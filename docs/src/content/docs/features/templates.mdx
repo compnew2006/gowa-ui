@@ -1,0 +1,105 @@
+---
+title: Templates
+description: Manage WhatsApp message templates
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+![Templates](/whatomate/images/11-templates.png)
+
+## Overview
+
+WhatsApp Message Templates are pre-approved message formats that allow businesses to send notifications and updates to customers. Whatomate makes it easy to manage, sync, and use templates across your organization.
+
+## Template Management
+
+### Viewing Templates
+
+The templates page displays all your synced templates from Meta's WhatsApp Business API, including:
+- Template name and status
+- Category (Marketing, Utility, Authentication)
+- Language
+- Last updated date
+
+### Syncing Templates
+
+Click the **Sync from Meta** button to fetch the latest templates from your WhatsApp Business Account. This ensures your local templates are always up to date with what's approved in Meta.
+
+### Template Editor
+
+![Template Editor](/whatomate/images/12-template-editor.png)
+
+View and manage template details:
+- **Header** - Optional header with text, image, video, or document
+- **Body** - Main message content with variable placeholders
+- **Footer** - Optional footer text
+- **Buttons** - Call-to-action or quick reply buttons
+
+## Template Variables
+
+Templates support dynamic variables that are replaced with actual values when sending messages.
+
+### Positional Parameters
+
+The traditional format uses numbered placeholders `{{1}}`, `{{2}}`, etc.:
+
+```
+Hello {{1}}, your order #{{2}} has been shipped!
+```
+
+When sending, you provide values in order:
+- `{{1}}` → Customer Name
+- `{{2}}` → Order ID
+
+### Named Parameters
+
+Templates also support named parameters for better readability and maintainability:
+
+```
+Hello {{customer_name}}, your order #{{order_id}} has been shipped!
+```
+
+Named parameters make templates easier to understand and less error-prone when dealing with multiple variables. When creating templates with named parameters:
+
+- Use descriptive names like `{{customer_name}}`, `{{order_id}}`, `{{delivery_date}}`
+- Parameter names can contain letters, numbers, and underscores
+- Whatomate automatically detects whether your template uses positional or named parameters
+
+<Aside type="tip">
+  Named parameters are recommended for templates with 3 or more variables, as they make the template easier to understand and maintain.
+</Aside>
+
+## Template Categories
+
+<CardGrid>
+  <Card title="Marketing" icon="megaphone">
+    Promotional content, offers, and announcements
+  </Card>
+  <Card title="Utility" icon="setting">
+    Order updates, confirmations, and notifications
+  </Card>
+  <Card title="Authentication" icon="approve-check">
+    One-time passwords and verification codes
+  </Card>
+</CardGrid>
+
+## Template Status
+
+| Status | Description |
+|--------|-------------|
+| **Approved** | Template is ready to use |
+| **Pending** | Awaiting Meta approval |
+| **Rejected** | Template was rejected by Meta |
+| **Disabled** | Template has been disabled |
+
+<Aside type="note">
+  Templates must be approved by Meta before they can be used for sending messages. The approval process typically takes a few minutes to 24 hours.
+</Aside>
+
+## Using Templates
+
+Templates can be used in:
+- **Direct Messages** - Send template to individual contacts
+- **Campaigns** - Bulk send to multiple contacts
+- **Chatbot Flows** - Automated template responses
+- **API** - Programmatically via REST API

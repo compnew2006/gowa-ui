@@ -1,0 +1,42 @@
+internal/handlers/business_profile.go:108:18: Error return value of `file.Close` is not checked (errcheck)
+	defer file.Close()
+	                ^
+internal/handlers/import_export.go:267:18: Error return value of `rows.Close` is not checked (errcheck)
+	defer rows.Close()
+	                ^
+internal/handlers/import_export.go:406:18: Error return value of `file.Close` is not checked (errcheck)
+	defer file.Close()
+	                ^
+internal/queue/queue_test.go:263:22: Error return value of `consumer.Close` is not checked (errcheck)
+	defer consumer.Close()
+	                    ^
+internal/queue/queue_test.go:298:22: Error return value of `consumer.Close` is not checked (errcheck)
+	defer consumer.Close()
+	                    ^
+internal/queue/queue_test.go:332:22: Error return value of `consumer.Close` is not checked (errcheck)
+	defer consumer.Close()
+	                    ^
+internal/queue/queue_test.go:395:17: Error return value of `sub.Close` is not checked (errcheck)
+	defer sub.Close()
+	               ^
+internal/queue/queue_test.go:473:23: Error return value of `badClient.Close` is not checked (errcheck)
+	defer badClient.Close()
+	                     ^
+internal/queue/queue_test.go:492:23: Error return value of `badClient.Close` is not checked (errcheck)
+	defer badClient.Close()
+	                     ^
+internal/queue/queue_test.go:511:23: Error return value of `badClient.Close` is not checked (errcheck)
+	defer badClient.Close()
+	                     ^
+pkg/whatsmeow/adapter.go:90:23: Error return value of `resp.Body.Close` is not checked (errcheck)
+	defer resp.Body.Close()
+	                     ^
+pkg/whatsmeow/events.go:71:17: Error return value of `cm.Disconnect` is not checked (errcheck)
+			cm.Disconnect(context.Background(), instanceID)
+			             ^
+internal/handlers/import_export.go:315:5: QF1003: could use tagged switch on col (staticcheck)
+				if col == "phone_number" {
+				^
+13 issues:
+* errcheck: 12
+* staticcheck: 1

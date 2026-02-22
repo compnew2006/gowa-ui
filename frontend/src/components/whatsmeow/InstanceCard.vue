@@ -1,0 +1,327 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import type { WhatsAppInstance } from "@/types/whatsmeow";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import type {
+  InstanceTagColorKey,
+  InstanceTagDisplayMode,
+} from "@/lib/instance-tag";
+import {
+  cloneAutoRejectSettings,
+  normalizeAutoRejectCallSettings,
+  type AutoRejectCallSettings,
+} from "@/lib/instance-auto-reject";
+import InstanceTagSettings from "@/components/whatsmeow/InstanceTagSettings.vue";
+import AutoRejectSettingsPanel from "@/components/whatsmeow/AutoRejectSettingsPanel.vue";
+import {
+  Loader2,
+  Power,
+  Trash2,
+  Smartphone,
+  QrCode,
+  Pencil,
+} from "lucide-vue-next";
+
+const { t } = useI18n();
+
+const props = defineProps<{
+  instance: WhatsAppInstance;
+  paletteIndex?: number;
+  tagSettingsSaving?: boolean;
+  autoSyncSaving?: boolean;
+  autoRejectSaving?: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: "connect", id: string): void;
+  (e: "disconnect", id: string): void;
+  (e: "delete", id: string): void;
+  (e: "edit", id: string): void;
+  (
+    e: "save-tag-settings",
+    id: string,
+    payload: {
+      customLabel: string;
+      color: InstanceTagColorKey;
+      displayMode: InstanceTagDisplayMode;
+    },
+  ): void;
+  (e: "update-auto-sync", id: string, enabled: boolean): void;
+  (
+    e: "update-auto-reject-settings",
+    id: string,
+    payload: AutoRejectCallSettings,
+  ): void;
+}>();
+
+const statusColor = computed(() => {
+  switch (props.instance.status) {
+    case "connected":
+      return "bg-green-500";
+    case "connecting":
+      return "bg-yellow-500";
+    case "disconnected":
+      return "bg-gray-500";
+    case "banned":
+      return "bg-red-500";
+    case "logged_out":
+      return "bg-orange-500";
+    default:
+      return "bg-gray-500";
+  }
+});
+
+const isConnected = computed(() => props.instance.status === "connected");
+const isConnecting = computed(() => props.instance.status === "connecting");
+const autoSyncEnabled = computed(() => {
+  const setting = props.instance.settings?.auto_sync_history;
+  return typeof setting === "boolean" ? setting : true;
+});
+
+const autoRejectSettings = computed(() =>
+  normalizeAutoRejectCallSettings(props.instance.settings?.auto_reject_calls),
+);
+const autoRejectSchedule = computed(() => {
+  const s = autoRejectSettings.value;
+  if (!s.enabled) return t("common.off");
+
+  switch (s.schedule.type) {
+    case "while_in_other_calls":
+      return t("instances.auto_reject.scheduleOtherCalls");
+    case "custom_hours":
+      return `${s.schedule.start} - ${s.schedule.end} (${s.schedule.timezone})`;
+    default:
+      return t("instances.auto_reject.scheduleAlways");
+  }
+});
+
+function formatUptime(totalSeconds?: number) {
+  const seconds = totalSeconds || 0;
+  if (seconds <= 0) {
+    return "0m";
+  }
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+</script>
+
+<template>
+  <Card
+    class="bg-white/[0.04] border-white/[0.08] light:bg-white light:border-gray-200"
+  >
+    <CardHeader class="pb-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <Badge :class="[statusColor, 'text-white border-0']">{{
+            $t(`instances.status.${instance.status}`)
+          }}</Badge>
+          <div
+            v-if="instance.is_default"
+            class="text-xs text-emerald-400 font-medium border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 rounded"
+          >
+            {{ $t("instances.card.default") }}
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            class="text-white/40 hover:text-emerald-400 hover:bg-emerald-400/10"
+            :aria-label="$t('instances.card.editAria')"
+            @click="emit('edit', instance.id)"
+          >
+            <Pencil class="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="text-white/40 hover:text-red-400 hover:bg-red-400/10"
+            :aria-label="$t('instances.card.deleteAria')"
+            @click="emit('delete', instance.id)"
+          >
+            <Trash2 class="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <CardTitle
+        class="text-lg font-semibold text-white mt-2 light:text-gray-900"
+        >{{ instance.name }}</CardTitle
+      >
+      <CardDescription class="text-white/40 light:text-gray-500">
+        {{ instance.phone_number || $t("instances.status.no_phone") }}
+      </CardDescription>
+    </CardHeader>
+    <CardContent>
+      <div class="text-sm text-white/60 light:text-gray-600 space-y-3">
+        <div class="flex items-center">
+          <Smartphone class="h-4 w-4 mr-2 opacity-70" />
+          <span>{{ instance.jid || $t("instances.status.not_paired") }}</span>
+        </div>
+        <div v-if="instance.health" class="grid grid-cols-2 gap-2 text-xs">
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="text-white/40 light:text-gray-500">
+              {{ $t("instances.card.uptime") }}
+            </div>
+            <div class="font-medium text-white light:text-gray-900">
+              {{ formatUptime(instance.health.uptime_seconds) }}
+            </div>
+          </div>
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="text-white/40 light:text-gray-500">
+              {{ $t("instances.card.queue") }}
+            </div>
+            <div class="font-medium text-white light:text-gray-900">
+              {{ instance.health.queue_depth }}
+            </div>
+          </div>
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="text-white/40 light:text-gray-500">
+              {{ $t("instances.card.sentReceived") }}
+            </div>
+            <div class="font-medium text-white light:text-gray-900">
+              {{ instance.health.messages_sent_today }} /
+              {{ instance.health.messages_received_today }}
+            </div>
+          </div>
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="text-white/40 light:text-gray-500">
+              {{ $t("instances.card.errorRate") }}
+            </div>
+            <div class="font-medium text-white light:text-gray-900">
+              {{ instance.health.error_rate_percent.toFixed(1) }}%
+            </div>
+          </div>
+        </div>
+        <div
+          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-medium text-white light:text-gray-900">
+                {{ $t("instances.card.autoSync") }}
+              </p>
+              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
+                {{ $t("instances.card.autoSyncDesc") }}
+              </p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <Loader2
+                v-if="autoSyncSaving"
+                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+              />
+              <Switch
+                :checked="autoSyncEnabled"
+                :disabled="autoSyncSaving"
+                @update:checked="
+                  (enabled) => emit('update-auto-sync', instance.id, enabled)
+                "
+              />
+            </div>
+          </div>
+        </div>
+        <div
+          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="text-xs font-medium text-white light:text-gray-900">
+                  {{ $t("instances.card.callAutoReject") }}
+                </p>
+                <Badge
+                  v-if="autoRejectSettings.enabled"
+                  variant="default"
+                  class="text-[10px] px-1.5 py-0"
+                  >{{ $t("common.on") }}</Badge
+                >
+              </div>
+              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
+                {{ autoRejectSchedule }}
+              </p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <Loader2
+                v-if="autoRejectSaving"
+                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+              />
+              <Switch
+                :checked="autoRejectSettings.enabled"
+                :disabled="autoRejectSaving"
+                @update:checked="
+                  (enabled) =>
+                    emit('update-auto-reject-settings', instance.id, {
+                      ...cloneAutoRejectSettings(autoRejectSettings),
+                      enabled,
+                    })
+                "
+              />
+            </div>
+          </div>
+
+          <AutoRejectSettingsPanel
+            :settings="autoRejectSettings"
+            :saving="autoRejectSaving || false"
+            @save="
+              (payload) =>
+                emit('update-auto-reject-settings', instance.id, payload)
+            "
+          />
+        </div>
+      </div>
+      <InstanceTagSettings
+        :instance="instance"
+        :palette-index="paletteIndex || 0"
+        :saving="tagSettingsSaving || false"
+        @save="(payload) => emit('save-tag-settings', instance.id, payload)"
+      />
+    </CardContent>
+    <CardFooter class="pt-2">
+      <Button
+        v-if="!isConnected && !isConnecting"
+        class="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+        @click="emit('connect', instance.id)"
+      >
+        <QrCode class="h-4 w-4 mr-2" />
+        {{ $t("instances.card.connectScan") }}
+      </Button>
+      <Button
+        v-else-if="isConnected"
+        variant="destructive"
+        class="w-full bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/50"
+        @click="emit('disconnect', instance.id)"
+      >
+        <Power class="h-4 w-4 mr-2" />
+        {{ $t("instances.card.disconnect") }}
+      </Button>
+      <div
+        v-else
+        class="w-full text-center text-sm text-yellow-400 animate-pulse"
+      >
+        {{ $t("instances.card.connecting") }}
+      </div>
+    </CardFooter>
+  </Card>
+</template>

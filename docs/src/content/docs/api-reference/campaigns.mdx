@@ -1,0 +1,280 @@
+---
+title: Campaigns
+description: Send bulk messages to multiple contacts
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Campaigns allow you to send bulk WhatsApp messages to multiple contacts using approved templates. The API handles rate limiting and delivery tracking automatically.
+
+## List Campaigns
+
+Retrieve all campaigns.
+
+```bash
+GET /api/campaigns
+```
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number (default: 1) |
+| `limit` | integer | Items per page (default: 20) |
+| `status` | string | Filter by status |
+| `account_id` | string | Filter by WhatsApp account |
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": "uuid",
+        "name": "Holiday Promotion",
+        "template_id": "uuid",
+        "status": "completed",
+        "total_recipients": 1000,
+        "sent_count": 1000,
+        "delivered_count": 950,
+        "read_count": 500,
+        "failed_count": 50,
+        "scheduled_at": "2024-01-01T10:00:00Z",
+        "started_at": "2024-01-01T10:00:05Z",
+        "completed_at": "2024-01-01T10:30:00Z"
+      }
+    ],
+    "total": 25,
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+## Get Campaign
+
+Retrieve a single campaign with detailed progress.
+
+```bash
+GET /api/campaigns/{id}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "name": "Holiday Promotion",
+    "template_id": "uuid",
+    "template_name": "holiday_offer",
+    "account_id": "uuid",
+    "status": "sending",
+    "total_recipients": 1000,
+    "sent_count": 450,
+    "delivered_count": 400,
+    "read_count": 100,
+    "failed_count": 10,
+    "variable_mapping": {
+      "1": "name",
+      "2": "discount_code"
+    },
+    "scheduled_at": null,
+    "started_at": "2024-01-01T10:00:05Z",
+    "created_at": "2024-01-01T09:00:00Z"
+  }
+}
+```
+
+## Create Campaign
+
+Create a new campaign.
+
+```bash
+POST /api/campaigns
+```
+
+### Request Body
+
+```json
+{
+  "name": "New Year Sale",
+  "account_id": "uuid",
+  "template_id": "uuid",
+  "variable_mapping": {
+    "1": "name",
+    "2": "discount_code"
+  },
+  "scheduled_at": "2024-01-01T00:00:00Z"
+}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "name": "New Year Sale",
+    "status": "draft",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+## Update Campaign
+
+Update a draft campaign.
+
+```bash
+PUT /api/campaigns/{id}
+```
+
+<Aside type="note">
+  Only draft campaigns can be updated. Started or completed campaigns cannot be modified.
+</Aside>
+
+## Delete Campaign
+
+Delete a campaign.
+
+```bash
+DELETE /api/campaigns/{id}
+```
+
+## Import Recipients
+
+Import recipients from a CSV or JSON file.
+
+```bash
+POST /api/campaigns/{id}/recipients/import
+```
+
+### Request Body (JSON)
+
+```json
+{
+  "recipients": [
+    {
+      "phone_number": "+1234567890",
+      "name": "John Doe",
+      "discount_code": "SAVE20"
+    },
+    {
+      "phone_number": "+0987654321",
+      "name": "Jane Smith",
+      "discount_code": "SAVE15"
+    }
+  ]
+}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "imported": 2,
+    "duplicates": 0,
+    "invalid": 0
+  }
+}
+```
+
+## Get Recipients
+
+Get campaign recipients with their delivery status.
+
+```bash
+GET /api/campaigns/{id}/recipients
+```
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number |
+| `limit` | integer | Items per page |
+| `status` | string | Filter by status |
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": "uuid",
+        "phone_number": "+1234567890",
+        "name": "John Doe",
+        "status": "delivered",
+        "sent_at": "2024-01-01T10:00:10Z",
+        "delivered_at": "2024-01-01T10:00:15Z"
+      }
+    ],
+    "total": 1000,
+    "page": 1,
+    "limit": 50
+  }
+}
+```
+
+## Campaign Actions
+
+### Start Campaign
+
+Begin sending messages.
+
+```bash
+POST /api/campaigns/{id}/start
+```
+
+### Pause Campaign
+
+Pause a running campaign.
+
+```bash
+POST /api/campaigns/{id}/pause
+```
+
+### Cancel Campaign
+
+Cancel a campaign (cannot be resumed).
+
+```bash
+POST /api/campaigns/{id}/cancel
+```
+
+## Campaign Status
+
+| Status | Description |
+|--------|-------------|
+| `draft` | Campaign created, not yet started |
+| `scheduled` | Campaign scheduled for future sending |
+| `sending` | Campaign is actively sending messages |
+| `paused` | Campaign is paused |
+| `completed` | All messages have been processed |
+| `cancelled` | Campaign was cancelled |
+
+## Rate Limiting
+
+Campaigns automatically respect WhatsApp's rate limits:
+
+| Tier | Messages per second |
+|------|---------------------|
+| TIER_1K | ~10 msg/sec |
+| TIER_10K | ~30 msg/sec |
+| TIER_100K | ~80 msg/sec |
+| TIER_UNLIMITED | No limit |
+
+<Aside type="tip">
+  Start with smaller campaigns to warm up your account and improve your messaging tier.
+</Aside>

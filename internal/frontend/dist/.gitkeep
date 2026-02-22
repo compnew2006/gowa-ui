@@ -1,0 +1,3 @@
+# This directory contains the built frontend files
+# Run `make build-frontend` or `npm run build` in the frontend directory
+# The files will be embedded into the Go binary during compilation

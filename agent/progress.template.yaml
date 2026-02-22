@@ -1,0 +1,158 @@
+# Project Progress Tracking
+# This file tracks the overall progress of the project, including milestones, tasks, and recent work.
+# Update this file regularly as work progresses.
+
+project:
+  name: project-name                    # Replace with your project name
+  version: 0.1.0                        # Current version (semantic versioning)
+  started: YYYY-MM-DD                   # Date project started
+  status: not_started                   # not_started | in_progress | completed
+  current_milestone: M1                 # Current milestone identifier
+  description: |                        # Brief project description
+    A short description of what this project does and its main purpose.
+
+# Milestones represent major phases of the project
+milestones:
+  - id: M1                              # Unique milestone identifier
+    name: Milestone Name                # Descriptive name
+    status: not_started                 # not_started | in_progress | completed
+    progress: 0                         # Percentage complete (0-100)
+    started: null                       # YYYY-MM-DD when started, null if not started
+    completed: null                     # YYYY-MM-DD when completed, null if not completed
+    estimated_weeks: 2                  # Estimated duration in weeks
+    tasks_completed: 0                  # Number of tasks completed
+    tasks_total: 5                      # Total number of tasks in this milestone
+    notes: |                            # Progress notes and observations
+      Notes about this milestone's progress, blockers, or important decisions.
+  
+  - id: M2
+    name: Second Milestone Name
+    status: not_started
+    progress: 0
+    started: null
+    completed: null
+    estimated_weeks: 3
+    tasks_completed: 0
+    tasks_total: 7
+    notes: |
+      This milestone depends on M1 completion.
+
+# Tasks are granular work items within milestones
+tasks:
+  milestone_1:                          # Group tasks by milestone
+    - id: task-1                        # Unique task identifier
+      name: Task Name                   # Descriptive task name
+      status: not_started               # not_started | in_progress | completed
+      file: agent/tasks/task-1-name.md  # Path to task document
+      estimated_hours: 4                # Estimated time in hours
+      completed_date: null              # YYYY-MM-DD when completed, null if not completed
+      notes: |                          # Task-specific notes
+        Any important notes about this task.
+    
+    - id: task-2
+      name: Second Task Name
+      status: not_started
+      file: agent/tasks/task-2-name.md
+      estimated_hours: 2
+      completed_date: null
+      notes: |
+        Depends on task-1 completion.
+  
+  milestone_2:
+    - id: task-3
+      name: Third Task Name
+      status: not_started
+      file: agent/tasks/task-3-name.md
+      estimated_hours: 6
+      completed_date: null
+      notes: |
+        First task of second milestone.
+
+# Documentation tracking
+documentation:
+  design_documents: 0                   # Number of design documents created
+  milestone_documents: 0                # Number of milestone documents
+  pattern_documents: 0                  # Number of pattern documents
+  task_documents: 0                     # Number of task documents
+  last_updated: YYYY-MM-DD              # Last documentation update date
+
+# Overall progress metrics
+progress:
+  planning: 0                           # Planning phase completion (0-100%)
+  implementation: 0                     # Implementation phase completion (0-100%)
+  testing: 0                            # Testing phase completion (0-100%)
+  documentation: 0                      # Documentation completion (0-100%)
+  overall: 0                            # Overall project completion (0-100%)
+
+# Recent work log (most recent first)
+recent_work:
+  - date: YYYY-MM-DD                    # Date of work
+    description: |                      # Description of what was done
+      Brief description of work completed on this date.
+    items:                              # Specific items completed
+      - ✅ Completed item 1
+      - ✅ Completed item 2
+      - ⚠️  Warning or note about something
+      - 📋 Pending item or follow-up needed
+  
+  - date: YYYY-MM-DD
+    description: |
+      Earlier work session description.
+    items:
+      - ✅ Another completed item
+      - 📋 Something to revisit
+
+# Next steps (prioritized list)
+next_steps:
+  - Next action item 1 (highest priority)
+  - Next action item 2
+  - Next action item 3
+  - Future consideration or enhancement
+
+# General notes and observations
+notes:
+  - Important note 1 about the project
+  - Important note 2 about architectural decisions
+  - Important note 3 about dependencies or constraints
+
+# Current blockers (remove when resolved)
+current_blockers:
+  - Blocker 1: Description of what's blocking progress
+  - Blocker 2: Another blocker and potential resolution
+
+# Team and contributors (if applicable)
+team:
+  - role: Lead Developer              # Role or responsibility
+    name: Name or "Agent"             # Name or identifier
+    focus: |                          # Current focus area
+      What this person/agent is currently working on
+  
+  - role: Documentation
+    name: Name or "Agent"
+    focus: |
+      Maintaining documentation and patterns
+
+# Dependencies and integrations
+dependencies:
+  external_services:                  # External services this project depends on
+    - name: Service Name
+      status: configured | pending | blocked
+      notes: |
+        Notes about this dependency
+  
+  libraries:                          # Key library dependencies
+    - name: Library Name
+      version: 1.0.0
+      purpose: |
+        Why this library is used
+  
+  infrastructure:                     # Infrastructure requirements
+    - name: Infrastructure Component
+      status: ready | pending | blocked
+      notes: |
+        Notes about this infrastructure
+
+# Quality metrics (optional)
+quality:
+  test_coverage: 0                    # Percentage (0-100)
+  code_review_status: pending         # pending | in
