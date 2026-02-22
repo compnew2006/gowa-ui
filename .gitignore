@@ -1,12 +1,18 @@
 # Binaries
 /server
 /whatomate
+/main
 bin/
+whatomate*
+whatomate_*
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+*.tar.gz
+*.zip
+*.7z
 
 # Config with secrets
 config.toml

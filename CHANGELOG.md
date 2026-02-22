@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+
+- Repository maintenance: Hardened `.gitignore` with comprehensive patterns for all executable files, build artifacts (wildcards), and archive types (`.tar.gz`, `.zip`, `.7z`).
+- Project memory: Initialized `RALPH_MEMORY.md` to persist technical learnings and prevent future regressions.
+
+### Fixed
+
+- Fixed repository synchronization by reconciling remote branch divergence via rebase and pushing all local tags.
+
+### Added
+
 - Added canned response multimedia + rich text capabilities:
   - Canned responses now support photo/video attachments stored as typed attachment metadata (`attachments` JSONB) with secure file cleanup on update/delete.
   - Added backend endpoint `POST /api/canned-responses/{id}/send` to dispatch canned response text and all stored attachments to a target contact through the unified outbound pipeline.
@@ -45,6 +55,7 @@
 - Added Playwright E2E coverage for Activity Logs route and own-history filtering (`frontend/e2e/tests/activity/activity-logs.spec.ts`).
 
 ### Fixed
+
 - Fixed Whatsmeow real-time sync for phone-origin outgoing messages:
   - `events.Message` with `IsFromMe` now persists/broadcasts when `DeviceSentMeta` indicates the message came from another linked device (mobile).
   - Locally-originated runtime echoes without `DeviceSentMeta` remain ignored to prevent duplicate outgoing records for dashboard/API sends.
@@ -115,6 +126,7 @@
 - Added 30-second timeouts to background WhatsApp API calls (reactions, read receipts) to prevent orphaned hangs.
 
 ### Added
+
 - Added contact creation instance binding:
   - `CreateContact` now accepts `instance_id`, validates org ownership, and stores it on the contact.
   - Shared `CreateContactDialog.vue` now loads available WhatsApp instances and lets users choose an instance when adding a contact.

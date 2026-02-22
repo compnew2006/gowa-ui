@@ -11,6 +11,7 @@
   - 📄 LICENSE
   - 📄 MEMORY.md
   - 📄 Makefile
+  - 📄 RALPH_MEMORY.md
   - 📄 README.md
   - 📄 acp_guide.html
   - 📄 config.example.toml
@@ -27,14 +28,10 @@
   - 📄 go_build_err.txt
   - 📄 go_lint.json
   - 📄 go_lint.txt
-  - 📄 main
   - 📄 prompt.md
   - 📄 serve_acp_with_proxy.py
   - 📄 session_summary.md
   - 📄 whatomate
-  - 📄 whatomate 3.30.36 PM
-  - 📄 whatomate 9.37.03 AM
-  - 📄 whatomate_0.1.1-beta-0.7_darwin_arm64.tar.gz
 - 📁 **cmd/**
   - 📁 **whatomate/**
     - 📄 main.go
@@ -1738,6 +1735,7 @@
     - 📄 ce37cb55-1528-4a05-a5f8-3b59cd3f00c1.jpg
     - 📄 cec3b5f6-be3a-4260-a2f3-e7af50a47a1c.jpg
     - 📄 ceda67ee-696a-41b3-89c8-f906ad7b0059.jpg
+    - 📄 ceff2947-6a09-4b3a-99e8-e4fb0781ea0f.jpg
     - 📄 cf0cd553-eed6-4218-a3b2-46f5f4f9ee6d.jpg
     - 📄 cf1552f0-86d2-4966-a901-80ef5f9b7fd9.jpg
     - 📄 cff47ef2-40b8-4496-a2af-dfb4cd72ae0c.jpg
@@ -1879,6 +1877,7 @@
     - 📄 07d1664c-8957-4120-87b7-e4c5b2cfd30f.mp4
     - 📄 19de8486-fbb9-4d26-9d0f-beed0fe52739.mp4
     - 📄 206b72d2-c94a-46d4-b906-1f0ca8052d83.mp4
+    - 📄 23850640-338d-4182-8ab9-f503ea04dc59.mp4
     - 📄 24b9451c-09e5-43f4-a7fb-67058050ee4a.mp4
     - 📄 2a7300e7-0b2b-4c9d-adb9-2d45b3b272e3.mp4
     - 📄 2ec25bea-c99f-4af5-99a0-ac780f3c186e.mp4
@@ -2401,6 +2400,7 @@
     - 📄 fb89ffdd-b204-45be-8eb9-fadfbafcd429.pdf
     - 📄 fbcb6bc9-415d-4172-9a39-972ece44c1ed.pdf
     - 📄 fc0955e0-ff59-4f7f-8bc9-47bd5429a08f.pdf
+    - 📄 fdd43d66-1e6b-4ad4-b3cb-c52c08bb4619.pdf
     - 📄 fe4863c4-3994-46e2-b172-3bc2e7a4aaa7.pdf
     - 📄 ff6ffa47-c3dc-4eba-88b3-145f2c99d029.pdf
     - 📄 ffef511f-679b-41de-b44f-8db30e436f18.pdf
