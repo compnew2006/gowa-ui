@@ -4,15 +4,6 @@
 
 ### Added
 
-- Repository maintenance: Hardened `.gitignore` with comprehensive patterns for all executable files, build artifacts (wildcards), and archive types (`.tar.gz`, `.zip`, `.7z`).
-- Project memory: Initialized `RALPH_MEMORY.md` to persist technical learnings and prevent future regressions.
-
-### Fixed
-
-- Fixed repository synchronization by reconciling remote branch divergence via rebase and pushing all local tags.
-
-### Added
-
 - Added canned response multimedia + rich text capabilities:
   - Canned responses now support photo/video attachments stored as typed attachment metadata (`attachments` JSONB) with secure file cleanup on update/delete.
   - Added backend endpoint `POST /api/canned-responses/{id}/send` to dispatch canned response text and all stored attachments to a target contact through the unified outbound pipeline.
