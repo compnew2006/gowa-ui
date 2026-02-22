@@ -13,11 +13,12 @@ import (
 
 // OrganizationSettings represents the settings structure
 type OrganizationSettings struct {
-	MaskPhoneNumbers      bool   `json:"mask_phone_numbers"`
-	Timezone              string `json:"timezone"`
-	DateFormat            string `json:"date_format"`
-	AssignedChatResetMode string `json:"assigned_chat_reset_mode"`
-	AssignedChatResetHour int    `json:"assigned_chat_reset_hour"`
+	MaskPhoneNumbers         bool   `json:"mask_phone_numbers"`
+	Timezone                 string `json:"timezone"`
+	DateFormat               string `json:"date_format"`
+	AssignedChatResetEnabled bool   `json:"assigned_chat_reset_enabled"`
+	AssignedChatResetMode    string `json:"assigned_chat_reset_mode"`
+	AssignedChatResetHour    int    `json:"assigned_chat_reset_hour"`
 }
 
 // GetOrganizationSettings returns the organization settings
@@ -34,11 +35,12 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 
 	// Parse settings from JSONB
 	settings := OrganizationSettings{
-		MaskPhoneNumbers:      false,
-		Timezone:              "UTC",
-		DateFormat:            "YYYY-MM-DD",
-		AssignedChatResetMode: string(ChatAssignmentResetModeMidnight),
-		AssignedChatResetHour: 0,
+		MaskPhoneNumbers:         false,
+		Timezone:                 "UTC",
+		DateFormat:               "YYYY-MM-DD",
+		AssignedChatResetEnabled: true,
+		AssignedChatResetMode:    string(ChatAssignmentResetModeMidnight),
+		AssignedChatResetHour:    0,
 	}
 
 	if org.Settings != nil {
@@ -53,6 +55,7 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		}
 
 		chatResetSettings := readChatAssignmentResetSettings(org.Settings)
+		settings.AssignedChatResetEnabled = chatResetSettings.Enabled
 		settings.AssignedChatResetMode = string(chatResetSettings.Mode)
 		settings.AssignedChatResetHour = chatResetSettings.Hour
 	}
@@ -71,12 +74,13 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	}
 
 	var req struct {
-		MaskPhoneNumbers      *bool   `json:"mask_phone_numbers"`
-		Timezone              *string `json:"timezone"`
-		DateFormat            *string `json:"date_format"`
-		Name                  *string `json:"name"`
-		AssignedChatResetMode *string `json:"assigned_chat_reset_mode"`
-		AssignedChatResetHour *int    `json:"assigned_chat_reset_hour"`
+		MaskPhoneNumbers         *bool   `json:"mask_phone_numbers"`
+		Timezone                 *string `json:"timezone"`
+		DateFormat               *string `json:"date_format"`
+		Name                     *string `json:"name"`
+		AssignedChatResetEnabled *bool   `json:"assigned_chat_reset_enabled"`
+		AssignedChatResetMode    *string `json:"assigned_chat_reset_mode"`
+		AssignedChatResetHour    *int    `json:"assigned_chat_reset_hour"`
 	}
 
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
@@ -105,6 +109,9 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	}
 	if req.DateFormat != nil {
 		org.Settings["date_format"] = *req.DateFormat
+	}
+	if req.AssignedChatResetEnabled != nil {
+		org.Settings[organizationSettingAssignedChatResetEnabled] = *req.AssignedChatResetEnabled
 	}
 
 	modeProvided := false

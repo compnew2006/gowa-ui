@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	organizationSettingAssignedChatResetEnabled  = "assigned_chat_reset_enabled"
 	organizationSettingAssignedChatResetMode     = "assigned_chat_reset_mode"
 	organizationSettingAssignedChatResetHour     = "assigned_chat_reset_hour"
 	organizationSettingAssignedChatResetLastDate = "assigned_chat_reset_last_date"
@@ -24,6 +25,7 @@ const (
 
 // ChatAssignmentResetSettings contains organization-level schedule preferences.
 type ChatAssignmentResetSettings struct {
+	Enabled       bool
 	Mode          ChatAssignmentResetMode
 	Hour          int
 	LastResetDate string
@@ -31,8 +33,9 @@ type ChatAssignmentResetSettings struct {
 
 func defaultChatAssignmentResetSettings() ChatAssignmentResetSettings {
 	return ChatAssignmentResetSettings{
-		Mode: ChatAssignmentResetModeMidnight,
-		Hour: 0,
+		Enabled: true,
+		Mode:    ChatAssignmentResetModeMidnight,
+		Hour:    0,
 	}
 }
 
@@ -100,6 +103,12 @@ func readChatAssignmentResetSettings(settings models.JSONB) ChatAssignmentResetS
 		return config
 	}
 
+	if rawEnabled, ok := settings[organizationSettingAssignedChatResetEnabled]; ok {
+		if parsedEnabled, parsed := parseJSONBBool(rawEnabled); parsed {
+			config.Enabled = parsedEnabled
+		}
+	}
+
 	if rawMode, ok := settings[organizationSettingAssignedChatResetMode].(string); ok && strings.TrimSpace(rawMode) != "" {
 		config.Mode = normalizeChatAssignmentResetMode(rawMode)
 	}
@@ -119,6 +128,25 @@ func readChatAssignmentResetSettings(settings models.JSONB) ChatAssignmentResetS
 	}
 
 	return config
+}
+
+func parseJSONBBool(raw any) (bool, bool) {
+	switch v := raw.(type) {
+	case bool:
+		return v, true
+	case string:
+		trimmed := strings.TrimSpace(strings.ToLower(v))
+		switch trimmed {
+		case "true", "1", "yes":
+			return true, true
+		case "false", "0", "no":
+			return false, true
+		default:
+			return false, false
+		}
+	default:
+		return false, false
+	}
 }
 
 func parseOrganizationTimezone(settings models.JSONB) string {

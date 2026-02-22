@@ -127,6 +127,7 @@ function normalizeAssignedChatResetHour(value: unknown): number {
 const MEDIA_GROUP_WINDOW_KEY = 'chat.mediaGroupWindowSeconds'
 const chatSettings = ref({
   media_group_window: 60,
+  assigned_chat_reset_enabled: true,
   assigned_chat_reset_mode: 'midnight' as AssignedChatResetMode,
   assigned_chat_reset_hour: 0
 })
@@ -188,6 +189,7 @@ onMounted(async () => {
 
       const resetMode = normalizeAssignedChatResetMode(orgData.settings?.assigned_chat_reset_mode)
       const resetHour = normalizeAssignedChatResetHour(orgData.settings?.assigned_chat_reset_hour)
+      chatSettings.value.assigned_chat_reset_enabled = orgData.settings?.assigned_chat_reset_enabled !== false
       chatSettings.value.assigned_chat_reset_mode = resetMode
       chatSettings.value.assigned_chat_reset_hour = resetMode === 'midnight' ? 0 : resetHour
     }
@@ -273,6 +275,7 @@ async function saveChatSettings() {
   try {
     localStorage.setItem(MEDIA_GROUP_WINDOW_KEY, String(clamped))
     await organizationService.updateSettings({
+      assigned_chat_reset_enabled: chatSettings.value.assigned_chat_reset_enabled,
       assigned_chat_reset_mode: normalizedMode,
       assigned_chat_reset_hour: normalizedHour
     })
@@ -509,11 +512,23 @@ onBeforeUnmount(() => {
                 </div>
                 <Separator class="bg-white/[0.08] light:bg-gray-200" />
                 <div class="space-y-2">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <Label class="text-white/70 light:text-gray-700">{{ $t('settings.assignedChatResetEnabled') }}</Label>
+                      <p class="text-xs text-white/40 light:text-gray-500">
+                        {{ $t('settings.assignedChatResetEnabledDesc') }}
+                      </p>
+                    </div>
+                    <Switch
+                      :checked="chatSettings.assigned_chat_reset_enabled"
+                      @update:checked="chatSettings.assigned_chat_reset_enabled = $event"
+                    />
+                  </div>
                   <Label class="text-white/70 light:text-gray-700">{{ $t('settings.assignedChatResetSchedule') }}</Label>
                   <p class="text-xs text-white/40 light:text-gray-500">
                     {{ $t('settings.assignedChatResetScheduleDesc') }}
                   </p>
-                  <Select v-model="chatSettings.assigned_chat_reset_mode">
+                  <Select v-model="chatSettings.assigned_chat_reset_mode" :disabled="!chatSettings.assigned_chat_reset_enabled">
                     <SelectTrigger class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700">
                       <SelectValue :placeholder="$t('settings.selectResetSchedule')" />
                     </SelectTrigger>
@@ -527,11 +542,12 @@ onBeforeUnmount(() => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div v-if="chatSettings.assigned_chat_reset_mode === 'custom_hour'" class="space-y-2">
+                <div v-if="chatSettings.assigned_chat_reset_enabled && chatSettings.assigned_chat_reset_mode === 'custom_hour'" class="space-y-2">
                   <Label class="text-white/70 light:text-gray-700">{{ $t('settings.customResetHour') }}</Label>
                   <Select
                     :model-value="String(chatSettings.assigned_chat_reset_hour)"
                     @update:model-value="(v: unknown) => { if (typeof v === 'string') chatSettings.assigned_chat_reset_hour = Number(v) }"
+                    :disabled="!chatSettings.assigned_chat_reset_enabled"
                   >
                     <SelectTrigger class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700">
                       <SelectValue :placeholder="$t('settings.selectResetHour')" />

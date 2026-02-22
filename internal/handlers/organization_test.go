@@ -24,11 +24,12 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 
 	// Set organization settings
 	org.Settings = models.JSONB{
-		"mask_phone_numbers":       true,
-		"timezone":                 "Asia/Kolkata",
-		"date_format":              "DD/MM/YYYY",
-		"assigned_chat_reset_mode": "custom_hour",
-		"assigned_chat_reset_hour": 9,
+		"mask_phone_numbers":          true,
+		"timezone":                    "Asia/Kolkata",
+		"date_format":                 "DD/MM/YYYY",
+		"assigned_chat_reset_enabled": true,
+		"assigned_chat_reset_mode":    "custom_hour",
+		"assigned_chat_reset_hour":    9,
 	}
 	require.NoError(t, app.DB.Save(org).Error)
 
@@ -51,6 +52,7 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 	assert.Equal(t, true, resp.Data.Settings.MaskPhoneNumbers)
 	assert.Equal(t, "Asia/Kolkata", resp.Data.Settings.Timezone)
 	assert.Equal(t, "DD/MM/YYYY", resp.Data.Settings.DateFormat)
+	assert.Equal(t, true, resp.Data.Settings.AssignedChatResetEnabled)
 	assert.Equal(t, "custom_hour", resp.Data.Settings.AssignedChatResetMode)
 	assert.Equal(t, 9, resp.Data.Settings.AssignedChatResetHour)
 	assert.Equal(t, org.Name, resp.Data.Name)
@@ -83,6 +85,7 @@ func TestApp_GetOrganizationSettings_Defaults(t *testing.T) {
 	assert.Equal(t, false, resp.Data.Settings.MaskPhoneNumbers)
 	assert.Equal(t, "UTC", resp.Data.Settings.Timezone)
 	assert.Equal(t, "YYYY-MM-DD", resp.Data.Settings.DateFormat)
+	assert.Equal(t, true, resp.Data.Settings.AssignedChatResetEnabled)
 	assert.Equal(t, "midnight", resp.Data.Settings.AssignedChatResetMode)
 	assert.Equal(t, 0, resp.Data.Settings.AssignedChatResetHour)
 }
@@ -115,12 +118,13 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	newName := "Updated Organization"
 
 	req := testutil.NewJSONRequest(t, map[string]any{
-		"mask_phone_numbers":       maskEnabled,
-		"timezone":                 timezone,
-		"date_format":              dateFormat,
-		"name":                     newName,
-		"assigned_chat_reset_mode": "custom_hour",
-		"assigned_chat_reset_hour": 22,
+		"mask_phone_numbers":          maskEnabled,
+		"timezone":                    timezone,
+		"date_format":                 dateFormat,
+		"name":                        newName,
+		"assigned_chat_reset_enabled": false,
+		"assigned_chat_reset_mode":    "custom_hour",
+		"assigned_chat_reset_hour":    22,
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 
@@ -145,6 +149,7 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	assert.Equal(t, true, updatedOrg.Settings["mask_phone_numbers"])
 	assert.Equal(t, "America/New_York", updatedOrg.Settings["timezone"])
 	assert.Equal(t, "MM/DD/YYYY", updatedOrg.Settings["date_format"])
+	assert.Equal(t, false, updatedOrg.Settings["assigned_chat_reset_enabled"])
 	assert.Equal(t, "custom_hour", updatedOrg.Settings["assigned_chat_reset_mode"])
 	assert.Equal(t, 22, updatedOrg.Settings["assigned_chat_reset_hour"])
 }
@@ -158,11 +163,12 @@ func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
 
 	// Set initial settings
 	org.Settings = models.JSONB{
-		"mask_phone_numbers":       false,
-		"timezone":                 "UTC",
-		"date_format":              "YYYY-MM-DD",
-		"assigned_chat_reset_mode": "custom_hour",
-		"assigned_chat_reset_hour": 8,
+		"mask_phone_numbers":          false,
+		"timezone":                    "UTC",
+		"date_format":                 "YYYY-MM-DD",
+		"assigned_chat_reset_enabled": false,
+		"assigned_chat_reset_mode":    "custom_hour",
+		"assigned_chat_reset_hour":    8,
 	}
 	require.NoError(t, app.DB.Save(org).Error)
 	originalName := org.Name
@@ -185,6 +191,7 @@ func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
 	assert.Equal(t, false, updatedOrg.Settings["mask_phone_numbers"])
 	assert.Equal(t, "Europe/London", updatedOrg.Settings["timezone"])
 	assert.Equal(t, "YYYY-MM-DD", updatedOrg.Settings["date_format"])
+	assert.Equal(t, false, updatedOrg.Settings["assigned_chat_reset_enabled"])
 	assert.Equal(t, "custom_hour", updatedOrg.Settings["assigned_chat_reset_mode"])
 	assert.Equal(t, 8, updatedOrg.Settings["assigned_chat_reset_hour"])
 }

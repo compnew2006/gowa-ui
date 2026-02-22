@@ -492,6 +492,8 @@
     "mediaGroupingWindow2Minutes": "دقيقتان",
     "mediaGroupingWindow3Minutes": "3 دقائق",
     "mediaGroupingWindow5Minutes": "5 دقائق",
+    "assignedChatResetEnabled": "تفعيل إعادة تعيين الدردشات المخصصة",
+    "assignedChatResetEnabledDesc": "تشغيل أو إيقاف إعادة التعيين اليومية التلقائية للدردشات المخصصة.",
     "assignedChatResetSchedule": "جدول إعادة تعيين الدردشات المخصصة",
     "assignedChatResetScheduleDesc": "أعد تعيين جميع الدردشات المخصصة تلقائياً إلى قيد الانتظار مرة واحدة يومياً.",
     "selectResetSchedule": "اختر جدول إعادة التعيين",

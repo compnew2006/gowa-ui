@@ -143,3 +143,39 @@ func TestChatAssignmentResetWorker_ProcessOrganization_SkipsWhenAlreadyRunToday(
 	assert.Equal(t, assignee.ID, *refreshedContact.AssignedUserID)
 	assert.Equal(t, models.ChatStatusOpen, refreshedContact.Status)
 }
+
+func TestChatAssignmentResetWorker_ProcessOrganization_SkipsWhenDisabled(t *testing.T) {
+	app := newChatAssignmentResetTestApp(t)
+	worker := NewChatAssignmentResetWorker(app, time.Minute)
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	assignee := testutil.CreateTestUser(t, app.DB, org.ID)
+	assignedContact := testutil.CreateTestContact(t, app.DB, org.ID)
+	require.NoError(t, app.DB.Model(&models.Contact{}).Where("id = ?", assignedContact.ID).Updates(map[string]any{
+		"assigned_user_id": assignee.ID,
+		"status":           models.ChatStatusOpen,
+	}).Error)
+
+	now := time.Now().UTC()
+	org.Settings = models.JSONB{
+		"timezone": "UTC",
+		organizationSettingAssignedChatResetEnabled:  false,
+		organizationSettingAssignedChatResetMode:     string(ChatAssignmentResetModeCustomHour),
+		organizationSettingAssignedChatResetHour:     0,
+		organizationSettingAssignedChatResetLastDate: now.Add(-24 * time.Hour).Format("2006-01-02"),
+	}
+	require.NoError(t, app.DB.Save(org).Error)
+
+	var storedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&storedOrg).Error)
+	require.NoError(t, worker.processOrganization(now, storedOrg))
+
+	var refreshedContact models.Contact
+	require.NoError(t, app.DB.Where("id = ?", assignedContact.ID).First(&refreshedContact).Error)
+	require.NotNil(t, refreshedContact.AssignedUserID)
+	assert.Equal(t, assignee.ID, *refreshedContact.AssignedUserID)
+	assert.Equal(t, models.ChatStatusOpen, refreshedContact.Status)
+
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&storedOrg).Error)
+	assert.Equal(t, now.Add(-24*time.Hour).Format("2006-01-02"), storedOrg.Settings[organizationSettingAssignedChatResetLastDate])
+}

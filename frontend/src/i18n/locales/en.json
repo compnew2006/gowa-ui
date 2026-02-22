@@ -517,6 +517,8 @@
     "mediaGroupingWindow2Minutes": "2 minutes",
     "mediaGroupingWindow3Minutes": "3 minutes",
     "mediaGroupingWindow5Minutes": "5 minutes",
+    "assignedChatResetEnabled": "Enable Assigned Chat Reset",
+    "assignedChatResetEnabledDesc": "Turn daily automatic reset of assigned chats on or off.",
     "assignedChatResetSchedule": "Assigned Chat Reset Schedule",
     "assignedChatResetScheduleDesc": "Automatically reset all assigned chats back to pending once per day.",
     "selectResetSchedule": "Select reset schedule",

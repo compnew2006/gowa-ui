@@ -71,6 +71,9 @@ func (w *ChatAssignmentResetWorker) runOnce(nowUTC time.Time) {
 
 func (w *ChatAssignmentResetWorker) processOrganization(nowUTC time.Time, organization models.Organization) error {
 	schedule := readChatAssignmentResetSettings(organization.Settings)
+	if !schedule.Enabled {
+		return nil
+	}
 	tzName := parseOrganizationTimezone(organization.Settings)
 	location, err := time.LoadLocation(tzName)
 	if err != nil {
