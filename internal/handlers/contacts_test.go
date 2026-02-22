@@ -249,6 +249,49 @@ func TestApp_ListContacts(t *testing.T) {
 		assert.Equal(t, 1, resp.Data.Page)
 		assert.Equal(t, 50, resp.Data.Limit)
 	})
+
+	t.Run("admin role bypass can see assigned chats without contacts read permission", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+
+		allPerms := testutil.GetOrCreateTestPermissions(t, app.DB)
+		var chatReadPerms []models.Permission
+		for _, perm := range allPerms {
+			if perm.Resource == models.ResourceChat && perm.Action == models.ActionRead {
+				chatReadPerms = append(chatReadPerms, perm)
+			}
+		}
+		adminRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "admin", false, false, chatReadPerms)
+		adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+		assignee := testutil.CreateTestUser(t, app.DB, org.ID)
+		contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+		require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+			"status":           models.ChatStatusOpen,
+			"assigned_user_id": assignee.ID,
+		}).Error)
+
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, adminUser.ID)
+		testutil.SetQueryParam(req, "status", "open")
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		require.Len(t, resp.Data.Contacts, 1)
+		assert.Equal(t, int64(1), resp.Data.Total)
+		assert.Equal(t, contact.ID, resp.Data.Contacts[0].ID)
+		require.NotNil(t, resp.Data.Contacts[0].AssignedUserID)
+		assert.Equal(t, assignee.ID, *resp.Data.Contacts[0].AssignedUserID)
+	})
 }
 
 // --- GetContact Tests ---
@@ -2521,6 +2564,89 @@ func TestApp_ReopenChat(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusConflict, testutil.GetResponseStatusCode(req))
 	})
+}
+
+func TestApp_ClaimChat_CreatesSystemMessage(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID), testutil.WithFullName("Claim Agent"))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":               models.ChatStatusPending,
+		"assigned_user_id":     nil,
+		"last_message_at":      nil,
+		"last_message_preview": "",
+	}).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("PUT")
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.ClaimChat(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var claimResp struct {
+		Data handlers.ContactResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &claimResp))
+	require.NotNil(t, claimResp.Data.AssignedUserID)
+	assert.Equal(t, adminUser.ID, *claimResp.Data.AssignedUserID)
+	assert.Equal(t, "Claim Agent", claimResp.Data.AssignedUserName)
+
+	var systemMessage models.Message
+	require.NoError(t, app.DB.Where("contact_id = ? AND metadata->>'event_type' = ?", contact.ID, "chat_claimed").Order("created_at DESC").First(&systemMessage).Error)
+	assert.Equal(t, models.DirectionOutgoing, systemMessage.Direction)
+	assert.Equal(t, models.MessageTypeText, systemMessage.MessageType)
+	assert.Equal(t, models.MessageStatusSent, systemMessage.Status)
+	assert.Equal(t, true, systemMessage.Metadata["system_event"])
+	assert.Contains(t, systemMessage.Content, "claimed this chat")
+}
+
+func TestApp_ListContacts_IncludesAssignedUserName(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	assignee := testutil.CreateTestUser(
+		t,
+		app.DB,
+		org.ID,
+		testutil.WithRoleID(&adminRole.ID),
+		testutil.WithFullName("Assigned Agent"),
+	)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"assigned_user_id": assignee.ID,
+		"status":           models.ChatStatusOpen,
+	}).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
+	testutil.SetQueryParam(req, "status", "open")
+
+	err := app.ListContacts(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Contacts []handlers.ContactResponse `json:"contacts"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	require.Len(t, resp.Data.Contacts, 1)
+	require.NotNil(t, resp.Data.Contacts[0].AssignedUserID)
+	assert.Equal(t, assignee.ID, *resp.Data.Contacts[0].AssignedUserID)
+	assert.Equal(t, "Assigned Agent", resp.Data.Contacts[0].AssignedUserName)
 }
 
 func TestApp_DeleteContact_PermissionBased(t *testing.T) {

@@ -452,6 +452,11 @@ function isDeletedMessage(message: Message): boolean {
   )
 }
 
+function isSystemEventMessage(message: Message): boolean {
+  const rawValue = message.metadata?.system_event
+  return rawValue === true || rawValue === 'true' || rawValue === 1 || rawValue === '1'
+}
+
 // Check if current user can assign contacts (admin or manager only)
 const canAssignContacts = computed(() => {
   // Try store first, then fallback to localStorage
@@ -474,6 +479,29 @@ const canAssignContacts = computed(() => {
 const assignableUsers = computed(() => {
   return usersStore.users.filter(u => u.is_active)
 })
+
+function getAssignedAgentName(contact: Contact): string {
+  const providedName = typeof contact.assigned_user_name === 'string'
+    ? contact.assigned_user_name.trim()
+    : ''
+  if (providedName) {
+    return providedName
+  }
+
+  const assignedUserID = typeof contact.assigned_user_id === 'string'
+    ? contact.assigned_user_id.trim()
+    : ''
+  if (!assignedUserID) {
+    return t('chat.unassigned')
+  }
+
+  const assignedUser = usersStore.users.find(user => user.id === assignedUserID)
+  if (assignedUser?.full_name) {
+    return assignedUser.full_name
+  }
+
+  return assignedUserID
+}
 
 // Icon mapping for custom actions
 const actionIconMap: Record<string, any> = {
@@ -2001,19 +2029,27 @@ async function sendMediaMessage() {
                 </span>
               </div>
               <div class="flex items-center justify-between gap-1.5">
-                <div class="flex min-w-0 items-center gap-1.5">
-                  <p v-if="!isContactsSidebarCompact" class="text-xs text-white/50 light:text-gray-500 truncate">
-                    {{ contact.phone_number }}
+                <div class="min-w-0">
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <p v-if="!isContactsSidebarCompact" class="text-xs text-white/50 light:text-gray-500 truncate">
+                      {{ contact.phone_number }}
+                    </p>
+                    <InstanceTag
+                      v-if="contact.instance_id"
+                      :instance-id="contact.instance_id"
+                      :class="[
+                        isContactsSidebarCompact ? 'max-w-[92px]' : '',
+                        isContactsSidebarWide ? 'max-w-[190px]' : ''
+                      ]"
+                      placement="sidebar"
+                    />
+                  </div>
+                  <p
+                    v-if="contact.assigned_user_id && !isContactsSidebarCompact"
+                    class="mt-0.5 truncate text-[11px] text-emerald-400/85 light:text-emerald-700"
+                  >
+                    {{ $t('chat.assignedTo') }}: {{ getAssignedAgentName(contact) }}
                   </p>
-                  <InstanceTag
-                    v-if="contact.instance_id"
-                    :instance-id="contact.instance_id"
-                    :class="[
-                      isContactsSidebarCompact ? 'max-w-[92px]' : '',
-                      isContactsSidebarWide ? 'max-w-[190px]' : ''
-                    ]"
-                    placement="sidebar"
-                  />
                 </div>
                 <Badge v-if="contact.unread_count > 0" class="ml-2 h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
                   {{ contact.unread_count }}
@@ -2295,13 +2331,17 @@ async function sendMediaMessage() {
                 :id="`message-${message.id}`"
                 :class="[
                   'flex group',
-                  message.direction === 'outgoing' ? 'justify-end' : 'justify-start'
+                  isSystemEventMessage(message)
+                    ? 'justify-center'
+                    : (message.direction === 'outgoing' ? 'justify-end' : 'justify-start')
                 ]"
               >
               <div
                 :class="[
                   'chat-bubble',
-                  message.direction === 'outgoing' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming',
+                  isSystemEventMessage(message)
+                    ? 'chat-bubble-system'
+                    : (message.direction === 'outgoing' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'),
                   isDeletedMessage(message) ? 'chat-bubble-deleted' : '',
                   isGroupMember(message.id) ? 'media-group-member' : ''
                 ]"
@@ -2467,9 +2507,9 @@ async function sendMediaMessage() {
                   <span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span></span>
                 </div>
                 <!-- Text content (for text messages or captions) -->
-                <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words">{{ getMessageContent(message) }}<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
+                <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words">{{ getMessageContent(message) }}<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing' && !isSystemEventMessage(message)" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
                 <!-- Fallback for media without URL -->
-                <span v-else-if="isMediaMessage(message) && !message.media_url" class="text-muted-foreground italic">[{{ message.message_type.charAt(0).toUpperCase() + message.message_type.slice(1) }}]<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
+                <span v-else-if="isMediaMessage(message) && !message.media_url" class="text-muted-foreground italic">[{{ message.message_type.charAt(0).toUpperCase() + message.message_type.slice(1) }}]<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing' && !isSystemEventMessage(message)" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
                 <!-- Interactive buttons - WhatsApp style -->
                 <div
                   v-if="getInteractiveButtons(message).length > 0"
@@ -2503,7 +2543,7 @@ async function sendMediaMessage() {
                 <span v-if="!getMessageContent(message) && !(isMediaMessage(message) && !message.media_url)" class="chat-bubble-time block clear-both">
                   <span>{{ formatMessageTime(message.created_at) }}</span>
                   <component
-                    v-if="message.direction === 'outgoing'"
+                    v-if="message.direction === 'outgoing' && !isSystemEventMessage(message)"
                     :is="getMessageStatusIcon(message.status)"
                     :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]"
                   />
@@ -2540,7 +2580,7 @@ async function sendMediaMessage() {
                 </span>
               </div>
               <!-- Action buttons for incoming messages -->
-              <div v-if="message.direction === 'incoming'" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
+              <div v-if="message.direction === 'incoming' && !isSystemEventMessage(message)" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
                 <Popover :open="reactionPickerMessageId === message.id" @update:open="(open: boolean) => reactionPickerMessageId = open ? message.id : null">
                   <PopoverTrigger as-child>
                     <Button variant="ghost" size="icon" class="h-6 w-6">
@@ -2570,7 +2610,7 @@ async function sendMediaMessage() {
                 </Button>
               </div>
               <!-- Reply button for outgoing messages (shown on hover) -->
-              <div v-if="message.direction === 'outgoing'" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
+              <div v-if="message.direction === 'outgoing' && !isSystemEventMessage(message)" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
                 <Popover :open="reactionPickerMessageId === message.id" @update:open="(open: boolean) => reactionPickerMessageId = open ? message.id : null">
                   <PopoverTrigger as-child>
                     <Button variant="ghost" size="icon" class="h-6 w-6">

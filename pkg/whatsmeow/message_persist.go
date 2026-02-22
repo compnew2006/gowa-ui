@@ -181,6 +181,20 @@ func (cm *ConnectionManager) persistParsedMessage(
 		}
 	}
 
+	// Outgoing messages created by this runtime are inserted first as "pending" and
+	// may receive their self event before finalizeMessageSend sets wamid. For these,
+	// reconcile the event into the existing pending row instead of creating a duplicate.
+	if evt.Info.IsFromMe && evt.Info.DeviceSentMeta == nil && !opts.HistorySync && strings.TrimSpace(content) != "" {
+		reconciled, err := cm.reconcilePendingOutgoingMessage(ctx, orgID, instanceID, contact.ID, chatJID.String(), msgType, content, waMessageID, createdAt)
+		if err != nil {
+			return nil, err
+		}
+		if reconciled != nil {
+			reconciled.Contact = contact
+			return reconciled, nil
+		}
+	}
+
 	message := models.Message{
 		BaseModel:         models.BaseModel{CreatedAt: createdAt},
 		OrganizationID:    orgID,
@@ -266,6 +280,60 @@ func (cm *ConnectionManager) persistParsedMessage(
 	cm.logger.Info("Message persisted", logFields...)
 
 	return &message, nil
+}
+
+func (cm *ConnectionManager) reconcilePendingOutgoingMessage(
+	ctx context.Context,
+	orgID, instanceID uuid.UUID,
+	contactID uuid.UUID,
+	conversationID string,
+	msgType models.MessageType,
+	content string,
+	waMessageID string,
+	eventTime time.Time,
+) (*models.Message, error) {
+	windowStart := eventTime.Add(-2 * time.Minute)
+
+	var pending models.Message
+	err := cm.db.WithContext(ctx).
+		Where(
+			"organization_id = ? AND instance_id = ? AND contact_id = ? AND direction = ? AND message_type = ? AND content = ? AND status = ? AND COALESCE(whats_app_message_id, '') = '' AND created_at >= ?",
+			orgID,
+			instanceID,
+			contactID,
+			models.DirectionOutgoing,
+			msgType,
+			content,
+			models.MessageStatusPending,
+			windowStart,
+		).
+		Order("created_at DESC").
+		First(&pending).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed pending outgoing reconciliation lookup: %w", err)
+	}
+
+	updates := map[string]any{
+		"status": models.MessageStatusSent,
+	}
+	if waMessageID != "" {
+		updates["whats_app_message_id"] = waMessageID
+		pending.WhatsAppMessageID = waMessageID
+	}
+	if pending.ConversationID == "" && strings.TrimSpace(conversationID) != "" {
+		updates["conversation_id"] = conversationID
+		pending.ConversationID = conversationID
+	}
+
+	if err := cm.db.WithContext(ctx).Model(&pending).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("failed to reconcile pending outgoing message: %w", err)
+	}
+
+	pending.Status = models.MessageStatusSent
+	return &pending, nil
 }
 
 func (cm *ConnectionManager) broadcastPersistedMessage(

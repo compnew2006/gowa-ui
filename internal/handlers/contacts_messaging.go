@@ -70,7 +70,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	// Get contact (users without full read permission can only message their assigned contacts)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
+	if !a.canReadAllContacts(userID, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
@@ -319,7 +319,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	// Get contact (users without full read permission can only message their assigned contacts)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
+	if !a.canReadAllContacts(userID, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
@@ -496,7 +496,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	// Get contact (users without full read permission can only react to messages in their assigned contacts)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
+	if !a.canReadAllContacts(userID, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
@@ -621,7 +621,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 
 	var contact models.Contact
 	contactQuery := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
+	if !a.canReadAllContacts(userID, orgID) {
 		contactQuery = contactQuery.Where("assigned_user_id = ?", userID)
 	}
 	if err := contactQuery.First(&contact).Error; err != nil {

@@ -160,7 +160,8 @@ The loop **ONLY** exits when ALL of these are true:
 | B    | Add semantic version entry to `CHANGELOG.md` (Added/Changed/Fixed)                                            | `date +"%Y-%m-%d %H:%M"`      |
 | C    | Create/update `session_summary.md` with date, objective, modules touched, technical decisions, and next steps | `date +"%Y-%m-%d %H:%M"`      |
 | D    | Regenerate `STRUCTURE.md` using Python script                                                                 | `python3 gen_md_structure.py` |
-| E    | Git commit changes                                                                                            | `git commit -m "<message>"`   |
+| E    | **MANDATORY**: Create/Update End-to-End (E2E) tests to validate the newly completed user request              | e.g., Playwright / Cypress    |
+| F    | Git commit changes                                                                                            | `git commit -m "<message>"`   |
 
 > **Date Format Rule**: All date headers in `MEMORY.md` and `CHANGELOG.md` MUST use the full `YYYY-MM-DD HH:MM` format (e.g., `2026-02-17 08:35`). Do NOT use bracketed date-only format like `[YYYY-MM-DD]`. Run `date +"%Y-%m-%d %H:%M"` to get the correct timestamp.
 
@@ -175,14 +176,15 @@ The loop **ONLY** exits when ALL of these are true:
 **NEVER** finish a task without completing these steps — but ONLY after the loop exits with ✅:
 
 1. **Analyze**: Review the conversation history and specific code modifications made during the session.
-2. **Generate/Append**: Create/update to a file named `session_summary.md` in the root directory.
-3. **Format**: Follow this markdown structure:
+2. **Create E2E Test**: Build an automated End-to-End (E2E) test for the feature/fix implemented to ensure complete verification.
+3. **Generate/Append**: Create/update to a file named `session_summary.md` in the root directory.
+4. **Format**: Follow this markdown structure:
    - **Date**: `YYYY-MM-DD HH:MM` (use `date +"%Y-%m-%d %H:%M"`)
    - **Objective**: One sentence stating the primary goal of the session.
    - **Modules Touched**: List specific files/modules modified or created. Note if any file approaches the 300 LOC limit.
    - **Technical Decisions**: Briefly explain _why_ specific architectural or library choices were made.
    - **Next Steps**: List pending tasks, unresolved bugs, or immediate next actions.
-4. **Execution**: Use strict diff-only or search-and-replace blocks to prevent overwriting previous history.
+5. **Execution**: Use strict diff-only or search-and-replace blocks to prevent overwriting previous history.
 
 ---
 
@@ -202,5 +204,3 @@ QA is no longer a separate step — it is **built into Phase 3 (TEST)** of every
 ---
 
 ## Execution Summary
-
-Develop an upgrade for the Canned Response feature that enables the inclusion of multimedia attachments, specifically photos and videos, alongside rich text formatting capabilities. Implement a text editor interface that supports WhatsApp's native styling syntax, allowing users to apply bold, italic, strikethrough, and monospace formatting to ensure messages render correctly within the WhatsApp client.

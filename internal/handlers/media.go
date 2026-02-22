@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -154,7 +154,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 
 	// Users without contacts:read permission can only access media from their assigned contacts
 	// or from contacts with an active team transfer where the user is a team member.
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
+	if !a.canReadAllContacts(userID, orgID) {
 		var contact models.Contact
 		if err := a.DB.Where("id = ? AND assigned_user_id = ?", message.ContactID, userID).First(&contact).Error; err != nil {
 			// Not directly assigned — check team membership via active transfer

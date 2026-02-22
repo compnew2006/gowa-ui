@@ -53,7 +53,7 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 	// Get contact (users without full read permission can only message their assigned contacts)
 	var contact models.Contact
 	contactQuery := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
+	if !a.canReadAllContacts(userID, orgID) {
 		contactQuery = contactQuery.Where("assigned_user_id = ?", userID)
 	}
 	if err := contactQuery.First(&contact).Error; err != nil {

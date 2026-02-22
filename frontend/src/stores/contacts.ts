@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { contactsService, chatsService, messagesService } from '@/services/api'
+import { useAuthStore } from '@/stores/auth'
 
 export type ChatStatus = 'pending' | 'open' | 'closed'
 export type ChatBucketTab = 'pending' | 'assigned'
@@ -23,6 +24,7 @@ export interface Contact {
   service_window_open?: boolean
   unread_count: number
   assigned_user_id?: string
+  assigned_user_name?: string
   closed_at?: string
   closed_by_user_id?: string
   closed_by_name?: string
@@ -160,6 +162,7 @@ function removeSyntheticPlaceholderMessages(messageList: Message[]): Message[] {
 }
 
 export const useContactsStore = defineStore('contacts', () => {
+  const authStore = useAuthStore()
   const contacts = ref<Contact[]>([])
   const pendingChats = ref<Contact[]>([])
   const assignedChats = ref<Contact[]>([])
@@ -186,7 +189,12 @@ export const useContactsStore = defineStore('contacts', () => {
   const pendingChatsTotal = ref(0)
   const assignedChatsTotal = ref(0)
   const isLoadingMoreContacts = ref(false)
+  const isAdminOrSuperAdmin = computed(() => {
+    if (authStore.user?.is_super_admin === true) return true
+    return (authStore.userRole || '').toLowerCase() === 'admin'
+  })
   const hasMoreContacts = computed(() => {
+    if (isAdminOrSuperAdmin.value) return false
     const activeCount = activeChatTab.value === 'assigned'
       ? assignedChats.value.length
       : pendingChats.value.length
@@ -232,6 +240,9 @@ export const useContactsStore = defineStore('contacts', () => {
   }
 
   const activeTabContacts = computed(() => {
+    if (isAdminOrSuperAdmin.value) {
+      return contacts.value.filter(contact => contact.status !== 'closed')
+    }
     if (activeChatTab.value === 'assigned') return assignedChats.value
     return pendingChats.value
   })
@@ -320,6 +331,10 @@ export const useContactsStore = defineStore('contacts', () => {
   function setActiveChatTab(tab: ChatBucketTab) {
     activeChatTab.value = tab
     contactsPage.value = 1
+    if (isAdminOrSuperAdmin.value) {
+      contactsTotal.value = pendingChatsTotal.value + assignedChatsTotal.value
+      return
+    }
     contactsTotal.value = tab === 'assigned'
       ? assignedChatsTotal.value
       : pendingChatsTotal.value
@@ -384,8 +399,7 @@ export const useContactsStore = defineStore('contacts', () => {
         }),
         chatsService.list({
           ...listParams,
-          status: 'open',
-          assigned_to: 'me'
+          status: 'open'
         })
       ])
 
@@ -408,9 +422,11 @@ export const useContactsStore = defineStore('contacts', () => {
 
       contacts.value = Array.from(merged.values())
       rebuildChatBucketsFromContacts()
-      contactsTotal.value = activeChatTab.value === 'assigned'
-        ? assignedChatsTotal.value
-        : pendingChatsTotal.value
+      contactsTotal.value = isAdminOrSuperAdmin.value
+        ? pendingChatsTotal.value + assignedChatsTotal.value
+        : (activeChatTab.value === 'assigned'
+          ? assignedChatsTotal.value
+          : pendingChatsTotal.value)
       contactsPage.value = 1
     } catch (error) {
       console.error('Failed to fetch chats:', error)
@@ -486,8 +502,7 @@ export const useContactsStore = defineStore('contacts', () => {
         search: searchQuery.value || undefined,
         page: nextPage,
         limit: contactsLimit.value,
-        status: activeChatTab.value === 'assigned' ? 'open' : 'pending',
-        assigned_to: activeChatTab.value === 'assigned' ? 'me' : undefined
+        status: activeChatTab.value === 'assigned' ? 'open' : 'pending'
       })
       const data = response.data.data || response.data
       const newContacts = normalizeContacts(data.contacts || [])

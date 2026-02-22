@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'vue-sonner'
 import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { getInitials, getAvatarGradient } from '@/lib/utils'
+import { DeleteConfirmDialog } from '@/components/shared'
 import {
   StickyNote, Pencil, Trash2, X, Check, Loader2, Send
 } from 'lucide-vue-next'
@@ -31,6 +32,8 @@ const newNoteContent = ref('')
 const editingNoteId = ref<string | null>(null)
 const editingContent = ref('')
 const isSaving = ref(false)
+const deleteDialogOpen = ref(false)
+const noteToDeleteId = ref<string | null>(null)
 const notesEndRef = ref<HTMLElement | null>(null)
 
 // Infinite scroll for older notes (scroll up to load more)
@@ -133,11 +136,22 @@ async function saveEdit(noteId: string) {
   }
 }
 
-async function deleteNote(noteId: string) {
-  if (!confirm(t('chat.confirmDeleteNote'))) return
+function requestDeleteNote(noteId: string) {
+  noteToDeleteId.value = noteId
+  deleteDialogOpen.value = true
+}
+
+function closeDeleteDialog() {
+  deleteDialogOpen.value = false
+  noteToDeleteId.value = null
+}
+
+async function confirmDeleteNote() {
+  if (!noteToDeleteId.value) return
   try {
-    await notesStore.deleteNote(props.contactId, noteId)
+    await notesStore.deleteNote(props.contactId, noteToDeleteId.value)
     toast.success(t('chat.noteDeleted'))
+    closeDeleteDialog()
   } catch {
     toast.error(t('chat.noteDeleteFailed'))
   }
@@ -167,6 +181,12 @@ function canManageNote(note: { created_by_id: string }): boolean {
   const currentUserID = normalizeID(authStore.user?.id)
   return (noteCreatorID !== '' && noteCreatorID === currentUserID) || authStore.hasPermission('chat', 'delete')
 }
+
+watch(deleteDialogOpen, (open) => {
+  if (!open) {
+    noteToDeleteId.value = null
+  }
+})
 </script>
 
 <template>
@@ -271,7 +291,7 @@ function canManageNote(note: { created_by_id: string }): boolean {
                 </button>
                 <button
                   class="h-6 w-6 rounded-md flex items-center justify-center hover:bg-red-500/10 text-white/30 hover:text-red-400 light:text-gray-400 light:hover:text-red-500 transition-colors"
-                  @click="deleteNote(note.id)"
+                  @click="requestDeleteNote(note.id)"
                 >
                   <Trash2 class="h-3 w-3" />
                 </button>
@@ -314,5 +334,15 @@ function canManageNote(note: { created_by_id: string }): boolean {
         </button>
       </div>
     </div>
+
+    <DeleteConfirmDialog
+      v-model:open="deleteDialogOpen"
+      :title="t('common.delete')"
+      :description="t('chat.confirmDeleteNote')"
+      :confirm-label="t('common.delete')"
+      :cancel-label="t('common.cancel')"
+      @confirm="confirmDeleteNote"
+      @cancel="closeDeleteDialog"
+    />
   </div>
 </template>

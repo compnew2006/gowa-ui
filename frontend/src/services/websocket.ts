@@ -420,7 +420,10 @@ class WebSocketService {
       store.patchContact({
         id: payload.contact_id,
         status: hasContactStatus ? payload.contact_status : undefined,
-        assigned_user_id: normalizedAssignedUserId
+        assigned_user_id: normalizedAssignedUserId,
+        assigned_user_name: typeof payload.assigned_user_name === 'string'
+          ? payload.assigned_user_name
+          : undefined
       })
     }
 
@@ -463,8 +466,11 @@ class WebSocketService {
       }
     }
 
-    // Refresh chat buckets to keep pending/assigned tabs in sync.
-    void store.fetchChats({ search: store.searchQuery || undefined })
+    // Avoid full list refetch on every message; it can evict already-loaded rows when pagination is active.
+    // If this message belongs to a contact not present in the store, fetch just that contact.
+    if (contactId && !knownContact) {
+      void store.fetchContact(contactId)
+    }
   }
 
   private handleStatusUpdate(store: ReturnType<typeof useContactsStore>, payload: any) {

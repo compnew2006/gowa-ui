@@ -95,6 +95,11 @@ func (a *App) canBypassPendingChatRestriction(userID, orgID uuid.UUID) bool {
 	return strings.EqualFold(perms.RoleName, "admin")
 }
 
+func (a *App) canReadAllContacts(userID, orgID uuid.UUID) bool {
+	return a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) ||
+		a.canBypassPendingChatRestriction(userID, orgID)
+}
+
 func isChatRestrictedForMessageRead(contact models.Contact) bool {
 	status := contact.EffectiveStatus()
 	return status == models.ChatStatusPending || contact.AssignedUserID == nil

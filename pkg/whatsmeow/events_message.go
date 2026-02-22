@@ -17,10 +17,13 @@ func (cm *ConnectionManager) handleMessage(ctx context.Context, evt *events.Mess
 	allowFromMe := false
 	if evt.Info.IsFromMe {
 		// Keep ignoring self-origin messages emitted by this runtime to avoid
-		// duplicate persistence for dashboard/API sends. DeviceSentMeta indicates
-		// the message came from another linked device (e.g. mobile), which should
-		// be synchronized into the chat thread.
-		if evt.Info.DeviceSentMeta == nil {
+		// duplicate persistence for dashboard/API sends.
+		//
+		// DeviceSentMeta is only guaranteed on direct chats. Group/channel
+		// self-origin messages may still come from another linked device without
+		// this metadata, and should be synchronized into the chat thread.
+		allowGroupOrChannelFromMe := evt.Info.IsGroup || evt.Info.Chat.Server == types.NewsletterServer
+		if evt.Info.DeviceSentMeta == nil && !allowGroupOrChannelFromMe {
 			return
 		}
 		allowFromMe = true

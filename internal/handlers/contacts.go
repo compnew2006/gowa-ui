@@ -33,6 +33,7 @@ type ContactResponse struct {
 	LastMessagePreview string     `json:"last_message_preview"`
 	UnreadCount        int        `json:"unread_count"`
 	AssignedUserID     *uuid.UUID `json:"assigned_user_id,omitempty"`
+	AssignedUserName   string     `json:"assigned_user_name,omitempty"`
 	ClosedAt           *time.Time `json:"closed_at,omitempty"`
 	ClosedByUserID     *uuid.UUID `json:"closed_by_user_id,omitempty"`
 	ClosedByName       string     `json:"closed_by_name,omitempty"`
@@ -450,7 +451,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, parseAssignedToErr.Error(), nil, "assigned_to")
 	}
 
-	hasContactsReadPermission := a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID)
+	hasContactsReadPermission := a.canReadAllContacts(userID, orgID)
 	// Users without contacts:read can still see pending queue + their assigned chats.
 	if !hasContactsReadPermission {
 		query = query.Where(
@@ -531,7 +532,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	var total int64
 	query.Model(&models.Contact{}).Count(&total)
 
-	if err := query.Preload("ClosedByUser").Offset(pg.Offset).Limit(pg.Limit).Find(&contacts).Error; err != nil {
+	if err := query.Preload("ClosedByUser").Preload("AssignedUser").Offset(pg.Offset).Limit(pg.Limit).Find(&contacts).Error; err != nil {
 		a.Log.Error("Failed to list contacts", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list contacts", nil, "")
 	}
@@ -610,6 +611,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			LastMessagePreview: c.LastMessagePreview,
 			UnreadCount:        int(unreadCount),
 			AssignedUserID:     c.AssignedUserID,
+			AssignedUserName:   strings.TrimSpace(userFullName(c.AssignedUser)),
 			ClosedAt:           closedAt,
 			ClosedByUserID:     closedByUserID,
 			ClosedByName:       strings.TrimSpace(userFullName(c.ClosedByUser)),
@@ -642,10 +644,10 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	query := a.DB.Preload("ClosedByUser").Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := a.DB.Preload("ClosedByUser").Preload("AssignedUser").Where("id = ? AND organization_id = ?", contactID, orgID)
 
 	// Users without contacts:read permission can only access their assigned contacts
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
+	if !a.canReadAllContacts(userID, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 
@@ -719,6 +721,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 		LastMessagePreview: contact.LastMessagePreview,
 		UnreadCount:        int(unreadCount),
 		AssignedUserID:     contact.AssignedUserID,
+		AssignedUserName:   strings.TrimSpace(userFullName(contact.AssignedUser)),
 		ClosedAt:           closedAt,
 		ClosedByUserID:     closedByUserID,
 		ClosedByName:       strings.TrimSpace(userFullName(contact.ClosedByUser)),
@@ -745,7 +748,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		return nil
 	}
 
-	hasContactsReadPermission := a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID)
+	hasContactsReadPermission := a.canReadAllContacts(userID, orgID)
 
 	// Verify contact belongs to org (and to user if no contacts:read permission)
 	var contact models.Contact

@@ -114,7 +114,6 @@ test.describe('Conversation Notes - UI', () => {
     await chatPage.goto(contactId)
     await chatPage.openNotesPanel()
 
-    page.on('dialog', dialog => dialog.accept())
     await chatPage.deleteNote(note.content)
 
     await chatPage.expectToast('Note deleted')

@@ -20,6 +20,16 @@ type ChatAssignmentResetWorker struct {
 	ticker   *time.Ticker
 }
 
+type chatAssignmentResetCandidate struct {
+	ID              uuid.UUID  `gorm:"column:id"`
+	OrganizationID  uuid.UUID  `gorm:"column:organization_id"`
+	PhoneNumber     string     `gorm:"column:phone_number"`
+	ProfileName     string     `gorm:"column:profile_name"`
+	InstanceID      *uuid.UUID `gorm:"column:instance_id"`
+	WhatsAppAccount string     `gorm:"column:whats_app_account"`
+	AssignedUserID  *uuid.UUID `gorm:"column:assigned_user_id"`
+}
+
 func NewChatAssignmentResetWorker(app *App, interval time.Duration) *ChatAssignmentResetWorker {
 	return &ChatAssignmentResetWorker{
 		app:      app,
@@ -96,7 +106,7 @@ func (w *ChatAssignmentResetWorker) processOrganization(nowUTC time.Time, organi
 		return nil
 	}
 
-	resetCount, contactIDs, err := w.resetAssignedChats(organization.ID, nowUTC)
+	resetCount, resetCandidates, err := w.resetAssignedChats(organization.ID, nowUTC)
 	if err != nil {
 		return err
 	}
@@ -106,7 +116,9 @@ func (w *ChatAssignmentResetWorker) processOrganization(nowUTC time.Time, organi
 	}
 
 	if resetCount > 0 {
+		contactIDs := resetCandidateIDs(resetCandidates)
 		w.broadcastResetContacts(organization.ID, contactIDs)
+		w.appendResetSystemMessages(resetCandidates, schedule, tzName, today)
 		w.app.Log.Info(
 			"Assigned chat reset completed",
 			"org_id", organization.ID,
@@ -120,15 +132,15 @@ func (w *ChatAssignmentResetWorker) processOrganization(nowUTC time.Time, organi
 	return nil
 }
 
-func (w *ChatAssignmentResetWorker) resetAssignedChats(orgID uuid.UUID, nowUTC time.Time) (int64, []uuid.UUID, error) {
+func (w *ChatAssignmentResetWorker) resetAssignedChats(orgID uuid.UUID, nowUTC time.Time) (int64, []chatAssignmentResetCandidate, error) {
 	query := w.app.DB.Model(&models.Contact{}).
 		Where("organization_id = ? AND assigned_user_id IS NOT NULL AND (status IS NULL OR status = '' OR status <> ?)", orgID, models.ChatStatusClosed)
 
-	var contactIDs []uuid.UUID
-	if err := query.Pluck("id", &contactIDs).Error; err != nil {
+	var resetCandidates []chatAssignmentResetCandidate
+	if err := query.Select("id", "organization_id", "phone_number", "profile_name", "instance_id", "whats_app_account", "assigned_user_id").Find(&resetCandidates).Error; err != nil {
 		return 0, nil, err
 	}
-	if len(contactIDs) == 0 {
+	if len(resetCandidates) == 0 {
 		return 0, nil, nil
 	}
 
@@ -141,13 +153,13 @@ func (w *ChatAssignmentResetWorker) resetAssignedChats(orgID uuid.UUID, nowUTC t
 	}
 
 	result := w.app.DB.Model(&models.Contact{}).
-		Where("id IN ?", contactIDs).
+		Where("id IN ?", resetCandidateIDs(resetCandidates)).
 		Updates(updates)
 	if result.Error != nil {
 		return 0, nil, result.Error
 	}
 
-	return result.RowsAffected, contactIDs, nil
+	return result.RowsAffected, resetCandidates, nil
 }
 
 func (w *ChatAssignmentResetWorker) persistOrganizationResetDate(orgID uuid.UUID, resetDate string) error {
@@ -176,5 +188,55 @@ func (w *ChatAssignmentResetWorker) broadcastResetContacts(orgID uuid.UUID, cont
 				"status":           models.ChatStatusPending.String(),
 			},
 		})
+	}
+}
+
+func resetCandidateIDs(resetCandidates []chatAssignmentResetCandidate) []uuid.UUID {
+	contactIDs := make([]uuid.UUID, 0, len(resetCandidates))
+	for _, candidate := range resetCandidates {
+		contactIDs = append(contactIDs, candidate.ID)
+	}
+	return contactIDs
+}
+
+func (w *ChatAssignmentResetWorker) appendResetSystemMessages(
+	resetCandidates []chatAssignmentResetCandidate,
+	schedule ChatAssignmentResetSettings,
+	timezone string,
+	resetDate string,
+) {
+	if len(resetCandidates) == 0 {
+		return
+	}
+
+	for _, candidate := range resetCandidates {
+		metadata := models.JSONB{
+			"event_type":    "chat_assignment_reset",
+			"reason":        "assigned_chat_reset_schedule",
+			"schedule_mode": string(schedule.Mode),
+			"schedule_hour": schedule.Hour,
+			"timezone":      timezone,
+			"reset_date":    resetDate,
+		}
+		if candidate.AssignedUserID != nil && *candidate.AssignedUserID != uuid.Nil {
+			metadata["previous_assigned_user_id"] = candidate.AssignedUserID.String()
+		}
+		resetContact := models.Contact{
+			BaseModel: models.BaseModel{
+				ID: candidate.ID,
+			},
+			OrganizationID:  candidate.OrganizationID,
+			PhoneNumber:     candidate.PhoneNumber,
+			ProfileName:     candidate.ProfileName,
+			InstanceID:      candidate.InstanceID,
+			WhatsAppAccount: candidate.WhatsAppAccount,
+			Status:          models.ChatStatusPending,
+			AssignedUserID:  nil,
+		}
+		w.app.appendSystemChatMessage(
+			&resetContact,
+			"System: Assigned Chat Reset schedule moved this chat back to pending queue.",
+			metadata,
+		)
 	}
 }

@@ -74,6 +74,20 @@ func TestChatAssignmentResetWorker_ProcessOrganization_ResetsAssignedChatsWhenDu
 	assert.Equal(t, assignee.ID, *refreshedClosed.AssignedUserID)
 	assert.Equal(t, models.ChatStatusClosed, refreshedClosed.Status)
 
+	var resetSystemMessage models.Message
+	require.NoError(t, app.DB.Where("contact_id = ? AND metadata->>'event_type' = ?", assignedContact.ID, "chat_assignment_reset").
+		Order("created_at DESC").
+		First(&resetSystemMessage).Error)
+	assert.Equal(t, models.DirectionOutgoing, resetSystemMessage.Direction)
+	assert.Equal(t, true, resetSystemMessage.Metadata["system_event"])
+	assert.Contains(t, resetSystemMessage.Content, "Assigned Chat Reset schedule")
+
+	var closedResetSystemMessageCount int64
+	require.NoError(t, app.DB.Model(&models.Message{}).
+		Where("contact_id = ? AND metadata->>'event_type' = ?", closedContact.ID, "chat_assignment_reset").
+		Count(&closedResetSystemMessageCount).Error)
+	assert.Equal(t, int64(0), closedResetSystemMessageCount)
+
 	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&storedOrg).Error)
 	assert.Equal(t, now.Format("2006-01-02"), storedOrg.Settings[organizationSettingAssignedChatResetLastDate])
 }

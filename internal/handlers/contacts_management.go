@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -125,6 +126,16 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 	if err := a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
+
+	claimerName := strings.TrimSpace(a.resolveActivityActorName(userID))
+	if claimerName == "" {
+		claimerName = "An agent"
+	}
+	a.appendSystemChatMessage(&contact, fmt.Sprintf("System: %s claimed this chat.", claimerName), models.JSONB{
+		"event_type":           "chat_claimed",
+		"claimed_by_user_id":   userID.String(),
+		"claimed_by_user_name": claimerName,
+	})
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 
 	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
@@ -240,7 +251,7 @@ func (a *App) GetContactSessionData(r *fastglue.Request) error {
 	// Verify contact belongs to org (users without full read permission can only access assigned contacts)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
+	if !a.canReadAllContacts(userID, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
@@ -694,6 +705,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) Con
 		}
 	}
 	serviceWindowOpen := contact.LastInboundAt != nil && time.Since(*contact.LastInboundAt) < 24*time.Hour
+	assignedUserName := a.resolveAssignedUserName(contact, orgID)
 
 	return ContactResponse{
 		ID:                 contact.ID,
@@ -711,6 +723,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) Con
 		LastMessagePreview: contact.LastMessagePreview,
 		UnreadCount:        int(unreadCount),
 		AssignedUserID:     contact.AssignedUserID,
+		AssignedUserName:   assignedUserName,
 		ClosedAt:           closedAt,
 		ClosedByUserID:     closedByUserID,
 		ClosedByName:       strings.TrimSpace(userFullName(contact.ClosedByUser)),
@@ -722,12 +735,32 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) Con
 	}
 }
 
+func (a *App) resolveAssignedUserName(contact *models.Contact, orgID uuid.UUID) string {
+	if contact == nil || contact.AssignedUserID == nil {
+		return ""
+	}
+
+	if name := strings.TrimSpace(userFullName(contact.AssignedUser)); name != "" {
+		return name
+	}
+
+	var assignedUser models.User
+	if err := a.DB.Select("full_name").
+		Where("id = ? AND organization_id = ?", *contact.AssignedUserID, orgID).
+		First(&assignedUser).Error; err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(assignedUser.FullName)
+}
+
 func (a *App) broadcastContactLifecycleUpdate(orgID uuid.UUID, contact *models.Contact, notifyAssignee bool) {
 	if a.WSHub == nil || contact == nil {
 		return
 	}
 
 	status := normalizeContactStatus(contact)
+	assignedUserName := a.resolveAssignedUserName(contact, orgID)
 	assignedUserID := ""
 	if contact.AssignedUserID != nil {
 		assignedUserID = contact.AssignedUserID.String()
@@ -739,10 +772,11 @@ func (a *App) broadcastContactLifecycleUpdate(orgID uuid.UUID, contact *models.C
 	}
 
 	payload := map[string]any{
-		"id":               contact.ID.String(),
-		"assigned_user_id": assignedUserID,
-		"status":           status.String(),
-		"profile_name":     profileName,
+		"id":                 contact.ID.String(),
+		"assigned_user_id":   assignedUserID,
+		"assigned_user_name": assignedUserName,
+		"status":             status.String(),
+		"profile_name":       profileName,
 	}
 
 	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
@@ -752,11 +786,12 @@ func (a *App) broadcastContactLifecycleUpdate(orgID uuid.UUID, contact *models.C
 
 	if notifyAssignee && contact.AssignedUserID != nil {
 		notifyPayload := map[string]any{
-			"id":                contact.ID.String(),
-			"assigned_user_id":  assignedUserID,
-			"status":            status.String(),
-			"profile_name":      profileName,
-			"notify_assignment": true,
+			"id":                 contact.ID.String(),
+			"assigned_user_id":   assignedUserID,
+			"assigned_user_name": assignedUserName,
+			"status":             status.String(),
+			"profile_name":       profileName,
+			"notify_assignment":  true,
 		}
 		a.WSHub.BroadcastToUser(orgID, *contact.AssignedUserID, websocket.WSMessage{
 			Type:    websocket.TypeContactUpdate,

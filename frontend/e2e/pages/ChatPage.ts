@@ -215,6 +215,9 @@ export class ChatPage extends BasePage {
     // Action buttons use group-hover opacity — force click
     const actionBtns = noteCard.locator('div.absolute button')
     await actionBtns.last().click({ force: true })
+    const deleteDialog = this.page.locator('[role="alertdialog"]')
+    await deleteDialog.waitFor({ state: 'visible', timeout: 5000 })
+    await deleteDialog.getByRole('button', { name: /Delete|حذف/i }).click()
   }
 
   // Account tabs helpers
