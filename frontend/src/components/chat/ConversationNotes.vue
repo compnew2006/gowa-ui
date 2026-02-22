@@ -157,6 +157,16 @@ function formatNoteTime(dateStr: string) {
   if (diffDays < 7) return `${diffDays}d ago`
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
+
+function normalizeID(value: string | null | undefined): string {
+  return (value || '').trim().toLowerCase()
+}
+
+function canManageNote(note: { created_by_id: string }): boolean {
+  const noteCreatorID = normalizeID(note.created_by_id)
+  const currentUserID = normalizeID(authStore.user?.id)
+  return (noteCreatorID !== '' && noteCreatorID === currentUserID) || authStore.hasPermission('chat', 'delete')
+}
 </script>
 
 <template>
@@ -248,10 +258,10 @@ function formatNoteTime(dateStr: string) {
                 </div>
               </div>
 
-              <!-- Hover actions (own notes only) -->
+              <!-- Note actions (creator or users with chat delete permission) -->
               <div
-                v-if="note.created_by_id === authStore.user?.id"
-                class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5"
+                v-if="canManageNote(note)"
+                class="absolute top-2 right-2 flex gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
               >
                 <button
                   class="h-6 w-6 rounded-md flex items-center justify-center hover:bg-white/[0.08] light:hover:bg-gray-200 text-white/30 hover:text-white/60 light:text-gray-400 light:hover:text-gray-600 transition-colors"

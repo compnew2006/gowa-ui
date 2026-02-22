@@ -3,9 +3,9 @@ package handlers
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -173,8 +173,8 @@ func (a *App) UpdateConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Only the creator can update their own notes
-	if note.CreatedByID != userID {
+	// The creator can edit their own notes. Users with chat:delete can manage all notes.
+	if note.CreatedByID != userID && !a.HasPermission(userID, models.ResourceChat, models.ActionDelete, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You can only edit your own notes", nil, "")
 	}
 
@@ -238,8 +238,8 @@ func (a *App) DeleteConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Only the creator can delete their own notes
-	if note.CreatedByID != userID {
+	// The creator can delete their own notes. Users with chat:delete can manage all notes.
+	if note.CreatedByID != userID && !a.HasPermission(userID, models.ResourceChat, models.ActionDelete, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You can only delete your own notes", nil, "")
 	}
 
