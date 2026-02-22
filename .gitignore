@@ -1,10 +1,29 @@
-# Binaries
-/server
-/whatomate
-/main
+# Binaries and build artifacts
 bin/
+/whatomate
+whatomate
 whatomate*
 whatomate_*
+*.bin
+/server
+/main
+
+# Build and lint outputs
+go_lint.txt
+go_lint.json
+go_build_err.txt
+frontend_typecheck.txt
+frontend_tsc.txt
+frontend_lint.json
+frontend_audit.json
+
+# Generated reports and analysis
+diagnostics_report.md
+session_summary.md
+ARCHITECTURE_REVIEW.md
+ARCHITECTURE_RISK_REPORT.md
+CORS_WEBSOCKET_ORIGIN_HARDENING_REPORT.md
+COMMERCIALIZATION_PLAN.md
 *.exe
 *.exe~
 *.dll

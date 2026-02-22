@@ -23,7 +23,8 @@ import (
 type CampaignRequest struct {
 	Name            string     `json:"name" validate:"required"`
 	WhatsAppAccount string     `json:"whatsapp_account" validate:"required"`
-	TemplateID      string     `json:"template_id" validate:"required"`
+	TemplateID      string     `json:"template_id"`
+	BodyContent     string     `json:"body_content"`
 	HeaderMediaID   string     `json:"header_media_id"`
 	ScheduledAt     *time.Time `json:"scheduled_at"`
 }
@@ -128,7 +129,7 @@ func (a *App) ListCampaigns(r *fastglue.Request) error {
 			UpdatedAt:           c.UpdatedAt,
 		}
 		if c.Template != nil {
-			response[i].TemplateName = c.Template.Name
+			response[i].TemplateName = campaignTemplateDisplayName(c.Template)
 		}
 	}
 
@@ -152,26 +153,27 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Validate template exists
-	templateID, err := uuid.Parse(req.TemplateID)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid template ID", nil, "")
+	if strings.TrimSpace(req.Name) == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign name is required", nil, "")
+	}
+	if strings.TrimSpace(req.WhatsAppAccount) == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "WhatsApp account is required", nil, "")
 	}
 
-	template, err := findByIDAndOrg[models.Template](a.DB, r, templateID, orgID, "Template")
-	if err != nil {
-		return nil
+	if err := a.validateCampaignSender(orgID, req.WhatsAppAccount); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 
-	// Validate WhatsApp account exists
-	if _, err := a.resolveWhatsAppAccount(orgID, req.WhatsAppAccount); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "WhatsApp account not found", nil, "")
+	template, err := a.resolveCampaignTemplate(orgID, req)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
+	templateID := template.ID
 
 	campaign := models.BulkMessageCampaign{
 		OrganizationID:  orgID,
 		WhatsAppAccount: req.WhatsAppAccount,
-		Name:            req.Name,
+		Name:            strings.TrimSpace(req.Name),
 		TemplateID:      templateID,
 		HeaderMediaID:  req.HeaderMediaID,
 		Status:          models.CampaignStatusDraft,
@@ -191,7 +193,7 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 		Name:                campaign.Name,
 		WhatsAppAccount:     campaign.WhatsAppAccount,
 		TemplateID:          campaign.TemplateID,
-		TemplateName:        template.Name,
+		TemplateName:        campaignTemplateDisplayName(template),
 		HeaderMediaID:       campaign.HeaderMediaID,
 		HeaderMediaFilename: campaign.HeaderMediaFilename,
 		HeaderMediaMimeType: campaign.HeaderMediaMimeType,
@@ -245,7 +247,7 @@ func (a *App) GetCampaign(r *fastglue.Request) error {
 		UpdatedAt:           campaign.UpdatedAt,
 	}
 	if campaign.Template != nil {
-		response.TemplateName = campaign.Template.Name
+		response.TemplateName = campaignTemplateDisplayName(campaign.Template)
 	}
 
 	return r.SendEnvelope(response)
@@ -293,7 +295,20 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 	}
 
 	if req.WhatsAppAccount != "" {
+		if err := a.validateCampaignSender(orgID, req.WhatsAppAccount); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+		}
 		updates["whats_app_account"] = req.WhatsAppAccount
+	}
+
+	if a.isWhatsmeowProvider() && strings.TrimSpace(req.BodyContent) != "" {
+		trimmedBody := strings.TrimSpace(req.BodyContent)
+		if err := a.DB.Model(&models.Template{}).
+			Where("id = ? AND organization_id = ?", campaign.TemplateID, orgID).
+			Update("body_content", trimmedBody).Error; err != nil {
+			a.Log.Error("Failed to update campaign message body", "error", err, "campaign_id", campaign.ID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update campaign message body", nil, "")
+		}
 	}
 
 	if err := a.DB.Model(campaign).Updates(updates).Error; err != nil {
@@ -322,10 +337,89 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 		UpdatedAt:           campaign.UpdatedAt,
 	}
 	if campaign.Template != nil {
-		response.TemplateName = campaign.Template.Name
+		response.TemplateName = campaignTemplateDisplayName(campaign.Template)
 	}
 
 	return r.SendEnvelope(response)
+}
+
+func (a *App) validateCampaignSender(orgID uuid.UUID, sender string) error {
+	if a.isWhatsmeowProvider() {
+		instanceID, err := uuid.Parse(strings.TrimSpace(sender))
+		if err != nil {
+			return fmt.Errorf("invalid WhatsApp instance ID")
+		}
+
+		var instance models.WhatsAppInstance
+		if err := a.DB.
+			Where("id = ? AND organization_id = ?", instanceID, orgID).
+			First(&instance).Error; err != nil {
+			return fmt.Errorf("WhatsApp instance not found")
+		}
+		return nil
+	}
+
+	if _, err := a.resolveWhatsAppAccount(orgID, sender); err != nil {
+		return fmt.Errorf("WhatsApp account not found")
+	}
+	return nil
+}
+
+func (a *App) resolveCampaignTemplate(orgID uuid.UUID, req CampaignRequest) (*models.Template, error) {
+	templateIDRaw := strings.TrimSpace(req.TemplateID)
+	if templateIDRaw != "" {
+		templateID, err := uuid.Parse(templateIDRaw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid template ID")
+		}
+
+		var template models.Template
+		if err := a.DB.Where("id = ? AND organization_id = ?", templateID, orgID).First(&template).Error; err != nil {
+			return nil, fmt.Errorf("template not found")
+		}
+		return &template, nil
+	}
+
+	if !a.isWhatsmeowProvider() {
+		return nil, fmt.Errorf("template ID is required")
+	}
+
+	body := strings.TrimSpace(req.BodyContent)
+	if body == "" {
+		return nil, fmt.Errorf("campaign message body is required")
+	}
+
+	displayName := strings.TrimSpace(req.Name)
+	if displayName == "" {
+		displayName = "Campaign Message"
+	}
+
+	template := &models.Template{
+		OrganizationID:  orgID,
+		WhatsAppAccount: strings.TrimSpace(req.WhatsAppAccount),
+		Name:            fmt.Sprintf("campaign_%s", uuid.NewString()[:8]),
+		DisplayName:     displayName,
+		Language:        "en",
+		Category:        "UTILITY",
+		Status:          "APPROVED",
+		BodyContent:     body,
+	}
+
+	if err := a.DB.Create(template).Error; err != nil {
+		return nil, fmt.Errorf("failed to create campaign template")
+	}
+
+	return template, nil
+}
+
+func campaignTemplateDisplayName(template *models.Template) string {
+	if template == nil {
+		return ""
+	}
+	if strings.TrimSpace(template.DisplayName) != "" {
+		return template.DisplayName
+	}
+	return template.Name
 }
 
 // DeleteCampaign implements campaign deletion
@@ -1095,4 +1189,3 @@ func sanitizeFilename(name string) string {
 	}
 	return name
 }
-

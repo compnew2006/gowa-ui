@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
@@ -11,6 +12,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/templateutil"
+	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -25,6 +27,7 @@ type Worker struct {
 	Redis     *redis.Client
 	Log       logf.Logger
 	WhatsApp  *whatsapp.Client
+	MessageProvider provider.MessageProvider
 	Consumer  *queue.RedisConsumer
 	Publisher *queue.Publisher
 }
@@ -33,7 +36,7 @@ type Worker struct {
 var _ queue.JobHandler = (*Worker)(nil)
 
 // New creates a new Worker instance
-func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger) (*Worker, error) {
+func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, messageProvider provider.MessageProvider) (*Worker, error) {
 	consumer, err := queue.NewRedisConsumer(rdb, log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consumer: %w", err)
@@ -47,6 +50,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger) (*
 		Redis:     rdb,
 		Log:       log,
 		WhatsApp:  whatsapp.NewWithBaseURL(log, cfg.WhatsApp.BaseURL),
+		MessageProvider: messageProvider,
 		Consumer:  consumer,
 		Publisher: publisher,
 	}, nil
@@ -104,16 +108,6 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		return nil // Not an error, just skip
 	}
 
-	// Get WhatsApp account
-	var account models.WhatsAppAccount
-	if err := w.DB.Where("name = ? AND organization_id = ?", campaign.WhatsAppAccount, job.OrganizationID).First(&account).Error; err != nil {
-		w.Log.Error("Failed to load WhatsApp account", "error", err, "account_name", campaign.WhatsAppAccount)
-		w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", "WhatsApp account not found")
-		w.incrementCampaignCount(job.CampaignID, "failed_count")
-		return nil // Don't retry, mark as failed
-	}
-	w.decryptAccountSecrets(&account)
-
 	// Get or create contact for this recipient
 	contact, _, err := contactutil.GetOrCreateContact(w.DB, job.OrganizationID, job.PhoneNumber, job.RecipientName)
 	if err != nil || contact == nil {
@@ -130,12 +124,45 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		TemplateParams: job.TemplateParams,
 	}
 
-	// Send template message
-	waMessageID, err := w.sendTemplateMessage(ctx, &account, campaign.Template, recipient, campaign.HeaderMediaID)
+	var (
+		waMessageID       string
+		sendErr           error
+		messageInstanceID *uuid.UUID
+	)
+
+	if w.isWhatsmeowProvider() {
+		if w.MessageProvider == nil {
+			sendErr = fmt.Errorf("message provider is not configured")
+			w.Log.Error("Failed to send message", "error", sendErr, "recipient", job.PhoneNumber)
+			w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", sendErr.Error())
+			w.incrementCampaignCount(job.CampaignID, "failed_count")
+			return nil
+		}
+
+		instanceID := strings.TrimSpace(campaign.WhatsAppAccount)
+		if parsedInstanceID, parseErr := uuid.Parse(instanceID); parseErr == nil {
+			messageInstanceID = &parsedInstanceID
+		}
+
+		waMessageID, sendErr = w.sendTemplateMessageViaProvider(ctx, instanceID, campaign.Template, recipient)
+	} else {
+		// Get WhatsApp account
+		var account models.WhatsAppAccount
+		if err := w.DB.Where("name = ? AND organization_id = ?", campaign.WhatsAppAccount, job.OrganizationID).First(&account).Error; err != nil {
+			w.Log.Error("Failed to load WhatsApp account", "error", err, "account_name", campaign.WhatsAppAccount)
+			w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", "WhatsApp account not found")
+			w.incrementCampaignCount(job.CampaignID, "failed_count")
+			return nil // Don't retry, mark as failed
+		}
+		w.decryptAccountSecrets(&account)
+
+		waMessageID, sendErr = w.sendTemplateMessage(ctx, &account, campaign.Template, recipient, campaign.HeaderMediaID)
+	}
 
 	// Create Message record
 	message := models.Message{
 		OrganizationID:    job.OrganizationID,
+		InstanceID:        messageInstanceID,
 		WhatsAppAccount:   campaign.WhatsAppAccount,
 		ContactID:         contact.ID,
 		WhatsAppMessageID: waMessageID,
@@ -153,11 +180,11 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		message.Content = content
 	}
 
-	if err != nil {
-		w.Log.Error("Failed to send message", "error", err, "recipient", job.PhoneNumber)
+	if sendErr != nil {
+		w.Log.Error("Failed to send message", "error", sendErr, "recipient", job.PhoneNumber)
 		message.Status = models.MessageStatusFailed
-		message.ErrorMessage = err.Error()
-		w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", err.Error())
+		message.ErrorMessage = sendErr.Error()
+		w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", sendErr.Error())
 		w.incrementCampaignCount(job.CampaignID, "failed_count")
 	} else {
 		w.Log.Info("Message sent", "recipient", job.PhoneNumber, "message_id", waMessageID)
@@ -175,6 +202,10 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 	w.checkCampaignCompletion(ctx, job.CampaignID, job.OrganizationID)
 
 	return nil
+}
+
+func (w *Worker) isWhatsmeowProvider() bool {
+	return w.Config != nil && w.Config.WhatsApp.Provider == "whatsmeow"
 }
 
 // updateRecipientStatus updates the recipient's status in the database
@@ -311,6 +342,30 @@ func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsA
 	}
 
 	return w.WhatsApp.SendTemplateMessage(ctx, waAccount, recipient.PhoneNumber, template.Name, template.Language, components)
+}
+
+func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID string, template *models.Template, recipient *models.BulkMessageRecipient) (string, error) {
+	if w.MessageProvider == nil {
+		return "", fmt.Errorf("message provider is not configured")
+	}
+
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return "", fmt.Errorf("campaign sender instance is required")
+	}
+	if _, err := uuid.Parse(instanceID); err != nil {
+		return "", fmt.Errorf("invalid campaign sender instance")
+	}
+	if template == nil {
+		return "", fmt.Errorf("campaign template not found")
+	}
+
+	body := strings.TrimSpace(templateutil.ReplaceWithJSONBParams(template.BodyContent, template.BodyContent, recipient.TemplateParams))
+	if body == "" {
+		body = fmt.Sprintf("[Campaign: %s]", template.DisplayName)
+	}
+
+	return w.MessageProvider.SendText(ctx, instanceID, recipient.PhoneNumber, body)
 }
 
 // buildMediaParameter creates a media parameter for WhatsApp template headers.

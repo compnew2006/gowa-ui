@@ -41,12 +41,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { campaignsService, templatesService, accountsService } from '@/services/api'
+import { campaignsService, templatesService, accountsService, instancesService } from '@/services/api'
 import { wsService } from '@/services/websocket'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'vue-sonner'
 import { PageHeader, DataTable, DeleteConfirmDialog, SearchInput, type Column } from '@/components/shared'
 import { getErrorMessage } from '@/lib/api-utils'
+import { useConfigStore } from '@/stores/config'
 import {
   Plus,
   Pencil,
@@ -74,6 +75,7 @@ import { formatDate } from '@/lib/utils'
 import { useDebounceFn } from '@vueuse/core'
 
 const { t } = useI18n()
+const configStore = useConfigStore()
 
 interface Campaign {
   id: string
@@ -130,6 +132,12 @@ interface Account {
   phone_id: string
 }
 
+interface Instance {
+  id: string
+  name: string
+  status?: string
+}
+
 interface Recipient {
   id: string
   phone_number: string
@@ -143,10 +151,27 @@ interface Recipient {
 const campaigns = ref<Campaign[]>([])
 const templates = ref<Template[]>([])
 const accounts = ref<Account[]>([])
+const instances = ref<Instance[]>([])
 const isLoading = ref(true)
 const isCreating = ref(false)
 const showCreateDialog = ref(false)
 const editingCampaignId = ref<string | null>(null) // null = create mode, string = edit mode
+const isWhatsmeowProvider = computed(() => configStore.isWhatsmeow)
+
+const senderLabel = computed(() =>
+  isWhatsmeowProvider.value ? t('campaigns.whatsappInstance') : t('campaigns.whatsappAccount')
+)
+const senderPlaceholder = computed(() =>
+  isWhatsmeowProvider.value ? t('campaigns.selectInstance') : t('campaigns.selectAccount')
+)
+const noSendersFoundMessage = computed(() =>
+  isWhatsmeowProvider.value ? t('campaigns.noInstancesFound') : t('campaigns.noAccountsFound')
+)
+const senderOptions = computed(() => (
+  isWhatsmeowProvider.value
+    ? instances.value.map(instance => ({ value: instance.id, label: instance.name }))
+    : accounts.value.map(account => ({ value: account.name, label: account.name }))
+))
 
 const columns = computed<Column<Campaign>[]>(() => [
   { key: 'name', label: t('campaigns.campaign'), sortable: true },
@@ -372,7 +397,8 @@ const manualInputValidation = computed((): ManualInputValidation => {
 const newCampaign = ref({
   name: '',
   whatsapp_account: '',
-  template_id: ''
+  template_id: '',
+  body_content: ''
 })
 
 // AlertDialog state
@@ -385,9 +411,10 @@ const campaignToCancel = ref<Campaign | null>(null)
 let unsubscribeCampaignStats: (() => void) | null = null
 
 onMounted(async () => {
+  await configStore.fetchConfig()
   await Promise.all([
     fetchCampaigns(),
-    fetchAccounts()
+    fetchSenders()
   ])
 
   // Subscribe to campaign stats updates
@@ -475,9 +502,21 @@ async function fetchTemplates(account?: string) {
   }
 }
 
+async function fetchSenders() {
+  if (isWhatsmeowProvider.value) {
+    await fetchInstances()
+    return
+  }
+  await fetchAccounts()
+}
+
 // Re-fetch templates when account changes
 watch(() => newCampaign.value.whatsapp_account, (account) => {
   newCampaign.value.template_id = ''
+  if (isWhatsmeowProvider.value) {
+    templates.value = []
+    return
+  }
   if (account) {
     fetchTemplates(account)
   } else {
@@ -489,33 +528,59 @@ async function fetchAccounts() {
   try {
     const response = await accountsService.list()
     accounts.value = response.data.data?.accounts || []
+    instances.value = []
   } catch (error) {
     console.error('Failed to fetch accounts:', error)
     accounts.value = []
   }
 }
 
+async function fetchInstances() {
+  try {
+    const response = await instancesService.list()
+    const data = (response.data as any).data || response.data
+    instances.value = Array.isArray(data) ? data : (data.instances || [])
+    accounts.value = []
+  } catch (error) {
+    console.error('Failed to fetch instances:', error)
+    instances.value = []
+  }
+}
+
 async function createCampaign() {
-  if (!newCampaign.value.name) {
+  const name = newCampaign.value.name.trim()
+  const bodyContent = newCampaign.value.body_content.trim()
+
+  if (!name) {
     toast.error(t('campaigns.enterCampaignName'))
     return
   }
   if (!newCampaign.value.whatsapp_account) {
-    toast.error(t('campaigns.selectWhatsappAccount'))
+    toast.error(isWhatsmeowProvider.value ? t('campaigns.selectInstance') : t('campaigns.selectWhatsappAccount'))
     return
   }
-  if (!newCampaign.value.template_id) {
+  if (!isWhatsmeowProvider.value && !newCampaign.value.template_id) {
     toast.error(t('campaigns.selectTemplateRequired'))
+    return
+  }
+  if (isWhatsmeowProvider.value && !bodyContent) {
+    toast.error(t('campaigns.enterMessageBody'))
     return
   }
 
   isCreating.value = true
   try {
-    await campaignsService.create({
-      name: newCampaign.value.name,
-      whatsapp_account: newCampaign.value.whatsapp_account,
-      template_id: newCampaign.value.template_id
-    })
+    const payload: Record<string, string> = {
+      name,
+      whatsapp_account: newCampaign.value.whatsapp_account
+    }
+    if (isWhatsmeowProvider.value) {
+      payload.body_content = bodyContent
+    } else {
+      payload.template_id = newCampaign.value.template_id
+    }
+
+    await campaignsService.create(payload)
     toast.success(t('common.createdSuccess', { resource: t('resources.Campaign') }))
     showCreateDialog.value = false
     resetForm()
@@ -531,17 +596,31 @@ function resetForm() {
   newCampaign.value = {
     name: '',
     whatsapp_account: '',
-    template_id: ''
+    template_id: '',
+    body_content: ''
   }
 }
 
-function openEditDialog(campaign: Campaign) {
+async function openEditDialog(campaign: Campaign) {
   editingCampaignId.value = campaign.id
   newCampaign.value = {
     name: campaign.name,
     whatsapp_account: campaign.whatsapp_account || '',
-    template_id: campaign.template_id || ''
+    template_id: campaign.template_id || '',
+    body_content: ''
   }
+
+  if (isWhatsmeowProvider.value && campaign.template_id) {
+    try {
+      const response = await templatesService.get(campaign.template_id)
+      const template = (response.data as any).data || response.data
+      newCampaign.value.body_content = template?.body_content || ''
+    } catch (error) {
+      console.error('Failed to fetch template for campaign edit:', error)
+      newCampaign.value.body_content = ''
+    }
+  }
+
   showCreateDialog.value = true
 }
 
@@ -552,8 +631,16 @@ function openCreateDialog() {
 }
 
 async function saveCampaign() {
-  if (!newCampaign.value.name) {
+  if (!newCampaign.value.name.trim()) {
     toast.error(t('campaigns.enterCampaignName'))
+    return
+  }
+  if (!newCampaign.value.whatsapp_account) {
+    toast.error(isWhatsmeowProvider.value ? t('campaigns.selectInstance') : t('campaigns.selectWhatsappAccount'))
+    return
+  }
+  if (isWhatsmeowProvider.value && !newCampaign.value.body_content.trim()) {
+    toast.error(t('campaigns.enterMessageBody'))
     return
   }
 
@@ -561,11 +648,16 @@ async function saveCampaign() {
     // Update existing campaign
     isCreating.value = true
     try {
-      await campaignsService.update(editingCampaignId.value, {
-        name: newCampaign.value.name,
+      const payload: Record<string, string> = {
+        name: newCampaign.value.name.trim(),
         whatsapp_account: newCampaign.value.whatsapp_account,
-        template_id: newCampaign.value.template_id
-      })
+      }
+      if (isWhatsmeowProvider.value) {
+        payload.body_content = newCampaign.value.body_content.trim()
+      } else {
+        payload.template_id = newCampaign.value.template_id
+      }
+      await campaignsService.update(editingCampaignId.value, payload)
       toast.success(t('common.updatedSuccess', { resource: t('resources.Campaign') }))
       showCreateDialog.value = false
       editingCampaignId.value = null
@@ -1179,22 +1271,23 @@ async function addRecipientsFromCSV() {
                 />
               </div>
               <div class="grid gap-2">
-                <Label for="account">{{ $t('campaigns.whatsappAccount') }}</Label>
+                <Label for="account">{{ senderLabel }}</Label>
                 <Select v-model="newCampaign.whatsapp_account" :disabled="isCreating">
                   <SelectTrigger>
-                    <SelectValue :placeholder="$t('campaigns.selectAccount')" />
+                    <SelectValue :placeholder="senderPlaceholder" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem v-for="account in accounts" :key="account.id" :value="account.name">
-                      {{ account.name }}
+                    <SelectItem v-for="option in senderOptions" :key="option.value" :value="option.value">
+                      {{ option.label }}
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <p v-if="accounts.length === 0" class="text-xs text-muted-foreground">
-                  {{ $t('campaigns.noAccountsFound') }}
+                <p v-if="senderOptions.length === 0" class="text-xs text-muted-foreground">
+                  {{ noSendersFoundMessage }}
                 </p>
               </div>
-              <div class="grid gap-2">
+
+              <div v-if="!isWhatsmeowProvider" class="grid gap-2">
                 <Label for="template">{{ $t('campaigns.messageTemplate') }}</Label>
                 <Select v-model="newCampaign.template_id" :disabled="isCreating">
                   <SelectTrigger>
@@ -1209,6 +1302,17 @@ async function addRecipientsFromCSV() {
                 <p v-if="templates.length === 0" class="text-xs text-muted-foreground">
                   {{ $t('campaigns.noTemplatesFound') }}
                 </p>
+              </div>
+
+              <div v-else class="grid gap-2">
+                <Label for="body-content">{{ $t('campaigns.messageBody') }}</Label>
+                <Textarea
+                  id="body-content"
+                  v-model="newCampaign.body_content"
+                  :placeholder="$t('campaigns.messageBodyPlaceholder')"
+                  :rows="5"
+                  :disabled="isCreating"
+                />
               </div>
             </div>
             <DialogFooter>

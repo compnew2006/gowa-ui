@@ -52,7 +52,7 @@ onMounted(() => {
 })
 
 // Meta-only nav paths that should be hidden when provider is whatsmeow
-const metaOnlyPaths = new Set(['/templates', '/flows', '/campaigns', '/analytics/meta-insights'])
+const metaOnlyPaths = new Set(['/templates', '/flows', '/analytics/meta-insights'])
 // Meta-only child paths within settings
 const metaOnlyChildPaths = new Set(['/settings/accounts'])
 
@@ -221,7 +221,7 @@ const handleLogout = async () => {
                   ? 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'
                   : 'text-white/50 hover:text-white hover:bg-white/[0.04] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-50',
                 isCollapsed && 'md:justify-center md:px-2',
-                isRTL && !isCollapsed && 'text-right'
+                isRTL && !isCollapsed && 'text-right flex-row-reverse'
               ]"
               role="menuitem"
               :aria-current="item.active ? 'page' : undefined"
@@ -247,7 +247,7 @@ const handleLogout = async () => {
                 :to="child.path"
                 :class="[
                   'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200',
-                  isRTL ? 'mr-4 text-right' : 'ml-4 text-left',
+                  isRTL ? 'mr-4 text-right flex-row-reverse' : 'ml-4 text-left',
                   route.path === child.path
                     ? 'bg-white/[0.06] text-white light:bg-gray-100 light:text-gray-900'
                     : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04] light:text-gray-400 light:hover:text-gray-700 light:hover:bg-gray-50'

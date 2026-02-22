@@ -89,7 +89,7 @@ const router = createRouter({
           path: 'campaigns',
           name: 'campaigns',
           component: () => import('@/views/settings/CampaignsView.vue'),
-          meta: { permission: 'campaigns', metaOnly: true }
+          meta: { permission: 'campaigns' }
         },
         {
           path: 'chatbot',

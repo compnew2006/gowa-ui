@@ -6,6 +6,7 @@ import { useContactsStore, type Contact, type Message, type ChatTypeFilter } fro
 import { useAuthStore } from '@/stores/auth'
 import { useUsersStore } from '@/stores/users'
 import { useTransfersStore } from '@/stores/transfers'
+import { useConfigStore } from '@/stores/config'
 import { localeDirectionManager } from '@/i18n/locale-direction'
 import { wsService } from '@/services/websocket'
 import { contactsService, chatbotService, messagesService, customActionsService, cannedResponsesService, type CustomAction, type ActionResult, type CannedResponseAttachment } from '@/services/api'
@@ -103,6 +104,7 @@ const contactsStore = useContactsStore()
 const authStore = useAuthStore()
 const usersStore = useUsersStore()
 const transfersStore = useTransfersStore()
+const configStore = useConfigStore()
 const tagsStore = useTagsStore()
 const notesStore = useNotesStore()
 const instancesStore = useInstancesStore()
@@ -192,6 +194,7 @@ const isTagFilterOpen = ref(false)
 const isServiceWindowExpired = computed(() => {
   const contact = contactsStore.currentContact
   if (!contact) return false
+  if (configStore.isWhatsmeow) return false
   return contact.service_window_open === false
 })
 
@@ -1781,11 +1784,13 @@ async function sendMediaMessage() {
       <div class="p-2 border-b border-white/[0.08] light:border-gray-200">
         <div class="flex items-center gap-2">
           <div class="relative flex-1">
-            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40 light:text-gray-400" />
+            <Search
+              :class="'absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40 light:text-gray-400 ' + (isRTL ? 'right-2.5' : 'left-2.5')"
+            />
             <Input
               v-model="contactsStore.searchQuery"
               :placeholder="$t('chat.searchContacts') + '...'"
-              class="pl-8 h-8 text-sm bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-gray-50 light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
+              :class="'h-8 text-sm bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-gray-50 light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400 ' + (isRTL ? 'pr-8 text-right' : 'pl-8 text-left')"
             />
           </div>
           <!-- Add Contact -->
@@ -1857,7 +1862,7 @@ async function sendMediaMessage() {
                     :class="contactsStore.selectedChatTypes.includes('private') && 'bg-white/[0.08] light:bg-gray-100'"
                     @click="toggleChatTypeFilter('private')"
                   >
-                    <span class="flex-1 text-left">{{ $t('chat.privateChats') }}</span>
+                    <span :class="['flex-1', isRTL ? 'text-right' : 'text-left']">{{ $t('chat.privateChats') }}</span>
                     <Check v-if="contactsStore.selectedChatTypes.includes('private')" class="h-4 w-4 text-emerald-400 shrink-0" />
                   </button>
                   <button
@@ -1865,7 +1870,7 @@ async function sendMediaMessage() {
                     :class="contactsStore.selectedChatTypes.includes('group') && 'bg-white/[0.08] light:bg-gray-100'"
                     @click="toggleChatTypeFilter('group')"
                   >
-                    <span class="flex-1 text-left">{{ $t('chat.groupChats') }}</span>
+                    <span :class="['flex-1', isRTL ? 'text-right' : 'text-left']">{{ $t('chat.groupChats') }}</span>
                     <Check v-if="contactsStore.selectedChatTypes.includes('group')" class="h-4 w-4 text-emerald-400 shrink-0" />
                   </button>
                   <button
@@ -1873,7 +1878,7 @@ async function sendMediaMessage() {
                     :class="contactsStore.selectedChatTypes.includes('channel') && 'bg-white/[0.08] light:bg-gray-100'"
                     @click="toggleChatTypeFilter('channel')"
                   >
-                    <span class="flex-1 text-left">{{ $t('chat.channelChats') }}</span>
+                    <span :class="['flex-1', isRTL ? 'text-right' : 'text-left']">{{ $t('chat.channelChats') }}</span>
                     <Check v-if="contactsStore.selectedChatTypes.includes('channel')" class="h-4 w-4 text-emerald-400 shrink-0" />
                   </button>
                 </div>
@@ -1892,7 +1897,7 @@ async function sendMediaMessage() {
                     @click="toggleTagFilter(tag.name)"
                   >
                     <span :class="['w-2 h-2 rounded-full shrink-0', getTagColorClass(tag.color).split(' ')[0]]" />
-                    <span class="flex-1 text-left truncate">{{ tag.name }}</span>
+                    <span :class="['flex-1 truncate', isRTL ? 'text-right' : 'text-left']">{{ tag.name }}</span>
                     <Check
                       v-if="contactsStore.selectedTags.includes(tag.name)"
                       class="h-4 w-4 text-emerald-400 shrink-0"
@@ -1983,7 +1988,7 @@ async function sendMediaMessage() {
                 </AvatarFallback>
               </Avatar>
             </button>
-            <div class="flex-1 min-w-0">
+            <div :class="['flex-1 min-w-0', isRTL ? 'text-right' : 'text-left']">
               <div class="flex min-w-0 items-center justify-between gap-2">
                 <p class="text-sm font-medium truncate text-white light:text-gray-900">
                   {{ contact.name || contact.phone_number }}

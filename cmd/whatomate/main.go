@@ -18,6 +18,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/internal/worker"
+	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/redis/go-redis/v9"
@@ -314,7 +315,7 @@ func runServer(args []string) {
 		workerCtx, workerCancel = context.WithCancel(context.Background())
 
 		for i := 0; i < *numWorkers; i++ {
-			w, err := worker.New(cfg, db, rdb, lo)
+			w, err := worker.New(cfg, db, rdb, lo, app.MessageProvider)
 			if err != nil {
 				lo.Fatal("Failed to create worker", "error", err, "worker_num", i+1)
 			}
@@ -435,6 +436,39 @@ func runWorker(args []string) {
 	}
 	lo.Info("Connected to Redis")
 
+	var messageProvider provider.MessageProvider
+	if cfg.WhatsApp.Provider == "whatsmeow" {
+		sqlDB, err := db.DB()
+		if err != nil {
+			lo.Fatal("Failed to get underlying SQL DB for whatsmeow", "error", err)
+		}
+		storeContainer := sqlstore.NewWithDB(sqlDB, "postgres", waLog.Stdout("Database", "DEBUG", true))
+		if err := storeContainer.Upgrade(context.Background()); err != nil {
+			lo.Fatal("Failed to upgrade whatsmeow store", "error", err)
+		}
+
+		whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
+		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := whatsmeowManager.ReconcileStartupStatuses(reconcileCtx); err != nil {
+			lo.Warn("Failed to reconcile stale instance statuses on startup", "error", err)
+		}
+		reconcileCancel()
+
+		reconnectCtx, reconnectCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		if err := whatsmeowManager.AutoConnectLinkedInstancesOnFirstRun(reconnectCtx); err != nil {
+			lo.Warn("First-run auto-connect completed with issues", "error", err)
+		}
+		if err := whatsmeowManager.ReconnectAll(reconnectCtx); err != nil {
+			lo.Error("Failed to reconnect instances", "error", err)
+		}
+		reconnectCancel()
+
+		messageProvider = whatsmeow.NewWhatsmeowAdapter(whatsmeowManager, db, lo)
+		lo.Info("Worker MessageProvider set to whatsmeow")
+	} else {
+		lo.Info("Worker MessageProvider set to meta")
+	}
+
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -448,7 +482,7 @@ func runWorker(args []string) {
 	errCh := make(chan error, *workerCount)
 
 	for i := 0; i < *workerCount; i++ {
-		w, err := worker.New(cfg, db, rdb, lo)
+		w, err := worker.New(cfg, db, rdb, lo, messageProvider)
 		if err != nil {
 			lo.Fatal("Failed to create worker", "error", err, "worker_num", i+1)
 		}

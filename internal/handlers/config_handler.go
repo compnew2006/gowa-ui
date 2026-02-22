@@ -21,8 +21,9 @@ type AppConfigResponse struct {
 }
 
 // GetAppConfig returns the active WhatsApp provider and feature flags.
-// Meta-only features (templates, flows, catalog, business profile, campaigns,
-// meta insights) are available only when the provider is "meta".
+// Meta-only features (templates, flows, catalog, business profile, meta
+// insights) are available only when the provider is "meta".
+// Campaigns are supported for both Meta and whatsmeow.
 func (a *App) GetAppConfig(r *fastglue.Request) error {
 	provider := a.Config.WhatsApp.Provider
 	if provider == "" {
@@ -38,7 +39,7 @@ func (a *App) GetAppConfig(r *fastglue.Request) error {
 			Flows:           isMeta,
 			Catalog:         isMeta,
 			BusinessProfile: isMeta,
-			Campaigns:       isMeta,
+			Campaigns:       true,
 			MetaInsights:    isMeta,
 		},
 	}
