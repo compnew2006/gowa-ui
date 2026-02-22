@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Archive, Loader2, RotateCw } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { PageHeader } from '@/components/shared'
@@ -8,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useContactsStore, type Contact } from '@/stores/contacts'
 
+const { t } = useI18n()
 const router = useRouter()
 const contactsStore = useContactsStore()
 const isLoading = ref(false)
@@ -56,11 +58,11 @@ async function reopenChat(chat: Contact) {
   reopeningChatId.value = chat.id
   try {
     const updated = await contactsStore.reopenChat(chat.id)
-    toast.success('Chat reopened and moved to pending queue')
+    toast.success(t('closedChats.reopenedSuccess'))
     await contactsStore.fetchClosedChats({ limit: 200 })
     router.push({ name: 'chat-conversation', params: { contactId: updated.id }, query: { tab: 'pending' } })
   } catch (error: any) {
-    const message = error?.response?.data?.message || 'Failed to reopen chat'
+    const message = error?.response?.data?.message || t('closedChats.reopenFailed')
     toast.error(message)
   } finally {
     reopeningChatId.value = null
@@ -73,8 +75,8 @@ onMounted(loadClosedChats)
 <template>
   <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
     <PageHeader
-      title="Closed Chats"
-      subtitle="Review resolved conversations in read-only mode."
+      :title="$t('closedChats.title')"
+      :subtitle="$t('closedChats.subtitle')"
       :icon="Archive"
       icon-gradient="bg-gradient-to-br from-zinc-500 to-zinc-700 shadow-zinc-500/20"
     />
@@ -83,11 +85,11 @@ onMounted(loadClosedChats)
       <div class="flex items-center gap-2">
         <Input
           v-model="searchQuery"
-          placeholder="Search by contact, phone, or closed by..."
+          :placeholder="$t('closedChats.searchPlaceholder')"
           class="max-w-md bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-white light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
         />
         <Button variant="outline" @click="loadClosedChats" :disabled="isLoading">
-          {{ isLoading ? 'Refreshing...' : 'Refresh' }}
+          {{ isLoading ? $t('closedChats.refreshing') : $t('closedChats.refresh') }}
         </Button>
       </div>
 
@@ -95,15 +97,15 @@ onMounted(loadClosedChats)
         <table class="w-full text-sm">
           <thead class="bg-white/[0.04] light:bg-gray-50">
             <tr>
-              <th class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700">Contact Name</th>
-              <th class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700">Closed By</th>
-              <th class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700">Date Closed</th>
-              <th class="text-right px-4 py-3 font-medium text-white/70 light:text-gray-700">Actions</th>
+              <th class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700">{{ $t('closedChats.contactName') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700">{{ $t('closedChats.closedBy') }}</th>
+              <th class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700">{{ $t('closedChats.dateClosed') }}</th>
+              <th class="text-right px-4 py-3 font-medium text-white/70 light:text-gray-700">{{ $t('closedChats.actions') }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="isLoading">
-              <td colspan="4" class="px-4 py-8 text-center text-white/50 light:text-gray-500">Loading closed chats...</td>
+              <td colspan="4" class="px-4 py-8 text-center text-white/50 light:text-gray-500">{{ $t('closedChats.loading') }}</td>
             </tr>
             <tr
               v-for="chat in filteredClosedChats"
@@ -127,12 +129,12 @@ onMounted(loadClosedChats)
                 >
                   <Loader2 v-if="reopeningChatId === chat.id" class="mr-1.5 h-3 w-3 animate-spin" />
                   <RotateCw v-else class="mr-1.5 h-3 w-3" />
-                  Reopen
+                  {{ $t('closedChats.reopen') }}
                 </Button>
               </td>
             </tr>
             <tr v-if="!isLoading && filteredClosedChats.length === 0">
-              <td colspan="4" class="px-4 py-8 text-center text-white/50 light:text-gray-500">No closed chats found.</td>
+              <td colspan="4" class="px-4 py-8 text-center text-white/50 light:text-gray-500">{{ $t('closedChats.empty') }}</td>
             </tr>
           </tbody>
         </table>

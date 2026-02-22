@@ -276,9 +276,9 @@ async function saveChatSettings() {
       assigned_chat_reset_mode: normalizedMode,
       assigned_chat_reset_hour: normalizedHour
     })
-    toast.success('Chat preferences saved')
+    toast.success(t('settings.chatPreferencesSaved'))
   } catch (error) {
-    toast.error('Failed to save chat preferences')
+    toast.error(t('settings.chatPreferencesSaveFailed'))
   } finally {
     isSubmitting.value = false
   }
@@ -306,7 +306,7 @@ onBeforeUnmount(() => {
             </TabsTrigger>
             <TabsTrigger value="chat" class="data-[state=active]:bg-white/[0.08] data-[state=active]:text-white text-white/50 light:data-[state=active]:bg-white light:data-[state=active]:text-gray-900 light:text-gray-500">
               <MessageSquare class="h-4 w-4 mr-2" />
-              Chat
+              {{ $t('settings.chat') }}
             </TabsTrigger>
             <TabsTrigger value="notifications" class="data-[state=active]:bg-white/[0.08] data-[state=active]:text-white text-white/50 light:data-[state=active]:bg-white light:data-[state=active]:text-gray-900 light:text-gray-500">
               <Bell class="h-4 w-4 mr-2" />
@@ -483,58 +483,58 @@ onBeforeUnmount(() => {
           <TabsContent value="chat">
             <div class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200">
               <div class="p-6 pb-3">
-                <h3 class="text-lg font-semibold text-white light:text-gray-900">Chat Preferences</h3>
-                <p class="text-sm text-white/40 light:text-gray-500">Customize how your chat behaves</p>
+                <h3 class="text-lg font-semibold text-white light:text-gray-900">{{ $t('settings.chatPreferences') }}</h3>
+                <p class="text-sm text-white/40 light:text-gray-500">{{ $t('settings.chatPreferencesDesc') }}</p>
               </div>
               <div class="p-6 pt-3 space-y-4">
                 <div class="space-y-2">
-                  <Label for="media_group_window" class="text-white/70 light:text-gray-700">Media Grouping Window</Label>
-                  <p class="text-xs text-white/40 light:text-gray-500">Consecutive incoming media files sent within this time window will be grouped together for batch download.</p>
+                  <Label for="media_group_window" class="text-white/70 light:text-gray-700">{{ $t('settings.mediaGroupingWindow') }}</Label>
+                  <p class="text-xs text-white/40 light:text-gray-500">{{ $t('settings.mediaGroupingWindowDesc') }}</p>
                   <Select
                     :model-value="String(chatSettings.media_group_window)"
                     @update:model-value="(v: unknown) => { if (typeof v === 'string') chatSettings.media_group_window = Number(v) }"
                   >
                     <SelectTrigger class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700">
-                      <SelectValue placeholder="Select grouping window" />
+                      <SelectValue :placeholder="$t('settings.selectGroupingWindow')" />
                     </SelectTrigger>
                     <SelectContent class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200">
-                      <SelectItem value="15" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">15 seconds</SelectItem>
-                      <SelectItem value="30" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">30 seconds</SelectItem>
-                      <SelectItem value="60" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">60 seconds (default)</SelectItem>
-                      <SelectItem value="120" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">2 minutes</SelectItem>
-                      <SelectItem value="180" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">3 minutes</SelectItem>
-                      <SelectItem value="300" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">5 minutes</SelectItem>
+                      <SelectItem value="15" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">{{ $t('settings.mediaGroupingWindow15Seconds') }}</SelectItem>
+                      <SelectItem value="30" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">{{ $t('settings.mediaGroupingWindow30Seconds') }}</SelectItem>
+                      <SelectItem value="60" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">{{ $t('settings.mediaGroupingWindow60SecondsDefault') }}</SelectItem>
+                      <SelectItem value="120" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">{{ $t('settings.mediaGroupingWindow2Minutes') }}</SelectItem>
+                      <SelectItem value="180" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">{{ $t('settings.mediaGroupingWindow3Minutes') }}</SelectItem>
+                      <SelectItem value="300" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">{{ $t('settings.mediaGroupingWindow5Minutes') }}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <Separator class="bg-white/[0.08] light:bg-gray-200" />
                 <div class="space-y-2">
-                  <Label class="text-white/70 light:text-gray-700">Assigned Chat Reset Schedule</Label>
+                  <Label class="text-white/70 light:text-gray-700">{{ $t('settings.assignedChatResetSchedule') }}</Label>
                   <p class="text-xs text-white/40 light:text-gray-500">
-                    Automatically reset all assigned chats back to pending once per day.
+                    {{ $t('settings.assignedChatResetScheduleDesc') }}
                   </p>
                   <Select v-model="chatSettings.assigned_chat_reset_mode">
                     <SelectTrigger class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700">
-                      <SelectValue placeholder="Select reset schedule" />
+                      <SelectValue :placeholder="$t('settings.selectResetSchedule')" />
                     </SelectTrigger>
                     <SelectContent class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200">
                       <SelectItem value="midnight" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">
-                        Default midnight (00:00)
+                        {{ $t('settings.defaultMidnight') }}
                       </SelectItem>
                       <SelectItem value="custom_hour" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">
-                        Custom hour
+                        {{ $t('settings.customHour') }}
                       </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div v-if="chatSettings.assigned_chat_reset_mode === 'custom_hour'" class="space-y-2">
-                  <Label class="text-white/70 light:text-gray-700">Custom Reset Hour</Label>
+                  <Label class="text-white/70 light:text-gray-700">{{ $t('settings.customResetHour') }}</Label>
                   <Select
                     :model-value="String(chatSettings.assigned_chat_reset_hour)"
                     @update:model-value="(v: unknown) => { if (typeof v === 'string') chatSettings.assigned_chat_reset_hour = Number(v) }"
                   >
                     <SelectTrigger class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700">
-                      <SelectValue placeholder="Select reset hour" />
+                      <SelectValue :placeholder="$t('settings.selectResetHour')" />
                     </SelectTrigger>
                     <SelectContent class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200">
                       <SelectItem
@@ -551,15 +551,15 @@ onBeforeUnmount(() => {
                 <Separator class="bg-white/[0.08] light:bg-gray-200" />
                 <div class="space-y-3">
                   <div>
-                    <h4 class="text-sm font-medium text-white light:text-gray-900">Chat Queues</h4>
-                    <p class="text-xs text-white/40 light:text-gray-500">Open queue view for closed chats.</p>
+                    <h4 class="text-sm font-medium text-white light:text-gray-900">{{ $t('settings.chatQueues') }}</h4>
+                    <p class="text-xs text-white/40 light:text-gray-500">{{ $t('settings.chatQueuesDesc') }}</p>
                   </div>
                   <div class="grid gap-2 sm:grid-cols-1">
                     <RouterLink
                       to="/settings/closed-chats"
                       class="rounded-lg border border-zinc-400/30 bg-zinc-500/10 px-3 py-2 text-xs text-zinc-100 hover:bg-zinc-500/20 light:border-zinc-200 light:bg-zinc-100 light:text-zinc-700"
                     >
-                      <span class="inline-flex items-center gap-1.5 font-medium"><Archive class="h-3.5 w-3.5" /> Closed Chats</span>
+                      <span class="inline-flex items-center gap-1.5 font-medium"><Archive class="h-3.5 w-3.5" /> {{ $t('settings.closedChats') }}</span>
                     </RouterLink>
                   </div>
                 </div>

@@ -115,7 +115,7 @@ export const navigationItems: NavItem[] = [
       { name: 'WhatsApp', path: '/settings/instances', icon: Smartphone, permission: 'instances' },
       { name: 'nav.accounts', path: '/settings/accounts', icon: Users, permission: 'accounts' },
       { name: 'nav.contacts', path: '/settings/contacts', icon: Contact, permission: 'contacts' },
-      { name: 'Closed Chats', path: '/settings/closed-chats', icon: Archive, permission: 'chat' },
+      { name: 'nav.closedChats', path: '/settings/closed-chats', icon: Archive, permission: 'chat' },
       { name: 'nav.cannedResponses', path: '/settings/canned-responses', icon: MessageSquareText, permission: 'canned_responses' },
       { name: 'nav.tags', path: '/settings/tags', icon: Tags, permission: 'tags' },
       { name: 'nav.teams', path: '/settings/teams', icon: Users, permission: 'teams' },

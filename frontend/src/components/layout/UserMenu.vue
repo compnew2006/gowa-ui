@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useContactsStore } from '@/stores/contacts'
 import { usersService, chatbotService } from '@/services/api'
+import { localeDirectionManager } from '@/i18n/locale-direction'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
@@ -29,7 +30,7 @@ import { getInitials } from '@/lib/utils'
 import ThemeSwitcher from './ThemeSwitcher.vue'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 defineProps<{
   collapsed?: boolean
@@ -46,6 +47,7 @@ const isUpdatingAvailability = ref(false)
 const isCheckingTransfers = ref(false)
 const showAwayWarning = ref(false)
 const awayWarningTransferCount = ref(0)
+const isRTL = computed(() => localeDirectionManager.isRTL(locale.value))
 
 const handleAvailabilityChange = async (checked: boolean) => {
   if (!checked) {
@@ -169,8 +171,8 @@ const handleLogout = () => {
         <Button
           variant="ghost"
           :class="[
-            'flex items-center justify-start w-full h-auto px-2 py-1.5 gap-2 hover:bg-white/[0.04] light:hover:bg-gray-100',
-            collapsed && 'md:justify-center'
+            'flex items-center w-full h-auto px-2 py-1.5 gap-2 hover:bg-white/[0.04] light:hover:bg-gray-100',
+            collapsed ? 'md:justify-center' : isRTL ? 'justify-end' : 'justify-start'
           ]"
           aria-label="User menu"
         >
@@ -180,7 +182,7 @@ const handleLogout = () => {
               {{ getInitials(authStore.user?.full_name || 'U') }}
             </AvatarFallback>
           </Avatar>
-          <div v-if="!collapsed" class="flex flex-col items-start text-left">
+          <div v-if="!collapsed" :class="['flex flex-col', isRTL ? 'items-end text-right' : 'items-start text-left']">
             <span class="text-[13px] font-medium truncate max-w-[140px] text-white light:text-gray-900">
               {{ authStore.user?.full_name }}
             </span>

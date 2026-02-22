@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
+import { localeDirectionManager } from '@/i18n/locale-direction'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -20,7 +21,7 @@ import UserMenu from './UserMenu.vue'
 import { navigationItems } from './navigation'
 import NotificationBell from '../NotificationBell.vue'
 
-useI18n() // Enable $t() in template
+const { locale } = useI18n() // Enable $t() in template
 
 const route = useRoute()
 const router = useRouter()
@@ -28,6 +29,7 @@ const authStore = useAuthStore()
 const configStore = useConfigStore()
 const isCollapsed = ref(false)
 const isMobileMenuOpen = ref(false)
+const isRTL = computed(() => localeDirectionManager.isRTL(locale.value))
 const isAdminUser = computed(() =>
   authStore.user?.is_super_admin === true || (authStore.userRole || '').toLowerCase() === 'admin'
 )
@@ -218,14 +220,23 @@ const handleLogout = async () => {
                 item.active
                   ? 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'
                   : 'text-white/50 hover:text-white hover:bg-white/[0.04] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-50',
-                isCollapsed && 'md:justify-center md:px-2'
+                isCollapsed && 'md:justify-center md:px-2',
+                isRTL && !isCollapsed && 'text-right'
               ]"
               role="menuitem"
               :aria-current="item.active ? 'page' : undefined"
               @click="isMobileMenuOpen = false"
             >
               <component :is="item.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span :class="isCollapsed && 'md:sr-only'">{{ $t(item.name) }}</span>
+              <span
+                :class="[
+                  isCollapsed && 'md:sr-only',
+                  !isCollapsed && 'flex-1',
+                  isRTL && !isCollapsed ? 'text-right' : 'text-left'
+                ]"
+              >
+                {{ $t(item.name) }}
+              </span>
             </RouterLink>
 
             <!-- Submenu items -->
@@ -235,7 +246,8 @@ const handleLogout = async () => {
                 :key="child.path"
                 :to="child.path"
                 :class="[
-                  'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200 ml-4',
+                  'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200',
+                  isRTL ? 'mr-4 text-right' : 'ml-4 text-left',
                   route.path === child.path
                     ? 'bg-white/[0.06] text-white light:bg-gray-100 light:text-gray-900'
                     : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04] light:text-gray-400 light:hover:text-gray-700 light:hover:bg-gray-50'
@@ -245,7 +257,7 @@ const handleLogout = async () => {
                 @click="isMobileMenuOpen = false"
               >
                 <component :is="child.icon" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span>{{ $t(child.name) }}</span>
+                <span :class="['flex-1', isRTL ? 'text-right' : 'text-left']">{{ $t(child.name) }}</span>
               </RouterLink>
             </template>
           </template>
