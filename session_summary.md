@@ -1,3 +1,71 @@
+# Session Summary - 2026-02-24 15:19
+
+## Objective
+
+Implement a production-grade TypeScript MCP sidecar (`mcp-server/`) for Whatomate with modular Tools, Resources, Prompts, stdio + HTTP transports, and OpenAI summarization support.
+
+## Modules Touched
+
+- `mcp-server/package.json`
+- `mcp-server/tsconfig.json`
+- `mcp-server/eslint.config.js`
+- `mcp-server/vitest.config.ts`
+- `mcp-server/.env.example`
+- `mcp-server/Dockerfile`
+- `mcp-server/README.md`
+- `mcp-server/src/index.ts`
+- `mcp-server/src/config.ts`
+- `mcp-server/src/logger.ts`
+- `mcp-server/src/errors.ts`
+- `mcp-server/src/mcp/server.ts`
+- `mcp-server/src/mcp/tool-registry.ts`
+- `mcp-server/src/mcp/resource-registry.ts`
+- `mcp-server/src/mcp/prompt-registry.ts`
+- `mcp-server/src/transports/stdio.ts`
+- `mcp-server/src/transports/streamable-http.ts`
+- `mcp-server/src/transports/legacy-sse.ts`
+- `mcp-server/src/clients/whatomate-client.ts`
+- `mcp-server/src/clients/openai-client.ts`
+- `mcp-server/src/tools/contacts.ts`
+- `mcp-server/src/tools/messages.ts`
+- `mcp-server/src/tools/campaigns.ts`
+- `mcp-server/src/tools/analytics.ts`
+- `mcp-server/src/tools/openai.ts`
+- `mcp-server/src/resources/organization.ts`
+- `mcp-server/src/resources/contacts.ts`
+- `mcp-server/src/resources/campaigns.ts`
+- `mcp-server/src/resources/analytics.ts`
+- `mcp-server/src/prompts/draft-reply.ts`
+- `mcp-server/src/prompts/campaign-brief.ts`
+- `mcp-server/src/prompts/handoff-summary.ts`
+- `mcp-server/tests/unit/config.test.ts`
+- `mcp-server/tests/unit/errors.test.ts`
+- `mcp-server/tests/unit/tool-schemas.test.ts`
+- `mcp-server/tests/integration/clients.test.ts`
+- `mcp-server/tests/integration/transports.test.ts`
+- `mcp-server/tests/e2e/workflow.e2e.test.ts`
+- `README.md`
+- `docker/docker-compose.yml`
+- `.github/workflows/test.yml`
+- `MEMORY.md`
+- `CHANGELOG.md`
+
+## Technical Decisions
+
+- Used `@modelcontextprotocol/sdk@1.27.0` and modularized the sidecar around registries and domain modules to keep blast radius low and testability high.
+- Implemented streamable HTTP `/mcp` as primary remote transport and retained legacy SSE compatibility (`/sse` + `/messages`) behind `MCP_ENABLE_LEGACY_SSE`.
+- Enforced deterministic config and payload validation with Zod, API timeout budgets, GET retries for idempotent Whatomate reads, and outbound host allowlisting.
+- Normalized tool outputs to return both text content and object-form `structuredContent` for consistent MCP client consumption.
+- Added CI checks for sidecar quality gates (`lint`, `typecheck`, `test`, `test:e2e`) without changing existing Go backend contracts.
+
+## Next Steps
+
+1. Wire staging secrets and bearer token into deployment environment for HTTP transport validation with a real MCP client.
+2. Add production observability hooks (log shipping/metrics) for sidecar request and tool execution latency.
+3. Optionally add integration tests against a running Whatomate backend instance (not mock services) for pre-release validation.
+
+---
+
 # Session Summary - 2026-02-22 01:07
 
 ## Objective

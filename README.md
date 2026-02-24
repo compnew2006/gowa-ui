@@ -145,6 +145,37 @@ make run-migrate    # Backend (port 8080)
 cd frontend && npm install && npm run dev   # Frontend (port 3000)
 ```
 
+## MCP Sidecar
+
+This repository includes a production-oriented MCP sidecar in [`mcp-server`](./mcp-server) that exposes Whatomate Tools, Resources, and Prompts over MCP.
+
+Quick start:
+
+```bash
+cd mcp-server
+npm install
+npm run build
+npm run start:stdio
+```
+
+HTTP transport:
+
+```bash
+cd mcp-server
+MCP_TRANSPORT=http \
+MCP_HTTP_BEARER_TOKEN=replace_me \
+WHATOMATE_BASE_URL=http://localhost:8080 \
+WHATOMATE_API_KEY=whm_replace_me \
+OPENAI_API_KEY=sk_replace_me \
+npm run start:http
+```
+
+Optional Docker Compose profile:
+
+```bash
+docker compose -f docker/docker-compose.yml --profile mcp up -d --build
+```
+
 ## License
 
 See [LICENSE](LICENSE) for details.
