@@ -22,8 +22,14 @@ import {
   normalizeAutoRejectCallSettings,
   type AutoRejectCallSettings,
 } from "@/lib/instance-auto-reject";
+import {
+  cloneAutoCampaignSettings,
+  normalizeAutoCampaignSettings,
+  type AutoCampaignSettings,
+} from "@/lib/instance-auto-campaign";
 import InstanceTagSettings from "@/components/whatsmeow/InstanceTagSettings.vue";
 import AutoRejectSettingsPanel from "@/components/whatsmeow/AutoRejectSettingsPanel.vue";
+import AutoCampaignSettingsPanel from "@/components/whatsmeow/AutoCampaignSettingsPanel.vue";
 import {
   Loader2,
   Power,
@@ -41,6 +47,8 @@ const props = defineProps<{
   tagSettingsSaving?: boolean;
   autoSyncSaving?: boolean;
   autoRejectSaving?: boolean;
+  autoCampaignSaving?: boolean;
+  autoCampaignUploading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -63,6 +71,13 @@ const emit = defineEmits<{
     id: string,
     payload: AutoRejectCallSettings,
   ): void;
+  (
+    e: "update-auto-campaign-settings",
+    id: string,
+    payload: AutoCampaignSettings,
+  ): void;
+  (e: "upload-auto-campaign-media", id: string, file: File): void;
+  (e: "clear-auto-campaign-media", id: string): void;
 }>();
 
 const statusColor = computed(() => {
@@ -92,6 +107,9 @@ const autoSyncEnabled = computed(() => {
 const autoRejectSettings = computed(() =>
   normalizeAutoRejectCallSettings(props.instance.settings?.auto_reject_calls),
 );
+const autoCampaignSettings = computed(() =>
+  normalizeAutoCampaignSettings(props.instance.settings?.auto_campaign),
+);
 const autoRejectSchedule = computed(() => {
   const s = autoRejectSettings.value;
   if (!s.enabled) return t("common.off");
@@ -104,6 +122,20 @@ const autoRejectSchedule = computed(() => {
     default:
       return t("instances.auto_reject.scheduleAlways");
   }
+});
+const autoCampaignSummary = computed(() => {
+  const s = autoCampaignSettings.value;
+  if (!s.enabled) {
+    return t("common.off");
+  }
+
+  return t("instances.auto_campaign.summary", {
+    days: s.interval_days,
+    status:
+      s.target_status === "run"
+        ? t("instances.auto_campaign.statusRun")
+        : t("instances.auto_campaign.statusDraft"),
+  });
 });
 
 function formatUptime(totalSeconds?: number) {
@@ -141,7 +173,7 @@ function formatUptime(totalSeconds?: number) {
           <Button
             variant="ghost"
             size="icon"
-            class="text-white/40 hover:text-emerald-400 hover:bg-emerald-400/10"
+            class="text-white/40 hover:text-emerald-400 hover:bg-emerald-400/10 light:text-gray-500 light:hover:text-emerald-600 light:hover:bg-emerald-50"
             :aria-label="$t('instances.card.editAria')"
             @click="emit('edit', instance.id)"
           >
@@ -150,7 +182,7 @@ function formatUptime(totalSeconds?: number) {
           <Button
             variant="ghost"
             size="icon"
-            class="text-white/40 hover:text-red-400 hover:bg-red-400/10"
+            class="text-white/40 hover:text-red-400 hover:bg-red-400/10 light:text-gray-500 light:hover:text-red-600 light:hover:bg-red-50"
             :aria-label="$t('instances.card.deleteAria')"
             @click="emit('delete', instance.id)"
           >
@@ -288,6 +320,59 @@ function formatUptime(totalSeconds?: number) {
               (payload) =>
                 emit('update-auto-reject-settings', instance.id, payload)
             "
+          />
+        </div>
+        <div
+          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="text-xs font-medium text-white light:text-gray-900">
+                  {{ $t("instances.card.autoCampaign") }}
+                </p>
+                <Badge
+                  v-if="autoCampaignSettings.enabled"
+                  variant="default"
+                  class="text-[10px] px-1.5 py-0"
+                  >{{ $t("common.on") }}</Badge
+                >
+              </div>
+              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
+                {{ autoCampaignSummary }}
+              </p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <Loader2
+                v-if="autoCampaignSaving"
+                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+              />
+              <Switch
+                :checked="autoCampaignSettings.enabled"
+                :disabled="autoCampaignSaving"
+                @update:checked="
+                  (enabled) =>
+                    emit('update-auto-campaign-settings', instance.id, {
+                      ...cloneAutoCampaignSettings(autoCampaignSettings),
+                      enabled,
+                    })
+                "
+              />
+            </div>
+          </div>
+
+          <AutoCampaignSettingsPanel
+            :settings="autoCampaignSettings"
+            :saving="autoCampaignSaving || false"
+            :uploading="autoCampaignUploading || false"
+            @save="
+              (payload) =>
+                emit('update-auto-campaign-settings', instance.id, payload)
+            "
+            @upload-media="
+              (file) => emit('upload-auto-campaign-media', instance.id, file)
+            "
+            @clear-media="() => emit('clear-auto-campaign-media', instance.id)"
           />
         </div>
       </div>

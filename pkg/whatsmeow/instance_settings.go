@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 )
 
 const (
@@ -23,6 +23,9 @@ func EnsureInstanceSettingsDefaults(settings models.JSONB) models.JSONB {
 	}
 	normalized[InstanceSettingAutoRejectCalls] = NormalizeAutoRejectCallSettings(
 		normalized[InstanceSettingAutoRejectCalls],
+	).ToJSONB()
+	normalized[InstanceSettingAutoCampaign] = NormalizeAutoCampaignSettings(
+		normalized[InstanceSettingAutoCampaign],
 	).ToJSONB()
 	return normalized
 }
@@ -110,6 +113,9 @@ func ValidateInstanceSettings(settings models.JSONB) error {
 
 	if err := ValidateAutoRejectCallSettings(settings[InstanceSettingAutoRejectCalls]); err != nil {
 		return fmt.Errorf("invalid %s: %w", InstanceSettingAutoRejectCalls, err)
+	}
+	if err := ValidateAutoCampaignSettings(settings[InstanceSettingAutoCampaign]); err != nil {
+		return fmt.Errorf("invalid %s: %w", InstanceSettingAutoCampaign, err)
 	}
 
 	return nil

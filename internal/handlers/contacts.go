@@ -432,8 +432,10 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	}
 
 	// Pagination
-	pg := parsePagination(r)
+	pg := parsePaginationWithDefaults(r, 50, 500)
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
+	createdFromParam := string(r.RequestCtx.QueryArgs().Peek("created_from"))
+	createdToParam := string(r.RequestCtx.QueryArgs().Peek("created_to"))
 	tagsParam := string(r.RequestCtx.QueryArgs().Peek("tags"))
 	instanceIDParam := string(r.RequestCtx.QueryArgs().Peek("instance_id"))
 	chatTypesParam := string(r.RequestCtx.QueryArgs().Peek("chat_types"))
@@ -461,6 +463,15 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		)
 	}
 
+	restrictedInstanceID, err := a.getRestrictedInstanceForUser(orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for contact list", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list contacts", nil, "")
+	}
+	if restrictedInstanceID != nil {
+		query = query.Where("instance_id = ?", *restrictedInstanceID)
+	}
+
 	if statusFilter != nil {
 		query = applyChatStatusFilter(query, *statusFilter)
 	} else {
@@ -473,6 +484,21 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		} else {
 			query = query.Where("assigned_user_id = ?", *assignedToUserID)
 		}
+	}
+
+	if createdFromParam != "" {
+		createdFrom, parseErr := time.Parse("2006-01-02", createdFromParam)
+		if parseErr != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid created_from format. Use YYYY-MM-DD", nil, "created_from")
+		}
+		query = query.Where("created_at >= ?", createdFrom)
+	}
+	if createdToParam != "" {
+		createdTo, parseErr := time.Parse("2006-01-02", createdToParam)
+		if parseErr != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid created_to format. Use YYYY-MM-DD", nil, "created_to")
+		}
+		query = query.Where("created_at <= ?", endOfDay(createdTo))
 	}
 
 	if search != "" {
@@ -650,6 +676,14 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	if !a.canReadAllContacts(userID, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
+	restrictedInstanceID, restrictedErr := a.getRestrictedInstanceForUser(orgID, userID)
+	if restrictedErr != nil {
+		a.Log.Error("Failed to resolve restricted instance for contact read", "error", restrictedErr, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load contact", nil, "")
+	}
+	if restrictedInstanceID != nil {
+		query = query.Where("instance_id = ?", *restrictedInstanceID)
+	}
 
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -749,12 +783,20 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	}
 
 	hasContactsReadPermission := a.canReadAllContacts(userID, orgID)
+	restrictedInstanceID, restrictedErr := a.getRestrictedInstanceForUser(orgID, userID)
+	if restrictedErr != nil {
+		a.Log.Error("Failed to resolve restricted instance for messages", "error", restrictedErr, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load messages", nil, "")
+	}
 
 	// Verify contact belongs to org (and to user if no contacts:read permission)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if !hasContactsReadPermission {
 		query = query.Where("assigned_user_id = ?", userID)
+	}
+	if restrictedInstanceID != nil {
+		query = query.Where("instance_id = ?", *restrictedInstanceID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")

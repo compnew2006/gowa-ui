@@ -269,6 +269,7 @@ func TestSecurityHeaders(t *testing.T) {
 	assert.Contains(t, csp, "object-src 'none'")
 	assert.Contains(t, csp, "frame-ancestors 'none'")
 	assert.Contains(t, csp, "script-src 'self'")
+	assert.Contains(t, csp, "img-src 'self' data: blob: https:")
 	assert.Contains(t, csp, "connect-src 'self' ws: wss:")
 }
 

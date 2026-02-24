@@ -1,0 +1,147 @@
+package handlers_test
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
+)
+
+func TestApp_SendMessage_BlockedByStrictSendRestrictions(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Enable strict mode on the organization and on this user.
+	var persistedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&persistedOrg).Error)
+	if persistedOrg.Settings == nil {
+		persistedOrg.Settings = models.JSONB{}
+	}
+	persistedOrg.Settings["strict_sending_restrictions_enabled"] = true
+	require.NoError(t, app.DB.Model(&persistedOrg).Update("settings", persistedOrg.Settings).Error)
+
+	var persistedUser models.User
+	require.NoError(t, app.DB.Where("id = ?", user.ID).First(&persistedUser).Error)
+	if persistedUser.Settings == nil {
+		persistedUser.Settings = models.JSONB{}
+	}
+	persistedUser.Settings["send_restrictions"] = models.JSONB{
+		"enabled":            true,
+		"authorized_numbers": []string{},
+	}
+	require.NoError(t, app.DB.Model(&persistedUser).Update("settings", persistedUser.Settings).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Hello from restricted user",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "Message blocked by strict sending restrictions")
+
+	var logEntry models.ActivityLog
+	require.NoError(t, app.DB.
+		Where("organization_id = ? AND user_id = ? AND event_type = ?", org.ID, user.ID, "security.restricted_send_blocked").
+		Order("created_at DESC").
+		First(&logEntry).Error)
+	assert.Equal(t, "blocked", logEntry.Status)
+	assert.Equal(t, "security", logEntry.Category)
+}
+
+func TestApp_SendMessage_StrictRestrictionsAutoAuthorizeFromIncomingHistory(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name), testutil.WithPhoneNumber("+15551234567"))
+
+	// Enable strict mode on the organization and on this user.
+	var persistedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&persistedOrg).Error)
+	if persistedOrg.Settings == nil {
+		persistedOrg.Settings = models.JSONB{}
+	}
+	persistedOrg.Settings["strict_sending_restrictions_enabled"] = true
+	require.NoError(t, app.DB.Model(&persistedOrg).Update("settings", persistedOrg.Settings).Error)
+
+	var persistedUser models.User
+	require.NoError(t, app.DB.Where("id = ?", user.ID).First(&persistedUser).Error)
+	if persistedUser.Settings == nil {
+		persistedUser.Settings = models.JSONB{}
+	}
+	persistedUser.Settings["send_restrictions"] = models.JSONB{
+		"enabled":            true,
+		"authorized_numbers": []string{},
+	}
+	require.NoError(t, app.DB.Model(&persistedUser).Update("settings", persistedUser.Settings).Error)
+
+	// Pre-existing incoming message should auto-authorize this number on first send.
+	incoming := &models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      contact.ID,
+		Direction:      models.DirectionIncoming,
+		MessageType:    models.MessageTypeText,
+		Content:        "Hi there",
+		Status:         models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(incoming).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Reply from restricted user",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var reloadedUser models.User
+	require.NoError(t, app.DB.Where("id = ?", user.ID).First(&reloadedUser).Error)
+
+	rawRestrictions, ok := reloadedUser.Settings["send_restrictions"].(map[string]interface{})
+	if !ok {
+		typed, okTyped := reloadedUser.Settings["send_restrictions"].(models.JSONB)
+		require.True(t, okTyped)
+		rawRestrictions = map[string]interface{}(typed)
+	}
+
+	authorizedAny, ok := rawRestrictions["authorized_numbers"]
+	require.True(t, ok)
+	authorizedJSON, err := json.Marshal(authorizedAny)
+	require.NoError(t, err)
+
+	// Number is normalized before persistence, so + is removed.
+	assert.True(t, strings.Contains(string(authorizedJSON), "15551234567"), string(authorizedJSON))
+}

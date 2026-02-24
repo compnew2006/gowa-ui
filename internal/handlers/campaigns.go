@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/websocket"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -26,30 +26,34 @@ type CampaignRequest struct {
 	TemplateID      string     `json:"template_id"`
 	BodyContent     string     `json:"body_content"`
 	HeaderMediaID   string     `json:"header_media_id"`
+	MinDelaySeconds *int       `json:"min_delay_seconds"`
+	MaxDelaySeconds *int       `json:"max_delay_seconds"`
 	ScheduledAt     *time.Time `json:"scheduled_at"`
 }
 
 // CampaignResponse represents campaign in API responses
 type CampaignResponse struct {
-	ID                    uuid.UUID             `json:"id"`
-	Name                  string                `json:"name"`
-	WhatsAppAccount       string                `json:"whatsapp_account"`
-	TemplateID            uuid.UUID             `json:"template_id"`
-	TemplateName          string                `json:"template_name,omitempty"`
-	HeaderMediaID         string                `json:"header_media_id,omitempty"`
-	HeaderMediaFilename   string                `json:"header_media_filename,omitempty"`
-	HeaderMediaMimeType   string                `json:"header_media_mime_type,omitempty"`
-	Status                models.CampaignStatus `json:"status"`
-	TotalRecipients int                  `json:"total_recipients"`
-	SentCount       int                  `json:"sent_count"`
-	DeliveredCount  int                  `json:"delivered_count"`
-	ReadCount       int                  `json:"read_count"`
-	FailedCount     int                  `json:"failed_count"`
-	ScheduledAt     *time.Time           `json:"scheduled_at,omitempty"`
-	StartedAt       *time.Time           `json:"started_at,omitempty"`
-	CompletedAt     *time.Time           `json:"completed_at,omitempty"`
-	CreatedAt       time.Time            `json:"created_at"`
-	UpdatedAt       time.Time            `json:"updated_at"`
+	ID                  uuid.UUID             `json:"id"`
+	Name                string                `json:"name"`
+	WhatsAppAccount     string                `json:"whatsapp_account"`
+	TemplateID          uuid.UUID             `json:"template_id"`
+	TemplateName        string                `json:"template_name,omitempty"`
+	HeaderMediaID       string                `json:"header_media_id,omitempty"`
+	HeaderMediaFilename string                `json:"header_media_filename,omitempty"`
+	HeaderMediaMimeType string                `json:"header_media_mime_type,omitempty"`
+	MinDelaySeconds     int                   `json:"min_delay_seconds"`
+	MaxDelaySeconds     int                   `json:"max_delay_seconds"`
+	Status              models.CampaignStatus `json:"status"`
+	TotalRecipients     int                   `json:"total_recipients"`
+	SentCount           int                   `json:"sent_count"`
+	DeliveredCount      int                   `json:"delivered_count"`
+	ReadCount           int                   `json:"read_count"`
+	FailedCount         int                   `json:"failed_count"`
+	ScheduledAt         *time.Time            `json:"scheduled_at,omitempty"`
+	StartedAt           *time.Time            `json:"started_at,omitempty"`
+	CompletedAt         *time.Time            `json:"completed_at,omitempty"`
+	CreatedAt           time.Time             `json:"created_at"`
+	UpdatedAt           time.Time             `json:"updated_at"`
 }
 
 // RecipientRequest represents recipient import request
@@ -116,6 +120,8 @@ func (a *App) ListCampaigns(r *fastglue.Request) error {
 			HeaderMediaID:       c.HeaderMediaID,
 			HeaderMediaFilename: c.HeaderMediaFilename,
 			HeaderMediaMimeType: c.HeaderMediaMimeType,
+			MinDelaySeconds:     c.MinDelaySeconds,
+			MaxDelaySeconds:     c.MaxDelaySeconds,
 			Status:              c.Status,
 			TotalRecipients:     c.TotalRecipients,
 			SentCount:           c.SentCount,
@@ -169,13 +175,19 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 	templateID := template.ID
+	minDelaySeconds, maxDelaySeconds, err := normalizeCampaignDelayRange(0, 0, req.MinDelaySeconds, req.MaxDelaySeconds)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
 
 	campaign := models.BulkMessageCampaign{
 		OrganizationID:  orgID,
 		WhatsAppAccount: req.WhatsAppAccount,
 		Name:            strings.TrimSpace(req.Name),
 		TemplateID:      templateID,
-		HeaderMediaID:  req.HeaderMediaID,
+		HeaderMediaID:   req.HeaderMediaID,
+		MinDelaySeconds: minDelaySeconds,
+		MaxDelaySeconds: maxDelaySeconds,
 		Status:          models.CampaignStatusDraft,
 		ScheduledAt:     req.ScheduledAt,
 		CreatedBy:       userID,
@@ -197,6 +209,8 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 		HeaderMediaID:       campaign.HeaderMediaID,
 		HeaderMediaFilename: campaign.HeaderMediaFilename,
 		HeaderMediaMimeType: campaign.HeaderMediaMimeType,
+		MinDelaySeconds:     campaign.MinDelaySeconds,
+		MaxDelaySeconds:     campaign.MaxDelaySeconds,
 		Status:              campaign.Status,
 		TotalRecipients:     campaign.TotalRecipients,
 		SentCount:           campaign.SentCount,
@@ -235,6 +249,8 @@ func (a *App) GetCampaign(r *fastglue.Request) error {
 		HeaderMediaID:       campaign.HeaderMediaID,
 		HeaderMediaFilename: campaign.HeaderMediaFilename,
 		HeaderMediaMimeType: campaign.HeaderMediaMimeType,
+		MinDelaySeconds:     campaign.MinDelaySeconds,
+		MaxDelaySeconds:     campaign.MaxDelaySeconds,
 		Status:              campaign.Status,
 		TotalRecipients:     campaign.TotalRecipients,
 		SentCount:           campaign.SentCount,
@@ -279,11 +295,22 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
 	}
+	minDelaySeconds, maxDelaySeconds, err := normalizeCampaignDelayRange(
+		campaign.MinDelaySeconds,
+		campaign.MaxDelaySeconds,
+		req.MinDelaySeconds,
+		req.MaxDelaySeconds,
+	)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
 
 	// Update fields
 	updates := map[string]interface{}{
-		"name":         req.Name,
-		"scheduled_at": req.ScheduledAt,
+		"name":              req.Name,
+		"scheduled_at":      req.ScheduledAt,
+		"min_delay_seconds": minDelaySeconds,
+		"max_delay_seconds": maxDelaySeconds,
 	}
 
 	if req.TemplateID != "" {
@@ -327,6 +354,8 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 		HeaderMediaID:       campaign.HeaderMediaID,
 		HeaderMediaFilename: campaign.HeaderMediaFilename,
 		HeaderMediaMimeType: campaign.HeaderMediaMimeType,
+		MinDelaySeconds:     campaign.MinDelaySeconds,
+		MaxDelaySeconds:     campaign.MaxDelaySeconds,
 		Status:              campaign.Status,
 		TotalRecipients:     campaign.TotalRecipients,
 		SentCount:           campaign.SentCount,
@@ -420,6 +449,27 @@ func campaignTemplateDisplayName(template *models.Template) string {
 		return template.DisplayName
 	}
 	return template.Name
+}
+
+func normalizeCampaignDelayRange(currentMin, currentMax int, requestedMin, requestedMax *int) (int, int, error) {
+	minDelay := currentMin
+	maxDelay := currentMax
+
+	if requestedMin != nil {
+		minDelay = *requestedMin
+	}
+	if requestedMax != nil {
+		maxDelay = *requestedMax
+	}
+
+	if minDelay < 0 || maxDelay < 0 {
+		return 0, 0, fmt.Errorf("campaign delay must be non-negative")
+	}
+	if minDelay > maxDelay {
+		return 0, 0, fmt.Errorf("campaign delay min cannot be greater than max")
+	}
+
+	return minDelay, maxDelay, nil
 }
 
 // DeleteCampaign implements campaign deletion
@@ -873,15 +923,11 @@ func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Can only upload media for draft campaigns", nil, "")
 	}
 
-	// Verify template has media header
-	if campaign.Template == nil || campaign.Template.HeaderType == "" || campaign.Template.HeaderType == "TEXT" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Template does not have a media header", nil, "")
-	}
+	providerIsWhatsmeow := a.isWhatsmeowProvider()
 
-	// Get WhatsApp account
-	account, err := a.resolveWhatsAppAccount(orgID, campaign.WhatsAppAccount)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "WhatsApp account not found", nil, "")
+	// Meta template campaigns require a media header to accept uploaded media.
+	if !providerIsWhatsmeow && (campaign.Template == nil || campaign.Template.HeaderType == "" || campaign.Template.HeaderType == "TEXT") {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Template does not have a media header", nil, "")
 	}
 
 	// Parse multipart form
@@ -922,21 +968,28 @@ func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
 		"video/mp4": true, "video/3gpp": true,
 		"audio/aac": true, "audio/mp4": true, "audio/mpeg": true, "audio/ogg": true,
 		"application/pdf": true, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
-		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   true,
 		"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
 	}
 	if !allowedMIME[mimeType] {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Unsupported file type: "+mimeType, nil, "")
 	}
 
-	// Upload to WhatsApp
-	waAccount := a.toWhatsAppAccount(account)
+	mediaID := ""
+	if !providerIsWhatsmeow {
+		// Meta provider requires uploading media first and storing returned media ID.
+		account, err := a.resolveWhatsAppAccount(orgID, campaign.WhatsAppAccount)
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "WhatsApp account not found", nil, "")
+		}
 
-	ctx := r.RequestCtx
-	mediaID, err := a.WhatsApp.UploadMedia(ctx, waAccount, data, mimeType, fileHeader.Filename)
-	if err != nil {
-		a.Log.Error("Failed to upload media to WhatsApp", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to upload media to WhatsApp", nil, "")
+		waAccount := a.toWhatsAppAccount(account)
+		ctx := r.RequestCtx
+		mediaID, err = a.WhatsApp.UploadMedia(ctx, waAccount, data, mimeType, fileHeader.Filename)
+		if err != nil {
+			a.Log.Error("Failed to upload media to WhatsApp", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to upload media to WhatsApp", nil, "")
+		}
 	}
 
 	// Save file locally for preview

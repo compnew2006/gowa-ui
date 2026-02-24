@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { RangeCalendar } from '@/components/ui/range-calendar'
 import {
@@ -35,7 +36,9 @@ import {
   Activity,
   ChevronsUpDown,
   Check,
-  Coffee
+  Coffee,
+  Download,
+  Star
 } from 'lucide-vue-next'
 import type { DateRange } from 'reka-ui'
 import { CalendarDate } from '@internationalized/date'
@@ -73,11 +76,35 @@ interface TrendPoint {
   avg_response_mins: number
 }
 
+interface AgentRatingSummary {
+  total_ratings: number
+  average_rating: number
+  ratings_by_score: Record<string, number>
+}
+
+interface AgentRatingRecord {
+  id: string
+  chat_id: string
+  contact_id: string
+  contact: string
+  contact_phone: string
+  agent_id?: string
+  agent_name: string
+  closing_agent_id: string
+  closing_agent_name: string
+  rating: number
+  rated_at: string
+  rating_message: string
+  context_messages: Record<string, unknown>
+}
+
 interface AgentAnalyticsResponse {
   summary: AgentAnalyticsSummary
   agent_stats?: AgentPerformanceStats[]
   trend_data: TrendPoint[]
   my_stats?: AgentPerformanceStats
+  rating_summary?: AgentRatingSummary
+  rating_records?: AgentRatingRecord[]
 }
 
 const { t } = useI18n()
@@ -102,6 +129,14 @@ const selectedAgentName = computed(() => {
   if (selectedAgentId.value === 'all') return t('agentAnalytics.allAgents')
   const agent = agents.value.find(a => a.id === selectedAgentId.value)
   return agent?.full_name || t('agentAnalytics.selectAgent')
+})
+
+const minRating = ref<string>('all')
+const maxRating = ref<string>('all')
+const isExporting = ref(false)
+const ratingOptions = Array.from({ length: 10 }, (_, idx) => {
+  const value = String(idx + 1)
+  return { value, label: value }
 })
 
 // Time range filter
@@ -215,6 +250,42 @@ const formatDateRange = computed(() => {
   return ''
 })
 
+const formatDateTime = (value: string): string => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
+
+const formatContextMessages = (context: Record<string, unknown> | undefined): string => {
+  if (!context) return '-'
+
+  const collect = (key: string): string[] => {
+    const value = context[key]
+    if (!Array.isArray(value)) return []
+    return value
+      .map((entry) => {
+        if (entry && typeof entry === 'object' && 'content' in entry) {
+          return String((entry as { content?: unknown }).content ?? '').trim()
+        }
+        return ''
+      })
+      .filter(Boolean)
+  }
+
+  let ratingPart = ''
+  const ratingValue = context.rating
+  if (ratingValue && typeof ratingValue === 'object' && 'content' in ratingValue) {
+    ratingPart = String((ratingValue as { content?: unknown }).content ?? '').trim()
+  }
+
+  const parts = [...collect('before')]
+  if (ratingPart) parts.push(ratingPart)
+  parts.push(...collect('after'))
+
+  return parts.join(' | ') || '-'
+}
+
 const formatMinutes = (mins: number): string => {
   if (!mins || mins === 0) return '0m'
   if (mins < 60) return `${Math.round(mins)}m`
@@ -238,9 +309,15 @@ const fetchAnalytics = async () => {
   isLoading.value = true
   try {
     const { from, to } = getDateRange.value
-    const params: { from: string; to: string; agent_id?: string } = { from, to }
+    const params: { from: string; to: string; agent_id?: string; min_rating?: number; max_rating?: number } = { from, to }
     if (isAdminOrManager.value && selectedAgentId.value !== 'all') {
       params.agent_id = selectedAgentId.value
+    }
+    if (isAdminOrManager.value && minRating.value !== 'all') {
+      params.min_rating = Number(minRating.value)
+    }
+    if (isAdminOrManager.value && maxRating.value !== 'all') {
+      params.max_rating = Number(maxRating.value)
     }
     const response = await agentAnalyticsService.getSummary(params)
     const data = response.data.data || response.data
@@ -250,6 +327,43 @@ const fetchAnalytics = async () => {
     analytics.value = null
   } finally {
     isLoading.value = false
+  }
+}
+
+const exportRatings = async () => {
+  if (!isAdminOrManager.value) return
+
+  isExporting.value = true
+  try {
+    const { from, to } = getDateRange.value
+    const params: { from: string; to: string; agent_id?: string; min_rating?: number; max_rating?: number } = { from, to }
+    if (selectedAgentId.value !== 'all') {
+      params.agent_id = selectedAgentId.value
+    }
+    if (minRating.value !== 'all') {
+      params.min_rating = Number(minRating.value)
+    }
+    if (maxRating.value !== 'all') {
+      params.max_rating = Number(maxRating.value)
+    }
+
+    const response = await agentAnalyticsService.exportRatings(params)
+    const csvBlob = response.data instanceof Blob
+      ? response.data
+      : new Blob([response.data], { type: 'text/csv' })
+
+    const url = URL.createObjectURL(csvBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `agent-ratings-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('Failed to export ratings:', error)
+  } finally {
+    isExporting.value = false
   }
 }
 
@@ -269,6 +383,14 @@ watch(selectedRange, (newValue) => {
 })
 
 watch(selectedAgentId, () => {
+  fetchAnalytics()
+})
+
+watch([minRating, maxRating], ([nextMin, nextMax]) => {
+  if (nextMin !== 'all' && nextMax !== 'all' && Number(nextMin) > Number(nextMax)) {
+    maxRating.value = nextMin
+    return
+  }
   fetchAnalytics()
 })
 
@@ -490,6 +612,46 @@ void _displayStats.value // Suppress unused warning
             </PopoverContent>
           </Popover>
         </div>
+
+        <div v-if="isAdminOrManager" class="flex items-center gap-2">
+          <Select v-model="minRating">
+            <SelectTrigger class="w-[120px]">
+              <SelectValue :placeholder="$t('agentAnalytics.minRating')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{{ $t('agentAnalytics.anyRating') }}</SelectItem>
+              <SelectItem
+                v-for="option in ratingOptions"
+                :key="`min-${option.value}`"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select v-model="maxRating">
+            <SelectTrigger class="w-[120px]">
+              <SelectValue :placeholder="$t('agentAnalytics.maxRating')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{{ $t('agentAnalytics.anyRating') }}</SelectItem>
+              <SelectItem
+                v-for="option in ratingOptions"
+                :key="`max-${option.value}`"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" :disabled="isExporting" @click="exportRatings">
+            <Loader2 v-if="isExporting" class="mr-2 h-4 w-4 animate-spin" />
+            <Download v-else class="mr-2 h-4 w-4" />
+            {{ $t('agentAnalytics.exportRatings') }}
+          </Button>
+        </div>
       </template>
     </PageHeader>
 
@@ -612,6 +774,26 @@ void _displayStats.value // Suppress unused warning
                 </p>
               </div>
             </div>
+
+            <div
+              v-if="isAdminOrManager"
+              class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200"
+            >
+              <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('agentAnalytics.averageRating') }}</span>
+                <div class="h-10 w-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                  <Star class="h-5 w-5 text-yellow-400" />
+                </div>
+              </div>
+              <div class="pt-2">
+                <div class="text-3xl font-bold text-white light:text-gray-900">
+                  {{ Number(analytics.rating_summary?.average_rating || 0).toFixed(1) }}
+                </div>
+                <p class="text-xs text-white/40 light:text-gray-500 mt-1">
+                  {{ $t('agentAnalytics.totalRatingsLabel', { count: analytics.rating_summary?.total_ratings || 0 }) }}
+                </p>
+              </div>
+            </div>
           </template>
         </div>
 
@@ -685,6 +867,59 @@ void _displayStats.value // Suppress unused warning
                   </div>
                 </template>
               </div>
+            </CardContent>
+          </Card>
+        </template>
+
+        <template v-if="isAdminOrManager">
+          <Card>
+            <CardHeader>
+              <CardTitle>{{ $t('agentAnalytics.ratingsTableTitle') }}</CardTitle>
+              <CardDescription>{{ $t('agentAnalytics.ratingsTableSubtitle') }}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <template v-if="isLoading">
+                <Skeleton class="h-64 w-full" />
+              </template>
+              <template v-else-if="analytics?.rating_records?.length">
+                <div class="overflow-x-auto rounded-md border border-white/[0.08] light:border-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{{ $t('agentAnalytics.agentColumn') }}</TableHead>
+                        <TableHead>{{ $t('agentAnalytics.chatIdColumn') }}</TableHead>
+                        <TableHead>{{ $t('agentAnalytics.contactColumn') }}</TableHead>
+                        <TableHead>{{ $t('agentAnalytics.ratingColumn') }}</TableHead>
+                        <TableHead>{{ $t('agentAnalytics.ratedAtColumn') }}</TableHead>
+                        <TableHead>{{ $t('agentAnalytics.closingAgentColumn') }}</TableHead>
+                        <TableHead>{{ $t('agentAnalytics.ratingMessageColumn') }}</TableHead>
+                        <TableHead>{{ $t('agentAnalytics.contextMessagesColumn') }}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow v-for="record in analytics.rating_records" :key="record.id">
+                        <TableCell>{{ record.agent_name || '-' }}</TableCell>
+                        <TableCell class="font-mono text-xs">{{ record.chat_id }}</TableCell>
+                        <TableCell>{{ record.contact || record.contact_phone }}</TableCell>
+                        <TableCell>{{ record.rating }}</TableCell>
+                        <TableCell>{{ formatDateTime(record.rated_at) }}</TableCell>
+                        <TableCell>{{ record.closing_agent_name || '-' }}</TableCell>
+                        <TableCell class="max-w-[220px] truncate" :title="record.rating_message">
+                          {{ record.rating_message || '-' }}
+                        </TableCell>
+                        <TableCell class="max-w-[280px] truncate" :title="formatContextMessages(record.context_messages)">
+                          {{ formatContextMessages(record.context_messages) }}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </template>
+              <template v-else>
+                <div class="h-40 flex items-center justify-center text-muted-foreground">
+                  {{ $t('agentAnalytics.noDataAvailable') }}
+                </div>
+              </template>
             </CardContent>
           </Card>
         </template>

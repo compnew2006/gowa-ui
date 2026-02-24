@@ -89,12 +89,13 @@ describe('ChatSidebarUnifier', () => {
     expect(entries[0].displayContact.name).toBe('Alice B')
   })
 
-  it('keeps group chats conversation-scoped instead of phone-scoped', () => {
+  it('merges same group conversation across accounts in unified mode', () => {
     const groupA = createContact({
       id: 'g-1',
       phone_number: '1203630@g.us',
       conversation_id: '1203630@g.us',
       is_group_chat: true,
+      instance_id: 'instance-a',
       whatsapp_account: 'account-a',
       unread_count: 1
     })
@@ -103,6 +104,7 @@ describe('ChatSidebarUnifier', () => {
       phone_number: '1203630@g.us',
       conversation_id: '1203630@g.us',
       is_group_chat: true,
+      instance_id: 'instance-b',
       whatsapp_account: 'account-b',
       unread_count: 2
     })
@@ -110,8 +112,36 @@ describe('ChatSidebarUnifier', () => {
     const entries = unifier.buildEntries([groupA, groupB], 'unified')
 
     expect(entries).toHaveLength(1)
-    expect(entries[0].key).toContain('conversation:1203630@g.us')
+    expect(entries[0].key).toBe('conversation:1203630@g.us')
     expect(entries[0].key).not.toContain('phone:')
+    expect(entries[0].sourceContactIDs).toEqual(['g-1', 'g-2'])
+    expect(entries[0].accountNames).toEqual(['account-a', 'account-b'])
+    expect(entries[0].displayContact.unread_count).toBe(3)
+  })
+
+  it('keeps same group conversation separate by instance in separate mode', () => {
+    const groupA = createContact({
+      id: 'g-1',
+      phone_number: '1203630@g.us',
+      conversation_id: '1203630@g.us',
+      is_group_chat: true,
+      instance_id: 'instance-a',
+      whatsapp_account: 'account-a'
+    })
+    const groupB = createContact({
+      id: 'g-2',
+      phone_number: '1203630@g.us',
+      conversation_id: '1203630@g.us',
+      is_group_chat: true,
+      instance_id: 'instance-b',
+      whatsapp_account: 'account-b'
+    })
+
+    const entries = unifier.buildEntries([groupA, groupB], 'separate')
+
+    expect(entries).toHaveLength(2)
+    expect(entries[0].key).toContain('conversation:1203630@g.us:instance-')
+    expect(entries[1].key).toContain('conversation:1203630@g.us:instance-')
   })
 
   it('finds a grouped entry by source contact id', () => {

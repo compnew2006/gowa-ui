@@ -89,6 +89,9 @@ export const usersService = {
   update: (id: string, data: { email?: string; password?: string; full_name?: string; role_id?: string; is_active?: boolean }) =>
     api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
+  getSendRestrictions: (id: string) => api.get(`/users/${id}/send-restrictions`),
+  updateSendRestrictions: (id: string, data: { enabled?: boolean; include_all_contacts?: boolean; authorized_numbers?: string[]; allowed_instance_id?: string | null }) =>
+    api.put(`/users/${id}/send-restrictions`, data),
   me: () => api.get('/me'),
   updateSettings: (data: { email_notifications: boolean; new_message_alerts: boolean; campaign_updates: boolean; notification_sound?: 'notification1' | 'notification2' | 'notification' }) =>
     api.put('/me/settings', data),
@@ -116,6 +119,8 @@ export const contactsService = {
     search?: string
     page?: number
     limit?: number
+    created_from?: string
+    created_to?: string
     tags?: string
     instance_id?: string
     chat_types?: string
@@ -351,6 +356,15 @@ export const instancesService = {
     api.post(`/instances/${id}/pair-phone`, data),
   disconnect: (id: string) => api.post(`/instances/${id}/disconnect`),
   reconnect: (id: string) => api.post(`/instances/${id}/reconnect`),
+  uploadAutoCampaignMedia: (id: string, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const csrfToken = getCookie('whm_csrf')
+    return axios.post(`${api.defaults.baseURL}/instances/${id}/auto-campaign/media`, formData, {
+      withCredentials: true,
+      headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
+    })
+  },
 }
 
 export const notificationsService = {
@@ -444,8 +458,10 @@ export const cannedResponsesService = {
 }
 
 export const agentAnalyticsService = {
-  getSummary: (params?: { from?: string; to?: string; agent_id?: string }) =>
-    api.get('/analytics/agents', { params })
+  getSummary: (params?: { from?: string; to?: string; agent_id?: string; min_rating?: number; max_rating?: number }) =>
+    api.get('/analytics/agents', { params }),
+  exportRatings: (params?: { from?: string; to?: string; agent_id?: string; min_rating?: number; max_rating?: number }) =>
+    api.get('/analytics/agents/ratings/export', { params, responseType: 'blob' })
 }
 
 // Meta WhatsApp Analytics Types
@@ -686,12 +702,16 @@ export const organizationService = {
   getSettings: () => api.get('/org/settings'),
   updateSettings: (data: {
     mask_phone_numbers?: boolean
+    strict_sending_restrictions_enabled?: boolean
     timezone?: string
     date_format?: string
     name?: string
     assigned_chat_reset_enabled?: boolean
     assigned_chat_reset_mode?: 'midnight' | 'custom_hour'
     assigned_chat_reset_hour?: number
+    chat_close_rating_enabled?: boolean
+    chat_close_rating_window_days?: number
+    chat_close_rating_templates?: Record<string, string>
   }) => api.put('/org/settings', data)
 }
 

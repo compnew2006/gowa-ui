@@ -307,6 +307,12 @@ func runServer(args []string) {
 	go chatAssignmentResetWorker.Start(chatAssignmentResetCtx)
 	lo.Info("Assigned chat reset worker started")
 
+	// Start instance auto campaign worker (checks interval every minute).
+	instanceAutoCampaignWorker := handlers.NewInstanceAutoCampaignWorker(app, time.Minute)
+	instanceAutoCampaignCtx, instanceAutoCampaignCancel := context.WithCancel(context.Background())
+	go instanceAutoCampaignWorker.Start(instanceAutoCampaignCtx)
+	lo.Info("Instance auto campaign worker started")
+
 	// Start embedded workers
 	var workers []*worker.Worker
 	var workerCancel context.CancelFunc
@@ -361,6 +367,11 @@ func runServer(args []string) {
 	chatAssignmentResetCancel()
 	chatAssignmentResetWorker.Stop()
 	lo.Info("Assigned chat reset worker stopped")
+
+	lo.Info("Stopping instance auto campaign worker...")
+	instanceAutoCampaignCancel()
+	instanceAutoCampaignWorker.Stop()
+	lo.Info("Instance auto campaign worker stopped")
 
 	// Stop workers first
 	if workerCancel != nil {
@@ -639,6 +650,8 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/users/{id}", app.GetUser)
 	g.PUT("/api/users/{id}", app.UpdateUser)
 	g.DELETE("/api/users/{id}", app.DeleteUser)
+	g.GET("/api/users/{id}/send-restrictions", app.GetUserSendRestrictions)
+	g.PUT("/api/users/{id}/send-restrictions", app.UpdateUserSendRestrictions)
 
 	// Roles & Permissions (admin only - enforced by middleware)
 	g.GET("/api/roles", app.ListRoles)
@@ -715,6 +728,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/instances/{id}/pair-phone", app.PairPhoneInstance)
 	g.POST("/api/instances/{id}/disconnect", app.DisconnectInstance)
 	g.POST("/api/instances/{id}/reconnect", app.ReconnectInstance)
+	g.POST("/api/instances/{id}/auto-campaign/media", app.UploadInstanceAutoCampaignMedia)
 	g.GET("/api/notifications", app.ListNotifications)
 	g.PUT("/api/notifications/{id}/dismiss", app.DismissNotification)
 
@@ -834,8 +848,9 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/analytics/messages", app.GetMessageAnalytics)
 	g.GET("/api/analytics/chatbot", app.GetChatbotAnalytics)
 	g.GET("/api/analytics/agents", app.GetAgentAnalytics)
-	g.GET("/api/analytics/agents/{id}", app.GetAgentDetails)
 	g.GET("/api/analytics/agents/comparison", app.GetAgentComparison)
+	g.GET("/api/analytics/agents/ratings/export", app.ExportAgentRatings)
+	g.GET("/api/analytics/agents/{id}", app.GetAgentDetails)
 
 	// Meta WhatsApp Analytics (Meta only)
 	g.GET("/api/analytics/meta", meta(app.GetMetaAnalytics))

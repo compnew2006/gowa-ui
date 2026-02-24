@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -127,6 +128,10 @@ func SLASendOptions() MessageSendOptions {
 // It handles: text, media (image/video/audio/document), interactive (buttons/list/cta_url), and template messages.
 // Routes through MessageProvider when configured for whatsmeow, otherwise uses the Meta client directly.
 func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageRequest, opts MessageSendOptions) (*models.Message, error) {
+	if err := a.enforceStrictSendRestrictions(ctx, req, opts); err != nil {
+		return nil, err
+	}
+
 	// 1. Create message record
 	msg := a.createOutgoingMessage(req, opts)
 
@@ -902,6 +907,10 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
 	if err != nil {
+		var restrictedErr *restrictedSendViolationError
+		if errors.As(err, &restrictedErr) {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedErr.Error(), nil, "")
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send template message", nil, "")
 	}
 

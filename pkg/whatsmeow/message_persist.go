@@ -2,8 +2,10 @@ package whatsmeow
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -21,6 +23,89 @@ type persistMessageOptions struct {
 	Broadcast     bool
 	HistorySync   bool
 	UpdateMetrics bool
+}
+
+var wamidPhonePattern = regexp.MustCompile(`\d{10,15}`)
+
+func shouldMigrateLIDContact(senderIdentity string) bool {
+	senderIdentity = strings.TrimSpace(senderIdentity)
+	return senderIdentity != "" && !strings.Contains(senderIdentity, "@")
+}
+
+func normalizeDirectSenderIdentity(senderIdentity string, chatJID, senderJID types.JID) string {
+	senderIdentity = strings.TrimSpace(senderIdentity)
+
+	// For direct chats, a PN chat JID is always canonical.
+	if chatJID.Server == types.DefaultUserServer && chatJID.User != "" {
+		return chatJID.User
+	}
+
+	if senderIdentity != "" {
+		if strings.Contains(senderIdentity, "@") {
+			return senderIdentity
+		}
+		// Hidden IDs can look like phone numbers; preserve their JID server suffix
+		// so they aren't treated as canonical phone numbers.
+		if chatJID.Server == types.HiddenUserServer && chatJID.User == senderIdentity {
+			return chatJID.String()
+		}
+		if senderJID.Server == types.HiddenUserServer && senderJID.User == senderIdentity {
+			return senderJID.String()
+		}
+		return senderIdentity
+	}
+
+	if senderJID.Server == types.DefaultUserServer && senderJID.User != "" {
+		return senderJID.User
+	}
+	if chatJID.Server == types.HiddenUserServer && chatJID.User != "" {
+		return chatJID.String()
+	}
+	if senderJID.Server == types.HiddenUserServer && senderJID.User != "" {
+		return senderJID.String()
+	}
+	return ""
+}
+
+func inferPhoneFromWAMID(wamid string) string {
+	wamid = strings.TrimSpace(wamid)
+	const prefix = "wamid."
+	if wamid == "" || !strings.HasPrefix(strings.ToLower(wamid), prefix) {
+		return ""
+	}
+
+	payload := strings.TrimSpace(wamid[len(prefix):])
+	if payload == "" {
+		return ""
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		decoded, err = base64.RawStdEncoding.DecodeString(payload)
+		if err != nil {
+			return ""
+		}
+	}
+
+	matches := wamidPhonePattern.FindAllString(string(decoded), -1)
+	longest := ""
+	for _, candidate := range matches {
+		if len(candidate) > len(longest) {
+			longest = candidate
+		}
+	}
+	return longest
+}
+
+func directConversationID(chatJID types.JID, peerIdentity string) string {
+	peerIdentity = strings.TrimSpace(peerIdentity)
+	if peerIdentity == "" {
+		return chatJID.String()
+	}
+	if strings.Contains(peerIdentity, "@") {
+		return peerIdentity
+	}
+	return peerIdentity + "@s.whatsapp.net"
 }
 
 func (cm *ConnectionManager) persistParsedMessage(
@@ -54,19 +139,72 @@ func (cm *ConnectionManager) persistParsedMessage(
 		// PN JID on direct chats is the canonical contact identity, even when sender is LID-addressed.
 		senderPhone = chatJID.User
 	}
-	if evt.Info.IsFromMe && !isGroup && !isChannel && chatJID.User != "" {
-		senderPhone = chatJID.User
+	if evt.Info.IsFromMe && !isGroup && !isChannel {
+		recipientAlt := evt.Info.RecipientAlt.ToNonAD()
+		if recipientAlt.Server == types.DefaultUserServer && recipientAlt.User != "" {
+			senderPhone = recipientAlt.User
+		} else if chatJID.User != "" {
+			senderPhone = chatJID.User
+		}
 	}
 	if senderPhone == "" {
-		senderPhone = evt.Info.Sender.User
+		senderJID := evt.Info.Sender.ToNonAD()
+		recipientAlt := evt.Info.RecipientAlt.ToNonAD()
+		switch {
+		case !isGroup && !isChannel && chatJID.Server == types.DefaultUserServer && chatJID.User != "":
+			senderPhone = chatJID.User
+		case evt.Info.IsFromMe && recipientAlt.Server == types.DefaultUserServer && recipientAlt.User != "":
+			senderPhone = recipientAlt.User
+		case senderJID.Server == types.DefaultUserServer && senderJID.User != "":
+			senderPhone = senderJID.User
+		case !isGroup && !isChannel && chatJID.Server == types.HiddenUserServer && chatJID.User != "":
+			senderPhone = chatJID.String()
+		case senderJID.Server == types.HiddenUserServer && senderJID.User != "":
+			senderPhone = senderJID.String()
+		}
 	}
-	if !evt.Info.IsFromMe && senderPhone != "" {
+	if !isGroup && !isChannel {
+		senderPhone = normalizeDirectSenderIdentity(senderPhone, chatJID, evt.Info.Sender.ToNonAD())
+	}
+	if evt.Info.IsFromMe && !isGroup && !isChannel && strings.HasSuffix(senderPhone, "@"+string(types.HiddenUserServer)) {
+		if resolvedPN := cm.lookupInstancePhoneByJID(ctx, orgID, senderPhone); resolvedPN != "" {
+			senderPhone = resolvedPN
+		}
+	}
+	lidSenderIdentity := ""
+	if !isGroup && !isChannel && strings.HasSuffix(senderPhone, "@"+string(types.HiddenUserServer)) {
+		lidSenderIdentity = senderPhone
+		if inferredPhone := inferPhoneFromWAMID(evt.Info.ID); inferredPhone != "" {
+			senderPhone = inferredPhone
+		}
+	}
+	if !evt.Info.IsFromMe {
+		if lidSenderIdentity != "" && senderPhone != "" && senderPhone != lidSenderIdentity {
+			cm.migrateContactPhoneFromLID(ctx, orgID, instanceID, lidSenderIdentity, senderPhone)
+		}
+	}
+	if evt.Info.IsFromMe && !isGroup && !isChannel && chatJID.Server == types.HiddenUserServer && chatJID.User != "" && shouldMigrateLIDContact(senderPhone) {
+		cm.migrateContactPhoneFromLID(ctx, orgID, instanceID, chatJID.String(), senderPhone)
+	}
+	if !evt.Info.IsFromMe && shouldMigrateLIDContact(senderPhone) {
 		if evt.Info.Sender.User != "" && senderPhone != evt.Info.Sender.User {
 			cm.migrateContactPhoneFromLID(ctx, orgID, instanceID, evt.Info.Sender.User, senderPhone)
 		}
 		if !isGroup && !isChannel && chatJID.Server == types.HiddenUserServer && chatJID.User != "" && senderPhone != chatJID.User {
 			cm.migrateContactPhoneFromLID(ctx, orgID, instanceID, chatJID.User, senderPhone)
 		}
+	}
+	if !isGroup && !isChannel {
+		cm.logger.Debug(
+			"Resolved direct chat peer identity",
+			"instance_id", instanceID,
+			"from_me", evt.Info.IsFromMe,
+			"chat_jid", chatJID.String(),
+			"sender_jid", evt.Info.Sender.ToNonAD().String(),
+			"sender_alt", evt.Info.SenderAlt.ToNonAD().String(),
+			"recipient_alt", evt.Info.RecipientAlt.ToNonAD().String(),
+			"resolved_peer", senderPhone,
+		)
 	}
 
 	contactPushName := evt.Info.PushName
@@ -122,6 +260,10 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 
 	replyCtx := cm.resolveIncomingReplyContext(ctx, orgID, instanceID, chatJID.String(), myJID, evt.Message)
+	conversationID := chatJID.String()
+	if !isGroup && !isChannel {
+		conversationID = directConversationID(chatJID, contactDetails.PhoneNumber)
+	}
 
 	metadata := models.JSONB{
 		"push_name":  evt.Info.PushName,
@@ -202,7 +344,7 @@ func (cm *ConnectionManager) persistParsedMessage(
 		WhatsAppAccount:   myAccount,
 		ContactID:         contact.ID,
 		WhatsAppMessageID: waMessageID,
-		ConversationID:    chatJID.String(),
+		ConversationID:    conversationID,
 		Direction:         direction,
 		MessageType:       msgType,
 		Content:           content,

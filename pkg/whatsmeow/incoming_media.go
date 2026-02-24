@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	waClient "go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
@@ -33,14 +33,17 @@ func (cm *ConnectionManager) extractMessageContentWithMedia(ctx context.Context,
 		return models.MessageTypeText, deletedMessageCaption, "", "", ""
 	}
 
-	// Ignore SenderKeyDistributionMessage (group encryption technical message)
-	if msg != nil && msg.SenderKeyDistributionMessage != nil {
+	// Ignore key-distribution control messages (group encryption technical payloads).
+	if msg != nil && (msg.SenderKeyDistributionMessage != nil || msg.FastRatchetKeySenderKeyDistributionMessage != nil) {
 		return models.MessageTypeIgnore, "", "", "", ""
 	}
 
 	unwrapped := unwrapIncomingMessage(msg)
 	if unwrapped == nil {
 		return models.MessageTypeText, "", "", "", ""
+	}
+	if unwrapped.GetSenderKeyDistributionMessage() != nil || unwrapped.GetFastRatchetKeySenderKeyDistributionMessage() != nil {
+		return models.MessageTypeIgnore, "", "", "", ""
 	}
 
 	if protocol := unwrapped.GetProtocolMessage(); protocol != nil &&

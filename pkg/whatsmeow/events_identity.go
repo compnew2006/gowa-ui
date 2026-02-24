@@ -2,13 +2,46 @@ package whatsmeow
 
 import (
 	"context"
+	"strings"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	waClient "go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 	"gorm.io/gorm"
 )
+
+func lidPhoneCandidates(lidPhone string) []string {
+	lidPhone = strings.TrimSpace(lidPhone)
+	if lidPhone == "" {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		if _, exists := seen[value]; exists {
+			return
+		}
+		seen[value] = struct{}{}
+	}
+
+	add(lidPhone)
+	if at := strings.Index(lidPhone, "@"); at > 0 {
+		add(lidPhone[:at])
+	} else {
+		add(lidPhone + "@" + string(types.HiddenUserServer))
+	}
+
+	values := make([]string, 0, len(seen))
+	for value := range seen {
+		values = append(values, value)
+	}
+	return values
+}
 
 func (cm *ConnectionManager) lookupPNForLID(ctx context.Context, lidUser string) string {
 	if lidUser == "" {
@@ -25,6 +58,26 @@ func (cm *ConnectionManager) lookupPNForLID(ctx context.Context, lidUser string)
 		return pn
 	}
 	return ""
+}
+
+func (cm *ConnectionManager) lookupInstancePhoneByJID(ctx context.Context, orgID uuid.UUID, jid string) string {
+	jid = strings.TrimSpace(jid)
+	if jid == "" {
+		return ""
+	}
+
+	var phone string
+	err := cm.db.WithContext(ctx).
+		Table("whatsapp_instances").
+		Select("phone_number").
+		Where("organization_id = ? AND jid = ?", orgID, jid).
+		Where("phone_number IS NOT NULL AND phone_number <> ''").
+		Limit(1).
+		Scan(&phone).Error
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(phone)
 }
 
 // resolveSenderPhone resolves message sender to a phone number, preferring PN identity.
@@ -75,14 +128,18 @@ func (cm *ConnectionManager) migrateContactPhoneFromLID(ctx context.Context, org
 	if lidPhone == "" || pnPhone == "" || lidPhone == pnPhone {
 		return
 	}
+	lidCandidates := lidPhoneCandidates(lidPhone)
+	if len(lidCandidates) == 0 {
+		return
+	}
 
 	var lidContact models.Contact
 	err := cm.db.WithContext(ctx).
-		Where("organization_id = ? AND phone_number = ? AND instance_id = ?", orgID, lidPhone, instanceID).
+		Where("organization_id = ? AND phone_number IN ? AND instance_id = ?", orgID, lidCandidates, instanceID).
 		First(&lidContact).Error
 	if err == gorm.ErrRecordNotFound {
 		err = cm.db.WithContext(ctx).
-			Where("organization_id = ? AND phone_number = ? AND instance_id IS NULL", orgID, lidPhone).
+			Where("organization_id = ? AND phone_number IN ? AND instance_id IS NULL", orgID, lidCandidates).
 			First(&lidContact).Error
 	}
 	if err != nil {

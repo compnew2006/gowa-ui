@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Smartphone, Plus, Loader2 } from "lucide-vue-next";
 import { wsService } from "@/services/websocket";
+import { instancesService } from "@/services/api";
 import { toast } from "vue-sonner";
 import { useI18n } from "vue-i18n";
 import {
@@ -28,6 +29,10 @@ import {
   normalizeAutoRejectCallSettings,
   type AutoRejectCallSettings,
 } from "@/lib/instance-auto-reject";
+import {
+  normalizeAutoCampaignSettings,
+  type AutoCampaignSettings,
+} from "@/lib/instance-auto-campaign";
 
 const instancesStore = useInstancesStore();
 const { t } = useI18n();
@@ -81,6 +86,8 @@ const isUpdatingName = ref(false);
 const tagSettingsSaving = ref<Record<string, boolean>>({});
 const autoSyncSaving = ref<Record<string, boolean>>({});
 const autoRejectSaving = ref<Record<string, boolean>>({});
+const autoCampaignSaving = ref<Record<string, boolean>>({});
+const autoCampaignUploading = ref<Record<string, boolean>>({});
 
 // Lifecycle
 onMounted(async () => {
@@ -513,6 +520,73 @@ async function handleAutoRejectSettingsUpdate(
     autoRejectSaving.value[id] = false;
   }
 }
+
+async function handleAutoCampaignSettingsUpdate(
+  id: string,
+  payload: AutoCampaignSettings,
+) {
+  const instance = instancesStore.instances.find((item) => item.id === id);
+  if (!instance) return;
+
+  autoCampaignSaving.value[id] = true;
+  try {
+    const current = normalizeAutoCampaignSettings(instance.settings?.auto_campaign);
+    const next = normalizeAutoCampaignSettings({
+      ...current,
+      ...payload,
+      last_generated_at: current.last_generated_at,
+    });
+
+    const settings = {
+      ...(instance.settings || {}),
+      auto_campaign: next,
+    };
+    await instancesStore.updateInstance(id, { settings });
+  } finally {
+    autoCampaignSaving.value[id] = false;
+  }
+}
+
+async function handleAutoCampaignMediaUpload(id: string, file: File) {
+  if (!file) return;
+
+  autoCampaignUploading.value[id] = true;
+  try {
+    await instancesService.uploadAutoCampaignMedia(id, file);
+    await fetchInstance(id);
+    toast.success(t("instances.auto_campaign.mediaUploaded"));
+  } catch (err: any) {
+    const message =
+      err.response?.data?.message ||
+      t("instances.auto_campaign.mediaUploadFailed");
+    toast.error(message);
+  } finally {
+    autoCampaignUploading.value[id] = false;
+  }
+}
+
+async function handleAutoCampaignMediaClear(id: string) {
+  const instance = instancesStore.instances.find((item) => item.id === id);
+  if (!instance) return;
+
+  autoCampaignSaving.value[id] = true;
+  try {
+    const current = normalizeAutoCampaignSettings(instance.settings?.auto_campaign);
+    const settings = {
+      ...(instance.settings || {}),
+      auto_campaign: normalizeAutoCampaignSettings({
+        ...current,
+        media_local_path: "",
+        media_mime_type: "",
+        media_filename: "",
+        last_generated_at: current.last_generated_at,
+      }),
+    };
+    await instancesStore.updateInstance(id, { settings });
+  } finally {
+    autoCampaignSaving.value[id] = false;
+  }
+}
 </script>
 
 <template>
@@ -528,7 +602,7 @@ async function handleAutoRejectSettingsUpdate(
           <RouterLink to="/settings/instances/health">
             <Button
               variant="outline"
-              class="border-white/10 hover:bg-white/5 text-white/80"
+              class="border-white/10 hover:bg-white/5 text-white/80 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
             >
               {{ $t("settings.instances.healthDashboard") }}
             </Button>
@@ -549,7 +623,7 @@ async function handleAutoRejectSettingsUpdate(
         v-if="instancesStore.loading && instancesStore.instances.length === 0"
         class="flex justify-center items-center h-64"
       >
-        <Loader2 class="h-8 w-8 text-white/20 animate-spin" />
+        <Loader2 class="h-8 w-8 text-white/20 light:text-gray-400 animate-spin" />
       </div>
 
       <div
@@ -557,9 +631,9 @@ async function handleAutoRejectSettingsUpdate(
         class="flex flex-col items-center justify-center h-64 text-center"
       >
         <div
-          class="h-16 w-16 bg-white/5 rounded-full flex items-center justify-center mb-4"
+          class="h-16 w-16 bg-white/5 light:bg-gray-100 rounded-full flex items-center justify-center mb-4"
         >
-          <Smartphone class="h-8 w-8 text-white/20" />
+          <Smartphone class="h-8 w-8 text-white/20 light:text-gray-400" />
         </div>
         <h3 class="text-lg font-medium text-white light:text-gray-900">
           {{ $t("settings.instances.noAccounts") }}
@@ -569,7 +643,7 @@ async function handleAutoRejectSettingsUpdate(
         </p>
         <Button
           variant="outline"
-          class="mt-6 border-white/10 hover:bg-white/5 text-emerald-400"
+          class="mt-6 border-white/10 hover:bg-white/5 text-emerald-400 light:border-gray-300 light:hover:bg-gray-100"
           @click="createDialogOpen = true"
         >
           {{ $t("settings.instances.connectFirstButton") }}
@@ -585,6 +659,10 @@ async function handleAutoRejectSettingsUpdate(
           :tag-settings-saving="tagSettingsSaving[instance.id] || false"
           :auto-sync-saving="autoSyncSaving[instance.id] || false"
           :auto-reject-saving="autoRejectSaving[instance.id] || false"
+          :auto-campaign-saving="autoCampaignSaving[instance.id] || false"
+          :auto-campaign-uploading="
+            autoCampaignUploading[instance.id] || false
+          "
           @connect="handleConnect"
           @disconnect="disconnectInstance"
           @edit="openEditDialog"
@@ -592,6 +670,9 @@ async function handleAutoRejectSettingsUpdate(
           @save-tag-settings="handleSaveTagSettings"
           @update-auto-sync="handleAutoSyncUpdate"
           @update-auto-reject-settings="handleAutoRejectSettingsUpdate"
+          @update-auto-campaign-settings="handleAutoCampaignSettingsUpdate"
+          @upload-auto-campaign-media="handleAutoCampaignMediaUpload"
+          @clear-auto-campaign-media="handleAutoCampaignMediaClear"
         />
       </div>
     </div>
@@ -599,7 +680,7 @@ async function handleAutoRejectSettingsUpdate(
     <!-- Create Instance Dialog -->
     <Dialog :open="createDialogOpen" @update:open="createDialogOpen = $event">
       <DialogContent
-        class="bg-[#1a1a1c] border-white/10 text-white sm:max-w-[425px]"
+        class="bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900 sm:max-w-[425px]"
       >
         <DialogHeader>
           <DialogTitle>{{
@@ -608,14 +689,14 @@ async function handleAutoRejectSettingsUpdate(
         </DialogHeader>
         <div class="grid gap-4 py-4">
           <div class="grid gap-2">
-            <Label htmlFor="name" class="text-white/70">{{
+            <Label htmlFor="name" class="text-white/70 light:text-gray-700">{{
               $t("settings.instances.dialog.accountName")
             }}</Label>
             <Input
               id="name"
               v-model="newInstanceName"
               :placeholder="$t('settings.instances.dialog.placeholder')"
-              class="bg-white/5 border-white/10 text-white placeholder:text-white/20"
+              class="bg-white/5 border-white/10 text-white placeholder:text-white/20 light:bg-white light:border-gray-300 light:text-gray-900 light:placeholder:text-gray-400"
             />
           </div>
         </div>
@@ -623,7 +704,7 @@ async function handleAutoRejectSettingsUpdate(
           <Button
             variant="outline"
             @click="createDialogOpen = false"
-            class="border-white/10 hover:bg-white/5 text-white/70"
+            class="border-white/10 hover:bg-white/5 text-white/70 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
             >{{ $t("common.cancel") }}</Button
           >
           <Button
@@ -644,7 +725,7 @@ async function handleAutoRejectSettingsUpdate(
       @update:open="(open) => !open && closeEditDialog()"
     >
       <DialogContent
-        class="bg-[#1a1a1c] border-white/10 text-white sm:max-w-[425px]"
+        class="bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900 sm:max-w-[425px]"
       >
         <DialogHeader>
           <DialogTitle>{{
@@ -653,14 +734,14 @@ async function handleAutoRejectSettingsUpdate(
         </DialogHeader>
         <div class="grid gap-4 py-4">
           <div class="grid gap-2">
-            <Label htmlFor="edit-name" class="text-white/70">{{
+            <Label htmlFor="edit-name" class="text-white/70 light:text-gray-700">{{
               $t("settings.instances.dialog.accountName")
             }}</Label>
             <Input
               id="edit-name"
               v-model="editInstanceName"
               :placeholder="$t('settings.instances.dialog.placeholder')"
-              class="bg-white/5 border-white/10 text-white placeholder:text-white/20"
+              class="bg-white/5 border-white/10 text-white placeholder:text-white/20 light:bg-white light:border-gray-300 light:text-gray-900 light:placeholder:text-gray-400"
             />
           </div>
         </div>
@@ -668,7 +749,7 @@ async function handleAutoRejectSettingsUpdate(
           <Button
             variant="outline"
             @click="closeEditDialog"
-            class="border-white/10 hover:bg-white/5 text-white/70"
+            class="border-white/10 hover:bg-white/5 text-white/70 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
             >{{ $t("common.cancel") }}</Button
           >
           <Button

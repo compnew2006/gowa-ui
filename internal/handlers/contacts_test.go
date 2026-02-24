@@ -2726,3 +2726,55 @@ func TestApp_DeleteContact_PermissionBased(t *testing.T) {
 		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 	})
 }
+
+func TestApp_DeleteContact_PreservesConversationData(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	assignee := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	now := time.Now().UTC()
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":               models.ChatStatusOpen,
+		"assigned_user_id":     assignee.ID,
+		"last_message_at":      now,
+		"last_message_preview": "old message",
+	}).Error)
+
+	message := models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		WhatsAppAccount: "whatsmeow",
+		ContactID:       contact.ID,
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeText,
+		Content:         "old history",
+		Status:          models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(&message).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("DELETE")
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.DeleteContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var deletedContact models.Contact
+	require.NoError(t, app.DB.Unscoped().Where("id = ?", contact.ID).First(&deletedContact).Error)
+	assert.True(t, deletedContact.DeletedAt.Valid)
+	assert.Equal(t, models.ChatStatusOpen, deletedContact.Status)
+	require.NotNil(t, deletedContact.AssignedUserID)
+	assert.Equal(t, assignee.ID, *deletedContact.AssignedUserID)
+	assert.Equal(t, "old message", deletedContact.LastMessagePreview)
+
+	var persistedMessage models.Message
+	require.NoError(t, app.DB.Where("id = ?", message.ID).First(&persistedMessage).Error)
+	assert.False(t, persistedMessage.DeletedAt.Valid)
+}

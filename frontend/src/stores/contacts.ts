@@ -97,6 +97,7 @@ export type ChatTypeFilter = 'private' | 'group' | 'channel'
 const unsupportedMessageBody = '[Unsupported message type]'
 const deletedMessageBody = '(This message was deleted)'
 const legacyDeletedMessageBody = 'This message was deleted'
+const syntheticPlaceholderCompanionWindowMs = 3000
 
 function normalizeChatStatus(rawStatus: unknown, assignedUserID?: string): ChatStatus {
   const normalized = typeof rawStatus === 'string' ? rawStatus.trim().toLowerCase() : ''
@@ -141,18 +142,105 @@ function isSyntheticPlaceholderMessage(message: Message): boolean {
   return isPlaceholderMessageBody(getMessageBody(message))
 }
 
+function isUnsupportedPlaceholderMessage(message: Message): boolean {
+  return isSyntheticPlaceholderMessage(message) && getMessageBody(message).trim() === unsupportedMessageBody
+}
+
+function isGroupMessage(message: Message): boolean {
+  return message.is_group_chat === true || message.metadata?.is_group_chat === true
+}
+
+function isMediaLikeMessage(message: Message): boolean {
+  const messageType = (message.message_type || '').toLowerCase()
+  return messageType === 'image' ||
+    messageType === 'video' ||
+    messageType === 'audio' ||
+    messageType === 'document' ||
+    messageType === 'sticker'
+}
+
+function getMessageSenderPhone(message: Message): string {
+  if (typeof message.sender_phone === 'string' && message.sender_phone.trim() !== '') {
+    return message.sender_phone.trim()
+  }
+  if (typeof message.metadata?.sender_phone === 'string' && message.metadata.sender_phone.trim() !== '') {
+    return message.metadata.sender_phone.trim()
+  }
+  return ''
+}
+
+function getMessageTimestamp(message: Message): number {
+  if (typeof message.created_at !== 'string') return Number.NaN
+  const parsed = Date.parse(message.created_at)
+  return Number.isNaN(parsed) ? Number.NaN : parsed
+}
+
+function collectNearbyMediaCompanionPlaceholderIDs(messageList: Message[]): Set<string> {
+  const ids = new Set<string>()
+  for (let i = 0; i < messageList.length; i++) {
+    const candidate = messageList[i]
+    if (!candidate?.id || !isUnsupportedPlaceholderMessage(candidate) || !isGroupMessage(candidate)) {
+      continue
+    }
+
+    const candidateSender = getMessageSenderPhone(candidate)
+    if (candidateSender === '') {
+      continue
+    }
+
+    const candidateTimestamp = getMessageTimestamp(candidate)
+    if (!Number.isFinite(candidateTimestamp)) {
+      continue
+    }
+
+    for (let j = i + 1; j < messageList.length; j++) {
+      const next = messageList[j]
+      if (!next) continue
+
+      const nextTimestamp = getMessageTimestamp(next)
+      if (!Number.isFinite(nextTimestamp)) {
+        continue
+      }
+
+      if (nextTimestamp - candidateTimestamp > syntheticPlaceholderCompanionWindowMs) {
+        break
+      }
+
+      if (!isMediaLikeMessage(next)) {
+        continue
+      }
+
+      if (next.contact_id !== candidate.contact_id || next.direction !== candidate.direction) {
+        continue
+      }
+
+      if (getMessageSenderPhone(next) !== candidateSender) {
+        continue
+      }
+
+      ids.add(candidate.id)
+      break
+    }
+  }
+  return ids
+}
+
 function removeSyntheticPlaceholderMessages(messageList: Message[]): Message[] {
   const companionWamids = new Set(
     messageList
       .filter(message => !isSyntheticPlaceholderMessage(message) && typeof message.wamid === 'string' && message.wamid.trim() !== '')
       .map(message => message.wamid!.trim())
   )
+  const nearbyMediaCompanionPlaceholderIDs = collectNearbyMediaCompanionPlaceholderIDs(messageList)
 
-  if (companionWamids.size === 0) {
+  if (companionWamids.size === 0 && nearbyMediaCompanionPlaceholderIDs.size === 0) {
     return messageList
   }
 
   return messageList.filter(message => {
+    if (message?.id && nearbyMediaCompanionPlaceholderIDs.has(message.id)) {
+      return false
+    }
     const wamid = typeof message.wamid === 'string' ? message.wamid.trim() : ''
     if (wamid === '' || !companionWamids.has(wamid)) {
       return true

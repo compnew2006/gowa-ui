@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { RangeCalendar } from '@/components/ui/range-calendar'
 import {
@@ -41,7 +42,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { campaignsService, templatesService, accountsService, instancesService } from '@/services/api'
+import { campaignsService, templatesService, accountsService, instancesService, contactsService } from '@/services/api'
 import { wsService } from '@/services/websocket'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'vue-sonner'
@@ -83,6 +84,8 @@ interface Campaign {
   template_name: string
   template_id?: string
   whatsapp_account?: string
+  min_delay_seconds?: number
+  max_delay_seconds?: number
   header_media_id?: string
   header_media_filename?: string
   header_media_mime_type?: string
@@ -146,6 +149,14 @@ interface Recipient {
   sent_at?: string
   delivered_at?: string
   error_message?: string
+}
+
+interface ContactRecipient {
+  id: string
+  phone_number: string
+  profile_name?: string
+  name?: string
+  created_at?: string
 }
 
 const campaigns = ref<Campaign[]>([])
@@ -287,8 +298,68 @@ const csvValidation = ref<CSVValidation | null>(null)
 const isValidatingCSV = ref(false)
 const selectedTemplate = ref<Template | null>(null)
 const addRecipientsTab = ref('manual')
+const contactsForImport = ref<ContactRecipient[]>([])
+const contactsSearchQuery = ref('')
+const contactsDateFrom = ref('')
+const contactsDateTo = ref('')
+const contactsImportPage = ref(1)
+const contactsImportTotal = ref(0)
+const contactsImportPageSize = ref(50)
+const contactsImportPageSizeOptions = [25, 50, 100, 500]
+const selectedContactsById = ref<Record<string, ContactRecipient>>({})
+const isLoadingContactsForImport = ref(false)
 
 // Media upload state
+const campaignMediaFile = ref<File | null>(null)
+const campaignMediaInputKey = ref(0)
+const maxCampaignMediaSizeBytes = 16 * 1024 * 1024
+const allowedCampaignMediaMimeTypes = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/3gpp',
+  'audio/aac',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/ogg',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+])
+const allowedCampaignMediaExtensions = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.mp4',
+  '.3gp',
+  '.aac',
+  '.m4a',
+  '.mp3',
+  '.ogg',
+  '.pdf',
+  '.xlsx',
+  '.docx',
+  '.pptx'
+]
+const campaignMediaAccept = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/3gpp',
+  'audio/aac',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/ogg',
+  '.pdf',
+  '.xlsx',
+  '.docx',
+  '.pptx'
+].join(',')
+
 // Computed: template parameter format hints
 const templateParamNames = computed(() => {
   if (!selectedTemplate.value) return []
@@ -347,6 +418,26 @@ const recipientPlaceholder = computed(() => {
   return `${line1}\n${line2}`
 })
 
+const selectedContactIdSet = computed(() => new Set(Object.keys(selectedContactsById.value)))
+
+const filteredContactsForImport = computed(() => contactsForImport.value)
+
+const selectedContactsForImport = computed(() => Object.values(selectedContactsById.value))
+
+const contactsImportTotalPages = computed(() => {
+  const total = Math.max(0, contactsImportTotal.value)
+  return Math.max(1, Math.ceil(total / contactsImportPageSize.value))
+})
+
+const hasContactsImportFilters = computed(() =>
+  Boolean(contactsSearchQuery.value.trim() || contactsDateFrom.value || contactsDateTo.value)
+)
+
+const areAllFilteredContactsSelected = computed(() => {
+  if (filteredContactsForImport.value.length === 0) return false
+  return filteredContactsForImport.value.every(contact => selectedContactIdSet.value.has(contact.id))
+})
+
 // Manual input validation
 interface ManualInputValidation {
   isValid: boolean
@@ -393,12 +484,166 @@ const manualInputValidation = computed((): ManualInputValidation => {
   }
 })
 
+function normalizePhoneNumber(phone: string): string {
+  return phone.replace(/[^\d+]/g, '')
+}
+
+function isValidRecipientPhone(phone: string): boolean {
+  return /^\+?\d{10,15}$/.test(phone)
+}
+
+function clearCampaignMediaSelection() {
+  campaignMediaFile.value = null
+  campaignMediaInputKey.value += 1
+}
+
+function isAllowedCampaignMediaFile(file: File): boolean {
+  const fileType = (file.type || '').toLowerCase()
+  if (fileType && allowedCampaignMediaMimeTypes.has(fileType)) {
+    return true
+  }
+
+  const fileNameLower = file.name.toLowerCase()
+  return allowedCampaignMediaExtensions.some(ext => fileNameLower.endsWith(ext))
+}
+
+function handleCampaignMediaFileSelect(event: Event) {
+  const input = event.target as HTMLInputElement | null
+  const selected = input?.files?.[0] ?? null
+  if (!selected) {
+    clearCampaignMediaSelection()
+    return
+  }
+
+  if (selected.size > maxCampaignMediaSizeBytes) {
+    toast.error(t('campaigns.mediaFileTooLarge'))
+    clearCampaignMediaSelection()
+    return
+  }
+
+  if (!isAllowedCampaignMediaFile(selected)) {
+    toast.error(t('campaigns.mediaFileTypeUnsupported'))
+    clearCampaignMediaSelection()
+    return
+  }
+
+  campaignMediaFile.value = selected
+}
+
+function getContactRecipientDisplayName(contact: ContactRecipient): string {
+  return contact.profile_name || contact.name || contact.phone_number
+}
+
+function toggleContactSelection(contact: ContactRecipient, checked: boolean) {
+  const contactId = contact.id
+  if (checked) {
+    selectedContactsById.value = {
+      ...selectedContactsById.value,
+      [contactId]: contact
+    }
+    return
+  }
+  const next = { ...selectedContactsById.value }
+  delete next[contactId]
+  selectedContactsById.value = next
+}
+
+function toggleAllFilteredContacts(checked: boolean) {
+  if (checked) {
+    const next = { ...selectedContactsById.value }
+    for (const contact of filteredContactsForImport.value) {
+      next[contact.id] = contact
+    }
+    selectedContactsById.value = next
+    return
+  }
+
+  const next = { ...selectedContactsById.value }
+  for (const contact of filteredContactsForImport.value) {
+    delete next[contact.id]
+  }
+  selectedContactsById.value = next
+}
+
+function goToContactsImportPage(page: number) {
+  if (isLoadingContactsForImport.value) return
+  if (page < 1 || page > contactsImportTotalPages.value) return
+  contactsImportPage.value = page
+  void fetchContactsForImport()
+}
+
+function updateContactsImportPageSize(value: unknown) {
+  if (value === null || value === undefined || typeof value === 'boolean') return
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed === contactsImportPageSize.value) {
+    return
+  }
+
+  contactsImportPageSize.value = parsed
+  contactsImportPage.value = 1
+  void fetchContactsForImport()
+}
+
+async function fetchContactsForImport() {
+  isLoadingContactsForImport.value = true
+  try {
+    const response = await contactsService.list({
+      page: contactsImportPage.value,
+      limit: contactsImportPageSize.value,
+      search: contactsSearchQuery.value.trim() || undefined,
+      created_from: contactsDateFrom.value || undefined,
+      created_to: contactsDateTo.value || undefined
+    })
+    const payload = (response.data as any).data || response.data
+    const pageContacts = Array.isArray(payload.contacts) ? payload.contacts : []
+    contactsForImport.value = pageContacts
+      .map((contact: any) => ({
+        id: String(contact.id || ''),
+        phone_number: normalizePhoneNumber(String(contact.phone_number || '').trim()),
+        profile_name: contact.profile_name || '',
+        name: contact.name || '',
+        created_at: typeof contact.created_at === 'string' ? contact.created_at : ''
+      }))
+      .filter((contact: ContactRecipient) => contact.id && isValidRecipientPhone(contact.phone_number))
+
+    const total = Number(payload.total)
+    contactsImportTotal.value = Number.isFinite(total) && total >= 0
+      ? total
+      : ((contactsImportPage.value - 1) * contactsImportPageSize.value) + contactsForImport.value.length
+  } catch (error: any) {
+    console.error('Failed to fetch contacts for campaign recipients:', error)
+    contactsForImport.value = []
+    contactsImportTotal.value = 0
+    toast.error(getErrorMessage(error, t('common.failedLoad', { resource: t('resources.contacts') })))
+  } finally {
+    isLoadingContactsForImport.value = false
+  }
+}
+
 // Form state
 const newCampaign = ref({
   name: '',
   whatsapp_account: '',
   template_id: '',
-  body_content: ''
+  body_content: '',
+  min_delay_minutes: 0,
+  max_delay_minutes: 0
+})
+
+const selectedCreateTemplate = computed(() =>
+  templates.value.find(template => template.id === newCampaign.value.template_id) || null
+)
+
+const canUploadMediaInForm = computed(() => {
+  if (isWhatsmeowProvider.value) return true
+  if (!newCampaign.value.template_id) return false
+
+  const template = selectedCreateTemplate.value
+  if (!template) return true
+
+  const headerType = String(template.header_type || '').toUpperCase()
+  if (!headerType) return true
+  return headerType !== 'TEXT' && headerType !== 'NONE'
 })
 
 // AlertDialog state
@@ -491,6 +736,16 @@ watch([filterStatus, selectedRange], () => {
   }
 })
 
+const debouncedContactsImportFilters = useDebounceFn(() => {
+  contactsImportPage.value = 1
+  void fetchContactsForImport()
+}, 350)
+
+watch([contactsSearchQuery, contactsDateFrom, contactsDateTo], () => {
+  if (!showAddRecipientsDialog.value) return
+  debouncedContactsImportFilters()
+})
+
 async function fetchTemplates(account?: string) {
   try {
     const response = await templatesService.list(account ? { account } : undefined)
@@ -550,6 +805,8 @@ async function fetchInstances() {
 async function createCampaign() {
   const name = newCampaign.value.name.trim()
   const bodyContent = newCampaign.value.body_content.trim()
+  const minDelayMinutes = Number(newCampaign.value.min_delay_minutes)
+  const maxDelayMinutes = Number(newCampaign.value.max_delay_minutes)
 
   if (!name) {
     toast.error(t('campaigns.enterCampaignName'))
@@ -567,12 +824,24 @@ async function createCampaign() {
     toast.error(t('campaigns.enterMessageBody'))
     return
   }
+  if (
+    !Number.isFinite(minDelayMinutes) ||
+    !Number.isFinite(maxDelayMinutes) ||
+    minDelayMinutes < 0 ||
+    maxDelayMinutes < 0 ||
+    minDelayMinutes > maxDelayMinutes
+  ) {
+    toast.error(t('campaigns.invalidDelayRange'))
+    return
+  }
 
   isCreating.value = true
   try {
-    const payload: Record<string, string> = {
+    const payload: Record<string, any> = {
       name,
-      whatsapp_account: newCampaign.value.whatsapp_account
+      whatsapp_account: newCampaign.value.whatsapp_account,
+      min_delay_seconds: Math.floor(minDelayMinutes * 60),
+      max_delay_seconds: Math.floor(maxDelayMinutes * 60)
     }
     if (isWhatsmeowProvider.value) {
       payload.body_content = bodyContent
@@ -580,8 +849,29 @@ async function createCampaign() {
       payload.template_id = newCampaign.value.template_id
     }
 
-    await campaignsService.create(payload)
-    toast.success(t('common.createdSuccess', { resource: t('resources.Campaign') }))
+    const createResponse = await campaignsService.create(payload)
+    const createdCampaign = (createResponse.data as any).data || createResponse.data
+    const createdCampaignID = createdCampaign?.id ? String(createdCampaign.id) : ''
+
+    let mediaUploadError: unknown = null
+    if (campaignMediaFile.value) {
+      if (!createdCampaignID) {
+        mediaUploadError = new Error('Campaign ID was missing after create response')
+      } else {
+        try {
+          await campaignsService.uploadMedia(createdCampaignID, campaignMediaFile.value)
+        } catch (uploadError) {
+          mediaUploadError = uploadError
+        }
+      }
+    }
+
+    if (mediaUploadError) {
+      toast.error(getErrorMessage(mediaUploadError, t('campaigns.campaignCreatedMediaUploadFailed')))
+    } else {
+      toast.success(t('common.createdSuccess', { resource: t('resources.Campaign') }))
+    }
+
     showCreateDialog.value = false
     resetForm()
     await fetchCampaigns()
@@ -597,17 +887,23 @@ function resetForm() {
     name: '',
     whatsapp_account: '',
     template_id: '',
-    body_content: ''
+    body_content: '',
+    min_delay_minutes: 0,
+    max_delay_minutes: 0
   }
+  clearCampaignMediaSelection()
 }
 
 async function openEditDialog(campaign: Campaign) {
   editingCampaignId.value = campaign.id
+  clearCampaignMediaSelection()
   newCampaign.value = {
     name: campaign.name,
     whatsapp_account: campaign.whatsapp_account || '',
     template_id: campaign.template_id || '',
-    body_content: ''
+    body_content: '',
+    min_delay_minutes: Math.max(0, Math.floor((campaign.min_delay_seconds || 0) / 60)),
+    max_delay_minutes: Math.max(0, Math.floor((campaign.max_delay_seconds || 0) / 60))
   }
 
   if (isWhatsmeowProvider.value && campaign.template_id) {
@@ -631,6 +927,9 @@ function openCreateDialog() {
 }
 
 async function saveCampaign() {
+  const minDelayMinutes = Number(newCampaign.value.min_delay_minutes)
+  const maxDelayMinutes = Number(newCampaign.value.max_delay_minutes)
+
   if (!newCampaign.value.name.trim()) {
     toast.error(t('campaigns.enterCampaignName'))
     return
@@ -643,14 +942,26 @@ async function saveCampaign() {
     toast.error(t('campaigns.enterMessageBody'))
     return
   }
+  if (
+    !Number.isFinite(minDelayMinutes) ||
+    !Number.isFinite(maxDelayMinutes) ||
+    minDelayMinutes < 0 ||
+    maxDelayMinutes < 0 ||
+    minDelayMinutes > maxDelayMinutes
+  ) {
+    toast.error(t('campaigns.invalidDelayRange'))
+    return
+  }
 
   if (editingCampaignId.value) {
     // Update existing campaign
     isCreating.value = true
     try {
-      const payload: Record<string, string> = {
+      const payload: Record<string, any> = {
         name: newCampaign.value.name.trim(),
         whatsapp_account: newCampaign.value.whatsapp_account,
+        min_delay_seconds: Math.floor(minDelayMinutes * 60),
+        max_delay_seconds: Math.floor(maxDelayMinutes * 60)
       }
       if (isWhatsmeowProvider.value) {
         payload.body_content = newCampaign.value.body_content.trim()
@@ -658,7 +969,21 @@ async function saveCampaign() {
         payload.template_id = newCampaign.value.template_id
       }
       await campaignsService.update(editingCampaignId.value, payload)
+
+      let mediaUploadError: unknown = null
+      if (campaignMediaFile.value) {
+        try {
+          await campaignsService.uploadMedia(editingCampaignId.value, campaignMediaFile.value)
+        } catch (uploadError) {
+          mediaUploadError = uploadError
+        }
+      }
+
       toast.success(t('common.updatedSuccess', { resource: t('resources.Campaign') }))
+      if (mediaUploadError) {
+        toast.error(getErrorMessage(mediaUploadError, t('campaigns.mediaUploadFailed')))
+      }
+
       showCreateDialog.value = false
       editingCampaignId.value = null
       resetForm()
@@ -873,7 +1198,7 @@ async function addRecipients() {
   const recipientsList = lines.map(line => {
     const parts = line.split(',').map(p => p.trim())
     const recipient: { phone_number: string; recipient_name?: string; template_params?: Record<string, any> } = {
-      phone_number: parts[0].replace(/[^\d+]/g, '') // Clean phone number
+      phone_number: normalizePhoneNumber(parts[0]) // Clean phone number
     }
 
     // Map values to template parameter names
@@ -897,6 +1222,44 @@ async function addRecipients() {
     toast.success(t('campaigns.addedRecipients', { count: result?.added_count || recipientsList.length }))
     showAddRecipientsDialog.value = false
     recipientsInput.value = ''
+    await fetchCampaigns()
+  } catch (error: any) {
+    toast.error(getErrorMessage(error, t('campaigns.addRecipientsFailed')))
+  } finally {
+    isAddingRecipients.value = false
+  }
+}
+
+async function addRecipientsFromContacts() {
+  if (!selectedCampaign.value) return
+
+  if (selectedContactsForImport.value.length === 0) {
+    toast.error(t('campaigns.enterPhoneNumber'))
+    return
+  }
+
+  const recipientsList = selectedContactsForImport.value.map(contact => {
+    const phoneNumber = normalizePhoneNumber(contact.phone_number)
+    const displayName = getContactRecipientDisplayName(contact).trim()
+    const recipient: { phone_number: string; recipient_name?: string } = {
+      phone_number: phoneNumber
+    }
+    if (displayName && displayName !== phoneNumber) {
+      recipient.recipient_name = displayName
+    }
+    return recipient
+  })
+
+  isAddingRecipients.value = true
+  try {
+    const response = await campaignsService.addRecipients(selectedCampaign.value.id, recipientsList)
+    const result = response.data.data
+    toast.success(t('campaigns.addedRecipients', { count: result?.added_count || recipientsList.length }))
+    showAddRecipientsDialog.value = false
+    selectedContactsById.value = {}
+    contactsSearchQuery.value = ''
+    contactsDateFrom.value = ''
+    contactsDateTo.value = ''
     await fetchCampaigns()
   } catch (error: any) {
     toast.error(getErrorMessage(error, t('campaigns.addRecipientsFailed')))
@@ -962,6 +1325,14 @@ async function openAddRecipientsDialog(campaign: Campaign) {
   csvFile.value = null
   csvValidation.value = null
   addRecipientsTab.value = 'manual'
+  selectedTemplate.value = null
+  contactsSearchQuery.value = ''
+  contactsDateFrom.value = ''
+  contactsDateTo.value = ''
+  contactsImportPage.value = 1
+  contactsImportTotal.value = 0
+  selectedContactsById.value = {}
+  contactsForImport.value = []
 
   // Fetch template details to get body_content
   if (campaign.template_id) {
@@ -975,6 +1346,7 @@ async function openAddRecipientsDialog(campaign: Campaign) {
   }
 
   showAddRecipientsDialog.value = true
+  void fetchContactsForImport()
 }
 
 function handleCSVFileSelect(event: Event) {
@@ -1207,7 +1579,7 @@ async function addRecipientsFromCSV() {
 
   const recipientsList = validRows.map(row => {
     const recipient: { phone_number: string; recipient_name?: string; template_params?: Record<string, any> } = {
-      phone_number: row.phone_number.replace(/[^\d+]/g, '')
+      phone_number: normalizePhoneNumber(row.phone_number)
     }
     if (row.name) {
       recipient.recipient_name = row.name
@@ -1314,9 +1686,57 @@ async function addRecipientsFromCSV() {
                   :disabled="isCreating"
                 />
               </div>
+
+              <div class="grid gap-2">
+                <Label>{{ $t('campaigns.delayBetweenMessages') }}</Label>
+                <div class="grid grid-cols-2 gap-2">
+                  <Input
+                    v-model.number="newCampaign.min_delay_minutes"
+                    type="number"
+                    min="0"
+                    :placeholder="$t('campaigns.delayFromMinutes')"
+                    :disabled="isCreating"
+                  />
+                  <Input
+                    v-model.number="newCampaign.max_delay_minutes"
+                    type="number"
+                    min="0"
+                    :placeholder="$t('campaigns.delayToMinutes')"
+                    :disabled="isCreating"
+                  />
+                </div>
+                <p class="text-xs text-muted-foreground">{{ $t('campaigns.delayRangeHint') }}</p>
+              </div>
+
+              <div class="grid gap-2">
+                <Label for="campaign-media">{{ $t('campaigns.mediaFile') }} ({{ $t('common.optional') }})</Label>
+                <div class="flex items-center gap-2">
+                  <Input
+                    id="campaign-media"
+                    :key="campaignMediaInputKey"
+                    type="file"
+                    :accept="campaignMediaAccept"
+                    :disabled="isCreating || !canUploadMediaInForm"
+                    @change="handleCampaignMediaFileSelect"
+                    class="flex-1"
+                  />
+                  <Button
+                    v-if="campaignMediaFile"
+                    variant="outline"
+                    size="icon"
+                    :disabled="isCreating"
+                    @click="clearCampaignMediaSelection"
+                  >
+                    <XCircle class="h-4 w-4" />
+                  </Button>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                  {{ canUploadMediaInForm ? $t('campaigns.mediaCreateHint') : $t('campaigns.mediaNeedsHeaderTemplate') }}
+                </p>
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" size="sm" @click="showCreateDialog = false; editingCampaignId = null" :disabled="isCreating">
+              <Button variant="outline" size="sm" @click="showCreateDialog = false; editingCampaignId = null; resetForm()" :disabled="isCreating">
                 {{ $t('common.cancel') }}
               </Button>
               <Button size="sm" @click="saveCampaign" :disabled="isCreating">
@@ -1623,10 +2043,14 @@ async function addRecipientsFromCSV() {
         </div>
 
         <Tabs v-model="addRecipientsTab" class="w-full">
-          <TabsList class="grid w-full grid-cols-2">
+          <TabsList class="grid w-full grid-cols-3">
             <TabsTrigger value="manual">
               <UserPlus class="h-4 w-4 mr-2" />
               {{ $t('campaigns.manualEntry') }}
+            </TabsTrigger>
+            <TabsTrigger value="contacts">
+              <Users class="h-4 w-4 mr-2" />
+              {{ $t('campaigns.contactsSource') }}
             </TabsTrigger>
             <TabsTrigger value="csv">
               <FileSpreadsheet class="h-4 w-4 mr-2" />
@@ -1679,6 +2103,152 @@ async function addRecipientsFromCSV() {
               </div>
               <div class="flex justify-end">
                 <Button @click="addRecipients" :disabled="isAddingRecipients || !manualInputValidation.isValid">
+                  <Loader2 v-if="isAddingRecipients" class="h-4 w-4 mr-2 animate-spin" />
+                  <Upload v-else class="h-4 w-4 mr-2" />
+                  {{ $t('campaigns.addRecipients') }}
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <!-- Contacts Tab -->
+          <TabsContent value="contacts" class="mt-4">
+            <div class="space-y-4">
+              <div class="flex items-center gap-2">
+                <Input
+                  v-model="contactsSearchQuery"
+                  :placeholder="$t('contacts.searchContacts') + '...'"
+                  class="flex-1"
+                  :disabled="isAddingRecipients"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  :disabled="isLoadingContactsForImport || filteredContactsForImport.length === 0 || isAddingRecipients"
+                  @click="toggleAllFilteredContacts(!areAllFilteredContactsSelected)"
+                >
+                  {{ areAllFilteredContactsSelected ? $t('common.deselectAll') : $t('common.selectAll') }}
+                </Button>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div class="space-y-1">
+                  <Label class="text-xs text-muted-foreground">{{ $t('analytics.from') }}</Label>
+                  <Input
+                    v-model="contactsDateFrom"
+                    type="date"
+                    :disabled="isAddingRecipients"
+                  />
+                </div>
+                <div class="space-y-1">
+                  <Label class="text-xs text-muted-foreground">{{ $t('analytics.to') }}</Label>
+                  <Input
+                    v-model="contactsDateTo"
+                    type="date"
+                    :disabled="isAddingRecipients"
+                  />
+                </div>
+                <div class="flex items-end">
+                  <Button
+                    variant="outline"
+                    class="w-full"
+                    :disabled="isAddingRecipients || (!contactsDateFrom && !contactsDateTo)"
+                    @click="contactsDateFrom = ''; contactsDateTo = ''"
+                  >
+                    {{ $t('common.clear') }}
+                  </Button>
+                </div>
+              </div>
+
+              <div v-if="isLoadingContactsForImport" class="flex items-center justify-center py-8">
+                <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+
+              <div v-else-if="filteredContactsForImport.length === 0" class="text-center py-8 text-muted-foreground">
+                <Users class="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>{{ hasContactsImportFilters ? $t('contacts.noMatchingContacts') : $t('contacts.noContactsYet') }}</p>
+              </div>
+
+              <div v-else class="border rounded-lg overflow-hidden">
+                <ScrollArea class="h-[300px]">
+                  <table class="w-full text-sm">
+                    <thead class="sticky top-0 bg-muted border-b">
+                      <tr>
+                        <th class="text-left py-2 px-3 w-10"></th>
+                        <th class="text-left py-2 px-3">{{ $t('campaigns.name') }}</th>
+                        <th class="text-left py-2 px-3">{{ $t('campaigns.phoneNumber') }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="contact in filteredContactsForImport"
+                        :key="contact.id"
+                        class="border-b last:border-0"
+                      >
+                        <td class="py-2 px-3">
+                          <Checkbox
+                            :id="`campaign-contact-${contact.id}`"
+                            :checked="selectedContactIdSet.has(contact.id)"
+                            @update:checked="(checked) => toggleContactSelection(contact, checked === true)"
+                          />
+                        </td>
+                        <td class="py-2 px-3">{{ getContactRecipientDisplayName(contact) }}</td>
+                        <td class="py-2 px-3 font-mono">{{ contact.phone_number }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </ScrollArea>
+              </div>
+
+              <div class="flex items-center justify-between">
+                <p class="text-xs text-muted-foreground">
+                  {{ contactsImportPage }} / {{ contactsImportTotalPages }} · {{ contactsImportTotal }} {{ $t('resources.contacts') }}
+                </p>
+                <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2">
+                    <Label class="text-xs text-muted-foreground">{{ $t('campaigns.pageSize') }}</Label>
+                    <Select
+                      :model-value="String(contactsImportPageSize)"
+                      :disabled="isAddingRecipients"
+                      @update:model-value="updateContactsImportPageSize"
+                    >
+                      <SelectTrigger class="h-8 w-[90px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem v-for="size in contactsImportPageSizeOptions" :key="size" :value="String(size)">
+                          {{ size }}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="isLoadingContactsForImport || contactsImportPage <= 1 || isAddingRecipients"
+                    @click="goToContactsImportPage(contactsImportPage - 1)"
+                  >
+                    {{ $t('common.back') }}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="isLoadingContactsForImport || contactsImportPage >= contactsImportTotalPages || isAddingRecipients"
+                    @click="goToContactsImportPage(contactsImportPage + 1)"
+                  >
+                    {{ $t('common.next') }}
+                  </Button>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between">
+                <p class="text-xs text-muted-foreground">
+                  {{ selectedContactsForImport.length }} {{ $t('common.selected') }}
+                </p>
+                <Button
+                  @click="addRecipientsFromContacts"
+                  :disabled="isAddingRecipients || selectedContactsForImport.length === 0"
+                >
                   <Loader2 v-if="isAddingRecipients" class="h-4 w-4 mr-2 animate-spin" />
                   <Upload v-else class="h-4 w-4 mr-2" />
                   {{ $t('campaigns.addRecipients') }}

@@ -92,6 +92,10 @@ function normalizePhoneNumber(phoneNumber: string): string {
   return phoneNumber.trim().toLowerCase()
 }
 
+function normalizeConversationID(conversationID: string): string {
+  return conversationID.trim().toLowerCase()
+}
+
 export class ChatSidebarUnifier {
   static readonly VIEW_MODE_STORAGE_KEY = 'chat.sidebarViewMode'
   static readonly DEFAULT_VIEW_MODE: ChatSidebarViewMode = 'separate'
@@ -129,7 +133,7 @@ export class ChatSidebarUnifier {
           displayContact: { ...contact },
           sourceContacts: [contact],
           contactsByAccount: this.createAccountContactMap(contact),
-          isUnified: mode === 'unified' && this.canUnifyByPhone(contact)
+          isUnified: mode === 'unified' && this.canUnifyContact(contact)
         })
         continue
       }
@@ -196,13 +200,39 @@ export class ChatSidebarUnifier {
     return true
   }
 
-  private getEntryKey(contact: Contact, mode: ChatSidebarViewMode): string {
-    if (mode === 'unified' && this.canUnifyByPhone(contact)) {
+  private canUnifyByConversation(contact: Contact): boolean {
+    if (!isGroupOrChannelContact(contact)) {
+      return false
+    }
+    return normalizeConversationID(readConversationID(contact)) !== ''
+  }
+
+  private canUnifyContact(contact: Contact): boolean {
+    return this.canUnifyByPhone(contact) || this.canUnifyByConversation(contact)
+  }
+
+  private getUnifiedEntryKey(contact: Contact): string {
+    if (this.canUnifyByPhone(contact)) {
       return `phone:${normalizePhoneNumber(contact.phone_number)}`
     }
 
+    if (this.canUnifyByConversation(contact)) {
+      return `conversation:${normalizeConversationID(readConversationID(contact))}`
+    }
+
+    return ''
+  }
+
+  private getEntryKey(contact: Contact, mode: ChatSidebarViewMode): string {
+    if (mode === 'unified') {
+      const unifiedKey = this.getUnifiedEntryKey(contact)
+      if (unifiedKey !== '') {
+        return unifiedKey
+      }
+    }
+
     if (isGroupOrChannelContact(contact)) {
-      const conversationID = readConversationID(contact)
+      const conversationID = normalizeConversationID(readConversationID(contact))
       const instanceID = contact.instance_id || 'no-instance'
       return `conversation:${conversationID || contact.id}:${instanceID}`
     }

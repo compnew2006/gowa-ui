@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,14 +23,14 @@ import (
 
 // Worker processes jobs from the queue
 type Worker struct {
-	Config    *config.Config
-	DB        *gorm.DB
-	Redis     *redis.Client
-	Log       logf.Logger
-	WhatsApp  *whatsapp.Client
+	Config          *config.Config
+	DB              *gorm.DB
+	Redis           *redis.Client
+	Log             logf.Logger
+	WhatsApp        *whatsapp.Client
 	MessageProvider provider.MessageProvider
-	Consumer  *queue.RedisConsumer
-	Publisher *queue.Publisher
+	Consumer        *queue.RedisConsumer
+	Publisher       *queue.Publisher
 }
 
 // Ensure Worker implements JobHandler interface
@@ -45,14 +46,14 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, me
 	publisher := queue.NewPublisher(rdb, log)
 
 	return &Worker{
-		Config:    cfg,
-		DB:        db,
-		Redis:     rdb,
-		Log:       log,
-		WhatsApp:  whatsapp.NewWithBaseURL(log, cfg.WhatsApp.BaseURL),
+		Config:          cfg,
+		DB:              db,
+		Redis:           rdb,
+		Log:             log,
+		WhatsApp:        whatsapp.NewWithBaseURL(log, cfg.WhatsApp.BaseURL),
 		MessageProvider: messageProvider,
-		Consumer:  consumer,
-		Publisher: publisher,
+		Consumer:        consumer,
+		Publisher:       publisher,
 	}, nil
 }
 
@@ -124,6 +125,10 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		TemplateParams: job.TemplateParams,
 	}
 
+	if err := w.applyCampaignSendDelay(ctx, job.CampaignID, campaign.MinDelaySeconds, campaign.MaxDelaySeconds); err != nil {
+		return fmt.Errorf("failed to apply campaign send delay: %w", err)
+	}
+
 	var (
 		waMessageID       string
 		sendErr           error
@@ -144,7 +149,7 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 			messageInstanceID = &parsedInstanceID
 		}
 
-		waMessageID, sendErr = w.sendTemplateMessageViaProvider(ctx, instanceID, campaign.Template, recipient)
+		waMessageID, sendErr = w.sendTemplateMessageViaProvider(ctx, instanceID, &campaign, campaign.Template, recipient)
 	} else {
 		// Get WhatsApp account
 		var account models.WhatsAppAccount
@@ -344,7 +349,7 @@ func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsA
 	return w.WhatsApp.SendTemplateMessage(ctx, waAccount, recipient.PhoneNumber, template.Name, template.Language, components)
 }
 
-func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID string, template *models.Template, recipient *models.BulkMessageRecipient) (string, error) {
+func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID string, campaign *models.BulkMessageCampaign, template *models.Template, recipient *models.BulkMessageRecipient) (string, error) {
 	if w.MessageProvider == nil {
 		return "", fmt.Errorf("message provider is not configured")
 	}
@@ -365,7 +370,55 @@ func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID 
 		body = fmt.Sprintf("[Campaign: %s]", template.DisplayName)
 	}
 
+	if campaign != nil && strings.TrimSpace(campaign.HeaderMediaLocalPath) != "" {
+		mediaRef := strings.TrimSpace(campaign.HeaderMediaLocalPath)
+		mediaFilename := strings.TrimSpace(campaign.HeaderMediaFilename)
+		if mediaFilename == "" {
+			mediaFilename = filepath.Base(mediaRef)
+		}
+		if mediaFilename == "" || mediaFilename == "." || mediaFilename == string(filepath.Separator) {
+			mediaFilename = "attachment"
+		}
+
+		switch classifyCampaignMediaType(campaign.HeaderMediaMimeType, mediaFilename) {
+		case "image":
+			return w.MessageProvider.SendImage(ctx, instanceID, recipient.PhoneNumber, mediaRef, body)
+		case "video":
+			return w.MessageProvider.SendVideo(ctx, instanceID, recipient.PhoneNumber, mediaRef, body)
+		case "audio":
+			return w.MessageProvider.SendAudio(ctx, instanceID, recipient.PhoneNumber, mediaRef)
+		default:
+			return w.MessageProvider.SendDocument(ctx, instanceID, recipient.PhoneNumber, mediaRef, mediaFilename)
+		}
+	}
+
 	return w.MessageProvider.SendText(ctx, instanceID, recipient.PhoneNumber, body)
+}
+
+func classifyCampaignMediaType(mimeType, filename string) string {
+	normalizedMIME := strings.ToLower(strings.TrimSpace(mimeType))
+	switch {
+	case strings.HasPrefix(normalizedMIME, "image/"):
+		return "image"
+	case strings.HasPrefix(normalizedMIME, "video/"):
+		return "video"
+	case strings.HasPrefix(normalizedMIME, "audio/"):
+		return "audio"
+	case normalizedMIME != "":
+		return "document"
+	}
+
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(filename)))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".webp":
+		return "image"
+	case ".mp4", ".3gp":
+		return "video"
+	case ".aac", ".m4a", ".mp3", ".ogg":
+		return "audio"
+	default:
+		return "document"
+	}
 }
 
 // buildMediaParameter creates a media parameter for WhatsApp template headers.

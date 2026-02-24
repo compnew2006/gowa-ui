@@ -16,7 +16,8 @@ import { useUsersStore, type User } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
 import { useOrganizationsStore } from '@/stores/organizations'
-import { authService } from '@/services/api'
+import { useInstancesStore } from '@/stores/instances'
+import { authService, usersService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Plus, Pencil, Trash2, UserMinus, User as UserIcon, Shield, ShieldCheck, UserCog, Users, Link, UserPlus, Loader2 } from 'lucide-vue-next'
 import { useCrudState } from '@/composables/useCrudState'
@@ -31,6 +32,7 @@ const usersStore = useUsersStore()
 const authStore = useAuthStore()
 const rolesStore = useRolesStore()
 const organizationsStore = useOrganizationsStore()
+const instancesStore = useInstancesStore()
 
 interface UserFormData {
   email: string
@@ -83,6 +85,7 @@ const sortDirection = ref<'asc' | 'desc'>('asc')
 
 const currentUserId = computed(() => authStore.user?.id)
 const isSuperAdmin = computed(() => authStore.user?.is_super_admin || false)
+const canManageSendRestrictions = computed(() => authStore.hasPermission('users', 'write'))
 const breadcrumbs = computed(() => [{ label: t('nav.settings'), href: '/settings' }, { label: t('nav.users') }])
 const getDefaultRoleId = () => rolesStore.roles.find(r => r.name === 'agent' && r.is_system)?.id || ''
 
@@ -91,8 +94,8 @@ function openEditDialog(user: User) {
   baseOpenEditDialog(user, (u) => ({ email: u.email, password: '', full_name: u.full_name, role_id: u.role_id || '', is_active: u.is_active, is_super_admin: u.is_super_admin || false }))
 }
 
-watch(() => organizationsStore.selectedOrgId, () => { fetchUsers(); rolesStore.fetchRoles() })
-onMounted(() => { fetchUsers(); rolesStore.fetchRoles() })
+watch(() => organizationsStore.selectedOrgId, () => { fetchUsers(); rolesStore.fetchRoles(); instancesStore.fetchInstances() })
+onMounted(() => { fetchUsers(); rolesStore.fetchRoles(); instancesStore.fetchInstances() })
 
 async function fetchUsers() {
   isLoading.value = true
@@ -240,6 +243,102 @@ async function copyInviteLink() {
     isInviteLinkLoading.value = false
   }
 }
+
+interface UserSendRestrictionsPayload {
+  enabled: boolean
+  include_all_contacts: boolean
+  authorized_numbers: string[]
+  allowed_instance_id?: string
+}
+
+const isSendRestrictionsOpen = ref(false)
+const sendRestrictionsUser = ref<User | null>(null)
+const sendRestrictionsEnabled = ref(false)
+const sendRestrictionsIncludeAllContacts = ref(false)
+const sendRestrictionsNumbers = ref<string[]>([])
+const sendRestrictionsNewNumber = ref('')
+const sendRestrictionsAllowedInstanceID = ref('')
+const isSendRestrictionsLoading = ref(false)
+const isSendRestrictionsSubmitting = ref(false)
+const sendRestrictionsAvailableInstances = computed(() => instancesStore.instances)
+
+function normalizeAuthorizedNumber(raw: string): string {
+  const noSpaces = raw.trim().replace(/\s+/g, '').replace(/^\+/, '')
+  const digitsOnly = noSpaces.replace(/\D+/g, '')
+  return digitsOnly
+}
+
+function setSendRestrictionsPayload(payload: UserSendRestrictionsPayload | undefined) {
+  sendRestrictionsEnabled.value = payload?.enabled === true
+  sendRestrictionsIncludeAllContacts.value = payload?.include_all_contacts === true
+  sendRestrictionsNumbers.value = Array.from(new Set((payload?.authorized_numbers || [])
+    .map(normalizeAuthorizedNumber)
+    .filter(Boolean))).sort()
+  sendRestrictionsAllowedInstanceID.value = payload?.allowed_instance_id || ''
+}
+
+async function openSendRestrictionsDialog(user: User) {
+  sendRestrictionsUser.value = user
+  isSendRestrictionsOpen.value = true
+  isSendRestrictionsLoading.value = true
+  sendRestrictionsNewNumber.value = ''
+  if (sendRestrictionsAvailableInstances.value.length === 0) {
+    await instancesStore.fetchInstances()
+  }
+  try {
+    const response = await usersService.getSendRestrictions(user.id)
+    const payload = (response.data as any).data || response.data
+    setSendRestrictionsPayload(payload)
+  } catch (e) {
+    setSendRestrictionsPayload(undefined)
+    toast.error(getErrorMessage(e, t('users.sendRestrictionsLoadFailed')))
+  } finally {
+    isSendRestrictionsLoading.value = false
+  }
+}
+
+function addAuthorizedNumber() {
+  const normalized = normalizeAuthorizedNumber(sendRestrictionsNewNumber.value)
+  if (!normalized) {
+    return
+  }
+  if (!sendRestrictionsNumbers.value.includes(normalized)) {
+    sendRestrictionsNumbers.value = [...sendRestrictionsNumbers.value, normalized].sort()
+  }
+  sendRestrictionsNewNumber.value = ''
+}
+
+function removeAuthorizedNumber(number: string) {
+  sendRestrictionsNumbers.value = sendRestrictionsNumbers.value.filter(item => item !== number)
+}
+
+async function saveSendRestrictions() {
+  if (!sendRestrictionsUser.value) {
+    return
+  }
+  if (sendRestrictionsEnabled.value && !sendRestrictionsAllowedInstanceID.value) {
+    toast.error(t('users.allowedInstanceRequired'))
+    return
+  }
+
+  isSendRestrictionsSubmitting.value = true
+  try {
+    const response = await usersService.updateSendRestrictions(sendRestrictionsUser.value.id, {
+      enabled: sendRestrictionsEnabled.value,
+      include_all_contacts: sendRestrictionsIncludeAllContacts.value,
+      authorized_numbers: sendRestrictionsNumbers.value,
+      allowed_instance_id: sendRestrictionsAllowedInstanceID.value,
+    })
+    const payload = (response.data as any).data || response.data
+    setSendRestrictionsPayload(payload)
+    toast.success(t('users.sendRestrictionsSaved'))
+    isSendRestrictionsOpen.value = false
+  } catch (e) {
+    toast.error(getErrorMessage(e, t('users.sendRestrictionsSaveFailed')))
+  } finally {
+    isSendRestrictionsSubmitting.value = false
+  }
+}
 </script>
 
 <template>
@@ -298,6 +397,14 @@ async function copyInviteLink() {
                 </template>
                 <template #cell-actions="{ item: user }">
                   <div class="flex items-center justify-end gap-1">
+                    <Tooltip v-if="canManageSendRestrictions">
+                      <TooltipTrigger as-child>
+                        <Button variant="ghost" size="icon" class="h-8 w-8" @click="openSendRestrictionsDialog(user)">
+                          <Shield class="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{{ $t('users.manageSendRestrictions') }}</TooltipContent>
+                    </Tooltip>
                     <template v-if="user.is_member">
                       <!-- Member actions: update role + remove -->
                       <Tooltip><TooltipTrigger as-child><Button variant="ghost" size="icon" class="h-8 w-8" @click="openMemberRoleDialog(user)"><Pencil class="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>{{ $t('users.updateMemberRole') }}</TooltipContent></Tooltip>
@@ -428,6 +535,96 @@ async function copyInviteLink() {
           <Button @click="submitAddExisting" :disabled="isAddExistingSubmitting || !addExistingEmail.trim()">
             <Loader2 v-if="isAddExistingSubmitting" class="h-4 w-4 mr-2 animate-spin" />
             {{ $t('users.addExistingUser') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="isSendRestrictionsOpen">
+      <DialogContent class="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{{ $t('users.sendRestrictionsTitle') }}</DialogTitle>
+          <DialogDescription>
+            {{ $t('users.sendRestrictionsDesc', { user: sendRestrictionsUser?.full_name || '' }) }}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="space-y-4 py-2">
+          <div class="flex items-center justify-between">
+            <div>
+              <Label class="font-normal">{{ $t('users.sendRestrictionsEnabled') }}</Label>
+              <p class="text-xs text-muted-foreground">{{ $t('users.sendRestrictionsEnabledDesc') }}</p>
+            </div>
+            <Switch :checked="sendRestrictionsEnabled" @update:checked="sendRestrictionsEnabled = $event" :disabled="isSendRestrictionsLoading" />
+          </div>
+
+          <div class="space-y-2">
+            <Label>{{ $t('users.allowedInstance') }}</Label>
+            <Select v-model="sendRestrictionsAllowedInstanceID" :disabled="isSendRestrictionsLoading">
+              <SelectTrigger>
+                <SelectValue :placeholder="$t('users.allowedInstancePlaceholder')" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="instance in sendRestrictionsAvailableInstances"
+                  :key="instance.id"
+                  :value="instance.id"
+                >
+                  {{ instance.name }} <span v-if="instance.phone_number">({{ instance.phone_number }})</span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p class="text-xs text-muted-foreground">{{ $t('users.allowedInstanceDesc') }}</p>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <Label class="font-normal">{{ $t('users.includeAllContacts') }}</Label>
+              <p class="text-xs text-muted-foreground">{{ $t('users.includeAllContactsDesc') }}</p>
+            </div>
+            <Switch :checked="sendRestrictionsIncludeAllContacts" @update:checked="sendRestrictionsIncludeAllContacts = $event" :disabled="isSendRestrictionsLoading" />
+          </div>
+
+          <div class="space-y-2">
+            <Label>{{ $t('users.authorizedNumbers') }}</Label>
+            <div class="flex gap-2">
+              <Input
+                v-model="sendRestrictionsNewNumber"
+                :placeholder="$t('users.authorizedNumberPlaceholder')"
+                :disabled="isSendRestrictionsLoading"
+                @keydown.enter.prevent="addAuthorizedNumber"
+              />
+              <Button type="button" variant="outline" @click="addAuthorizedNumber" :disabled="isSendRestrictionsLoading || !sendRestrictionsNewNumber.trim()">
+                {{ $t('common.add') }}
+              </Button>
+            </div>
+            <div class="rounded-md border p-3 min-h-[56px] space-y-2">
+              <div v-if="isSendRestrictionsLoading" class="text-sm text-muted-foreground">{{ $t('common.loading') }}...</div>
+              <div v-else-if="sendRestrictionsNumbers.length === 0" class="text-sm text-muted-foreground">{{ $t('users.noAuthorizedNumbers') }}</div>
+              <div v-else class="flex flex-wrap gap-2">
+                <Badge v-for="number in sendRestrictionsNumbers" :key="number" variant="secondary" class="pr-1">
+                  <span>{{ number }}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    class="h-5 w-5 ml-1"
+                    @click="removeAuthorizedNumber(number)"
+                    :disabled="isSendRestrictionsLoading"
+                  >
+                    <Trash2 class="h-3 w-3" />
+                  </Button>
+                </Badge>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" @click="isSendRestrictionsOpen = false">{{ $t('common.cancel') }}</Button>
+          <Button @click="saveSendRestrictions" :disabled="isSendRestrictionsSubmitting || isSendRestrictionsLoading">
+            <Loader2 v-if="isSendRestrictionsSubmitting" class="h-4 w-4 mr-2 animate-spin" />
+            {{ $t('common.save') }}
           </Button>
         </DialogFooter>
       </DialogContent>

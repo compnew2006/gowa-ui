@@ -12,6 +12,41 @@ import (
 	"gorm.io/gorm"
 )
 
+func inboundContactUpdates(contact *models.Contact, profileName string, metadata models.JSONB) map[string]any {
+	updates := map[string]any{}
+
+	if profileName != "" {
+		shouldUpdateProfileName := contact.ProfileName == "" ||
+			contact.ProfileName == contact.PhoneNumber ||
+			isGroupContactMetadata(metadata) ||
+			isChannelContactMetadata(metadata)
+		if shouldUpdateProfileName && contact.ProfileName != profileName {
+			updates["profile_name"] = profileName
+			contact.ProfileName = profileName
+		}
+	}
+
+	if mergedMetadata, changed := mergeJSONB(contact.Metadata, metadata); changed {
+		updates["metadata"] = mergedMetadata
+		contact.Metadata = mergedMetadata
+	}
+
+	return updates
+}
+
+func (cm *ConnectionManager) applyContactUpdates(ctx context.Context, contact *models.Contact, updates map[string]any) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	query := cm.db.WithContext(ctx).Model(contact)
+	if _, restoring := updates["deleted_at"]; restoring {
+		query = cm.db.WithContext(ctx).Unscoped().Model(contact)
+	}
+
+	return query.Updates(updates).Error
+}
+
 // handleMessage processes incoming messages.
 func (cm *ConnectionManager) handleMessage(ctx context.Context, evt *events.Message, instanceID, orgID uuid.UUID) {
 	allowFromMe := false
@@ -137,28 +172,29 @@ func (cm *ConnectionManager) findOrCreateContact(
 		Where("organization_id = ? AND phone_number = ? AND instance_id = ?", orgID, phoneNumber, instanceID).
 		First(&contact).Error
 	if err == nil {
-		updates := map[string]any{}
-
-		if profileName != "" {
-			shouldUpdateProfileName := contact.ProfileName == "" ||
-				contact.ProfileName == contact.PhoneNumber ||
-				isGroupContactMetadata(metadata) ||
-				isChannelContactMetadata(metadata)
-			if shouldUpdateProfileName && contact.ProfileName != profileName {
-				updates["profile_name"] = profileName
-				contact.ProfileName = profileName
-			}
+		if err := cm.applyContactUpdates(ctx, &contact, inboundContactUpdates(&contact, profileName, metadata)); err != nil {
+			return nil, err
 		}
+		return &contact, nil
+	}
 
-		if mergedMetadata, changed := mergeJSONB(contact.Metadata, metadata); changed {
-			updates["metadata"] = mergedMetadata
-			contact.Metadata = mergedMetadata
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	// If the contact was soft-deleted, restore it instead of creating a duplicate
+	// row that can violate the unique org/phone/instance index.
+	err = cm.db.WithContext(ctx).Unscoped().
+		Where("organization_id = ? AND phone_number = ? AND instance_id = ?", orgID, phoneNumber, instanceID).
+		First(&contact).Error
+	if err == nil {
+		updates := inboundContactUpdates(&contact, profileName, metadata)
+		if contact.DeletedAt.Valid {
+			updates["deleted_at"] = nil
+			contact.DeletedAt = gorm.DeletedAt{}
 		}
-
-		if len(updates) > 0 {
-			if err := cm.db.WithContext(ctx).Model(&contact).Updates(updates).Error; err != nil {
-				return nil, err
-			}
+		if err := cm.applyContactUpdates(ctx, &contact, updates); err != nil {
+			return nil, err
 		}
 		return &contact, nil
 	}
@@ -180,23 +216,40 @@ func (cm *ConnectionManager) findOrCreateContact(
 		instID := instanceID
 		contact.InstanceID = &instID
 
-		if profileName != "" {
-			shouldUpdateProfileName := contact.ProfileName == "" ||
-				contact.ProfileName == contact.PhoneNumber ||
-				isGroupContactMetadata(metadata) ||
-				isChannelContactMetadata(metadata)
-			if shouldUpdateProfileName && contact.ProfileName != profileName {
-				updates["profile_name"] = profileName
-				contact.ProfileName = profileName
-			}
+		for key, value := range inboundContactUpdates(&contact, profileName, metadata) {
+			updates[key] = value
 		}
 
-		if mergedMetadata, changed := mergeJSONB(contact.Metadata, metadata); changed {
-			updates["metadata"] = mergedMetadata
-			contact.Metadata = mergedMetadata
+		if err := cm.applyContactUpdates(ctx, &contact, updates); err != nil {
+			return nil, err
+		}
+		return &contact, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	// Also support soft-deleted legacy rows where instance_id was NULL.
+	err = cm.db.WithContext(ctx).Unscoped().
+		Where("organization_id = ? AND phone_number = ? AND instance_id IS NULL", orgID, phoneNumber).
+		First(&contact).Error
+	if err == nil {
+		updates := map[string]any{
+			"instance_id": instanceID,
 		}
 
-		if err := cm.db.WithContext(ctx).Model(&contact).Updates(updates).Error; err != nil {
+		instID := instanceID
+		contact.InstanceID = &instID
+
+		for key, value := range inboundContactUpdates(&contact, profileName, metadata) {
+			updates[key] = value
+		}
+		if contact.DeletedAt.Valid {
+			updates["deleted_at"] = nil
+			contact.DeletedAt = gorm.DeletedAt{}
+		}
+
+		if err := cm.applyContactUpdates(ctx, &contact, updates); err != nil {
 			return nil, err
 		}
 		return &contact, nil
@@ -223,6 +276,20 @@ func (cm *ConnectionManager) findOrCreateContact(
 		if fetchErr := cm.db.WithContext(ctx).
 			Where("organization_id = ? AND phone_number = ? AND instance_id = ?", orgID, phoneNumber, instanceID).
 			First(&contact).Error; fetchErr == nil {
+			return &contact, nil
+		}
+		// If the conflict was against a soft-deleted row, restore and reuse it.
+		if fetchErr := cm.db.WithContext(ctx).Unscoped().
+			Where("organization_id = ? AND phone_number = ? AND instance_id = ?", orgID, phoneNumber, instanceID).
+			First(&contact).Error; fetchErr == nil {
+			updates := inboundContactUpdates(&contact, profileName, metadata)
+			if contact.DeletedAt.Valid {
+				updates["deleted_at"] = nil
+				contact.DeletedAt = gorm.DeletedAt{}
+			}
+			if updateErr := cm.applyContactUpdates(ctx, &contact, updates); updateErr != nil {
+				return nil, updateErr
+			}
 			return &contact, nil
 		}
 		return nil, err

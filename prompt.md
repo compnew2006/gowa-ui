@@ -204,3 +204,5 @@ QA is no longer a separate step — it is **built into Phase 3 (TEST)** of every
 ---
 
 ## Execution Summary
+
+Implement a production-grade Model Context Protocol (MCP) server for Whatomate using the official MCP SDK (TypeScript or Python) to facilitate secure and standardized communication with external services. The solution must strictly follow MCP best practices, featuring a modular architecture that supports all core primitives: Tools (for action execution), Resources (for data context), and Prompts (for workflow templates). Include robust implementations for standard transport layers (Stdio and SSE), comprehensive error handling, input validation, and logging. Provide the full project structure, source code, and a configuration guide demonstrating how to connect Whatomate to external APIs.

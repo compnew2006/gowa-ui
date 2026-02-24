@@ -148,10 +148,17 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 	payload := a.parseIncomingMessagePayload(account, msg)
 
 	// Save incoming message to messages table (always, even if chatbot is disabled).
-	a.saveIncomingMessage(account, contact, msg.ID, payload.MessageType, payload.MessageText, payload.MediaInfo, payload.ReplyToWAMID)
+	savedIncomingMessage := a.saveIncomingMessage(account, contact, msg.ID, payload.MessageType, payload.MessageText, payload.MediaInfo, payload.ReplyToWAMID)
+	if savedIncomingMessage == nil {
+		return
+	}
 
 	// Clear chatbot tracking since client has replied
 	a.ClearContactChatbotTracking(contact.ID)
+
+	if a.maybeCaptureChatCloseRating(account.OrganizationID, contact, payload, savedIncomingMessage) {
+		return
+	}
 
 	// Check for active agent transfer - skip chatbot processing if transferred
 	if a.hasActiveAgentTransfer(account.OrganizationID, contact.ID) {
@@ -2353,7 +2360,7 @@ type MediaInfo struct {
 }
 
 // saveIncomingMessage saves an incoming message to the messages table
-func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *models.Contact, whatsappMsgID, msgType, content string, mediaInfo *MediaInfo, replyToWAMID string) {
+func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *models.Contact, whatsappMsgID, msgType, content string, mediaInfo *MediaInfo, replyToWAMID string) *models.Message {
 	now := time.Now()
 
 	if reopened, err := a.reopenClosedChatToPending(contact); err != nil {
@@ -2394,7 +2401,7 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 
 	if err := a.DB.Create(&message).Error; err != nil {
 		a.Log.Error("Failed to save incoming message", "error", err)
-		return
+		return nil
 	}
 
 	// Update contact's last message info
@@ -2475,6 +2482,8 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 		WhatsAppAccount: account.Name,
 		Direction:       models.DirectionIncoming,
 	})
+
+	return &message
 }
 
 // isWithinBusinessHours checks if current time is within configured business hours

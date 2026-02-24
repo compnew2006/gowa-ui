@@ -3,8 +3,8 @@ package handlers
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -23,17 +23,17 @@ type AgentAnalyticsSummary struct {
 
 // AgentPerformanceStats represents performance metrics for an agent
 type AgentPerformanceStats struct {
-	AgentID              string   `json:"agent_id"`
-	AgentName            string   `json:"agent_name"`
-	AvgFirstResponseMins float64  `json:"avg_first_response_mins"`
-	AvgResolutionMins    float64  `json:"avg_resolution_mins"`
-	TransfersHandled     int64    `json:"transfers_handled"`
-	ActiveTransfers      int64    `json:"active_transfers"`
-	MessagesSent         int64    `json:"messages_sent"`
-	TotalBreakTimeMins   float64  `json:"total_break_time_mins"`
-	BreakCount           int64    `json:"break_count"`
-	IsAvailable          bool     `json:"is_available"`
-	CurrentBreakStart    *string  `json:"current_break_start,omitempty"`
+	AgentID              string  `json:"agent_id"`
+	AgentName            string  `json:"agent_name"`
+	AvgFirstResponseMins float64 `json:"avg_first_response_mins"`
+	AvgResolutionMins    float64 `json:"avg_resolution_mins"`
+	TransfersHandled     int64   `json:"transfers_handled"`
+	ActiveTransfers      int64   `json:"active_transfers"`
+	MessagesSent         int64   `json:"messages_sent"`
+	TotalBreakTimeMins   float64 `json:"total_break_time_mins"`
+	BreakCount           int64   `json:"break_count"`
+	IsAvailable          bool    `json:"is_available"`
+	CurrentBreakStart    *string `json:"current_break_start,omitempty"`
 }
 
 // TrendPoint represents a data point for time-series charts
@@ -45,10 +45,12 @@ type TrendPoint struct {
 
 // AgentAnalyticsResponse is the full API response
 type AgentAnalyticsResponse struct {
-	Summary    AgentAnalyticsSummary   `json:"summary"`
-	AgentStats []AgentPerformanceStats `json:"agent_stats,omitempty"`
-	TrendData  []TrendPoint            `json:"trend_data"`
-	MyStats    *AgentPerformanceStats  `json:"my_stats,omitempty"`
+	Summary       AgentAnalyticsSummary   `json:"summary"`
+	AgentStats    []AgentPerformanceStats `json:"agent_stats,omitempty"`
+	TrendData     []TrendPoint            `json:"trend_data"`
+	MyStats       *AgentPerformanceStats  `json:"my_stats,omitempty"`
+	RatingSummary *AgentRatingSummary     `json:"rating_summary,omitempty"`
+	RatingRecords []AgentRatingRecord     `json:"rating_records,omitempty"`
 }
 
 // GetAgentAnalytics returns agent analytics for the organization
@@ -64,6 +66,17 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 	toStr := string(r.RequestCtx.QueryArgs().Peek("to"))
 	groupBy := string(r.RequestCtx.QueryArgs().Peek("group_by"))
 	agentIDStr := string(r.RequestCtx.QueryArgs().Peek("agent_id"))
+	minRating, minRatingErr := parseRatingFilterBound(string(r.RequestCtx.QueryArgs().Peek("min_rating")))
+	if minRatingErr != "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, minRatingErr, nil, "")
+	}
+	maxRating, maxRatingErr := parseRatingFilterBound(string(r.RequestCtx.QueryArgs().Peek("max_rating")))
+	if maxRatingErr != "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, maxRatingErr, nil, "")
+	}
+	if minRating != nil && maxRating != nil && *minRating > *maxRating {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "min_rating cannot be greater than max_rating", nil, "")
+	}
 	if groupBy == "" {
 		groupBy = "day"
 	}
@@ -93,8 +106,8 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 	// Check if filtering by specific agent (requires analytics permission)
 	var filterAgentID *uuid.UUID
 	if a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) && agentIDStr != "" {
-		parsedID, err := uuid.Parse(agentIDStr)
-		if err == nil {
+		parsedID, parseErr := uuid.Parse(agentIDStr)
+		if parseErr == nil {
 			filterAgentID = &parsedID
 		}
 	}
@@ -104,8 +117,21 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 		agentStats := a.calculateAgentStats(orgID, *filterAgentID, periodStart, periodEnd)
 		response.MyStats = &agentStats
 		response.TrendData = a.calculateTrendData(orgID, periodStart, periodEnd, groupBy, filterAgentID)
-		// Calculate summary for this specific agent
 		a.calculateAgentSummaryStats(orgID, *filterAgentID, periodStart, periodEnd, &response.Summary)
+
+		ratingSummary, summaryErr := a.calculateAgentRatingSummary(orgID, periodStart, periodEnd, filterAgentID, minRating, maxRating)
+		if summaryErr != nil {
+			a.Log.Error("Failed to calculate agent rating summary", "error", summaryErr, "organization_id", orgID)
+		} else {
+			response.RatingSummary = &ratingSummary
+		}
+
+		ratingRecords, recordsErr := a.listAgentRatingRecords(orgID, periodStart, periodEnd, filterAgentID, minRating, maxRating, 200)
+		if recordsErr != nil {
+			a.Log.Error("Failed to list agent rating records", "error", recordsErr, "organization_id", orgID)
+		} else {
+			response.RatingRecords = ratingRecords
+		}
 	} else if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
 		// Users without analytics permission only see their own stats
 		myStats := a.calculateAgentStats(orgID, userID, periodStart, periodEnd)
@@ -117,9 +143,22 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 		a.calculateSummaryStats(orgID, periodStart, periodEnd, &response.Summary)
 		response.TrendData = a.calculateTrendData(orgID, periodStart, periodEnd, groupBy, nil)
 		response.AgentStats = a.calculateAllAgentStats(orgID, periodStart, periodEnd)
-		// Also include current user's stats (for their own break time tracking)
 		myStats := a.calculateAgentStats(orgID, userID, periodStart, periodEnd)
 		response.MyStats = &myStats
+
+		ratingSummary, summaryErr := a.calculateAgentRatingSummary(orgID, periodStart, periodEnd, nil, minRating, maxRating)
+		if summaryErr != nil {
+			a.Log.Error("Failed to calculate rating summary", "error", summaryErr, "organization_id", orgID)
+		} else {
+			response.RatingSummary = &ratingSummary
+		}
+
+		ratingRecords, recordsErr := a.listAgentRatingRecords(orgID, periodStart, periodEnd, nil, minRating, maxRating, 200)
+		if recordsErr != nil {
+			a.Log.Error("Failed to list rating records", "error", recordsErr, "organization_id", orgID)
+		} else {
+			response.RatingRecords = ratingRecords
+		}
 	}
 
 	return r.SendEnvelope(response)
@@ -453,7 +492,7 @@ func (a *App) calculateTrendData(orgID uuid.UUID, start, end time.Time, groupBy 
 	}
 
 	query := a.DB.Model(&models.AgentTransfer{}).
-		Select("DATE_TRUNC('" + dateTrunc + "', transferred_at) as date, COUNT(*) as count").
+		Select("DATE_TRUNC('"+dateTrunc+"', transferred_at) as date, COUNT(*) as count").
 		Where("organization_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ?",
 			orgID, models.TransferStatusResumed, start, end)
 

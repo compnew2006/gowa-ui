@@ -182,6 +182,8 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 	if err := a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
+
+	a.handleManualChatCloseRatingPrompt(orgID, userID, &contact)
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 
 	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
@@ -617,7 +619,7 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 	return r.SendEnvelope(a.buildContactResponse(contact, orgID))
 }
 
-// DeleteContact soft-deletes a contact
+// DeleteContact soft-deletes a contact while preserving conversation history.
 func (a *App) DeleteContact(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
@@ -640,7 +642,6 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Soft delete the contact
 	if err := a.DB.Delete(contact).Error; err != nil {
 		a.Log.Error("Failed to delete contact", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete contact", nil, "")

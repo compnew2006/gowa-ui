@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zerodha/logf"
@@ -177,4 +177,127 @@ func TestFindOrCreateContact_ReusesExistingContactForSameInstance(t *testing.T) 
 	var updated models.Contact
 	require.NoError(t, db.First(&updated, "id = ?", contactRow.ID).Error)
 	assert.Equal(t, "Updated Name", updated.ProfileName)
+}
+
+func TestFindOrCreateContact_RestoresSoftDeletedContactForSameInstance(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Restore Org",
+		Slug:      "restore-instance-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Restore Instance",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	contactRow := models.Contact{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		InstanceID:     &instance.ID,
+		PhoneNumber:    "15550000004",
+		ProfileName:    "",
+		Metadata:       models.JSONB{"old": true},
+	}
+	require.NoError(t, db.Create(&contactRow).Error)
+	require.NoError(t, db.Delete(&contactRow).Error)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	contact, err := cm.findOrCreateContact(
+		context.Background(),
+		org.ID,
+		instance.ID,
+		"15550000004",
+		"Restored Name",
+		models.JSONB{"source": "inbound"},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, contact)
+	assert.Equal(t, contactRow.ID, contact.ID)
+	require.NotNil(t, contact.InstanceID)
+	assert.Equal(t, instance.ID, *contact.InstanceID)
+	assert.Equal(t, "Restored Name", contact.ProfileName)
+
+	var restored models.Contact
+	require.NoError(t, db.Unscoped().First(&restored, "id = ?", contactRow.ID).Error)
+	assert.False(t, restored.DeletedAt.Valid)
+	assert.Equal(t, "Restored Name", restored.ProfileName)
+	assert.Equal(t, "inbound", restored.Metadata["source"])
+	assert.Equal(t, true, restored.Metadata["old"])
+
+	var count int64
+	require.NoError(t, db.Unscoped().Model(&models.Contact{}).
+		Where("organization_id = ? AND phone_number = ? AND instance_id = ?", org.ID, "15550000004", instance.ID).
+		Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+}
+
+func TestFindOrCreateContact_RestoresSoftDeletedLegacyContact(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Restore Legacy Org",
+		Slug:      "restore-legacy-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Legacy Instance",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	legacy := models.Contact{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		PhoneNumber:    "15550000005",
+		ProfileName:    "",
+		Metadata:       models.JSONB{"legacy": true},
+	}
+	require.NoError(t, db.Create(&legacy).Error)
+	require.NoError(t, db.Delete(&legacy).Error)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	contact, err := cm.findOrCreateContact(
+		context.Background(),
+		org.ID,
+		instance.ID,
+		"15550000005",
+		"Legacy Restored",
+		models.JSONB{"source": "inbound"},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, contact)
+	assert.Equal(t, legacy.ID, contact.ID)
+	require.NotNil(t, contact.InstanceID)
+	assert.Equal(t, instance.ID, *contact.InstanceID)
+	assert.Equal(t, "Legacy Restored", contact.ProfileName)
+
+	var restored models.Contact
+	require.NoError(t, db.Unscoped().First(&restored, "id = ?", legacy.ID).Error)
+	assert.False(t, restored.DeletedAt.Valid)
+	require.NotNil(t, restored.InstanceID)
+	assert.Equal(t, instance.ID, *restored.InstanceID)
+	assert.Equal(t, "Legacy Restored", restored.ProfileName)
+	assert.Equal(t, true, restored.Metadata["legacy"])
+	assert.Equal(t, "inbound", restored.Metadata["source"])
+
+	var count int64
+	require.NoError(t, db.Unscoped().Model(&models.Contact{}).
+		Where("organization_id = ? AND phone_number = ?", org.ID, "15550000005").
+		Count(&count).Error)
+	assert.Equal(t, int64(1), count)
 }

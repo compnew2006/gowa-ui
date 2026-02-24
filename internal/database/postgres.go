@@ -73,6 +73,7 @@ func GetMigrationModels() []MigrationModel {
 		{"Contact", &models.Contact{}},
 		{"Tag", &models.Tag{}},
 		{"Message", &models.Message{}},
+		{"ChatClosureRating", &models.ChatClosureRating{}},
 		{"Template", &models.Template{}},
 		{"WhatsAppFlow", &models.WhatsAppFlow{}},
 
@@ -233,6 +234,8 @@ func getIndexes() []string {
 		`ALTER TABLE chatbot_sessions ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE agent_transfers ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE bulk_message_recipients ALTER COLUMN phone_number TYPE varchar(50)`,
+		`ALTER TABLE bulk_message_campaigns ADD COLUMN IF NOT EXISTS min_delay_seconds integer DEFAULT 0`,
+		`ALTER TABLE bulk_message_campaigns ADD COLUMN IF NOT EXISTS max_delay_seconds integer DEFAULT 0`,
 		// Indexes
 		`CREATE INDEX IF NOT EXISTS idx_messages_contact_created ON messages(contact_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`,
@@ -287,6 +290,10 @@ func getIndexes() []string {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_org_unique ON user_organizations(user_id, organization_id) WHERE deleted_at IS NULL`,
 		// Conversation notes
 		`CREATE INDEX IF NOT EXISTS idx_conversation_notes_contact ON conversation_notes(organization_id, contact_id, created_at DESC)`,
+		// Chat closure ratings
+		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_org_closed ON chat_closure_ratings(organization_id, closed_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_contact_state ON chat_closure_ratings(contact_id, state, closed_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_agent_rated ON chat_closure_ratings(agent_user_id, rated_at DESC) WHERE state = 'rated'`,
 	}
 }
 

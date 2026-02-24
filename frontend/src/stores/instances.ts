@@ -3,13 +3,16 @@ import { ref } from 'vue'
 import { instancesService } from '@/services/api'
 import type { InstanceHealth, WhatsAppInstance } from '@/types/whatsmeow'
 import { toast } from 'vue-sonner'
+import { i18n } from '@/i18n'
 
 export const useInstancesStore = defineStore('instances', () => {
+  const t = i18n.global.t
   const instances = ref<WhatsAppInstance[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   const healthByInstance = ref<Record<string, InstanceHealth>>({})
   let healthPollTimer: number | null = null
+  let healthPollInFlight = false
 
   async function fetchInstances() {
     loading.value = true
@@ -22,7 +25,7 @@ export const useInstancesStore = defineStore('instances', () => {
         health: healthByInstance.value[instance.id]
       }))
     } catch (err: any) {
-      const message = err.response?.data?.message || 'Failed to fetch instances'
+      const message = err.response?.data?.message || t('instances.toast.fetchFailed')
       error.value = message
       toast.error(message)
     } finally {
@@ -41,6 +44,15 @@ export const useInstancesStore = defineStore('instances', () => {
       }
       return health
     } catch (err) {
+      const nextHealth = { ...healthByInstance.value }
+      delete nextHealth[id]
+      healthByInstance.value = nextHealth
+
+      const instance = instances.value.find(item => item.id === id)
+      if (instance) {
+        instance.health = undefined
+      }
+
       return null
     }
   }
@@ -72,16 +84,33 @@ export const useInstancesStore = defineStore('instances', () => {
 
       return nextInstance
     } catch (err: any) {
-      const message = err.response?.data?.message || 'Failed to fetch instance'
+      const message = err.response?.data?.message || t('instances.toast.fetchOneFailed')
       error.value = message
       return null
     }
   }
 
-  function startHealthPolling(intervalMs = 30000) {
+  async function runHealthPollingTick(refreshInstances = false) {
+    if (healthPollInFlight) {
+      return
+    }
+
+    healthPollInFlight = true
+    try {
+      if (refreshInstances) {
+        await fetchInstances()
+      }
+      await fetchAllHealth()
+    } finally {
+      healthPollInFlight = false
+    }
+  }
+
+  function startHealthPolling(intervalMs = 30000, options: { refreshInstances?: boolean } = {}) {
     stopHealthPolling()
+    const refreshInstances = options.refreshInstances === true
     healthPollTimer = window.setInterval(() => {
-      fetchAllHealth()
+      void runHealthPollingTick(refreshInstances)
     }, intervalMs)
   }
 
@@ -98,10 +127,10 @@ export const useInstancesStore = defineStore('instances', () => {
       const response = await instancesService.create(data)
       const newInstance = (response.data.data || response.data) as WhatsAppInstance
       instances.value.push(newInstance)
-      toast.success('Instance created successfully')
+      toast.success(t('instances.toast.createSuccess'))
       return newInstance
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to create instance'
+      const msg = err.response?.data?.message || t('instances.toast.createFailed')
       toast.error(msg)
       throw err
     } finally {
@@ -125,10 +154,10 @@ export const useInstancesStore = defineStore('instances', () => {
           health: healthByInstance.value[id]
         }
       }
-      toast.success('Instance updated successfully')
+      toast.success(t('instances.toast.updateSuccess'))
       return updatedInstance
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to update instance'
+      const msg = err.response?.data?.message || t('instances.toast.updateFailed')
       toast.error(msg)
       throw err
     } finally {
@@ -142,9 +171,9 @@ export const useInstancesStore = defineStore('instances', () => {
       await instancesService.delete(id)
       instances.value = instances.value.filter(instance => instance.id !== id)
       delete healthByInstance.value[id]
-      toast.success('Instance deleted successfully')
+      toast.success(t('instances.toast.deleteSuccess'))
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to delete instance'
+      const msg = err.response?.data?.message || t('instances.toast.deleteFailed')
       toast.error(msg)
       throw err
     } finally {
@@ -156,10 +185,10 @@ export const useInstancesStore = defineStore('instances', () => {
     try {
       await instancesService.connect(id)
       updateInstanceStatus(id, 'connecting')
-      toast.info('Connection initiated. waiting for QR code...')
+      toast.info(t('instances.toast.connectInitiated'))
       return true
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to initiate connection'
+      const msg = err.response?.data?.message || t('instances.toast.connectFailed')
       toast.error(msg)
       return false
     }
@@ -169,13 +198,13 @@ export const useInstancesStore = defineStore('instances', () => {
     loading.value = true
     try {
       await instancesService.disconnect(id)
-      toast.success('Instance logged out')
+      toast.success(t('instances.toast.disconnectSuccess'))
       const index = instances.value.findIndex(instance => instance.id === id)
       if (index !== -1) {
         instances.value[index].status = 'logged_out'
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to disconnect instance'
+      const msg = err.response?.data?.message || t('instances.toast.disconnectFailed')
       toast.error(msg)
     } finally {
       loading.value = false
@@ -185,9 +214,9 @@ export const useInstancesStore = defineStore('instances', () => {
   async function reconnectInstance(id: string) {
     try {
       await instancesService.reconnect(id)
-      toast.info('Requesting a new QR code...')
+      toast.info(t('instances.toast.reconnectRequested'))
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to regenerate QR code'
+      const msg = err.response?.data?.message || t('instances.toast.reconnectFailed')
       toast.error(msg)
       throw err
     }
@@ -199,10 +228,10 @@ export const useInstancesStore = defineStore('instances', () => {
         phone_number: phoneNumber
       })
       const payload = response.data.data || response.data
-      toast.success('Pairing code generated. Enter it in WhatsApp linked devices.')
+      toast.success(t('instances.toast.pairingCodeGenerated'))
       return payload
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to request pairing code'
+      const msg = err.response?.data?.message || t('instances.toast.pairingCodeFailed')
       toast.error(msg)
       throw err
     }

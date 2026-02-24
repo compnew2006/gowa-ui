@@ -1,51 +1,73 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick, computed, defineAsyncComponent } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
-import { useContactsStore, type Contact, type Message, type ChatTypeFilter } from '@/stores/contacts'
-import { useAuthStore } from '@/stores/auth'
-import { useUsersStore } from '@/stores/users'
-import { useTransfersStore } from '@/stores/transfers'
-import { useConfigStore } from '@/stores/config'
-import { localeDirectionManager } from '@/i18n/locale-direction'
-import { wsService } from '@/services/websocket'
-import { contactsService, chatbotService, messagesService, customActionsService, cannedResponsesService, type CustomAction, type ActionResult, type CannedResponseAttachment } from '@/services/api'
-import { useTagsStore } from '@/stores/tags'
-import { TagBadge } from '@/components/ui/tag-badge'
-import { getTagColorClass } from '@/lib/constants'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
+import {
+  ref,
+  watch,
+  onMounted,
+  onUnmounted,
+  nextTick,
+  computed,
+  defineAsyncComponent,
+} from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
+import {
+  useContactsStore,
+  type Contact,
+  type Message,
+  type ChatTypeFilter,
+} from "@/stores/contacts";
+import { useAuthStore } from "@/stores/auth";
+import { useUsersStore } from "@/stores/users";
+import { useTransfersStore } from "@/stores/transfers";
+import { useConfigStore } from "@/stores/config";
+import { localeDirectionManager } from "@/i18n/locale-direction";
+import { wsService } from "@/services/websocket";
+import {
+  contactsService,
+  chatbotService,
+  messagesService,
+  customActionsService,
+  cannedResponsesService,
+  type CustomAction,
+  type ActionResult,
+  type CannedResponseAttachment,
+} from "@/services/api";
+import { useTagsStore } from "@/stores/tags";
+import { TagBadge } from "@/components/ui/tag-badge";
+import { getTagColorClass } from "@/lib/constants";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@/components/ui/tooltip'
+} from "@/components/ui/tooltip";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
+} from "@/components/ui/popover";
 // Lazy-load emoji picker to reduce initial bundle size
 const EmojiPicker = defineAsyncComponent(() => {
-  return import('vue3-emoji-picker').then(module => {
+  return import("vue3-emoji-picker").then((module) => {
     // Import CSS when component loads
-    import('vue3-emoji-picker/css')
-    return module.default
-  })
-})
+    import("vue3-emoji-picker/css");
+    return module.default;
+  });
+});
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { toast } from 'vue-sonner'
+} from "@/components/ui/dialog";
+import { toast } from "vue-sonner";
 import {
   Search,
   Send,
@@ -79,524 +101,796 @@ import {
   Code,
   RotateCw,
   Filter,
-  StickyNote
-} from 'lucide-vue-next'
-import { getInitials, getAvatarGradient } from '@/lib/utils'
-import { getMessageSenderPhone, isGroupContact } from '@/lib/group-chat'
-import { useColorMode } from '@/composables/useColorMode'
-import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
-import CannedResponsePicker from '@/components/chat/CannedResponsePicker.vue'
-import TemplatePicker from '@/components/chat/TemplatePicker.vue'
-import ContactInfoPanel from '@/components/chat/ContactInfoPanel.vue'
-import ConversationNotes from '@/components/chat/ConversationNotes.vue'
-import InstanceTag from '@/components/chat/InstanceTag.vue'
-import MediaGroupBar from '@/components/chat/MediaGroupBar.vue'
-import { useInstancesStore } from '@/stores/instances'
-import { useNotesStore } from '@/stores/notes'
-import { CreateContactDialog } from '@/components/shared'
-import { Info } from 'lucide-vue-next'
-import { useMediaGroups } from '@/composables/useMediaGroups'
+  StickyNote,
+} from "lucide-vue-next";
+import { getInitials, getAvatarGradient } from "@/lib/utils";
+import { getMessageSenderPhone, isGroupContact } from "@/lib/group-chat";
+import {
+  ChatSidebarUnifier,
+  type ChatSidebarViewMode,
+  type SidebarContactEntry,
+} from "@/lib/chat-sidebar-unifier";
+import { MentionContactResolver } from "@/lib/mention-contact-resolver";
+import { useColorMode } from "@/composables/useColorMode";
+import { useInfiniteScroll } from "@/composables/useInfiniteScroll";
+import CannedResponsePicker from "@/components/chat/CannedResponsePicker.vue";
+import TemplatePicker from "@/components/chat/TemplatePicker.vue";
+import ContactInfoPanel from "@/components/chat/ContactInfoPanel.vue";
+import ConversationNotes from "@/components/chat/ConversationNotes.vue";
+import InstanceTag from "@/components/chat/InstanceTag.vue";
+import MediaGroupBar from "@/components/chat/MediaGroupBar.vue";
+import { useInstancesStore } from "@/stores/instances";
+import { useNotesStore } from "@/stores/notes";
+import { CreateContactDialog } from "@/components/shared";
+import { Info } from "lucide-vue-next";
+import { useMediaGroups } from "@/composables/useMediaGroups";
 
-const { t, locale } = useI18n()
-const route = useRoute()
-const router = useRouter()
-const contactsStore = useContactsStore()
-const authStore = useAuthStore()
-const usersStore = useUsersStore()
-const transfersStore = useTransfersStore()
-const configStore = useConfigStore()
-const tagsStore = useTagsStore()
-const notesStore = useNotesStore()
-const instancesStore = useInstancesStore()
-const { isDark } = useColorMode()
+const { t, locale } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const contactsStore = useContactsStore();
+const authStore = useAuthStore();
+const usersStore = useUsersStore();
+const transfersStore = useTransfersStore();
+const configStore = useConfigStore();
+const tagsStore = useTagsStore();
+const notesStore = useNotesStore();
+const instancesStore = useInstancesStore();
+const { isDark } = useColorMode();
 
 // Media grouping for batch download
-const { getGroupForMessage, isGroupLeader, isGroupTail, isGroupMember } = useMediaGroups(
-  computed(() => contactsStore.messages)
-)
+const { getGroupForMessage, isGroupLeader, isGroupTail, isGroupMember } =
+  useMediaGroups(computed(() => contactsStore.messages));
 
 /** Resolve full Message objects for a group (for download) */
 function getGroupMessages(groupId: string): Message[] {
-  const group = getGroupForMessage(groupId)
-  if (!group) return []
+  const group = getGroupForMessage(groupId);
+  if (!group) return [];
   return group.messageIds
-    .map(mid => contactsStore.messages.find((m: Message) => m.id === mid))
-    .filter((m): m is Message => !!m)
+    .map((mid) => contactsStore.messages.find((m: Message) => m.id === mid))
+    .filter((m): m is Message => !!m);
 }
 
-const isAdminUser = computed(() =>
-  authStore.user?.is_super_admin === true || (authStore.userRole || '').toLowerCase() === 'admin'
-)
-const canShowAddContact = computed(() =>
-  isAdminUser.value || authStore.hasPermission('contacts', 'write')
-)
-const canRevokeMessages = computed(() => authStore.hasPermission('chat', 'delete'))
-const isRTL = computed(() => localeDirectionManager.isRTL(String(locale.value)))
+const isAdminUser = computed(
+  () =>
+    authStore.user?.is_super_admin === true ||
+    (authStore.userRole || "").toLowerCase() === "admin",
+);
+const canShowAddContact = computed(
+  () => isAdminUser.value || authStore.hasPermission("contacts", "write"),
+);
+const canRevokeMessages = computed(() =>
+  authStore.hasPermission("chat", "delete"),
+);
+const isRTL = computed(() =>
+  localeDirectionManager.isRTL(String(locale.value)),
+);
 
-const messageInput = ref('')
-const messagesEndRef = ref<HTMLElement | null>(null)
-const messageInputRef = ref<HTMLTextAreaElement | null>(null)
-const isSending = ref(false)
-const isAssignDialogOpen = ref(false)
-const isTransferring = ref(false)
-const isResuming = ref(false)
-const isInfoPanelOpen = ref(false)
-const isNotesPanelOpen = ref(false)
-const contactSessionData = ref<any>(null)
+const messageInput = ref("");
+const messagesEndRef = ref<HTMLElement | null>(null);
+const messageInputRef = ref<HTMLTextAreaElement | null>(null);
+const isSending = ref(false);
+const isAssignDialogOpen = ref(false);
+const isTransferring = ref(false);
+const isResuming = ref(false);
+const isInfoPanelOpen = ref(false);
+const isNotesPanelOpen = ref(false);
+const contactSessionData = ref<any>(null);
 
 // Multi-account state
-const selectedAccount = ref<string | null>(null)
-const contactAccounts = ref<string[]>([])
+const selectedAccount = ref<string | null>(null);
+const contactAccounts = ref<string[]>([]);
+const chatSidebarUnifier = new ChatSidebarUnifier();
+const chatSidebarViewMode = ref<ChatSidebarViewMode>(
+  ChatSidebarUnifier.readViewMode(),
+);
+const ACCOUNT_TOGGLE_PREFIX = "acct:";
+const CONTACT_TOGGLE_PREFIX = "contact:";
+
+function toAccountToggleKey(accountName: string): string {
+  return `${ACCOUNT_TOGGLE_PREFIX}${accountName}`;
+}
+
+function toContactToggleKey(contactID: string): string {
+  return `${CONTACT_TOGGLE_PREFIX}${contactID}`;
+}
+
+function accountFromToggleKey(toggleKey?: string | null): string {
+  if (!toggleKey || !toggleKey.startsWith(ACCOUNT_TOGGLE_PREFIX)) {
+    return "";
+  }
+  return toggleKey.slice(ACCOUNT_TOGGLE_PREFIX.length).trim();
+}
+
+function contactIDFromToggleKey(toggleKey?: string | null): string {
+  if (!toggleKey || !toggleKey.startsWith(CONTACT_TOGGLE_PREFIX)) {
+    return "";
+  }
+  return toggleKey.slice(CONTACT_TOGGLE_PREFIX.length).trim();
+}
+
+function selectedAccountFilter(toggleKey?: string | null): string | undefined {
+  const account = accountFromToggleKey(toggleKey);
+  return account || undefined;
+}
+
+function findSidebarEntrySourceContact(
+  entry: SidebarContactEntry | null,
+  contactID: string,
+): Contact | null {
+  if (!entry || !contactID) return null;
+  return entry.sourceContacts.find((contact) => contact.id === contactID) || null;
+}
+
+function resolveInstanceToggleLabel(instanceID?: string): string {
+  if (!instanceID) return "";
+  const instance = instancesStore.instances.find((item) => item.id === instanceID);
+  if (!instance) return "";
+  if (typeof instance.name === "string" && instance.name.trim() !== "") {
+    return instance.name.trim();
+  }
+  if (
+    typeof (instance as Record<string, unknown>).phone_number === "string" &&
+    String((instance as Record<string, unknown>).phone_number).trim() !== ""
+  ) {
+    return String((instance as Record<string, unknown>).phone_number).trim();
+  }
+  return "";
+}
+
+function formatAccountToggleLabel(toggleKey: string): string {
+  const account = accountFromToggleKey(toggleKey);
+  if (account) {
+    return account;
+  }
+
+  const contactID = contactIDFromToggleKey(toggleKey);
+  if (contactID) {
+    const sourceContact =
+      findSidebarEntrySourceContact(currentSidebarEntry.value, contactID) ||
+      contactsStore.contacts.find((contact) => contact.id === contactID) ||
+      null;
+    if (sourceContact) {
+      const instanceLabel = resolveInstanceToggleLabel(sourceContact.instance_id);
+      if (instanceLabel) {
+        return instanceLabel;
+      }
+      const contactAccount = (sourceContact.whatsapp_account || "").trim();
+      if (contactAccount) {
+        return contactAccount;
+      }
+      if (sourceContact.instance_id) {
+        return sourceContact.instance_id;
+      }
+      if (sourceContact.phone_number) {
+        return sourceContact.phone_number;
+      }
+    }
+  }
+
+  return toggleKey;
+}
 
 // File upload state
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const selectedFile = ref<File | null>(null)
-const filePreviewUrl = ref<string | null>(null)
-const isMediaDialogOpen = ref(false)
-const isProfilePhotoDialogOpen = ref(false)
-const profilePhotoContact = ref<Contact | null>(null)
-const mediaCaption = ref('')
-const isUploadingMedia = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const selectedFile = ref<File | null>(null);
+const filePreviewUrl = ref<string | null>(null);
+const isMediaDialogOpen = ref(false);
+const isProfilePhotoDialogOpen = ref(false);
+const profilePhotoContact = ref<Contact | null>(null);
+const mediaCaption = ref("");
+const isUploadingMedia = ref(false);
 
 // Cache for media blob URLs (message_id -> blob URL)
-const mediaBlobUrls = ref<Record<string, string>>({})
-const mediaLoadingStates = ref<Record<string, boolean>>({})
+const mediaBlobUrls = ref<Record<string, string>>({});
+const mediaLoadingStates = ref<Record<string, boolean>>({});
 
 // Canned responses slash command state
-const cannedPickerOpen = ref(false)
-const cannedSearchQuery = ref('')
-const pendingCannedResponse = ref<{ id: string; attachments: CannedResponseAttachment[] } | null>(null)
+const cannedPickerOpen = ref(false);
+const cannedSearchQuery = ref("");
+const pendingCannedResponse = ref<{
+  id: string;
+  attachments: CannedResponseAttachment[];
+} | null>(null);
 
 // Sticky date header state
-const stickyDate = ref('')
-const showStickyDate = ref(false)
-let stickyDateTimeout: ReturnType<typeof setTimeout> | null = null
+const stickyDate = ref("");
+const showStickyDate = ref(false);
+let stickyDateTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Emoji picker state
-const emojiPickerOpen = ref(false)
+const emojiPickerOpen = ref(false);
 
 // Template picker state
-const templatePickerRef = ref<HTMLElement | null>(null)
-const templateDialogOpen = ref(false)
-const selectedTemplate = ref<any>(null)
-const templateParamNames = ref<string[]>([])
-const templateParamValues = ref<Record<string, string>>({})
-const isSendingTemplate = ref(false)
+const templatePickerRef = ref<HTMLElement | null>(null);
+const templateDialogOpen = ref(false);
+const selectedTemplate = ref<any>(null);
+const templateParamNames = ref<string[]>([]);
+const templateParamValues = ref<Record<string, string>>({});
+const isSendingTemplate = ref(false);
 
 // Custom actions state
-const customActions = ref<CustomAction[]>([])
-const executingActionId = ref<string | null>(null)
+const customActions = ref<CustomAction[]>([]);
+const executingActionId = ref<string | null>(null);
 
 // Tags filter state
-const isTagFilterOpen = ref(false)
+const isTagFilterOpen = ref(false);
 
 // Service window state
 const isServiceWindowExpired = computed(() => {
-  const contact = contactsStore.currentContact
-  if (!contact) return false
-  if (configStore.isWhatsmeow) return false
-  return contact.service_window_open === false
-})
+  const contact = contactsStore.currentContact;
+  if (!contact) return false;
+  if (configStore.isWhatsmeow) return false;
+  return contact.service_window_open === false;
+});
 
 const hasPendingCannedAttachments = computed(() => {
-  return (pendingCannedResponse.value?.attachments.length ?? 0) > 0
-})
+  return (pendingCannedResponse.value?.attachments.length ?? 0) > 0;
+});
 
 const canSendMessage = computed(() => {
-  return Boolean(messageInput.value.trim()) || hasPendingCannedAttachments.value
-})
+  return (
+    Boolean(messageInput.value.trim()) || hasPendingCannedAttachments.value
+  );
+});
 
 function openTemplatePicker() {
-  const btn = templatePickerRef.value?.querySelector('button')
-  btn?.click()
+  const btn = templatePickerRef.value?.querySelector("button");
+  btn?.click();
 }
 
 // Add contact dialog state
-const isAddContactOpen = ref(false)
-const CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY = 'chat.contactsSidebarWidth'
-const CONTACTS_SIDEBAR_MIN_WIDTH = 280
-const CONTACTS_SIDEBAR_MAX_WIDTH = 500
-const CONTACTS_SIDEBAR_DEFAULT_WIDTH = 320
+const isAddContactOpen = ref(false);
+const deletingSidebarEntryKey = ref<string | null>(null);
+const pendingSidebarDeleteEntryKey = ref<string | null>(null);
+const SIDEBAR_DELETE_CONFIRM_TIMEOUT_MS = 5000;
+let pendingSidebarDeleteTimeout: ReturnType<typeof setTimeout> | null = null;
+const CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY = "chat.contactsSidebarWidth";
+const CONTACTS_SIDEBAR_MIN_WIDTH = 280;
+const CONTACTS_SIDEBAR_MAX_WIDTH = 500;
+const CONTACTS_SIDEBAR_DEFAULT_WIDTH = 320;
 
 function clampContactsSidebarWidth(value: number): number {
-  return Math.min(CONTACTS_SIDEBAR_MAX_WIDTH, Math.max(CONTACTS_SIDEBAR_MIN_WIDTH, value))
+  return Math.min(
+    CONTACTS_SIDEBAR_MAX_WIDTH,
+    Math.max(CONTACTS_SIDEBAR_MIN_WIDTH, value),
+  );
 }
 
 function readContactsSidebarWidth(): number {
   try {
-    const stored = Number(localStorage.getItem(CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY))
+    const stored = Number(
+      localStorage.getItem(CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY),
+    );
     if (Number.isFinite(stored) && stored > 0) {
-      return clampContactsSidebarWidth(stored)
+      return clampContactsSidebarWidth(stored);
     }
   } catch {
     // Ignore localStorage errors
   }
-  return CONTACTS_SIDEBAR_DEFAULT_WIDTH
+  return CONTACTS_SIDEBAR_DEFAULT_WIDTH;
 }
 
-const contactsSidebarWidth = ref(readContactsSidebarWidth())
-const isContactsSidebarResizing = ref(false)
-const isContactsSidebarCompact = computed(() => contactsSidebarWidth.value <= 320)
-const isContactsSidebarWide = computed(() => contactsSidebarWidth.value >= 420)
-let contactsSidebarResizeStartX = 0
-let contactsSidebarResizeStartWidth = contactsSidebarWidth.value
+const contactsSidebarWidth = ref(readContactsSidebarWidth());
+const isContactsSidebarResizing = ref(false);
+const isContactsSidebarCompact = computed(
+  () => contactsSidebarWidth.value <= 320,
+);
+const isContactsSidebarWide = computed(() => contactsSidebarWidth.value >= 420);
+let contactsSidebarResizeStartX = 0;
+let contactsSidebarResizeStartWidth = contactsSidebarWidth.value;
 
 function setContactsSidebarWidth(value: number) {
-  const nextWidth = clampContactsSidebarWidth(value)
-  contactsSidebarWidth.value = nextWidth
+  const nextWidth = clampContactsSidebarWidth(value);
+  contactsSidebarWidth.value = nextWidth;
   try {
-    localStorage.setItem(CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth))
+    localStorage.setItem(CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth));
   } catch {
     // Ignore localStorage errors
   }
 }
 
 function onContactsSidebarResizeMove(event: MouseEvent) {
-  if (!isContactsSidebarResizing.value) return
+  if (!isContactsSidebarResizing.value) return;
   const deltaX = isRTL.value
     ? contactsSidebarResizeStartX - event.clientX
-    : event.clientX - contactsSidebarResizeStartX
-  setContactsSidebarWidth(contactsSidebarResizeStartWidth + deltaX)
+    : event.clientX - contactsSidebarResizeStartX;
+  setContactsSidebarWidth(contactsSidebarResizeStartWidth + deltaX);
 }
 
 function stopContactsSidebarResize() {
-  if (!isContactsSidebarResizing.value) return
-  isContactsSidebarResizing.value = false
-  window.removeEventListener('mousemove', onContactsSidebarResizeMove)
-  window.removeEventListener('mouseup', stopContactsSidebarResize)
+  if (!isContactsSidebarResizing.value) return;
+  isContactsSidebarResizing.value = false;
+  window.removeEventListener("mousemove", onContactsSidebarResizeMove);
+  window.removeEventListener("mouseup", stopContactsSidebarResize);
 }
 
 function startContactsSidebarResize(event: MouseEvent) {
-  if (window.innerWidth < 768) return
-  isContactsSidebarResizing.value = true
-  contactsSidebarResizeStartX = event.clientX
-  contactsSidebarResizeStartWidth = contactsSidebarWidth.value
-  window.addEventListener('mousemove', onContactsSidebarResizeMove)
-  window.addEventListener('mouseup', stopContactsSidebarResize)
-  event.preventDefault()
+  if (window.innerWidth < 768) return;
+  isContactsSidebarResizing.value = true;
+  contactsSidebarResizeStartX = event.clientX;
+  contactsSidebarResizeStartWidth = contactsSidebarWidth.value;
+  window.addEventListener("mousemove", onContactsSidebarResizeMove);
+  window.addEventListener("mouseup", stopContactsSidebarResize);
+  event.preventDefault();
 }
 
 function openAddContactDialog() {
-  isAddContactOpen.value = true
+  isAddContactOpen.value = true;
 }
 
 async function onContactCreated(contact: any) {
   // Refresh contacts and select the new one
-  await refreshContactsSidebar()
+  await refreshContactsSidebar();
   if (contact?.id) {
-    router.push({ name: 'chat-conversation', params: { contactId: contact.id } })
+    router.push({
+      name: "chat-conversation",
+      params: { contactId: contact.id },
+    });
   }
 }
 
 // Infinite scroll for contacts (load more at bottom)
 const contactsScroll = useInfiniteScroll({
-  direction: 'bottom',
+  direction: "bottom",
   onLoadMore: () => contactsStore.loadMoreContacts(),
   hasMore: computed(() => contactsStore.hasMoreContacts),
-  isLoading: computed(() => contactsStore.isLoadingMoreContacts)
-})
+  isLoading: computed(() => contactsStore.isLoadingMoreContacts),
+});
 
-const CONTACTS_SIDEBAR_PREFILL_MAX_REQUESTS = 48
-const CONTACTS_SIDEBAR_PREFILL_TIMEOUT_MS = 5000
+const CONTACTS_SIDEBAR_PREFILL_MAX_REQUESTS = 48;
+const CONTACTS_SIDEBAR_PREFILL_TIMEOUT_MS = 5000;
 
 async function hydrateContactsSidebarUntilScrollable() {
-  await nextTick()
-  const viewport = contactsScroll.getViewport()
-  if (!viewport) return
+  await nextTick();
+  const viewport = contactsScroll.getViewport();
+  if (!viewport) return;
 
-  const startedAt = Date.now()
-  let requests = 0
+  const startedAt = Date.now();
+  let requests = 0;
   while (
     contactsStore.hasMoreContacts &&
     !contactsStore.isLoadingMoreContacts
   ) {
-    const hasOverflow = viewport.scrollHeight > viewport.clientHeight + 1
+    const hasOverflow = viewport.scrollHeight > viewport.clientHeight + 1;
     if (hasOverflow) {
-      break
+      break;
     }
 
     if (requests >= CONTACTS_SIDEBAR_PREFILL_MAX_REQUESTS) {
-      break
+      break;
     }
     if (Date.now() - startedAt >= CONTACTS_SIDEBAR_PREFILL_TIMEOUT_MS) {
-      break
+      break;
     }
 
-    const beforeRawCount = contactsStore.contacts.length
-    await contactsStore.loadMoreContacts()
-    await nextTick()
-    requests++
+    const beforeRawCount = contactsStore.contacts.length;
+    await contactsStore.loadMoreContacts();
+    await nextTick();
+    requests++;
 
     if (contactsStore.contacts.length === beforeRawCount) {
-      break
+      break;
     }
   }
 }
 
 async function refreshContactsSidebar() {
-  await contactsStore.fetchChats({ search: contactsStore.searchQuery || undefined })
-  await hydrateContactsSidebarUntilScrollable()
+  await contactsStore.fetchChats({
+    search: contactsStore.searchQuery || undefined,
+  });
+  await hydrateContactsSidebarUntilScrollable();
 }
 
-async function switchChatTab(tab: 'pending' | 'assigned') {
-  if (contactsStore.activeChatTab === tab) return
-  contactsStore.setActiveChatTab(tab)
-  await refreshContactsSidebar()
+async function switchChatTab(tab: "pending" | "assigned") {
+  if (contactsStore.activeChatTab === tab) return;
+  contactsStore.setActiveChatTab(tab);
+  await refreshContactsSidebar();
 }
 
 // Infinite scroll for messages (load older at top)
 const messagesScroll = useInfiniteScroll({
-  direction: 'top',
+  direction: "top",
   onLoadMore: async () => {
-    if (!contactsStore.currentContact) return
+    if (!contactsStore.currentContact) return;
     await messagesScroll.preserveScrollPosition(async () => {
-      await contactsStore.fetchOlderMessages(contactsStore.currentContact!.id, selectedAccount.value || undefined)
-      await nextTick()
+      const accountFilter = selectedAccountFilter(selectedAccount.value);
+      await contactsStore.fetchOlderMessages(
+        contactsStore.currentContact!.id,
+        accountFilter,
+      );
+      await nextTick();
       // Load media for any new messages
       try {
-        loadMediaForMessages()
+        loadMediaForMessages();
       } catch (e) {
-        console.error('Error loading media:', e)
+        console.error("Error loading media:", e);
       }
-    })
+    });
   },
   hasMore: computed(() => contactsStore.hasMoreMessages),
   isLoading: computed(() => contactsStore.isLoadingOlderMessages),
-  onScroll: (event) => updateStickyDate(event.target as HTMLElement)
-})
+  onScroll: (event) => updateStickyDate(event.target as HTMLElement),
+});
 
-const contactId = computed(() => route.params.contactId as string | undefined)
+const contactId = computed(() => route.params.contactId as string | undefined);
+const sidebarContacts = computed(() =>
+  chatSidebarUnifier.buildEntries(
+    contactsStore.sortedContacts,
+    chatSidebarViewMode.value,
+  ),
+);
+const currentSidebarEntry = computed(() => {
+  if (!contactsStore.currentContact) return null;
+  return (
+    chatSidebarUnifier.findEntryByContactID(
+      sidebarContacts.value,
+      contactsStore.currentContact.id,
+    ) || null
+  );
+});
+const isSidebarUnifiedMode = computed(
+  () => chatSidebarViewMode.value === "unified",
+);
+
+function refreshChatSidebarViewModePreference() {
+  chatSidebarViewMode.value = ChatSidebarUnifier.readViewMode();
+}
+
+function getSidebarEntryPreferredContact(entry: SidebarContactEntry): Contact {
+  const selectedAccountName = accountFromToggleKey(selectedAccount.value);
+  if (selectedAccountName && entry.contactsByAccount[selectedAccountName]) {
+    return entry.contactsByAccount[selectedAccountName];
+  }
+
+  const selectedContactID = contactIDFromToggleKey(selectedAccount.value);
+  if (selectedContactID) {
+    const selectedContact = findSidebarEntrySourceContact(entry, selectedContactID);
+    if (selectedContact) {
+      return selectedContact;
+    }
+  }
+
+  const displayAccount =
+    typeof entry.displayContact.whatsapp_account === "string"
+      ? entry.displayContact.whatsapp_account.trim()
+      : "";
+  if (displayAccount && entry.contactsByAccount[displayAccount]) {
+    return entry.contactsByAccount[displayAccount];
+  }
+
+  if (entry.accountNames.length > 0) {
+    const fallbackContact = entry.contactsByAccount[entry.accountNames[0]];
+    if (fallbackContact) {
+      return fallbackContact;
+    }
+  }
+
+  return entry.displayContact;
+}
+
+function isSidebarEntryActive(entry: SidebarContactEntry): boolean {
+  const currentContactID = contactsStore.currentContact?.id;
+  if (!currentContactID) return false;
+  return entry.sourceContactIDs.includes(currentContactID);
+}
 
 // Get active transfer for current contact from the store (reactive)
 const activeTransfer = computed(() => {
-  if (!contactsStore.currentContact) return null
-  return transfersStore.getActiveTransferForContact(contactsStore.currentContact.id)
-})
+  if (!contactsStore.currentContact) return null;
+  return transfersStore.getActiveTransferForContact(
+    contactsStore.currentContact.id,
+  );
+});
 
-const activeTransferId = computed(() => activeTransfer.value?.id || null)
-const isCurrentGroupChat = computed(() => isGroupContact(contactsStore.currentContact))
-const isCurrentChatClosed = computed(() => contactsStore.currentContact?.status === 'closed')
+const activeTransferId = computed(() => activeTransfer.value?.id || null);
+const isCurrentGroupChat = computed(() =>
+  isGroupContact(contactsStore.currentContact),
+);
+const isCurrentChatClosed = computed(
+  () => contactsStore.currentContact?.status === "closed",
+);
 const isCurrentChatRestricted = computed(() => {
-  if (!contactsStore.currentContact) return false
-  if (isAdminUser.value) return false
-  return contactsStore.currentContact.status === 'pending' || !contactsStore.currentContact.assigned_user_id || contactsStore.isMessageAccessRestricted
-})
+  if (!contactsStore.currentContact) return false;
+  if (isAdminUser.value) return false;
+  return (
+    contactsStore.currentContact.status === "pending" ||
+    !contactsStore.currentContact.assigned_user_id ||
+    contactsStore.isMessageAccessRestricted
+  );
+});
 const canClaimCurrentChat = computed(() => {
-  if (!contactsStore.currentContact || isAdminUser.value) return false
-  return contactsStore.currentContact.status === 'pending' || !contactsStore.currentContact.assigned_user_id
-})
+  if (!contactsStore.currentContact || isAdminUser.value) return false;
+  return (
+    contactsStore.currentContact.status === "pending" ||
+    !contactsStore.currentContact.assigned_user_id
+  );
+});
 const canCloseCurrentChat = computed(() => {
-  const contact = contactsStore.currentContact
-  if (!contact || contact.status !== 'open') return false
-  if (isAdminUser.value) return true
-  return !!authStore.user?.id && contact.assigned_user_id === authStore.user.id
-})
+  const contact = contactsStore.currentContact;
+  if (!contact || contact.status !== "open") return false;
+  if (isAdminUser.value) return true;
+  return !!authStore.user?.id && contact.assigned_user_id === authStore.user.id;
+});
 const canReopenCurrentChat = computed(() => {
-  const contact = contactsStore.currentContact
-  if (!contact || contact.status !== 'closed') return false
-  if (isAdminUser.value) return true
-  return authStore.hasPermission('chat.assign', 'write') ||
-    authStore.hasPermission('contacts', 'write') ||
-    authStore.hasPermission('chat', 'write')
-})
-const isClaimingCurrentChat = ref(false)
-const isClosingCurrentChat = ref(false)
-const isReopeningCurrentChat = ref(false)
-const deletedMessageText = '(This message was deleted)'
-const legacyDeletedMessageText = 'This message was deleted'
+  const contact = contactsStore.currentContact;
+  if (!contact || contact.status !== "closed") return false;
+  if (isAdminUser.value) return true;
+  return (
+    authStore.hasPermission("chat.assign", "write") ||
+    authStore.hasPermission("contacts", "write") ||
+    authStore.hasPermission("chat", "write")
+  );
+});
+const isClaimingCurrentChat = ref(false);
+const isClosingCurrentChat = ref(false);
+const isReopeningCurrentChat = ref(false);
+const deletedMessageText = "(This message was deleted)";
+const legacyDeletedMessageText = "This message was deleted";
+const mentionContactResolver = new MentionContactResolver();
+const mentionResolutionVersion = ref(0);
 
 function getGroupSenderPhone(message: Message): string {
-  return getMessageSenderPhone(message)
+  return getMessageSenderPhone(message);
 }
 
 function isGroupMessage(message: Message): boolean {
   if (message.is_group_chat === true) {
-    return true
+    return true;
   }
-  if (typeof message.conversation_id === 'string' && message.conversation_id.endsWith('@g.us')) {
-    return true
+  if (
+    typeof message.conversation_id === "string" &&
+    message.conversation_id.endsWith("@g.us")
+  ) {
+    return true;
   }
-  return isCurrentGroupChat.value
+  return isCurrentGroupChat.value;
 }
 
 function shouldShowGroupSenderPhone(message: Message): boolean {
-  if (message.direction !== 'incoming' || !isGroupMessage(message)) {
-    return false
+  if (message.direction !== "incoming" || !isGroupMessage(message)) {
+    return false;
   }
-  return getGroupSenderPhone(message) !== ''
+  return getGroupSenderPhone(message) !== "";
 }
 
 function normalizeDeletedMessageText(content: string): string {
   if (content.trim().toLowerCase() === legacyDeletedMessageText.toLowerCase()) {
-    return deletedMessageText
+    return deletedMessageText;
   }
-  return content
+  return content;
 }
 
-function isDeletedMessage(message: Message): boolean {
-  if (message.content && typeof message.content === 'object') {
-    const metadata = (message.content as { metadata?: Record<string, any> }).metadata
-    if (metadata?.revoked === true) {
-      return true
+function preloadMentionResolverFromKnownContacts(): void {
+  const changed = mentionContactResolver.preloadContacts([
+    ...contactsStore.contacts,
+    ...contactsStore.pendingChats,
+    ...contactsStore.assignedChats,
+    ...contactsStore.closedChats,
+  ]);
+
+  if (changed) {
+    mentionResolutionVersion.value += 1;
+  }
+}
+
+function applyMentionDisplayNames(content: string): string {
+  if (!content || !content.includes("@")) {
+    return content;
+  }
+
+  // Keep render reactive to async lookup results.
+  const revision = mentionResolutionVersion.value;
+  if (revision < 0) {
+    return content;
+  }
+
+  return mentionContactResolver.replaceMentions(content);
+}
+
+async function resolveMentionsForCurrentMessages(): Promise<void> {
+  preloadMentionResolverFromKnownContacts();
+
+  const texts: string[] = [];
+  for (const message of contactsStore.messages) {
+    const raw = getMessageContentRaw(message);
+    if (raw && raw.includes("@")) {
+      texts.push(raw);
     }
   }
 
-  const body = getMessageContent(message).trim()
+  if (texts.length === 0) {
+    return;
+  }
+
+  const changed = await mentionContactResolver.resolveMentionsInTexts(texts);
+  if (changed) {
+    mentionResolutionVersion.value += 1;
+  }
+}
+
+function isDeletedMessage(message: Message): boolean {
+  if (message.content && typeof message.content === "object") {
+    const metadata = (message.content as { metadata?: Record<string, any> })
+      .metadata;
+    if (metadata?.revoked === true) {
+      return true;
+    }
+  }
+
+  const body = getMessageContent(message).trim();
   if (!body) {
-    return false
+    return false;
   }
 
   return (
-    body.includes(deletedMessageText) ||
-    body.includes(legacyDeletedMessageText)
-  )
+    body.includes(deletedMessageText) || body.includes(legacyDeletedMessageText)
+  );
 }
 
 function isSystemEventMessage(message: Message): boolean {
-  const rawValue = message.metadata?.system_event
-  return rawValue === true || rawValue === 'true' || rawValue === 1 || rawValue === '1'
+  const rawValue = message.metadata?.system_event;
+  return (
+    rawValue === true ||
+    rawValue === "true" ||
+    rawValue === 1 ||
+    rawValue === "1"
+  );
 }
 
 // Check if current user can assign contacts (admin or manager only)
 const canAssignContacts = computed(() => {
   // Try store first, then fallback to localStorage
-  let role = authStore.userRole
-  if (!role || role === 'agent') {
+  let role = authStore.userRole;
+  if (!role || role === "agent") {
     try {
-      const storedUser = localStorage.getItem('user')
+      const storedUser = localStorage.getItem("user");
       if (storedUser) {
-        const user = JSON.parse(storedUser)
-        role = user.role?.name || user.role // Support both old and new format
+        const user = JSON.parse(storedUser);
+        role = user.role?.name || user.role; // Support both old and new format
       }
     } catch {
       // ignore
     }
   }
-  return role === 'admin' || role === 'manager'
-})
+  return role === "admin" || role === "manager";
+});
 
 // Get list of users for assignment
 const assignableUsers = computed(() => {
-  return usersStore.users.filter(u => u.is_active)
-})
+  return usersStore.users.filter((u) => u.is_active);
+});
 
 function getAssignedAgentName(contact: Contact): string {
-  const providedName = typeof contact.assigned_user_name === 'string'
-    ? contact.assigned_user_name.trim()
-    : ''
+  const providedName =
+    typeof contact.assigned_user_name === "string"
+      ? contact.assigned_user_name.trim()
+      : "";
   if (providedName) {
-    return providedName
+    return providedName;
   }
 
-  const assignedUserID = typeof contact.assigned_user_id === 'string'
-    ? contact.assigned_user_id.trim()
-    : ''
+  const assignedUserID =
+    typeof contact.assigned_user_id === "string"
+      ? contact.assigned_user_id.trim()
+      : "";
   if (!assignedUserID) {
-    return t('chat.unassigned')
+    return t("chat.unassigned");
   }
 
-  const assignedUser = usersStore.users.find(user => user.id === assignedUserID)
+  const assignedUser = usersStore.users.find(
+    (user) => user.id === assignedUserID,
+  );
   if (assignedUser?.full_name) {
-    return assignedUser.full_name
+    return assignedUser.full_name;
   }
 
-  return assignedUserID
+  return assignedUserID;
 }
 
 // Icon mapping for custom actions
 const actionIconMap: Record<string, any> = {
-  'ticket': Ticket,
-  'user': User,
-  'bar-chart': BarChart,
-  'link': Link,
-  'phone': Phone,
-  'mail': Mail,
-  'file-text': FileText,
-  'external-link': ExternalLink,
-  'zap': Zap,
-  'globe': Globe,
-  'code': Code
-}
+  ticket: Ticket,
+  user: User,
+  "bar-chart": BarChart,
+  link: Link,
+  phone: Phone,
+  mail: Mail,
+  "file-text": FileText,
+  "external-link": ExternalLink,
+  zap: Zap,
+  globe: Globe,
+  code: Code,
+};
 
 function getActionIcon(iconName: string) {
-  return actionIconMap[iconName] || Zap
+  return actionIconMap[iconName] || Zap;
 }
 
 async function fetchCustomActions() {
   try {
-    const response = await customActionsService.list()
-    const data = (response.data as any).data || response.data
-    customActions.value = (data.custom_actions || []).filter((a: CustomAction) => a.is_active)
+    const response = await customActionsService.list();
+    const data = (response.data as any).data || response.data;
+    customActions.value = (data.custom_actions || []).filter(
+      (a: CustomAction) => a.is_active,
+    );
   } catch (error) {
     // Silently fail - custom actions are optional
-    console.error('Failed to fetch custom actions:', error)
+    console.error("Failed to fetch custom actions:", error);
   }
 }
 
 async function toggleTagFilter(tagName: string) {
-  const index = contactsStore.selectedTags.indexOf(tagName)
+  const index = contactsStore.selectedTags.indexOf(tagName);
   if (index === -1) {
-    contactsStore.selectedTags.push(tagName)
+    contactsStore.selectedTags.push(tagName);
   } else {
-    contactsStore.selectedTags.splice(index, 1)
+    contactsStore.selectedTags.splice(index, 1);
   }
   // Refetch contacts with new filter
-  await refreshContactsSidebar()
+  await refreshContactsSidebar();
 }
 
 async function toggleChatTypeFilter(chatType: ChatTypeFilter) {
-  const index = contactsStore.selectedChatTypes.indexOf(chatType)
+  const index = contactsStore.selectedChatTypes.indexOf(chatType);
   if (index === -1) {
-    contactsStore.selectedChatTypes.push(chatType)
+    contactsStore.selectedChatTypes.push(chatType);
   } else {
-    contactsStore.selectedChatTypes.splice(index, 1)
+    contactsStore.selectedChatTypes.splice(index, 1);
   }
-  await refreshContactsSidebar()
+  await refreshContactsSidebar();
 }
 
 async function updateInstanceFilter(event: Event) {
-  const target = event.target as HTMLSelectElement
-  contactsStore.selectedInstanceId = target.value
-  await refreshContactsSidebar()
+  const target = event.target as HTMLSelectElement;
+  contactsStore.selectedInstanceId = target.value;
+  await refreshContactsSidebar();
 }
 
 async function clearTagFilter() {
-  contactsStore.selectedTags = []
-  contactsStore.selectedChatTypes = []
-  contactsStore.selectedInstanceId = ''
-  await refreshContactsSidebar()
+  contactsStore.selectedTags = [];
+  contactsStore.selectedChatTypes = [];
+  contactsStore.selectedInstanceId = "";
+  await refreshContactsSidebar();
 }
 
 async function clearInstanceFilter() {
-  contactsStore.selectedInstanceId = ''
-  await refreshContactsSidebar()
+  contactsStore.selectedInstanceId = "";
+  await refreshContactsSidebar();
 }
 
 function getChatTypeLabel(chatType: ChatTypeFilter): string {
-  if (chatType === 'group') return t('chat.groupChats')
-  if (chatType === 'channel') return t('chat.channelChats')
-  return t('chat.privateChats')
+  if (chatType === "group") return t("chat.groupChats");
+  if (chatType === "channel") return t("chat.channelChats");
+  return t("chat.privateChats");
 }
 
 const activeFilterCount = computed(() => {
-  return contactsStore.selectedTags.length +
+  return (
+    contactsStore.selectedTags.length +
     contactsStore.selectedChatTypes.length +
     (contactsStore.selectedInstanceId ? 1 : 0)
-})
+  );
+});
 
 const selectedInstanceName = computed(() => {
-  if (!contactsStore.selectedInstanceId) return ''
-  const selected = instancesStore.instances.find(item => item.id === contactsStore.selectedInstanceId)
-  return selected?.name || contactsStore.selectedInstanceId
-})
+  if (!contactsStore.selectedInstanceId) return "";
+  const selected = instancesStore.instances.find(
+    (item) => item.id === contactsStore.selectedInstanceId,
+  );
+  return selected?.name || contactsStore.selectedInstanceId;
+});
 
 async function executeCustomAction(action: CustomAction) {
-  if (!contactsStore.currentContact || executingActionId.value) return
+  if (!contactsStore.currentContact || executingActionId.value) return;
 
-  executingActionId.value = action.id
+  executingActionId.value = action.id;
   try {
-    const response = await customActionsService.execute(action.id, contactsStore.currentContact.id)
-    let result: ActionResult = (response.data as any).data || response.data
+    const response = await customActionsService.execute(
+      action.id,
+      contactsStore.currentContact.id,
+    );
+    let result: ActionResult = (response.data as any).data || response.data;
 
     // JavaScript actions are now executed server-side via goja.
     // The response already contains structured result fields (toast, clipboard, redirect_url, message).
@@ -604,15 +898,18 @@ async function executeCustomAction(action: CustomAction) {
     // Handle different result types
     if (result.redirect_url) {
       // Open URL action result - prepend base path for relative URLs
-      let redirectUrl = result.redirect_url
-      if (redirectUrl.startsWith('/api/')) {
-        const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-        redirectUrl = basePath + redirectUrl
+      let redirectUrl = result.redirect_url;
+      if (redirectUrl.startsWith("/api/")) {
+        const basePath = ((window as any).__BASE_PATH__ ?? "").replace(
+          /\/$/,
+          "",
+        );
+        redirectUrl = basePath + redirectUrl;
       }
       try {
-        const parsed = new URL(redirectUrl, window.location.origin)
-        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-          window.open(parsed.href, '_blank')
+        const parsed = new URL(redirectUrl, window.location.origin);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+          window.open(parsed.href, "_blank");
         }
       } catch {
         // Invalid URL, ignore
@@ -621,764 +918,1121 @@ async function executeCustomAction(action: CustomAction) {
 
     if (result.clipboard) {
       // Copy to clipboard
-      await navigator.clipboard.writeText(result.clipboard)
-      toast.success(t('common.copiedToClipboard'))
+      await navigator.clipboard.writeText(result.clipboard);
+      toast.success(t("common.copiedToClipboard"));
     }
 
     if (result.toast) {
       // Show toast notification
-      if (result.toast.type === 'success') {
-        toast.success(result.toast.message)
-      } else if (result.toast.type === 'error') {
-        toast.error(result.toast.message)
+      if (result.toast.type === "success") {
+        toast.success(result.toast.message);
+      } else if (result.toast.type === "error") {
+        toast.error(result.toast.message);
       } else {
-        toast.info(result.toast.message)
+        toast.info(result.toast.message);
       }
     } else if (result.success && !result.redirect_url && !result.clipboard) {
       // Default success message
-      toast.success(result.message || t('chat.actionExecuted'))
+      toast.success(result.message || t("chat.actionExecuted"));
     } else if (!result.success) {
-      toast.error(result.message || t('chat.actionFailed'))
+      toast.error(result.message || t("chat.actionFailed"));
     }
   } catch (error: any) {
-    const message = error.response?.data?.message || 'Failed to execute action'
-    toast.error(message)
+    const message = error.response?.data?.message || "Failed to execute action";
+    toast.error(message);
   } finally {
-    executingActionId.value = null
+    executingActionId.value = null;
   }
 }
 
 // Search state for assignment dialog
-const assignSearchQuery = ref('')
+const assignSearchQuery = ref("");
 
 // Filtered users for assignment dialog
 const filteredAssignableUsers = computed(() => {
-  const query = assignSearchQuery.value.toLowerCase().trim()
-  if (!query) return assignableUsers.value
-  return assignableUsers.value.filter(u =>
-    u.full_name.toLowerCase().includes(query) ||
-    u.email.toLowerCase().includes(query)
-  )
-})
+  const query = assignSearchQuery.value.toLowerCase().trim();
+  if (!query) return assignableUsers.value;
+  return assignableUsers.value.filter(
+    (u) =>
+      u.full_name.toLowerCase().includes(query) ||
+      u.email.toLowerCase().includes(query),
+  );
+});
 
 // Fetch contacts on mount (WebSocket is connected in AppLayout)
 onMounted(async () => {
+  refreshChatSidebarViewModePreference();
+  window.addEventListener("storage", refreshChatSidebarViewModePreference);
+
   // Ensure auth session is restored
   if (!authStore.isAuthenticated) {
-    authStore.restoreSession()
+    authStore.restoreSession();
   }
 
-  contactsStore.setActiveChatTab(route.query.tab === 'assigned' ? 'assigned' : 'pending')
-  await contactsStore.fetchChats({ search: contactsStore.searchQuery || undefined })
+  contactsStore.setActiveChatTab(
+    route.query.tab === "assigned" ? "assigned" : "pending",
+  );
+  await contactsStore.fetchChats({
+    search: contactsStore.searchQuery || undefined,
+  });
 
   // Fetch instances for sidebar instance tags
-  instancesStore.fetchInstances()
+  instancesStore.fetchInstances();
 
   // Setup infinite scroll for contacts list
-  await nextTick()
-  contactsScroll.setup()
-  await hydrateContactsSidebarUntilScrollable()
+  await nextTick();
+  contactsScroll.setup();
+  await hydrateContactsSidebarUntilScrollable();
 
   // Fetch transfers to track active transfers
-  transfersStore.fetchTransfers({ status: 'active' })
+  transfersStore.fetchTransfers({ status: "active" });
 
   // Fetch users if can assign contacts
   if (canAssignContacts.value) {
     usersStore.fetchUsers().catch(() => {
       // Silently fail if user list can't be loaded
-    })
+    });
   }
 
   // Fetch custom actions for admins/managers
   if (canAssignContacts.value) {
-    fetchCustomActions()
+    fetchCustomActions();
   }
 
   // Fetch available tags for filtering (if not already loaded)
   if (tagsStore.tags.length === 0) {
-    tagsStore.fetchTags().catch(() => {})
+    tagsStore.fetchTags().catch(() => {});
   }
 
   if (contactId.value) {
-    await selectContact(contactId.value)
+    await selectContact(contactId.value);
   }
-})
+});
 
 onUnmounted(() => {
-  stopContactsSidebarResize()
-  wsService.setCurrentContact(null)
+  stopContactsSidebarResize();
+  clearPendingSidebarDeleteConfirmation();
+  window.removeEventListener("storage", refreshChatSidebarViewModePreference);
+  wsService.setCurrentContact(null);
   // Clear current contact when leaving chat view so notifications work on other pages
-  contactsStore.setCurrentContact(null)
-  notesStore.clearNotes()
+  contactsStore.setCurrentContact(null);
+  notesStore.clearNotes();
   // Clean up blob URLs to prevent memory leaks
-  Object.values(mediaBlobUrls.value).forEach(url => {
-    URL.revokeObjectURL(url)
-  })
-  mediaBlobUrls.value = {}
+  Object.values(mediaBlobUrls.value).forEach((url) => {
+    URL.revokeObjectURL(url);
+  });
+  mediaBlobUrls.value = {};
   // Clear sticky date timeout
-  if (stickyDateTimeout) clearTimeout(stickyDateTimeout)
-})
+  if (stickyDateTimeout) clearTimeout(stickyDateTimeout);
+});
 
 function updateStickyDate(scrollContainer: HTMLElement) {
   // Find all date separator elements
-  const dateSeparators = scrollContainer.querySelectorAll('[data-date-separator]')
-  if (dateSeparators.length === 0) return
+  const dateSeparators = scrollContainer.querySelectorAll(
+    "[data-date-separator]",
+  );
+  if (dateSeparators.length === 0) return;
 
-  const containerRect = scrollContainer.getBoundingClientRect()
-  const containerTop = containerRect.top + 60 // Offset for sticky header position
+  const containerRect = scrollContainer.getBoundingClientRect();
+  const containerTop = containerRect.top + 60; // Offset for sticky header position
 
   // Find the last date separator that's above the viewport top
-  let currentDate = ''
+  let currentDate = "";
   for (const separator of dateSeparators) {
-    const rect = separator.getBoundingClientRect()
+    const rect = separator.getBoundingClientRect();
     if (rect.top < containerTop) {
-      currentDate = separator.getAttribute('data-date-separator') || ''
+      currentDate = separator.getAttribute("data-date-separator") || "";
     } else {
-      break
+      break;
     }
   }
 
   // Show sticky date if we have scrolled past at least one date separator
   if (currentDate && scrollContainer.scrollTop > 50) {
-    stickyDate.value = currentDate
-    showStickyDate.value = true
+    stickyDate.value = currentDate;
+    showStickyDate.value = true;
 
     // Hide after scrolling stops
-    if (stickyDateTimeout) clearTimeout(stickyDateTimeout)
+    if (stickyDateTimeout) clearTimeout(stickyDateTimeout);
     stickyDateTimeout = setTimeout(() => {
-      showStickyDate.value = false
-    }, 1500)
+      showStickyDate.value = false;
+    }, 1500);
   } else {
-    showStickyDate.value = false
+    showStickyDate.value = false;
   }
 }
 
 // Watch for route changes
 watch(contactId, async (newId) => {
   if (newId) {
-    notesStore.clearNotes()
-    await selectContact(newId)
+    notesStore.clearNotes();
+    await selectContact(newId);
   } else {
-    wsService.setCurrentContact(null)
-    contactsStore.setCurrentContact(null)
-    contactsStore.clearMessages()
-    notesStore.clearNotes()
+    wsService.setCurrentContact(null);
+    contactsStore.setCurrentContact(null);
+    contactsStore.clearMessages();
+    notesStore.clearNotes();
   }
-})
+});
 
 async function selectContact(id: string) {
-  let contact = contactsStore.contacts.find(c => c.id === id)
+  let contact = contactsStore.contacts.find((c) => c.id === id);
   if (!contact) {
-    const fetched = await contactsStore.fetchContact(id)
-    if (!fetched) return
-    contact = fetched
+    const fetched = await contactsStore.fetchContact(id);
+    if (!fetched) return;
+    contact = fetched;
   }
+  const sidebarEntry = chatSidebarUnifier.findEntryByContactID(
+    sidebarContacts.value,
+    contact.id,
+  );
+  const hasUnifiedAccountGroup = Boolean(
+    isSidebarUnifiedMode.value &&
+      sidebarEntry &&
+      (sidebarEntry.accountNames.length > 1 ||
+        (sidebarEntry.accountNames.length === 0 &&
+          sidebarEntry.sourceContactIDs.length > 1)),
+  );
+  let activeContact = contact;
 
   // Remove old scroll listener before switching contacts
-  messagesScroll.cleanup()
+  messagesScroll.cleanup();
 
   // Reset account selection when switching contacts
-  selectedAccount.value = null
-  contactAccounts.value = []
-  contactsStore.setAccountFilter(null)
+  selectedAccount.value = null;
+  contactAccounts.value = [];
+  contactsStore.setAccountFilter(null);
 
-  contactsStore.setCurrentContact(contact)
+  if (
+    isSidebarUnifiedMode.value &&
+    sidebarEntry &&
+    sidebarEntry.accountNames.length > 0
+  ) {
+    contactAccounts.value = sidebarEntry.accountNames.map((accountName) =>
+      toAccountToggleKey(accountName),
+    );
+  } else if (
+    isSidebarUnifiedMode.value &&
+    sidebarEntry &&
+    sidebarEntry.sourceContactIDs.length > 1
+  ) {
+    contactAccounts.value = Array.from(
+      new Set(sidebarEntry.sourceContactIDs.map((sourceID) => toContactToggleKey(sourceID))),
+    );
+  }
 
-  const isRestrictedForNonAdmin = !isAdminUser.value && (contact.status === 'pending' || !contact.assigned_user_id)
+  if (hasUnifiedAccountGroup && sidebarEntry) {
+    if (sidebarEntry.accountNames.length > 0) {
+      const requestedAccount =
+        typeof contact.whatsapp_account === "string"
+          ? contact.whatsapp_account.trim()
+          : "";
+      const requestedKey = requestedAccount
+        ? toAccountToggleKey(requestedAccount)
+        : "";
+      const selected =
+        requestedKey && contactAccounts.value.includes(requestedKey)
+          ? requestedKey
+          : contactAccounts.value[0];
+      selectedAccount.value = selected || null;
+
+      const accountFilter = selectedAccountFilter(selectedAccount.value);
+      if (accountFilter && sidebarEntry.contactsByAccount[accountFilter]) {
+        activeContact = sidebarEntry.contactsByAccount[accountFilter];
+        contactsStore.setAccountFilter(accountFilter);
+      }
+    } else {
+      const requestedKey = toContactToggleKey(contact.id);
+      const selected = contactAccounts.value.includes(requestedKey)
+        ? requestedKey
+        : contactAccounts.value[0];
+      selectedAccount.value = selected || null;
+
+      const selectedContactID = contactIDFromToggleKey(selectedAccount.value);
+      const selectedSourceContact = findSidebarEntrySourceContact(
+        sidebarEntry,
+        selectedContactID,
+      );
+      if (selectedSourceContact) {
+        activeContact = selectedSourceContact;
+      }
+      contactsStore.setAccountFilter(null);
+    }
+  }
+
+  contactsStore.setCurrentContact(activeContact);
+
+  const isRestrictedForNonAdmin =
+    !isAdminUser.value &&
+    (activeContact.status === "pending" || !activeContact.assigned_user_id);
   if (isRestrictedForNonAdmin) {
-    contactsStore.clearMessages()
-    wsService.setCurrentContact(null)
-    return
+    contactsStore.clearMessages();
+    wsService.setCurrentContact(null);
+    return;
   }
 
-  await contactsStore.fetchMessages(id)
+  const initialAccountFilter = selectedAccountFilter(selectedAccount.value);
+  await contactsStore.fetchMessages(activeContact.id, initialAccountFilter ? {
+    account: initialAccountFilter,
+  } : undefined);
 
-  // Discover distinct accounts from the unfiltered message set
-  const accounts = new Set<string>()
-  for (const msg of contactsStore.messages) {
-    if (msg.whatsapp_account) accounts.add(msg.whatsapp_account)
-  }
-  contactAccounts.value = Array.from(accounts).sort()
+  if (isSidebarUnifiedMode.value) {
+    // Fallback for legacy per-contact multi-account histories.
+    if (!hasUnifiedAccountGroup) {
+      const accounts = new Set<string>();
+      for (const msg of contactsStore.messages) {
+        if (msg.whatsapp_account) accounts.add(msg.whatsapp_account);
+      }
+      contactAccounts.value = Array.from(accounts)
+        .sort()
+        .map((accountName) => toAccountToggleKey(accountName));
 
-  // Auto-select account if multi-account contact
-  if (contactAccounts.value.length > 1) {
-    // Find account of the most recent incoming message
-    for (let i = contactsStore.messages.length - 1; i >= 0; i--) {
-      const msg = contactsStore.messages[i]
-      if (msg.direction === 'incoming' && msg.whatsapp_account) {
-        selectedAccount.value = msg.whatsapp_account
-        break
+      // Auto-select account if multi-account contact
+      if (contactAccounts.value.length > 1) {
+        // Find account of the most recent incoming message
+        for (let i = contactsStore.messages.length - 1; i >= 0; i--) {
+          const msg = contactsStore.messages[i];
+          if (msg.direction === "incoming" && msg.whatsapp_account) {
+            selectedAccount.value = toAccountToggleKey(msg.whatsapp_account);
+            break;
+          }
+        }
+        // Fallback to contact's default account
+        if (!selectedAccount.value) {
+          const preferredAccount =
+            (activeContact.whatsapp_account || "").trim() ||
+            selectedAccountFilter(contactAccounts.value[0]) ||
+            "";
+          if (preferredAccount) {
+            selectedAccount.value = toAccountToggleKey(preferredAccount);
+          }
+        }
+        // Re-fetch messages filtered by selected account
+        const refreshedAccountFilter = selectedAccountFilter(selectedAccount.value);
+        if (refreshedAccountFilter) {
+          contactsStore.setAccountFilter(refreshedAccountFilter);
+          await contactsStore.fetchMessages(activeContact.id, {
+            account: refreshedAccountFilter,
+          });
+        }
       }
     }
-    // Fallback to contact's default account
-    if (!selectedAccount.value) {
-      selectedAccount.value = contact.whatsapp_account || contactAccounts.value[0]
-    }
-    // Re-fetch messages filtered by selected account
-    if (selectedAccount.value) {
-      contactsStore.setAccountFilter(selectedAccount.value)
-      await contactsStore.fetchMessages(id, { account: selectedAccount.value })
+  } else {
+    // Separate mode should always focus a single account thread.
+    const discoveredAccounts = Array.from(
+      new Set(
+        contactsStore.messages
+          .map((msg) => msg.whatsapp_account || "")
+          .filter(Boolean),
+      ),
+    ).sort();
+
+    if (discoveredAccounts.length > 0) {
+      const preferredFromContact =
+        typeof activeContact.whatsapp_account === "string"
+          ? activeContact.whatsapp_account.trim()
+          : "";
+      let preferredAccount = discoveredAccounts.includes(preferredFromContact)
+        ? preferredFromContact
+        : "";
+
+      if (!preferredAccount) {
+        for (let i = contactsStore.messages.length - 1; i >= 0; i--) {
+          const msg = contactsStore.messages[i];
+          if (msg.direction === "incoming" && msg.whatsapp_account) {
+            preferredAccount = msg.whatsapp_account;
+            break;
+          }
+        }
+      }
+
+      if (!preferredAccount) {
+        preferredAccount = discoveredAccounts[0];
+      }
+
+      selectedAccount.value = toAccountToggleKey(preferredAccount);
+      contactAccounts.value = [toAccountToggleKey(preferredAccount)];
+      contactsStore.setAccountFilter(preferredAccount);
+      await contactsStore.fetchMessages(activeContact.id, {
+        account: preferredAccount,
+      });
+    } else {
+      selectedAccount.value = null;
+      contactAccounts.value = [];
+      contactsStore.setAccountFilter(null);
     }
   }
 
-  // Tell WebSocket server which contact we're viewing
-  wsService.setCurrentContact(id)
+  // Tell WebSocket server which contact we're viewing.
+  wsService.setCurrentContact(activeContact.id);
   // Wait for DOM to render messages before scrolling
-  await nextTick()
+  await nextTick();
   // Load media for messages after messages are fetched
   try {
-    loadMediaForMessages()
+    loadMediaForMessages();
   } catch (e) {
-    console.error('Error loading media:', e)
+    console.error("Error loading media:", e);
   }
   // Scroll after a brief delay to ensure content is rendered (instant on initial load)
   setTimeout(() => {
-    scrollToBottom(true)
+    scrollToBottom(true);
     // Setup scroll listener for infinite scroll after initial scroll
-    messagesScroll.setup()
-  }, 50)
+    messagesScroll.setup();
+  }, 50);
 
   // Fetch notes for badge count
-  notesStore.fetchNotes(id)
+  notesStore.fetchNotes(activeContact.id);
 
   // Fetch session data and auto-open panel if configured
   try {
-    const response = await contactsService.getSessionData(id)
-    contactSessionData.value = response.data.data || response.data
+    const response = await contactsService.getSessionData(activeContact.id);
+    contactSessionData.value = response.data.data || response.data;
     if (contactSessionData.value?.panel_config?.sections?.length > 0) {
-      isInfoPanelOpen.value = true
+      isInfoPanelOpen.value = true;
     }
   } catch {
-    contactSessionData.value = null
+    contactSessionData.value = null;
   }
 }
 
 // Watch for new messages to auto-scroll and load media
-watch(() => contactsStore.messages.length, () => {
-  scrollToBottom()
-  try {
-    loadMediaForMessages()
-  } catch (e) {
-    console.error('Error loading media:', e)
-  }
-})
+watch(
+  () => contactsStore.messages.length,
+  () => {
+    void resolveMentionsForCurrentMessages();
+    scrollToBottom();
+    try {
+      loadMediaForMessages();
+    } catch (e) {
+      console.error("Error loading media:", e);
+    }
+  },
+);
 
 // Watch for messages changes to load media
-watch(() => contactsStore.messages, () => {
-  try {
-    loadMediaForMessages()
-  } catch (e) {
-    console.error('Error loading media:', e)
-  }
-}, { deep: true })
+watch(
+  () => contactsStore.messages,
+  () => {
+    void resolveMentionsForCurrentMessages();
+    try {
+      loadMediaForMessages();
+    } catch (e) {
+      console.error("Error loading media:", e);
+    }
+  },
+  { deep: true },
+);
 
-async function switchAccount(accountName: string) {
-  if (!contactsStore.currentContact || accountName === selectedAccount.value) return
-  selectedAccount.value = accountName
-  contactsStore.setAccountFilter(accountName)
-  await contactsStore.fetchMessages(contactsStore.currentContact.id, { account: accountName })
-  await nextTick()
-  try {
-    loadMediaForMessages()
-  } catch (e) {
-    console.error('Error loading media:', e)
+watch(
+  () => [
+    contactsStore.contacts,
+    contactsStore.pendingChats,
+    contactsStore.assignedChats,
+    contactsStore.closedChats,
+  ],
+  () => {
+    preloadMentionResolverFromKnownContacts();
+  },
+  { deep: true, immediate: true },
+);
+
+async function switchAccount(accountToggleKey: string) {
+  if (!isSidebarUnifiedMode.value) return;
+  if (
+    !contactsStore.currentContact ||
+    accountToggleKey === selectedAccount.value
+  ) {
+    return;
   }
-  scrollToBottom(true)
+
+  const sidebarEntry = currentSidebarEntry.value;
+  const accountFilter = selectedAccountFilter(accountToggleKey);
+  const selectedContactID = contactIDFromToggleKey(accountToggleKey);
+
+  if (sidebarEntry) {
+    if (accountFilter && sidebarEntry.contactsByAccount[accountFilter]) {
+      const targetContact = sidebarEntry.contactsByAccount[accountFilter];
+      selectedAccount.value = accountToggleKey;
+      contactsStore.setAccountFilter(accountFilter);
+      if (targetContact.id !== contactsStore.currentContact.id) {
+        await router.push(`/chat/${targetContact.id}`);
+        return;
+      }
+    } else if (selectedContactID) {
+      const targetContact = findSidebarEntrySourceContact(
+        sidebarEntry,
+        selectedContactID,
+      );
+      if (targetContact) {
+        selectedAccount.value = accountToggleKey;
+        contactsStore.setAccountFilter(null);
+        if (targetContact.id !== contactsStore.currentContact.id) {
+          await router.push(`/chat/${targetContact.id}`);
+          return;
+        }
+      }
+    }
+  }
+
+  selectedAccount.value = accountToggleKey;
+  contactsStore.setAccountFilter(accountFilter || null);
+  await contactsStore.fetchMessages(
+    contactsStore.currentContact.id,
+    accountFilter ? { account: accountFilter } : undefined,
+  );
+  await nextTick();
+  try {
+    loadMediaForMessages();
+  } catch (e) {
+    console.error("Error loading media:", e);
+  }
+  scrollToBottom(true);
 }
 
-function handleContactClick(contact: Contact) {
-  router.push(`/chat/${contact.id}`)
+function handleContactClick(entry: SidebarContactEntry) {
+  clearPendingSidebarDeleteConfirmation();
+  const target = getSidebarEntryPreferredContact(entry);
+  router.push(`/chat/${target.id}`);
+}
+
+function clearPendingSidebarDeleteConfirmation() {
+  pendingSidebarDeleteEntryKey.value = null;
+  if (pendingSidebarDeleteTimeout) {
+    clearTimeout(pendingSidebarDeleteTimeout);
+    pendingSidebarDeleteTimeout = null;
+  }
+}
+
+function armSidebarDeleteConfirmation(entryKey: string) {
+  pendingSidebarDeleteEntryKey.value = entryKey;
+  if (pendingSidebarDeleteTimeout) {
+    clearTimeout(pendingSidebarDeleteTimeout);
+  }
+  pendingSidebarDeleteTimeout = setTimeout(() => {
+    pendingSidebarDeleteEntryKey.value = null;
+    pendingSidebarDeleteTimeout = null;
+  }, SIDEBAR_DELETE_CONFIRM_TIMEOUT_MS);
+}
+
+async function deleteSidebarEntry(entry: SidebarContactEntry) {
+  if (!isAdminUser.value || deletingSidebarEntryKey.value) return;
+
+  const contactIDs = Array.from(
+    new Set(entry.sourceContactIDs.filter((id): id is string => Boolean(id))),
+  );
+  if (contactIDs.length === 0) return;
+  if (pendingSidebarDeleteEntryKey.value !== entry.key) {
+    armSidebarDeleteConfirmation(entry.key);
+    return;
+  }
+  clearPendingSidebarDeleteConfirmation();
+
+  deletingSidebarEntryKey.value = entry.key;
+  try {
+    await Promise.all(contactIDs.map((id) => contactsService.delete(id)));
+
+    const currentContactID = contactsStore.currentContact?.id || null;
+    const deletedCurrentContact = currentContactID
+      ? contactIDs.includes(currentContactID)
+      : false;
+
+    if (deletedCurrentContact) {
+      wsService.setCurrentContact(null);
+      contactsStore.setCurrentContact(null);
+      contactsStore.clearMessages();
+      notesStore.clearNotes();
+      contactSessionData.value = null;
+      isInfoPanelOpen.value = false;
+      isNotesPanelOpen.value = false;
+    }
+
+    await refreshContactsSidebar();
+
+    if (deletedCurrentContact || (contactId.value && contactIDs.includes(contactId.value))) {
+      await router.push("/chat");
+    }
+
+    toast.success(
+      t("common.deletedSuccess", {
+        resource:
+          contactIDs.length > 1 ? t("resources.contacts") : t("resources.Contact"),
+      }),
+    );
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      t("common.failedDelete", { resource: t("resources.contact") });
+    toast.error(message);
+  } finally {
+    deletingSidebarEntryKey.value = null;
+  }
 }
 
 function openProfilePhotoDialog(contact: Contact | null) {
-  if (!contact) return
-  profilePhotoContact.value = contact
-  isProfilePhotoDialogOpen.value = true
+  if (!contact) return;
+  profilePhotoContact.value = contact;
+  isProfilePhotoDialogOpen.value = true;
 }
 
 function handleProfilePhotoDialogOpenChange(open: boolean) {
-  isProfilePhotoDialogOpen.value = open
+  isProfilePhotoDialogOpen.value = open;
   if (!open) {
-    profilePhotoContact.value = null
+    profilePhotoContact.value = null;
   }
 }
 
 async function handleContactDeleted(contactId: string) {
   if (contactsStore.currentContact?.id === contactId) {
-    wsService.setCurrentContact(null)
-    contactsStore.setCurrentContact(null)
-    contactsStore.clearMessages()
-    notesStore.clearNotes()
-    isInfoPanelOpen.value = false
-    await refreshContactsSidebar()
-    router.push('/chat')
-    return
+    wsService.setCurrentContact(null);
+    contactsStore.setCurrentContact(null);
+    contactsStore.clearMessages();
+    notesStore.clearNotes();
+    isInfoPanelOpen.value = false;
+    await refreshContactsSidebar();
+    router.push("/chat");
+    return;
   }
 
-  await refreshContactsSidebar()
+  await refreshContactsSidebar();
 }
 
 async function sendMessage() {
-  if (isCurrentChatRestricted.value || isCurrentChatClosed.value) return
-  if (!canSendMessage.value || !contactsStore.currentContact) return
+  if (isCurrentChatRestricted.value || isCurrentChatClosed.value) return;
+  if (!canSendMessage.value || !contactsStore.currentContact) return;
 
-  isSending.value = true
+  isSending.value = true;
   try {
-    if (pendingCannedResponse.value && pendingCannedResponse.value.attachments.length > 0) {
-      const response = await cannedResponsesService.send(pendingCannedResponse.value.id, {
-        contact_id: contactsStore.currentContact.id,
-        content: messageInput.value,
-        instance_id: contactsStore.currentContact.instance_id,
-        reply_to_message_id: contactsStore.replyingTo?.id,
-        whatsapp_account: selectedAccount.value || undefined
-      })
-      const payload = (response.data as any).data || response.data
-      const sentMessages = Array.isArray(payload.messages) ? payload.messages : []
+    const activeAccountFilter = selectedAccountFilter(selectedAccount.value);
+    if (
+      pendingCannedResponse.value &&
+      pendingCannedResponse.value.attachments.length > 0
+    ) {
+      const response = await cannedResponsesService.send(
+        pendingCannedResponse.value.id,
+        {
+          contact_id: contactsStore.currentContact.id,
+          content: messageInput.value,
+          instance_id: contactsStore.currentContact.instance_id,
+          reply_to_message_id: contactsStore.replyingTo?.id,
+          whatsapp_account: activeAccountFilter,
+        },
+      );
+      const payload = (response.data as any).data || response.data;
+      const sentMessages = Array.isArray(payload.messages)
+        ? payload.messages
+        : [];
       for (const sentMessage of sentMessages) {
-        contactsStore.addMessage(sentMessage)
+        contactsStore.addMessage(sentMessage);
       }
     } else {
       await contactsStore.sendMessage(
         contactsStore.currentContact.id,
-        'text',
+        "text",
         { body: messageInput.value },
         contactsStore.replyingTo?.id,
-        selectedAccount.value || undefined
-      )
+        activeAccountFilter,
+      );
     }
 
-    messageInput.value = ''
-    pendingCannedResponse.value = null
-    contactsStore.clearReplyingTo()
-    resetTextareaHeight()
-    await nextTick()
-    scrollToBottom()
-  } catch (error) {
-    toast.error(t('chat.sendMessageFailed'))
+    messageInput.value = "";
+    pendingCannedResponse.value = null;
+    contactsStore.clearReplyingTo();
+    resetTextareaHeight();
+    await nextTick();
+    scrollToBottom();
+  } catch (error: any) {
+    const message = error?.response?.data?.message || t("chat.sendMessageFailed");
+    toast.error(message);
   } finally {
-    isSending.value = false
+    isSending.value = false;
   }
 }
 
-const retryingMessageId = ref<string | null>(null)
-const revokingMessageId = ref<string | null>(null)
+const retryingMessageId = ref<string | null>(null);
+const revokingMessageId = ref<string | null>(null);
 
 async function retryMessage(message: Message) {
-  if (!contactsStore.currentContact || retryingMessageId.value) return
+  if (!contactsStore.currentContact || retryingMessageId.value) return;
 
-  retryingMessageId.value = message.id
+  retryingMessageId.value = message.id;
   try {
     // Get the message content based on type
-    const content = message.content || {}
+    const content = message.content || {};
 
     await contactsStore.sendMessage(
       contactsStore.currentContact.id,
       message.message_type,
       content,
       undefined,
-      message.whatsapp_account || selectedAccount.value || undefined
-    )
+      message.whatsapp_account ||
+        selectedAccountFilter(selectedAccount.value) ||
+        undefined,
+    );
 
     // Remove the failed message from the list after successful retry
-    const messages = (contactsStore.messages as any).get?.(contactsStore.currentContact.id) as Message[] | undefined
+    const messages = (contactsStore.messages as any).get?.(
+      contactsStore.currentContact.id,
+    ) as Message[] | undefined;
     if (messages) {
-      const index = messages.findIndex((m: Message) => m.id === message.id)
+      const index = messages.findIndex((m: Message) => m.id === message.id);
       if (index !== -1) {
-        messages.splice(index, 1)
+        messages.splice(index, 1);
       }
     }
 
-    toast.success(t('chat.messageSent'))
-  } catch (error) {
-    toast.error(t('chat.sendMessageFailed'))
+    toast.success(t("chat.messageSent"));
+  } catch (error: any) {
+    const message = error?.response?.data?.message || t("chat.sendMessageFailed");
+    toast.error(message);
   } finally {
-    retryingMessageId.value = null
+    retryingMessageId.value = null;
   }
 }
 
 function isRevokedMessage(message: Message): boolean {
   if (message.metadata?.revoked === true) {
-    return true
+    return true;
   }
-  return isDeletedMessage(message)
+  return isDeletedMessage(message);
 }
 
 function canRevokeMessage(message: Message): boolean {
-  if (!canRevokeMessages.value) return false
-  if (message.direction !== 'outgoing') return false
-  if (message.status === 'failed') return false
-  return !isRevokedMessage(message)
+  if (!canRevokeMessages.value) return false;
+  if (message.direction !== "outgoing") return false;
+  if (message.status === "failed") return false;
+  return !isRevokedMessage(message);
 }
 
 async function revokeMessage(message: Message) {
-  if (!contactsStore.currentContact || revokingMessageId.value || !canRevokeMessage(message)) {
-    return
+  if (
+    !contactsStore.currentContact ||
+    revokingMessageId.value ||
+    !canRevokeMessage(message)
+  ) {
+    return;
   }
 
-  revokingMessageId.value = message.id
+  revokingMessageId.value = message.id;
   try {
-    const response = await messagesService.revoke(contactsStore.currentContact.id, message.id)
-    const updatedMessage = (response.data?.data || response.data) as Message
-    contactsStore.patchMessage(updatedMessage)
-    toast.success('Message revoked')
+    const response = await messagesService.revoke(
+      contactsStore.currentContact.id,
+      message.id,
+    );
+    const updatedMessage = (response.data?.data || response.data) as Message;
+    contactsStore.patchMessage(updatedMessage);
+    toast.success("Message revoked");
   } catch (error: any) {
-    const messageText = error?.response?.data?.message || 'Failed to revoke message'
-    toast.error(messageText)
+    const messageText =
+      error?.response?.data?.message || "Failed to revoke message";
+    toast.error(messageText);
   } finally {
-    revokingMessageId.value = null
+    revokingMessageId.value = null;
   }
 }
 
 function autoResizeTextarea() {
-  const textarea = messageInputRef.value
-  if (!textarea) return
-  textarea.style.height = 'auto'
-  textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px'
+  const textarea = messageInputRef.value;
+  if (!textarea) return;
+  textarea.style.height = "auto";
+  textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px";
 }
 
 function resetTextareaHeight() {
-  const textarea = messageInputRef.value
-  if (!textarea) return
-  textarea.style.height = 'auto'
+  const textarea = messageInputRef.value;
+  if (!textarea) return;
+  textarea.style.height = "auto";
 }
 
 function getReplyPreviewContent(message: Message): string {
-  if (!message.reply_to_message) return ''
-  const reply = message.reply_to_message
-  if (reply.message_type === 'text') {
-    const rawBody = typeof reply.content === 'string' ? reply.content : (reply.content?.body || '')
-    const body = normalizeDeletedMessageText(rawBody)
-    return body.length > 50 ? body.substring(0, 50) + '...' : body
+  if (!message.reply_to_message) return "";
+  const reply = message.reply_to_message;
+  if (reply.message_type === "text") {
+    const rawBody =
+      typeof reply.content === "string"
+        ? reply.content
+        : reply.content?.body || "";
+    const body = applyMentionDisplayNames(normalizeDeletedMessageText(rawBody));
+    return body.length > 50 ? body.substring(0, 50) + "..." : body;
   }
-  if (reply.message_type === 'button_reply') {
-    const body = typeof reply.content === 'string' ? reply.content : (reply.content?.body || '')
-    return body.length > 50 ? body.substring(0, 50) + '...' : body
+  if (reply.message_type === "button_reply") {
+    const body =
+      typeof reply.content === "string"
+        ? reply.content
+        : reply.content?.body || "";
+    const displayBody = applyMentionDisplayNames(body);
+    return displayBody.length > 50
+      ? displayBody.substring(0, 50) + "..."
+      : displayBody;
   }
-  if (reply.message_type === 'interactive') {
-    const body = typeof reply.content === 'string' ? reply.content : ((reply as any).interactive_data?.body || reply.content?.body || '')
-    return body.length > 50 ? body.substring(0, 50) + '...' : body
+  if (reply.message_type === "interactive") {
+    const body =
+      typeof reply.content === "string"
+        ? reply.content
+        : (reply as any).interactive_data?.body || reply.content?.body || "";
+    const displayBody = applyMentionDisplayNames(body);
+    return displayBody.length > 50
+      ? displayBody.substring(0, 50) + "..."
+      : displayBody;
   }
-  if (reply.message_type === 'template') {
-    const body = reply.content?.body || ''
-    return body.length > 50 ? body.substring(0, 50) + '...' : body
+  if (reply.message_type === "template") {
+    const body = reply.content?.body || "";
+    const displayBody = applyMentionDisplayNames(body);
+    return displayBody.length > 50
+      ? displayBody.substring(0, 50) + "..."
+      : displayBody;
   }
-  if (reply.message_type === 'image') return '[Photo]'
-  if (reply.message_type === 'video') return '[Video]'
-  if (reply.message_type === 'audio') return '[Audio]'
-  if (reply.message_type === 'document') return '[Document]'
-  if (reply.message_type === 'location') return '[Location]'
-  if (reply.message_type === 'contacts' || reply.message_type === 'contact') return '[Contact]'
-  if (reply.message_type === 'sticker') return '[Sticker]'
-  return '[Message]'
+  if (reply.message_type === "image") return "[Photo]";
+  if (reply.message_type === "video") return "[Video]";
+  if (reply.message_type === "audio") return "[Audio]";
+  if (reply.message_type === "document") return "[Document]";
+  if (reply.message_type === "location") return "[Location]";
+  if (reply.message_type === "contacts" || reply.message_type === "contact")
+    return "[Contact]";
+  if (reply.message_type === "sticker") return "[Sticker]";
+  return "[Message]";
 }
 
 function getReplyAuthorLabel(message: Message): string {
   if (!message.reply_to_message) {
-    return 'You'
+    return "You";
   }
-  if (message.reply_to_message.direction === 'outgoing') {
-    return 'You'
+  if (message.reply_to_message.direction === "outgoing") {
+    return "You";
   }
-  if ((isGroupMessage(message) || isCurrentGroupChat.value) && message.reply_to_message.sender_phone) {
-    return message.reply_to_message.sender_phone
+  if (
+    (isGroupMessage(message) || isCurrentGroupChat.value) &&
+    message.reply_to_message.sender_phone
+  ) {
+    return message.reply_to_message.sender_phone;
   }
-  return contactsStore.currentContact?.profile_name || contactsStore.currentContact?.name || 'Customer'
+  return (
+    contactsStore.currentContact?.profile_name ||
+    contactsStore.currentContact?.name ||
+    "Customer"
+  );
 }
 
 function getReplyingToAuthorLabel(message: Message | null): string {
   if (!message) {
-    return 'Yourself'
+    return "Yourself";
   }
-  if (message.direction === 'outgoing') {
-    return 'Yourself'
+  if (message.direction === "outgoing") {
+    return "Yourself";
   }
   if (isGroupMessage(message) || isCurrentGroupChat.value) {
-    const senderPhone = getGroupSenderPhone(message)
+    const senderPhone = getGroupSenderPhone(message);
     if (senderPhone) {
-      return senderPhone
+      return senderPhone;
     }
   }
-  return contactsStore.currentContact?.profile_name || contactsStore.currentContact?.name || 'Customer'
+  return (
+    contactsStore.currentContact?.profile_name ||
+    contactsStore.currentContact?.name ||
+    "Customer"
+  );
 }
 
 function scrollToMessage(messageId: string | undefined) {
-  if (!messageId) return
-  const messageEl = document.getElementById(`message-${messageId}`)
+  if (!messageId) return;
+  const messageEl = document.getElementById(`message-${messageId}`);
   if (messageEl) {
-    messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    messageEl.classList.add('highlight-message')
-    setTimeout(() => messageEl.classList.remove('highlight-message'), 2000)
+    messageEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    messageEl.classList.add("highlight-message");
+    setTimeout(() => messageEl.classList.remove("highlight-message"), 2000);
   }
 }
 
-function insertCannedResponse(payload: { id: string; content: string; attachments: CannedResponseAttachment[] }) {
-  messageInput.value = payload.content
+function insertCannedResponse(payload: {
+  id: string;
+  content: string;
+  attachments: CannedResponseAttachment[];
+}) {
+  messageInput.value = payload.content;
   if (payload.attachments && payload.attachments.length > 0) {
     pendingCannedResponse.value = {
       id: payload.id,
-      attachments: [...payload.attachments]
-    }
+      attachments: [...payload.attachments],
+    };
   } else {
-    pendingCannedResponse.value = null
+    pendingCannedResponse.value = null;
   }
-  cannedPickerOpen.value = false
-  cannedSearchQuery.value = ''
+  cannedPickerOpen.value = false;
+  cannedSearchQuery.value = "";
 }
 
 function closeCannedPicker() {
-  cannedPickerOpen.value = false
-  cannedSearchQuery.value = ''
+  cannedPickerOpen.value = false;
+  cannedSearchQuery.value = "";
 }
 
 function clearPendingCannedAttachments() {
-  pendingCannedResponse.value = null
+  pendingCannedResponse.value = null;
 }
 
 function removePendingCannedAttachment(index: number) {
-  if (!pendingCannedResponse.value) return
-  pendingCannedResponse.value.attachments = pendingCannedResponse.value.attachments.filter((_, currentIndex) => currentIndex !== index)
+  if (!pendingCannedResponse.value) return;
+  pendingCannedResponse.value.attachments =
+    pendingCannedResponse.value.attachments.filter(
+      (_, currentIndex) => currentIndex !== index,
+    );
   if (pendingCannedResponse.value.attachments.length === 0) {
-    pendingCannedResponse.value = null
+    pendingCannedResponse.value = null;
   }
 }
 
 function getPendingAttachmentIcon(type: string) {
-  return type === 'video' ? Play : ImageIcon
+  return type === "video" ? Play : ImageIcon;
 }
 
 function insertEmoji(emoji: string) {
-  messageInput.value += emoji
-  emojiPickerOpen.value = false
+  messageInput.value += emoji;
+  emojiPickerOpen.value = false;
 }
 
 // Template message handling
 function getTemplateBodyContent(tpl: any): string {
-  return tpl.body_content || ''
+  return tpl.body_content || "";
 }
 
 const templatePreview = computed(() => {
-  if (!selectedTemplate.value) return ''
-  let body = getTemplateBodyContent(selectedTemplate.value)
+  if (!selectedTemplate.value) return "";
+  let body = getTemplateBodyContent(selectedTemplate.value);
   for (const [key, value] of Object.entries(templateParamValues.value)) {
-    body = body.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value || `{{${key}}}`)
+    body = body.replace(
+      new RegExp(`\\{\\{${key}\\}\\}`, "g"),
+      value || `{{${key}}}`,
+    );
   }
-  return body
-})
+  return body;
+});
 
 function handleTemplateWithParams(template: any, paramNames: string[]) {
-  selectedTemplate.value = template
-  templateParamNames.value = paramNames
-  templateParamValues.value = Object.fromEntries(paramNames.map(n => [n, '']))
-  templateDialogOpen.value = true
+  selectedTemplate.value = template;
+  templateParamNames.value = paramNames;
+  templateParamValues.value = Object.fromEntries(
+    paramNames.map((n) => [n, ""]),
+  );
+  templateDialogOpen.value = true;
 }
 
 async function sendTemplateMessage() {
-  if (!contactsStore.currentContact || !selectedTemplate.value) return
+  if (!contactsStore.currentContact || !selectedTemplate.value) return;
 
   // Validate all params are filled
-  const missing = templateParamNames.value.some(n => !templateParamValues.value[n]?.trim())
+  const missing = templateParamNames.value.some(
+    (n) => !templateParamValues.value[n]?.trim(),
+  );
   if (missing) {
-    toast.error(t('chat.parameterRequired'))
-    return
+    toast.error(t("chat.parameterRequired"));
+    return;
   }
 
-  isSendingTemplate.value = true
+  isSendingTemplate.value = true;
   try {
     await contactsStore.sendTemplate(
       contactsStore.currentContact.id,
       selectedTemplate.value.name,
       templateParamValues.value,
-      selectedAccount.value || undefined
-    )
-    toast.success(t('chat.templateSent'))
-    templateDialogOpen.value = false
-    selectedTemplate.value = null
-    templateParamNames.value = []
-    templateParamValues.value = {}
-  } catch {
-    toast.error(t('chat.templateSendFailed'))
+      selectedAccountFilter(selectedAccount.value),
+    );
+    toast.success(t("chat.templateSent"));
+    templateDialogOpen.value = false;
+    selectedTemplate.value = null;
+    templateParamNames.value = [];
+    templateParamValues.value = {};
+  } catch (error: any) {
+    const message = error?.response?.data?.message || t("chat.templateSendFailed");
+    toast.error(message);
   } finally {
-    isSendingTemplate.value = false
+    isSendingTemplate.value = false;
   }
 }
 
 // Reaction handling
-const reactionPickerMessageId = ref<string | null>(null)
-const quickReactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+const reactionPickerMessageId = ref<string | null>(null);
+const quickReactionEmojis = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 async function sendReaction(messageId: string, emoji: string) {
-  if (!contactsStore.currentContact) return
+  if (!contactsStore.currentContact) return;
 
   try {
     const response = await messagesService.sendReaction(
       contactsStore.currentContact.id,
       messageId,
-      emoji
-    )
+      emoji,
+    );
     // Update will come via WebSocket, but we can update locally for immediate feedback
-    const data = response.data.data || response.data
-    contactsStore.updateMessageReactions(messageId, data.reactions)
+    const data = response.data.data || response.data;
+    contactsStore.updateMessageReactions(messageId, data.reactions);
   } catch (error) {
-    toast.error(t('chat.reactionFailed'))
+    toast.error(t("chat.reactionFailed"));
   }
-  reactionPickerMessageId.value = null
+  reactionPickerMessageId.value = null;
 }
 
 function _toggleReactionPicker(messageId: string) {
   if (reactionPickerMessageId.value === messageId) {
-    reactionPickerMessageId.value = null
+    reactionPickerMessageId.value = null;
   } else {
-    reactionPickerMessageId.value = messageId
+    reactionPickerMessageId.value = messageId;
   }
 }
-void _toggleReactionPicker // Suppress unused warning
+void _toggleReactionPicker; // Suppress unused warning
 
 function replyToMessage(message: Message) {
-  contactsStore.setReplyingTo(message)
+  contactsStore.setReplyingTo(message);
   nextTick(() => {
-    messageInputRef.value?.focus()
-  })
+    messageInputRef.value?.focus();
+  });
 }
 
 // Watch for slash commands in message input
 watch(messageInput, (val) => {
-  if (val.startsWith('/')) {
-    const query = val.slice(1) // Remove the leading /
-    cannedSearchQuery.value = query
-    cannedPickerOpen.value = true
+  if (val.startsWith("/")) {
+    const query = val.slice(1); // Remove the leading /
+    cannedSearchQuery.value = query;
+    cannedPickerOpen.value = true;
   } else if (cannedPickerOpen.value) {
     // Close picker if user removes the /
-    cannedPickerOpen.value = false
-    cannedSearchQuery.value = ''
+    cannedPickerOpen.value = false;
+    cannedSearchQuery.value = "";
   }
-})
+});
 
 async function assignContactToUser(userId: string | null) {
-  if (!contactsStore.currentContact) return
+  if (!contactsStore.currentContact) return;
 
   try {
-    await contactsService.assign(contactsStore.currentContact.id, userId)
-    toast.success(userId ? t('chat.contactAssigned') : t('chat.contactUnassigned'))
+    await contactsService.assign(contactsStore.currentContact.id, userId);
+    toast.success(
+      userId ? t("chat.contactAssigned") : t("chat.contactUnassigned"),
+    );
     // Update current contact with new assignment
     contactsStore.currentContact = {
       ...contactsStore.currentContact,
       assigned_user_id: userId || undefined,
-      status: userId ? 'open' : 'pending'
-    }
+      status: userId ? "open" : "pending",
+    };
     // Refresh contacts list
-    await refreshContactsSidebar()
+    await refreshContactsSidebar();
   } catch (error: any) {
-    const message = error.response?.data?.message || t('chat.assignFailed')
-    toast.error(message)
+    const message = error.response?.data?.message || t("chat.assignFailed");
+    toast.error(message);
   }
 }
 
 async function claimCurrentChat() {
-  if (!contactsStore.currentContact || isClaimingCurrentChat.value) return
-  isClaimingCurrentChat.value = true
+  if (!contactsStore.currentContact || isClaimingCurrentChat.value) return;
+  isClaimingCurrentChat.value = true;
   try {
-    const updated = await contactsStore.claimChat(contactsStore.currentContact.id)
-    toast.success('Chat claimed successfully')
-    contactsStore.setActiveChatTab('assigned')
-    await refreshContactsSidebar()
-    await selectContact(updated.id)
+    const updated = await contactsStore.claimChat(
+      contactsStore.currentContact.id,
+    );
+    toast.success("Chat claimed successfully");
+    contactsStore.setActiveChatTab("assigned");
+    await refreshContactsSidebar();
+    await selectContact(updated.id);
   } catch (error: any) {
-    const message = error?.response?.data?.message || 'Failed to claim chat'
-    toast.error(message)
+    const message = error?.response?.data?.message || "Failed to claim chat";
+    toast.error(message);
   } finally {
-    isClaimingCurrentChat.value = false
+    isClaimingCurrentChat.value = false;
   }
 }
 
 async function closeCurrentChat() {
-  if (!contactsStore.currentContact || isClosingCurrentChat.value) return
-  isClosingCurrentChat.value = true
+  if (!contactsStore.currentContact || isClosingCurrentChat.value) return;
+  isClosingCurrentChat.value = true;
   try {
-    await contactsStore.closeChat(contactsStore.currentContact.id)
-    toast.success('Chat closed')
-    await refreshContactsSidebar()
-    wsService.setCurrentContact(null)
-    contactsStore.setCurrentContact(null)
-    contactsStore.clearMessages()
-    router.push('/chat')
+    await contactsStore.closeChat(contactsStore.currentContact.id);
+    toast.success("Chat closed");
+    await refreshContactsSidebar();
+    wsService.setCurrentContact(null);
+    contactsStore.setCurrentContact(null);
+    contactsStore.clearMessages();
+    router.push("/chat");
   } catch (error: any) {
-    const message = error?.response?.data?.message || 'Failed to close chat'
-    toast.error(message)
+    const message = error?.response?.data?.message || "Failed to close chat";
+    toast.error(message);
   } finally {
-    isClosingCurrentChat.value = false
+    isClosingCurrentChat.value = false;
   }
 }
 
 async function reopenCurrentChat() {
-  if (!contactsStore.currentContact || isReopeningCurrentChat.value) return
-  isReopeningCurrentChat.value = true
+  if (!contactsStore.currentContact || isReopeningCurrentChat.value) return;
+  isReopeningCurrentChat.value = true;
   try {
-    const updated = await contactsStore.reopenChat(contactsStore.currentContact.id)
-    toast.success('Chat reopened and moved to pending queue')
-    contactsStore.setActiveChatTab('pending')
-    await refreshContactsSidebar()
-    await selectContact(updated.id)
+    const updated = await contactsStore.reopenChat(
+      contactsStore.currentContact.id,
+    );
+    toast.success("Chat reopened and moved to pending queue");
+    contactsStore.setActiveChatTab("pending");
+    await refreshContactsSidebar();
+    await selectContact(updated.id);
   } catch (error: any) {
-    const message = error?.response?.data?.message || 'Failed to reopen chat'
-    toast.error(message)
+    const message = error?.response?.data?.message || "Failed to reopen chat";
+    toast.error(message);
   } finally {
-    isReopeningCurrentChat.value = false
+    isReopeningCurrentChat.value = false;
   }
 }
 
 async function transferToAgent() {
-  if (!contactsStore.currentContact) return
+  if (!contactsStore.currentContact) return;
 
-  isTransferring.value = true
+  isTransferring.value = true;
   try {
     await chatbotService.createTransfer({
       contact_id: contactsStore.currentContact.id,
       whatsapp_account: (contactsStore.currentContact as any).whatsapp_account,
-      source: 'manual'
-    })
-    toast.success(t('chat.transferSuccess'), {
-      description: t('chat.transferSuccessDesc')
-    })
+      source: "manual",
+    });
+    toast.success(t("chat.transferSuccess"), {
+      description: t("chat.transferSuccessDesc"),
+    });
     // Refresh transfers store (WebSocket will also update, but this ensures immediate sync)
-    await transfersStore.fetchTransfers({ status: 'active' })
+    await transfersStore.fetchTransfers({ status: "active" });
   } catch (error: any) {
-    const message = error.response?.data?.message || t('chat.transferFailed')
-    toast.error(message)
+    const message = error.response?.data?.message || t("chat.transferFailed");
+    toast.error(message);
   } finally {
-    isTransferring.value = false
+    isTransferring.value = false;
   }
 }
 
 async function resumeChatbot() {
-  if (!activeTransferId.value) return
+  if (!activeTransferId.value) return;
 
-  const currentContactId = contactsStore.currentContact?.id
-  isResuming.value = true
+  const currentContactId = contactsStore.currentContact?.id;
+  isResuming.value = true;
   try {
-    await chatbotService.resumeTransfer(activeTransferId.value)
-    toast.success(t('chat.resumeSuccess'), {
-      description: t('chat.resumeSuccessDesc')
-    })
+    await chatbotService.resumeTransfer(activeTransferId.value);
+    toast.success(t("chat.resumeSuccess"), {
+      description: t("chat.resumeSuccessDesc"),
+    });
     // Refresh transfers store to update UI
-    await transfersStore.fetchTransfers({ status: 'active' })
+    await transfersStore.fetchTransfers({ status: "active" });
     // Refresh contacts list (assignment may have changed)
-    await refreshContactsSidebar()
+    await refreshContactsSidebar();
 
     // Check if current contact is still in the list (may have been unassigned)
     if (currentContactId) {
-      const stillExists = contactsStore.contacts.some(c => c.id === currentContactId)
+      const stillExists = contactsStore.contacts.some(
+        (c) => c.id === currentContactId,
+      );
       if (!stillExists) {
         // Contact no longer visible to this user, navigate away
-        contactsStore.setCurrentContact(null)
-        contactsStore.clearMessages()
-        router.push('/chat')
+        contactsStore.setCurrentContact(null);
+        contactsStore.clearMessages();
+        router.push("/chat");
       }
     }
   } catch (error: any) {
-    const message = error.response?.data?.message || t('chat.resumeFailed')
-    toast.error(message)
+    const message = error.response?.data?.message || t("chat.resumeFailed");
+    toast.error(message);
   } finally {
-    isResuming.value = false
+    isResuming.value = false;
   }
 }
 
@@ -1386,265 +2040,308 @@ function scrollToBottom(instant = false) {
   nextTick(() => {
     if (messagesEndRef.value) {
       messagesEndRef.value.scrollIntoView({
-        behavior: instant ? 'instant' : 'smooth',
-        block: 'end'
-      })
+        behavior: instant ? "instant" : "smooth",
+        block: "end",
+      });
     }
-  })
+  });
 }
 
 function getMessageStatusIcon(status: string) {
   switch (status) {
-    case 'sent':
-      return Check
-    case 'delivered':
-      return CheckCheck
-    case 'read':
-      return CheckCheck
-    case 'failed':
-      return AlertCircle
+    case "sent":
+      return Check;
+    case "delivered":
+      return CheckCheck;
+    case "read":
+      return CheckCheck;
+    case "failed":
+      return AlertCircle;
     default:
-      return Clock
+      return Clock;
   }
 }
 
 function getMessageStatusClass(status: string) {
   switch (status) {
-    case 'read':
-      return 'text-blue-400' // Bright blue for read
-    case 'failed':
-      return 'text-destructive'
+    case "read":
+      return "text-blue-400"; // Bright blue for read
+    case "failed":
+      return "text-destructive";
     default:
-      return 'text-muted-foreground' // Gray for sent/delivered
+      return "text-muted-foreground"; // Gray for sent/delivered
   }
 }
 
 function formatMessageTime(dateStr: string) {
-  const date = new Date(dateStr)
-  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  const date = new Date(dateStr);
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatContactTime(dateStr?: string) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000)
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
 
   if (diffDays === 0) {
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } else if (diffDays === 1) {
-    return 'Yesterday'
+    return "Yesterday";
   } else if (diffDays < 7) {
-    return date.toLocaleDateString('en-US', { weekday: 'short' })
+    return date.toLocaleDateString("en-US", { weekday: "short" });
   }
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function getDateLabel(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const diffDays = Math.floor((today.getTime() - messageDate.getTime()) / 86400000)
+  const date = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const messageDate = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+  const diffDays = Math.floor(
+    (today.getTime() - messageDate.getTime()) / 86400000,
+  );
 
   if (diffDays === 0) {
-    return 'Today'
+    return "Today";
   } else if (diffDays === 1) {
-    return 'Yesterday'
+    return "Yesterday";
   }
-  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function shouldShowDateSeparator(index: number): boolean {
-  const messages = contactsStore.messages
-  if (index === 0) return true
+  const messages = contactsStore.messages;
+  if (index === 0) return true;
 
-  const currentDate = new Date(messages[index].created_at)
-  const prevDate = new Date(messages[index - 1].created_at)
+  const currentDate = new Date(messages[index].created_at);
+  const prevDate = new Date(messages[index - 1].created_at);
 
-  return currentDate.toDateString() !== prevDate.toDateString()
+  return currentDate.toDateString() !== prevDate.toDateString();
+}
+
+function getMessageContentRaw(message: Message): string {
+  if (message.message_type === "text") {
+    if (typeof message.content === "string") {
+      return message.content;
+    }
+    return message.content?.body || "";
+  }
+  if (message.message_type === "button_reply") {
+    // Button reply stores the selected button title in content
+    if (typeof message.content === "string") {
+      return message.content;
+    }
+    return message.content?.body || "";
+  }
+  if (message.message_type === "interactive") {
+    // Interactive messages store body text in content (string) or content.body or interactive_data.body
+    if (typeof message.content === "string") {
+      return message.content;
+    }
+    if (message.interactive_data?.body) {
+      return message.interactive_data.body;
+    }
+    return message.content?.body || "[Interactive Message]";
+  }
+  // For media messages, return caption if available (media is displayed inline)
+  if (
+    message.message_type === "image" ||
+    message.message_type === "video" ||
+    message.message_type === "sticker"
+  ) {
+    if (typeof message.content === "string") {
+      return message.content;
+    }
+    return message.content?.body || "";
+  }
+  if (message.message_type === "audio") {
+    return ""; // Audio doesn't have captions
+  }
+  if (message.message_type === "document") {
+    if (typeof message.content === "string") {
+      return message.content;
+    }
+    return message.content?.body || "";
+  }
+  if (message.message_type === "template") {
+    // Show actual content if available (campaign messages), otherwise fallback
+    if (typeof message.content === "string") {
+      return message.content;
+    }
+    return message.content?.body || "[Template Message]";
+  }
+  if (message.message_type === "location") {
+    return ""; // Location is displayed as a map/card, not text
+  }
+  if (
+    message.message_type === "contacts" ||
+    message.message_type === "contact"
+  ) {
+    return ""; // Contacts are displayed as a card, not text
+  }
+  if (message.message_type === "unsupported") {
+    return ""; // Displayed as a visual card, not text
+  }
+  return "[Message]";
 }
 
 function getMessageContent(message: Message): string {
-  if (message.message_type === 'text') {
-    if (typeof message.content === 'string') {
-      return normalizeDeletedMessageText(message.content)
-    }
-    return normalizeDeletedMessageText(message.content?.body || '')
-  }
-  if (message.message_type === 'button_reply') {
-    // Button reply stores the selected button title in content
-    if (typeof message.content === 'string') {
-      return message.content
-    }
-    return message.content?.body || ''
-  }
-  if (message.message_type === 'interactive') {
-    // Interactive messages store body text in content (string) or content.body or interactive_data.body
-    if (typeof message.content === 'string') {
-      return message.content
-    }
-    if (message.interactive_data?.body) {
-      return message.interactive_data.body
-    }
-    return message.content?.body || '[Interactive Message]'
-  }
-  // For media messages, return caption if available (media is displayed inline)
-  if (message.message_type === 'image' || message.message_type === 'video' || message.message_type === 'sticker') {
-    if (typeof message.content === 'string') {
-      return message.content
-    }
-    return message.content?.body || ''
-  }
-  if (message.message_type === 'audio') {
-    return '' // Audio doesn't have captions
-  }
-  if (message.message_type === 'document') {
-    if (typeof message.content === 'string') {
-      return message.content
-    }
-    return message.content?.body || ''
-  }
-  if (message.message_type === 'template') {
-    // Show actual content if available (campaign messages), otherwise fallback
-    if (typeof message.content === 'string') {
-      return message.content
-    }
-    return message.content?.body || '[Template Message]'
-  }
-  if (message.message_type === 'location') {
-    return '' // Location is displayed as a map/card, not text
-  }
-  if (message.message_type === 'contacts' || message.message_type === 'contact') {
-    return '' // Contacts are displayed as a card, not text
-  }
-  if (message.message_type === 'unsupported') {
-    return '' // Displayed as a visual card, not text
-  }
-  return '[Message]'
+  const rawContent = getMessageContentRaw(message);
+  const normalizedContent = normalizeDeletedMessageText(rawContent);
+  return applyMentionDisplayNames(normalizedContent);
 }
 
 interface LocationData {
-  latitude: number
-  longitude: number
-  name?: string
-  address?: string
+  latitude: number;
+  longitude: number;
+  name?: string;
+  address?: string;
 }
 
 interface ContactData {
-  name: string
-  phones?: string[]
+  name: string;
+  phones?: string[];
 }
 
 function getLocationData(message: Message): LocationData | null {
-  if (message.message_type !== 'location') return null
+  if (message.message_type !== "location") return null;
   try {
     // Content is stored as JSON string in body
-    const body = message.content?.body || message.content
-    if (typeof body === 'string') {
-      return JSON.parse(body)
+    const body = message.content?.body || message.content;
+    if (typeof body === "string") {
+      return JSON.parse(body);
     }
-    return body as LocationData
+    return body as LocationData;
   } catch {
-    return null
+    return null;
   }
 }
 
 function getContactsData(message: Message): ContactData[] {
-  if (message.message_type !== 'contacts' && message.message_type !== 'contact') return []
+  if (message.message_type !== "contacts" && message.message_type !== "contact")
+    return [];
   try {
     // Content is stored as JSON string in body
-    const body = message.content?.body || message.content
-    if (typeof body === 'string') {
-      return JSON.parse(body)
+    const body = message.content?.body || message.content;
+    if (typeof body === "string") {
+      return JSON.parse(body);
     }
-    return body as ContactData[]
+    return body as ContactData[];
   } catch {
-    return []
+    return [];
   }
 }
 
 function getGoogleMapsUrl(location: LocationData): string {
-  return `https://www.google.com/maps?q=${location.latitude},${location.longitude}`
+  return `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
 }
 
-function getInteractiveButtons(message: Message): Array<{ id: string; title: string }> {
+function getInteractiveButtons(
+  message: Message,
+): Array<{ id: string; title: string }> {
   if (!message.interactive_data) {
-    return []
+    return [];
   }
   // Support both interactive and template messages with buttons
-  if (message.message_type !== 'interactive' && message.message_type !== 'template') {
-    return []
+  if (
+    message.message_type !== "interactive" &&
+    message.message_type !== "template"
+  ) {
+    return [];
   }
   // Handle both "buttons" (<=3) and "rows" (>3 list format)
-  const items = message.interactive_data.buttons || message.interactive_data.rows
+  const items =
+    message.interactive_data.buttons || message.interactive_data.rows;
   if (!items || !Array.isArray(items)) {
-    return []
+    return [];
   }
   return items.map((btn: any) => ({
-    id: btn.reply?.id || btn.id || '',
-    title: btn.reply?.title || btn.title || btn.text || ''
-  }))
+    id: btn.reply?.id || btn.id || "",
+    title: btn.reply?.title || btn.title || btn.text || "",
+  }));
 }
 
 interface CTAUrlData {
-  type: 'cta_url'
-  body: string
-  button_text: string
-  url: string
+  type: "cta_url";
+  body: string;
+  button_text: string;
+  url: string;
 }
 
 function getCTAUrlData(message: Message): CTAUrlData | null {
-  if (message.message_type !== 'interactive' || !message.interactive_data) {
-    return null
+  if (message.message_type !== "interactive" || !message.interactive_data) {
+    return null;
   }
-  if (message.interactive_data.type !== 'cta_url') {
-    return null
+  if (message.interactive_data.type !== "cta_url") {
+    return null;
   }
   return {
-    type: 'cta_url',
-    body: message.interactive_data.body || '',
-    button_text: (message.interactive_data as any).button_text || 'Open',
-    url: (message.interactive_data as any).url || ''
-  }
+    type: "cta_url",
+    body: message.interactive_data.body || "",
+    button_text: (message.interactive_data as any).button_text || "Open",
+    url: (message.interactive_data as any).url || "",
+  };
 }
 
 function isMediaMessage(message: Message): boolean {
-  return ['image', 'video', 'audio', 'document', 'sticker'].includes(message.message_type)
+  return ["image", "video", "audio", "document", "sticker"].includes(
+    message.message_type,
+  );
 }
 
 function getMediaBlobUrl(message: Message): string {
-  return mediaBlobUrls.value[message.id] || ''
+  return mediaBlobUrls.value[message.id] || "";
 }
 
 function isMediaLoading(message: Message): boolean {
-  return mediaLoadingStates.value[message.id] || false
+  return mediaLoadingStates.value[message.id] || false;
 }
 
 async function loadMediaForMessage(message: Message) {
-  if (!message.media_url || mediaBlobUrls.value[message.id] || mediaLoadingStates.value[message.id]) {
-    return
+  if (
+    !message.media_url ||
+    mediaBlobUrls.value[message.id] ||
+    mediaLoadingStates.value[message.id]
+  ) {
+    return;
   }
 
-  mediaLoadingStates.value[message.id] = true
+  mediaLoadingStates.value[message.id] = true;
 
   try {
-    const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
+    const basePath = ((window as any).__BASE_PATH__ ?? "").replace(/\/$/, "");
     const response = await fetch(`${basePath}/api/media/${message.id}`, {
-      credentials: 'include'
-    })
+      credentials: "include",
+    });
 
     if (!response.ok) {
-      throw new Error(`Failed to load media: ${response.status}`)
+      throw new Error(`Failed to load media: ${response.status}`);
     }
 
-    const blob = await response.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    mediaBlobUrls.value[message.id] = blobUrl
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    mediaBlobUrls.value[message.id] = blobUrl;
   } catch (error) {
-    console.error('Failed to load media:', error, 'message_id:', message.id)
+    console.error("Failed to load media:", error, "message_id:", message.id);
   } finally {
-    mediaLoadingStates.value[message.id] = false
+    mediaLoadingStates.value[message.id] = false;
   }
 }
 
@@ -1654,147 +2351,155 @@ function loadMediaForMessages() {
     for (const message of contactsStore.messages) {
       if (message.media_url && !mediaBlobUrls.value[message.id]) {
         // Fire and forget - errors are handled inside loadMediaForMessage
-        loadMediaForMessage(message).catch(() => {})
+        loadMediaForMessage(message).catch(() => {});
       }
     }
   } catch (e) {
-    console.error('Error in loadMediaForMessages:', e)
+    console.error("Error in loadMediaForMessages:", e);
   }
 }
 
 function openMediaPreview(message: Message) {
-  const url = getMediaBlobUrl(message)
+  const url = getMediaBlobUrl(message);
   if (url) {
-    window.open(url, '_blank')
+    window.open(url, "_blank");
   }
 }
 
 function handleImageError(event: Event) {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
+  const img = event.target as HTMLImageElement;
+  img.style.display = "none";
 }
 
 function handleMediaError(event: Event, mediaType: string) {
-  console.error(`Failed to load ${mediaType}:`, event)
+  console.error(`Failed to load ${mediaType}:`, event);
 }
 
 // File upload functions
 function openFilePicker() {
-  fileInputRef.value?.click()
+  fileInputRef.value?.click();
 }
 
 function handleFileSelect(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
 
   // Validate file type
-  const allowedTypes = ['image/', 'video/', 'audio/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument']
-  const isAllowed = allowedTypes.some(type => file.type.startsWith(type))
+  const allowedTypes = [
+    "image/",
+    "video/",
+    "audio/",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument",
+  ];
+  const isAllowed = allowedTypes.some((type) => file.type.startsWith(type));
   if (!isAllowed) {
-    toast.error(t('chat.unsupportedFileType'), {
-      description: t('chat.unsupportedFileTypeDesc')
-    })
-    return
+    toast.error(t("chat.unsupportedFileType"), {
+      description: t("chat.unsupportedFileTypeDesc"),
+    });
+    return;
   }
 
   // Validate file size (16MB limit for WhatsApp)
-  const maxSize = 16 * 1024 * 1024
+  const maxSize = 16 * 1024 * 1024;
   if (file.size > maxSize) {
-    toast.error(t('chat.fileTooLarge'), {
-      description: t('chat.fileTooLargeDesc')
-    })
-    return
+    toast.error(t("chat.fileTooLarge"), {
+      description: t("chat.fileTooLargeDesc"),
+    });
+    return;
   }
 
-  selectedFile.value = file
-  mediaCaption.value = ''
+  selectedFile.value = file;
+  mediaCaption.value = "";
 
   // Create preview URL for images and videos
-  if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-    filePreviewUrl.value = URL.createObjectURL(file)
+  if (file.type.startsWith("image/") || file.type.startsWith("video/")) {
+    filePreviewUrl.value = URL.createObjectURL(file);
   } else {
-    filePreviewUrl.value = null
+    filePreviewUrl.value = null;
   }
 
-  isMediaDialogOpen.value = true
+  isMediaDialogOpen.value = true;
 
   // Reset input so same file can be selected again
-  input.value = ''
+  input.value = "";
 }
 
 function closeMediaDialog() {
-  isMediaDialogOpen.value = false
+  isMediaDialogOpen.value = false;
   if (filePreviewUrl.value) {
-    URL.revokeObjectURL(filePreviewUrl.value)
-    filePreviewUrl.value = null
+    URL.revokeObjectURL(filePreviewUrl.value);
+    filePreviewUrl.value = null;
   }
-  selectedFile.value = null
-  mediaCaption.value = ''
+  selectedFile.value = null;
+  mediaCaption.value = "";
 }
 
 function getMediaType(mimeType: string): string {
-  if (mimeType.startsWith('image/')) return 'image'
-  if (mimeType.startsWith('video/')) return 'video'
-  if (mimeType.startsWith('audio/')) return 'audio'
-  return 'document'
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "document";
 }
 
 async function sendMediaMessage() {
-  if (isCurrentChatRestricted.value || isCurrentChatClosed.value) return
-  if (!selectedFile.value || !contactsStore.currentContact) return
+  if (isCurrentChatRestricted.value || isCurrentChatClosed.value) return;
+  if (!selectedFile.value || !contactsStore.currentContact) return;
 
-  isUploadingMedia.value = true
+  isUploadingMedia.value = true;
   try {
-    const formData = new FormData()
-    formData.append('file', selectedFile.value)
-    formData.append('contact_id', contactsStore.currentContact.id)
-    formData.append('type', getMediaType(selectedFile.value.type))
+    const formData = new FormData();
+    formData.append("file", selectedFile.value);
+    formData.append("contact_id", contactsStore.currentContact.id);
+    formData.append("type", getMediaType(selectedFile.value.type));
     if (mediaCaption.value.trim()) {
-      formData.append('caption', mediaCaption.value.trim())
+      formData.append("caption", mediaCaption.value.trim());
     }
-    if (selectedAccount.value) {
-      formData.append('whatsapp_account', selectedAccount.value)
+    const accountFilter = selectedAccountFilter(selectedAccount.value);
+    if (accountFilter) {
+      formData.append("whatsapp_account", accountFilter);
     }
 
     // Read CSRF token for mutating request
-    const csrfMatch = document.cookie.match(/(?:^|; )whm_csrf=([^;]*)/)
-    const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : ''
+    const csrfMatch = document.cookie.match(/(?:^|; )whm_csrf=([^;]*)/);
+    const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : "";
 
-    const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
+    const basePath = ((window as any).__BASE_PATH__ ?? "").replace(/\/$/, "");
     const response = await fetch(`${basePath}/api/messages/media`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
-      body: formData
-    })
+      method: "POST",
+      credentials: "include",
+      headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {},
+      body: formData,
+    });
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Failed to send media')
+      const error = await response.json();
+      throw new Error(error.message || "Failed to send media");
     }
 
-    const result = await response.json()
+    const result = await response.json();
 
     // Add the message to the store (addMessage has duplicate checking for WebSocket)
     if (result.data) {
-      contactsStore.addMessage(result.data)
-      scrollToBottom()
+      contactsStore.addMessage(result.data);
+      scrollToBottom();
       // Load media for the new message
-      await nextTick()
+      await nextTick();
       if (result.data.media_url) {
-        loadMediaForMessage(result.data)
+        loadMediaForMessage(result.data);
       }
     }
 
-    toast.success(t('chat.mediaSent'))
-    closeMediaDialog()
+    toast.success(t("chat.mediaSent"));
+    closeMediaDialog();
   } catch (error: any) {
-    toast.error(t('chat.mediaFailed'), {
-      description: error.message || t('chat.mediaFailedDesc')
-    })
+    toast.error(t("chat.mediaFailed"), {
+      description: error.message || t("chat.mediaFailedDesc"),
+    });
   } finally {
-    isUploadingMedia.value = false
+    isUploadingMedia.value = false;
   }
 }
 </script>
@@ -1805,7 +2510,11 @@ async function sendMediaMessage() {
     <div
       data-contacts-sidebar="true"
       class="relative min-h-0 shrink-0 flex flex-col bg-[#0a0a0b] light:bg-white"
-      :class="isRTL ? 'border-l border-white/[0.08] light:border-gray-200' : 'border-r border-white/[0.08] light:border-gray-200'"
+      :class="
+        isRTL
+          ? 'border-l border-white/[0.08] light:border-gray-200'
+          : 'border-r border-white/[0.08] light:border-gray-200'
+      "
       :style="{ width: `${contactsSidebarWidth}px` }"
     >
       <!-- Search Header -->
@@ -1813,12 +2522,18 @@ async function sendMediaMessage() {
         <div class="flex items-center gap-2">
           <div class="relative flex-1">
             <Search
-              :class="'absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40 light:text-gray-400 ' + (isRTL ? 'right-2.5' : 'left-2.5')"
+              :class="
+                'absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40 light:text-gray-400 ' +
+                (isRTL ? 'right-2.5' : 'left-2.5')
+              "
             />
             <Input
               v-model="contactsStore.searchQuery"
               :placeholder="$t('chat.searchContacts') + '...'"
-              :class="'h-8 text-sm bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-gray-50 light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400 ' + (isRTL ? 'pr-8 text-right' : 'pl-8 text-left')"
+              :class="
+                'h-8 text-sm bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-gray-50 light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400 ' +
+                (isRTL ? 'pr-8 text-right' : 'pl-8 text-left')
+              "
             />
           </div>
           <!-- Add Contact -->
@@ -1833,7 +2548,7 @@ async function sendMediaMessage() {
                 <UserPlus class="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{{ $t('chat.addContact') }}</TooltipContent>
+            <TooltipContent>{{ $t("chat.addContact") }}</TooltipContent>
           </Tooltip>
           <!-- Tag Filter -->
           <Popover v-model:open="isTagFilterOpen">
@@ -1842,10 +2557,17 @@ async function sendMediaMessage() {
                 variant="ghost"
                 size="icon"
                 class="h-8 w-8 shrink-0 relative"
-                :class="activeFilterCount > 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100'"
+                :class="
+                  activeFilterCount > 0
+                    ? 'text-emerald-400 bg-emerald-500/10'
+                    : 'text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100'
+                "
               >
                 <Filter class="h-4 w-4" />
-                <span v-if="activeFilterCount > 0" class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 text-[10px] text-white flex items-center justify-center">
+                <span
+                  v-if="activeFilterCount > 0"
+                  class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 text-[10px] text-white flex items-center justify-center"
+                >
                   {{ activeFilterCount }}
                 </span>
               </Button>
@@ -1853,7 +2575,9 @@ async function sendMediaMessage() {
             <PopoverContent align="end" class="w-72 p-2">
               <div class="space-y-2">
                 <div class="flex items-center justify-between px-1">
-                  <span class="text-sm font-medium">{{ $t('chat.filterByTags') }}</span>
+                  <span class="text-sm font-medium">{{
+                    $t("chat.filterByTags")
+                  }}</span>
                   <Button
                     v-if="activeFilterCount > 0"
                     variant="ghost"
@@ -1861,18 +2585,21 @@ async function sendMediaMessage() {
                     class="h-6 px-2 text-xs"
                     @click="clearTagFilter"
                   >
-                    {{ $t('chat.clearFilters') }}
+                    {{ $t("chat.clearFilters") }}
                   </Button>
                 </div>
                 <Separator />
                 <div class="space-y-1.5 px-1">
-                  <span class="text-xs font-medium text-white/60 light:text-gray-500">{{ $t('chat.filterByInstance') }}</span>
+                  <span
+                    class="text-xs font-medium text-white/60 light:text-gray-500"
+                    >{{ $t("chat.filterByInstance") }}</span
+                  >
                   <select
                     :value="contactsStore.selectedInstanceId"
                     class="h-8 w-full rounded-md border border-white/[0.12] bg-black/20 px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400 light:border-gray-300 light:bg-white light:text-gray-800"
                     @change="updateInstanceFilter"
                   >
-                    <option value="">{{ $t('chat.allInstances') }}</option>
+                    <option value="">{{ $t("chat.allInstances") }}</option>
                     <option
                       v-for="instance in instancesStore.instances"
                       :key="instance.id"
@@ -1884,54 +2611,104 @@ async function sendMediaMessage() {
                 </div>
                 <Separator />
                 <div class="space-y-1 px-1">
-                  <span class="text-xs font-medium text-white/60 light:text-gray-500">{{ $t('chat.chatType') }}</span>
+                  <span
+                    class="text-xs font-medium text-white/60 light:text-gray-500"
+                    >{{ $t("chat.chatType") }}</span
+                  >
                   <button
                     class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
-                    :class="contactsStore.selectedChatTypes.includes('private') && 'bg-white/[0.08] light:bg-gray-100'"
+                    :class="
+                      contactsStore.selectedChatTypes.includes('private') &&
+                      'bg-white/[0.08] light:bg-gray-100'
+                    "
                     @click="toggleChatTypeFilter('private')"
                   >
-                    <span :class="['flex-1', isRTL ? 'text-right' : 'text-left']">{{ $t('chat.privateChats') }}</span>
-                    <Check v-if="contactsStore.selectedChatTypes.includes('private')" class="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span
+                      :class="['flex-1', isRTL ? 'text-right' : 'text-left']"
+                      >{{ $t("chat.privateChats") }}</span
+                    >
+                    <Check
+                      v-if="contactsStore.selectedChatTypes.includes('private')"
+                      class="h-4 w-4 text-emerald-400 shrink-0"
+                    />
                   </button>
                   <button
                     class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
-                    :class="contactsStore.selectedChatTypes.includes('group') && 'bg-white/[0.08] light:bg-gray-100'"
+                    :class="
+                      contactsStore.selectedChatTypes.includes('group') &&
+                      'bg-white/[0.08] light:bg-gray-100'
+                    "
                     @click="toggleChatTypeFilter('group')"
                   >
-                    <span :class="['flex-1', isRTL ? 'text-right' : 'text-left']">{{ $t('chat.groupChats') }}</span>
-                    <Check v-if="contactsStore.selectedChatTypes.includes('group')" class="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span
+                      :class="['flex-1', isRTL ? 'text-right' : 'text-left']"
+                      >{{ $t("chat.groupChats") }}</span
+                    >
+                    <Check
+                      v-if="contactsStore.selectedChatTypes.includes('group')"
+                      class="h-4 w-4 text-emerald-400 shrink-0"
+                    />
                   </button>
                   <button
                     class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
-                    :class="contactsStore.selectedChatTypes.includes('channel') && 'bg-white/[0.08] light:bg-gray-100'"
+                    :class="
+                      contactsStore.selectedChatTypes.includes('channel') &&
+                      'bg-white/[0.08] light:bg-gray-100'
+                    "
                     @click="toggleChatTypeFilter('channel')"
                   >
-                    <span :class="['flex-1', isRTL ? 'text-right' : 'text-left']">{{ $t('chat.channelChats') }}</span>
-                    <Check v-if="contactsStore.selectedChatTypes.includes('channel')" class="h-4 w-4 text-emerald-400 shrink-0" />
-                  </button>
-                </div>
-                <Separator />
-                <div class="space-y-1">
-                  <span class="px-1 text-xs font-medium text-white/60 light:text-gray-500">{{ $t('chat.tags') }}</span>
-                <div v-if="tagsStore.tags.length === 0" class="py-2 text-center text-sm text-muted-foreground">
-                  {{ $t('chat.noTagsAvailable') }}
-                </div>
-                <div v-else class="space-y-1 max-h-48 overflow-y-auto">
-                  <button
-                    v-for="tag in tagsStore.tags"
-                    :key="tag.name"
-                    class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
-                    :class="contactsStore.selectedTags.includes(tag.name) && 'bg-white/[0.08] light:bg-gray-100'"
-                    @click="toggleTagFilter(tag.name)"
-                  >
-                    <span :class="['w-2 h-2 rounded-full shrink-0', getTagColorClass(tag.color).split(' ')[0]]" />
-                    <span :class="['flex-1 truncate', isRTL ? 'text-right' : 'text-left']">{{ tag.name }}</span>
+                    <span
+                      :class="['flex-1', isRTL ? 'text-right' : 'text-left']"
+                      >{{ $t("chat.channelChats") }}</span
+                    >
                     <Check
-                      v-if="contactsStore.selectedTags.includes(tag.name)"
+                      v-if="contactsStore.selectedChatTypes.includes('channel')"
                       class="h-4 w-4 text-emerald-400 shrink-0"
                     />
                   </button>
                 </div>
+                <Separator />
+                <div class="space-y-1">
+                  <span
+                    class="px-1 text-xs font-medium text-white/60 light:text-gray-500"
+                    >{{ $t("chat.tags") }}</span
+                  >
+                  <div
+                    v-if="tagsStore.tags.length === 0"
+                    class="py-2 text-center text-sm text-muted-foreground"
+                  >
+                    {{ $t("chat.noTagsAvailable") }}
+                  </div>
+                  <div v-else class="space-y-1 max-h-48 overflow-y-auto">
+                    <button
+                      v-for="tag in tagsStore.tags"
+                      :key="tag.name"
+                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
+                      :class="
+                        contactsStore.selectedTags.includes(tag.name) &&
+                        'bg-white/[0.08] light:bg-gray-100'
+                      "
+                      @click="toggleTagFilter(tag.name)"
+                    >
+                      <span
+                        :class="[
+                          'w-2 h-2 rounded-full shrink-0',
+                          getTagColorClass(tag.color).split(' ')[0],
+                        ]"
+                      />
+                      <span
+                        :class="[
+                          'flex-1 truncate',
+                          isRTL ? 'text-right' : 'text-left',
+                        ]"
+                        >{{ tag.name }}</span
+                      >
+                      <Check
+                        v-if="contactsStore.selectedTags.includes(tag.name)"
+                        class="h-4 w-4 text-emerald-400 shrink-0"
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
             </PopoverContent>
@@ -1945,7 +2722,7 @@ async function sendMediaMessage() {
             class="cursor-pointer hover:opacity-80"
             @click="clearInstanceFilter"
           >
-            {{ $t('chat.instance') }}: {{ selectedInstanceName }}
+            {{ $t("chat.instance") }}: {{ selectedInstanceName }}
             <X class="h-3 w-3 ml-1" />
           </TagBadge>
           <TagBadge
@@ -1969,21 +2746,27 @@ async function sendMediaMessage() {
             <X class="h-3 w-3 ml-1" />
           </TagBadge>
         </div>
-        <div class="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] p-1 light:bg-gray-100">
+        <div
+          class="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] p-1 light:bg-gray-100"
+        >
           <button
             class="rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
-            :class="contactsStore.activeChatTab === 'pending'
-              ? 'bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700'
-              : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-white'"
+            :class="
+              contactsStore.activeChatTab === 'pending'
+                ? 'bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700'
+                : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-white'
+            "
             @click="switchChatTab('pending')"
           >
             Pending ({{ contactsStore.pendingChats.length }})
           </button>
           <button
             class="rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
-            :class="contactsStore.activeChatTab === 'assigned'
-              ? 'bg-emerald-500/20 text-emerald-300 light:bg-emerald-100 light:text-emerald-700'
-              : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-white'"
+            :class="
+              contactsStore.activeChatTab === 'assigned'
+                ? 'bg-emerald-500/20 text-emerald-300 light:bg-emerald-100 light:text-emerald-700'
+                : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-white'
+            "
             @click="switchChatTab('assigned')"
           >
             Assigned ({{ contactsStore.assignedChats.length }})
@@ -1992,81 +2775,172 @@ async function sendMediaMessage() {
       </div>
 
       <!-- Contacts -->
-      <ScrollArea :ref="(el: any) => contactsScroll.scrollAreaRef.value = el" class="flex-1 min-h-0">
+      <ScrollArea
+        :ref="(el: any) => (contactsScroll.scrollAreaRef.value = el)"
+        class="flex-1 min-h-0"
+      >
         <div class="py-1">
           <div
-            v-for="contact in contactsStore.sortedContacts"
-            :key="contact.id"
+            v-for="entry in sidebarContacts"
+            :key="entry.key"
             :class="[
-              'flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors',
-              contactsStore.currentContact?.id === contact.id && 'bg-white/[0.08] light:bg-gray-100'
+              'group flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors',
+              isSidebarEntryActive(entry) && 'bg-white/[0.08] light:bg-gray-100',
             ]"
-            @click="handleContactClick(contact)"
+            @click="handleContactClick(entry)"
           >
             <button
               type="button"
               class="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
-              :aria-label="`${t('resources.ProfilePhoto')}: ${contact.name || contact.phone_number}`"
-              @click.stop="openProfilePhotoDialog(contact)"
+              :aria-label="`${t('resources.ProfilePhoto')}: ${entry.displayContact.name || entry.displayContact.phone_number}`"
+              @click.stop="openProfilePhotoDialog(entry.displayContact)"
             >
-              <Avatar class="h-9 w-9 ring-2 ring-white/[0.1] light:ring-gray-200">
-                <AvatarImage :src="contact.avatar_url" />
-                <AvatarFallback :class="'text-xs bg-gradient-to-br text-white ' + getAvatarGradient(contact.name || contact.phone_number)">
-                  {{ getInitials(contact.name || contact.phone_number) }}
+              <Avatar
+                class="h-9 w-9 ring-2 ring-white/[0.1] light:ring-gray-200"
+              >
+                <AvatarImage :src="entry.displayContact.avatar_url" />
+                <AvatarFallback
+                  :class="
+                    'text-xs bg-gradient-to-br text-white ' +
+                    getAvatarGradient(
+                      entry.displayContact.name || entry.displayContact.phone_number,
+                    )
+                  "
+                >
+                  {{
+                    getInitials(
+                      entry.displayContact.name || entry.displayContact.phone_number,
+                    )
+                  }}
                 </AvatarFallback>
               </Avatar>
             </button>
-            <div :class="['flex-1 min-w-0', isRTL ? 'text-right' : 'text-left']">
+            <div
+              :class="['flex-1 min-w-0', isRTL ? 'text-right' : 'text-left']"
+            >
               <div class="flex min-w-0 items-center justify-between gap-2">
-                <p class="text-sm font-medium truncate text-white light:text-gray-900">
-                  {{ contact.name || contact.phone_number }}
+                <p
+                  class="text-sm font-medium truncate text-white light:text-gray-900"
+                >
+                  {{ entry.displayContact.name || entry.displayContact.phone_number }}
                 </p>
                 <span
                   v-if="!isContactsSidebarCompact"
                   class="shrink-0 text-[11px] text-white/40 light:text-gray-500"
                 >
-                  {{ formatContactTime(contact.last_message_at) }}
+                  {{ formatContactTime(entry.displayContact.last_message_at) }}
                 </span>
               </div>
               <div class="flex items-center justify-between gap-1.5">
                 <div class="min-w-0">
                   <div class="flex min-w-0 items-center gap-1.5">
-                    <p v-if="!isContactsSidebarCompact" class="text-xs text-white/50 light:text-gray-500 truncate">
-                      {{ contact.phone_number }}
+                    <p
+                      v-if="!isContactsSidebarCompact"
+                      class="text-xs text-white/50 light:text-gray-500 truncate"
+                    >
+                      {{ entry.displayContact.phone_number }}
                     </p>
                     <InstanceTag
-                      v-if="contact.instance_id"
-                      :instance-id="contact.instance_id"
+                      v-if="
+                        entry.displayContact.instance_id &&
+                        !(isSidebarUnifiedMode && entry.accountNames.length > 1)
+                      "
+                      :instance-id="entry.displayContact.instance_id"
                       :class="[
                         isContactsSidebarCompact ? 'max-w-[92px]' : '',
-                        isContactsSidebarWide ? 'max-w-[190px]' : ''
+                        isContactsSidebarWide ? 'max-w-[190px]' : '',
                       ]"
                       placement="sidebar"
                     />
                   </div>
+                  <div
+                    v-if="
+                      isSidebarUnifiedMode &&
+                      entry.accountNames.length > 0 &&
+                      !isContactsSidebarCompact
+                    "
+                    class="mt-1 flex flex-wrap items-center gap-1"
+                  >
+                    <span
+                      v-for="acct in entry.accountNames"
+                      :key="`sidebar-account-${entry.key}-${acct}`"
+                      class="inline-flex max-w-[130px] items-center rounded-full border border-white/[0.14] bg-white/[0.04] px-2 py-0.5 text-[10px] leading-none text-white/70 light:border-gray-300 light:bg-gray-100 light:text-gray-700"
+                      :title="acct"
+                    >
+                      <span class="truncate">{{ acct }}</span>
+                    </span>
+                  </div>
                   <p
-                    v-if="contact.assigned_user_id && !isContactsSidebarCompact"
+                    v-if="
+                      entry.displayContact.assigned_user_id &&
+                      !isContactsSidebarCompact
+                    "
                     class="mt-0.5 truncate text-[11px] text-emerald-400/85 light:text-emerald-700"
                   >
-                    {{ $t('chat.assignedTo') }}: {{ getAssignedAgentName(contact) }}
+                    {{ $t("chat.assignedTo") }}:
+                    {{ getAssignedAgentName(entry.displayContact) }}
                   </p>
                 </div>
-                <Badge v-if="contact.unread_count > 0" class="ml-2 h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
-                  {{ contact.unread_count }}
-                </Badge>
+                <div class="ml-2 flex items-center gap-1">
+                  <Badge
+                    v-if="entry.displayContact.unread_count > 0"
+                    class="h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700"
+                  >
+                    {{ entry.displayContact.unread_count }}
+                  </Badge>
+                  <button
+                    v-if="isAdminUser"
+                    type="button"
+                    class="inline-flex h-5 w-5 items-center justify-center rounded-md transition-colors"
+                    :class="
+                      pendingSidebarDeleteEntryKey === entry.key
+                        ? 'text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 hover:text-emerald-200 light:text-emerald-700 light:bg-emerald-100 light:hover:bg-emerald-200'
+                        : 'text-red-400/80 hover:text-red-300 hover:bg-red-500/15 light:text-red-600 light:hover:text-red-700 light:hover:bg-red-100'
+                    "
+                    :aria-label="
+                      pendingSidebarDeleteEntryKey === entry.key
+                        ? `Confirm delete chat: ${entry.displayContact.name || entry.displayContact.phone_number}`
+                        : `Delete chat: ${entry.displayContact.name || entry.displayContact.phone_number}`
+                    "
+                    :disabled="deletingSidebarEntryKey === entry.key"
+                    @click.stop="deleteSidebarEntry(entry)"
+                  >
+                    <Loader2
+                      v-if="deletingSidebarEntryKey === entry.key"
+                      class="h-3.5 w-3.5 animate-spin"
+                    />
+                    <Check
+                      v-else-if="pendingSidebarDeleteEntryKey === entry.key"
+                      class="h-3.5 w-3.5"
+                    />
+                    <Trash2 v-else class="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
           <!-- Loading indicator for infinite scroll -->
-          <div v-if="contactsStore.isLoadingMoreContacts" class="p-3 text-center">
-            <Loader2 class="h-5 w-5 mx-auto animate-spin text-white/40 light:text-gray-400" />
+          <div
+            v-if="contactsStore.isLoadingMoreContacts"
+            class="p-3 text-center"
+          >
+            <Loader2
+              class="h-5 w-5 mx-auto animate-spin text-white/40 light:text-gray-400"
+            />
           </div>
 
-          <div v-if="contactsStore.sortedContacts.length === 0" class="p-3 text-center text-white/40 light:text-gray-500">
+          <div
+            v-if="sidebarContacts.length === 0"
+            class="p-3 text-center text-white/40 light:text-gray-500"
+          >
             <User class="h-6 w-6 mx-auto mb-1.5 opacity-50" />
             <p class="text-sm">
-              {{ contactsStore.activeChatTab === 'pending' ? 'No pending chats' : 'No assigned chats' }}
+              {{
+                contactsStore.activeChatTab === "pending"
+                  ? "No pending chats"
+                  : "No assigned chats"
+              }}
             </p>
           </div>
         </div>
@@ -2076,7 +2950,9 @@ async function sendMediaMessage() {
         class="absolute top-0 bottom-0 hidden md:block w-1 z-20 cursor-col-resize transition-colors"
         :class="[
           isRTL ? 'left-0' : 'right-0',
-          isContactsSidebarResizing ? 'bg-emerald-500/30' : 'hover:bg-emerald-500/20'
+          isContactsSidebarResizing
+            ? 'bg-emerald-500/30'
+            : 'hover:bg-emerald-500/20',
         ]"
         @mousedown="startContactsSidebarResize"
       />
@@ -2090,18 +2966,26 @@ async function sendMediaMessage() {
         class="flex-1 flex items-center justify-center text-white/40 light:text-gray-500"
       >
         <div class="text-center">
-          <div class="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20">
+          <div
+            class="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20"
+          >
             <Send class="h-8 w-8 text-white" />
           </div>
-          <h3 class="font-medium text-lg mb-1 text-white light:text-gray-900">{{ $t('chat.selectConversation') }}</h3>
-          <p class="text-sm text-white/50 light:text-gray-500">{{ $t('chat.chooseContact') }}</p>
+          <h3 class="font-medium text-lg mb-1 text-white light:text-gray-900">
+            {{ $t("chat.selectConversation") }}
+          </h3>
+          <p class="text-sm text-white/50 light:text-gray-500">
+            {{ $t("chat.chooseContact") }}
+          </p>
         </div>
       </div>
 
       <!-- Chat Interface -->
       <template v-else>
         <!-- Chat Header -->
-        <div class="h-14 flex-shrink-0 px-4 border-b border-white/[0.08] light:border-gray-200 flex items-center justify-between bg-[#0f0f10] light:bg-white">
+        <div
+          class="h-14 flex-shrink-0 px-4 border-b border-white/[0.08] light:border-gray-200 flex items-center justify-between bg-[#0f0f10] light:bg-white"
+        >
           <div class="flex items-center gap-2">
             <button
               type="button"
@@ -2109,25 +2993,52 @@ async function sendMediaMessage() {
               :aria-label="`${t('resources.ProfilePhoto')}: ${contactsStore.currentContact.name || contactsStore.currentContact.phone_number}`"
               @click="openProfilePhotoDialog(contactsStore.currentContact)"
             >
-              <Avatar class="h-8 w-8 ring-2 ring-white/[0.1] light:ring-gray-200">
+              <Avatar
+                class="h-8 w-8 ring-2 ring-white/[0.1] light:ring-gray-200"
+              >
                 <AvatarImage :src="contactsStore.currentContact.avatar_url" />
-                <AvatarFallback :class="'text-xs bg-gradient-to-br text-white ' + getAvatarGradient(contactsStore.currentContact.name || contactsStore.currentContact.phone_number)">
-                  {{ getInitials(contactsStore.currentContact.name || contactsStore.currentContact.phone_number) }}
+                <AvatarFallback
+                  :class="
+                    'text-xs bg-gradient-to-br text-white ' +
+                    getAvatarGradient(
+                      contactsStore.currentContact.name ||
+                        contactsStore.currentContact.phone_number,
+                    )
+                  "
+                >
+                  {{
+                    getInitials(
+                      contactsStore.currentContact.name ||
+                        contactsStore.currentContact.phone_number,
+                    )
+                  }}
                 </AvatarFallback>
               </Avatar>
             </button>
             <div>
               <div class="flex items-center gap-1.5">
                 <p class="text-sm font-medium text-white light:text-gray-900">
-                  {{ contactsStore.currentContact.name || contactsStore.currentContact.phone_number }}
+                  {{
+                    contactsStore.currentContact.name ||
+                    contactsStore.currentContact.phone_number
+                  }}
                 </p>
-                <Badge v-if="contactsStore.currentContact.status === 'pending'" class="text-[10px] h-5 bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700">
+                <Badge
+                  v-if="contactsStore.currentContact.status === 'pending'"
+                  class="text-[10px] h-5 bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700"
+                >
                   Pending
                 </Badge>
-                <Badge v-if="contactsStore.currentContact.status === 'closed'" class="text-[10px] h-5 bg-zinc-500/20 text-zinc-300 light:bg-zinc-100 light:text-zinc-700">
+                <Badge
+                  v-if="contactsStore.currentContact.status === 'closed'"
+                  class="text-[10px] h-5 bg-zinc-500/20 text-zinc-300 light:bg-zinc-100 light:text-zinc-700"
+                >
                   Closed
                 </Badge>
-                <Badge v-if="activeTransferId" class="text-[10px] h-5 bg-orange-500/20 text-orange-400 light:bg-orange-100 light:text-orange-700">
+                <Badge
+                  v-if="activeTransferId"
+                  class="text-[10px] h-5 bg-orange-500/20 text-orange-400 light:bg-orange-100 light:text-orange-700"
+                >
                   Paused
                 </Badge>
               </div>
@@ -2139,11 +3050,16 @@ async function sendMediaMessage() {
           <div class="flex items-center gap-1">
             <Tooltip v-if="canAssignContacts">
               <TooltipTrigger as-child>
-                <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100" @click="isAssignDialogOpen = true">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  @click="isAssignDialogOpen = true"
+                >
                   <UserPlus class="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.assignToAgent') }}</TooltipContent>
+              <TooltipContent>{{ $t("chat.assignToAgent") }}</TooltipContent>
             </Tooltip>
             <Tooltip v-if="canCloseCurrentChat">
               <TooltipTrigger as-child>
@@ -2154,7 +3070,10 @@ async function sendMediaMessage() {
                   :disabled="isClosingCurrentChat"
                   @click="closeCurrentChat"
                 >
-                  <Loader2 v-if="isClosingCurrentChat" class="h-4 w-4 animate-spin" />
+                  <Loader2
+                    v-if="isClosingCurrentChat"
+                    class="h-4 w-4 animate-spin"
+                  />
                   <Check v-else class="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -2172,15 +3091,21 @@ async function sendMediaMessage() {
                   <UserX class="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.transferToAgent') }}</TooltipContent>
+              <TooltipContent>{{ $t("chat.transferToAgent") }}</TooltipContent>
             </Tooltip>
             <Tooltip v-if="activeTransferId">
               <TooltipTrigger as-child>
-                <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100" :disabled="isResuming" @click="resumeChatbot">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  :disabled="isResuming"
+                  @click="resumeChatbot"
+                >
                   <Play class="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.resumeChatbot') }}</TooltipContent>
+              <TooltipContent>{{ $t("chat.resumeChatbot") }}</TooltipContent>
             </Tooltip>
             <!-- Custom Action Buttons -->
             <Tooltip v-for="action in customActions" :key="action.id">
@@ -2192,8 +3117,15 @@ async function sendMediaMessage() {
                   :disabled="executingActionId === action.id"
                   @click="executeCustomAction(action)"
                 >
-                  <Loader2 v-if="executingActionId === action.id" class="h-4 w-4 animate-spin" />
-                  <component v-else :is="getActionIcon(action.icon)" class="h-4 w-4" />
+                  <Loader2
+                    v-if="executingActionId === action.id"
+                    class="h-4 w-4 animate-spin"
+                  />
+                  <component
+                    v-else
+                    :is="getActionIcon(action.icon)"
+                    class="h-4 w-4"
+                  />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{{ action.name }}</TooltipContent>
@@ -2205,7 +3137,10 @@ async function sendMediaMessage() {
                   size="icon"
                   id="notes-button"
                   class="h-8 w-8 relative text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
-                  :class="isNotesPanelOpen && 'bg-amber-500/10 text-amber-400 light:bg-amber-50 light:text-amber-600'"
+                  :class="
+                    isNotesPanelOpen &&
+                    'bg-amber-500/10 text-amber-400 light:bg-amber-50 light:text-amber-600'
+                  "
                   @click="isNotesPanelOpen = !isNotesPanelOpen"
                 >
                   <StickyNote class="h-4 w-4" />
@@ -2218,7 +3153,7 @@ async function sendMediaMessage() {
                   </span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.internalNotes') }}</TooltipContent>
+              <TooltipContent>{{ $t("chat.internalNotes") }}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
@@ -2227,23 +3162,30 @@ async function sendMediaMessage() {
                   size="icon"
                   id="info-button"
                   class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
-                  :class="isInfoPanelOpen && 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'"
+                  :class="
+                    isInfoPanelOpen &&
+                    'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'
+                  "
                   @click="isInfoPanelOpen = !isInfoPanelOpen"
                 >
                   <Info class="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.contactInfo') }}</TooltipContent>
+              <TooltipContent>{{ $t("chat.contactInfo") }}</TooltipContent>
             </Tooltip>
           </div>
         </div>
 
         <!-- Account Tabs (shown when contact has messages from multiple WhatsApp accounts) -->
         <div
-          v-if="contactAccounts.length > 1 && selectedAccount"
+          v-if="
+            isSidebarUnifiedMode && contactAccounts.length > 1
+          "
           class="flex-shrink-0 px-4 py-2 border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b] light:bg-gray-50"
         >
-          <div class="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] light:bg-gray-100 p-1">
+          <div
+            class="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] light:bg-gray-100 p-1"
+          >
             <button
               v-for="acct in contactAccounts"
               :key="acct"
@@ -2251,11 +3193,11 @@ async function sendMediaMessage() {
                 'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all',
                 acct === selectedAccount
                   ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-white/[0.08] text-white/70 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
+                  : 'bg-white/[0.08] text-white/70 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300',
               ]"
               @click="switchAccount(acct)"
             >
-              {{ acct }}
+              {{ formatAccountToggleLabel(acct) }}
             </button>
           </div>
         </div>
@@ -2264,10 +3206,17 @@ async function sendMediaMessage() {
           v-if="isCurrentChatRestricted"
           class="flex-1 min-h-0 flex items-center justify-center px-6"
         >
-          <div class="max-w-md w-full rounded-xl border border-amber-400/30 bg-amber-500/10 p-6 text-center">
-            <h3 class="text-lg font-semibold text-amber-200 light:text-amber-800">Restricted View</h3>
+          <div
+            class="max-w-md w-full rounded-xl border border-amber-400/30 bg-amber-500/10 p-6 text-center"
+          >
+            <h3
+              class="text-lg font-semibold text-amber-200 light:text-amber-800"
+            >
+              Restricted View
+            </h3>
             <p class="mt-2 text-sm text-amber-100/80 light:text-amber-700">
-              This chat is currently unassigned. You must claim it to view messages.
+              This chat is currently unassigned. You must claim it to view
+              messages.
             </p>
             <Button
               v-if="canClaimCurrentChat"
@@ -2275,8 +3224,13 @@ async function sendMediaMessage() {
               :disabled="isClaimingCurrentChat"
               @click="claimCurrentChat"
             >
-              <Loader2 v-if="isClaimingCurrentChat" class="mr-2 h-4 w-4 animate-spin" />
-              <span>{{ isClaimingCurrentChat ? 'Claiming...' : 'Claim Chat' }}</span>
+              <Loader2
+                v-if="isClaimingCurrentChat"
+                class="mr-2 h-4 w-4 animate-spin"
+              />
+              <span>{{
+                isClaimingCurrentChat ? "Claiming..." : "Claim Chat"
+              }}</span>
             </Button>
           </div>
         </div>
@@ -2293,13 +3247,23 @@ async function sendMediaMessage() {
             </div>
           </Transition>
 
-          <ScrollArea :ref="(el: any) => messagesScroll.scrollAreaRef.value = el" class="h-full p-3 chat-background">
+          <ScrollArea
+            :ref="(el: any) => (messagesScroll.scrollAreaRef.value = el)"
+            class="h-full p-3 chat-background"
+          >
             <div class="space-y-2">
               <!-- Loading indicator for older messages -->
-              <div v-if="contactsStore.isLoadingOlderMessages" class="flex justify-center py-2">
-                <div class="flex items-center gap-2 text-white/40 light:text-gray-500 text-sm">
-                  <div class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  <span>{{ $t('chat.loadingOlderMessages') }}...</span>
+              <div
+                v-if="contactsStore.isLoadingOlderMessages"
+                class="flex justify-center py-2"
+              >
+                <div
+                  class="flex items-center gap-2 text-white/40 light:text-gray-500 text-sm"
+                >
+                  <div
+                    class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                  />
+                  <span>{{ $t("chat.loadingOlderMessages") }}...</span>
                 </div>
               </div>
               <template
@@ -2312,378 +3276,599 @@ async function sendMediaMessage() {
                   class="flex items-center justify-center my-4"
                   :data-date-separator="getDateLabel(message.created_at)"
                 >
-                  <div class="px-3 py-1 bg-white/[0.06] light:bg-gray-200 rounded-full text-[11px] text-white/40 light:text-gray-600 font-medium">
+                  <div
+                    class="px-3 py-1 bg-white/[0.06] light:bg-gray-200 rounded-full text-[11px] text-white/40 light:text-gray-600 font-medium"
+                  >
                     {{ getDateLabel(message.created_at) }}
                   </div>
                 </div>
 
-              <!-- Media group start bar -->
-              <MediaGroupBar
-                v-if="isGroupLeader(message.id)"
-                variant="start"
-                :group="getGroupForMessage(message.id)!"
-                :messages="getGroupMessages(message.id)"
-                :blob-urls="mediaBlobUrls"
-              />
+                <!-- Media group start bar -->
+                <MediaGroupBar
+                  v-if="isGroupLeader(message.id)"
+                  variant="start"
+                  :group="getGroupForMessage(message.id)!"
+                  :messages="getGroupMessages(message.id)"
+                  :blob-urls="mediaBlobUrls"
+                />
 
-              <!-- Message bubble -->
-              <div
-                :id="`message-${message.id}`"
-                :class="[
-                  'flex group',
-                  isSystemEventMessage(message)
-                    ? 'justify-center'
-                    : (message.direction === 'outgoing' ? 'justify-end' : 'justify-start')
-                ]"
-              >
-              <div
-                :class="[
-                  'chat-bubble',
-                  isSystemEventMessage(message)
-                    ? 'chat-bubble-system'
-                    : (message.direction === 'outgoing' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'),
-                  isDeletedMessage(message) ? 'chat-bubble-deleted' : '',
-                  isGroupMember(message.id) ? 'media-group-member' : ''
-                ]"
-              >
-                <p
-                  v-if="shouldShowGroupSenderPhone(message)"
-                  class="mb-1 text-[11px] font-medium text-emerald-300 light:text-emerald-700"
-                >
-                  {{ getGroupSenderPhone(message) }}
-                </p>
-                <!-- Reply preview (if this message is replying to another) -->
+                <!-- Message bubble -->
                 <div
-                  v-if="message.is_reply && message.reply_to_message"
-                  class="reply-preview cursor-pointer text-xs"
-                  @click="scrollToMessage(message.reply_to_message_id)"
-                >
-                  <p class="font-medium">
-                    {{ getReplyAuthorLabel(message) }}
-                  </p>
-                  <p class="truncate">
-                    {{ getReplyPreviewContent(message) }}
-                  </p>
-                </div>
-                <!-- Image message -->
-                <div v-if="message.message_type === 'image' && message.media_url" class="mb-2">
-                  <div v-if="isMediaLoading(message)" class="w-[200px] h-[150px] bg-muted rounded-lg animate-pulse flex items-center justify-center">
-                    <span class="text-muted-foreground text-sm">{{ $t('common.loading') }}...</span>
-                  </div>
-                  <img
-                    v-else-if="getMediaBlobUrl(message)"
-                    :src="getMediaBlobUrl(message)"
-                    :alt="message.content?.body || 'Image'"
-                    class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
-                    @click="openMediaPreview(message)"
-                    @error="handleImageError($event)"
-                  />
-                  <div v-else class="w-[200px] h-[150px] bg-muted rounded-lg flex items-center justify-center">
-                    <span class="text-muted-foreground text-sm">[Image]</span>
-                  </div>
-                </div>
-                <!-- Sticker message -->
-                <div v-else-if="message.message_type === 'sticker' && message.media_url" class="mb-2">
-                  <div v-if="isMediaLoading(message)" class="w-[128px] h-[128px] bg-muted rounded-lg animate-pulse flex items-center justify-center">
-                    <span class="text-muted-foreground text-sm">{{ $t('common.loading') }}...</span>
-                  </div>
-                  <img
-                    v-else-if="getMediaBlobUrl(message)"
-                    :src="getMediaBlobUrl(message)"
-                    alt="Sticker"
-                    class="max-w-[128px] max-h-[128px] cursor-pointer"
-                    @click="openMediaPreview(message)"
-                    @error="handleImageError($event)"
-                  />
-                  <div v-else class="w-[128px] h-[128px] bg-muted rounded-lg flex items-center justify-center">
-                    <span class="text-muted-foreground text-sm">[Sticker]</span>
-                  </div>
-                </div>
-                <!-- Video message -->
-                <div v-else-if="message.message_type === 'video' && message.media_url" class="mb-2">
-                  <div v-if="isMediaLoading(message)" class="w-[200px] h-[150px] bg-muted rounded-lg animate-pulse flex items-center justify-center">
-                    <span class="text-muted-foreground text-sm">{{ $t('common.loading') }}...</span>
-                  </div>
-                  <video
-                    v-else-if="getMediaBlobUrl(message)"
-                    :src="getMediaBlobUrl(message)"
-                    controls
-                    class="max-w-[280px] max-h-[300px] rounded-lg"
-                    @error="handleMediaError($event, 'video')"
-                  />
-                  <div v-else class="w-[200px] h-[150px] bg-muted rounded-lg flex items-center justify-center">
-                    <span class="text-muted-foreground text-sm">[Video]</span>
-                  </div>
-                </div>
-                <!-- Audio message -->
-                <div v-else-if="message.message_type === 'audio' && message.media_url" class="mb-2">
-                  <div v-if="isMediaLoading(message)" class="w-[200px] h-[40px] bg-muted rounded-lg animate-pulse"></div>
-                  <audio
-                    v-else-if="getMediaBlobUrl(message)"
-                    :src="getMediaBlobUrl(message)"
-                    controls
-                    class="max-w-[280px]"
-                    @error="handleMediaError($event, 'audio')"
-                  />
-                  <div v-else class="text-muted-foreground text-sm">[Audio]</div>
-                </div>
-                <!-- Document message -->
-                <div v-else-if="message.message_type === 'document' && message.media_url" class="mb-2">
-                  <a
-                    v-if="getMediaBlobUrl(message)"
-                    :href="getMediaBlobUrl(message)"
-                    :download="message.media_filename || 'document'"
-                    class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
-                  >
-                    <FileText class="h-5 w-5 text-muted-foreground" />
-                    <span class="text-sm truncate max-w-[200px]">
-                      {{ message.media_filename || 'Document' }}
-                    </span>
-                  </a>
-                  <div v-else-if="isMediaLoading(message)" class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg">
-                    <FileText class="h-5 w-5 text-muted-foreground" />
-                    <span class="text-sm text-muted-foreground">{{ $t('common.loading') }}...</span>
-                  </div>
-                  <div v-else class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg">
-                    <FileText class="h-5 w-5 text-muted-foreground" />
-                    <span class="text-sm text-muted-foreground">[Document]</span>
-                  </div>
-                </div>
-                <!-- Location message -->
-                <div v-else-if="message.message_type === 'location' && getLocationData(message)" class="mb-2">
-                  <a
-                    :href="getGoogleMapsUrl(getLocationData(message)!)"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="flex items-center gap-3 px-3 py-3 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
-                  >
-                    <div class="h-10 w-10 rounded-full bg-red-900/30 light:bg-red-100 flex items-center justify-center shrink-0">
-                      <MapPin class="h-5 w-5 text-red-500" />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <p v-if="getLocationData(message)?.name" class="text-sm font-medium truncate">
-                        {{ getLocationData(message)?.name }}
-                      </p>
-                      <p v-else class="text-sm font-medium">Location</p>
-                      <p v-if="getLocationData(message)?.address" class="text-xs text-muted-foreground truncate">
-                        {{ getLocationData(message)?.address }}
-                      </p>
-                      <p class="text-xs text-muted-foreground">
-                        {{ getLocationData(message)?.latitude.toFixed(6) }}, {{ getLocationData(message)?.longitude.toFixed(6) }}
-                      </p>
-                    </div>
-                    <ExternalLink class="h-4 w-4 text-muted-foreground shrink-0" />
-                  </a>
-                </div>
-                <!-- Contacts message -->
-                <div v-else-if="(message.message_type === 'contacts' || message.message_type === 'contact') && getContactsData(message).length > 0" class="mb-2 space-y-2">
-                  <div
-                    v-for="(contact, idx) in getContactsData(message)"
-                    :key="idx"
-                    class="flex items-center gap-3 px-3 py-2 bg-background/50 rounded-lg"
-                  >
-                    <div class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <User class="h-5 w-5 text-primary" />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <p class="text-sm font-medium truncate">{{ contact.name }}</p>
-                      <div v-if="contact.phones?.length" class="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Phone class="h-3 w-3" />
-                        <span class="truncate">{{ contact.phones.join(', ') }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <!-- Unsupported message -->
-                <div v-else-if="message.message_type === 'unsupported'" class="mb-2">
-                  <div class="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-muted-foreground">
-                    <AlertCircle class="h-4 w-4 shrink-0" />
-                    <span class="text-sm italic">This message type is not supported</span>
-                  </div>
-                </div>
-                <!-- Button reply - WhatsApp style -->
-                <div v-if="message.message_type === 'button_reply'" class="button-reply-bubble">
-                  <span class="whitespace-pre-wrap break-words">{{ getMessageContent(message) }}</span>
-                  <span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span></span>
-                </div>
-                <!-- Text content (for text messages or captions) -->
-                <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words">{{ getMessageContent(message) }}<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing' && !isSystemEventMessage(message)" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
-                <!-- Fallback for media without URL -->
-                <span v-else-if="isMediaMessage(message) && !message.media_url" class="text-muted-foreground italic">[{{ message.message_type.charAt(0).toUpperCase() + message.message_type.slice(1) }}]<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing' && !isSystemEventMessage(message)" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
-                <!-- Interactive buttons - WhatsApp style -->
-                <div
-                  v-if="getInteractiveButtons(message).length > 0"
-                  class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
+                  :id="`message-${message.id}`"
+                  :class="[
+                    'flex group',
+                    isSystemEventMessage(message)
+                      ? 'justify-center'
+                      : message.direction === 'outgoing'
+                        ? 'justify-end'
+                        : 'justify-start',
+                  ]"
                 >
                   <div
-                    v-for="(btn, index) in getInteractiveButtons(message)"
-                    :key="btn.id"
                     :class="[
-                      'py-2 text-sm text-center font-medium cursor-pointer',
-                      index > 0 && 'border-t'
+                      'chat-bubble',
+                      isSystemEventMessage(message)
+                        ? 'chat-bubble-system'
+                        : message.direction === 'outgoing'
+                          ? 'chat-bubble-outgoing'
+                          : 'chat-bubble-incoming',
+                      isDeletedMessage(message) ? 'chat-bubble-deleted' : '',
+                      isGroupMember(message.id) ? 'media-group-member' : '',
                     ]"
                   >
-                    {{ btn.title }}
+                    <p
+                      v-if="shouldShowGroupSenderPhone(message)"
+                      class="mb-1 text-[11px] font-medium text-emerald-300 light:text-emerald-700"
+                    >
+                      {{ getGroupSenderPhone(message) }}
+                    </p>
+                    <!-- Reply preview (if this message is replying to another) -->
+                    <div
+                      v-if="message.is_reply && message.reply_to_message"
+                      class="reply-preview cursor-pointer text-xs"
+                      @click="scrollToMessage(message.reply_to_message_id)"
+                    >
+                      <p class="font-medium">
+                        {{ getReplyAuthorLabel(message) }}
+                      </p>
+                      <p class="truncate">
+                        {{ getReplyPreviewContent(message) }}
+                      </p>
+                    </div>
+                    <!-- Image message -->
+                    <div
+                      v-if="
+                        message.message_type === 'image' && message.media_url
+                      "
+                      class="mb-2"
+                    >
+                      <div
+                        v-if="isMediaLoading(message)"
+                        class="w-[200px] h-[150px] bg-muted rounded-lg animate-pulse flex items-center justify-center"
+                      >
+                        <span class="text-muted-foreground text-sm"
+                          >{{ $t("common.loading") }}...</span
+                        >
+                      </div>
+                      <img
+                        v-else-if="getMediaBlobUrl(message)"
+                        :src="getMediaBlobUrl(message)"
+                        :alt="message.content?.body || 'Image'"
+                        class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
+                        @click="openMediaPreview(message)"
+                        @error="handleImageError($event)"
+                      />
+                      <div
+                        v-else
+                        class="w-[200px] h-[150px] bg-muted rounded-lg flex items-center justify-center"
+                      >
+                        <span class="text-muted-foreground text-sm"
+                          >[Image]</span
+                        >
+                      </div>
+                    </div>
+                    <!-- Sticker message -->
+                    <div
+                      v-else-if="
+                        message.message_type === 'sticker' && message.media_url
+                      "
+                      class="mb-2"
+                    >
+                      <div
+                        v-if="isMediaLoading(message)"
+                        class="w-[128px] h-[128px] bg-muted rounded-lg animate-pulse flex items-center justify-center"
+                      >
+                        <span class="text-muted-foreground text-sm"
+                          >{{ $t("common.loading") }}...</span
+                        >
+                      </div>
+                      <img
+                        v-else-if="getMediaBlobUrl(message)"
+                        :src="getMediaBlobUrl(message)"
+                        alt="Sticker"
+                        class="max-w-[128px] max-h-[128px] cursor-pointer"
+                        @click="openMediaPreview(message)"
+                        @error="handleImageError($event)"
+                      />
+                      <div
+                        v-else
+                        class="w-[128px] h-[128px] bg-muted rounded-lg flex items-center justify-center"
+                      >
+                        <span class="text-muted-foreground text-sm"
+                          >[Sticker]</span
+                        >
+                      </div>
+                    </div>
+                    <!-- Video message -->
+                    <div
+                      v-else-if="
+                        message.message_type === 'video' && message.media_url
+                      "
+                      class="mb-2"
+                    >
+                      <div
+                        v-if="isMediaLoading(message)"
+                        class="w-[200px] h-[150px] bg-muted rounded-lg animate-pulse flex items-center justify-center"
+                      >
+                        <span class="text-muted-foreground text-sm"
+                          >{{ $t("common.loading") }}...</span
+                        >
+                      </div>
+                      <video
+                        v-else-if="getMediaBlobUrl(message)"
+                        :src="getMediaBlobUrl(message)"
+                        controls
+                        class="max-w-[280px] max-h-[300px] rounded-lg"
+                        @error="handleMediaError($event, 'video')"
+                      />
+                      <div
+                        v-else
+                        class="w-[200px] h-[150px] bg-muted rounded-lg flex items-center justify-center"
+                      >
+                        <span class="text-muted-foreground text-sm"
+                          >[Video]</span
+                        >
+                      </div>
+                    </div>
+                    <!-- Audio message -->
+                    <div
+                      v-else-if="
+                        message.message_type === 'audio' && message.media_url
+                      "
+                      class="mb-2"
+                    >
+                      <div
+                        v-if="isMediaLoading(message)"
+                        class="w-[200px] h-[40px] bg-muted rounded-lg animate-pulse"
+                      ></div>
+                      <audio
+                        v-else-if="getMediaBlobUrl(message)"
+                        :src="getMediaBlobUrl(message)"
+                        controls
+                        class="max-w-[280px]"
+                        @error="handleMediaError($event, 'audio')"
+                      />
+                      <div v-else class="text-muted-foreground text-sm">
+                        [Audio]
+                      </div>
+                    </div>
+                    <!-- Document message -->
+                    <div
+                      v-else-if="
+                        message.message_type === 'document' && message.media_url
+                      "
+                      class="mb-2"
+                    >
+                      <a
+                        v-if="getMediaBlobUrl(message)"
+                        :href="getMediaBlobUrl(message)"
+                        :download="message.media_filename || 'document'"
+                        class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
+                      >
+                        <FileText class="h-5 w-5 text-muted-foreground" />
+                        <span class="text-sm truncate max-w-[200px]">
+                          {{ message.media_filename || "Document" }}
+                        </span>
+                      </a>
+                      <div
+                        v-else-if="isMediaLoading(message)"
+                        class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg"
+                      >
+                        <FileText class="h-5 w-5 text-muted-foreground" />
+                        <span class="text-sm text-muted-foreground"
+                          >{{ $t("common.loading") }}...</span
+                        >
+                      </div>
+                      <div
+                        v-else
+                        class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg"
+                      >
+                        <FileText class="h-5 w-5 text-muted-foreground" />
+                        <span class="text-sm text-muted-foreground"
+                          >[Document]</span
+                        >
+                      </div>
+                    </div>
+                    <!-- Location message -->
+                    <div
+                      v-else-if="
+                        message.message_type === 'location' &&
+                        getLocationData(message)
+                      "
+                      class="mb-2"
+                    >
+                      <a
+                        :href="getGoogleMapsUrl(getLocationData(message)!)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="flex items-center gap-3 px-3 py-3 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
+                      >
+                        <div
+                          class="h-10 w-10 rounded-full bg-red-900/30 light:bg-red-100 flex items-center justify-center shrink-0"
+                        >
+                          <MapPin class="h-5 w-5 text-red-500" />
+                        </div>
+                        <div class="flex-1 min-w-0">
+                          <p
+                            v-if="getLocationData(message)?.name"
+                            class="text-sm font-medium truncate"
+                          >
+                            {{ getLocationData(message)?.name }}
+                          </p>
+                          <p v-else class="text-sm font-medium">Location</p>
+                          <p
+                            v-if="getLocationData(message)?.address"
+                            class="text-xs text-muted-foreground truncate"
+                          >
+                            {{ getLocationData(message)?.address }}
+                          </p>
+                          <p class="text-xs text-muted-foreground">
+                            {{ getLocationData(message)?.latitude.toFixed(6) }},
+                            {{ getLocationData(message)?.longitude.toFixed(6) }}
+                          </p>
+                        </div>
+                        <ExternalLink
+                          class="h-4 w-4 text-muted-foreground shrink-0"
+                        />
+                      </a>
+                    </div>
+                    <!-- Contacts message -->
+                    <div
+                      v-else-if="
+                        (message.message_type === 'contacts' ||
+                          message.message_type === 'contact') &&
+                        getContactsData(message).length > 0
+                      "
+                      class="mb-2 space-y-2"
+                    >
+                      <div
+                        v-for="(contact, idx) in getContactsData(message)"
+                        :key="idx"
+                        class="flex items-center gap-3 px-3 py-2 bg-background/50 rounded-lg"
+                      >
+                        <div
+                          class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0"
+                        >
+                          <User class="h-5 w-5 text-primary" />
+                        </div>
+                        <div class="flex-1 min-w-0">
+                          <p class="text-sm font-medium truncate">
+                            {{ contact.name }}
+                          </p>
+                          <div
+                            v-if="contact.phones?.length"
+                            class="flex items-center gap-1 text-xs text-muted-foreground"
+                          >
+                            <Phone class="h-3 w-3" />
+                            <span class="truncate">{{
+                              contact.phones.join(", ")
+                            }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Unsupported message -->
+                    <div
+                      v-else-if="message.message_type === 'unsupported'"
+                      class="mb-2"
+                    >
+                      <div
+                        class="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-muted-foreground"
+                      >
+                        <AlertCircle class="h-4 w-4 shrink-0" />
+                        <span class="text-sm italic"
+                          >This message type is not supported</span
+                        >
+                      </div>
+                    </div>
+                    <!-- Button reply - WhatsApp style -->
+                    <div
+                      v-if="message.message_type === 'button_reply'"
+                      class="button-reply-bubble"
+                    >
+                      <span class="whitespace-pre-wrap break-words">{{
+                        getMessageContent(message)
+                      }}</span>
+                      <span class="chat-bubble-time"
+                        ><span>{{
+                          formatMessageTime(message.created_at)
+                        }}</span></span
+                      >
+                    </div>
+                    <!-- Text content (for text messages or captions) -->
+                    <span
+                      v-else-if="getMessageContent(message)"
+                      class="whitespace-pre-wrap break-words"
+                      >{{ getMessageContent(message)
+                      }}<span class="chat-bubble-time"
+                        ><span>{{ formatMessageTime(message.created_at) }}</span
+                        ><component
+                          v-if="
+                            message.direction === 'outgoing' &&
+                            !isSystemEventMessage(message)
+                          "
+                          :is="getMessageStatusIcon(message.status)"
+                          :class="[
+                            'h-4 w-4 status-icon',
+                            getMessageStatusClass(message.status),
+                          ]" /></span
+                    ></span>
+                    <!-- Fallback for media without URL -->
+                    <span
+                      v-else-if="isMediaMessage(message) && !message.media_url"
+                      class="text-muted-foreground italic"
+                      >[{{
+                        message.message_type.charAt(0).toUpperCase() +
+                        message.message_type.slice(1)
+                      }}]<span class="chat-bubble-time"
+                        ><span>{{ formatMessageTime(message.created_at) }}</span
+                        ><component
+                          v-if="
+                            message.direction === 'outgoing' &&
+                            !isSystemEventMessage(message)
+                          "
+                          :is="getMessageStatusIcon(message.status)"
+                          :class="[
+                            'h-4 w-4 status-icon',
+                            getMessageStatusClass(message.status),
+                          ]" /></span
+                    ></span>
+                    <!-- Interactive buttons - WhatsApp style -->
+                    <div
+                      v-if="getInteractiveButtons(message).length > 0"
+                      class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
+                    >
+                      <div
+                        v-for="(btn, index) in getInteractiveButtons(message)"
+                        :key="btn.id"
+                        :class="[
+                          'py-2 text-sm text-center font-medium cursor-pointer',
+                          index > 0 && 'border-t',
+                        ]"
+                      >
+                        {{ btn.title }}
+                      </div>
+                    </div>
+                    <!-- CTA URL button - WhatsApp style -->
+                    <a
+                      v-if="getCTAUrlData(message)"
+                      :href="getCTAUrlData(message)?.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t block"
+                    >
+                      <div
+                        class="py-2 text-sm text-center font-medium cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <ExternalLink class="h-3.5 w-3.5" />
+                        {{ getCTAUrlData(message)?.button_text }}
+                      </div>
+                    </a>
+                    <!-- Time for messages without text content -->
+                    <span
+                      v-if="
+                        !getMessageContent(message) &&
+                        !(isMediaMessage(message) && !message.media_url)
+                      "
+                      class="chat-bubble-time block clear-both"
+                    >
+                      <span>{{ formatMessageTime(message.created_at) }}</span>
+                      <component
+                        v-if="
+                          message.direction === 'outgoing' &&
+                          !isSystemEventMessage(message)
+                        "
+                        :is="getMessageStatusIcon(message.status)"
+                        :class="[
+                          'h-4 w-4 status-icon',
+                          getMessageStatusClass(message.status),
+                        ]"
+                      />
+                    </span>
+                    <!-- Reactions display -->
+                    <div
+                      v-if="message.reactions && message.reactions.length > 0"
+                      class="reactions-display flex flex-wrap gap-1 mt-1"
+                    >
+                      <span
+                        v-for="(reaction, idx) in message.reactions"
+                        :key="idx"
+                        class="reaction-badge"
+                        :title="reaction.from_phone || reaction.from_user || ''"
+                      >
+                        {{ reaction.emoji }}
+                      </span>
+                    </div>
+                    <!-- Failed message error (not for template messages) -->
+                    <span
+                      v-if="
+                        message.status === 'failed' &&
+                        message.direction === 'outgoing' &&
+                        message.message_type !== 'template'
+                      "
+                      class="flex items-center gap-1 mt-1 text-xs text-destructive"
+                    >
+                      <AlertCircle class="h-3 w-3" />
+                      <span>{{
+                        message.error_message || "Failed to send"
+                      }}</span>
+                    </span>
+                    <!-- Failed template message indicator (no retry) -->
+                    <span
+                      v-if="
+                        message.status === 'failed' &&
+                        message.direction === 'outgoing' &&
+                        message.message_type === 'template'
+                      "
+                      class="flex items-center gap-1 mt-1 text-xs text-destructive"
+                    >
+                      <AlertCircle class="h-3 w-3" />
+                      <span>{{
+                        message.error_message || "Failed to send"
+                      }}</span>
+                    </span>
                   </div>
-                </div>
-                <!-- CTA URL button - WhatsApp style -->
-                <a
-                  v-if="getCTAUrlData(message)"
-                  :href="getCTAUrlData(message)?.url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t block"
-                >
-                  <div class="py-2 text-sm text-center font-medium cursor-pointer flex items-center justify-center gap-1.5">
-                    <ExternalLink class="h-3.5 w-3.5" />
-                    {{ getCTAUrlData(message)?.button_text }}
-                  </div>
-                </a>
-                <!-- Time for messages without text content -->
-                <span v-if="!getMessageContent(message) && !(isMediaMessage(message) && !message.media_url)" class="chat-bubble-time block clear-both">
-                  <span>{{ formatMessageTime(message.created_at) }}</span>
-                  <component
-                    v-if="message.direction === 'outgoing' && !isSystemEventMessage(message)"
-                    :is="getMessageStatusIcon(message.status)"
-                    :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]"
-                  />
-                </span>
-                <!-- Reactions display -->
-                <div
-                  v-if="message.reactions && message.reactions.length > 0"
-                  class="reactions-display flex flex-wrap gap-1 mt-1"
-                >
-                  <span
-                    v-for="(reaction, idx) in message.reactions"
-                    :key="idx"
-                    class="reaction-badge"
-                    :title="reaction.from_phone || reaction.from_user || ''"
+                  <!-- Action buttons for incoming messages -->
+                  <div
+                    v-if="
+                      message.direction === 'incoming' &&
+                      !isSystemEventMessage(message)
+                    "
+                    class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1"
                   >
-                    {{ reaction.emoji }}
-                  </span>
+                    <Popover
+                      :open="reactionPickerMessageId === message.id"
+                      @update:open="
+                        (open: boolean) =>
+                          (reactionPickerMessageId = open ? message.id : null)
+                      "
+                    >
+                      <PopoverTrigger as-child>
+                        <Button variant="ghost" size="icon" class="h-6 w-6">
+                          <SmilePlus class="h-3 w-3" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent side="top" class="w-auto p-2">
+                        <div class="flex gap-1">
+                          <button
+                            v-for="emoji in quickReactionEmojis"
+                            :key="emoji"
+                            class="text-lg hover:bg-muted p-1 rounded cursor-pointer"
+                            @click="sendReaction(message.id, emoji)"
+                          >
+                            {{ emoji }}
+                          </button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="h-6 w-6"
+                      @click="replyToMessage(message)"
+                    >
+                      <Reply class="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <!-- Reply button for outgoing messages (shown on hover) -->
+                  <div
+                    v-if="
+                      message.direction === 'outgoing' &&
+                      !isSystemEventMessage(message)
+                    "
+                    class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1"
+                  >
+                    <Popover
+                      :open="reactionPickerMessageId === message.id"
+                      @update:open="
+                        (open: boolean) =>
+                          (reactionPickerMessageId = open ? message.id : null)
+                      "
+                    >
+                      <PopoverTrigger as-child>
+                        <Button variant="ghost" size="icon" class="h-6 w-6">
+                          <SmilePlus class="h-3 w-3" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent side="top" class="w-auto p-2">
+                        <div class="flex gap-1">
+                          <button
+                            v-for="emoji in quickReactionEmojis"
+                            :key="emoji"
+                            class="text-lg hover:bg-muted p-1 rounded cursor-pointer"
+                            @click="sendReaction(message.id, emoji)"
+                          >
+                            {{ emoji }}
+                          </button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="h-6 w-6"
+                      @click="replyToMessage(message)"
+                    >
+                      <Reply class="h-3 w-3" />
+                    </Button>
+                    <Button
+                      v-if="canRevokeMessage(message)"
+                      variant="ghost"
+                      size="icon"
+                      class="h-6 w-6 text-destructive hover:text-destructive"
+                      :disabled="revokingMessageId === message.id"
+                      title="Revoke message"
+                      @click="revokeMessage(message)"
+                    >
+                      <Loader2
+                        v-if="revokingMessageId === message.id"
+                        class="h-3 w-3 animate-spin"
+                      />
+                      <Trash2 v-else class="h-3 w-3" />
+                    </Button>
+                    <Button
+                      v-if="
+                        message.status === 'failed' &&
+                        message.message_type !== 'template'
+                      "
+                      variant="ghost"
+                      size="icon"
+                      class="h-6 w-6 text-destructive hover:text-destructive"
+                      :disabled="retryingMessageId === message.id"
+                      @click="retryMessage(message)"
+                      title="Retry sending"
+                    >
+                      <Loader2
+                        v-if="retryingMessageId === message.id"
+                        class="h-3 w-3 animate-spin"
+                      />
+                      <RotateCw v-else class="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
-                <!-- Failed message error (not for template messages) -->
-                <span
-                  v-if="message.status === 'failed' && message.direction === 'outgoing' && message.message_type !== 'template'"
-                  class="flex items-center gap-1 mt-1 text-xs text-destructive"
-                >
-                  <AlertCircle class="h-3 w-3" />
-                  <span>{{ message.error_message || 'Failed to send' }}</span>
-                </span>
-                <!-- Failed template message indicator (no retry) -->
-                <span
-                  v-if="message.status === 'failed' && message.direction === 'outgoing' && message.message_type === 'template'"
-                  class="flex items-center gap-1 mt-1 text-xs text-destructive"
-                >
-                  <AlertCircle class="h-3 w-3" />
-                  <span>{{ message.error_message || 'Failed to send' }}</span>
-                </span>
-              </div>
-              <!-- Action buttons for incoming messages -->
-              <div v-if="message.direction === 'incoming' && !isSystemEventMessage(message)" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
-                <Popover :open="reactionPickerMessageId === message.id" @update:open="(open: boolean) => reactionPickerMessageId = open ? message.id : null">
-                  <PopoverTrigger as-child>
-                    <Button variant="ghost" size="icon" class="h-6 w-6">
-                      <SmilePlus class="h-3 w-3" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent side="top" class="w-auto p-2">
-                    <div class="flex gap-1">
-                      <button
-                        v-for="emoji in quickReactionEmojis"
-                        :key="emoji"
-                        class="text-lg hover:bg-muted p-1 rounded cursor-pointer"
-                        @click="sendReaction(message.id, emoji)"
-                      >
-                        {{ emoji }}
-                      </button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-6 w-6"
-                  @click="replyToMessage(message)"
-                >
-                  <Reply class="h-3 w-3" />
-                </Button>
-              </div>
-              <!-- Reply button for outgoing messages (shown on hover) -->
-              <div v-if="message.direction === 'outgoing' && !isSystemEventMessage(message)" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
-                <Popover :open="reactionPickerMessageId === message.id" @update:open="(open: boolean) => reactionPickerMessageId = open ? message.id : null">
-                  <PopoverTrigger as-child>
-                    <Button variant="ghost" size="icon" class="h-6 w-6">
-                      <SmilePlus class="h-3 w-3" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent side="top" class="w-auto p-2">
-                    <div class="flex gap-1">
-                      <button
-                        v-for="emoji in quickReactionEmojis"
-                        :key="emoji"
-                        class="text-lg hover:bg-muted p-1 rounded cursor-pointer"
-                        @click="sendReaction(message.id, emoji)"
-                      >
-                        {{ emoji }}
-                      </button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-6 w-6"
-                  @click="replyToMessage(message)"
-                >
-                  <Reply class="h-3 w-3" />
-                </Button>
-                <Button
-                  v-if="canRevokeMessage(message)"
-                  variant="ghost"
-                  size="icon"
-                  class="h-6 w-6 text-destructive hover:text-destructive"
-                  :disabled="revokingMessageId === message.id"
-                  title="Revoke message"
-                  @click="revokeMessage(message)"
-                >
-                  <Loader2 v-if="revokingMessageId === message.id" class="h-3 w-3 animate-spin" />
-                  <Trash2 v-else class="h-3 w-3" />
-                </Button>
-                <Button
-                  v-if="message.status === 'failed' && message.message_type !== 'template'"
-                  variant="ghost"
-                  size="icon"
-                  class="h-6 w-6 text-destructive hover:text-destructive"
-                  :disabled="retryingMessageId === message.id"
-                  @click="retryMessage(message)"
-                  title="Retry sending"
-                >
-                  <Loader2 v-if="retryingMessageId === message.id" class="h-3 w-3 animate-spin" />
-                  <RotateCw v-else class="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
 
-              <!-- Media group end bar -->
-              <MediaGroupBar
-                v-if="isGroupTail(message.id)"
-                variant="end"
-                :group="getGroupForMessage(message.id)!"
-                :messages="getGroupMessages(message.id)"
-                :blob-urls="mediaBlobUrls"
-              />
-            </template>
-            <div ref="messagesEndRef" />
-          </div>
-        </ScrollArea>
+                <!-- Media group end bar -->
+                <MediaGroupBar
+                  v-if="isGroupTail(message.id)"
+                  variant="end"
+                  :group="getGroupForMessage(message.id)!"
+                  :messages="getGroupMessages(message.id)"
+                  :blob-urls="mediaBlobUrls"
+                />
+              </template>
+              <div ref="messagesEndRef" />
+            </div>
+          </ScrollArea>
         </div>
 
         <div
           v-if="isCurrentChatClosed && !isCurrentChatRestricted"
           class="px-4 py-2 border-t border-white/[0.08] light:border-gray-200 bg-zinc-500/10 text-xs text-zinc-300 light:bg-zinc-100 light:text-zinc-700 flex items-center justify-between gap-3"
         >
-          <span>This chat is closed. You can view message history in read-only mode.</span>
+          <span
+            >This chat is closed. You can view message history in read-only
+            mode.</span
+          >
           <Button
             v-if="canReopenCurrentChat"
             size="sm"
@@ -2692,7 +3877,10 @@ async function sendMediaMessage() {
             :disabled="isReopeningCurrentChat"
             @click="reopenCurrentChat"
           >
-            <Loader2 v-if="isReopeningCurrentChat" class="mr-1.5 h-3 w-3 animate-spin" />
+            <Loader2
+              v-if="isReopeningCurrentChat"
+              class="mr-1.5 h-3 w-3 animate-spin"
+            />
             <RotateCw v-else class="mr-1.5 h-3 w-3" />
             Reopen Chat
           </Button>
@@ -2704,39 +3892,58 @@ async function sendMediaMessage() {
           class="px-4 py-2.5 border-t border-red-500/20 bg-red-500/10 flex items-center gap-2"
         >
           <Clock class="h-4 w-4 text-red-500 shrink-0" />
-          <span class="text-sm text-red-500 flex-1">{{ $t('chat.serviceWindowExpired') }}</span>
-          <Button variant="outline" size="sm" class="border-red-500/30 text-red-500 hover:bg-red-500/10 shrink-0" @click="openTemplatePicker">
-            {{ $t('chat.sendTemplateAction') }}
+          <span class="text-sm text-red-500 flex-1">{{
+            $t("chat.serviceWindowExpired")
+          }}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            class="border-red-500/30 text-red-500 hover:bg-red-500/10 shrink-0"
+            @click="openTemplatePicker"
+          >
+            {{ $t("chat.sendTemplateAction") }}
           </Button>
         </div>
 
         <!-- Reply indicator -->
         <div
-          v-if="contactsStore.replyingTo && !isCurrentChatClosed && !isCurrentChatRestricted"
+          v-if="
+            contactsStore.replyingTo &&
+            !isCurrentChatClosed &&
+            !isCurrentChatRestricted
+          "
           class="px-4 py-2 border-t border-white/[0.08] light:border-gray-200 bg-white/[0.04] light:bg-gray-50 flex items-center justify-between"
         >
           <div class="flex-1 min-w-0">
             <p class="text-xs font-medium text-white/50 light:text-gray-500">
-              Replying to {{ getReplyingToAuthorLabel(contactsStore.replyingTo) }}
+              Replying to
+              {{ getReplyingToAuthorLabel(contactsStore.replyingTo) }}
             </p>
             <p class="text-sm truncate text-white/70 light:text-gray-700">
-              {{ getMessageContent(contactsStore.replyingTo) || '[Media]' }}
+              {{ getMessageContent(contactsStore.replyingTo) || "[Media]" }}
             </p>
           </div>
-          <button class="w-6 h-6 rounded hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center shrink-0 transition-colors" @click="contactsStore.clearReplyingTo">
+          <button
+            class="w-6 h-6 rounded hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center shrink-0 transition-colors"
+            @click="contactsStore.clearReplyingTo"
+          >
             <X class="h-4 w-4 text-white/50 light:text-gray-500" />
           </button>
         </div>
 
         <!-- Message Input -->
-        <div v-if="!isCurrentChatClosed && !isCurrentChatRestricted" class="p-4 border-t border-white/[0.08] light:border-gray-200 bg-[#0f0f10] light:bg-white">
+        <div
+          v-if="!isCurrentChatClosed && !isCurrentChatRestricted"
+          class="p-4 border-t border-white/[0.08] light:border-gray-200 bg-[#0f0f10] light:bg-white"
+        >
           <div
             v-if="pendingCannedResponse?.attachments?.length"
             class="mb-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2"
           >
             <div class="mb-1 flex items-center justify-between">
               <p class="text-xs text-emerald-200 light:text-emerald-700">
-                {{ pendingCannedResponse.attachments.length }} canned media attachment(s) ready
+                {{ pendingCannedResponse.attachments.length }} canned media
+                attachment(s) ready
               </p>
               <button
                 type="button"
@@ -2752,23 +3959,40 @@ async function sendMediaMessage() {
                 :key="attachment.id"
                 class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600/15 px-2 py-1 text-xs text-emerald-100 light:bg-emerald-100 light:text-emerald-800"
               >
-                <component :is="getPendingAttachmentIcon(attachment.type)" class="h-3.5 w-3.5" />
-                <span class="max-w-[200px] truncate">{{ attachment.file_name }}</span>
-                <button type="button" class="inline-flex items-center" @click="removePendingCannedAttachment(index)">
+                <component
+                  :is="getPendingAttachmentIcon(attachment.type)"
+                  class="h-3.5 w-3.5"
+                />
+                <span class="max-w-[200px] truncate">{{
+                  attachment.file_name
+                }}</span>
+                <button
+                  type="button"
+                  class="inline-flex items-center"
+                  @click="removePendingCannedAttachment(index)"
+                >
                   <X class="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
           </div>
 
-          <form @submit.prevent="sendMessage" class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200">
+          <form
+            @submit.prevent="sendMessage"
+            class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200"
+          >
             <Tooltip>
               <TooltipTrigger as-child>
                 <span>
                   <Popover v-model:open="emojiPickerOpen">
                     <PopoverTrigger as-child>
-                      <button type="button" class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors">
-                        <Smile class="w-[18px] h-[18px] text-white/40 light:text-gray-500" />
+                      <button
+                        type="button"
+                        class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors"
+                      >
+                        <Smile
+                          class="w-[18px] h-[18px] text-white/40 light:text-gray-500"
+                        />
                       </button>
                     </PopoverTrigger>
                     <PopoverContent side="top" align="start" class="w-auto p-0">
@@ -2782,7 +4006,7 @@ async function sendMediaMessage() {
                   </Popover>
                 </span>
               </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.emoji') }}</TooltipContent>
+              <TooltipContent>{{ $t("chat.emoji") }}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
@@ -2796,7 +4020,7 @@ async function sendMediaMessage() {
                   />
                 </span>
               </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.cannedResponses') }}</TooltipContent>
+              <TooltipContent>{{ $t("chat.cannedResponses") }}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
@@ -2807,15 +4031,21 @@ async function sendMediaMessage() {
                   />
                 </span>
               </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.sendTemplate') }}</TooltipContent>
+              <TooltipContent>{{ $t("chat.sendTemplate") }}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
-                <button type="button" class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors" @click="openFilePicker">
-                  <Paperclip class="w-[18px] h-[18px] text-white/40 light:text-gray-500" />
+                <button
+                  type="button"
+                  class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors"
+                  @click="openFilePicker"
+                >
+                  <Paperclip
+                    class="w-[18px] h-[18px] text-white/40 light:text-gray-500"
+                  />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.attachFile') }}</TooltipContent>
+              <TooltipContent>{{ $t("chat.attachFile") }}</TooltipContent>
             </Tooltip>
             <input
               ref="fileInputRef"
@@ -2833,7 +4063,11 @@ async function sendMediaMessage() {
               @keydown.enter.exact.prevent="sendMessage"
               @input="autoResizeTextarea"
             />
-            <button type="submit" class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="!canSendMessage || isSending">
+            <button
+              type="submit"
+              class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50"
+              :disabled="!canSendMessage || isSending"
+            >
               <Send class="w-4 h-4 text-white" />
             </button>
           </form>
@@ -2854,7 +4088,13 @@ async function sendMediaMessage() {
       :contact="contactsStore.currentContact"
       :session-data="contactSessionData"
       @close="isInfoPanelOpen = false"
-      @tags-updated="(tags) => contactsStore.updateContactTags(contactsStore.currentContact!.id, tags)"
+      @tags-updated="
+        (tags) =>
+          contactsStore.updateContactTags(
+            contactsStore.currentContact!.id,
+            tags,
+          )
+      "
       @deleted="handleContactDeleted"
     />
 
@@ -2862,13 +4102,21 @@ async function sendMediaMessage() {
     <Dialog v-model:open="templateDialogOpen">
       <DialogContent class="max-w-sm">
         <DialogHeader>
-          <DialogTitle>{{ templateParamNames.length > 0 ? $t('chat.fillParameters') : $t('chat.preview') }}</DialogTitle>
+          <DialogTitle>{{
+            templateParamNames.length > 0
+              ? $t("chat.fillParameters")
+              : $t("chat.preview")
+          }}</DialogTitle>
           <DialogDescription>
             {{ selectedTemplate?.display_name || selectedTemplate?.name }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-3">
-          <div v-for="param in templateParamNames" :key="param" class="space-y-1">
+          <div
+            v-for="param in templateParamNames"
+            :key="param"
+            class="space-y-1"
+          >
             <label class="text-sm font-medium">{{ param }}</label>
             <Input
               v-model="templateParamValues[param]"
@@ -2877,9 +4125,16 @@ async function sendMediaMessage() {
             />
           </div>
           <div v-if="templatePreview" class="space-y-1">
-            <label class="text-xs font-medium text-muted-foreground">{{ $t('chat.preview') }}</label>
-            <div class="chat-bubble chat-bubble-outgoing ml-auto" style="max-width: 100%;">
-              <span class="whitespace-pre-wrap break-words text-sm">{{ templatePreview }}</span>
+            <label class="text-xs font-medium text-muted-foreground">{{
+              $t("chat.preview")
+            }}</label>
+            <div
+              class="chat-bubble chat-bubble-outgoing ml-auto"
+              style="max-width: 100%"
+            >
+              <span class="whitespace-pre-wrap break-words text-sm">{{
+                templatePreview
+              }}</span>
               <div
                 v-if="selectedTemplate?.buttons?.length"
                 class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
@@ -2887,7 +4142,10 @@ async function sendMediaMessage() {
                 <div
                   v-for="(btn, index) in selectedTemplate.buttons"
                   :key="index"
-                  :class="['py-2 text-sm text-center font-medium', Number(index) > 0 && 'border-t']"
+                  :class="[
+                    'py-2 text-sm text-center font-medium',
+                    Number(index) > 0 && 'border-t',
+                  ]"
                 >
                   {{ btn.text }}
                 </div>
@@ -2896,28 +4154,38 @@ async function sendMediaMessage() {
           </div>
         </div>
         <div class="flex justify-end gap-2">
-          <Button variant="outline" @click="templateDialogOpen = false">{{ $t('common.cancel') }}</Button>
+          <Button variant="outline" @click="templateDialogOpen = false">{{
+            $t("common.cancel")
+          }}</Button>
           <Button @click="sendTemplateMessage" :disabled="isSendingTemplate">
-            <Loader2 v-if="isSendingTemplate" class="h-4 w-4 mr-2 animate-spin" />
-            {{ $t('chat.send') }}
+            <Loader2
+              v-if="isSendingTemplate"
+              class="h-4 w-4 mr-2 animate-spin"
+            />
+            {{ $t("chat.send") }}
           </Button>
         </div>
       </DialogContent>
     </Dialog>
 
     <!-- Assign Contact Dialog -->
-    <Dialog v-model:open="isAssignDialogOpen" @update:open="(open) => !open && (assignSearchQuery = '')">
+    <Dialog
+      v-model:open="isAssignDialogOpen"
+      @update:open="(open) => !open && (assignSearchQuery = '')"
+    >
       <DialogContent class="max-w-sm">
         <DialogHeader>
-          <DialogTitle>{{ $t('chat.assignContact') }}</DialogTitle>
+          <DialogTitle>{{ $t("chat.assignContact") }}</DialogTitle>
           <DialogDescription>
-            {{ $t('chat.assignContactDesc') }}
+            {{ $t("chat.assignContactDesc") }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-3">
           <!-- Search input -->
           <div class="relative">
-            <Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search
+              class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"
+            />
             <Input
               v-model="assignSearchQuery"
               :placeholder="$t('chat.searchUsers') + '...'"
@@ -2928,10 +4196,13 @@ async function sendMediaMessage() {
             v-if="contactsStore.currentContact?.assigned_user_id"
             variant="outline"
             class="w-full justify-start"
-            @click="assignContactToUser(null); isAssignDialogOpen = false"
+            @click="
+              assignContactToUser(null);
+              isAssignDialogOpen = false;
+            "
           >
             <UserMinus class="mr-2 h-4 w-4" />
-            {{ $t('chat.unassignContact') }}
+            {{ $t("chat.unassignContact") }}
           </Button>
           <Separator />
           <ScrollArea class="max-h-[280px]">
@@ -2939,22 +4210,34 @@ async function sendMediaMessage() {
               <Button
                 v-for="user in filteredAssignableUsers"
                 :key="user.id"
-                :variant="contactsStore.currentContact?.assigned_user_id === user.id ? 'secondary' : 'ghost'"
+                :variant="
+                  contactsStore.currentContact?.assigned_user_id === user.id
+                    ? 'secondary'
+                    : 'ghost'
+                "
                 class="w-full justify-start"
-                @click="assignContactToUser(user.id); isAssignDialogOpen = false"
+                @click="
+                  assignContactToUser(user.id);
+                  isAssignDialogOpen = false;
+                "
               >
                 <User class="mr-2 h-4 w-4" />
                 <span>{{ user.full_name }}</span>
                 <Check
-                  v-if="contactsStore.currentContact?.assigned_user_id === user.id"
+                  v-if="
+                    contactsStore.currentContact?.assigned_user_id === user.id
+                  "
                   class="ml-auto h-4 w-4 text-primary"
                 />
                 <Badge v-else variant="outline" class="ml-auto text-xs">
                   {{ user.role?.name }}
                 </Badge>
               </Button>
-              <p v-if="filteredAssignableUsers.length === 0" class="text-sm text-muted-foreground text-center py-4">
-                {{ $t('chat.noUsersFound') }}
+              <p
+                v-if="filteredAssignableUsers.length === 0"
+                class="text-sm text-muted-foreground text-center py-4"
+              >
+                {{ $t("chat.noUsersFound") }}
               </p>
             </div>
           </ScrollArea>
@@ -2966,14 +4249,17 @@ async function sendMediaMessage() {
     <Dialog v-model:open="isMediaDialogOpen">
       <DialogContent class="max-w-md">
         <DialogHeader>
-          <DialogTitle>{{ $t('chat.sendMedia') }}</DialogTitle>
+          <DialogTitle>{{ $t("chat.sendMedia") }}</DialogTitle>
           <DialogDescription>
             {{ selectedFile?.name }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-4">
           <!-- Image preview -->
-          <div v-if="selectedFile?.type.startsWith('image/') && filePreviewUrl" class="flex justify-center">
+          <div
+            v-if="selectedFile?.type.startsWith('image/') && filePreviewUrl"
+            class="flex justify-center"
+          >
             <img
               :src="filePreviewUrl"
               :alt="selectedFile.name"
@@ -2981,7 +4267,12 @@ async function sendMediaMessage() {
             />
           </div>
           <!-- Video preview -->
-          <div v-else-if="selectedFile?.type.startsWith('video/') && filePreviewUrl" class="flex justify-center">
+          <div
+            v-else-if="
+              selectedFile?.type.startsWith('video/') && filePreviewUrl
+            "
+            class="flex justify-center"
+          >
             <video
               :src="filePreviewUrl"
               controls
@@ -2989,25 +4280,36 @@ async function sendMediaMessage() {
             />
           </div>
           <!-- Audio preview -->
-          <div v-else-if="selectedFile?.type.startsWith('audio/')" class="flex justify-center">
+          <div
+            v-else-if="selectedFile?.type.startsWith('audio/')"
+            class="flex justify-center"
+          >
             <div class="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
-              <div class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <div
+                class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"
+              >
                 <Paperclip class="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p class="font-medium text-sm">{{ selectedFile.name }}</p>
-                <p class="text-xs text-muted-foreground">{{ $t('chat.audioFile') }}</p>
+                <p class="text-xs text-muted-foreground">
+                  {{ $t("chat.audioFile") }}
+                </p>
               </div>
             </div>
           </div>
           <!-- Document preview -->
           <div v-else-if="selectedFile" class="flex justify-center">
             <div class="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
-              <div class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <div
+                class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"
+              >
                 <FileText class="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p class="font-medium text-sm truncate max-w-[200px]">{{ selectedFile.name }}</p>
+                <p class="font-medium text-sm truncate max-w-[200px]">
+                  {{ selectedFile.name }}
+                </p>
                 <p class="text-xs text-muted-foreground">
                   {{ (selectedFile.size / 1024).toFixed(1) }} KB
                 </p>
@@ -3027,13 +4329,17 @@ async function sendMediaMessage() {
 
           <!-- Actions -->
           <div class="flex justify-end gap-2">
-            <Button variant="outline" @click="closeMediaDialog" :disabled="isUploadingMedia">
-              {{ $t('common.cancel') }}
+            <Button
+              variant="outline"
+              @click="closeMediaDialog"
+              :disabled="isUploadingMedia"
+            >
+              {{ $t("common.cancel") }}
             </Button>
             <Button @click="sendMediaMessage" :disabled="isUploadingMedia">
               <Send v-if="!isUploadingMedia" class="mr-2 h-4 w-4" />
-              <span v-if="isUploadingMedia">{{ $t('chat.sending') }}...</span>
-              <span v-else>{{ $t('chat.send') }}</span>
+              <span v-if="isUploadingMedia">{{ $t("chat.sending") }}...</span>
+              <span v-else>{{ $t("chat.send") }}</span>
             </Button>
           </div>
         </div>
@@ -3041,33 +4347,53 @@ async function sendMediaMessage() {
     </Dialog>
 
     <!-- Contact Profile Photo Dialog -->
-    <Dialog v-model:open="isProfilePhotoDialogOpen" @update:open="handleProfilePhotoDialogOpenChange">
+    <Dialog
+      v-model:open="isProfilePhotoDialogOpen"
+      @update:open="handleProfilePhotoDialogOpenChange"
+    >
       <DialogContent class="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{{ $t('resources.ProfilePhoto') }}</DialogTitle>
+          <DialogTitle>{{ $t("resources.ProfilePhoto") }}</DialogTitle>
           <DialogDescription>
-            {{ profilePhotoContact?.name || profilePhotoContact?.phone_number || $t('chat.customer') }}
+            {{
+              profilePhotoContact?.name ||
+              profilePhotoContact?.phone_number ||
+              $t("chat.customer")
+            }}
           </DialogDescription>
         </DialogHeader>
         <div class="flex items-center justify-center py-2">
           <img
             v-if="profilePhotoContact?.avatar_url"
             :src="profilePhotoContact.avatar_url"
-            :alt="profilePhotoContact?.name || profilePhotoContact?.phone_number || $t('resources.ProfilePhoto')"
+            :alt="
+              profilePhotoContact?.name ||
+              profilePhotoContact?.phone_number ||
+              $t('resources.ProfilePhoto')
+            "
             class="max-h-[70vh] max-w-full rounded-lg object-contain"
           />
           <div
             v-else
             class="flex h-48 w-48 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-4xl font-semibold text-white"
           >
-            {{ getInitials(profilePhotoContact?.name || profilePhotoContact?.phone_number || $t('chat.customer')) }}
+            {{
+              getInitials(
+                profilePhotoContact?.name ||
+                  profilePhotoContact?.phone_number ||
+                  $t("chat.customer"),
+              )
+            }}
           </div>
         </div>
       </DialogContent>
     </Dialog>
 
     <!-- Add Contact Dialog -->
-    <CreateContactDialog v-model:open="isAddContactOpen" @created="onContactCreated" />
+    <CreateContactDialog
+      v-model:open="isAddContactOpen"
+      @created="onContactCreated"
+    />
   </div>
 </template>
 

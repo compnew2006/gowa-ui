@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useInstancesStore } from '@/stores/instances'
+import { useOrganizationsStore } from '@/stores/organizations'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Activity, AlertTriangle, Clock3, Inbox, Loader2, Send } from 'lucide-vue-next'
 
 const instancesStore = useInstancesStore()
+const organizationsStore = useOrganizationsStore()
 const refreshing = ref(false)
 
 const instances = computed(() => instancesStore.instances)
@@ -23,9 +25,12 @@ function formatUptime(totalSeconds?: number) {
   return `${minutes}m`
 }
 
-async function refreshHealth() {
+async function refreshHealth(options: { includeInstances?: boolean } = {}) {
   refreshing.value = true
   try {
+    if (options.includeInstances) {
+      await instancesStore.fetchInstances()
+    }
     await instancesStore.fetchAllHealth()
   } finally {
     refreshing.value = false
@@ -33,22 +38,29 @@ async function refreshHealth() {
 }
 
 onMounted(async () => {
-  if (instancesStore.instances.length === 0) {
-    await instancesStore.fetchInstances()
-  }
-  await refreshHealth()
-  instancesStore.startHealthPolling(30000)
+  await refreshHealth({ includeInstances: true })
+  instancesStore.startHealthPolling(30000, { refreshInstances: true })
 })
 
 onUnmounted(() => {
   instancesStore.stopHealthPolling()
 })
+
+watch(
+  () => organizationsStore.selectedOrgId,
+  async (nextOrgID, previousOrgID) => {
+    if (nextOrgID === previousOrgID) {
+      return
+    }
+    await refreshHealth({ includeInstances: true })
+  }
+)
 </script>
 
 <template>
   <div class="space-y-4">
     <div class="flex justify-end">
-      <Button variant="outline" class="border-white/10 hover:bg-white/5 text-white/80 light:text-gray-700" @click="refreshHealth">
+      <Button variant="outline" class="border-white/10 hover:bg-white/5 text-white/80 light:text-gray-700" @click="refreshHealth({ includeInstances: true })">
         <Loader2 v-if="refreshing" class="h-4 w-4 mr-2 animate-spin" />
         Refresh
       </Button>

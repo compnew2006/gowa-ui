@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -158,6 +159,10 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
 	if err != nil {
+		var restrictedErr *restrictedSendViolationError
+		if errors.As(err, &restrictedErr) {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedErr.Error(), nil, "")
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send message", nil, "")
 	}
 
@@ -390,6 +395,10 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
 	if err != nil {
+		var restrictedErr *restrictedSendViolationError
+		if errors.As(err, &restrictedErr) {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedErr.Error(), nil, "")
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send message", nil, "")
 	}
 

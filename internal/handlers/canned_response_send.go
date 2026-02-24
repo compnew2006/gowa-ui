@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/compnew2006/whatomate/internal/models"
@@ -128,6 +129,10 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 		}
 		message, sendErr := a.SendOutgoingMessage(sendCtx, textRequest, opts)
 		if sendErr != nil {
+			var restrictedErr *restrictedSendViolationError
+			if errors.As(sendErr, &restrictedErr) {
+				return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedErr.Error(), nil, "")
+			}
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send canned response text", nil, "")
 		}
 		sentMessages = append(sentMessages, *message)
@@ -157,6 +162,10 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 		}
 		message, sendErr := a.SendOutgoingMessage(sendCtx, mediaRequest, opts)
 		if sendErr != nil {
+			var restrictedErr *restrictedSendViolationError
+			if errors.As(sendErr, &restrictedErr) {
+				return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedErr.Error(), nil, "")
+			}
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send canned response attachment", nil, "")
 		}
 		sentMessages = append(sentMessages, *message)

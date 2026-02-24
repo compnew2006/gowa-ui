@@ -15,6 +15,19 @@ export interface WhatsAppInstanceSettings {
             timezone?: string
         }
     }
+    auto_campaign?: {
+        enabled?: boolean
+        name_prefix?: string
+        message?: string
+        interval_days?: number
+        min_delay_minutes?: number
+        max_delay_minutes?: number
+        target_status?: 'draft' | 'run'
+        media_local_path?: string
+        media_mime_type?: string
+        media_filename?: string
+        last_generated_at?: string
+    }
     chat_tag_custom_label?: string
     chat_tag_color?: string
     chat_tag_display_mode?: 'name' | 'phone' | 'custom'
