@@ -77,9 +77,52 @@ func enableRestrictedInstanceVisibilityWithStrictAndEnabled(
 		user.Settings = models.JSONB{}
 	}
 	user.Settings["send_restrictions"] = models.JSONB{
-		"enabled":             restrictionsEnabled,
-		"allowed_instance_id": allowedInstanceID.String(),
-		"authorized_numbers":  []string{},
+		"enabled":              restrictionsEnabled,
+		"allowed_instance_id":  allowedInstanceID.String(),
+		"allowed_instance_ids": []string{allowedInstanceID.String()},
+		"authorized_numbers":   []string{},
+	}
+	require.NoError(t, app.DB.Model(&user).Update("settings", user.Settings).Error)
+}
+
+func enableRestrictedInstanceVisibilityMultiple(
+	t *testing.T,
+	app *handlers.App,
+	orgID uuid.UUID,
+	userID uuid.UUID,
+	allowedInstanceIDs ...uuid.UUID,
+) {
+	t.Helper()
+
+	app.Config.WhatsApp.Provider = "whatsmeow"
+
+	var org models.Organization
+	require.NoError(t, app.DB.Where("id = ?", orgID).First(&org).Error)
+	if org.Settings == nil {
+		org.Settings = models.JSONB{}
+	}
+	org.Settings["strict_sending_restrictions_enabled"] = true
+	require.NoError(t, app.DB.Model(&org).Update("settings", org.Settings).Error)
+
+	ids := make([]string, 0, len(allowedInstanceIDs))
+	for _, id := range allowedInstanceIDs {
+		ids = append(ids, id.String())
+	}
+
+	var user models.User
+	require.NoError(t, app.DB.Where("id = ?", userID).First(&user).Error)
+	if user.Settings == nil {
+		user.Settings = models.JSONB{}
+	}
+	var legacy any
+	if len(ids) > 0 {
+		legacy = ids[0]
+	}
+	user.Settings["send_restrictions"] = models.JSONB{
+		"enabled":              true,
+		"allowed_instance_id":  legacy,
+		"allowed_instance_ids": ids,
+		"authorized_numbers":   []string{},
 	}
 	require.NoError(t, app.DB.Model(&user).Update("settings", user.Settings).Error)
 }
@@ -156,6 +199,38 @@ func TestApp_ListInstances_RestrictedUserOnlySeesAllowedInstance(t *testing.T) {
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
 	require.Len(t, resp.Data, 1)
 	assert.Equal(t, allowed.ID, resp.Data[0].ID)
+}
+
+func TestApp_ListInstances_RestrictedUserSeesMultipleAllowedInstances(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID)
+
+	allowedA := createTestInstance(t, app, org.ID, "Allowed A")
+	allowedB := createTestInstance(t, app, org.ID, "Allowed B")
+	hidden := createTestInstance(t, app, org.ID, "Hidden")
+	enableRestrictedInstanceVisibilityMultiple(t, app, org.ID, user.ID, allowedA.ID, allowedB.ID)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListInstances(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data []models.WhatsAppInstance `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	require.Len(t, resp.Data, 2)
+
+	gotIDs := []uuid.UUID{resp.Data[0].ID, resp.Data[1].ID}
+	assert.ElementsMatch(t, []uuid.UUID{allowedA.ID, allowedB.ID}, gotIDs)
+	for _, instance := range resp.Data {
+		assert.NotEqual(t, hidden.ID, instance.ID)
+	}
 }
 
 func TestApp_GetInstance_RestrictedUserCannotAccessOtherInstance(t *testing.T) {

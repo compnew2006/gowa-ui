@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PageHeader, SearchInput, DataTable, CrudFormDialog, DeleteConfirmDialog, type Column } from '@/components/shared'
@@ -248,6 +249,7 @@ interface UserSendRestrictionsPayload {
   enabled: boolean
   include_all_contacts: boolean
   authorized_numbers: string[]
+  allowed_instance_ids?: string[]
   allowed_instance_id?: string | null
   prefix_agent_name?: boolean
 }
@@ -258,7 +260,7 @@ const sendRestrictionsEnabled = ref(false)
 const sendRestrictionsIncludeAllContacts = ref(false)
 const sendRestrictionsNumbers = ref<string[]>([])
 const sendRestrictionsNewNumber = ref('')
-const sendRestrictionsAllowedInstanceID = ref('')
+const sendRestrictionsAllowedInstanceIDs = ref<string[]>([])
 const sendRestrictionsPrefixAgentName = ref(true)
 const isSendRestrictionsLoading = ref(false)
 const isSendRestrictionsSubmitting = ref(false)
@@ -270,13 +272,26 @@ function normalizeAuthorizedNumber(raw: string): string {
   return digitsOnly
 }
 
+function normalizeAllowedInstanceIDs(values: unknown): string[] {
+  if (!Array.isArray(values)) return []
+  return Array.from(new Set(values
+    .map((value) => typeof value === 'string' ? value.trim() : '')
+    .filter(Boolean)))
+}
+
 function setSendRestrictionsPayload(payload: UserSendRestrictionsPayload | undefined) {
   sendRestrictionsEnabled.value = payload?.enabled === true
   sendRestrictionsIncludeAllContacts.value = payload?.include_all_contacts === true
   sendRestrictionsNumbers.value = Array.from(new Set((payload?.authorized_numbers || [])
     .map(normalizeAuthorizedNumber)
     .filter(Boolean))).sort()
-  sendRestrictionsAllowedInstanceID.value = payload?.allowed_instance_id || ''
+  const fromArray = normalizeAllowedInstanceIDs(payload?.allowed_instance_ids)
+  if (fromArray.length > 0) {
+    sendRestrictionsAllowedInstanceIDs.value = fromArray
+  } else {
+    const legacy = typeof payload?.allowed_instance_id === 'string' ? payload.allowed_instance_id.trim() : ''
+    sendRestrictionsAllowedInstanceIDs.value = legacy ? [legacy] : []
+  }
   sendRestrictionsPrefixAgentName.value = payload?.prefix_agent_name !== false
 }
 
@@ -315,14 +330,28 @@ function removeAuthorizedNumber(number: string) {
   sendRestrictionsNumbers.value = sendRestrictionsNumbers.value.filter(item => item !== number)
 }
 
+function toggleAllowedInstance(instanceID: string, checked: boolean) {
+  const normalized = instanceID.trim()
+  if (!normalized) return
+  if (checked) {
+    if (!sendRestrictionsAllowedInstanceIDs.value.includes(normalized)) {
+      sendRestrictionsAllowedInstanceIDs.value = [...sendRestrictionsAllowedInstanceIDs.value, normalized]
+    }
+    return
+  }
+  sendRestrictionsAllowedInstanceIDs.value = sendRestrictionsAllowedInstanceIDs.value.filter(id => id !== normalized)
+}
+
 async function saveSendRestrictions() {
   if (!sendRestrictionsUser.value) {
     return
   }
-  if (sendRestrictionsEnabled.value && !sendRestrictionsAllowedInstanceID.value) {
+  if (sendRestrictionsEnabled.value && sendRestrictionsAllowedInstanceIDs.value.length === 0) {
     toast.error(t('users.allowedInstanceRequired'))
     return
   }
+
+  const allowedInstanceIDs = normalizeAllowedInstanceIDs(sendRestrictionsAllowedInstanceIDs.value)
 
   isSendRestrictionsSubmitting.value = true
   try {
@@ -330,7 +359,8 @@ async function saveSendRestrictions() {
       enabled: sendRestrictionsEnabled.value,
       include_all_contacts: sendRestrictionsIncludeAllContacts.value,
       authorized_numbers: sendRestrictionsNumbers.value,
-      allowed_instance_id: sendRestrictionsAllowedInstanceID.value || null,
+      allowed_instance_ids: allowedInstanceIDs,
+      allowed_instance_id: allowedInstanceIDs[0] || null,
       prefix_agent_name: sendRestrictionsPrefixAgentName.value,
     })
     const payload = (response.data as any).data || response.data
@@ -564,32 +594,44 @@ async function saveSendRestrictions() {
 
           <div class="space-y-2">
             <Label>{{ $t('users.allowedInstance') }}</Label>
-            <div class="flex items-center gap-2">
-              <Select v-model="sendRestrictionsAllowedInstanceID" :disabled="isSendRestrictionsLoading">
-                <SelectTrigger>
-                  <SelectValue :placeholder="$t('users.allowedInstancePlaceholder')" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem
-                    v-for="instance in sendRestrictionsAvailableInstances"
-                    :key="instance.id"
-                    :value="instance.id"
-                  >
+            <div class="rounded-md border p-3 max-h-48 overflow-y-auto">
+              <div v-if="isSendRestrictionsLoading" class="text-sm text-muted-foreground">{{ $t('common.loading') }}...</div>
+              <div v-else-if="sendRestrictionsAvailableInstances.length === 0" class="text-sm text-muted-foreground">
+                {{ $t('users.allowedInstancePlaceholder') }}
+              </div>
+              <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label
+                  v-for="instance in sendRestrictionsAvailableInstances"
+                  :key="instance.id"
+                  :for="`allowed-instance-${instance.id}`"
+                  class="flex items-start gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50 cursor-pointer min-w-0"
+                >
+                  <span class="shrink-0 pt-0.5">
+                    <Checkbox
+                      :id="`allowed-instance-${instance.id}`"
+                      :checked="sendRestrictionsAllowedInstanceIDs.includes(instance.id)"
+                      :disabled="isSendRestrictionsLoading"
+                      @update:checked="toggleAllowedInstance(instance.id, $event === true)"
+                    />
+                  </span>
+                  <span class="text-sm leading-snug break-words whitespace-normal min-w-0">
                     {{ instance.name }} <span v-if="instance.phone_number">({{ instance.phone_number }})</span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                  </span>
+                </label>
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-xs text-muted-foreground">{{ $t('users.allowedInstanceDesc') }}</p>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                :disabled="isSendRestrictionsLoading || !sendRestrictionsAllowedInstanceID"
-                @click="sendRestrictionsAllowedInstanceID = ''"
+                :disabled="isSendRestrictionsLoading || sendRestrictionsAllowedInstanceIDs.length === 0"
+                @click="sendRestrictionsAllowedInstanceIDs = []"
               >
-                Clear
+                {{ $t('common.clear') }}
               </Button>
             </div>
-            <p class="text-xs text-muted-foreground">{{ $t('users.allowedInstanceDesc') }}</p>
           </div>
 
           <div class="flex items-center justify-between">

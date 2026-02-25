@@ -106,6 +106,7 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 	req := testutil.NewJSONRequest(t, map[string]interface{}{
 		"enabled":              true,
 		"include_all_contacts": true,
+		"allowed_instance_ids": []string{instance.ID.String()},
 		"allowed_instance_id":  instance.ID.String(),
 		"prefix_agent_name":    false,
 		"authorized_numbers": []string{
@@ -125,6 +126,7 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 		Data struct {
 			Enabled            bool     `json:"enabled"`
 			IncludeAllContacts bool     `json:"include_all_contacts"`
+			AllowedInstanceIDs []string `json:"allowed_instance_ids"`
 			AllowedInstanceID  string   `json:"allowed_instance_id"`
 			AuthorizedNumbers  []string `json:"authorized_numbers"`
 			PrefixAgentName    bool     `json:"prefix_agent_name"`
@@ -133,7 +135,52 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
 	assert.True(t, resp.Data.Enabled)
 	assert.True(t, resp.Data.IncludeAllContacts)
+	assert.Equal(t, []string{instance.ID.String()}, resp.Data.AllowedInstanceIDs)
 	assert.Equal(t, instance.ID.String(), resp.Data.AllowedInstanceID)
 	assert.Equal(t, []string{"15550001111"}, resp.Data.AuthorizedNumbers)
 	assert.False(t, resp.Data.PrefixAgentName)
+}
+
+func TestApp_UpdateUserSendRestrictions_AllowsMultipleInstances(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	targetUser := testutil.CreateTestUser(t, app.DB, org.ID)
+	instanceA := createTestInstance(t, app, org.ID, "Instance A")
+	instanceB := createTestInstance(t, app, org.ID, "Instance B")
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"enabled":              true,
+		"include_all_contacts": false,
+		"allowed_instance_ids": []string{instanceA.ID.String(), instanceB.ID.String(), instanceA.ID.String()},
+		"authorized_numbers":   []string{},
+		"prefix_agent_name":    true,
+	})
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
+	testutil.SetPathParam(req, "id", targetUser.ID.String())
+
+	err := app.UpdateUserSendRestrictions(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			AllowedInstanceIDs []string `json:"allowed_instance_ids"`
+			AllowedInstanceID  string   `json:"allowed_instance_id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, []string{instanceA.ID.String(), instanceB.ID.String()}, resp.Data.AllowedInstanceIDs)
+	assert.Equal(t, instanceA.ID.String(), resp.Data.AllowedInstanceID)
+
+	var reloaded models.User
+	require.NoError(t, app.DB.Where("id = ?", targetUser.ID).First(&reloaded).Error)
+	settingsJSON, err := json.Marshal(reloaded.Settings)
+	require.NoError(t, err)
+	assert.Contains(t, string(settingsJSON), `"allowed_instance_ids"`)
+	assert.Contains(t, string(settingsJSON), instanceA.ID.String())
+	assert.Contains(t, string(settingsJSON), instanceB.ID.String())
 }

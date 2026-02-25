@@ -493,13 +493,13 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		)
 	}
 
-	restrictedInstanceID, err := a.getRestrictedInstanceForUser(orgID, userID)
+	restrictedInstanceIDs, err := a.getRestrictedInstancesForUser(orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for contact list", "error", err, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list contacts", nil, "")
 	}
-	if restrictedInstanceID != nil {
-		query = query.Where("instance_id = ?", *restrictedInstanceID)
+	if len(restrictedInstanceIDs) > 0 {
+		query = query.Where("instance_id IN ?", restrictedInstanceIDs)
 	}
 
 	if statusFilter != nil {
@@ -711,13 +711,13 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	if !a.canReadAllContacts(userID, orgID) {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
-	restrictedInstanceID, restrictedErr := a.getRestrictedInstanceForUser(orgID, userID)
+	restrictedInstanceIDs, restrictedErr := a.getRestrictedInstancesForUser(orgID, userID)
 	if restrictedErr != nil {
 		a.Log.Error("Failed to resolve restricted instance for contact read", "error", restrictedErr, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load contact", nil, "")
 	}
-	if restrictedInstanceID != nil {
-		query = query.Where("instance_id = ?", *restrictedInstanceID)
+	if len(restrictedInstanceIDs) > 0 {
+		query = query.Where("instance_id IN ?", restrictedInstanceIDs)
 	}
 
 	if err := query.First(&contact).Error; err != nil {
@@ -823,7 +823,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	}
 
 	hasContactsReadPermission := a.canReadAllContacts(userID, orgID)
-	restrictedInstanceID, restrictedErr := a.getRestrictedInstanceForUser(orgID, userID)
+	restrictedInstanceIDs, restrictedErr := a.getRestrictedInstancesForUser(orgID, userID)
 	if restrictedErr != nil {
 		a.Log.Error("Failed to resolve restricted instance for messages", "error", restrictedErr, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load messages", nil, "")
@@ -835,8 +835,8 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	if !hasContactsReadPermission {
 		query = query.Where("assigned_user_id = ?", userID)
 	}
-	if restrictedInstanceID != nil {
-		query = query.Where("instance_id = ?", *restrictedInstanceID)
+	if len(restrictedInstanceIDs) > 0 {
+		query = query.Where("instance_id IN ?", restrictedInstanceIDs)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")

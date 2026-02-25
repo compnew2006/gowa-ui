@@ -84,12 +84,12 @@ func (a *App) broadcastInstanceConnectFailure(orgID, instanceID uuid.UUID, reaso
 }
 
 func (a *App) scopeInstancesQueryToUserRestriction(query *gorm.DB, orgID, userID uuid.UUID) (*gorm.DB, error) {
-	restrictedInstanceID, err := a.getRestrictedInstanceForUser(orgID, userID)
+	restrictedInstanceIDs, err := a.getRestrictedInstancesForUser(orgID, userID)
 	if err != nil {
 		return nil, err
 	}
-	if restrictedInstanceID != nil {
-		query = query.Where("id = ?", *restrictedInstanceID)
+	if len(restrictedInstanceIDs) > 0 {
+		query = query.Where("id IN ?", restrictedInstanceIDs)
 	}
 	return query, nil
 }

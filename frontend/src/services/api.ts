@@ -90,7 +90,7 @@ export const usersService = {
     api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
   getSendRestrictions: (id: string) => api.get(`/users/${id}/send-restrictions`),
-  updateSendRestrictions: (id: string, data: { enabled?: boolean; include_all_contacts?: boolean; authorized_numbers?: string[]; allowed_instance_id?: string | null; prefix_agent_name?: boolean }) =>
+  updateSendRestrictions: (id: string, data: { enabled?: boolean; include_all_contacts?: boolean; authorized_numbers?: string[]; allowed_instance_ids?: string[]; allowed_instance_id?: string | null; prefix_agent_name?: boolean }) =>
     api.put(`/users/${id}/send-restrictions`, data),
   me: () => api.get('/me'),
   updateSettings: (data: { email_notifications: boolean; new_message_alerts: boolean; campaign_updates: boolean; notification_sound?: 'notification1' | 'notification2' | 'notification' }) =>

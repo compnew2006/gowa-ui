@@ -118,16 +118,25 @@ function normalizeContacts(contacts: Contact[]): Contact[] {
   return contacts.map(normalizeContact)
 }
 
-function extractAllowedInstanceIDFromUserSettings(settings: unknown): string {
-  if (!settings || typeof settings !== 'object') return ''
+function extractAllowedInstanceIDsFromUserSettings(settings: unknown): string[] {
+  if (!settings || typeof settings !== 'object') return []
 
   const sendRestrictions = (settings as Record<string, unknown>).send_restrictions
-  if (!sendRestrictions || typeof sendRestrictions !== 'object') return ''
+  if (!sendRestrictions || typeof sendRestrictions !== 'object') return []
 
-  const allowedInstanceID = (sendRestrictions as Record<string, unknown>).allowed_instance_id
-  if (typeof allowedInstanceID !== 'string') return ''
+  const raw = sendRestrictions as Record<string, unknown>
+  const allowedInstanceIDs = raw.allowed_instance_ids
+  if (Array.isArray(allowedInstanceIDs)) {
+    return Array.from(new Set(allowedInstanceIDs
+      .map((value) => typeof value === 'string' ? value.trim() : '')
+      .filter(Boolean)))
+  }
 
-  return allowedInstanceID.trim()
+  const allowedInstanceID = raw.allowed_instance_id
+  if (typeof allowedInstanceID !== 'string') return []
+
+  const trimmed = allowedInstanceID.trim()
+  return trimmed ? [trimmed] : []
 }
 
 function getMessageBody(message: Message): string {
@@ -289,15 +298,17 @@ export const useContactsStore = defineStore('contacts', () => {
   const pendingChatsTotal = ref(0)
   const assignedChatsTotal = ref(0)
   const isLoadingMoreContacts = ref(false)
-  const restrictedAllowedInstanceID = computed(() =>
-    extractAllowedInstanceIDFromUserSettings(authStore.user?.settings)
+  const restrictedAllowedInstanceIDs = computed(() =>
+    extractAllowedInstanceIDsFromUserSettings(authStore.user?.settings)
   )
   const effectiveInstanceFilterID = computed(() => {
     const selected = selectedInstanceId.value.trim()
     if (selected !== '') {
       return selected
     }
-    return restrictedAllowedInstanceID.value
+    return restrictedAllowedInstanceIDs.value.length === 1
+      ? restrictedAllowedInstanceIDs.value[0]
+      : ''
   })
   const isAdminOrSuperAdmin = computed(() => {
     if (authStore.user?.is_super_admin === true) return true
@@ -388,6 +399,12 @@ export const useContactsStore = defineStore('contacts', () => {
   function matchesActiveFilters(contact: Contact): boolean {
     if (effectiveInstanceFilterID.value && contact.instance_id !== effectiveInstanceFilterID.value) {
       return false
+    }
+    if (!effectiveInstanceFilterID.value && restrictedAllowedInstanceIDs.value.length > 0) {
+      const instanceID = typeof contact.instance_id === 'string' ? contact.instance_id.trim() : ''
+      if (!instanceID || !restrictedAllowedInstanceIDs.value.includes(instanceID)) {
+        return false
+      }
     }
 
     return true

@@ -16,6 +16,7 @@ type UserSendRestrictionsResponse struct {
 	Enabled            bool     `json:"enabled"`
 	IncludeAllContacts bool     `json:"include_all_contacts"`
 	AuthorizedNumbers  []string `json:"authorized_numbers"`
+	AllowedInstanceIDs []string `json:"allowed_instance_ids"`
 	AllowedInstanceID  *string  `json:"allowed_instance_id,omitempty"`
 	PrefixAgentName    bool     `json:"prefix_agent_name"`
 }
@@ -61,6 +62,37 @@ func (a *App) resolveSendRestrictionsInstanceID(orgID uuid.UUID, raw string) (*u
 	return &instanceID, nil
 }
 
+func (a *App) resolveSendRestrictionsInstanceIDs(orgID uuid.UUID, raw []string) ([]uuid.UUID, error) {
+	if len(raw) == 0 {
+		return []uuid.UUID{}, nil
+	}
+
+	resolved := make([]uuid.UUID, 0, len(raw))
+	seen := make(map[uuid.UUID]struct{}, len(raw))
+	for _, value := range raw {
+		instanceID, err := a.resolveSendRestrictionsInstanceID(orgID, value)
+		if err != nil {
+			if strings.Contains(err.Error(), "valid UUID") {
+				return nil, errors.New("allowed_instance_ids must contain valid UUID values")
+			}
+			if strings.Contains(err.Error(), "does not belong to this organization") {
+				return nil, errors.New("one or more allowed_instance_ids do not belong to this organization")
+			}
+			return nil, err
+		}
+		if instanceID == nil {
+			continue
+		}
+		if _, ok := seen[*instanceID]; ok {
+			continue
+		}
+		seen[*instanceID] = struct{}{}
+		resolved = append(resolved, *instanceID)
+	}
+
+	return resolved, nil
+}
+
 // GetUserSendRestrictions returns strict send restriction settings for a user.
 func (a *App) GetUserSendRestrictions(r *fastglue.Request) error {
 	orgID, currentUserID, err := a.getOrgAndUserID(r)
@@ -89,7 +121,8 @@ func (a *App) GetUserSendRestrictions(r *fastglue.Request) error {
 		Enabled:            cfg.Enabled,
 		IncludeAllContacts: cfg.IncludeAllContacts,
 		AuthorizedNumbers:  cfg.AuthorizedNumbers,
-		AllowedInstanceID:  stringifyOptionalUUID(cfg.AllowedInstanceID),
+		AllowedInstanceIDs: stringifyUUIDs(allowedInstanceIDsForRestrictions(cfg)),
+		AllowedInstanceID:  stringifyOptionalUUID(firstRestrictedUUID(allowedInstanceIDsForRestrictions(cfg))),
 		PrefixAgentName:    cfg.PrefixAgentName,
 	})
 }
@@ -113,6 +146,7 @@ func (a *App) UpdateUserSendRestrictions(r *fastglue.Request) error {
 		Enabled            *bool     `json:"enabled"`
 		IncludeAllContacts *bool     `json:"include_all_contacts"`
 		AuthorizedNumbers  *[]string `json:"authorized_numbers"`
+		AllowedInstanceIDs *[]string `json:"allowed_instance_ids"`
 		AllowedInstanceID  *string   `json:"allowed_instance_id"`
 		PrefixAgentName    *bool     `json:"prefix_agent_name"`
 	}
@@ -138,20 +172,32 @@ func (a *App) UpdateUserSendRestrictions(r *fastglue.Request) error {
 	if req.AuthorizedNumbers != nil {
 		cfg.AuthorizedNumbers = normalizeRestrictedNumbers(*req.AuthorizedNumbers)
 	}
-	if req.AllowedInstanceID != nil {
+	if req.AllowedInstanceIDs != nil {
+		instanceIDs, resolveErr := a.resolveSendRestrictionsInstanceIDs(orgID, *req.AllowedInstanceIDs)
+		if resolveErr != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "allowed_instance_ids")
+		}
+		cfg.AllowedInstanceIDs = instanceIDs
+		cfg.AllowedInstanceID = firstRestrictedUUID(instanceIDs)
+	} else if req.AllowedInstanceID != nil {
 		instanceID, resolveErr := a.resolveSendRestrictionsInstanceID(orgID, *req.AllowedInstanceID)
 		if resolveErr != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "allowed_instance_id")
 		}
 		cfg.AllowedInstanceID = instanceID
+		if instanceID == nil {
+			cfg.AllowedInstanceIDs = []uuid.UUID{}
+		} else {
+			cfg.AllowedInstanceIDs = []uuid.UUID{*instanceID}
+		}
 	}
 	if req.PrefixAgentName != nil {
 		cfg.PrefixAgentName = *req.PrefixAgentName
 	}
 
 	if cfg.Enabled {
-		if a.isWhatsmeowProvider() && cfg.AllowedInstanceID == nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "allowed_instance_id is required when restrictions are enabled", nil, "allowed_instance_id")
+		if a.isWhatsmeowProvider() && len(allowedInstanceIDsForRestrictions(cfg)) == 0 {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "allowed_instance_ids is required when restrictions are enabled", nil, "allowed_instance_ids")
 		}
 
 		cfg, err = a.syncUserRestrictionsWithSources(orgID, user, cfg)
@@ -171,7 +217,8 @@ func (a *App) UpdateUserSendRestrictions(r *fastglue.Request) error {
 		Enabled:            cfg.Enabled,
 		IncludeAllContacts: cfg.IncludeAllContacts,
 		AuthorizedNumbers:  cfg.AuthorizedNumbers,
-		AllowedInstanceID:  stringifyOptionalUUID(cfg.AllowedInstanceID),
+		AllowedInstanceIDs: stringifyUUIDs(allowedInstanceIDsForRestrictions(cfg)),
+		AllowedInstanceID:  stringifyOptionalUUID(firstRestrictedUUID(allowedInstanceIDsForRestrictions(cfg))),
 		PrefixAgentName:    cfg.PrefixAgentName,
 	})
 }

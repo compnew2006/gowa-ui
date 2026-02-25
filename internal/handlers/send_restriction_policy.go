@@ -48,6 +48,7 @@ type sendRestrictionsSettings struct {
 	IncludeAllContacts bool
 	AuthorizedNumbers  []string
 	AllowedInstanceID  *uuid.UUID
+	AllowedInstanceIDs []uuid.UUID
 	PrefixAgentName    bool
 }
 
@@ -57,6 +58,7 @@ func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSetting
 		IncludeAllContacts: false,
 		AuthorizedNumbers:  []string{},
 		AllowedInstanceID:  nil,
+		AllowedInstanceIDs: []uuid.UUID{},
 		PrefixAgentName:    true,
 	}
 	if settings == nil {
@@ -91,7 +93,13 @@ func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSetting
 	if rawNumbers, ok := payload["authorized_numbers"]; ok {
 		cfg.AuthorizedNumbers = normalizeRestrictedNumbers(asStringSlice(rawNumbers))
 	}
-	cfg.AllowedInstanceID = parseOptionalUUID(payload["allowed_instance_id"])
+	cfg.AllowedInstanceIDs = normalizeRestrictedUUIDs(parseUUIDSlice(payload["allowed_instance_ids"]))
+	if len(cfg.AllowedInstanceIDs) == 0 {
+		if legacy := parseOptionalUUID(payload["allowed_instance_id"]); legacy != nil {
+			cfg.AllowedInstanceIDs = []uuid.UUID{*legacy}
+		}
+	}
+	cfg.AllowedInstanceID = firstRestrictedUUID(cfg.AllowedInstanceIDs)
 
 	return cfg
 }
@@ -100,14 +108,19 @@ func writeSendRestrictionsSettings(settings models.JSONB, cfg sendRestrictionsSe
 	if settings == nil {
 		settings = models.JSONB{}
 	}
+	allowedInstanceIDs := normalizeRestrictedUUIDs(cfg.AllowedInstanceIDs)
+	if len(allowedInstanceIDs) == 0 && cfg.AllowedInstanceID != nil {
+		allowedInstanceIDs = []uuid.UUID{*cfg.AllowedInstanceID}
+	}
 	restrictions := models.JSONB{
 		"enabled":              cfg.Enabled,
 		"include_all_contacts": cfg.IncludeAllContacts,
 		"authorized_numbers":   normalizeRestrictedNumbers(cfg.AuthorizedNumbers),
+		"allowed_instance_ids": stringifyUUIDs(allowedInstanceIDs),
 		"prefix_agent_name":    cfg.PrefixAgentName,
 	}
-	if cfg.AllowedInstanceID != nil {
-		restrictions["allowed_instance_id"] = cfg.AllowedInstanceID.String()
+	if len(allowedInstanceIDs) > 0 {
+		restrictions["allowed_instance_id"] = allowedInstanceIDs[0].String()
 	} else {
 		restrictions["allowed_instance_id"] = nil
 	}
@@ -178,6 +191,106 @@ func stringifyOptionalUUID(value *uuid.UUID) *string {
 	}
 	formatted := value.String()
 	return &formatted
+}
+
+func stringifyUUIDs(values []uuid.UUID) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == uuid.Nil {
+			continue
+		}
+		out = append(out, value.String())
+	}
+	return out
+}
+
+func parseUUIDSlice(raw interface{}) []uuid.UUID {
+	switch typed := raw.(type) {
+	case []uuid.UUID:
+		return append([]uuid.UUID{}, typed...)
+	case []string:
+		out := make([]uuid.UUID, 0, len(typed))
+		for _, item := range typed {
+			if parsed := parseOptionalUUID(item); parsed != nil {
+				out = append(out, *parsed)
+			}
+		}
+		return out
+	case models.StringArray:
+		out := make([]uuid.UUID, 0, len(typed))
+		for _, item := range typed {
+			if parsed := parseOptionalUUID(item); parsed != nil {
+				out = append(out, *parsed)
+			}
+		}
+		return out
+	case []interface{}:
+		out := make([]uuid.UUID, 0, len(typed))
+		for _, item := range typed {
+			if parsed := parseOptionalUUID(item); parsed != nil {
+				out = append(out, *parsed)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func normalizeRestrictedUUIDs(values []uuid.UUID) []uuid.UUID {
+	if len(values) == 0 {
+		return []uuid.UUID{}
+	}
+	seen := make(map[uuid.UUID]struct{}, len(values))
+	normalized := make([]uuid.UUID, 0, len(values))
+	for _, value := range values {
+		if value == uuid.Nil {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return normalized
+}
+
+func firstRestrictedUUID(values []uuid.UUID) *uuid.UUID {
+	for _, value := range values {
+		if value == uuid.Nil {
+			continue
+		}
+		v := value
+		return &v
+	}
+	return nil
+}
+
+func containsRestrictedUUID(values []uuid.UUID, needle uuid.UUID) bool {
+	if needle == uuid.Nil {
+		return false
+	}
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func allowedInstanceIDsForRestrictions(cfg sendRestrictionsSettings) []uuid.UUID {
+	ids := normalizeRestrictedUUIDs(cfg.AllowedInstanceIDs)
+	if len(ids) > 0 {
+		return ids
+	}
+	if cfg.AllowedInstanceID != nil && *cfg.AllowedInstanceID != uuid.Nil {
+		return []uuid.UUID{*cfg.AllowedInstanceID}
+	}
+	return []uuid.UUID{}
 }
 
 func asStringSlice(raw interface{}) []string {
@@ -419,7 +532,7 @@ func (a *App) syncUserRestrictionsWithSources(orgID uuid.UUID, user *models.User
 	return cfg, nil
 }
 
-func (a *App) getRestrictedInstanceForUser(orgID, userID uuid.UUID) (*uuid.UUID, error) {
+func (a *App) getRestrictedInstancesForUser(orgID, userID uuid.UUID) ([]uuid.UUID, error) {
 	if a == nil || a.DB == nil || orgID == uuid.Nil || userID == uuid.Nil || !a.isWhatsmeowProvider() {
 		return nil, nil
 	}
@@ -433,11 +546,21 @@ func (a *App) getRestrictedInstanceForUser(orgID, userID uuid.UUID) (*uuid.UUID,
 	}
 
 	cfg := readSendRestrictionsSettings(user.Settings)
-	if cfg.AllowedInstanceID == nil {
+	allowedInstanceIDs := allowedInstanceIDsForRestrictions(cfg)
+	if len(allowedInstanceIDs) == 0 {
 		return nil, nil
 	}
 
-	return cfg.AllowedInstanceID, nil
+	return allowedInstanceIDs, nil
+}
+
+func (a *App) getRestrictedInstanceForUser(orgID, userID uuid.UUID) (*uuid.UUID, error) {
+	ids, err := a.getRestrictedInstancesForUser(orgID, userID)
+	if err != nil || len(ids) == 0 {
+		return nil, err
+	}
+	id := ids[0]
+	return &id, nil
 }
 
 func resolveOutgoingInstanceID(req OutgoingMessageRequest) *uuid.UUID {
@@ -490,21 +613,22 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 		targetPhone = canonical
 	}
 	if a.isWhatsmeowProvider() {
-		if cfg.AllowedInstanceID == nil {
+		allowedInstanceIDs := allowedInstanceIDsForRestrictions(cfg)
+		if len(allowedInstanceIDs) == 0 {
 			reason := "restricted user does not have an allowed instance configured"
 			a.logRestrictedSendBlocked(orgID, *opts.SentByUserID, req.Contact, req.Type, targetPhone, reason)
 			return &restrictedSendViolationError{message: "Message blocked by strict sending restrictions. Your user must be assigned to a WhatsApp instance."}
 		}
 
 		outgoingInstanceID := resolveOutgoingInstanceID(req)
-		if outgoingInstanceID == nil || *outgoingInstanceID != *cfg.AllowedInstanceID {
+		if outgoingInstanceID == nil || !containsRestrictedUUID(allowedInstanceIDs, *outgoingInstanceID) {
 			requestedInstance := ""
 			if outgoingInstanceID != nil {
 				requestedInstance = outgoingInstanceID.String()
 			}
-			reason := fmt.Sprintf("instance mismatch (allowed=%s, requested=%s)", cfg.AllowedInstanceID.String(), requestedInstance)
+			reason := fmt.Sprintf("instance mismatch (allowed=%s, requested=%s)", strings.Join(stringifyUUIDs(allowedInstanceIDs), ","), requestedInstance)
 			a.logRestrictedSendBlocked(orgID, *opts.SentByUserID, req.Contact, req.Type, targetPhone, reason)
-			return &restrictedSendViolationError{message: "Message blocked by strict sending restrictions. You can only send and receive chats on your assigned WhatsApp instance."}
+			return &restrictedSendViolationError{message: "Message blocked by strict sending restrictions. You can only send and receive chats on your assigned WhatsApp instances."}
 		}
 	}
 
