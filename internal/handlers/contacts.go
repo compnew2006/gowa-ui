@@ -59,6 +59,7 @@ type MessageResponse struct {
 	MediaURL         string               `json:"media_url,omitempty"`
 	MediaMimeType    string               `json:"media_mime_type,omitempty"`
 	MediaFilename    string               `json:"media_filename,omitempty"`
+	Metadata         models.JSONB         `json:"metadata,omitempty"`
 	InteractiveData  models.JSONB         `json:"interactive_data,omitempty"`
 	Status           models.MessageStatus `json:"status"`
 	WAMID            string               `json:"wamid"`
@@ -162,6 +163,27 @@ func buildConversationScopeQuery(db *gorm.DB, orgID uuid.UUID, conversationID st
 		query = query.Where("instance_id = ?", *instanceID)
 	}
 	return query
+}
+
+func buildGroupConversationMessagesQuery(db *gorm.DB, orgID uuid.UUID, conversationID string, contactID uuid.UUID, instanceID *uuid.UUID) *gorm.DB {
+	// Include canonical conversation messages plus legacy system events that were
+	// stored before conversation_id was persisted for claim/reset events.
+	conversationClause := "organization_id = ? AND conversation_id = ?"
+	conversationArgs := []any{orgID, conversationID}
+	if instanceID != nil {
+		conversationClause += " AND instance_id = ?"
+		conversationArgs = append(conversationArgs, *instanceID)
+	}
+
+	legacyClause := "organization_id = ? AND contact_id = ? AND COALESCE(conversation_id, '') = '' AND metadata->>'system_event' = 'true'"
+	legacyArgs := []any{orgID, contactID}
+	if instanceID != nil {
+		legacyClause += " AND instance_id = ?"
+		legacyArgs = append(legacyArgs, *instanceID)
+	}
+
+	args := append(conversationArgs, legacyArgs...)
+	return db.Where("(("+conversationClause+") OR ("+legacyClause+"))", args...)
 }
 
 func stringifyInstanceID(instanceID *uuid.UUID) *string {
@@ -300,7 +322,7 @@ func (a *App) resolveContactConversationContext(orgID uuid.UUID, contact models.
 
 	var latestMessage models.Message
 	if err := a.DB.WithContext(context.Background()).
-		Select("conversation_id", "metadata").
+		Select("conversation_id", "metadata", "direction").
 		Where("organization_id = ? AND contact_id = ?", orgID, contact.ID).
 		Order("created_at DESC").
 		First(&latestMessage).Error; err != nil {
@@ -349,8 +371,16 @@ func (a *App) resolveContactConversationContext(orgID uuid.UUID, contact models.
 
 	conversationID := strings.TrimSpace(latestMessage.ConversationID)
 	if conversationID != "" {
+		displayName := ""
+		if latestMessage.Direction == models.DirectionIncoming {
+			displayName = messageMetadataString(latestMessage.Metadata, "sender_push_name")
+			if displayName == "" {
+				displayName = messageMetadataString(latestMessage.Metadata, "push_name")
+			}
+		}
 		return contactConversationContext{
 			ConversationID: conversationID,
+			DisplayName:    displayName,
 		}
 	}
 
@@ -604,6 +634,11 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		if conversationContext.DisplayName != "" {
 			profileName = conversationContext.DisplayName
 		}
+		if !conversationContext.IsGroupChat && !conversationContext.IsChannelChat && isDirectIdentityValue(profileName) {
+			if fallbackName := fallbackDirectContactDisplayName(phoneNumber, conversationContext.ConversationID); fallbackName != "" {
+				profileName = fallbackName
+			}
+		}
 		if shouldMask {
 			phoneNumber = MaskPhoneNumber(phoneNumber)
 			profileName = MaskIfPhoneNumber(profileName)
@@ -721,6 +756,11 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	if conversationContext.DisplayName != "" {
 		profileName = conversationContext.DisplayName
 	}
+	if !conversationContext.IsGroupChat && !conversationContext.IsChannelChat && isDirectIdentityValue(profileName) {
+		if fallbackName := fallbackDirectContactDisplayName(phoneNumber, conversationContext.ConversationID); fallbackName != "" {
+			profileName = fallbackName
+		}
+	}
 	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
 	if shouldMask {
 		phoneNumber = MaskPhoneNumber(phoneNumber)
@@ -824,7 +864,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	// Build base query
 	msgQuery := a.DB.Where("contact_id = ?", contactID)
 	if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
-		msgQuery = buildConversationScopeQuery(a.DB, orgID, conversationContext.ConversationID, contact.InstanceID)
+		msgQuery = buildGroupConversationMessagesQuery(a.DB, orgID, conversationContext.ConversationID, contact.ID, contact.InstanceID)
 	}
 
 	// Filter by WhatsApp account if specified
@@ -966,6 +1006,7 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 			MediaURL:        m.MediaURL,
 			MediaMimeType:   m.MediaMimeType,
 			MediaFilename:   m.MediaFilename,
+			Metadata:        m.Metadata,
 			InteractiveData: m.InteractiveData,
 			Status:          m.Status,
 			WAMID:           m.WhatsAppMessageID,

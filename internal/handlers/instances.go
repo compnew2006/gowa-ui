@@ -83,6 +83,17 @@ func (a *App) broadcastInstanceConnectFailure(orgID, instanceID uuid.UUID, reaso
 	})
 }
 
+func (a *App) scopeInstancesQueryToUserRestriction(query *gorm.DB, orgID, userID uuid.UUID) (*gorm.DB, error) {
+	restrictedInstanceID, err := a.getRestrictedInstanceForUser(orgID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if restrictedInstanceID != nil {
+		query = query.Where("id = ?", *restrictedInstanceID)
+	}
+	return query, nil
+}
+
 // CreateInstance creates a new WhatsApp instance
 func (a *App) CreateInstance(r *fastglue.Request) error {
 	orgID, err := a.getOrgID(r)
@@ -133,13 +144,20 @@ func (a *App) CreateInstance(r *fastglue.Request) error {
 
 // ListInstances returns all instances for the organization
 func (a *App) ListInstances(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
+	query := a.DB.Where("organization_id = ?", orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for list", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list instances", nil, "")
+	}
+
 	var instances []models.WhatsAppInstance
-	if err := a.DB.Where("organization_id = ?", orgID).Find(&instances).Error; err != nil {
+	if err := query.Find(&instances).Error; err != nil {
 		a.Log.Error("Failed to list instances", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list instances", nil, "")
 	}
@@ -149,7 +167,7 @@ func (a *App) ListInstances(r *fastglue.Request) error {
 
 // GetInstance returns a single instance
 func (a *App) GetInstance(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -160,8 +178,15 @@ func (a *App) GetInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
+	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for read", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to get instance", nil, "")
+	}
+
 	var instance models.WhatsAppInstance
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&instance).Error; err != nil {
+	if err := query.First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
 		}
@@ -174,7 +199,7 @@ func (a *App) GetInstance(r *fastglue.Request) error {
 
 // UpdateInstance updates an instance
 func (a *App) UpdateInstance(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -190,8 +215,15 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
 	}
 
+	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for update", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
+	}
+
 	var instance models.WhatsAppInstance
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&instance).Error; err != nil {
+	if err := query.First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
 		}
@@ -242,7 +274,7 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 
 // DeleteInstance logs out/unlinks an instance and then deletes it.
 func (a *App) DeleteInstance(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -253,8 +285,15 @@ func (a *App) DeleteInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
+	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for delete", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
+	}
+
 	var instance models.WhatsAppInstance
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&instance).Error; err != nil {
+	if err := query.First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
 		}
@@ -283,7 +322,7 @@ func (a *App) DeleteInstance(r *fastglue.Request) error {
 
 // ConnectInstance initiates connection (and QR generation) for an instance
 func (a *App) ConnectInstance(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -294,9 +333,16 @@ func (a *App) ConnectInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
+	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for connect", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
+	}
+
 	// Verify ownership
 	var instance models.WhatsAppInstance
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&instance).Error; err != nil {
+	if err := query.First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
 		}
@@ -329,7 +375,7 @@ func (a *App) ConnectInstance(r *fastglue.Request) error {
 
 // DisconnectInstance disconnects an instance
 func (a *App) DisconnectInstance(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -340,9 +386,16 @@ func (a *App) DisconnectInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
+	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for disconnect", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
+	}
+
 	// Verify ownership
 	var instance models.WhatsAppInstance
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&instance).Error; err != nil {
+	if err := query.First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
 		}
@@ -366,7 +419,7 @@ func (a *App) DisconnectInstance(r *fastglue.Request) error {
 
 // ReconnectInstance reconnects an instance
 func (a *App) ReconnectInstance(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -377,8 +430,15 @@ func (a *App) ReconnectInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
+	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for reconnect", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
+	}
+
 	var instance models.WhatsAppInstance
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&instance).Error; err != nil {
+	if err := query.First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
 		}
@@ -416,7 +476,7 @@ func (a *App) ReconnectInstance(r *fastglue.Request) error {
 
 // PairPhoneInstance requests a phone linking code for an unpaired instance.
 func (a *App) PairPhoneInstance(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -427,8 +487,15 @@ func (a *App) PairPhoneInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
+	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for pairing", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
+	}
+
 	var instance models.WhatsAppInstance
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&instance).Error; err != nil {
+	if err := query.First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
 		}
@@ -491,7 +558,7 @@ func (a *App) PairPhoneInstance(r *fastglue.Request) error {
 
 // GetInstanceHealth returns runtime health metrics for an instance.
 func (a *App) GetInstanceHealth(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -502,8 +569,15 @@ func (a *App) GetInstanceHealth(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
+	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for health", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
+	}
+
 	var instance models.WhatsAppInstance
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&instance).Error; err != nil {
+	if err := query.First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
 		}

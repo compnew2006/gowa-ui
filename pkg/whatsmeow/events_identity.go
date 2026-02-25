@@ -162,7 +162,10 @@ func (cm *ConnectionManager) migrateContactPhoneFromLID(ctx context.Context, org
 			Update("contact_id", pnContact.ID).Error
 
 		updates := map[string]any{}
-		if pnContact.ProfileName == "" && lidContact.ProfileName != "" {
+		if pnContact.ProfileName == "" &&
+			lidContact.ProfileName != "" &&
+			!isLIDIdentity(lidContact.ProfileName) &&
+			!isDefaultUserJIDIdentity(lidContact.ProfileName) {
 			updates["profile_name"] = lidContact.ProfileName
 		}
 		if pnContact.InstanceID == nil && lidContact.InstanceID != nil {

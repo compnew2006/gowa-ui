@@ -119,10 +119,23 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 	}
 
 	// Build recipient for sending
+	templateBody := ""
+	if campaign.Template != nil {
+		templateBody = campaign.Template.BodyContent
+	}
+	mergedTemplateParams := w.resolveCampaignTemplateParams(
+		ctx,
+		job.OrganizationID,
+		contact,
+		job.PhoneNumber,
+		job.RecipientName,
+		templateBody,
+		job.TemplateParams,
+	)
 	recipient := &models.BulkMessageRecipient{
 		PhoneNumber:    job.PhoneNumber,
 		RecipientName:  job.RecipientName,
-		TemplateParams: job.TemplateParams,
+		TemplateParams: mergedTemplateParams,
 	}
 
 	if err := w.applyCampaignSendDelay(ctx, job.CampaignID, campaign.MinDelaySeconds, campaign.MaxDelaySeconds); err != nil {
@@ -173,7 +186,7 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		WhatsAppMessageID: waMessageID,
 		Direction:         models.DirectionOutgoing,
 		MessageType:       models.MessageTypeTemplate,
-		TemplateParams:    job.TemplateParams,
+		TemplateParams:    recipient.TemplateParams,
 		Metadata: models.JSONB{
 			"campaign_id":    job.CampaignID.String(),
 			"recipient_name": job.RecipientName,
@@ -181,7 +194,7 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 	}
 	if campaign.Template != nil {
 		message.TemplateName = campaign.Template.Name
-		content := templateutil.ReplaceWithJSONBParams(campaign.Template.BodyContent, campaign.Template.BodyContent, job.TemplateParams)
+		content := renderCampaignTemplateBody(campaign.Template.BodyContent, recipient.TemplateParams)
 		message.Content = content
 	}
 
@@ -365,7 +378,7 @@ func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID 
 		return "", fmt.Errorf("campaign template not found")
 	}
 
-	body := strings.TrimSpace(templateutil.ReplaceWithJSONBParams(template.BodyContent, template.BodyContent, recipient.TemplateParams))
+	body := strings.TrimSpace(renderCampaignTemplateBody(template.BodyContent, recipient.TemplateParams))
 	if body == "" {
 		body = fmt.Sprintf("[Campaign: %s]", template.DisplayName)
 	}

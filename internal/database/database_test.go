@@ -3,11 +3,11 @@ package database_test
 import (
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/database"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -247,6 +247,85 @@ func TestBackfillAdminChatDeletePermission_Idempotent(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Table("role_permissions").
 		Where("custom_role_id = ? AND permission_id = ?", role.ID, chatDeletePermission.ID).
+		Count(&count).Error)
+	assert.Equal(t, int64(1), count, "backfill should not create duplicate role_permissions rows")
+}
+
+func TestBackfillSystemChatPrefixPermission_AddsMissingPermission(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	require.NoError(t, database.SeedPermissionsAndRoles(db))
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Prefix Backfill Org",
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	roleNames := []string{"admin", "manager", "agent"}
+	for _, roleName := range roleNames {
+		role := models.CustomRole{
+			BaseModel:      models.BaseModel{ID: uuid.New()},
+			OrganizationID: org.ID,
+			Name:           roleName,
+			Description:    "System role",
+			IsSystem:       true,
+		}
+		require.NoError(t, db.Create(&role).Error)
+	}
+
+	require.NoError(t, database.BackfillSystemChatPrefixPermission(db))
+
+	var chatPrefixPermission models.Permission
+	require.NoError(t, db.Where("resource = ? AND action = ?", models.ResourceChat, models.ActionPrefix).
+		First(&chatPrefixPermission).Error)
+
+	for _, roleName := range roleNames {
+		var role models.CustomRole
+		require.NoError(t, db.Where("organization_id = ? AND name = ? AND is_system = ?", org.ID, roleName, true).First(&role).Error)
+
+		var count int64
+		require.NoError(t, db.Table("role_permissions").
+			Where("custom_role_id = ? AND permission_id = ?", role.ID, chatPrefixPermission.ID).
+			Count(&count).Error)
+		assert.Equal(t, int64(1), count, "backfill should add chat:prefix to %s role", roleName)
+	}
+}
+
+func TestBackfillSystemChatPrefixPermission_Idempotent(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	require.NoError(t, database.SeedPermissionsAndRoles(db))
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Prefix Backfill Idempotent Org",
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	role := models.CustomRole{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "agent",
+		Description:    "System role",
+		IsSystem:       true,
+	}
+	require.NoError(t, db.Create(&role).Error)
+
+	require.NoError(t, database.BackfillSystemChatPrefixPermission(db))
+	require.NoError(t, database.BackfillSystemChatPrefixPermission(db))
+
+	var chatPrefixPermission models.Permission
+	require.NoError(t, db.Where("resource = ? AND action = ?", models.ResourceChat, models.ActionPrefix).
+		First(&chatPrefixPermission).Error)
+
+	var count int64
+	require.NoError(t, db.Table("role_permissions").
+		Where("custom_role_id = ? AND permission_id = ?", role.ID, chatPrefixPermission.ID).
 		Count(&count).Error)
 	assert.Equal(t, int64(1), count, "backfill should not create duplicate role_permissions rows")
 }

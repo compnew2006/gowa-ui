@@ -19,6 +19,12 @@ Modern, open-source WhatsApp Business Platform. Support for both **WhatsApp Clou
 - **Real-time Chat**
   Live messaging with WebSocket support for instant communication, featuring instance tags for easy identification.
 
+- **Claim Audit System Messages**
+  Each successful chat claim action writes a `chat_claimed` system message into the conversation timeline so teams can audit ownership changes directly in chat history.
+
+- **Per-User Agent Name Prefix**
+  Outgoing agent-authored text messages can be prefixed with the sender's full name (`Agent Name : message`) using each user's **Send Restrictions** setting (`prefix_agent_name`). Disable it per user to send plain text without an agent-name prefix.
+
 - **Template Management**
   Create and manage message templates (Meta provider) or send regular messages (Whatsmeow).
 
@@ -140,9 +146,28 @@ The backend is written in Go ([Fastglue](https://github.com/zerodha/fastglue)) a
 - If you are interested in contributing, please read [CONTRIBUTING.md](./CONTRIBUTING.md) first.
 
 ```bash
-# Development setup
-make run-migrate    # Backend (port 8080)
-cd frontend && npm install && npm run dev   # Frontend (port 3000)
+# Development setup (backend + frontend)
+cd /Users/noiemany/Downloads/whatomate_GOWA/whatomate
+
+# Node.js requirement for frontend (Vite 7): 20.19+ or 22.12+
+cd frontend
+nvm install
+nvm use
+cd ..
+
+# 1) Start dependencies (Postgres + Redis)
+docker compose -f docker/docker-compose.yml up -d db redis
+
+# 2) Backend (Terminal 1, port 8080)
+make run-migrate
+
+# 3) Frontend (Terminal 2, port 3000)
+cd frontend
+npm install
+npm run dev
+
+# Optional: run backend + frontend together (after db/redis are up)
+make dev
 ```
 
 ## MCP Sidecar

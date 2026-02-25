@@ -11,3 +11,5 @@
 
 ### Changed
 - Updated root `README.md` with MCP sidecar quickstart and HTTP usage.
+- Claim chat now always appends a `chat_claimed` system message on successful claim responses, including already-assigned same-user claim requests.
+- Outgoing agent message name-prefixing is now controlled per user via Send Restrictions (`prefix_agent_name`) instead of role permission.

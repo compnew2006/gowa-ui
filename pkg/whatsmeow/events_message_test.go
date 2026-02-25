@@ -179,6 +179,141 @@ func TestFindOrCreateContact_ReusesExistingContactForSameInstance(t *testing.T) 
 	assert.Equal(t, "Updated Name", updated.ProfileName)
 }
 
+func TestFindOrCreateContact_ReplacesLIDPlaceholderProfileName(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "LID Name Replace Org",
+		Slug:      "lid-name-replace-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "LID Name Replace Instance",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	contactRow := models.Contact{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		InstanceID:     &instance.ID,
+		PhoneNumber:    "966561853319",
+		ProfileName:    "149641526026409@lid",
+		Metadata:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&contactRow).Error)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	contact, err := cm.findOrCreateContact(
+		context.Background(),
+		org.ID,
+		instance.ID,
+		"966561853319",
+		"Customer Profile",
+		models.JSONB{"source": "inbound"},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, contact)
+	assert.Equal(t, contactRow.ID, contact.ID)
+
+	var updated models.Contact
+	require.NoError(t, db.First(&updated, "id = ?", contactRow.ID).Error)
+	assert.Equal(t, "Customer Profile", updated.ProfileName)
+}
+
+func TestFindOrCreateContact_DoesNotFallbackProfileNameToLIDIdentity(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "LID Fallback Org",
+		Slug:      "lid-fallback-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "LID Fallback Instance",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	contact, err := cm.findOrCreateContact(
+		context.Background(),
+		org.ID,
+		instance.ID,
+		"149641526026409@lid",
+		"",
+		models.JSONB{},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, contact)
+	assert.Equal(t, "", contact.ProfileName)
+}
+
+func TestMigrateContactPhoneFromLID_DoesNotCopyLIDProfileName(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "LID Migration Org",
+		Slug:      "lid-migration-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "LID Migration Instance",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	lidPhone := "149641526026409@lid"
+	pnPhone := "966561853319"
+
+	lidContact := models.Contact{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		InstanceID:     &instance.ID,
+		PhoneNumber:    lidPhone,
+		ProfileName:    lidPhone,
+	}
+	require.NoError(t, db.Create(&lidContact).Error)
+
+	pnContact := models.Contact{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		InstanceID:     &instance.ID,
+		PhoneNumber:    pnPhone,
+		ProfileName:    "",
+	}
+	require.NoError(t, db.Create(&pnContact).Error)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	cm.migrateContactPhoneFromLID(context.Background(), org.ID, instance.ID, lidPhone, pnPhone)
+
+	var updatedPN models.Contact
+	require.NoError(t, db.First(&updatedPN, "id = ?", pnContact.ID).Error)
+	assert.Equal(t, "", updatedPN.ProfileName)
+
+	var lidCount int64
+	require.NoError(t, db.Model(&models.Contact{}).Where("id = ?", lidContact.ID).Count(&lidCount).Error)
+	assert.Equal(t, int64(0), lidCount)
+}
+
 func TestFindOrCreateContact_RestoresSoftDeletedContactForSameInstance(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	testutil.TruncateTables(db)

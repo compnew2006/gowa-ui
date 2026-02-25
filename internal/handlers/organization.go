@@ -14,16 +14,17 @@ import (
 
 // OrganizationSettings represents the settings structure
 type OrganizationSettings struct {
-	MaskPhoneNumbers          bool              `json:"mask_phone_numbers"`
-	StrictSendingRestrictions bool              `json:"strict_sending_restrictions_enabled"`
-	Timezone                  string            `json:"timezone"`
-	DateFormat                string            `json:"date_format"`
-	AssignedChatResetEnabled  bool              `json:"assigned_chat_reset_enabled"`
-	AssignedChatResetMode     string            `json:"assigned_chat_reset_mode"`
-	AssignedChatResetHour     int               `json:"assigned_chat_reset_hour"`
-	ChatCloseRatingEnabled    bool              `json:"chat_close_rating_enabled"`
-	ChatCloseRatingWindowDays int               `json:"chat_close_rating_window_days"`
-	ChatCloseRatingTemplates  map[string]string `json:"chat_close_rating_templates"`
+	MaskPhoneNumbers                     bool              `json:"mask_phone_numbers"`
+	StrictSendingRestrictions            bool              `json:"strict_sending_restrictions_enabled"`
+	Timezone                             string            `json:"timezone"`
+	DateFormat                           string            `json:"date_format"`
+	AssignedChatResetEnabled             bool              `json:"assigned_chat_reset_enabled"`
+	AssignedChatResetMode                string            `json:"assigned_chat_reset_mode"`
+	AssignedChatResetHour                int               `json:"assigned_chat_reset_hour"`
+	ChatCloseRatingEnabled               bool              `json:"chat_close_rating_enabled"`
+	ChatCloseRatingWindowDays            int               `json:"chat_close_rating_window_days"`
+	ChatCloseRatingFollowupWindowMinutes int               `json:"chat_close_rating_followup_window_minutes"`
+	ChatCloseRatingTemplates             map[string]string `json:"chat_close_rating_templates"`
 }
 
 // GetOrganizationSettings returns the organization settings
@@ -40,16 +41,17 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 
 	// Parse settings from JSONB
 	settings := OrganizationSettings{
-		MaskPhoneNumbers:          false,
-		StrictSendingRestrictions: false,
-		Timezone:                  "UTC",
-		DateFormat:                "YYYY-MM-DD",
-		AssignedChatResetEnabled:  true,
-		AssignedChatResetMode:     string(ChatAssignmentResetModeMidnight),
-		AssignedChatResetHour:     0,
-		ChatCloseRatingEnabled:    true,
-		ChatCloseRatingWindowDays: defaultChatCloseRatingWindowDays,
-		ChatCloseRatingTemplates:  cloneDefaultChatCloseRatingTemplates(),
+		MaskPhoneNumbers:                     false,
+		StrictSendingRestrictions:            false,
+		Timezone:                             "UTC",
+		DateFormat:                           "YYYY-MM-DD",
+		AssignedChatResetEnabled:             true,
+		AssignedChatResetMode:                string(ChatAssignmentResetModeMidnight),
+		AssignedChatResetHour:                0,
+		ChatCloseRatingEnabled:               true,
+		ChatCloseRatingWindowDays:            defaultChatCloseRatingWindowDays,
+		ChatCloseRatingFollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
+		ChatCloseRatingTemplates:             cloneDefaultChatCloseRatingTemplates(),
 	}
 
 	if org.Settings != nil {
@@ -74,6 +76,7 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		chatCloseRatingSettings := readChatCloseRatingSettings(org.Settings)
 		settings.ChatCloseRatingEnabled = chatCloseRatingSettings.Enabled
 		settings.ChatCloseRatingWindowDays = chatCloseRatingSettings.WindowDays
+		settings.ChatCloseRatingFollowupWindowMinutes = chatCloseRatingSettings.FollowupWindowMinutes
 		settings.ChatCloseRatingTemplates = chatCloseRatingSettings.Templates
 	}
 
@@ -91,17 +94,18 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	}
 
 	var req struct {
-		MaskPhoneNumbers          *bool              `json:"mask_phone_numbers"`
-		StrictSendingRestrictions *bool              `json:"strict_sending_restrictions_enabled"`
-		Timezone                  *string            `json:"timezone"`
-		DateFormat                *string            `json:"date_format"`
-		Name                      *string            `json:"name"`
-		AssignedChatResetEnabled  *bool              `json:"assigned_chat_reset_enabled"`
-		AssignedChatResetMode     *string            `json:"assigned_chat_reset_mode"`
-		AssignedChatResetHour     *int               `json:"assigned_chat_reset_hour"`
-		ChatCloseRatingEnabled    *bool              `json:"chat_close_rating_enabled"`
-		ChatCloseRatingWindowDays *int               `json:"chat_close_rating_window_days"`
-		ChatCloseRatingTemplates  *map[string]string `json:"chat_close_rating_templates"`
+		MaskPhoneNumbers                     *bool              `json:"mask_phone_numbers"`
+		StrictSendingRestrictions            *bool              `json:"strict_sending_restrictions_enabled"`
+		Timezone                             *string            `json:"timezone"`
+		DateFormat                           *string            `json:"date_format"`
+		Name                                 *string            `json:"name"`
+		AssignedChatResetEnabled             *bool              `json:"assigned_chat_reset_enabled"`
+		AssignedChatResetMode                *string            `json:"assigned_chat_reset_mode"`
+		AssignedChatResetHour                *int               `json:"assigned_chat_reset_hour"`
+		ChatCloseRatingEnabled               *bool              `json:"chat_close_rating_enabled"`
+		ChatCloseRatingWindowDays            *int               `json:"chat_close_rating_window_days"`
+		ChatCloseRatingFollowupWindowMinutes *int               `json:"chat_close_rating_followup_window_minutes"`
+		ChatCloseRatingTemplates             *map[string]string `json:"chat_close_rating_templates"`
 	}
 
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
@@ -116,6 +120,16 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(
 				fasthttp.StatusBadRequest,
 				fmt.Sprintf("chat_close_rating_window_days must be between 1 and %d", maxChatCloseRatingWindowDays),
+				nil,
+				"",
+			)
+		}
+	}
+	if req.ChatCloseRatingFollowupWindowMinutes != nil {
+		if *req.ChatCloseRatingFollowupWindowMinutes < 1 || *req.ChatCloseRatingFollowupWindowMinutes > maxChatCloseRatingFollowupWindowMinutes {
+			return r.SendErrorEnvelope(
+				fasthttp.StatusBadRequest,
+				fmt.Sprintf("chat_close_rating_followup_window_minutes must be between 1 and %d", maxChatCloseRatingFollowupWindowMinutes),
 				nil,
 				"",
 			)
@@ -152,6 +166,9 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	}
 	if req.ChatCloseRatingWindowDays != nil {
 		org.Settings[organizationSettingChatCloseRatingWindowDays] = *req.ChatCloseRatingWindowDays
+	}
+	if req.ChatCloseRatingFollowupWindowMinutes != nil {
+		org.Settings[organizationSettingChatCloseRatingFollowupWindowMinutes] = *req.ChatCloseRatingFollowupWindowMinutes
 	}
 	if req.ChatCloseRatingTemplates != nil {
 		parsedTemplates := parseChatCloseRatingTemplates(*req.ChatCloseRatingTemplates)
@@ -396,6 +413,115 @@ func (a *App) CreateOrganization(r *fastglue.Request) error {
 		Slug:      org.Slug,
 		CreatedAt: org.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	})
+}
+
+// DeleteOrganization removes an organization and disables access for its users.
+func (a *App) DeleteOrganization(r *fastglue.Request) error {
+	_, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	if err := a.requirePermission(r, userID, models.ResourceOrganizations, models.ActionDelete); err != nil {
+		return nil
+	}
+
+	targetOrgID, err := parsePathUUID(r, "id", "organization")
+	if err != nil {
+		return nil
+	}
+
+	var org models.Organization
+	if err := a.DB.Where("id = ?", targetOrgID).First(&org).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Organization not found", nil, "")
+	}
+
+	// Keep at least one active organization in the system.
+	var orgCount int64
+	if err := a.DB.Model(&models.Organization{}).Count(&orgCount).Error; err != nil {
+		a.Log.Error("Failed to count organizations before delete", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
+	}
+	if orgCount <= 1 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Cannot delete the last organization", nil, "")
+	}
+
+	var currentUser models.User
+	if err := a.DB.Select("id", "organization_id").Where("id = ?", userID).First(&currentUser).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if currentUser.OrganizationID == targetOrgID {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Cannot delete your home organization", nil, "")
+	}
+
+	tx := a.DB.Begin()
+	if tx.Error != nil {
+		a.Log.Error("Failed to begin transaction for organization delete", "error", tx.Error)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
+	}
+
+	var memberUserIDs []uuid.UUID
+	if err := tx.Model(&models.UserOrganization{}).
+		Where("organization_id = ?", targetOrgID).
+		Distinct().
+		Pluck("user_id", &memberUserIDs).Error; err != nil {
+		tx.Rollback()
+		a.Log.Error("Failed to list organization members for delete", "error", err, "organization_id", targetOrgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
+	}
+
+	var nativeUserIDs []uuid.UUID
+	if err := tx.Model(&models.User{}).
+		Where("organization_id = ?", targetOrgID).
+		Pluck("id", &nativeUserIDs).Error; err != nil {
+		tx.Rollback()
+		a.Log.Error("Failed to list native users for organization delete", "error", err, "organization_id", targetOrgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
+	}
+
+	if err := tx.Where("organization_id = ?", targetOrgID).Delete(&models.UserOrganization{}).Error; err != nil {
+		tx.Rollback()
+		a.Log.Error("Failed to delete organization memberships", "error", err, "organization_id", targetOrgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
+	}
+
+	// Users whose home org is being deleted are soft-deleted to avoid orphaned auth state.
+	if len(nativeUserIDs) > 0 {
+		if err := tx.Where("user_id IN ?", nativeUserIDs).Delete(&models.UserOrganization{}).Error; err != nil {
+			tx.Rollback()
+			a.Log.Error("Failed to delete user memberships for native users", "error", err, "organization_id", targetOrgID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
+		}
+		if err := tx.Where("id IN ?", nativeUserIDs).Delete(&models.User{}).Error; err != nil {
+			tx.Rollback()
+			a.Log.Error("Failed to delete native users for organization", "error", err, "organization_id", targetOrgID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
+		}
+	}
+
+	if err := tx.Delete(&org).Error; err != nil {
+		tx.Rollback()
+		a.Log.Error("Failed to delete organization record", "error", err, "organization_id", targetOrgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		a.Log.Error("Failed to commit organization delete transaction", "error", err, "organization_id", targetOrgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
+	}
+
+	affectedUsers := make(map[uuid.UUID]struct{}, len(memberUserIDs)+len(nativeUserIDs))
+	for _, id := range memberUserIDs {
+		affectedUsers[id] = struct{}{}
+	}
+	for _, id := range nativeUserIDs {
+		affectedUsers[id] = struct{}{}
+	}
+	for id := range affectedUsers {
+		a.InvalidateUserPermissionsCache(id)
+	}
+
+	return r.SendEnvelope(map[string]string{"message": "Organization deleted successfully"})
 }
 
 // MemberResponse represents an organization member in API responses

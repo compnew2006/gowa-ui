@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/middleware"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/crypto/bcrypt"
@@ -368,7 +368,7 @@ func CreateAgentRole(t *testing.T, db *gorm.DB, orgID uuid.UUID) *models.CustomR
 	t.Helper()
 
 	agentPerms := []string{
-		"chat:read", "chat:write",
+		"chat:read", "chat:write", "chat:prefix",
 		"contacts:read",
 		"analytics.agents:read",
 		"transfers:read", "transfers:pickup",

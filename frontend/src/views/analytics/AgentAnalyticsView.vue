@@ -257,6 +257,65 @@ const formatDateTime = (value: string): string => {
   return date.toLocaleString()
 }
 
+const extractFollowupComments = (context: Record<string, unknown> | undefined): string[] => {
+  if (!context) return []
+  const rawFollowup = context.followup
+  if (!rawFollowup || typeof rawFollowup !== 'object') return []
+
+  const followup = rawFollowup as Record<string, unknown>
+  const comments: string[] = []
+  const seen = new Set<string>()
+
+  const appendIfValid = (value: unknown) => {
+    if (typeof value !== 'string') return
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) return
+    seen.add(trimmed)
+    comments.push(trimmed)
+  }
+
+  const rawComments = followup.comments
+  if (Array.isArray(rawComments)) {
+    rawComments.forEach(appendIfValid)
+  }
+
+  const rawEntries = followup.entries
+  if (Array.isArray(rawEntries)) {
+    rawEntries.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return
+      const typed = entry as Record<string, unknown>
+      if (typed.kind !== 'comment') return
+      appendIfValid(typed.content)
+    })
+  }
+
+  return comments
+}
+
+const formatRatingMessage = (record: AgentRatingRecord): string => {
+  const base = typeof record.rating_message === 'string' ? record.rating_message.trim() : ''
+  const comments = extractFollowupComments(record.context_messages)
+  const merged: string[] = []
+
+  const appendIfUnique = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return
+    if (merged.includes(trimmed)) return
+    merged.push(trimmed)
+  }
+
+  if (base) {
+    base
+      .split('|')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach(appendIfUnique)
+  }
+  comments.forEach(appendIfUnique)
+
+  return merged.join(' | ') || '-'
+}
+
 const formatContextMessages = (context: Record<string, unknown> | undefined): string => {
   if (!context) return '-'
 
@@ -282,6 +341,7 @@ const formatContextMessages = (context: Record<string, unknown> | undefined): st
   const parts = [...collect('before')]
   if (ratingPart) parts.push(ratingPart)
   parts.push(...collect('after'))
+  parts.push(...extractFollowupComments(context))
 
   return parts.join(' | ') || '-'
 }
@@ -776,7 +836,6 @@ void _displayStats.value // Suppress unused warning
             </div>
 
             <div
-              v-if="isAdminOrManager"
               class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200"
             >
               <div class="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -904,8 +963,8 @@ void _displayStats.value // Suppress unused warning
                         <TableCell>{{ record.rating }}</TableCell>
                         <TableCell>{{ formatDateTime(record.rated_at) }}</TableCell>
                         <TableCell>{{ record.closing_agent_name || '-' }}</TableCell>
-                        <TableCell class="max-w-[220px] truncate" :title="record.rating_message">
-                          {{ record.rating_message || '-' }}
+                        <TableCell class="max-w-[220px] truncate" :title="formatRatingMessage(record)">
+                          {{ formatRatingMessage(record) }}
                         </TableCell>
                         <TableCell class="max-w-[280px] truncate" :title="formatContextMessages(record.context_messages)">
                           {{ formatContextMessages(record.context_messages) }}

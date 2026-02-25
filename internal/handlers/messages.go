@@ -132,6 +132,8 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 		return nil, err
 	}
 
+	a.applyAgentNamePrefixToTextMessage(&req, opts)
+
 	// 1. Create message record
 	msg := a.createOutgoingMessage(req, opts)
 
@@ -281,6 +283,84 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 // isWhatsmeowProvider returns true if the configured provider is whatsmeow
 func (a *App) isWhatsmeowProvider() bool {
 	return a.Config != nil && a.Config.WhatsApp.Provider == "whatsmeow"
+}
+
+func (a *App) applyAgentNamePrefixToTextMessage(req *OutgoingMessageRequest, opts MessageSendOptions) {
+	if a == nil || req == nil || req.Type != models.MessageTypeText || opts.SentByUserID == nil {
+		return
+	}
+	if !a.canPrefixTextWithAgentName(req, *opts.SentByUserID) {
+		return
+	}
+
+	agentName := a.resolveAgentMessagePrefixName(*opts.SentByUserID)
+	req.Content = formatAgentMessageContent(agentName, req.Content)
+}
+
+func (a *App) canPrefixTextWithAgentName(req *OutgoingMessageRequest, userID uuid.UUID) bool {
+	if a == nil || userID == uuid.Nil {
+		return false
+	}
+
+	orgID := uuid.Nil
+	if req != nil {
+		if req.Contact != nil {
+			orgID = req.Contact.OrganizationID
+		}
+		if orgID == uuid.Nil && req.Account != nil {
+			orgID = req.Account.OrganizationID
+		}
+	}
+
+	return a.shouldPrefixAgentNameForUser(orgID, userID)
+}
+
+func (a *App) resolveAgentMessagePrefixName(userID uuid.UUID) string {
+	if a == nil || userID == uuid.Nil {
+		return ""
+	}
+
+	name := strings.TrimSpace(a.resolveActivityActorName(userID))
+	if name == "" {
+		return ""
+	}
+
+	if at := strings.Index(name, "@"); at > 0 {
+		return strings.TrimSpace(name[:at])
+	}
+
+	return name
+}
+
+func formatAgentMessageContent(agentName, content string) string {
+	trimmedContent := strings.TrimSpace(content)
+	trimmedName := strings.TrimSpace(agentName)
+	if trimmedContent == "" || trimmedName == "" {
+		return trimmedContent
+	}
+
+	if contentHasAgentPrefix(trimmedContent, trimmedName) {
+		return trimmedContent
+	}
+
+	return fmt.Sprintf("%s : %s", trimmedName, trimmedContent)
+}
+
+func contentHasAgentPrefix(content, agentName string) bool {
+	if content == "" || agentName == "" {
+		return false
+	}
+
+	if len(content) <= len(agentName) {
+		return false
+	}
+
+	if !strings.EqualFold(content[:len(agentName)], agentName) {
+		return false
+	}
+
+	remaining := strings.TrimLeft(content[len(agentName):], " \t")
+	return strings.HasPrefix(remaining, ":")
 }
 
 // sendViaProvider routes the message through the MessageProvider interface.

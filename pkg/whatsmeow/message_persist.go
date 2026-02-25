@@ -225,11 +225,6 @@ func (cm *ConnectionManager) persistParsedMessage(
 	if err != nil {
 		return nil, fmt.Errorf("failed to find or create contact: %w", err)
 	}
-	if !evt.Info.IsFromMe && !opts.HistorySync {
-		if err := cm.reopenClosedContactOnIncoming(ctx, contact); err != nil {
-			cm.logger.Warn("Failed to auto-reopen closed chat on incoming message", "contact_id", contact.ID, "error", err)
-		}
-	}
 	cm.scheduleContactAvatarRefresh(instanceID, contact)
 
 	msgType, content, mediaURL, mimeType, filename := cm.extractMessageContent(ctx, client, evt.Message)
@@ -257,6 +252,21 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 	if myAccount == "" {
 		myAccount = "whatsmeow"
+	}
+	if strings.TrimSpace(contact.WhatsAppAccount) != myAccount {
+		if err := cm.db.WithContext(ctx).
+			Model(&models.Contact{}).
+			Where("id = ?", contact.ID).
+			Update("whats_app_account", myAccount).Error; err != nil {
+			cm.logger.Warn("Failed to backfill contact account from instance", "contact_id", contact.ID, "error", err)
+		} else {
+			contact.WhatsAppAccount = myAccount
+		}
+	}
+	if !evt.Info.IsFromMe && !opts.HistorySync {
+		if err := cm.reopenClosedContactOnIncoming(ctx, contact, msgType, content); err != nil {
+			cm.logger.Warn("Failed to auto-reopen closed chat on incoming message", "contact_id", contact.ID, "error", err)
+		}
 	}
 
 	replyCtx := cm.resolveIncomingReplyContext(ctx, orgID, instanceID, chatJID.String(), myJID, evt.Message)
@@ -360,6 +370,9 @@ func (cm *ConnectionManager) persistParsedMessage(
 	if err := cm.db.WithContext(ctx).Create(&message).Error; err != nil {
 		return nil, fmt.Errorf("failed to save message: %w", err)
 	}
+	if direction == models.DirectionIncoming {
+		cm.maybeCaptureChatCloseRating(ctx, orgID, contact, &message)
+	}
 
 	if opts.UpdateMetrics && direction == models.DirectionIncoming {
 		cm.MarkMessageReceived(instanceID)
@@ -377,6 +390,7 @@ func (cm *ConnectionManager) persistParsedMessage(
 		updates := map[string]any{
 			"last_message_at":      message.CreatedAt,
 			"last_message_preview": preview,
+			"whats_app_account":    myAccount,
 		}
 		if direction == models.DirectionIncoming {
 			updates["is_read"] = true
@@ -393,6 +407,7 @@ func (cm *ConnectionManager) persistParsedMessage(
 		updates := map[string]any{
 			"last_message_at":      &now,
 			"last_message_preview": preview,
+			"whats_app_account":    myAccount,
 		}
 		if direction == models.DirectionIncoming {
 			updates["is_read"] = false

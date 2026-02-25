@@ -51,6 +51,7 @@ rate_limit_min_delay_ms = 1000
 rate_limit_max_delay_ms = 3000
 queue_timeout_seconds = 300
 max_instances_per_org = 5
+identity = "" # Optional device label prefix shown on phone linked devices. Example: "whats" -> "whats+<instance name>"
 
 [storage]
 type = "local"  # local, s3

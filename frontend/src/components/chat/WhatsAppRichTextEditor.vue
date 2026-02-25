@@ -6,9 +6,11 @@ const props = withDefaults(defineProps<{
   modelValue: string
   placeholder?: string
   rows?: number
+  disabled?: boolean
 }>(), {
   placeholder: '',
-  rows: 6
+  rows: 6,
+  disabled: false
 })
 
 const emit = defineEmits<{
@@ -16,6 +18,14 @@ const emit = defineEmits<{
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const placeholderTokens = [
+  '{customer_name}',
+  '{chat_id}',
+  '{agent_name}',
+  '{organization_name}',
+  '{contact_name}',
+  '{phone_number}'
+]
 
 function updateValue(value: string) {
   emit('update:modelValue', value)
@@ -66,24 +76,33 @@ function insertToken(token: string) {
 <template>
   <div class="space-y-2">
     <div class="flex flex-wrap items-center gap-1.5">
-      <Button type="button" variant="outline" size="sm" class="h-7 px-2 font-semibold" @click="applyWrapFormat('*', 'bold')">
+      <Button type="button" variant="outline" size="sm" class="h-7 px-2 font-semibold" :disabled="disabled" @click="applyWrapFormat('*', 'bold')">
         Bold
       </Button>
-      <Button type="button" variant="outline" size="sm" class="h-7 px-2 italic" @click="applyWrapFormat('_', 'italic')">
+      <Button type="button" variant="outline" size="sm" class="h-7 px-2 italic" :disabled="disabled" @click="applyWrapFormat('_', 'italic')">
         Italic
       </Button>
-      <Button type="button" variant="outline" size="sm" class="h-7 px-2 line-through" @click="applyWrapFormat('~', 'strike')">
+      <Button type="button" variant="outline" size="sm" class="h-7 px-2 line-through" :disabled="disabled" @click="applyWrapFormat('~', 'strike')">
         Strike
       </Button>
-      <Button type="button" variant="outline" size="sm" class="h-7 px-2 font-mono" @click="applyWrapFormat('```', 'mono')">
+      <Button type="button" variant="outline" size="sm" class="h-7 px-2 font-mono" :disabled="disabled" @click="applyWrapFormat('```', 'mono')">
         Mono
       </Button>
-      <div class="mx-1 h-5 w-px bg-border" />
-      <Button type="button" variant="ghost" size="sm" class="h-7 px-2 text-xs" @click="insertToken('{contact_name}')">
-        {contact_name}
-      </Button>
-      <Button type="button" variant="ghost" size="sm" class="h-7 px-2 text-xs" @click="insertToken('{phone_number}')">
-        {phone_number}
+    </div>
+
+    <div class="flex flex-wrap items-center gap-1.5">
+      <span class="text-xs text-muted-foreground">Placeholders:</span>
+      <Button
+        v-for="token in placeholderTokens"
+        :key="token"
+        type="button"
+        variant="ghost"
+        size="sm"
+        class="h-7 px-2 text-xs"
+        :disabled="disabled"
+        @click="insertToken(token)"
+      >
+        {{ token }}
       </Button>
     </div>
 
@@ -92,6 +111,7 @@ function insertToken(token: string) {
       :value="modelValue"
       :placeholder="placeholder"
       :rows="rows"
+      :disabled="disabled"
       class="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
       @input="updateValue(($event.target as HTMLTextAreaElement).value)"
     />

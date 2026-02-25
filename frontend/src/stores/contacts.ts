@@ -118,6 +118,18 @@ function normalizeContacts(contacts: Contact[]): Contact[] {
   return contacts.map(normalizeContact)
 }
 
+function extractAllowedInstanceIDFromUserSettings(settings: unknown): string {
+  if (!settings || typeof settings !== 'object') return ''
+
+  const sendRestrictions = (settings as Record<string, unknown>).send_restrictions
+  if (!sendRestrictions || typeof sendRestrictions !== 'object') return ''
+
+  const allowedInstanceID = (sendRestrictions as Record<string, unknown>).allowed_instance_id
+  if (typeof allowedInstanceID !== 'string') return ''
+
+  return allowedInstanceID.trim()
+}
+
 function getMessageBody(message: Message): string {
   if (typeof message.content === 'string') {
     return message.content
@@ -277,6 +289,16 @@ export const useContactsStore = defineStore('contacts', () => {
   const pendingChatsTotal = ref(0)
   const assignedChatsTotal = ref(0)
   const isLoadingMoreContacts = ref(false)
+  const restrictedAllowedInstanceID = computed(() =>
+    extractAllowedInstanceIDFromUserSettings(authStore.user?.settings)
+  )
+  const effectiveInstanceFilterID = computed(() => {
+    const selected = selectedInstanceId.value.trim()
+    if (selected !== '') {
+      return selected
+    }
+    return restrictedAllowedInstanceID.value
+  })
   const isAdminOrSuperAdmin = computed(() => {
     if (authStore.user?.is_super_admin === true) return true
     return (authStore.userRole || '').toLowerCase() === 'admin'
@@ -364,7 +386,7 @@ export const useContactsStore = defineStore('contacts', () => {
   }
 
   function matchesActiveFilters(contact: Contact): boolean {
-    if (selectedInstanceId.value && contact.instance_id !== selectedInstanceId.value) {
+    if (effectiveInstanceFilterID.value && contact.instance_id !== effectiveInstanceFilterID.value) {
       return false
     }
 
@@ -431,7 +453,7 @@ export const useContactsStore = defineStore('contacts', () => {
   function buildListParams() {
     return {
       tags: selectedTags.value.length > 0 ? selectedTags.value.join(',') : undefined,
-      instance_id: selectedInstanceId.value || undefined,
+      instance_id: effectiveInstanceFilterID.value || undefined,
       chat_types: selectedChatTypes.value.length > 0 ? selectedChatTypes.value.join(',') : undefined
     }
   }

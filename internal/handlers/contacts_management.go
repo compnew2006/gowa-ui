@@ -17,6 +17,40 @@ type AssignContactRequest struct {
 	UserID *uuid.UUID `json:"user_id"` // nil to unassign
 }
 
+func (a *App) appendClaimedChatSystemMessage(contact *models.Contact, userID uuid.UUID) {
+	if a == nil || contact == nil {
+		return
+	}
+
+	claimerName := strings.TrimSpace(a.resolveActivityActorName(userID))
+	if claimerName == "" {
+		claimerName = "An agent"
+	}
+
+	a.appendSystemChatMessage(contact, fmt.Sprintf("System: %s claimed this chat.", claimerName), models.JSONB{
+		"event_type":           "chat_claimed",
+		"claimed_by_user_id":   userID.String(),
+		"claimed_by_user_name": claimerName,
+	})
+}
+
+func (a *App) appendClosedChatSystemMessage(contact *models.Contact, userID uuid.UUID) {
+	if a == nil || contact == nil {
+		return
+	}
+
+	closerName := strings.TrimSpace(a.resolveActivityActorName(userID))
+	if closerName == "" {
+		closerName = "An agent"
+	}
+
+	a.appendSystemChatMessage(contact, fmt.Sprintf("System: %s closed this chat.", closerName), models.JSONB{
+		"event_type":          "chat_closed",
+		"closed_by_user_id":   userID.String(),
+		"closed_by_user_name": closerName,
+	})
+}
+
 // AssignContact assigns a contact to a user (agent)
 // Only users with write permission can assign contacts
 func (a *App) AssignContact(r *fastglue.Request) error {
@@ -115,6 +149,7 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 	}
 	if status != models.ChatStatusPending && contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
 		_ = a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
+		a.appendClaimedChatSystemMessage(&contact, userID)
 		return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
 	}
 
@@ -127,15 +162,7 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 
-	claimerName := strings.TrimSpace(a.resolveActivityActorName(userID))
-	if claimerName == "" {
-		claimerName = "An agent"
-	}
-	a.appendSystemChatMessage(&contact, fmt.Sprintf("System: %s claimed this chat.", claimerName), models.JSONB{
-		"event_type":           "chat_claimed",
-		"claimed_by_user_id":   userID.String(),
-		"claimed_by_user_name": claimerName,
-	})
+	a.appendClaimedChatSystemMessage(&contact, userID)
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 
 	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
@@ -183,6 +210,7 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 
+	a.appendClosedChatSystemMessage(&contact, userID)
 	a.handleManualChatCloseRatingPrompt(orgID, userID, &contact)
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 

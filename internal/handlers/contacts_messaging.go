@@ -90,26 +90,22 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		)
 	}
 
-	var selectedInstanceID *uuid.UUID
+	var (
+		selectedInstanceID *uuid.UUID
+		selectedInstance   *models.WhatsAppInstance
+	)
 	if a.isWhatsmeowProvider() {
 		instance, resolveErr := a.resolveOutboundInstance(orgID, req.InstanceID, contact.InstanceID)
 		if resolveErr != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "instance_id")
 		}
+		selectedInstance = instance
 		selectedInstanceID = &instance.ID
 	}
 
-	// Resolve WhatsApp account only for Meta provider.
-	var account *models.WhatsAppAccount
-	if !a.isWhatsmeowProvider() {
-		accountName := contact.WhatsAppAccount
-		if req.WhatsAppAccount != "" {
-			accountName = req.WhatsAppAccount
-		}
-		account, err = a.resolveWhatsAppAccount(orgID, accountName)
-		if err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to resolve WhatsApp account", nil, "")
-		}
+	account, err := a.resolveOutboundMessageAccount(orgID, &contact, req.WhatsAppAccount, selectedInstance)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to resolve WhatsApp account", nil, "")
 	}
 
 	// Handle reply context
@@ -347,26 +343,22 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	if instanceValues := form.Value["instance_id"]; len(instanceValues) > 0 {
 		requestedInstanceID = instanceValues[0]
 	}
-	var selectedInstanceID *uuid.UUID
+	var (
+		selectedInstanceID *uuid.UUID
+		selectedInstance   *models.WhatsAppInstance
+	)
 	if a.isWhatsmeowProvider() {
 		instance, resolveErr := a.resolveOutboundInstance(orgID, requestedInstanceID, contact.InstanceID)
 		if resolveErr != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "instance_id")
 		}
+		selectedInstance = instance
 		selectedInstanceID = &instance.ID
 	}
 
-	// Resolve WhatsApp account only for Meta provider.
-	var account *models.WhatsAppAccount
-	if !a.isWhatsmeowProvider() {
-		mediaAccountName := contact.WhatsAppAccount
-		if formWhatsAppAccount != "" {
-			mediaAccountName = formWhatsAppAccount
-		}
-		account, err = a.resolveWhatsAppAccount(orgID, mediaAccountName)
-		if err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
-		}
+	account, err := a.resolveOutboundMessageAccount(orgID, &contact, formWhatsAppAccount, selectedInstance)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 
 	// Save file locally first

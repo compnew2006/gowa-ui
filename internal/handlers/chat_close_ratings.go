@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
@@ -17,12 +19,20 @@ import (
 )
 
 const (
-	organizationSettingChatCloseRatingEnabled    = "chat_close_rating_enabled"
-	organizationSettingChatCloseRatingWindowDays = "chat_close_rating_window_days"
-	organizationSettingChatCloseRatingTemplates  = "chat_close_rating_templates"
+	organizationSettingChatCloseRatingEnabled               = "chat_close_rating_enabled"
+	organizationSettingChatCloseRatingWindowDays            = "chat_close_rating_window_days"
+	organizationSettingChatCloseRatingTemplates             = "chat_close_rating_templates"
+	organizationSettingChatCloseRatingFollowupWindowMinutes = "chat_close_rating_followup_window_minutes"
 
-	defaultChatCloseRatingWindowDays = 2
-	maxChatCloseRatingWindowDays     = 30
+	defaultChatCloseRatingWindowDays            = 2
+	maxChatCloseRatingWindowDays                = 30
+	defaultChatCloseRatingFollowupWindowMinutes = 15
+	maxChatCloseRatingFollowupWindowMinutes     = 1440
+	chatCloseRatingFollowupMessageLimit         = 3
+
+	chatCloseRatingFollowupContextKey  = "followup"
+	chatCloseRatingFollowupEntriesKey  = "entries"
+	chatCloseRatingFollowupCommentsKey = "comments"
 )
 
 var defaultChatCloseRatingTemplates = map[string]string{
@@ -31,10 +41,18 @@ var defaultChatCloseRatingTemplates = map[string]string{
 	"es": "Hola {customer_name}, tu chat {chat_id} con {agent_name} en {organization_name} se ha cerrado. Responde con un numero del 1 al 10 para calificar tu experiencia.",
 }
 
+var localizedRatingDigitReplacer = strings.NewReplacer(
+	"٠", "0", "١", "1", "٢", "2", "٣", "3", "٤", "4",
+	"٥", "5", "٦", "6", "٧", "7", "٨", "8", "٩", "9",
+	"۰", "0", "۱", "1", "۲", "2", "۳", "3", "۴", "4",
+	"۵", "5", "۶", "6", "۷", "7", "۸", "8", "۹", "9",
+)
+
 type chatCloseRatingSettings struct {
-	Enabled    bool
-	WindowDays int
-	Templates  map[string]string
+	Enabled               bool
+	WindowDays            int
+	Templates             map[string]string
+	FollowupWindowMinutes int
 }
 
 // AgentRatingSummary represents rating KPIs for the selected analytics period.
@@ -71,9 +89,10 @@ func cloneDefaultChatCloseRatingTemplates() map[string]string {
 
 func readChatCloseRatingSettings(settings models.JSONB) chatCloseRatingSettings {
 	result := chatCloseRatingSettings{
-		Enabled:    true,
-		WindowDays: defaultChatCloseRatingWindowDays,
-		Templates:  cloneDefaultChatCloseRatingTemplates(),
+		Enabled:               true,
+		WindowDays:            defaultChatCloseRatingWindowDays,
+		Templates:             cloneDefaultChatCloseRatingTemplates(),
+		FollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
 	}
 
 	if settings == nil {
@@ -95,6 +114,11 @@ func readChatCloseRatingSettings(settings models.JSONB) chatCloseRatingSettings 
 	if rawTemplates, ok := settings[organizationSettingChatCloseRatingTemplates]; ok {
 		for lang, template := range parseChatCloseRatingTemplates(rawTemplates) {
 			result.Templates[lang] = template
+		}
+	}
+	if rawFollowupWindow, ok := settings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
+		if parsed := parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
+			result.FollowupWindowMinutes = parsed
 		}
 	}
 
@@ -125,6 +149,201 @@ func parseChatCloseRatingWindowDays(raw any) int {
 		return maxChatCloseRatingWindowDays
 	}
 	return parsed
+}
+
+func parseChatCloseRatingFollowupWindowMinutes(raw any) int {
+	parsed := 0
+	switch v := raw.(type) {
+	case int:
+		parsed = v
+	case int32:
+		parsed = int(v)
+	case int64:
+		parsed = int(v)
+	case float64:
+		parsed = int(v)
+	case string:
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			parsed = n
+		}
+	}
+
+	if parsed < 1 {
+		return defaultChatCloseRatingFollowupWindowMinutes
+	}
+	if parsed > maxChatCloseRatingFollowupWindowMinutes {
+		return maxChatCloseRatingFollowupWindowMinutes
+	}
+	return parsed
+}
+
+type chatCloseRatingFollowupState struct {
+	ExpiresAt         time.Time
+	RemainingMessages int
+	Entries           []any
+	Comments          []string
+}
+
+func newChatCloseRatingFollowupState(closedAt time.Time, settings chatCloseRatingSettings) chatCloseRatingFollowupState {
+	return chatCloseRatingFollowupState{
+		ExpiresAt:         closedAt.Add(time.Duration(settings.FollowupWindowMinutes) * time.Minute),
+		RemainingMessages: chatCloseRatingFollowupMessageLimit,
+		Entries:           make([]any, 0, chatCloseRatingFollowupMessageLimit),
+		Comments:          []string{},
+	}
+}
+
+func readChatCloseRatingFollowupState(cycle *models.ChatClosureRating, settings chatCloseRatingSettings) chatCloseRatingFollowupState {
+	if cycle == nil {
+		return newChatCloseRatingFollowupState(time.Now().UTC(), settings)
+	}
+
+	state := newChatCloseRatingFollowupState(cycle.ClosedAt, settings)
+	if cycle.ContextMessages == nil {
+		return state
+	}
+
+	rawFollowup, ok := cycle.ContextMessages[chatCloseRatingFollowupContextKey]
+	if !ok || rawFollowup == nil {
+		return state
+	}
+
+	var payload map[string]any
+	switch typed := rawFollowup.(type) {
+	case map[string]any:
+		payload = typed
+	case models.JSONB:
+		payload = map[string]any(typed)
+	default:
+		return state
+	}
+
+	if rawExpiresAt, ok := payload["expires_at"]; ok {
+		if parsed := parseJSONTime(rawExpiresAt); !parsed.IsZero() {
+			state.ExpiresAt = parsed
+		}
+	}
+	if rawRemaining, ok := payload["remaining_messages"]; ok {
+		if parsed, ok := parseJSONInt(rawRemaining); ok {
+			state.RemainingMessages = parsed
+		}
+	}
+	if rawEntries, ok := payload[chatCloseRatingFollowupEntriesKey]; ok {
+		switch typed := rawEntries.(type) {
+		case []any:
+			state.Entries = append([]any{}, typed...)
+		case []map[string]any:
+			for _, entry := range typed {
+				state.Entries = append(state.Entries, entry)
+			}
+		}
+	}
+	if rawComments, ok := payload[chatCloseRatingFollowupCommentsKey]; ok {
+		state.Comments = normalizeRatingComments(asStringSlice(rawComments))
+	}
+
+	if state.RemainingMessages < 0 {
+		state.RemainingMessages = 0
+	}
+	return state
+}
+
+func (s chatCloseRatingFollowupState) IsActive(now time.Time) bool {
+	if s.RemainingMessages <= 0 {
+		return false
+	}
+	return !now.After(s.ExpiresAt)
+}
+
+func normalizeRatingComments(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+func appendChatCloseRatingFollowupEntry(
+	state *chatCloseRatingFollowupState,
+	incomingMessage *models.Message,
+	content string,
+	kind string,
+	ratingValue *int,
+) {
+	if state == nil {
+		return
+	}
+
+	entry := models.JSONB{
+		"kind":    kind,
+		"content": strings.TrimSpace(content),
+	}
+	if incomingMessage != nil {
+		entry["message_id"] = incomingMessage.ID.String()
+		entry["message_type"] = incomingMessage.MessageType
+		entry["created_at"] = incomingMessage.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	if ratingValue != nil {
+		entry["rating"] = *ratingValue
+	}
+
+	state.Entries = append(state.Entries, entry)
+}
+
+func writeChatCloseRatingFollowupState(contextMessages models.JSONB, state chatCloseRatingFollowupState) models.JSONB {
+	if contextMessages == nil {
+		contextMessages = models.JSONB{}
+	}
+
+	contextMessages[chatCloseRatingFollowupContextKey] = models.JSONB{
+		"expires_at":                       state.ExpiresAt.UTC().Format(time.RFC3339),
+		"remaining_messages":               state.RemainingMessages,
+		chatCloseRatingFollowupEntriesKey:  state.Entries,
+		chatCloseRatingFollowupCommentsKey: state.Comments,
+	}
+	return contextMessages
+}
+
+func parseJSONTime(raw any) time.Time {
+	switch typed := raw.(type) {
+	case string:
+		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(typed))
+		if err == nil {
+			return parsed.UTC()
+		}
+	case time.Time:
+		return typed.UTC()
+	}
+	return time.Time{}
+}
+
+func parseJSONInt(raw any) (int, bool) {
+	switch typed := raw.(type) {
+	case int:
+		return typed, true
+	case int32:
+		return int(typed), true
+	case int64:
+		return int(typed), true
+	case float64:
+		return int(typed), true
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	default:
+		return 0, false
+	}
 }
 
 func parseChatCloseRatingTemplates(raw any) map[string]string {
@@ -348,30 +567,79 @@ func (a *App) sendChatCloseRatingPrompt(orgID uuid.UUID, contact *models.Contact
 }
 
 func (a *App) resolveClosePromptAccount(orgID uuid.UUID, contact *models.Contact) (*models.WhatsAppAccount, error) {
+	accountName := ""
+	if contact != nil {
+		accountName = a.resolveContactMessageAccount(contact)
+	}
+
 	if a.isWhatsmeowProvider() {
-		accountName := ""
-		if contact != nil {
-			accountName = contact.WhatsAppAccount
-		}
 		return &models.WhatsAppAccount{
 			OrganizationID: orgID,
 			Name:           accountName,
 		}, nil
 	}
 
-	accountName := ""
-	if contact != nil {
-		accountName = contact.WhatsAppAccount
-	}
 	return a.resolveWhatsAppAccount(orgID, accountName)
 }
 
+func normalizeInboundRatingText(raw string) string {
+	normalized := strings.TrimSpace(localizedRatingDigitReplacer.Replace(raw))
+	if normalized == "" {
+		return ""
+	}
+
+	runes := []rune(normalized)
+	start := 0
+	for start < len(runes) && (unicode.IsSpace(runes[start]) || isIgnorableRatingRune(runes[start])) {
+		start++
+	}
+	if start >= len(runes) {
+		return ""
+	}
+
+	end := len(runes)
+	for end > start && (unicode.IsSpace(runes[end-1]) || isIgnorableRatingRune(runes[end-1])) {
+		end--
+	}
+
+	return string(runes[start:end])
+}
+
+func isIgnorableRatingRune(r rune) bool {
+	if unicode.IsControl(r) {
+		return true
+	}
+	return unicode.In(r, unicode.Cf)
+}
+
 func parseInboundRatingValue(raw string) (int, bool) {
-	trimmed := strings.TrimSpace(raw)
+	trimmed := normalizeInboundRatingText(raw)
 	if trimmed == "" {
 		return 0, false
 	}
-	rating, err := strconv.Atoi(trimmed)
+
+	runes := []rune(trimmed)
+	end := 0
+	for end < len(runes) && runes[end] >= '0' && runes[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0, false
+	}
+
+	nextIndex := end
+	for nextIndex < len(runes) && isIgnorableRatingRune(runes[nextIndex]) {
+		nextIndex++
+	}
+
+	if nextIndex < len(runes) {
+		next := runes[nextIndex]
+		if !unicode.IsSpace(next) && !unicode.IsPunct(next) && !unicode.IsSymbol(next) {
+			return 0, false
+		}
+	}
+
+	rating, err := strconv.Atoi(string(runes[:end]))
 	if err != nil {
 		return 0, false
 	}
@@ -379,6 +647,60 @@ func parseInboundRatingValue(raw string) (int, bool) {
 		return 0, false
 	}
 	return rating, true
+}
+
+func (a *App) loadChatCloseRatingSettings(orgID uuid.UUID) (chatCloseRatingSettings, error) {
+	var org models.Organization
+	if err := a.DB.Select("settings").Where("id = ?", orgID).First(&org).Error; err != nil {
+		return chatCloseRatingSettings{}, err
+	}
+	return readChatCloseRatingSettings(org.Settings), nil
+}
+
+func (a *App) findActiveChatCloseRatingCycle(
+	orgID, contactID uuid.UUID,
+	now time.Time,
+) (*models.ChatClosureRating, chatCloseRatingFollowupState, error) {
+	settings, err := a.loadChatCloseRatingSettings(orgID)
+	if err != nil {
+		return nil, chatCloseRatingFollowupState{}, err
+	}
+	if !settings.Enabled {
+		return nil, chatCloseRatingFollowupState{}, nil
+	}
+
+	windowStart := now.UTC().Add(-time.Duration(settings.WindowDays) * 24 * time.Hour)
+
+	var cycle models.ChatClosureRating
+	if err := a.DB.Where("organization_id = ? AND contact_id = ? AND state IN ? AND closed_at >= ?",
+		orgID,
+		contactID,
+		[]models.ChatClosureRatingState{
+			models.ChatClosureRatingStatePending,
+			models.ChatClosureRatingStateRated,
+		},
+		windowStart,
+	).Order("closed_at DESC").First(&cycle).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, chatCloseRatingFollowupState{}, nil
+		}
+		return nil, chatCloseRatingFollowupState{}, err
+	}
+
+	followup := readChatCloseRatingFollowupState(&cycle, settings)
+	if followup.IsActive(now) {
+		return &cycle, followup, nil
+	}
+
+	if cycle.State == models.ChatClosureRatingStatePending {
+		if err := a.DB.Model(&models.ChatClosureRating{}).
+			Where("id = ? AND state = ?", cycle.ID, models.ChatClosureRatingStatePending).
+			Update("state", models.ChatClosureRatingStateExpired).Error; err != nil {
+			return nil, followup, err
+		}
+	}
+
+	return nil, followup, nil
 }
 
 func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Contact, payload incomingMessagePayload, incomingMessage *models.Message) bool {
@@ -389,57 +711,77 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 		return false
 	}
 
-	ratingValue, ok := parseInboundRatingValue(payload.MessageText)
-	if !ok {
+	now := time.Now().UTC()
+	cycle, followup, err := a.findActiveChatCloseRatingCycle(orgID, contact.ID, now)
+	if err != nil {
+		a.Log.Error("Failed to resolve close rating cycle", "error", err, "organization_id", orgID, "contact_id", contact.ID)
+		return false
+	}
+	if cycle == nil {
 		return false
 	}
 
-	var org models.Organization
-	if err := a.DB.Select("settings").Where("id = ?", orgID).First(&org).Error; err != nil {
-		a.Log.Error("Failed to load organization settings for rating capture", "error", err, "organization_id", orgID)
-		return false
+	trimmedContent := strings.TrimSpace(payload.MessageText)
+	ratingValue, hasRating := parseInboundRatingValue(payload.MessageText)
+	contextMessages := cycle.ContextMessages
+	if hasRating {
+		contextMessages = a.buildChatCloseRatingContext(contact.ID, incomingMessage)
+	}
+	if contextMessages == nil {
+		contextMessages = models.JSONB{}
 	}
 
-	settings := readChatCloseRatingSettings(org.Settings)
-	if !settings.Enabled {
-		return false
+	var ratingPointer *int
+	entryKind := "comment"
+	if hasRating {
+		ratingPointer = &ratingValue
+		entryKind = "rating"
 	}
-
-	windowStart := time.Now().UTC().Add(-time.Duration(settings.WindowDays) * 24 * time.Hour)
-
-	var cycle models.ChatClosureRating
-	if err := a.DB.Where("organization_id = ? AND contact_id = ? AND state = ? AND closed_at >= ?",
-		orgID,
-		contact.ID,
-		models.ChatClosureRatingStatePending,
-		windowStart,
-	).Order("closed_at DESC").First(&cycle).Error; err != nil {
-		return false
+	appendChatCloseRatingFollowupEntry(&followup, incomingMessage, payload.MessageText, entryKind, ratingPointer)
+	if !hasRating && trimmedContent != "" {
+		followup.Comments = append(followup.Comments, trimmedContent)
 	}
+	if followup.RemainingMessages > 0 {
+		followup.RemainingMessages--
+	}
+	contextMessages = writeChatCloseRatingFollowupState(contextMessages, followup)
 
-	ratedAt := time.Now().UTC()
-	contextMessages := a.buildChatCloseRatingContext(contact.ID, incomingMessage)
 	updates := map[string]any{
-		"state":             models.ChatClosureRatingStateRated,
-		"rating":            ratingValue,
-		"rated_at":          &ratedAt,
-		"rating_message":    strings.TrimSpace(payload.MessageText),
-		"rating_message_id": incomingMessage.ID,
-		"context_messages":  contextMessages,
+		"context_messages": contextMessages,
+	}
+	if hasRating {
+		ratedAt := now
+		updates["state"] = models.ChatClosureRatingStateRated
+		updates["rating"] = ratingValue
+		updates["rated_at"] = &ratedAt
+		updates["rating_message"] = trimmedContent
+		updates["rating_message_id"] = incomingMessage.ID
+	} else if cycle.State == models.ChatClosureRatingStateRated && trimmedContent != "" {
+		updates["rating_message"] = trimmedContent
+		updates["rating_message_id"] = incomingMessage.ID
+	} else if cycle.State == models.ChatClosureRatingStatePending && !followup.IsActive(now) {
+		updates["state"] = models.ChatClosureRatingStateExpired
 	}
 
 	result := a.DB.Model(&models.ChatClosureRating{}).
-		Where("id = ? AND state = ?", cycle.ID, models.ChatClosureRatingStatePending).
+		Where("id = ? AND state IN ?", cycle.ID, []models.ChatClosureRatingState{
+			models.ChatClosureRatingStatePending,
+			models.ChatClosureRatingStateRated,
+		}).
 		Updates(updates)
 	if result.Error != nil {
-		a.Log.Error("Failed to persist chat close rating", "error", result.Error, "cycle_id", cycle.ID)
+		a.Log.Error("Failed to persist chat close rating follow-up", "error", result.Error, "cycle_id", cycle.ID)
 		return false
 	}
 	if result.RowsAffected == 0 {
 		return false
 	}
 
-	a.Log.Info("Captured chat close rating", "cycle_id", cycle.ID, "contact_id", contact.ID, "rating", ratingValue)
+	if hasRating {
+		a.Log.Info("Captured chat close rating", "cycle_id", cycle.ID, "contact_id", contact.ID, "rating", ratingValue)
+	} else {
+		a.Log.Info("Captured chat close rating follow-up comment", "cycle_id", cycle.ID, "contact_id", contact.ID)
+	}
 	return true
 }
 
@@ -490,6 +832,103 @@ func mapSingleMessageForRatingContext(message *models.Message) models.JSONB {
 		"content":      message.Content,
 		"created_at":   message.CreatedAt.Format(time.RFC3339),
 	}
+}
+
+func extractFollowupCommentsForRatingMessage(contextMessages models.JSONB) []string {
+	if len(contextMessages) == 0 {
+		return nil
+	}
+
+	rawFollowup, ok := contextMessages[chatCloseRatingFollowupContextKey]
+	if !ok || rawFollowup == nil {
+		return nil
+	}
+
+	var followup map[string]any
+	switch typed := rawFollowup.(type) {
+	case map[string]any:
+		followup = typed
+	case models.JSONB:
+		followup = map[string]any(typed)
+	default:
+		return nil
+	}
+
+	comments := make([]string, 0, 4)
+	seen := make(map[string]struct{}, 4)
+	appendUnique := func(value string) {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return
+		}
+		if _, exists := seen[trimmed]; exists {
+			return
+		}
+		seen[trimmed] = struct{}{}
+		comments = append(comments, trimmed)
+	}
+
+	for _, comment := range asStringSlice(followup[chatCloseRatingFollowupCommentsKey]) {
+		appendUnique(comment)
+	}
+
+	if rawEntries, ok := followup[chatCloseRatingFollowupEntriesKey]; ok {
+		if entries, ok := rawEntries.([]any); ok {
+			for _, rawEntry := range entries {
+				entry, ok := rawEntry.(map[string]any)
+				if !ok {
+					continue
+				}
+				kind, _ := entry["kind"].(string)
+				if strings.TrimSpace(kind) != "comment" {
+					continue
+				}
+				content, _ := entry["content"].(string)
+				appendUnique(content)
+			}
+		}
+	}
+
+	return comments
+}
+
+func mergeRatingMessageWithFollowupComments(base string, contextMessages models.JSONB) string {
+	parts := make([]string, 0, 4)
+	seen := make(map[string]struct{}, 4)
+	appendUnique := func(value string) {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return
+		}
+		if _, exists := seen[trimmed]; exists {
+			return
+		}
+		seen[trimmed] = struct{}{}
+		parts = append(parts, trimmed)
+	}
+
+	appendUnique(base)
+	for _, comment := range extractFollowupCommentsForRatingMessage(contextMessages) {
+		appendUnique(comment)
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " | ")
+}
+
+func decodeRatingContextMessages(raw json.RawMessage) models.JSONB {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || strings.EqualFold(trimmed, "null") {
+		return nil
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &decoded); err != nil {
+		return nil
+	}
+	return models.JSONB(decoded)
 }
 
 func parseRatingFilterBound(raw string) (*int, string) {
@@ -580,7 +1019,7 @@ func (a *App) listAgentRatingRecords(
 		Rating           int
 		RatedAt          time.Time
 		RatingMessage    string
-		ContextMessages  models.JSONB
+		ContextMessages  json.RawMessage `gorm:"column:context_messages"`
 	}
 
 	query := a.DB.Table("chat_closure_ratings ccr").
@@ -639,6 +1078,7 @@ func (a *App) listAgentRatingRecords(
 		if item.AgentUserID != nil {
 			agentID = item.AgentUserID.String()
 		}
+		contextMessages := decodeRatingContextMessages(item.ContextMessages)
 
 		records = append(records, AgentRatingRecord{
 			ID:               item.ID.String(),
@@ -652,8 +1092,8 @@ func (a *App) listAgentRatingRecords(
 			ClosingAgentName: strings.TrimSpace(item.ClosingAgentName),
 			Rating:           item.Rating,
 			RatedAt:          item.RatedAt,
-			RatingMessage:    item.RatingMessage,
-			ContextMessages:  item.ContextMessages,
+			RatingMessage:    mergeRatingMessageWithFollowupComments(item.RatingMessage, contextMessages),
+			ContextMessages:  contextMessages,
 		})
 	}
 

@@ -16,8 +16,7 @@ func inboundContactUpdates(contact *models.Contact, profileName string, metadata
 	updates := map[string]any{}
 
 	if profileName != "" {
-		shouldUpdateProfileName := contact.ProfileName == "" ||
-			contact.ProfileName == contact.PhoneNumber ||
+		shouldUpdateProfileName := isPlaceholderProfileName(contact.ProfileName, contact.PhoneNumber) ||
 			isGroupContactMetadata(metadata) ||
 			isChannelContactMetadata(metadata)
 		if shouldUpdateProfileName && contact.ProfileName != profileName {
@@ -267,7 +266,7 @@ func (cm *ConnectionManager) findOrCreateContact(
 		Metadata:       metadata,
 	}
 	if contact.ProfileName == "" {
-		contact.ProfileName = phoneNumber
+		contact.ProfileName = fallbackContactProfileName(phoneNumber)
 	}
 
 	if err := cm.db.WithContext(ctx).Create(&contact).Error; err != nil {

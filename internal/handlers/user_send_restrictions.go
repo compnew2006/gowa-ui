@@ -17,6 +17,7 @@ type UserSendRestrictionsResponse struct {
 	IncludeAllContacts bool     `json:"include_all_contacts"`
 	AuthorizedNumbers  []string `json:"authorized_numbers"`
 	AllowedInstanceID  *string  `json:"allowed_instance_id,omitempty"`
+	PrefixAgentName    bool     `json:"prefix_agent_name"`
 }
 
 func (a *App) getUserSendRestrictionsForOrg(orgID, userID uuid.UUID) (*models.User, sendRestrictionsSettings, error) {
@@ -89,6 +90,7 @@ func (a *App) GetUserSendRestrictions(r *fastglue.Request) error {
 		IncludeAllContacts: cfg.IncludeAllContacts,
 		AuthorizedNumbers:  cfg.AuthorizedNumbers,
 		AllowedInstanceID:  stringifyOptionalUUID(cfg.AllowedInstanceID),
+		PrefixAgentName:    cfg.PrefixAgentName,
 	})
 }
 
@@ -112,6 +114,7 @@ func (a *App) UpdateUserSendRestrictions(r *fastglue.Request) error {
 		IncludeAllContacts *bool     `json:"include_all_contacts"`
 		AuthorizedNumbers  *[]string `json:"authorized_numbers"`
 		AllowedInstanceID  *string   `json:"allowed_instance_id"`
+		PrefixAgentName    *bool     `json:"prefix_agent_name"`
 	}
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
@@ -142,6 +145,9 @@ func (a *App) UpdateUserSendRestrictions(r *fastglue.Request) error {
 		}
 		cfg.AllowedInstanceID = instanceID
 	}
+	if req.PrefixAgentName != nil {
+		cfg.PrefixAgentName = *req.PrefixAgentName
+	}
 
 	if cfg.Enabled {
 		if a.isWhatsmeowProvider() && cfg.AllowedInstanceID == nil {
@@ -166,5 +172,6 @@ func (a *App) UpdateUserSendRestrictions(r *fastglue.Request) error {
 		IncludeAllContacts: cfg.IncludeAllContacts,
 		AuthorizedNumbers:  cfg.AuthorizedNumbers,
 		AllowedInstanceID:  stringifyOptionalUUID(cfg.AllowedInstanceID),
+		PrefixAgentName:    cfg.PrefixAgentName,
 	})
 }

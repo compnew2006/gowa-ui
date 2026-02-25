@@ -138,6 +138,13 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 		response.MyStats = &myStats
 		response.TrendData = a.calculateTrendData(orgID, periodStart, periodEnd, groupBy, &userID)
 		a.calculateAgentSummaryStats(orgID, userID, periodStart, periodEnd, &response.Summary)
+
+		ratingSummary, summaryErr := a.calculateAgentRatingSummary(orgID, periodStart, periodEnd, &userID, minRating, maxRating)
+		if summaryErr != nil {
+			a.Log.Error("Failed to calculate agent self rating summary", "error", summaryErr, "organization_id", orgID, "agent_id", userID)
+		} else {
+			response.RatingSummary = &ratingSummary
+		}
 	} else {
 		// Users with analytics permission see all agents
 		a.calculateSummaryStats(orgID, periodStart, periodEnd, &response.Summary)

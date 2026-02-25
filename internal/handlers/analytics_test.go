@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -151,8 +151,8 @@ func TestApp_GetDashboardStats_Success(t *testing.T) {
 
 	var resp struct {
 		Data struct {
-			Stats          handlers.DashboardStats            `json:"stats"`
-			RecentMessages []handlers.RecentMessageResponse   `json:"recent_messages"`
+			Stats          handlers.DashboardStats          `json:"stats"`
+			RecentMessages []handlers.RecentMessageResponse `json:"recent_messages"`
 		} `json:"data"`
 	}
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
@@ -369,12 +369,58 @@ func TestApp_GetAgentAnalytics_AgentSeesOwnStats(t *testing.T) {
 	)
 
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	otherContact := testutil.CreateTestContact(t, app.DB, org.ID)
 	now := time.Now().UTC()
 	resumedAt := now.Add(-10 * time.Minute)
 
 	createTestAgentTransfer(t, app, org.ID, contact.ID, &user.ID,
 		models.TransferStatusResumed, models.TransferSourceManual,
 		now.Add(-1*time.Hour), &resumedAt)
+
+	otherAgent := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("agent-other")),
+		testutil.WithPassword("password"),
+	)
+
+	myRating := 8
+	myRatedAt := now.Add(-15 * time.Minute)
+	myCycle := &models.ChatClosureRating{
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       org.ID,
+		ContactID:            contact.ID,
+		ChatID:               contact.ID,
+		AgentUserID:          &user.ID,
+		ClosingAgentID:       user.ID,
+		ClosedAt:             now.Add(-30 * time.Minute),
+		State:                models.ChatClosureRatingStateRated,
+		Rating:               &myRating,
+		RatedAt:              &myRatedAt,
+		RatingMessage:        "8",
+		CloseMessage:         "Please rate 1-10",
+		CloseMessageLanguage: "en",
+		ContextMessages:      models.JSONB{},
+	}
+	require.NoError(t, app.DB.Create(myCycle).Error)
+
+	otherRating := 3
+	otherRatedAt := now.Add(-20 * time.Minute)
+	otherCycle := &models.ChatClosureRating{
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       org.ID,
+		ContactID:            otherContact.ID,
+		ChatID:               otherContact.ID,
+		AgentUserID:          &otherAgent.ID,
+		ClosingAgentID:       otherAgent.ID,
+		ClosedAt:             now.Add(-35 * time.Minute),
+		State:                models.ChatClosureRatingStateRated,
+		Rating:               &otherRating,
+		RatedAt:              &otherRatedAt,
+		RatingMessage:        "3",
+		CloseMessage:         "Please rate 1-10",
+		CloseMessageLanguage: "en",
+		ContextMessages:      models.JSONB{},
+	}
+	require.NoError(t, app.DB.Create(otherCycle).Error)
 
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, user.ID)
@@ -393,6 +439,9 @@ func TestApp_GetAgentAnalytics_AgentSeesOwnStats(t *testing.T) {
 	assert.NotNil(t, resp.Data.MyStats)
 	assert.Nil(t, resp.Data.AgentStats)
 	assert.Equal(t, user.ID.String(), resp.Data.MyStats.AgentID)
+	require.NotNil(t, resp.Data.RatingSummary)
+	assert.Equal(t, int64(1), resp.Data.RatingSummary.TotalRatings)
+	assert.InDelta(t, 8.0, resp.Data.RatingSummary.AverageRating, 0.001)
 }
 
 // --- GetAgentDetails Tests ---

@@ -248,7 +248,8 @@ interface UserSendRestrictionsPayload {
   enabled: boolean
   include_all_contacts: boolean
   authorized_numbers: string[]
-  allowed_instance_id?: string
+  allowed_instance_id?: string | null
+  prefix_agent_name?: boolean
 }
 
 const isSendRestrictionsOpen = ref(false)
@@ -258,6 +259,7 @@ const sendRestrictionsIncludeAllContacts = ref(false)
 const sendRestrictionsNumbers = ref<string[]>([])
 const sendRestrictionsNewNumber = ref('')
 const sendRestrictionsAllowedInstanceID = ref('')
+const sendRestrictionsPrefixAgentName = ref(true)
 const isSendRestrictionsLoading = ref(false)
 const isSendRestrictionsSubmitting = ref(false)
 const sendRestrictionsAvailableInstances = computed(() => instancesStore.instances)
@@ -275,6 +277,7 @@ function setSendRestrictionsPayload(payload: UserSendRestrictionsPayload | undef
     .map(normalizeAuthorizedNumber)
     .filter(Boolean))).sort()
   sendRestrictionsAllowedInstanceID.value = payload?.allowed_instance_id || ''
+  sendRestrictionsPrefixAgentName.value = payload?.prefix_agent_name !== false
 }
 
 async function openSendRestrictionsDialog(user: User) {
@@ -327,7 +330,8 @@ async function saveSendRestrictions() {
       enabled: sendRestrictionsEnabled.value,
       include_all_contacts: sendRestrictionsIncludeAllContacts.value,
       authorized_numbers: sendRestrictionsNumbers.value,
-      allowed_instance_id: sendRestrictionsAllowedInstanceID.value,
+      allowed_instance_id: sendRestrictionsAllowedInstanceID.value || null,
+      prefix_agent_name: sendRestrictionsPrefixAgentName.value,
     })
     const payload = (response.data as any).data || response.data
     setSendRestrictionsPayload(payload)
@@ -560,20 +564,31 @@ async function saveSendRestrictions() {
 
           <div class="space-y-2">
             <Label>{{ $t('users.allowedInstance') }}</Label>
-            <Select v-model="sendRestrictionsAllowedInstanceID" :disabled="isSendRestrictionsLoading">
-              <SelectTrigger>
-                <SelectValue :placeholder="$t('users.allowedInstancePlaceholder')" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="instance in sendRestrictionsAvailableInstances"
-                  :key="instance.id"
-                  :value="instance.id"
-                >
-                  {{ instance.name }} <span v-if="instance.phone_number">({{ instance.phone_number }})</span>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <div class="flex items-center gap-2">
+              <Select v-model="sendRestrictionsAllowedInstanceID" :disabled="isSendRestrictionsLoading">
+                <SelectTrigger>
+                  <SelectValue :placeholder="$t('users.allowedInstancePlaceholder')" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="instance in sendRestrictionsAvailableInstances"
+                    :key="instance.id"
+                    :value="instance.id"
+                  >
+                    {{ instance.name }} <span v-if="instance.phone_number">({{ instance.phone_number }})</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                :disabled="isSendRestrictionsLoading || !sendRestrictionsAllowedInstanceID"
+                @click="sendRestrictionsAllowedInstanceID = ''"
+              >
+                Clear
+              </Button>
+            </div>
             <p class="text-xs text-muted-foreground">{{ $t('users.allowedInstanceDesc') }}</p>
           </div>
 
@@ -583,6 +598,14 @@ async function saveSendRestrictions() {
               <p class="text-xs text-muted-foreground">{{ $t('users.includeAllContactsDesc') }}</p>
             </div>
             <Switch :checked="sendRestrictionsIncludeAllContacts" @update:checked="sendRestrictionsIncludeAllContacts = $event" :disabled="isSendRestrictionsLoading" />
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <Label class="font-normal">{{ $t('users.prefixAgentName') }}</Label>
+              <p class="text-xs text-muted-foreground">{{ $t('users.prefixAgentNameDesc') }}</p>
+            </div>
+            <Switch :checked="sendRestrictionsPrefixAgentName" @update:checked="sendRestrictionsPrefixAgentName = $event" :disabled="isSendRestrictionsLoading" />
           </div>
 
           <div class="space-y-2">

@@ -217,6 +217,8 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		contentType = "image/jpeg"
 	case ".png":
 		contentType = "image/png"
+	case ".tif", ".tiff":
+		contentType = "image/tiff"
 	case ".gif":
 		contentType = "image/gif"
 	case ".webp":

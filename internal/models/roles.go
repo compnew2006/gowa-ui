@@ -22,7 +22,7 @@ type CustomRole struct {
 	OrganizationID uuid.UUID    `gorm:"type:uuid;index;not null" json:"organization_id"`
 	Name           string       `gorm:"size:100;not null" json:"name"`
 	Description    string       `gorm:"size:500" json:"description"`
-	IsSystem       bool         `gorm:"default:false" json:"is_system"` // true for default admin/manager/agent
+	IsSystem       bool         `gorm:"default:false" json:"is_system"`  // true for default admin/manager/agent
 	IsDefault      bool         `gorm:"default:false" json:"is_default"` // default role for new users in org
 	Permissions    []Permission `gorm:"many2many:role_permissions;" json:"permissions"`
 
@@ -84,6 +84,7 @@ const (
 	ActionExport  = "export"
 	ActionPickup  = "pickup"
 	ActionAssign  = "assign"
+	ActionPrefix  = "prefix"
 )
 
 // DefaultPermissions returns the list of all available permissions to seed
@@ -151,6 +152,7 @@ func DefaultPermissions() []Permission {
 		// Chat
 		{Resource: ResourceChat, Action: ActionRead, Description: "View chat conversations"},
 		{Resource: ResourceChat, Action: ActionWrite, Description: "Send messages"},
+		{Resource: ResourceChat, Action: ActionPrefix, Description: "Prefix outgoing messages with agent name"},
 		{Resource: ResourceChat, Action: ActionDelete, Description: "Delete/revoke chat messages"},
 		{Resource: ResourceChatAssign, Action: ActionWrite, Description: "Assign conversations to agents"},
 
@@ -232,7 +234,7 @@ func SystemRolePermissions() map[string][]string {
 		"chatbot.keywords:read", "chatbot.keywords:write", "chatbot.keywords:delete",
 		"chatbot.ai:read", "chatbot.ai:write",
 		// Chat
-		"chat:read", "chat:write", "chat.assign:write",
+		"chat:read", "chat:write", "chat:prefix", "chat.assign:write",
 		// Contacts
 		"contacts:read", "contacts:write", "contacts:delete", "contacts:import", "contacts:export",
 		// Tags
@@ -253,7 +255,7 @@ func SystemRolePermissions() map[string][]string {
 
 	agentPermissions := []string{
 		// Chat
-		"chat:read", "chat:write",
+		"chat:read", "chat:write", "chat:prefix",
 		// Contacts (read only)
 		"contacts:read",
 		// Tags (read only - agents can see tags on contacts)

@@ -1,8 +1,10 @@
 package handlers_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +17,52 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
+
+type stubMessageProvider struct{}
+
+func (m *stubMessageProvider) SendText(context.Context, string, string, string) (string, error) {
+	return "wamid.stub." + uuid.NewString(), nil
+}
+
+func (m *stubMessageProvider) SendImage(context.Context, string, string, string, string) (string, error) {
+	return "wamid.stub." + uuid.NewString(), nil
+}
+
+func (m *stubMessageProvider) SendDocument(context.Context, string, string, string, string) (string, error) {
+	return "wamid.stub." + uuid.NewString(), nil
+}
+
+func (m *stubMessageProvider) SendVideo(context.Context, string, string, string, string) (string, error) {
+	return "wamid.stub." + uuid.NewString(), nil
+}
+
+func (m *stubMessageProvider) SendAudio(context.Context, string, string, string) (string, error) {
+	return "wamid.stub." + uuid.NewString(), nil
+}
+
+func (m *stubMessageProvider) MarkRead(context.Context, string, string) error {
+	return nil
+}
+
+func (m *stubMessageProvider) SendReaction(context.Context, string, string, string) error {
+	return nil
+}
+
+func (m *stubMessageProvider) RevokeMessage(context.Context, string, string) error {
+	return nil
+}
+
+func (m *stubMessageProvider) GetMediaURL(context.Context, string, string) (string, error) {
+	return "", nil
+}
+
+func (m *stubMessageProvider) DownloadMedia(context.Context, string, string) ([]byte, error) {
+	return nil, nil
+}
+
+func (m *stubMessageProvider) UploadMedia(context.Context, string, string, []byte) (string, error) {
+	return "", nil
+}
 
 // --- ListContacts Tests ---
 
@@ -1389,6 +1437,89 @@ func TestApp_GetMessages(t *testing.T) {
 		assert.Equal(t, "wamid.group.instance.a", resp.Data.Messages[0].WAMID)
 	})
 
+	t.Run("group conversation fetch includes legacy system events without conversation id", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+		account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+		groupJID := "120363999000000000@g.us"
+		contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+		require.NoError(t, app.DB.Model(contact).Update("metadata", models.JSONB{
+			"is_group_chat": true,
+			"group_jid":     groupJID,
+		}).Error)
+
+		require.NoError(t, app.DB.Create(&models.Message{
+			BaseModel:         models.BaseModel{ID: uuid.New(), CreatedAt: time.Now().UTC().Add(-time.Minute)},
+			OrganizationID:    org.ID,
+			WhatsAppAccount:   account.Name,
+			ContactID:         contact.ID,
+			ConversationID:    groupJID,
+			Direction:         models.DirectionIncoming,
+			MessageType:       models.MessageTypeText,
+			Content:           "Group message",
+			Status:            models.MessageStatusDelivered,
+			WhatsAppMessageID: "wamid.group.legacy.seed",
+			Metadata: models.JSONB{
+				"is_group_chat": true,
+				"group_jid":     groupJID,
+				"sender_phone":  "15550000003",
+			},
+		}).Error)
+		require.NoError(t, app.DB.Create(&models.Message{
+			BaseModel:       models.BaseModel{ID: uuid.New(), CreatedAt: time.Now().UTC()},
+			OrganizationID:  org.ID,
+			WhatsAppAccount: account.Name,
+			ContactID:       contact.ID,
+			Direction:       models.DirectionOutgoing,
+			MessageType:     models.MessageTypeText,
+			Content:         "System: Claim Agent claimed this chat.",
+			Status:          models.MessageStatusSent,
+			Metadata: models.JSONB{
+				"system_event":  true,
+				"event_type":    "chat_claimed",
+				"is_group_chat": true,
+			},
+		}).Error)
+
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+		testutil.SetQueryParam(req, "limit", 50)
+
+		err := app.GetMessages(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Messages []handlers.MessageResponse `json:"messages"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		assert.Equal(t, int64(2), resp.Data.Total)
+		require.Len(t, resp.Data.Messages, 2)
+
+		foundClaimMessage := false
+		for _, msg := range resp.Data.Messages {
+			contentMap, ok := msg.Content.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			body, _ := contentMap["body"].(string)
+			if strings.Contains(body, "claimed this chat") {
+				foundClaimMessage = true
+				assert.Equal(t, true, msg.Metadata["system_event"])
+				assert.Equal(t, "chat_claimed", msg.Metadata["event_type"])
+			}
+		}
+		assert.True(t, foundClaimMessage)
+	})
+
 	t.Run("suppresses synthetic placeholder rows when media companion exists", func(t *testing.T) {
 		t.Parallel()
 		app := newTestApp(t)
@@ -1526,6 +1657,80 @@ func TestApp_SendMessage(t *testing.T) {
 		assert.Equal(t, contact.ID, resp.Data.ContactID)
 		assert.Equal(t, models.DirectionOutgoing, resp.Data.Direction)
 		assert.Equal(t, models.MessageTypeText, resp.Data.MessageType)
+	})
+
+	t.Run("success - whatsmeow persists outbound account for filtered history", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		app.Config.WhatsApp.Provider = "whatsmeow"
+		app.MessageProvider = &stubMessageProvider{}
+
+		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+		instance := models.WhatsAppInstance{
+			BaseModel:      models.BaseModel{ID: uuid.New()},
+			OrganizationID: org.ID,
+			Name:           "Primary",
+			PhoneNumber:    "201007181781",
+			Status:         models.InstanceStatusConnected,
+			IsDefault:      true,
+			Settings:       models.JSONB{},
+		}
+		require.NoError(t, app.DB.Create(&instance).Error)
+
+		contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(""))
+
+		sendReq := testutil.NewJSONRequest(t, map[string]interface{}{
+			"type": "text",
+			"content": map[string]string{
+				"body": "visible with account filter",
+			},
+		})
+		testutil.SetAuthContext(sendReq, org.ID, user.ID)
+		testutil.SetPathParam(sendReq, "id", contact.ID.String())
+
+		err := app.SendMessage(sendReq)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(sendReq))
+
+		var sendResp struct {
+			Data handlers.MessageResponse `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(sendReq), &sendResp))
+		assert.Equal(t, instance.PhoneNumber, sendResp.Data.WhatsAppAccount)
+
+		var stored models.Message
+		require.NoError(t, app.DB.Where("id = ?", sendResp.Data.ID).First(&stored).Error)
+		assert.Equal(t, instance.PhoneNumber, stored.WhatsAppAccount)
+
+		messagesReq := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(messagesReq, org.ID, user.ID)
+		testutil.SetPathParam(messagesReq, "id", contact.ID.String())
+		testutil.SetQueryParam(messagesReq, "account", instance.PhoneNumber)
+		testutil.SetQueryParam(messagesReq, "limit", 50)
+
+		err = app.GetMessages(messagesReq)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(messagesReq))
+
+		var messagesResp struct {
+			Data struct {
+				Messages []handlers.MessageResponse `json:"messages"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(messagesReq), &messagesResp))
+
+		found := false
+		for _, message := range messagesResp.Data.Messages {
+			if message.ID == sendResp.Data.ID {
+				found = true
+				assert.Equal(t, instance.PhoneNumber, message.WhatsAppAccount)
+				break
+			}
+		}
+		assert.True(t, found, "expected sent message to be included when filtering by whatsapp account")
 	})
 
 	t.Run("invalid request body", func(t *testing.T) {
@@ -2403,6 +2608,104 @@ func TestApp_ListContacts_FilterByInstanceAndChatType(t *testing.T) {
 	})
 }
 
+func TestApp_ListContacts_RestrictedUserFiltersByAllowedInstanceEvenWhenOrgStrictDisabled(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	instanceA := &models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Instance A",
+		Status:         models.InstanceStatusConnected,
+	}
+	instanceB := &models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Instance B",
+		Status:         models.InstanceStatusConnected,
+	}
+	require.NoError(t, app.DB.Create(instanceA).Error)
+	require.NoError(t, app.DB.Create(instanceB).Error)
+
+	contactA := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550000101"))
+	contactB := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550000102"))
+	require.NoError(t, app.DB.Model(contactA).Update("instance_id", instanceA.ID).Error)
+	require.NoError(t, app.DB.Model(contactB).Update("instance_id", instanceB.ID).Error)
+
+	enableRestrictedInstanceVisibilityWithStrict(t, app, org.ID, user.ID, instanceA.ID, false)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListContacts(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Contacts []handlers.ContactResponse `json:"contacts"`
+			Total    int64                      `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, int64(1), resp.Data.Total)
+	require.Len(t, resp.Data.Contacts, 1)
+	assert.Equal(t, contactA.ID, resp.Data.Contacts[0].ID)
+}
+
+func TestApp_ListContacts_RestrictedUserFiltersByAllowedInstanceWhenRestrictionsDisabled(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	instanceA := &models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Instance A",
+		Status:         models.InstanceStatusConnected,
+	}
+	instanceB := &models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Instance B",
+		Status:         models.InstanceStatusConnected,
+	}
+	require.NoError(t, app.DB.Create(instanceA).Error)
+	require.NoError(t, app.DB.Create(instanceB).Error)
+
+	contactA := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550000201"))
+	contactB := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550000202"))
+	require.NoError(t, app.DB.Model(contactA).Update("instance_id", instanceA.ID).Error)
+	require.NoError(t, app.DB.Model(contactB).Update("instance_id", instanceB.ID).Error)
+
+	enableRestrictedInstanceVisibilityWithStrictAndEnabled(t, app, org.ID, user.ID, instanceA.ID, false, false)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListContacts(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Contacts []handlers.ContactResponse `json:"contacts"`
+			Total    int64                      `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, int64(1), resp.Data.Total)
+	require.Len(t, resp.Data.Contacts, 1)
+	assert.Equal(t, contactA.ID, resp.Data.Contacts[0].ID)
+}
+
 func TestApp_ListContacts_FilterPrivateChats_WithGroupHistory(t *testing.T) {
 	t.Parallel()
 
@@ -2606,6 +2909,229 @@ func TestApp_ClaimChat_CreatesSystemMessage(t *testing.T) {
 	assert.Equal(t, models.MessageStatusSent, systemMessage.Status)
 	assert.Equal(t, true, systemMessage.Metadata["system_event"])
 	assert.Contains(t, systemMessage.Content, "claimed this chat")
+}
+
+func TestApp_CloseChat_CreatesSystemMessage(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID), testutil.WithFullName("Close Agent"))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":           models.ChatStatusOpen,
+		"assigned_user_id": adminUser.ID,
+	}).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("PUT")
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.CloseChat(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var systemMessage models.Message
+	require.NoError(t, app.DB.Where("contact_id = ? AND metadata->>'event_type' = ?", contact.ID, "chat_closed").Order("created_at DESC").First(&systemMessage).Error)
+	assert.Equal(t, models.DirectionOutgoing, systemMessage.Direction)
+	assert.Equal(t, models.MessageTypeText, systemMessage.MessageType)
+	assert.Equal(t, models.MessageStatusSent, systemMessage.Status)
+	assert.Equal(t, true, systemMessage.Metadata["system_event"])
+	assert.Contains(t, systemMessage.Content, "closed this chat")
+	assert.Equal(t, "Close Agent", systemMessage.Metadata["closed_by_user_name"])
+}
+
+func TestApp_ClaimChat_AlreadyAssignedToCurrentUser_StillCreatesSystemMessage(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID), testutil.WithFullName("Claim Agent"))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":               models.ChatStatusOpen,
+		"assigned_user_id":     adminUser.ID,
+		"last_message_at":      nil,
+		"last_message_preview": "",
+	}).Error)
+
+	var beforeCount int64
+	require.NoError(t, app.DB.Model(&models.Message{}).
+		Where("contact_id = ? AND metadata->>'event_type' = ?", contact.ID, "chat_claimed").
+		Count(&beforeCount).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("PUT")
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.ClaimChat(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var afterCount int64
+	require.NoError(t, app.DB.Model(&models.Message{}).
+		Where("contact_id = ? AND metadata->>'event_type' = ?", contact.ID, "chat_claimed").
+		Count(&afterCount).Error)
+	assert.Equal(t, beforeCount+1, afterCount)
+
+	var systemMessage models.Message
+	require.NoError(t, app.DB.Where("contact_id = ? AND metadata->>'event_type' = ?", contact.ID, "chat_claimed").Order("created_at DESC").First(&systemMessage).Error)
+	assert.Equal(t, models.DirectionOutgoing, systemMessage.Direction)
+	assert.Equal(t, models.MessageTypeText, systemMessage.MessageType)
+	assert.Equal(t, models.MessageStatusSent, systemMessage.Status)
+	assert.Equal(t, true, systemMessage.Metadata["system_event"])
+	assert.Contains(t, systemMessage.Content, "claimed this chat")
+}
+
+func TestApp_ClaimChat_SystemMessageUsesResolvedAccountWhenContactAccountMissing(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID), testutil.WithFullName("Claim Agent"))
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Primary",
+		PhoneNumber:    "201007181781",
+		Status:         models.InstanceStatusConnected,
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, app.DB.Create(&instance).Error)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(""))
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":            models.ChatStatusPending,
+		"assigned_user_id":  nil,
+		"whats_app_account": "",
+		"instance_id":       instance.ID,
+	}).Error)
+
+	conversationID := strings.TrimSpace(contact.PhoneNumber) + "@s.whatsapp.net"
+	require.NoError(t, app.DB.Create(&models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New(), CreatedAt: time.Now().UTC().Add(-time.Minute)},
+		OrganizationID:  org.ID,
+		InstanceID:      &instance.ID,
+		WhatsAppAccount: instance.PhoneNumber,
+		ContactID:       contact.ID,
+		ConversationID:  conversationID,
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeText,
+		Content:         "Incoming seed",
+		Status:          models.MessageStatusReceived,
+		Metadata: models.JSONB{
+			"is_group_chat": false,
+		},
+	}).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("PUT")
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.ClaimChat(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var systemMessage models.Message
+	require.NoError(t, app.DB.Where("contact_id = ? AND metadata->>'event_type' = ?", contact.ID, "chat_claimed").Order("created_at DESC").First(&systemMessage).Error)
+	assert.Equal(t, instance.PhoneNumber, systemMessage.WhatsAppAccount)
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	assert.Equal(t, instance.PhoneNumber, refreshed.WhatsAppAccount)
+}
+
+func TestApp_ClaimChat_GroupConversation_SystemMessageVisibleInHistory(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID), testutil.WithFullName("Noie Many"))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	groupJID := "120363999999999999@g.us"
+
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":           models.ChatStatusPending,
+		"assigned_user_id": nil,
+		"metadata": models.JSONB{
+			"is_group_chat": true,
+			"group_jid":     groupJID,
+		},
+	}).Error)
+
+	require.NoError(t, app.DB.Create(&models.Message{
+		BaseModel:         models.BaseModel{ID: uuid.New(), CreatedAt: time.Now().UTC().Add(-time.Minute)},
+		OrganizationID:    org.ID,
+		WhatsAppAccount:   account.Name,
+		ContactID:         contact.ID,
+		ConversationID:    groupJID,
+		Direction:         models.DirectionIncoming,
+		MessageType:       models.MessageTypeText,
+		Content:           "Incoming group message",
+		Status:            models.MessageStatusDelivered,
+		WhatsAppMessageID: "wamid.group.claim.seed",
+		Metadata: models.JSONB{
+			"is_group_chat": true,
+			"group_jid":     groupJID,
+			"sender_phone":  "15550000001",
+		},
+	}).Error)
+
+	claimReq := testutil.NewRequest(t)
+	claimReq.RequestCtx.Request.Header.SetMethod("PUT")
+	testutil.SetAuthContext(claimReq, org.ID, adminUser.ID)
+	testutil.SetPathParam(claimReq, "id", contact.ID.String())
+
+	err := app.ClaimChat(claimReq)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(claimReq))
+
+	messagesReq := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(messagesReq, org.ID, adminUser.ID)
+	testutil.SetPathParam(messagesReq, "id", contact.ID.String())
+	testutil.SetQueryParam(messagesReq, "limit", 50)
+
+	err = app.GetMessages(messagesReq)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(messagesReq))
+
+	var resp struct {
+		Data struct {
+			Messages []handlers.MessageResponse `json:"messages"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(messagesReq), &resp))
+	require.NotEmpty(t, resp.Data.Messages)
+
+	foundClaimMessage := false
+	for _, msg := range resp.Data.Messages {
+		contentMap, ok := msg.Content.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		body, _ := contentMap["body"].(string)
+		if !strings.Contains(body, "claimed this chat") {
+			continue
+		}
+
+		foundClaimMessage = true
+		assert.Equal(t, groupJID, msg.ConversationID)
+		assert.True(t, msg.IsGroupChat)
+		assert.Equal(t, true, msg.Metadata["system_event"])
+		assert.Equal(t, "chat_claimed", msg.Metadata["event_type"])
+	}
+	assert.True(t, foundClaimMessage)
 }
 
 func TestApp_ListContacts_IncludesAssignedUserName(t *testing.T) {

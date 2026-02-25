@@ -10,6 +10,7 @@ const (
 	groupJIDSuffix       = "@g.us"
 	newsletterJIDSuffix  = "@newsletter"
 	defaultUserJIDSuffix = "@s.whatsapp.net"
+	hiddenUserJIDSuffix  = "@lid"
 )
 
 func isGroupConversationID(conversationID string) bool {
@@ -45,6 +46,31 @@ func directUserFromConversationID(conversationID string) string {
 		return strings.TrimSuffix(normalized, defaultUserJIDSuffix)
 	}
 	return ""
+}
+
+func isDirectIdentityValue(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return false
+	}
+	return strings.HasSuffix(normalized, defaultUserJIDSuffix) || strings.HasSuffix(normalized, hiddenUserJIDSuffix)
+}
+
+func fallbackDirectContactDisplayName(phoneNumber, conversationID string) string {
+	if directUser := strings.TrimSpace(directUserFromConversationID(conversationID)); directUser != "" {
+		return directUser
+	}
+
+	normalizedPhone := strings.TrimSpace(phoneNumber)
+	if normalizedPhone == "" {
+		return ""
+	}
+
+	if at := strings.Index(normalizedPhone, "@"); at > 0 {
+		return strings.TrimSpace(normalizedPhone[:at])
+	}
+
+	return normalizedPhone
 }
 
 func isChannelMessage(message models.Message) bool {

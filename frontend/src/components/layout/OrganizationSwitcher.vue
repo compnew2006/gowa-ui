@@ -13,9 +13,11 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DeleteConfirmDialog } from '@/components/shared'
 import { organizationsService } from '@/services/api'
 import { toast } from 'vue-sonner'
-import { Building2, Plus, Loader2 } from 'lucide-vue-next'
+import { getErrorMessage } from '@/lib/api-utils'
+import { Building2, Plus, Loader2, Trash2 } from 'lucide-vue-next'
 
 const props = defineProps<{
   collapsed?: boolean
@@ -27,6 +29,7 @@ const authStore = useAuthStore()
 
 const isSuperAdmin = computed(() => authStore.user?.is_super_admin || false)
 const canCreateOrg = computed(() => authStore.hasPermission('organizations', 'write'))
+const canDeleteOrg = computed(() => isSuperAdmin.value && authStore.hasPermission('organizations', 'delete'))
 
 const shouldShowSwitcher = computed(() =>
   isSuperAdmin.value || organizationsStore.isMultiOrg
@@ -92,6 +95,9 @@ const handleOrgChange = async (value: string | number | bigint | Record<string, 
 const isCreateDialogOpen = ref(false)
 const newOrgName = ref('')
 const isCreating = ref(false)
+const isDeleteDialogOpen = ref(false)
+const deletingOrg = ref<{ id: string; name: string } | null>(null)
+const isDeleting = ref(false)
 
 async function submitCreateOrg() {
   if (!newOrgName.value.trim()) return
@@ -106,6 +112,55 @@ async function submitCreateOrg() {
     toast.error(t('organizations.createFailed'))
   } finally {
     isCreating.value = false
+  }
+}
+
+function openDeleteOrgDialog() {
+  const selectedID = currentOrgId.value
+  if (!selectedID) {
+    toast.error(t('organizations.selectToDelete'))
+    return
+  }
+
+  if (organizationsStore.organizations.length <= 1) {
+    toast.error(t('organizations.cannotDeleteLast'))
+    return
+  }
+
+  const org = organizationsStore.organizations.find(item => item.id === selectedID)
+  if (!org) {
+    toast.error(t('organizations.selectToDelete'))
+    return
+  }
+
+  deletingOrg.value = { id: org.id, name: org.name }
+  isDeleteDialogOpen.value = true
+}
+
+async function submitDeleteOrg() {
+  if (!deletingOrg.value || isDeleting.value) return
+
+  isDeleting.value = true
+  const deletedOrgID = deletingOrg.value.id
+
+  try {
+    await organizationsService.delete(deletedOrgID)
+    toast.success(t('organizations.deleted'))
+    isDeleteDialogOpen.value = false
+    deletingOrg.value = null
+
+    const wasSelected = organizationsStore.selectedOrgId === deletedOrgID
+    await organizationsStore.fetchOrganizations()
+
+    if (wasSelected) {
+      const fallback = organizationsStore.organizations.find(item => item.id !== deletedOrgID)
+      organizationsStore.selectOrganization(fallback?.id || null)
+      window.location.reload()
+    }
+  } catch (err) {
+    toast.error(getErrorMessage(err, t('organizations.deleteFailed')))
+  } finally {
+    isDeleting.value = false
   }
 }
 
@@ -125,15 +180,27 @@ const refreshOrgs = async () => {
         <span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide px-1">
           Organization
         </span>
-        <Button
-          v-if="canCreateOrg"
-          variant="ghost"
-          size="icon"
-          class="h-5 w-5"
-          @click="isCreateDialogOpen = true"
-        >
-          <Plus class="h-3 w-3" />
-        </Button>
+        <div class="flex items-center gap-1">
+          <Button
+            v-if="canDeleteOrg"
+            variant="ghost"
+            size="icon"
+            class="h-5 w-5"
+            :title="t('organizations.deleteCurrent')"
+            @click="openDeleteOrgDialog"
+          >
+            <Trash2 class="h-3 w-3 text-destructive" />
+          </Button>
+          <Button
+            v-if="canCreateOrg"
+            variant="ghost"
+            size="icon"
+            class="h-5 w-5"
+            @click="isCreateDialogOpen = true"
+          >
+            <Plus class="h-3 w-3" />
+          </Button>
+        </div>
       </div>
       <Select
         v-if="orgList.length > 0"
@@ -203,4 +270,13 @@ const refreshOrgs = async () => {
       </DialogFooter>
     </DialogContent>
   </Dialog>
+
+  <DeleteConfirmDialog
+    v-model:open="isDeleteDialogOpen"
+    :title="t('organizations.deleteTitle')"
+    :description="t('organizations.deleteWarning')"
+    :item-name="deletingOrg?.name"
+    :confirm-label="isDeleting ? t('common.loading') : t('common.delete')"
+    @confirm="submitDeleteOrg"
+  />
 </template>

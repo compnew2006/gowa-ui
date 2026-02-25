@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/zerodha/logf"
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waWa6"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -153,6 +154,16 @@ func (cm *ConnectionManager) Connect(ctx context.Context, instanceID uuid.UUID) 
 	// Use a sub-logger for whatsmeow
 	clientLog := waLog.Stdout("Client", "DEBUG", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
+	identityPrefix := ""
+	if cm.cfg != nil {
+		identityPrefix = cm.cfg.Identity
+	}
+	linkedDeviceName := buildLinkedDeviceName(identityPrefix, instance.Name, instance.ID)
+	client.GetClientPayload = func() *waWa6.ClientPayload {
+		payload := deviceStore.GetClientPayload()
+		applyLinkedDeviceName(payload, linkedDeviceName)
+		return payload
+	}
 
 	// 5. Register event handler
 	// handleEvent will be defined in events.go (same package)

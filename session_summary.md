@@ -1,3 +1,100 @@
+# Session Summary - 2026-02-25 19:25
+
+## Objective
+
+Move agent-name message prefix control from role permissions to per-user Send Restrictions.
+
+## Modules Touched
+
+- `internal/handlers/send_restriction_policy.go`
+- `internal/handlers/user_send_restrictions.go`
+- `internal/handlers/messages.go`
+- `internal/handlers/messages_test.go`
+- `internal/handlers/user_send_restrictions_test.go`
+- `frontend/src/views/settings/UsersView.vue`
+- `frontend/src/services/api.ts`
+- `frontend/src/i18n/locales/en.json`
+- `frontend/src/i18n/locales/ar.json`
+- `frontend/src/i18n/locales/es.json`
+- `README.md`
+- `CHANGELOG.md`
+- `MEMORY.md`
+- `session_summary.md`
+
+## Technical Decisions
+
+- Stored prefix behavior in user settings under `send_restrictions.prefix_agent_name` to align with user-level send controls.
+- Defaulted missing `prefix_agent_name` to `true` so existing users retain current message prefix behavior unless explicitly disabled.
+- Added UI and API support in the Send Restrictions dialog to make prefix behavior configurable without role editing.
+
+## Next Steps
+
+1. Remove deprecated `chat:prefix` permission wiring from role permissions and system-role backfills to avoid admin confusion.
+2. Add an e2e UI test that toggles `prefix_agent_name` and validates outbound text content format.
+
+---
+
+# Session Summary - 2026-02-25 19:17
+
+## Objective
+
+Make agent-name message prefixing configurable by role so organizations can enable or disable `agent_name : message` formatting per user role.
+
+## Modules Touched
+
+- `internal/models/roles.go`
+- `internal/database/postgres.go`
+- `internal/database/database_test.go`
+- `internal/handlers/messages.go`
+- `internal/handlers/messages_test.go`
+- `test/testutil/fixtures.go`
+- `frontend/src/components/roles/PermissionMatrix.vue`
+- `README.md`
+- `CHANGELOG.md`
+- `MEMORY.md`
+- `session_summary.md`
+
+## Technical Decisions
+
+- Introduced `chat:prefix` as a first-class role permission instead of hard-coding prefix behavior for all agents.
+- Added system-role backfill to keep existing organizations aligned with default behavior without manual migration steps.
+- Preserved current prefix format and anti-double-prefix guard while making prefixing conditional on permission.
+
+## Next Steps
+
+1. Add a frontend role settings hint/tooltip clarifying `chat:prefix` impact on WhatsApp outbound text.
+2. Add a UI e2e scenario that toggles `chat:prefix` and verifies outbound message rendering in chat timeline.
+
+---
+
+# Session Summary - 2026-02-25 18:28
+
+## Objective
+
+Guarantee that chat claim actions always produce a `chat_claimed` system message and persist session/project documentation updates for this behavior.
+
+## Modules Touched
+
+- `internal/handlers/contacts_management.go`
+- `internal/handlers/contacts_test.go`
+- `README.md`
+- `CHANGELOG.md`
+- `MEMORY.md`
+- `session_summary.md`
+
+## Technical Decisions
+
+- Centralized claim-system-message emission in a dedicated helper and reused it in both the standard claim transition and the successful already-assigned claim path.
+- Added a regression test proving claim endpoint calls on already-assigned chats still append a `chat_claimed` system message.
+- Updated project-facing documentation and session memory artifacts immediately after implementation to keep behavior/spec history aligned.
+
+## Next Steps
+
+1. Add a UI integration/e2e check that validates claim system messages remain visible under active account filters.
+2. Consider deduplicating rapid repeated claim logs with a short server-side debounce window if operators over-trigger claim actions.
+
+---
+
 # Session Summary - 2026-02-24 15:19
 
 ## Objective

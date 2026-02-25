@@ -11,6 +11,7 @@ import {
 import { cannedResponsesService, type CannedResponse, type CannedResponseAttachment } from '@/services/api'
 import { MessageSquareText, Search, Loader2, Paperclip } from 'lucide-vue-next'
 import type { Contact } from '@/stores/contacts'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   contact: Contact | null
@@ -27,6 +28,7 @@ const internalOpen = ref(false)
 const isLoading = ref(false)
 const searchQuery = ref('')
 const responses = ref<CannedResponse[]>([])
+const authStore = useAuthStore()
 
 // Sync external open state - use external if true, otherwise use internal
 const isOpen = computed({
@@ -107,14 +109,22 @@ function getCategoryLabel(category: string): string {
 function replacePlaceholders(content: string): string {
   if (!props.contact) return content
 
-  const resolvedName = props.contact.profile_name || props.contact.name || 'there'
+  const resolvedName = props.contact.profile_name || props.contact.name || 'Customer'
+  const resolvedContactName = resolvedName
   const resolvedPhone = props.contact.phone_number || ''
+  const resolvedChatID = props.contact.id || ''
+  const resolvedAgentName = props.contact.assigned_user_name || authStore.user?.full_name || 'Agent'
+  const resolvedOrganizationName = authStore.user?.organization_name || 'Organization'
 
   // Support both single-brace ({contact_name}) and double-brace ({{contact_name}}) formats.
   // Settings UI hints use single-brace placeholders.
   return content
-    .replace(/\{\{\s*contact_name\s*\}\}|\{\s*contact_name\s*\}/gi, resolvedName)
+    .replace(/\{\{\s*customer_name\s*\}\}|\{\s*customer_name\s*\}/gi, resolvedName)
+    .replace(/\{\{\s*chat_id\s*\}\}|\{\s*chat_id\s*\}/gi, resolvedChatID)
+    .replace(/\{\{\s*agent_name\s*\}\}|\{\s*agent_name\s*\}/gi, resolvedAgentName)
+    .replace(/\{\{\s*organization_name\s*\}\}|\{\s*organization_name\s*\}/gi, resolvedOrganizationName)
     .replace(/\{\{\s*phone_number\s*\}\}|\{\s*phone_number\s*\}/gi, resolvedPhone)
+    .replace(/\{\{\s*contact_name\s*\}\}|\{\s*contact_name\s*\}/gi, resolvedContactName)
 }
 
 function selectResponse(response: CannedResponse) {

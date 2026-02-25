@@ -90,7 +90,7 @@ export const usersService = {
     api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
   getSendRestrictions: (id: string) => api.get(`/users/${id}/send-restrictions`),
-  updateSendRestrictions: (id: string, data: { enabled?: boolean; include_all_contacts?: boolean; authorized_numbers?: string[]; allowed_instance_id?: string | null }) =>
+  updateSendRestrictions: (id: string, data: { enabled?: boolean; include_all_contacts?: boolean; authorized_numbers?: string[]; allowed_instance_id?: string | null; prefix_agent_name?: boolean }) =>
     api.put(`/users/${id}/send-restrictions`, data),
   me: () => api.get('/me'),
   updateSettings: (data: { email_notifications: boolean; new_message_alerts: boolean; campaign_updates: boolean; notification_sound?: 'notification1' | 'notification2' | 'notification' }) =>
@@ -711,6 +711,7 @@ export const organizationService = {
     assigned_chat_reset_hour?: number
     chat_close_rating_enabled?: boolean
     chat_close_rating_window_days?: number
+    chat_close_rating_followup_window_minutes?: number
     chat_close_rating_templates?: Record<string, string>
   }) => api.put('/org/settings', data)
 }
@@ -726,6 +727,7 @@ export interface Organization {
 export const organizationsService = {
   list: () => api.get<{ organizations: Organization[] }>('/organizations'),
   create: (data: { name: string }) => api.post('/organizations', data),
+  delete: (id: string) => api.delete(`/organizations/${id}`),
   // Members
   addMember: (data: { user_id?: string; email?: string; role_id?: string }) =>
     api.post('/organizations/members', data),

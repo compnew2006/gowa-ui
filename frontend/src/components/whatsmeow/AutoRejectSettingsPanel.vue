@@ -30,6 +30,7 @@ import {
 import { Loader2, Settings2 } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { useI18n } from "vue-i18n";
+import WhatsAppRichTextEditor from "@/components/chat/WhatsAppRichTextEditor.vue";
 
 const { t } = useI18n();
 
@@ -57,6 +58,14 @@ const dayOptions = [
   { value: 5, label: "instances.auto_reject.days.fri" },
   { value: 6, label: "instances.auto_reject.days.sat" },
 ];
+const autoRejectPlaceholderTokens = [
+  "{customer_name}",
+  "{chat_id}",
+  "{agent_name}",
+  "{organization_name}",
+  "{contact_name}",
+  "{phone_number}",
+];
 
 watch(
   () => props.settings,
@@ -83,6 +92,10 @@ function toggleDay(day: number) {
     daySet.add(day);
   }
   localSettings.value.schedule.days = [...daySet].sort((a, b) => a - b);
+}
+
+function appendAutoRejectPlaceholder(token: string) {
+  localSettings.value.message = `${localSettings.value.message || ""}${token}`;
 }
 
 function handleSave() {
@@ -193,12 +206,28 @@ function handleSave() {
 
         <div v-if="localSettings.mode === 'with_message'" class="space-y-2">
           <Label>{{ $t("instances.auto_reject.automatedMessage") }}</Label>
-          <Textarea
+          <div class="flex flex-wrap items-center gap-1.5">
+            <Button
+              v-for="token in autoRejectPlaceholderTokens"
+              :key="token"
+              type="button"
+              variant="outline"
+              size="sm"
+              class="h-7 px-2 text-xs"
+              :disabled="saving"
+              @click="appendAutoRejectPlaceholder(token)"
+            >
+              {{ token }}
+            </Button>
+          </div>
+          <WhatsAppRichTextEditor
             v-model="localSettings.message"
             :rows="3"
-            class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
             :placeholder="$t('instances.auto_reject.messagePlaceholder')"
           />
+          <p class="text-xs text-white/45 light:text-gray-500">
+            {{ $t("instances.auto_reject.placeholderHint") }}
+          </p>
         </div>
 
         <div class="space-y-2">

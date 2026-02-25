@@ -153,3 +153,32 @@ func TestIsGroupMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestIsDirectIdentityValue(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, isDirectIdentityValue("15551234567@s.whatsapp.net"))
+	assert.True(t, isDirectIdentityValue("149641526026409@lid"))
+	assert.False(t, isDirectIdentityValue("John Doe"))
+	assert.False(t, isDirectIdentityValue(""))
+}
+
+func TestFallbackDirectContactDisplayName(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(
+		t,
+		"15551234567",
+		fallbackDirectContactDisplayName("149641526026409@lid", "15551234567@s.whatsapp.net"),
+	)
+	assert.Equal(
+		t,
+		"966561853319",
+		fallbackDirectContactDisplayName("966561853319", ""),
+	)
+	assert.Equal(
+		t,
+		"149641526026409",
+		fallbackDirectContactDisplayName("149641526026409@lid", ""),
+	)
+}

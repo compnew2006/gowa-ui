@@ -454,6 +454,9 @@ func SeedSystemRolesForAllOrgs(db *gorm.DB) error {
 	if err := BackfillAdminChatDeletePermission(db); err != nil {
 		return fmt.Errorf("failed to backfill admin chat delete permission: %w", err)
 	}
+	if err := BackfillSystemChatPrefixPermission(db); err != nil {
+		return fmt.Errorf("failed to backfill system chat prefix permission: %w", err)
+	}
 
 	// Migrate existing users from old role column to new role_id
 	if err := MigrateExistingUserRoles(db); err != nil {
@@ -559,6 +562,45 @@ func BackfillAdminChatDeletePermission(db *gorm.DB) error {
 			permission.ID,
 		).Error; err != nil {
 			return fmt.Errorf("failed to backfill admin role %s: %w", role.ID, err)
+		}
+	}
+
+	return nil
+}
+
+// BackfillSystemChatPrefixPermission ensures system admin/manager/agent roles
+// include chat:prefix so outgoing message prefix behavior remains available by default.
+// This is idempotent and only affects system roles.
+func BackfillSystemChatPrefixPermission(db *gorm.DB) error {
+	var permission models.Permission
+	if err := db.Where("resource = ? AND action = ?", models.ResourceChat, models.ActionPrefix).
+		First(&permission).Error; err != nil {
+		return fmt.Errorf("failed to resolve chat:prefix permission: %w", err)
+	}
+
+	var systemRoles []models.CustomRole
+	if err := db.Where("is_system = ? AND LOWER(name) IN ?", true, []string{"admin", "manager", "agent"}).
+		Find(&systemRoles).Error; err != nil {
+		return fmt.Errorf("failed to list system roles: %w", err)
+	}
+
+	for _, role := range systemRoles {
+		var count int64
+		if err := db.Table("role_permissions").
+			Where("custom_role_id = ? AND permission_id = ?", role.ID, permission.ID).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("failed to inspect role permissions: %w", err)
+		}
+		if count > 0 {
+			continue
+		}
+
+		if err := db.Exec(
+			"INSERT INTO role_permissions (custom_role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+			role.ID,
+			permission.ID,
+		).Error; err != nil {
+			return fmt.Errorf("failed to backfill role %s: %w", role.ID, err)
 		}
 	}
 

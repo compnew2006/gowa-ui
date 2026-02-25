@@ -21,6 +21,62 @@ type inboundContactDetails struct {
 	ChannelConversation string
 }
 
+func isLIDIdentity(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return false
+	}
+	return strings.HasSuffix(normalized, "@"+strings.ToLower(string(types.HiddenUserServer)))
+}
+
+func isDefaultUserJIDIdentity(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return false
+	}
+	return strings.HasSuffix(normalized, "@"+strings.ToLower(string(types.DefaultUserServer)))
+}
+
+func isPlaceholderProfileName(profileName, phoneNumber string) bool {
+	trimmedProfile := strings.TrimSpace(profileName)
+	if trimmedProfile == "" {
+		return true
+	}
+	if trimmedProfile == strings.TrimSpace(phoneNumber) {
+		return true
+	}
+	if isLIDIdentity(trimmedProfile) || isDefaultUserJIDIdentity(trimmedProfile) {
+		return true
+	}
+	return false
+}
+
+func fallbackContactProfileName(phoneNumber string) string {
+	trimmedPhone := strings.TrimSpace(phoneNumber)
+	if trimmedPhone == "" {
+		return ""
+	}
+
+	if parsedJID, err := types.ParseJID(trimmedPhone); err == nil {
+		if parsedJID.Server == types.HiddenUserServer {
+			return ""
+		}
+		if parsedJID.User != "" {
+			return parsedJID.User
+		}
+	}
+
+	if at := strings.Index(trimmedPhone, "@"); at > 0 {
+		server := strings.TrimSpace(strings.ToLower(trimmedPhone[at+1:]))
+		if server == strings.ToLower(string(types.HiddenUserServer)) {
+			return ""
+		}
+		return strings.TrimSpace(trimmedPhone[:at])
+	}
+
+	return trimmedPhone
+}
+
 func (cm *ConnectionManager) resolveInboundContactDetails(
 	ctx context.Context,
 	client *waClient.Client,
@@ -43,7 +99,7 @@ func (cm *ConnectionManager) resolveInboundContactDetails(
 			details.ProfileName = cm.resolveStoredContactName(ctx, client, chatJID, details.PhoneNumber)
 		}
 		if strings.TrimSpace(details.ProfileName) == "" {
-			details.ProfileName = details.PhoneNumber
+			details.ProfileName = fallbackContactProfileName(details.PhoneNumber)
 		}
 		return details
 	}

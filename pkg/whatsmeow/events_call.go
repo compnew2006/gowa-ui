@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	waClient "go.mau.fi/whatsmeow"
 	waBinary "go.mau.fi/whatsmeow/binary"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
@@ -183,12 +183,13 @@ func (cm *ConnectionManager) handleIncomingCallAutoReject(ctx context.Context, i
 		cm.MarkError(instanceID)
 	}
 
-	if strings.TrimSpace(decision.ReplyMessage) == "" {
+	replyMessage := cm.renderAutoRejectReplyMessage(ctx, orgID, contact, conversationID, decision.ReplyMessage)
+	if strings.TrimSpace(replyMessage) == "" {
 		cm.logger.Info("Incoming call auto-rejected", "instance_id", instanceID, "call_id", payload.CallID, "caller", resolvedCallerPhone, "mode", settings.Mode)
 		return
 	}
 
-	wamID, sendErr := cm.sendAutoRejectTextReply(ctx, instanceID, rejectTarget.ToNonAD(), decision.ReplyMessage)
+	wamID, sendErr := cm.sendAutoRejectTextReply(ctx, instanceID, rejectTarget.ToNonAD(), replyMessage)
 	autoReplyStatus := models.MessageStatusSent
 	autoReplyError := ""
 	if sendErr != nil {
@@ -210,7 +211,7 @@ func (cm *ConnectionManager) handleIncomingCallAutoReject(ctx context.Context, i
 		ConversationID: conversationID,
 		Direction:      models.DirectionOutgoing,
 		Status:         autoReplyStatus,
-		Content:        decision.ReplyMessage,
+		Content:        replyMessage,
 		WAMID:          wamID,
 		ErrorMessage:   autoReplyError,
 		Metadata:       autoReplyMetadata,

@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/pkg/whatsmeow"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"github.com/zerodha/logf"
@@ -81,7 +81,7 @@ func (a *App) getOrgID(r *fastglue.Request) (uuid.UUID, error) {
 			if a.IsSuperAdmin(userID) {
 				// Super admins can access any org
 				var count int64
-				if err := a.DB.Table("organizations").Where("id = ?", parsedOrgID).Count(&count).Error; err == nil && count > 0 {
+				if err := a.DB.Table("organizations").Where("id = ? AND deleted_at IS NULL", parsedOrgID).Count(&count).Error; err == nil && count > 0 {
 					return parsedOrgID, nil
 				}
 			} else {

@@ -833,6 +833,155 @@ func TestSaveIncomingMessage_ReopensClosedChatAsPendingUnassigned(t *testing.T) 
 	assert.Nil(t, refreshed.ClosedByUserID)
 }
 
+func TestSaveIncomingMessage_DoesNotReopenClosedChatForPendingRatingReply(t *testing.T) {
+	app := newProcessorTestApp(t)
+	org, account := createProcessorTestOrg(t, app)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	assignee := testutil.CreateTestUser(t, app.DB, org.ID)
+	closingAgent := testutil.CreateTestUser(t, app.DB, org.ID)
+
+	closedAt := time.Now().UTC()
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":            models.ChatStatusClosed,
+		"assigned_user_id":  assignee.ID,
+		"closed_at":         &closedAt,
+		"closed_by_user_id": assignee.ID,
+	}).Error)
+
+	cycle := models.ChatClosureRating{
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       org.ID,
+		ContactID:            contact.ID,
+		ChatID:               contact.ID,
+		AgentUserID:          &assignee.ID,
+		ClosingAgentID:       closingAgent.ID,
+		ClosedAt:             closedAt,
+		State:                models.ChatClosureRatingStatePending,
+		CloseMessage:         "Please rate 1-10",
+		CloseMessageLanguage: "en",
+		ContextMessages:      models.JSONB{},
+	}
+	require.NoError(t, app.DB.Create(&cycle).Error)
+
+	waMsgID := "wamid." + uuid.New().String()[:16]
+	app.saveIncomingMessage(account, contact, waMsgID, "text", "٧ ممتاز", nil, "")
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	assert.Equal(t, models.ChatStatusClosed, refreshed.EffectiveStatus())
+	require.NotNil(t, refreshed.AssignedUserID)
+	assert.Equal(t, assignee.ID, *refreshed.AssignedUserID)
+	require.NotNil(t, refreshed.ClosedAt)
+	require.NotNil(t, refreshed.ClosedByUserID)
+	assert.Equal(t, assignee.ID, *refreshed.ClosedByUserID)
+}
+
+func TestSaveIncomingMessage_DoesNotReopenClosedChatForRatedFollowupText(t *testing.T) {
+	app := newProcessorTestApp(t)
+	org, account := createProcessorTestOrg(t, app)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	assignee := testutil.CreateTestUser(t, app.DB, org.ID)
+	closingAgent := testutil.CreateTestUser(t, app.DB, org.ID)
+
+	closedAt := time.Now().UTC()
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":            models.ChatStatusClosed,
+		"assigned_user_id":  assignee.ID,
+		"closed_at":         &closedAt,
+		"closed_by_user_id": assignee.ID,
+	}).Error)
+
+	rating := 8
+	ratedAt := closedAt.Add(1 * time.Minute)
+	cycle := models.ChatClosureRating{
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       org.ID,
+		ContactID:            contact.ID,
+		ChatID:               contact.ID,
+		AgentUserID:          &assignee.ID,
+		ClosingAgentID:       closingAgent.ID,
+		ClosedAt:             closedAt,
+		State:                models.ChatClosureRatingStateRated,
+		Rating:               &rating,
+		RatedAt:              &ratedAt,
+		RatingMessage:        "8",
+		CloseMessage:         "Please rate 1-10",
+		CloseMessageLanguage: "en",
+		ContextMessages: models.JSONB{
+			chatCloseRatingFollowupContextKey: models.JSONB{
+				"expires_at":                       closedAt.Add(15 * time.Minute).Format(time.RFC3339),
+				"remaining_messages":               2,
+				chatCloseRatingFollowupEntriesKey:  []any{},
+				chatCloseRatingFollowupCommentsKey: []any{},
+			},
+		},
+	}
+	require.NoError(t, app.DB.Create(&cycle).Error)
+
+	waMsgID := "wamid." + uuid.New().String()[:16]
+	app.saveIncomingMessage(account, contact, waMsgID, "text", "very good agent", nil, "")
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	assert.Equal(t, models.ChatStatusClosed, refreshed.EffectiveStatus())
+	require.NotNil(t, refreshed.AssignedUserID)
+	assert.Equal(t, assignee.ID, *refreshed.AssignedUserID)
+	require.NotNil(t, refreshed.ClosedAt)
+}
+
+func TestSaveIncomingMessage_ReopensClosedChatForFollowupMediaReply(t *testing.T) {
+	app := newProcessorTestApp(t)
+	org, account := createProcessorTestOrg(t, app)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	assignee := testutil.CreateTestUser(t, app.DB, org.ID)
+	closingAgent := testutil.CreateTestUser(t, app.DB, org.ID)
+
+	closedAt := time.Now().UTC()
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":            models.ChatStatusClosed,
+		"assigned_user_id":  assignee.ID,
+		"closed_at":         &closedAt,
+		"closed_by_user_id": assignee.ID,
+	}).Error)
+
+	cycle := models.ChatClosureRating{
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       org.ID,
+		ContactID:            contact.ID,
+		ChatID:               contact.ID,
+		AgentUserID:          &assignee.ID,
+		ClosingAgentID:       closingAgent.ID,
+		ClosedAt:             closedAt,
+		State:                models.ChatClosureRatingStatePending,
+		CloseMessage:         "Please rate 1-10",
+		CloseMessageLanguage: "en",
+		ContextMessages: models.JSONB{
+			chatCloseRatingFollowupContextKey: models.JSONB{
+				"expires_at":                       closedAt.Add(15 * time.Minute).Format(time.RFC3339),
+				"remaining_messages":               3,
+				chatCloseRatingFollowupEntriesKey:  []any{},
+				chatCloseRatingFollowupCommentsKey: []any{},
+			},
+		},
+	}
+	require.NoError(t, app.DB.Create(&cycle).Error)
+
+	waMsgID := "wamid." + uuid.New().String()[:16]
+	media := &MediaInfo{
+		MediaURL:      "/uploads/test-image.jpg",
+		MediaMimeType: "image/jpeg",
+		MediaFilename: "photo.jpg",
+	}
+	app.saveIncomingMessage(account, contact, waMsgID, "image", "file", media, "")
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	assert.Equal(t, models.ChatStatusPending, refreshed.EffectiveStatus())
+	assert.Nil(t, refreshed.AssignedUserID)
+	assert.Nil(t, refreshed.ClosedAt)
+	assert.Nil(t, refreshed.ClosedByUserID)
+}
+
 func TestSaveIncomingMessage_WithMedia(t *testing.T) {
 	app := newProcessorTestApp(t)
 	org, account := createProcessorTestOrg(t, app)

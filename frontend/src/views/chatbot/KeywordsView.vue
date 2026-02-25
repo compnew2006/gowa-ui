@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
@@ -31,6 +30,7 @@ import { PageHeader, SearchInput, DataTable, DeleteConfirmDialog, type Column } 
 import { getErrorMessage } from '@/lib/api-utils'
 import { Plus, Pencil, Trash2, Key } from 'lucide-vue-next'
 import { useDebounceFn } from '@vueuse/core'
+import WhatsAppRichTextEditor from '@/components/chat/WhatsAppRichTextEditor.vue'
 
 const { t } = useI18n()
 
@@ -89,6 +89,14 @@ const columns = computed<Column<KeywordRule>[]>(() => [
 
 const sortKey = ref('priority')
 const sortDirection = ref<'asc' | 'desc'>('desc')
+const keywordPlaceholderTokens = [
+  '{customer_name}',
+  '{chat_id}',
+  '{agent_name}',
+  '{organization_name}',
+  '{contact_name}',
+  '{phone_number}'
+]
 
 function addButton() {
   if (formData.value.buttons.length >= 10) {
@@ -100,6 +108,10 @@ function addButton() {
 
 function removeButton(index: number) {
   formData.value.buttons.splice(index, 1)
+}
+
+function appendKeywordPlaceholder(token: string) {
+  formData.value.response_content = `${formData.value.response_content || ''}${token}`
 }
 
 onMounted(async () => {
@@ -385,12 +397,27 @@ const emptyDescription = computed(() => {
             <Label for="response">
               {{ formData.response_type === 'transfer' ? $t('keywords.transferMessage') : $t('keywords.responseMessage') }}
             </Label>
-            <Textarea
-              id="response"
+            <div class="flex flex-wrap items-center gap-1.5">
+              <Button
+                v-for="token in keywordPlaceholderTokens"
+                :key="token"
+                type="button"
+                variant="outline"
+                size="sm"
+                class="h-7 px-2 text-xs"
+                @click="appendKeywordPlaceholder(token)"
+              >
+                {{ token }}
+              </Button>
+            </div>
+            <WhatsAppRichTextEditor
               v-model="formData.response_content"
               :placeholder="formData.response_type === 'transfer' ? $t('keywords.transferPlaceholder') + '...' : $t('keywords.responsePlaceholder') + '...'"
               :rows="3"
             />
+            <p class="text-xs text-muted-foreground">
+              {{ $t('keywords.placeholderHint') }}
+            </p>
             <p v-if="formData.response_type === 'transfer'" class="text-xs text-muted-foreground">
               {{ $t('keywords.transferHint') }}
             </p>

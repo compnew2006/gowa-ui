@@ -74,6 +74,7 @@ import {
 } from 'lucide-vue-next'
 import { formatDate } from '@/lib/utils'
 import { useDebounceFn } from '@vueuse/core'
+import WhatsAppRichTextEditor from '@/components/chat/WhatsAppRichTextEditor.vue'
 
 const { t } = useI18n()
 const configStore = useConfigStore()
@@ -629,6 +630,18 @@ const newCampaign = ref({
   min_delay_minutes: 0,
   max_delay_minutes: 0
 })
+const campaignPlaceholderTokens = [
+  '{customer_name}',
+  '{chat_id}',
+  '{agent_name}',
+  '{organization_name}',
+  '{contact_name}',
+  '{phone_number}'
+]
+
+function appendCampaignPlaceholder(token: string) {
+  newCampaign.value.body_content = `${newCampaign.value.body_content || ''}${token}`
+}
 
 const selectedCreateTemplate = computed(() =>
   templates.value.find(template => template.id === newCampaign.value.template_id) || null
@@ -1678,13 +1691,27 @@ async function addRecipientsFromCSV() {
 
               <div v-else class="grid gap-2">
                 <Label for="body-content">{{ $t('campaigns.messageBody') }}</Label>
-                <Textarea
-                  id="body-content"
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    v-for="token in campaignPlaceholderTokens"
+                    :key="token"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    class="h-7 px-2 text-xs"
+                    :disabled="isCreating"
+                    @click="appendCampaignPlaceholder(token)"
+                  >
+                    {{ token }}
+                  </Button>
+                </div>
+                <WhatsAppRichTextEditor
                   v-model="newCampaign.body_content"
                   :placeholder="$t('campaigns.messageBodyPlaceholder')"
                   :rows="5"
                   :disabled="isCreating"
                 />
+                <p class="text-xs text-muted-foreground">{{ $t('campaigns.placeholderHint') }}</p>
               </div>
 
               <div class="grid gap-2">

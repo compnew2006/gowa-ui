@@ -71,10 +71,12 @@ func TestApp_GetUserSendRestrictions_AutoMergesIncomingNumbers(t *testing.T) {
 		Data struct {
 			Enabled           bool     `json:"enabled"`
 			AuthorizedNumbers []string `json:"authorized_numbers"`
+			PrefixAgentName   bool     `json:"prefix_agent_name"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
 	assert.True(t, resp.Data.Enabled)
+	assert.True(t, resp.Data.PrefixAgentName)
 	assert.Contains(t, resp.Data.AuthorizedNumbers, "15550112233")
 	assert.Contains(t, resp.Data.AuthorizedNumbers, "15550987654")
 
@@ -105,6 +107,7 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 		"enabled":              true,
 		"include_all_contacts": true,
 		"allowed_instance_id":  instance.ID.String(),
+		"prefix_agent_name":    false,
 		"authorized_numbers": []string{
 			"+1 555-000-1111",
 			"15550001111",
@@ -124,6 +127,7 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 			IncludeAllContacts bool     `json:"include_all_contacts"`
 			AllowedInstanceID  string   `json:"allowed_instance_id"`
 			AuthorizedNumbers  []string `json:"authorized_numbers"`
+			PrefixAgentName    bool     `json:"prefix_agent_name"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
@@ -131,4 +135,5 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 	assert.True(t, resp.Data.IncludeAllContacts)
 	assert.Equal(t, instance.ID.String(), resp.Data.AllowedInstanceID)
 	assert.Equal(t, []string{"15550001111"}, resp.Data.AuthorizedNumbers)
+	assert.False(t, resp.Data.PrefixAgentName)
 }

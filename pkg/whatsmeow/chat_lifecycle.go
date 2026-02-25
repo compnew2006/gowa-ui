@@ -7,11 +7,19 @@ import (
 )
 
 // reopenClosedContactOnIncoming moves a closed conversation back to pending queue on inbound activity.
-func (cm *ConnectionManager) reopenClosedContactOnIncoming(ctx context.Context, contact *models.Contact) error {
+func (cm *ConnectionManager) reopenClosedContactOnIncoming(
+	ctx context.Context,
+	contact *models.Contact,
+	msgType models.MessageType,
+	content string,
+) error {
 	if contact == nil {
 		return nil
 	}
 	if contact.EffectiveStatus() != models.ChatStatusClosed {
+		return nil
+	}
+	if cm.shouldSkipClosedChatAutoReopenForIncomingMessage(ctx, contact.OrganizationID, contact, msgType, content) {
 		return nil
 	}
 

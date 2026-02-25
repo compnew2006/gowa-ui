@@ -74,26 +74,22 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 		)
 	}
 
-	var selectedInstanceID *uuid.UUID
+	var (
+		selectedInstanceID *uuid.UUID
+		selectedInstance   *models.WhatsAppInstance
+	)
 	if a.isWhatsmeowProvider() {
 		instance, resolveErr := a.resolveOutboundInstance(orgID, req.InstanceID, contact.InstanceID)
 		if resolveErr != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "instance_id")
 		}
+		selectedInstance = instance
 		selectedInstanceID = &instance.ID
 	}
 
-	// Resolve WhatsApp account only for Meta provider.
-	var account *models.WhatsAppAccount
-	if !a.isWhatsmeowProvider() {
-		accountName := contact.WhatsAppAccount
-		if req.WhatsAppAccount != "" {
-			accountName = req.WhatsAppAccount
-		}
-		account, err = a.resolveWhatsAppAccount(orgID, accountName)
-		if err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to resolve WhatsApp account", nil, "")
-		}
+	account, err := a.resolveOutboundMessageAccount(orgID, &contact, req.WhatsAppAccount, selectedInstance)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to resolve WhatsApp account", nil, "")
 	}
 
 	var replyToMessage *models.Message
@@ -111,6 +107,7 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 	if strings.TrimSpace(messageText) == "" {
 		messageText = cannedResponse.Content
 	}
+	messageText = a.renderMessageTemplatePlaceholders(context.Background(), orgID, &contact, messageText)
 
 	opts := DefaultSendOptions()
 	opts.SentByUserID = &userID

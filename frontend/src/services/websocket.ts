@@ -189,32 +189,71 @@ class WebSocketService {
   private getTokenFn: (() => Promise<string | null>) | null = null
   private eventSubscribers: Record<string, Array<(payload: any) => void>> = {}
 
-  private async isIncomingChatOwnedByCurrentUser(
-    contactId: string,
-    currentUserId: string,
-    payloadAssignedUserId?: string,
-    payloadStatus?: string,
+  private async shouldNotifyIncomingMessageForUser(options: {
+    contactId: string
+    currentUserId: string
+    userRole?: string
+    isSuperAdmin?: boolean
+    payloadAssignedUserId?: string
+    payloadStatus?: string
     localAssignedUserId?: string
-  ): Promise<boolean> {
+  }): Promise<boolean> {
+    const {
+      contactId,
+      currentUserId,
+      userRole,
+      isSuperAdmin,
+      payloadAssignedUserId,
+      payloadStatus,
+      localAssignedUserId
+    } = options
+
     if (!contactId || !currentUserId) return false
-    if (payloadAssignedUserId !== currentUserId) return false
-    if (payloadStatus === 'pending') return false
-    if (localAssignedUserId !== undefined && localAssignedUserId !== currentUserId) return false
+
+    const normalizedRole = typeof userRole === 'string'
+      ? userRole.trim().toLowerCase()
+      : ''
+    if (isSuperAdmin === true || normalizedRole === 'admin' || normalizedRole === 'manager') {
+      return true
+    }
+
+    const normalizedPayloadAssignedUserId =
+      typeof payloadAssignedUserId === 'string' && payloadAssignedUserId.trim() !== ''
+        ? payloadAssignedUserId.trim()
+        : undefined
+    const normalizedLocalAssignedUserId =
+      typeof localAssignedUserId === 'string' && localAssignedUserId.trim() !== ''
+        ? localAssignedUserId.trim()
+        : undefined
+    const normalizedPayloadStatus = typeof payloadStatus === 'string'
+      ? payloadStatus.trim().toLowerCase()
+      : ''
+
+    if (normalizedPayloadAssignedUserId !== undefined) {
+      if (normalizedPayloadAssignedUserId !== currentUserId) return false
+      return normalizedPayloadStatus !== 'pending'
+    }
+
+    if (normalizedLocalAssignedUserId !== undefined) {
+      if (normalizedLocalAssignedUserId !== currentUserId) return false
+      if (normalizedPayloadStatus !== 'pending') return true
+    }
 
     try {
       const response = await contactsService.get(contactId)
       const contact = response.data?.data || response.data
-      const latestAssignedUserId = typeof contact?.assigned_user_id === 'string' && contact.assigned_user_id.trim() !== ''
-        ? contact.assigned_user_id
-        : undefined
+      const latestAssignedUserId =
+        typeof contact?.assigned_user_id === 'string' && contact.assigned_user_id.trim() !== ''
+          ? contact.assigned_user_id.trim()
+          : undefined
       const latestStatus = typeof contact?.status === 'string'
         ? contact.status.trim().toLowerCase()
         : ''
 
       return latestAssignedUserId === currentUserId && latestStatus !== 'pending'
     } catch {
-      // Fail closed for notifications when assignment cannot be verified.
-      return false
+      // Fall back to local assignment snapshot if API check fails.
+      return normalizedLocalAssignedUserId === currentUserId && normalizedPayloadStatus !== 'pending'
     }
   }
 
@@ -427,12 +466,8 @@ class WebSocketService {
       })
     }
 
-    // Show toast notification for incoming messages only if:
-    // 1. Message is incoming (from customer, not chatbot/agent)
-    // 2. Chat is assigned to the current user
-    // 3. User has new_message_alerts enabled
-    // 4. User is not currently viewing this contact
-    if (isNewMessage && payload.direction === 'incoming' && !isViewingThisContact) {
+    // Notifications are for newly-added incoming messages only.
+    if (isNewMessage && payload.direction === 'incoming') {
       const authStore = useAuthStore()
       const currentUserId = authStore.user?.id
       const settings = authStore.userSettings
@@ -440,17 +475,19 @@ class WebSocketService {
       // Check if new message alerts are enabled (default to true if not set)
       const alertsEnabled = settings.new_message_alerts !== false
 
-      const isAssignedToCurrentUser = currentUserId
-        ? await this.isIncomingChatOwnedByCurrentUser(
+      const shouldNotifyCurrentUser = currentUserId
+        ? await this.shouldNotifyIncomingMessageForUser({
             contactId,
             currentUserId,
-            normalizedAssignedUserId,
-            normalizedContactStatus,
-            knownAssignedUserId
-          )
+            userRole: authStore.user?.role?.name,
+            isSuperAdmin: authStore.user?.is_super_admin,
+            payloadAssignedUserId: normalizedAssignedUserId,
+            payloadStatus: normalizedContactStatus,
+            localAssignedUserId: knownAssignedUserId
+          })
         : false
 
-      if (alertsEnabled && isAssignedToCurrentUser) {
+      if (alertsEnabled && shouldNotifyCurrentUser) {
         const senderName = payload.profile_name || 'Unknown'
         const messagePreview = typeof payload.content === 'string'
           ? payload.content
@@ -460,9 +497,12 @@ class WebSocketService {
           : messagePreview
         const contactId = payload.contact_id
 
-        // Play notification sound and show browser notification
+        // Always play sound for eligible incoming notifications.
         playNotificationSound()
-        showNotification(senderName, preview, contactId)
+        // Keep toast popups suppressed while actively viewing this chat.
+        if (!isViewingThisContact) {
+          showNotification(senderName, preview, contactId)
+        }
       }
     }
 

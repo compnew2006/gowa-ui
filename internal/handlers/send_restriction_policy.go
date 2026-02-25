@@ -48,6 +48,7 @@ type sendRestrictionsSettings struct {
 	IncludeAllContacts bool
 	AuthorizedNumbers  []string
 	AllowedInstanceID  *uuid.UUID
+	PrefixAgentName    bool
 }
 
 func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSettings {
@@ -56,6 +57,7 @@ func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSetting
 		IncludeAllContacts: false,
 		AuthorizedNumbers:  []string{},
 		AllowedInstanceID:  nil,
+		PrefixAgentName:    true,
 	}
 	if settings == nil {
 		return cfg
@@ -82,6 +84,9 @@ func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSetting
 	if includeAllContacts, ok := payload["include_all_contacts"].(bool); ok {
 		cfg.IncludeAllContacts = includeAllContacts
 	}
+	if prefixAgentName, ok := payload["prefix_agent_name"].(bool); ok {
+		cfg.PrefixAgentName = prefixAgentName
+	}
 
 	if rawNumbers, ok := payload["authorized_numbers"]; ok {
 		cfg.AuthorizedNumbers = normalizeRestrictedNumbers(asStringSlice(rawNumbers))
@@ -99,6 +104,7 @@ func writeSendRestrictionsSettings(settings models.JSONB, cfg sendRestrictionsSe
 		"enabled":              cfg.Enabled,
 		"include_all_contacts": cfg.IncludeAllContacts,
 		"authorized_numbers":   normalizeRestrictedNumbers(cfg.AuthorizedNumbers),
+		"prefix_agent_name":    cfg.PrefixAgentName,
 	}
 	if cfg.AllowedInstanceID != nil {
 		restrictions["allowed_instance_id"] = cfg.AllowedInstanceID.String()
@@ -107,6 +113,27 @@ func writeSendRestrictionsSettings(settings models.JSONB, cfg sendRestrictionsSe
 	}
 	settings[userSettingSendRestrictions] = restrictions
 	return settings
+}
+
+func (a *App) shouldPrefixAgentNameForUser(orgID, userID uuid.UUID) bool {
+	if a == nil || a.DB == nil || userID == uuid.Nil {
+		return false
+	}
+
+	if orgID == uuid.Nil {
+		return true
+	}
+
+	user, err := a.loadUserForSendRestrictions(orgID, userID)
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			a.Log.Error("Failed to resolve user settings for message prefix", "error", err, "org_id", orgID, "user_id", userID)
+		}
+		return true
+	}
+
+	cfg := readSendRestrictionsSettings(user.Settings)
+	return cfg.PrefixAgentName
 }
 
 func parseOptionalUUID(raw interface{}) *uuid.UUID {
@@ -396,9 +423,6 @@ func (a *App) getRestrictedInstanceForUser(orgID, userID uuid.UUID) (*uuid.UUID,
 	if a == nil || a.DB == nil || orgID == uuid.Nil || userID == uuid.Nil || !a.isWhatsmeowProvider() {
 		return nil, nil
 	}
-	if !a.isStrictSendingRestrictionsEnabled(orgID) {
-		return nil, nil
-	}
 
 	user, err := a.loadUserForSendRestrictions(orgID, userID)
 	if err != nil {
@@ -409,7 +433,7 @@ func (a *App) getRestrictedInstanceForUser(orgID, userID uuid.UUID) (*uuid.UUID,
 	}
 
 	cfg := readSendRestrictionsSettings(user.Settings)
-	if !cfg.Enabled || cfg.AllowedInstanceID == nil {
+	if cfg.AllowedInstanceID == nil {
 		return nil, nil
 	}
 

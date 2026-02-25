@@ -73,6 +73,8 @@ import {
   Send,
   Paperclip,
   FileText,
+  Download,
+  Printer,
   Image as ImageIcon,
   Smile,
   Phone,
@@ -105,6 +107,21 @@ import {
 } from "lucide-vue-next";
 import { getInitials, getAvatarGradient } from "@/lib/utils";
 import { getMessageSenderPhone, isGroupContact } from "@/lib/group-chat";
+import {
+  downloadMessageMedia,
+  resolveMediaFilename,
+} from "@/lib/media-actions";
+import {
+  mergePhotosAndPdfsAndOpenPrintDialog,
+} from "@/lib/media-merge-print";
+import {
+  isMergePrintableBubbleMessage,
+  toMergePrintableFile,
+} from "@/lib/chat-bubble-merge-print";
+import {
+  isMessagePrintSupported,
+  openPrintDialogForSingleMessage,
+} from "@/lib/single-media-print";
 import {
   ChatSidebarUnifier,
   type ChatSidebarViewMode,
@@ -280,10 +297,14 @@ const isProfilePhotoDialogOpen = ref(false);
 const profilePhotoContact = ref<Contact | null>(null);
 const mediaCaption = ref("");
 const isUploadingMedia = ref(false);
+const isPreparingBatchPrint = ref(false);
+const isBatchPrintSelectionMode = ref(false);
+const selectedBatchPrintMessageIds = ref<string[]>([]);
 
 // Cache for media blob URLs (message_id -> blob URL)
 const mediaBlobUrls = ref<Record<string, string>>({});
 const mediaLoadingStates = ref<Record<string, boolean>>({});
+const mediaBlobCache = new Map<string, Blob>();
 
 // Canned responses slash command state
 const cannedPickerOpen = ref(false);
@@ -333,6 +354,18 @@ const canSendMessage = computed(() => {
     Boolean(messageInput.value.trim()) || hasPendingCannedAttachments.value
   );
 });
+
+const selectedBatchPrintCount = computed(
+  () => selectedBatchPrintMessageIds.value.length,
+);
+
+const hasMergePrintableBubbles = computed(() =>
+  contactsStore.messages.some((message) => isMergePrintableBubbleMessage(message)),
+);
+
+const canMergeSelectedBubbleFiles = computed(
+  () => selectedBatchPrintCount.value >= 2,
+);
 
 function openTemplatePicker() {
   const btn = templatePickerRef.value?.querySelector("button");
@@ -1010,6 +1043,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  resetBatchPrintSelection();
   stopContactsSidebarResize();
   clearPendingSidebarDeleteConfirmation();
   window.removeEventListener("storage", refreshChatSidebarViewModePreference);
@@ -1022,6 +1056,7 @@ onUnmounted(() => {
     URL.revokeObjectURL(url);
   });
   mediaBlobUrls.value = {};
+  mediaBlobCache.clear();
   // Clear sticky date timeout
   if (stickyDateTimeout) clearTimeout(stickyDateTimeout);
 });
@@ -1064,6 +1099,7 @@ function updateStickyDate(scrollContainer: HTMLElement) {
 
 // Watch for route changes
 watch(contactId, async (newId) => {
+  resetBatchPrintSelection();
   if (newId) {
     notesStore.clearNotes();
     await selectContact(newId);
@@ -1076,6 +1112,7 @@ watch(contactId, async (newId) => {
 });
 
 async function selectContact(id: string) {
+  resetBatchPrintSelection();
   let contact = contactsStore.contacts.find((c) => c.id === id);
   if (!contact) {
     const fetched = await contactsStore.fetchContact(id);
@@ -1314,6 +1351,14 @@ watch(
   () => contactsStore.messages,
   () => {
     void resolveMentionsForCurrentMessages();
+    if (selectedBatchPrintMessageIds.value.length > 0) {
+      const availableMessageIDs = new Set(
+        contactsStore.messages.map((message) => message.id),
+      );
+      selectedBatchPrintMessageIds.value = selectedBatchPrintMessageIds.value.filter(
+        (id) => availableMessageIDs.has(id),
+      );
+    }
     try {
       loadMediaForMessages();
     } catch (e) {
@@ -2314,12 +2359,60 @@ function isMediaLoading(message: Message): boolean {
   return mediaLoadingStates.value[message.id] || false;
 }
 
+function getAttachmentFilename(message: Message): string {
+  return resolveMediaFilename(message);
+}
+
+function isModifiedPointerEvent(event?: MouseEvent): boolean {
+  if (!event) return false;
+  return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
+
+function downloadAttachment(message: Message, event?: MouseEvent) {
+  if (isBatchPrintSelectionMode.value) return;
+  if (isModifiedPointerEvent(event)) return;
+  const mediaUrl = getMediaBlobUrl(message);
+  if (!mediaUrl) return;
+  downloadMessageMedia(mediaUrl, message);
+}
+
+function printAttachment(message: Message, event?: MouseEvent) {
+  if (isBatchPrintSelectionMode.value) return;
+  if (isModifiedPointerEvent(event)) return;
+  const mediaUrl = getMediaBlobUrl(message);
+  if (!mediaUrl) return;
+  if (!isMessagePrintSupported(message)) {
+    toast.error(t("chat.printDialogFailed"), {
+      description: t("chat.batchPrintUnsupportedDesc"),
+    });
+    return;
+  }
+  void (async () => {
+    const opened = await openPrintDialogForSingleMessage({
+      message,
+      mediaUrl,
+      resolveBlob: () => resolveMessageBlobForBatchPrint(message),
+    });
+    if (!opened) {
+      toast.error(t("chat.printDialogFailed"));
+    }
+  })();
+}
+
 async function loadMediaForMessage(message: Message) {
-  if (
-    !message.media_url ||
-    mediaBlobUrls.value[message.id] ||
-    mediaLoadingStates.value[message.id]
-  ) {
+  if (!message.media_url || mediaLoadingStates.value[message.id]) {
+    return;
+  }
+
+  const cachedBlob = mediaBlobCache.get(message.id);
+  if (cachedBlob) {
+    if (!mediaBlobUrls.value[message.id]) {
+      mediaBlobUrls.value[message.id] = URL.createObjectURL(cachedBlob);
+    }
+    return;
+  }
+
+  if (mediaBlobUrls.value[message.id]) {
     return;
   }
 
@@ -2336,6 +2429,10 @@ async function loadMediaForMessage(message: Message) {
     }
 
     const blob = await response.blob();
+    mediaBlobCache.set(message.id, blob);
+    if (mediaBlobUrls.value[message.id]) {
+      URL.revokeObjectURL(mediaBlobUrls.value[message.id]);
+    }
     const blobUrl = URL.createObjectURL(blob);
     mediaBlobUrls.value[message.id] = blobUrl;
   } catch (error) {
@@ -2359,7 +2456,12 @@ function loadMediaForMessages() {
   }
 }
 
-function openMediaPreview(message: Message) {
+function openMediaPreview(message: Message, event?: MouseEvent) {
+  if (isBatchPrintSelectionMode.value) {
+    handleMessageBubbleClickForBatchPrint(message, event);
+    return;
+  }
+  if (isModifiedPointerEvent(event)) return;
   const url = getMediaBlobUrl(message);
   if (url) {
     window.open(url, "_blank");
@@ -2378,6 +2480,150 @@ function handleMediaError(event: Event, mediaType: string) {
 // File upload functions
 function openFilePicker() {
   fileInputRef.value?.click();
+}
+
+function resetBatchPrintSelection() {
+  isBatchPrintSelectionMode.value = false;
+  selectedBatchPrintMessageIds.value = [];
+}
+
+function cancelBatchPrintSelection() {
+  resetBatchPrintSelection();
+}
+
+function isBatchPrintBubbleSelectable(message: Message): boolean {
+  return isMergePrintableBubbleMessage(message);
+}
+
+function isBatchPrintBubbleSelected(messageId: string): boolean {
+  return selectedBatchPrintMessageIds.value.includes(messageId);
+}
+
+function toggleBatchPrintMessageSelection(messageId: string) {
+  if (isBatchPrintBubbleSelected(messageId)) {
+    selectedBatchPrintMessageIds.value = selectedBatchPrintMessageIds.value.filter(
+      (id) => id !== messageId,
+    );
+    return;
+  }
+  selectedBatchPrintMessageIds.value = [
+    ...selectedBatchPrintMessageIds.value,
+    messageId,
+  ];
+}
+
+function handleMessageBubbleClickForBatchPrint(
+  message: Message,
+  event?: MouseEvent,
+) {
+  if (!isBatchPrintSelectionMode.value) return;
+  if (!isBatchPrintBubbleSelectable(message)) return;
+  if (isModifiedPointerEvent(event)) return;
+  event?.preventDefault();
+  event?.stopPropagation();
+  toggleBatchPrintMessageSelection(message.id);
+}
+
+async function resolveMessageBlobForBatchPrint(message: Message): Promise<Blob> {
+  const cachedBlob = mediaBlobCache.get(message.id);
+  if (cachedBlob) {
+    return cachedBlob;
+  }
+
+  await loadMediaForMessage(message);
+  const loadedBlob = mediaBlobCache.get(message.id);
+  if (loadedBlob) {
+    return loadedBlob;
+  }
+
+  const basePath = ((window as any).__BASE_PATH__ ?? "").replace(/\/$/, "");
+  const response = await fetch(`${basePath}/api/media/${message.id}`, {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load media: ${response.status}`);
+  }
+  const blob = await response.blob();
+  mediaBlobCache.set(message.id, blob);
+  if (!mediaBlobUrls.value[message.id]) {
+    mediaBlobUrls.value[message.id] = URL.createObjectURL(blob);
+  }
+  return blob;
+}
+
+async function mergeSelectedMessageBubblesAndPrint() {
+  if (!canMergeSelectedBubbleFiles.value) {
+    toast.error(t("chat.batchPrintMinSelection"), {
+      description: t("chat.batchPrintMinSelectionDesc"),
+    });
+    return;
+  }
+
+  const selectedMessageIDs = new Set(selectedBatchPrintMessageIds.value);
+  const selectedMessages = contactsStore.messages.filter(
+    (message) =>
+      selectedMessageIDs.has(message.id) && isBatchPrintBubbleSelectable(message),
+  );
+
+  if (selectedMessages.length < 2) {
+    toast.error(t("chat.batchPrintMinSelection"), {
+      description: t("chat.batchPrintMinSelectionDesc"),
+    });
+    return;
+  }
+
+  isPreparingBatchPrint.value = true;
+  toast.info(t("chat.batchPrintPreparing"));
+  try {
+    const files: File[] = [];
+    for (const message of selectedMessages) {
+      const blob = await resolveMessageBlobForBatchPrint(message);
+      const file = toMergePrintableFile(message, blob, files.length);
+      if (!file) {
+        throw new Error(`Unsupported selected message: ${message.id}`);
+      }
+      files.push(file);
+    }
+
+    const opened = await mergePhotosAndPdfsAndOpenPrintDialog(files);
+    if (!opened) {
+      toast.error(t("chat.printDialogFailed"));
+      return;
+    }
+    resetBatchPrintSelection();
+  } catch (error) {
+    console.error("Failed to merge selected bubbles for printing:", error);
+    const errorDescription =
+      error instanceof Error && error.message
+        ? error.message
+        : t("chat.batchPrintFailedDesc");
+    toast.error(t("chat.batchPrintFailed"), {
+      description: errorDescription,
+    });
+  } finally {
+    isPreparingBatchPrint.value = false;
+  }
+}
+
+function openBatchPrintPicker() {
+  if (isPreparingBatchPrint.value) return;
+
+  if (!isBatchPrintSelectionMode.value) {
+    if (!hasMergePrintableBubbles.value) {
+      toast.error(t("chat.batchPrintNoBubbleFiles"), {
+        description: t("chat.batchPrintNoBubbleFilesDesc"),
+      });
+      return;
+    }
+    resetBatchPrintSelection();
+    isBatchPrintSelectionMode.value = true;
+    toast.info(t("chat.batchPrintSelectionMode"), {
+      description: t("chat.batchPrintSelectionModeDesc"),
+    });
+    return;
+  }
+
+  void mergeSelectedMessageBubblesAndPrint();
 }
 
 function handleFileSelect(event: Event) {
@@ -3306,7 +3552,7 @@ async function sendMediaMessage() {
                 >
                   <div
                     :class="[
-                      'chat-bubble',
+                      'chat-bubble relative',
                       isSystemEventMessage(message)
                         ? 'chat-bubble-system'
                         : message.direction === 'outgoing'
@@ -3314,8 +3560,37 @@ async function sendMediaMessage() {
                           : 'chat-bubble-incoming',
                       isDeletedMessage(message) ? 'chat-bubble-deleted' : '',
                       isGroupMember(message.id) ? 'media-group-member' : '',
+                      isBatchPrintSelectionMode &&
+                      isBatchPrintBubbleSelectable(message)
+                        ? 'batch-print-selectable-bubble'
+                        : '',
+                      isBatchPrintBubbleSelected(message.id)
+                        ? 'batch-print-selected-bubble'
+                        : '',
                     ]"
+                    @click="handleMessageBubbleClickForBatchPrint(message, $event)"
                   >
+                    <button
+                      v-if="
+                        isBatchPrintSelectionMode &&
+                        isBatchPrintBubbleSelectable(message)
+                      "
+                      type="button"
+                      class="batch-print-bubble-marker"
+                      :class="
+                        isBatchPrintBubbleSelected(message.id)
+                          ? 'batch-print-bubble-marker--selected'
+                          : ''
+                      "
+                      @click.stop.prevent="
+                        toggleBatchPrintMessageSelection(message.id)
+                      "
+                    >
+                      <Check
+                        v-if="isBatchPrintBubbleSelected(message.id)"
+                        class="h-3 w-3"
+                      />
+                    </button>
                     <p
                       v-if="shouldShowGroupSenderPhone(message)"
                       class="mb-1 text-[11px] font-medium text-emerald-300 light:text-emerald-700"
@@ -3355,7 +3630,7 @@ async function sendMediaMessage() {
                         :src="getMediaBlobUrl(message)"
                         :alt="message.content?.body || 'Image'"
                         class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
-                        @click="openMediaPreview(message)"
+                        @click="openMediaPreview(message, $event)"
                         @error="handleImageError($event)"
                       />
                       <div
@@ -3365,6 +3640,35 @@ async function sendMediaMessage() {
                         <span class="text-muted-foreground text-sm"
                           >[Image]</span
                         >
+                      </div>
+                      <div
+                        v-if="
+                          getMediaBlobUrl(message) &&
+                          (configStore.showPrintButtons ||
+                            configStore.showDownloadButtons)
+                        "
+                        class="mt-2 flex flex-wrap items-center gap-1.5"
+                      >
+                        <Button
+                          v-if="configStore.showPrintButtons"
+                          variant="ghost"
+                          size="xs"
+                          class="h-7 px-2 text-[11px]"
+                          @click.stop="printAttachment(message, $event)"
+                        >
+                          <Printer class="h-3.5 w-3.5" />
+                          {{ $t("common.print") }}
+                        </Button>
+                        <Button
+                          v-if="configStore.showDownloadButtons"
+                          variant="ghost"
+                          size="xs"
+                          class="h-7 px-2 text-[11px]"
+                          @click.stop="downloadAttachment(message, $event)"
+                        >
+                          <Download class="h-3.5 w-3.5" />
+                          {{ $t("common.download") }}
+                        </Button>
                       </div>
                     </div>
                     <!-- Sticker message -->
@@ -3387,7 +3691,7 @@ async function sendMediaMessage() {
                         :src="getMediaBlobUrl(message)"
                         alt="Sticker"
                         class="max-w-[128px] max-h-[128px] cursor-pointer"
-                        @click="openMediaPreview(message)"
+                        @click="openMediaPreview(message, $event)"
                         @error="handleImageError($event)"
                       />
                       <div
@@ -3459,17 +3763,49 @@ async function sendMediaMessage() {
                       "
                       class="mb-2"
                     >
-                      <a
-                        v-if="getMediaBlobUrl(message)"
-                        :href="getMediaBlobUrl(message)"
-                        :download="message.media_filename || 'document'"
-                        class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
-                      >
-                        <FileText class="h-5 w-5 text-muted-foreground" />
-                        <span class="text-sm truncate max-w-[200px]">
-                          {{ message.media_filename || "Document" }}
-                        </span>
-                      </a>
+                      <div v-if="getMediaBlobUrl(message)" class="space-y-2">
+                        <a
+                          :href="getMediaBlobUrl(message)"
+                          :download="getAttachmentFilename(message)"
+                          class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
+                        >
+                          <FileText class="h-5 w-5 text-muted-foreground" />
+                          <span class="text-sm truncate max-w-[200px]">
+                            {{ getAttachmentFilename(message) }}
+                          </span>
+                        </a>
+                        <div
+                          v-if="
+                            configStore.showPrintButtons ||
+                            configStore.showDownloadButtons
+                          "
+                          class="flex flex-wrap items-center gap-1.5"
+                        >
+                          <Button
+                            v-if="
+                              configStore.showPrintButtons &&
+                              isMessagePrintSupported(message)
+                            "
+                            variant="ghost"
+                            size="xs"
+                            class="h-7 px-2 text-[11px]"
+                            @click.stop="printAttachment(message, $event)"
+                          >
+                            <Printer class="h-3.5 w-3.5" />
+                            {{ $t("common.print") }}
+                          </Button>
+                          <Button
+                            v-if="configStore.showDownloadButtons"
+                            variant="ghost"
+                            size="xs"
+                            class="h-7 px-2 text-[11px]"
+                            @click.stop="downloadAttachment(message, $event)"
+                          >
+                            <Download class="h-3.5 w-3.5" />
+                            {{ $t("common.download") }}
+                          </Button>
+                        </div>
+                      </div>
                       <div
                         v-else-if="isMediaLoading(message)"
                         class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg"
@@ -3977,6 +4313,34 @@ async function sendMediaMessage() {
             </div>
           </div>
 
+          <div
+            v-if="isBatchPrintSelectionMode"
+            class="mb-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-xs text-emerald-200 light:text-emerald-700">
+                {{ $t("chat.batchPrintSelectionModeDesc") }}
+              </p>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-emerald-100 light:text-emerald-800">
+                  {{
+                    $t("chat.batchPrintSelectedCount", {
+                      count: selectedBatchPrintCount,
+                    })
+                  }}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  class="h-7 px-2 text-[11px] text-emerald-100 hover:text-emerald-50 light:text-emerald-800 light:hover:text-emerald-900"
+                  @click="cancelBatchPrintSelection"
+                >
+                  {{ $t("common.cancel") }}
+                </Button>
+              </div>
+            </div>
+          </div>
+
           <form
             @submit.prevent="sendMessage"
             class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200"
@@ -4046,6 +4410,43 @@ async function sendMediaMessage() {
                 </button>
               </TooltipTrigger>
               <TooltipContent>{{ $t("chat.attachFile") }}</TooltipContent>
+            </Tooltip>
+            <Tooltip v-if="configStore.showPrintButtons">
+              <TooltipTrigger as-child>
+                <button
+                  type="button"
+                  class="relative w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  :disabled="
+                    isPreparingBatchPrint ||
+                    (isBatchPrintSelectionMode && !canMergeSelectedBubbleFiles)
+                  "
+                  @click="openBatchPrintPicker"
+                >
+                  <Loader2
+                    v-if="isPreparingBatchPrint"
+                    class="w-[18px] h-[18px] text-white/40 light:text-gray-500 animate-spin"
+                  />
+                  <Check
+                    v-else-if="isBatchPrintSelectionMode"
+                    class="w-[18px] h-[18px] text-emerald-300 light:text-emerald-600"
+                  />
+                  <Printer
+                    v-else
+                    class="w-[18px] h-[18px] text-white/40 light:text-gray-500"
+                  />
+                  <span
+                    v-if="isBatchPrintSelectionMode && selectedBatchPrintCount > 0"
+                    class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-[10px] font-semibold leading-4 text-white text-center"
+                  >
+                    {{ selectedBatchPrintCount }}
+                  </span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{{
+                isBatchPrintSelectionMode
+                  ? $t("chat.batchPrintConfirmAction")
+                  : $t("chat.mergePrint")
+              }}</TooltipContent>
             </Tooltip>
             <input
               ref="fileInputRef"
@@ -4405,6 +4806,50 @@ async function sendMediaMessage() {
 
 :root.light .media-group-member {
   border-left-color: rgba(16, 185, 129, 0.25);
+}
+
+.batch-print-selectable-bubble {
+  cursor: pointer;
+}
+
+.batch-print-selectable-bubble:hover {
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35);
+}
+
+.batch-print-selected-bubble {
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.6);
+}
+
+:root.light .batch-print-selected-bubble {
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.55);
+}
+
+.batch-print-bubble-marker {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(15, 15, 16, 0.9);
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: all 0.2s ease;
+}
+
+.batch-print-bubble-marker--selected {
+  color: rgb(236, 253, 245);
+  border-color: rgba(16, 185, 129, 0.95);
+  background: rgb(16, 185, 129);
+}
+
+:root.light .batch-print-bubble-marker {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(107, 114, 128, 0.55);
 }
 
 .sticky-date-enter-active,

@@ -80,6 +80,7 @@ type WhatsmeowConfig struct {
 	MaxInstancesPerOrg  int `koanf:"max_instances_per_org"`
 	UploadRetryCount    int `koanf:"upload_retry_count"`
 	UploadRetryDelaySec int `koanf:"upload_retry_delay_sec"`
+	Identity            string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")
 }
 
 type AIConfig struct {

@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/templateutil"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -732,6 +732,7 @@ func TestApp_SendOutgoingMessage_WithSentByUser(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	account := createTestAccount(t, app, org.ID)
 	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent-prefix-enabled", []string{"chat:read", "chat:write"})
 
 	// Create a test user (required due to foreign key constraint)
 	user := &models.User{
@@ -739,6 +740,7 @@ func TestApp_SendOutgoingMessage_WithSentByUser(t *testing.T) {
 		OrganizationID: org.ID,
 		Email:          "agent-" + uuid.New().String()[:8] + "@test.com",
 		FullName:       "Test Agent",
+		RoleID:         &role.ID,
 		IsActive:       true,
 	}
 	require.NoError(t, app.DB.Create(user).Error)
@@ -760,6 +762,7 @@ func TestApp_SendOutgoingMessage_WithSentByUser(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, msg)
+	assert.Equal(t, "Test Agent : Message from agent", msg.Content)
 
 	// Wait for async send
 	app.WaitForBackgroundTasks()
@@ -769,6 +772,104 @@ func TestApp_SendOutgoingMessage_WithSentByUser(t *testing.T) {
 	require.NoError(t, app.DB.First(&dbMsg, msg.ID).Error)
 	require.NotNil(t, dbMsg.SentByUserID)
 	assert.Equal(t, userID, *dbMsg.SentByUserID)
+	assert.Equal(t, "Test Agent : Message from agent", dbMsg.Content)
+
+	require.Len(t, mockServer.sentMessages, 1)
+	sentMsg := mockServer.sentMessages[0]
+	textContent := sentMsg["text"].(map[string]interface{})
+	assert.Equal(t, "Test Agent : Message from agent", textContent["body"])
+}
+
+func TestApp_SendOutgoingMessage_WithSentByUser_DoesNotDoublePrefix(t *testing.T) {
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent-prefix-enabled", []string{"chat:read", "chat:write"})
+
+	user := &models.User{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Email:          "agent-" + uuid.New().String()[:8] + "@test.com",
+		FullName:       "Test Agent",
+		RoleID:         &role.ID,
+		IsActive:       true,
+	}
+	require.NoError(t, app.DB.Create(user).Error)
+	userID := user.ID
+
+	ctx := testutil.TestContext(t)
+	req := handlers.OutgoingMessageRequest{
+		Account: account,
+		Contact: contact,
+		Type:    models.MessageTypeText,
+		Content: "Test Agent : Already prefixed",
+	}
+
+	opts := handlers.ChatbotSendOptions()
+	opts.SentByUserID = &userID
+
+	msg, err := app.SendOutgoingMessage(ctx, req, opts)
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+	assert.Equal(t, "Test Agent : Already prefixed", msg.Content)
+
+	require.Len(t, mockServer.sentMessages, 1)
+	sentMsg := mockServer.sentMessages[0]
+	textContent := sentMsg["text"].(map[string]interface{})
+	assert.Equal(t, "Test Agent : Already prefixed", textContent["body"])
+}
+
+func TestApp_SendOutgoingMessage_WithSentByUser_PrefixDisabledBySendRestrictions(t *testing.T) {
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent-no-prefix", []string{"chat:read", "chat:write"})
+
+	user := &models.User{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Email:          "agent-" + uuid.New().String()[:8] + "@test.com",
+		FullName:       "Test Agent",
+		RoleID:         &role.ID,
+		IsActive:       true,
+	}
+	require.NoError(t, app.DB.Create(user).Error)
+	user.Settings = models.JSONB{
+		"send_restrictions": models.JSONB{
+			"prefix_agent_name": false,
+		},
+	}
+	require.NoError(t, app.DB.Model(user).Update("settings", user.Settings).Error)
+	userID := user.ID
+
+	ctx := testutil.TestContext(t)
+	req := handlers.OutgoingMessageRequest{
+		Account: account,
+		Contact: contact,
+		Type:    models.MessageTypeText,
+		Content: "Message without prefix setting",
+	}
+
+	opts := handlers.ChatbotSendOptions()
+	opts.SentByUserID = &userID
+
+	msg, err := app.SendOutgoingMessage(ctx, req, opts)
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+	assert.Equal(t, "Message without prefix setting", msg.Content)
+
+	require.Len(t, mockServer.sentMessages, 1)
+	sentMsg := mockServer.sentMessages[0]
+	textContent := sentMsg["text"].(map[string]interface{})
+	assert.Equal(t, "Message without prefix setting", textContent["body"])
 }
 
 func TestApp_SendOutgoingMessage_UnsupportedType(t *testing.T) {

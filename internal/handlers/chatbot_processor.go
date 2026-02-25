@@ -364,6 +364,7 @@ func (a *App) handleChatbotConversation(
 	keywordResponse, keywordMatched := a.matchKeywordRules(account.OrganizationID, account.Name, payload.MessageText)
 	if keywordMatched && keywordResponse.ResponseType == models.ResponseTypeTransfer {
 		a.Log.Info("Transfer keyword matched", "response", keywordResponse.Body)
+		renderedKeywordBody := a.renderMessageTemplatePlaceholders(context.Background(), account.OrganizationID, contact, keywordResponse.Body)
 		// Check business hours - if outside hours, send out of hours message instead
 		if settings.BusinessHours.Enabled && len(settings.BusinessHours.Hours) > 0 {
 			if !a.isWithinBusinessHours(settings.BusinessHours.Hours) {
@@ -373,8 +374,8 @@ func (a *App) handleChatbotConversation(
 			}
 		}
 		// Within business hours - send transfer message and create transfer
-		if keywordResponse.Body != "" {
-			if err := a.sendAndSaveTextMessage(account, contact, keywordResponse.Body); err != nil {
+		if renderedKeywordBody != "" {
+			if err := a.sendAndSaveTextMessage(account, contact, renderedKeywordBody); err != nil {
 				a.Log.Error("Failed to send transfer message", "error", err, "contact", contact.PhoneNumber)
 			}
 		}
@@ -425,19 +426,20 @@ func (a *App) handleChatbotConversation(
 	// Handle non-transfer keyword matches (transfer was already handled above)
 	if keywordMatched && keywordResponse.ResponseType != models.ResponseTypeTransfer {
 		a.Log.Info("Keyword rule matched", "response_type", keywordResponse.ResponseType, "response", keywordResponse.Body)
+		renderedKeywordBody := a.renderMessageTemplatePlaceholders(context.Background(), account.OrganizationID, contact, keywordResponse.Body)
 
 		// Handle regular text response
 		if len(keywordResponse.Buttons) > 0 {
-			if err := a.sendAndSaveInteractiveButtons(account, contact, keywordResponse.Body, keywordResponse.Buttons); err != nil {
+			if err := a.sendAndSaveInteractiveButtons(account, contact, renderedKeywordBody, keywordResponse.Buttons); err != nil {
 				a.Log.Error("Failed to send interactive buttons", "error", err, "contact", contact.PhoneNumber)
 			}
 		} else {
-			if err := a.sendAndSaveTextMessage(account, contact, keywordResponse.Body); err != nil {
+			if err := a.sendAndSaveTextMessage(account, contact, renderedKeywordBody); err != nil {
 				a.Log.Error("Failed to send text message", "error", err, "contact", contact.PhoneNumber)
 			}
 		}
 		// Log outgoing message
-		a.logSessionMessage(session.ID, models.DirectionOutgoing, keywordResponse.Body, "keyword_response")
+		a.logSessionMessage(session.ID, models.DirectionOutgoing, renderedKeywordBody, "keyword_response")
 		return
 	}
 
@@ -2359,14 +2361,38 @@ type MediaInfo struct {
 	MediaFilename string
 }
 
+func (a *App) shouldSkipClosedChatAutoReopenForIncomingMessage(orgID uuid.UUID, contact *models.Contact, msgType, content string) bool {
+	if a == nil || contact == nil {
+		return false
+	}
+	_ = content
+	if normalizeContactStatus(contact) != models.ChatStatusClosed {
+		return false
+	}
+	if strings.TrimSpace(msgType) != "text" {
+		return false
+	}
+
+	cycle, _, err := a.findActiveChatCloseRatingCycle(orgID, contact.ID, time.Now().UTC())
+	if err != nil {
+		a.Log.Error("Failed to resolve pending close rating cycle before auto-reopen", "error", err, "organization_id", orgID, "contact_id", contact.ID)
+		return false
+	}
+	return cycle != nil
+}
+
 // saveIncomingMessage saves an incoming message to the messages table
 func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *models.Contact, whatsappMsgID, msgType, content string, mediaInfo *MediaInfo, replyToWAMID string) *models.Message {
 	now := time.Now()
 
-	if reopened, err := a.reopenClosedChatToPending(contact); err != nil {
-		a.Log.Error("Failed to auto-reopen closed chat on incoming message", "error", err, "contact_id", contact.ID)
-	} else if reopened {
-		a.Log.Info("Auto-reopened closed chat after inbound message", "contact_id", contact.ID)
+	if a.shouldSkipClosedChatAutoReopenForIncomingMessage(account.OrganizationID, contact, msgType, content) {
+		a.Log.Info("Skipping auto-reopen for inbound rating response", "contact_id", contact.ID)
+	} else {
+		if reopened, err := a.reopenClosedChatToPending(contact); err != nil {
+			a.Log.Error("Failed to auto-reopen closed chat on incoming message", "error", err, "contact_id", contact.ID)
+		} else if reopened {
+			a.Log.Info("Auto-reopened closed chat after inbound message", "contact_id", contact.ID)
+		}
 	}
 
 	message := models.Message{

@@ -42,3 +42,16 @@ func TestDirectConversationID(t *testing.T) {
 	assert.Equal(t, "269638281724102@"+string(types.HiddenUserServer), directConversationID(chat, "269638281724102@"+string(types.HiddenUserServer)))
 	assert.Equal(t, chat.String(), directConversationID(chat, ""))
 }
+
+func TestFallbackContactProfileName(t *testing.T) {
+	assert.Equal(t, "", fallbackContactProfileName("269638281724102@"+string(types.HiddenUserServer)))
+	assert.Equal(t, "15550001234", fallbackContactProfileName("15550001234@"+string(types.DefaultUserServer)))
+	assert.Equal(t, "15550001234", fallbackContactProfileName("15550001234"))
+}
+
+func TestIsPlaceholderProfileName(t *testing.T) {
+	assert.True(t, isPlaceholderProfileName("", "15550001234"))
+	assert.True(t, isPlaceholderProfileName("15550001234", "15550001234"))
+	assert.True(t, isPlaceholderProfileName("269638281724102@"+string(types.HiddenUserServer), "15550001234"))
+	assert.False(t, isPlaceholderProfileName("Customer Name", "15550001234"))
+}

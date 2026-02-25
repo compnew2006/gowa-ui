@@ -28,7 +28,8 @@ const actionLabels: Record<string, string> = {
   delete: 'Delete',
   manage: 'Manage',
   export: 'Export',
-  assign: 'Assign'
+  assign: 'Assign',
+  prefix: 'Prefix Agent Name'
 }
 
 function getActionLabel(action: string): string {

@@ -26,10 +26,33 @@ func (a *App) appendSystemChatMessage(contact *models.Contact, content string, m
 	}
 	metadata[chatSystemEventMetadataKey] = true
 
+	conversationContext := a.resolveContactConversationContext(contact.OrganizationID, *contact)
+	if conversationContext.IsGroupChat {
+		if _, ok := metadata["is_group_chat"]; !ok {
+			metadata["is_group_chat"] = true
+		}
+		if conversationContext.ConversationID != "" {
+			if _, ok := metadata["group_jid"]; !ok {
+				metadata["group_jid"] = conversationContext.ConversationID
+			}
+		}
+	}
+	if conversationContext.IsChannelChat {
+		if _, ok := metadata["is_channel_chat"]; !ok {
+			metadata["is_channel_chat"] = true
+		}
+		if conversationContext.ConversationID != "" {
+			if _, ok := metadata["channel_jid"]; !ok {
+				metadata["channel_jid"] = conversationContext.ConversationID
+			}
+		}
+	}
+
 	systemMessage := models.Message{
 		OrganizationID:  contact.OrganizationID,
 		InstanceID:      contact.InstanceID,
-		WhatsAppAccount: contact.WhatsAppAccount,
+		ConversationID:  conversationContext.ConversationID,
+		WhatsAppAccount: a.resolveContactMessageAccount(contact),
 		ContactID:       contact.ID,
 		Direction:       models.DirectionOutgoing,
 		MessageType:     models.MessageTypeText,
