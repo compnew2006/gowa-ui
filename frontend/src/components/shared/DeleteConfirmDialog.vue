@@ -55,6 +55,9 @@ function handleCancel() {
             </template>
           </slot>
         </AlertDialogDescription>
+        <div v-if="$slots.details" class="mt-3">
+          <slot name="details" />
+        </div>
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel @click="handleCancel">{{ cancelLabel }}</AlertDialogCancel>

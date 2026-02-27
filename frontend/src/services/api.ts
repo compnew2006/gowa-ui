@@ -153,6 +153,8 @@ export const chatsService = {
   claim: (id: string) => api.put(`/chats/${id}/claim`),
   close: (id: string) => api.put(`/chats/${id}/close`),
   reopen: (id: string) => api.put(`/chats/${id}/reopen`),
+  setPublic: (id: string, isPublic: boolean) =>
+    api.put(`/chats/${id}/public`, { is_public: isPublic }),
   listMessages: (id: string, params?: { page?: number; limit?: number; before_id?: string; account?: string }) =>
     api.get(`/chats/${id}/messages`, { params }),
 }
@@ -346,11 +348,15 @@ export const instancesService = {
   list: () => api.get('/instances'),
   get: (id: string) => api.get(`/instances/${id}`),
   health: (id: string) => api.get(`/instances/${id}/health`),
+  getQRCode: (id: string) => api.get(`/instances/${id}/qr`),
   create: (data: { name: string; is_default?: boolean; auto_read_receipt?: boolean; settings?: Record<string, any> }) =>
     api.post('/instances', data),
   update: (id: string, data: { name?: string; is_default?: boolean; auto_read_receipt?: boolean; settings?: Record<string, any> }) =>
     api.put(`/instances/${id}`, data),
-  delete: (id: string) => api.delete(`/instances/${id}`),
+  delete: (id: string, options?: { deleteChats?: boolean }) =>
+    api.delete(`/instances/${id}`, {
+      params: options?.deleteChats ? { delete_chats: true } : undefined
+    }),
   connect: (id: string) => api.post(`/instances/${id}/connect`),
   pairPhone: (id: string, data: { phone_number: string; show_push_notification?: boolean; client_type?: string; client_display_name?: string }) =>
     api.post(`/instances/${id}/pair-phone`, data),
@@ -448,9 +454,13 @@ export const cannedResponsesService = {
   list: (params?: { category?: string; search?: string; active_only?: string; page?: number; limit?: number }) =>
     api.get<{ canned_responses: CannedResponse[]; total?: number }>('/canned-responses', { params }),
   create: (data: FormData | { name: string; shortcut?: string; content: string; category?: string; is_active?: boolean; keep_attachment_ids?: string[] }) =>
-    api.post('/canned-responses', data),
+    api.post('/canned-responses', data, data instanceof FormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    } : undefined),
   update: (id: string, data: FormData | { name?: string; shortcut?: string; content?: string; category?: string; is_active?: boolean; keep_attachment_ids?: string[] }) =>
-    api.put(`/canned-responses/${id}`, data),
+    api.put(`/canned-responses/${id}`, data, data instanceof FormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    } : undefined),
   send: (id: string, data: { contact_id: string; content?: string; instance_id?: string; reply_to_message_id?: string; whatsapp_account?: string }) =>
     api.post(`/canned-responses/${id}/send`, data),
   delete: (id: string) => api.delete(`/canned-responses/${id}`),

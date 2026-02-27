@@ -100,7 +100,12 @@ function messagesEnvelope(messages: any[]) {
   }
 }
 
-async function setupMockRoutes(page: Page) {
+async function setupMockRoutes(
+  page: Page,
+  options?: {
+    messageDelayByContactID?: Partial<Record<string, number>>
+  }
+) {
   await page.route('**/api/contacts?*', async (route: Route) => {
     if (route.request().method() !== 'GET') {
       await route.continue()
@@ -165,12 +170,16 @@ async function setupMockRoutes(page: Page) {
     const parts = url.pathname.split('/')
     const contactID = parts[parts.indexOf('chats') + 1]
     const account = url.searchParams.get('account')
+    const delayMs = options?.messageDelayByContactID?.[contactID] ?? 0
 
     const baseMessages = CONTACT_MESSAGES[contactID] || []
     const filteredMessages = account
       ? baseMessages.filter((message) => message.whatsapp_account === account)
       : baseMessages
 
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
     await route.fulfill({ json: messagesEnvelope(filteredMessages) })
   })
 
@@ -218,5 +227,24 @@ test.describe('Unified Sidebar Contacts Across Accounts', () => {
 
     await expect(page).toHaveURL(new RegExp(`/chat/${CONTACT_B_ID}$`))
     await expect(page.getByText('Message from account B')).toBeVisible()
+  })
+
+  test('keeps latest selected chat visible when an older message request resolves late', async ({ page }) => {
+    await setupMockRoutes(page, {
+      messageDelayByContactID: {
+        [CONTACT_A_ID]: 900,
+        [CONTACT_B_ID]: 50
+      }
+    })
+
+    await page.goto(`/chat/${CONTACT_A_ID}`)
+    await page.waitForTimeout(80)
+    await page.goto(`/chat/${CONTACT_B_ID}`)
+
+    await expect(page).toHaveURL(new RegExp(`/chat/${CONTACT_B_ID}$`))
+    await expect(page.getByText('Message from account B')).toBeVisible()
+    await page.waitForTimeout(1000)
+    await expect(page.getByText('Message from account B')).toBeVisible()
+    await expect(page.getByText('Message from account A')).not.toBeVisible()
   })
 })

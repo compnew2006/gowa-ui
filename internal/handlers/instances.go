@@ -58,6 +58,16 @@ type InstanceHealthResponse struct {
 	QueueDepth            int64   `json:"queue_depth"`
 }
 
+// InstanceQRCodeSnapshotResponse returns the latest cached QR code for an instance, if available.
+type InstanceQRCodeSnapshotResponse struct {
+	InstanceID string `json:"instance_id"`
+	Available  bool   `json:"available"`
+	QRCode     string `json:"qr_code,omitempty"`
+	TimeoutSec int    `json:"timeout_seconds,omitempty"`
+	ReceivedAt string `json:"received_at,omitempty"`
+	ExpiresAt  string `json:"expires_at,omitempty"`
+}
+
 func (a *App) broadcastInstanceConnectFailure(orgID, instanceID uuid.UUID, reason, message string) {
 	if a.WSHub == nil {
 		return
@@ -279,6 +289,11 @@ func (a *App) DeleteInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
+	deleteChats, err := parseDeleteChatsQueryFlag(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "delete_chats")
+	}
+
 	idStr := r.RequestCtx.UserValue("id").(string)
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -312,7 +327,7 @@ func (a *App) DeleteInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to log out instance", nil, "")
 	}
 
-	if err := a.DB.Delete(&instance).Error; err != nil {
+	if err := a.deleteWhatsAppInstanceWithOptionalChatPurge(&instance, orgID, deleteChats); err != nil {
 		a.Log.Error("Failed to delete instance", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete instance", nil, "")
 	}
@@ -472,6 +487,58 @@ func (a *App) ReconnectInstance(r *fastglue.Request) error {
 	}()
 
 	return r.SendEnvelope(map[string]string{"status": "reconnection_initiated"})
+}
+
+// GetInstanceQRCodeSnapshot returns the latest cached QR code (if still valid) for an instance.
+func (a *App) GetInstanceQRCodeSnapshot(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	idStr := r.RequestCtx.UserValue("id").(string)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
+	}
+
+	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance for qr snapshot", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
+	}
+
+	var instance models.WhatsAppInstance
+	if err := query.Select("id").First(&instance).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
+		}
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
+	}
+
+	if a.WhatsmeowManager == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Whatsmeow manager not initialized", nil, "")
+	}
+
+	snapshot, ok := a.WhatsmeowManager.GetCachedQRCode(instance.ID)
+	if !ok {
+		return r.SendEnvelope(InstanceQRCodeSnapshotResponse{
+			InstanceID: instance.ID.String(),
+			Available:  false,
+		})
+	}
+
+	receivedAt := snapshot.ReceivedAt.UTC()
+	expiresAt := receivedAt.Add(time.Duration(snapshot.TimeoutSec) * time.Second)
+	return r.SendEnvelope(InstanceQRCodeSnapshotResponse{
+		InstanceID: instance.ID.String(),
+		Available:  true,
+		QRCode:     snapshot.Code,
+		TimeoutSec: snapshot.TimeoutSec,
+		ReceivedAt: receivedAt.Format(time.RFC3339),
+		ExpiresAt:  expiresAt.Format(time.RFC3339),
+	})
 }
 
 // PairPhoneInstance requests a phone linking code for an unpaired instance.

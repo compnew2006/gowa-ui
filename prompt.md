@@ -172,10 +172,11 @@ The loop **ONLY** exits when ALL of these are true:
 | D    | Regenerate `STRUCTURE.md` using Python script                                                                 | `python3 gen_md_structure.py` |
 | E    | **MANDATORY**: Create/Update End-to-End (E2E) tests to validate the newly completed user request              | e.g., Playwright / Cypress    |
 | F    | Git commit changes                                                                                            | `git commit -m "<message>"`   |
+| G    | Create a "Memory Summary" for future turns (stable facts/decisions)                                           | (internal)                    |
 
 > **Date Format Rule**: All date headers in `MEMORY.md` and `CHANGELOG.md` MUST use the full `YYYY-MM-DD HH:MM` format (e.g., `2026-02-17 08:35`). Do NOT use bracketed date-only format like `[YYYY-MM-DD]`. Run `date +"%Y-%m-%d %H:%M"` to get the correct timestamp.
 
-> **Note**: Check if `user.name` and `user.email` are set; configure if missing.
+> **Memory Summary Protocol**: When completing Step G, capture only stable facts and decisions using these sections: User goal, Constraints/preferences, Decisions made, and TODOs. Max 10 bullet points, each <= 12 words per point. No personal data.
 
 ---
 
@@ -213,6 +214,15 @@ QA is no longer a separate step — it is **built into Phase 3 (TEST)** of every
 
 ---
 
-## Immediate Task: 
+## Immediate Task:
 
 <YOUR REQUEST HERE>
+
+deploy this project to my server :
+vps ip : 31.97.192.53
+user : root
+password : 01007181781Aa#
+os : ubuntu
+the info file in local server : /Users/noiemany/Downloads/whatomate_GOWA/whatomate/docs/whatomate_multi_instances_info.md
+the info in vps is : /root/whatomate_multi_instances_info.md and /root/whatomate_production_info.md
+after finish update the md files

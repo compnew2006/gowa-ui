@@ -693,6 +693,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/chats/{id}/claim", app.ClaimChat)
 	g.PUT("/api/chats/{id}/close", app.CloseChat)
 	g.PUT("/api/chats/{id}/reopen", app.ReopenChat)
+	g.PUT("/api/chats/{id}/public", app.SetChatPublic)
 	g.GET("/api/chats/{id}/messages", app.GetMessages)
 
 	// Generic Import/Export
@@ -724,6 +725,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/instances/{id}", app.UpdateInstance)
 	g.DELETE("/api/instances/{id}", app.DeleteInstance)
 	g.GET("/api/instances/{id}/health", app.GetInstanceHealth)
+	g.GET("/api/instances/{id}/qr", app.GetInstanceQRCodeSnapshot)
 	g.POST("/api/instances/{id}/connect", app.ConnectInstance)
 	g.POST("/api/instances/{id}/pair-phone", app.PairPhoneInstance)
 	g.POST("/api/instances/{id}/disconnect", app.DisconnectInstance)

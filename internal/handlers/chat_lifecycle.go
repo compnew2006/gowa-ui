@@ -100,6 +100,23 @@ func (a *App) canReadAllContacts(userID, orgID uuid.UUID) bool {
 		a.canBypassPendingChatRestriction(userID, orgID)
 }
 
+func applyAssignedOrPublicContactAccessFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB {
+	return query.Where("(assigned_user_id = ? OR is_public = ?)", userID, true)
+}
+
+func applyAgentVisibleChatListFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB {
+	return query.Where(
+		"(is_public = ? OR assigned_user_id = ? OR ((status IS NULL OR status = '' OR status = ?) AND assigned_user_id IS NULL))",
+		true,
+		userID,
+		models.ChatStatusPending,
+	)
+}
+
+func (a *App) canAccessRestrictedChatWithoutClaim(contact models.Contact, userID, orgID uuid.UUID) bool {
+	return contact.IsPublic || a.canBypassPendingChatRestriction(userID, orgID)
+}
+
 func isChatRestrictedForMessageRead(contact models.Contact) bool {
 	status := contact.EffectiveStatus()
 	return status == models.ChatStatusPending || contact.AssignedUserID == nil

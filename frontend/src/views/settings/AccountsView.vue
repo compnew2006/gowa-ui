@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -88,6 +89,7 @@ const testResults = ref<Record<string, TestResult>>({})
 const subscribingAccountId = ref<string | null>(null)
 const deleteDialogOpen = ref(false)
 const accountToDelete = ref<WhatsAppAccount | null>(null)
+const deleteChatsWithAccount = ref(false)
 
 // Business Profile Dialog State
 const isProfileDialogOpen = ref(false)
@@ -212,6 +214,7 @@ async function saveAccount() {
 
 function openDeleteDialog(account: WhatsAppAccount) {
   accountToDelete.value = account
+  deleteChatsWithAccount.value = false
   deleteDialogOpen.value = true
 }
 
@@ -219,10 +222,13 @@ async function confirmDelete() {
   if (!accountToDelete.value) return
 
   try {
-    await api.delete(`/accounts/${accountToDelete.value.id}`)
+    await api.delete(`/accounts/${accountToDelete.value.id}`, {
+      params: deleteChatsWithAccount.value ? { delete_chats: true } : undefined
+    })
     toast.success(t('common.deletedSuccess', { resource: t('resources.Account') }))
     deleteDialogOpen.value = false
     accountToDelete.value = null
+    deleteChatsWithAccount.value = false
     await fetchAccounts()
   } catch (error: any) {
     toast.error(getErrorMessage(error, t('common.failedDelete', { resource: t('resources.account') })))
@@ -727,7 +733,30 @@ const webhookUrl = window.location.origin + basePath + '/api/webhook'
       :title="$t('accounts.deleteAccount')"
       :item-name="accountToDelete?.name"
       @confirm="confirmDelete"
-    />
+    >
+      <template #description>
+        {{ $t('accounts.deleteAccountWarning', { name: accountToDelete?.name || '' }) }}
+      </template>
+      <template #details>
+        <div class="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+          <div class="flex items-start gap-2">
+            <Checkbox
+              id="delete-account-chats"
+              :checked="deleteChatsWithAccount"
+              @update:checked="deleteChatsWithAccount = $event === true"
+            />
+            <div class="space-y-1">
+              <Label for="delete-account-chats" class="cursor-pointer">
+                {{ $t('accounts.deleteRelatedChatsLabel') }}
+              </Label>
+              <p class="text-xs text-muted-foreground">
+                {{ $t('accounts.deleteRelatedChatsHint') }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </template>
+    </DeleteConfirmDialog>
 
     <BusinessProfileDialog
         v-model:open="isProfileDialogOpen"

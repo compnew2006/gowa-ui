@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/models"
@@ -33,8 +34,16 @@ type ConnectionManager struct {
 	cfg           *config.WhatsmeowConfig
 	hub           *websocket.Hub
 	connectFn     func(context.Context, uuid.UUID) error
+	qrCodesMu     sync.RWMutex
+	qrCodes       map[uuid.UUID]cachedQRCode
 	// mediaStoragePath is the local root directory where inbound media is persisted.
 	mediaStoragePath string
+}
+
+type cachedQRCode struct {
+	code       string
+	timeoutSec int
+	receivedAt time.Time
 }
 
 const orgAutoConnectBootstrapSettingsKey = "whatsmeow_auto_connect_bootstrap_done"
@@ -53,6 +62,7 @@ func NewConnectionManager(db *gorm.DB, store *sqlstore.Container, logger logf.Lo
 		hub:              hub,
 		mediaStoragePath: mediaStoragePath,
 		activeCallIDs:    make(map[uuid.UUID]map[string]struct{}),
+		qrCodes:          make(map[uuid.UUID]cachedQRCode),
 	}
 	cm.connectFn = cm.Connect
 	return cm
@@ -76,6 +86,7 @@ func (cm *ConnectionManager) Connect(ctx context.Context, instanceID uuid.UUID) 
 			newStatus := models.InstanceStatusConnecting
 			if existingClient.Store != nil && existingClient.Store.ID != nil {
 				newStatus = models.InstanceStatusConnected
+				cm.ClearCachedQRCode(instanceID)
 			}
 
 			if err := cm.updateInstanceStatus(ctx, instanceID, newStatus); err != nil {
@@ -97,6 +108,7 @@ func (cm *ConnectionManager) Connect(ctx context.Context, instanceID uuid.UUID) 
 		newStatus := models.InstanceStatusConnecting
 		if existingClient.Store != nil && existingClient.Store.ID != nil {
 			newStatus = models.InstanceStatusConnected
+			cm.ClearCachedQRCode(instanceID)
 		}
 
 		if err := cm.updateInstanceStatus(ctx, instanceID, newStatus); err != nil {
@@ -189,6 +201,7 @@ func (cm *ConnectionManager) Connect(ctx context.Context, instanceID uuid.UUID) 
 		cm.logger.Error("Failed to update instance status", "component", "whatsmeow", "event", "status_update_error", "error", err)
 	}
 	if newStatus == models.InstanceStatusConnected {
+		cm.ClearCachedQRCode(instanceID)
 		cm.MarkConnected(instanceID)
 		cm.broadcastInstanceConnected(instance.OrganizationID, instanceID, instance.PhoneNumber)
 	}
@@ -210,6 +223,7 @@ func (cm *ConnectionManager) Disconnect(ctx context.Context, instanceID uuid.UUI
 	client.Disconnect()
 	delete(cm.clients, instanceID)
 	cm.clearActiveCalls(instanceID)
+	cm.ClearCachedQRCode(instanceID)
 
 	if err := cm.updateInstanceStatus(ctx, instanceID, models.InstanceStatusDisconnected); err != nil {
 		cm.logger.Error("Failed to update instance status on disconnect", "component", "whatsmeow", "event", "disconnect_error", "instance_id", instanceID, "error", err)
@@ -249,6 +263,7 @@ func (cm *ConnectionManager) Logout(ctx context.Context, instanceID uuid.UUID) e
 	delete(cm.clients, instanceID)
 	cm.clientsMu.Unlock()
 	cm.clearActiveCalls(instanceID)
+	cm.ClearCachedQRCode(instanceID)
 
 	if err := cm.db.WithContext(ctx).Model(&models.WhatsAppInstance{}).
 		Where("id = ?", instanceID).

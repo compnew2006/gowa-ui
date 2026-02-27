@@ -34,6 +34,7 @@ type ContactResponse struct {
 	UnreadCount        int        `json:"unread_count"`
 	AssignedUserID     *uuid.UUID `json:"assigned_user_id,omitempty"`
 	AssignedUserName   string     `json:"assigned_user_name,omitempty"`
+	IsPublic           bool       `json:"is_public"`
 	ClosedAt           *time.Time `json:"closed_at,omitempty"`
 	ClosedByUserID     *uuid.UUID `json:"closed_by_user_id,omitempty"`
 	ClosedByName       string     `json:"closed_by_name,omitempty"`
@@ -484,13 +485,9 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	}
 
 	hasContactsReadPermission := a.canReadAllContacts(userID, orgID)
-	// Users without contacts:read can still see pending queue + their assigned chats.
+	// Users without contacts:read can still see pending queue + their assigned chats + public chats.
 	if !hasContactsReadPermission {
-		query = query.Where(
-			"assigned_user_id = ? OR ((status IS NULL OR status = '' OR status = ?) AND assigned_user_id IS NULL)",
-			userID,
-			models.ChatStatusPending,
-		)
+		query = applyAgentVisibleChatListFilter(query, userID)
 	}
 
 	restrictedInstanceIDs, err := a.getRestrictedInstancesForUser(orgID, userID)
@@ -582,8 +579,8 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		}
 	}
 
-	// Order by last message time (most recent first)
-	query = query.Order("last_message_at DESC NULLS LAST, created_at DESC")
+	// Public chats are pinned first, then most recent activity.
+	query = query.Order("is_public DESC, last_message_at DESC NULLS LAST, created_at DESC")
 
 	var total int64
 	query.Model(&models.Contact{}).Count(&total)
@@ -673,6 +670,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			UnreadCount:        int(unreadCount),
 			AssignedUserID:     c.AssignedUserID,
 			AssignedUserName:   strings.TrimSpace(userFullName(c.AssignedUser)),
+			IsPublic:           c.IsPublic,
 			ClosedAt:           closedAt,
 			ClosedByUserID:     closedByUserID,
 			ClosedByName:       strings.TrimSpace(userFullName(c.ClosedByUser)),
@@ -709,7 +707,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 
 	// Users without contacts:read permission can only access their assigned contacts
 	if !a.canReadAllContacts(userID, orgID) {
-		query = query.Where("assigned_user_id = ?", userID)
+		query = applyAssignedOrPublicContactAccessFilter(query, userID)
 	}
 	restrictedInstanceIDs, restrictedErr := a.getRestrictedInstancesForUser(orgID, userID)
 	if restrictedErr != nil {
@@ -796,6 +794,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 		UnreadCount:        int(unreadCount),
 		AssignedUserID:     contact.AssignedUserID,
 		AssignedUserName:   strings.TrimSpace(userFullName(contact.AssignedUser)),
+		IsPublic:           contact.IsPublic,
 		ClosedAt:           closedAt,
 		ClosedByUserID:     closedByUserID,
 		ClosedByName:       strings.TrimSpace(userFullName(contact.ClosedByUser)),
@@ -833,7 +832,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if !hasContactsReadPermission {
-		query = query.Where("assigned_user_id = ?", userID)
+		query = applyAssignedOrPublicContactAccessFilter(query, userID)
 	}
 	if len(restrictedInstanceIDs) > 0 {
 		query = query.Where("instance_id IN ?", restrictedInstanceIDs)
@@ -842,7 +841,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 	normalizeContactStatus(&contact)
-	if isChatRestrictedForMessageRead(contact) && !a.canBypassPendingChatRestriction(userID, orgID) {
+	if isChatRestrictedForMessageRead(contact) && !a.canAccessRestrictedChatWithoutClaim(contact, userID, orgID) {
 		return r.SendErrorEnvelope(
 			fasthttp.StatusForbidden,
 			"This chat is currently unassigned. Claim it before viewing messages.",

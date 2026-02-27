@@ -100,6 +100,7 @@ import {
   Link,
   Mail,
   Globe,
+  Pin,
   Code,
   RotateCw,
   Filter,
@@ -305,6 +306,12 @@ const selectedBatchPrintMessageIds = ref<string[]>([]);
 const mediaBlobUrls = ref<Record<string, string>>({});
 const mediaLoadingStates = ref<Record<string, boolean>>({});
 const mediaBlobCache = new Map<string, Blob>();
+const MAX_MEDIA_LOAD_CONCURRENCY = 4;
+const pendingMediaQueue: Message[] = [];
+const queuedMediaMessageIDs = new Set<string>();
+const inFlightMediaRequests = new Map<string, AbortController>();
+let activeMediaLoadCount = 0;
+let mediaLoadGeneration = 0;
 
 // Canned responses slash command state
 const cannedPickerOpen = ref(false);
@@ -378,6 +385,7 @@ const deletingSidebarEntryKey = ref<string | null>(null);
 const pendingSidebarDeleteEntryKey = ref<string | null>(null);
 const SIDEBAR_DELETE_CONFIRM_TIMEOUT_MS = 5000;
 let pendingSidebarDeleteTimeout: ReturnType<typeof setTimeout> | null = null;
+let contactSelectionSequence = 0;
 const CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY = "chat.contactsSidebarWidth";
 const CONTACTS_SIDEBAR_MIN_WIDTH = 280;
 const CONTACTS_SIDEBAR_MAX_WIDTH = 500;
@@ -473,6 +481,13 @@ const contactsScroll = useInfiniteScroll({
 
 const CONTACTS_SIDEBAR_PREFILL_MAX_REQUESTS = 48;
 const CONTACTS_SIDEBAR_PREFILL_TIMEOUT_MS = 5000;
+const CONTACTS_SEARCH_REFRESH_DEBOUNCE_MS = 280;
+const CONTACTS_SEARCH_PREFETCH_DEBOUNCE_MS = 220;
+const CONTACTS_SEARCH_PREFETCH_MAX_REQUESTS = 24;
+const CONTACTS_SEARCH_PREFETCH_TIMEOUT_MS = 4000;
+let contactsSearchRefreshTimer: number | null = null;
+let contactsSearchPrefetchTimer: number | null = null;
+let contactsSearchPrefetchRunToken = 0;
 
 async function hydrateContactsSidebarUntilScrollable() {
   await nextTick();
@@ -513,6 +528,40 @@ async function refreshContactsSidebar() {
     search: contactsStore.searchQuery || undefined,
   });
   await hydrateContactsSidebarUntilScrollable();
+}
+
+async function prefetchSearchResultsIfNeeded(query: string, token: number) {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return;
+
+  await nextTick();
+
+  const startedAt = Date.now();
+  let requests = 0;
+
+  while (
+    token === contactsSearchPrefetchRunToken &&
+    contactsStore.searchQuery.trim() === trimmedQuery &&
+    contactsStore.sortedContacts.length === 0 &&
+    contactsStore.hasMoreContacts &&
+    !contactsStore.isLoadingMoreContacts
+  ) {
+    if (requests >= CONTACTS_SEARCH_PREFETCH_MAX_REQUESTS) {
+      break;
+    }
+    if (Date.now() - startedAt >= CONTACTS_SEARCH_PREFETCH_TIMEOUT_MS) {
+      break;
+    }
+
+    const beforeRawCount = contactsStore.contacts.length;
+    await contactsStore.loadMoreContacts();
+    await nextTick();
+    requests++;
+
+    if (contactsStore.contacts.length === beforeRawCount) {
+      break;
+    }
+  }
 }
 
 async function switchChatTab(tab: "pending" | "assigned") {
@@ -626,10 +675,11 @@ const isCurrentChatClosed = computed(
 const isCurrentChatRestricted = computed(() => {
   if (!contactsStore.currentContact) return false;
   if (isAdminUser.value) return false;
+  if (contactsStore.isMessageAccessRestricted) return true;
+  if (contactsStore.currentContact.is_public === true) return false;
   return (
     contactsStore.currentContact.status === "pending" ||
-    !contactsStore.currentContact.assigned_user_id ||
-    contactsStore.isMessageAccessRestricted
+    !contactsStore.currentContact.assigned_user_id
   );
 });
 const canClaimCurrentChat = computed(() => {
@@ -655,9 +705,19 @@ const canReopenCurrentChat = computed(() => {
     authStore.hasPermission("chat", "write")
   );
 });
+const canToggleCurrentChatPublic = computed(() => {
+  if (!contactsStore.currentContact) return false;
+  if (isAdminUser.value) return true;
+  return (
+    authStore.hasPermission("chat.assign", "write") ||
+    authStore.hasPermission("contacts", "write") ||
+    authStore.hasPermission("chat", "write")
+  );
+});
 const isClaimingCurrentChat = ref(false);
 const isClosingCurrentChat = ref(false);
 const isReopeningCurrentChat = ref(false);
+const isUpdatingCurrentChatPublic = ref(false);
 const deletedMessageText = "(This message was deleted)";
 const legacyDeletedMessageText = "This message was deleted";
 const mentionContactResolver = new MentionContactResolver();
@@ -1005,9 +1065,7 @@ onMounted(async () => {
   contactsStore.setActiveChatTab(
     route.query.tab === "assigned" ? "assigned" : "pending",
   );
-  await contactsStore.fetchChats({
-    search: contactsStore.searchQuery || undefined,
-  });
+  await contactsStore.fetchChats();
 
   // Fetch instances for sidebar instance tags
   instancesStore.fetchInstances();
@@ -1038,11 +1096,21 @@ onMounted(async () => {
   }
 
   if (contactId.value) {
-    await selectContact(contactId.value);
+    const selectionSequence = ++contactSelectionSequence;
+    await selectContact(contactId.value, selectionSequence);
   }
 });
 
 onUnmounted(() => {
+  contactsSearchPrefetchRunToken++;
+  if (contactsSearchRefreshTimer !== null) {
+    window.clearTimeout(contactsSearchRefreshTimer);
+    contactsSearchRefreshTimer = null;
+  }
+  if (contactsSearchPrefetchTimer !== null) {
+    window.clearTimeout(contactsSearchPrefetchTimer);
+    contactsSearchPrefetchTimer = null;
+  }
   resetBatchPrintSelection();
   stopContactsSidebarResize();
   clearPendingSidebarDeleteConfirmation();
@@ -1051,6 +1119,7 @@ onUnmounted(() => {
   // Clear current contact when leaving chat view so notifications work on other pages
   contactsStore.setCurrentContact(null);
   notesStore.clearNotes();
+  resetMediaLoadingPipeline();
   // Clean up blob URLs to prevent memory leaks
   Object.values(mediaBlobUrls.value).forEach((url) => {
     URL.revokeObjectURL(url);
@@ -1098,11 +1167,20 @@ function updateStickyDate(scrollContainer: HTMLElement) {
 }
 
 // Watch for route changes
-watch(contactId, async (newId) => {
+watch(contactId, (newId) => {
+  const selectionSequence = ++contactSelectionSequence;
   resetBatchPrintSelection();
+  resetMediaLoadingPipeline();
+  contactSessionData.value = null;
+  isInfoPanelOpen.value = false;
+
   if (newId) {
     notesStore.clearNotes();
-    await selectContact(newId);
+    const prefetchedContact =
+      contactsStore.contacts.find((contact) => contact.id === newId) || null;
+    contactsStore.setCurrentContact(prefetchedContact);
+    contactsStore.clearMessages();
+    void selectContact(newId, selectionSequence);
   } else {
     wsService.setCurrentContact(null);
     contactsStore.setCurrentContact(null);
@@ -1111,14 +1189,19 @@ watch(contactId, async (newId) => {
   }
 });
 
-async function selectContact(id: string) {
+async function selectContact(id: string, selectionSequence: number) {
+  const isSelectionStale = () =>
+    selectionSequence !== contactSelectionSequence;
+  resetMediaLoadingPipeline();
   resetBatchPrintSelection();
   let contact = contactsStore.contacts.find((c) => c.id === id);
   if (!contact) {
     const fetched = await contactsStore.fetchContact(id);
+    if (isSelectionStale()) return;
     if (!fetched) return;
     contact = fetched;
   }
+  if (isSelectionStale()) return;
   const sidebarEntry = chatSidebarUnifier.findEntryByContactID(
     sidebarContacts.value,
     contact.id,
@@ -1201,6 +1284,7 @@ async function selectContact(id: string) {
 
   const isRestrictedForNonAdmin =
     !isAdminUser.value &&
+    activeContact.is_public !== true &&
     (activeContact.status === "pending" || !activeContact.assigned_user_id);
   if (isRestrictedForNonAdmin) {
     contactsStore.clearMessages();
@@ -1212,6 +1296,7 @@ async function selectContact(id: string) {
   await contactsStore.fetchMessages(activeContact.id, initialAccountFilter ? {
     account: initialAccountFilter,
   } : undefined);
+  if (isSelectionStale()) return;
 
   if (isSidebarUnifiedMode.value) {
     // Fallback for legacy per-contact multi-account histories.
@@ -1251,6 +1336,7 @@ async function selectContact(id: string) {
           await contactsStore.fetchMessages(activeContact.id, {
             account: refreshedAccountFilter,
           });
+          if (isSelectionStale()) return;
         }
       }
     }
@@ -1293,6 +1379,7 @@ async function selectContact(id: string) {
       await contactsStore.fetchMessages(activeContact.id, {
         account: preferredAccount,
       });
+      if (isSelectionStale()) return;
     } else {
       selectedAccount.value = null;
       contactAccounts.value = [];
@@ -1300,10 +1387,12 @@ async function selectContact(id: string) {
     }
   }
 
+  if (isSelectionStale()) return;
   // Tell WebSocket server which contact we're viewing.
   wsService.setCurrentContact(activeContact.id);
   // Wait for DOM to render messages before scrolling
   await nextTick();
+  if (isSelectionStale()) return;
   // Load media for messages after messages are fetched
   try {
     loadMediaForMessages();
@@ -1312,22 +1401,25 @@ async function selectContact(id: string) {
   }
   // Scroll after a brief delay to ensure content is rendered (instant on initial load)
   setTimeout(() => {
+    if (isSelectionStale()) return;
     scrollToBottom(true);
     // Setup scroll listener for infinite scroll after initial scroll
     messagesScroll.setup();
   }, 50);
 
   // Fetch notes for badge count
-  notesStore.fetchNotes(activeContact.id);
+  void notesStore.fetchNotes(activeContact.id);
 
   // Fetch session data and auto-open panel if configured
   try {
     const response = await contactsService.getSessionData(activeContact.id);
+    if (isSelectionStale()) return;
     contactSessionData.value = response.data.data || response.data;
     if (contactSessionData.value?.panel_config?.sections?.length > 0) {
       isInfoPanelOpen.value = true;
     }
   } catch {
+    if (isSelectionStale()) return;
     contactSessionData.value = null;
   }
 }
@@ -1381,6 +1473,42 @@ watch(
   { deep: true, immediate: true },
 );
 
+watch(
+  () => contactsStore.searchQuery,
+  (value) => {
+    contactsSearchPrefetchRunToken++;
+
+    if (contactsSearchRefreshTimer !== null) {
+      window.clearTimeout(contactsSearchRefreshTimer);
+      contactsSearchRefreshTimer = null;
+    }
+    if (contactsSearchPrefetchTimer !== null) {
+      window.clearTimeout(contactsSearchPrefetchTimer);
+      contactsSearchPrefetchTimer = null;
+    }
+
+    const trimmedValue = value.trim();
+    const token = contactsSearchPrefetchRunToken;
+    contactsSearchRefreshTimer = window.setTimeout(() => {
+      contactsSearchRefreshTimer = null;
+      void (async () => {
+        if (token !== contactsSearchPrefetchRunToken) return;
+        await refreshContactsSidebar();
+        if (token !== contactsSearchPrefetchRunToken) return;
+
+        if (!trimmedValue) {
+          return;
+        }
+
+        contactsSearchPrefetchTimer = window.setTimeout(() => {
+          contactsSearchPrefetchTimer = null;
+          void prefetchSearchResultsIfNeeded(trimmedValue, token);
+        }, CONTACTS_SEARCH_PREFETCH_DEBOUNCE_MS);
+      })();
+    }, CONTACTS_SEARCH_REFRESH_DEBOUNCE_MS);
+  },
+);
+
 async function switchAccount(accountToggleKey: string) {
   if (!isSidebarUnifiedMode.value) return;
   if (
@@ -1421,6 +1549,7 @@ async function switchAccount(accountToggleKey: string) {
 
   selectedAccount.value = accountToggleKey;
   contactsStore.setAccountFilter(accountFilter || null);
+  resetMediaLoadingPipeline();
   await contactsStore.fetchMessages(
     contactsStore.currentContact.id,
     accountFilter ? { account: accountFilter } : undefined,
@@ -1976,7 +2105,9 @@ async function claimCurrentChat() {
     toast.success("Chat claimed successfully");
     contactsStore.setActiveChatTab("assigned");
     await refreshContactsSidebar();
-    await selectContact(updated.id);
+    const selectionSequence = ++contactSelectionSequence;
+    resetMediaLoadingPipeline();
+    await selectContact(updated.id, selectionSequence);
   } catch (error: any) {
     const message = error?.response?.data?.message || "Failed to claim chat";
     toast.error(message);
@@ -2014,12 +2145,56 @@ async function reopenCurrentChat() {
     toast.success("Chat reopened and moved to pending queue");
     contactsStore.setActiveChatTab("pending");
     await refreshContactsSidebar();
-    await selectContact(updated.id);
+    const selectionSequence = ++contactSelectionSequence;
+    resetMediaLoadingPipeline();
+    await selectContact(updated.id, selectionSequence);
   } catch (error: any) {
     const message = error?.response?.data?.message || "Failed to reopen chat";
     toast.error(message);
   } finally {
     isReopeningCurrentChat.value = false;
+  }
+}
+
+async function toggleCurrentChatPublicVisibility() {
+  if (
+    !contactsStore.currentContact ||
+    !canToggleCurrentChatPublic.value ||
+    isUpdatingCurrentChatPublic.value
+  ) {
+    return;
+  }
+
+  isUpdatingCurrentChatPublic.value = true;
+  const nextIsPublic = contactsStore.currentContact.is_public !== true;
+  try {
+    const updated = await contactsStore.setChatPublic(
+      contactsStore.currentContact.id,
+      nextIsPublic,
+    );
+    toast.success(
+      nextIsPublic ? t("chat.publicChatEnabled") : t("chat.publicChatDisabled"),
+    );
+
+    if (
+      nextIsPublic &&
+      contactsStore.currentContact?.id === updated.id &&
+      contactsStore.isMessageAccessRestricted
+    ) {
+      const activeAccountFilter = selectedAccountFilter(selectedAccount.value);
+      await contactsStore.fetchMessages(
+        updated.id,
+        activeAccountFilter ? { account: activeAccountFilter } : undefined,
+      );
+    }
+
+    await refreshContactsSidebar();
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message || t("chat.publicChatUpdateFailed");
+    toast.error(message);
+  } finally {
+    isUpdatingCurrentChatPublic.value = false;
   }
 }
 
@@ -2399,8 +2574,57 @@ function printAttachment(message: Message, event?: MouseEvent) {
   })();
 }
 
-async function loadMediaForMessage(message: Message) {
-  if (!message.media_url || mediaLoadingStates.value[message.id]) {
+function resetMediaLoadingPipeline() {
+  mediaLoadGeneration++;
+  pendingMediaQueue.length = 0;
+  queuedMediaMessageIDs.clear();
+  for (const controller of inFlightMediaRequests.values()) {
+    controller.abort();
+  }
+  inFlightMediaRequests.clear();
+}
+
+function enqueueMediaForBackgroundLoad(message: Message) {
+  if (queuedMediaMessageIDs.has(message.id)) return;
+  queuedMediaMessageIDs.add(message.id);
+  pendingMediaQueue.push(message);
+}
+
+function pumpMediaLoadQueue() {
+  while (
+    activeMediaLoadCount < MAX_MEDIA_LOAD_CONCURRENCY &&
+    pendingMediaQueue.length > 0
+  ) {
+    const message = pendingMediaQueue.shift();
+    if (!message) continue;
+    queuedMediaMessageIDs.delete(message.id);
+
+    if (
+      !message.media_url ||
+      mediaBlobUrls.value[message.id] ||
+      mediaLoadingStates.value[message.id]
+    ) {
+      continue;
+    }
+
+    const generationAtStart = mediaLoadGeneration;
+    activeMediaLoadCount++;
+    void loadMediaForMessage(message, generationAtStart).finally(() => {
+      activeMediaLoadCount = Math.max(0, activeMediaLoadCount - 1);
+      pumpMediaLoadQueue();
+    });
+  }
+}
+
+async function loadMediaForMessage(
+  message: Message,
+  generation: number = mediaLoadGeneration,
+) {
+  if (
+    generation !== mediaLoadGeneration ||
+    !message.media_url ||
+    mediaLoadingStates.value[message.id]
+  ) {
     return;
   }
 
@@ -2416,13 +2640,20 @@ async function loadMediaForMessage(message: Message) {
     return;
   }
 
+  const controller = new AbortController();
+  inFlightMediaRequests.set(message.id, controller);
   mediaLoadingStates.value[message.id] = true;
 
   try {
     const basePath = ((window as any).__BASE_PATH__ ?? "").replace(/\/$/, "");
     const response = await fetch(`${basePath}/api/media/${message.id}`, {
       credentials: "include",
+      signal: controller.signal,
     });
+
+    if (generation !== mediaLoadGeneration) {
+      return;
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to load media: ${response.status}`);
@@ -2430,14 +2661,23 @@ async function loadMediaForMessage(message: Message) {
 
     const blob = await response.blob();
     mediaBlobCache.set(message.id, blob);
+    if (generation !== mediaLoadGeneration) {
+      return;
+    }
     if (mediaBlobUrls.value[message.id]) {
       URL.revokeObjectURL(mediaBlobUrls.value[message.id]);
     }
     const blobUrl = URL.createObjectURL(blob);
     mediaBlobUrls.value[message.id] = blobUrl;
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      return;
+    }
     console.error("Failed to load media:", error, "message_id:", message.id);
   } finally {
+    if (inFlightMediaRequests.get(message.id) === controller) {
+      inFlightMediaRequests.delete(message.id);
+    }
     mediaLoadingStates.value[message.id] = false;
   }
 }
@@ -2447,10 +2687,10 @@ function loadMediaForMessages() {
   try {
     for (const message of contactsStore.messages) {
       if (message.media_url && !mediaBlobUrls.value[message.id]) {
-        // Fire and forget - errors are handled inside loadMediaForMessage
-        loadMediaForMessage(message).catch(() => {});
+        enqueueMediaForBackgroundLoad(message);
       }
     }
+    pumpMediaLoadQueue();
   } catch (e) {
     console.error("Error in loadMediaForMessages:", e);
   }
@@ -3127,10 +3367,16 @@ async function sendMediaMessage() {
                     {{ getAssignedAgentName(entry.displayContact) }}
                   </p>
                 </div>
-                <div class="ml-2 flex items-center gap-1">
-                  <Badge
-                    v-if="entry.displayContact.unread_count > 0"
-                    class="h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700"
+	                <div class="ml-2 flex items-center gap-1">
+	                  <Badge
+	                    v-if="entry.displayContact.is_public"
+	                    class="h-5 text-[10px] bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-700"
+	                  >
+	                    {{ $t("chat.publicShort") }}
+	                  </Badge>
+	                  <Badge
+	                    v-if="entry.displayContact.unread_count > 0"
+	                    class="h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700"
                   >
                     {{ entry.displayContact.unread_count }}
                   </Badge>
@@ -3263,15 +3509,21 @@ async function sendMediaMessage() {
             </button>
             <div>
               <div class="flex items-center gap-1.5">
-                <p class="text-sm font-medium text-white light:text-gray-900">
-                  {{
-                    contactsStore.currentContact.name ||
-                    contactsStore.currentContact.phone_number
-                  }}
-                </p>
-                <Badge
-                  v-if="contactsStore.currentContact.status === 'pending'"
-                  class="text-[10px] h-5 bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700"
+	                <p class="text-sm font-medium text-white light:text-gray-900">
+	                  {{
+	                    contactsStore.currentContact.name ||
+	                    contactsStore.currentContact.phone_number
+	                  }}
+	                </p>
+	                <Badge
+	                  v-if="contactsStore.currentContact.is_public"
+	                  class="text-[10px] h-5 bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-700"
+	                >
+	                  {{ $t("chat.publicChat") }}
+	                </Badge>
+	                <Badge
+	                  v-if="contactsStore.currentContact.status === 'pending'"
+	                  class="text-[10px] h-5 bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700"
                 >
                   Pending
                 </Badge>
@@ -3294,7 +3546,7 @@ async function sendMediaMessage() {
             </div>
           </div>
           <div class="flex items-center gap-1">
-            <Tooltip v-if="canAssignContacts">
+	            <Tooltip v-if="canAssignContacts">
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"
@@ -3305,9 +3557,59 @@ async function sendMediaMessage() {
                   <UserPlus class="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t("chat.assignToAgent") }}</TooltipContent>
-            </Tooltip>
-            <Tooltip v-if="canCloseCurrentChat">
+	              <TooltipContent>{{ $t("chat.assignToAgent") }}</TooltipContent>
+	            </Tooltip>
+	            <Tooltip v-if="canToggleCurrentChatPublic">
+	              <TooltipTrigger as-child>
+	                <Button
+	                  variant="ghost"
+	                  size="icon"
+	                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+	                  :disabled="isUpdatingCurrentChatPublic"
+	                  @click="toggleCurrentChatPublicVisibility"
+	                >
+	                  <Loader2
+	                    v-if="isUpdatingCurrentChatPublic"
+	                    class="h-4 w-4 animate-spin"
+	                  />
+	                  <Pin
+	                    v-else
+	                    class="h-4 w-4"
+	                    :class="
+	                      contactsStore.currentContact?.is_public
+	                        ? 'text-sky-300 light:text-sky-700'
+	                        : ''
+	                    "
+	                  />
+	                </Button>
+	              </TooltipTrigger>
+	              <TooltipContent>
+	                {{
+	                  contactsStore.currentContact?.is_public
+	                    ? $t("chat.removePublicChat")
+	                    : $t("chat.makePublicChat")
+	                }}
+	              </TooltipContent>
+	            </Tooltip>
+	            <Tooltip v-if="canClaimCurrentChat && !isCurrentChatRestricted">
+	              <TooltipTrigger as-child>
+	                <Button
+	                  variant="ghost"
+	                  size="icon"
+	                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+	                  :disabled="isClaimingCurrentChat"
+	                  @click="claimCurrentChat"
+	                >
+	                  <Loader2
+	                    v-if="isClaimingCurrentChat"
+	                    class="h-4 w-4 animate-spin"
+	                  />
+	                  <Check v-else class="h-4 w-4" />
+	                </Button>
+	              </TooltipTrigger>
+	              <TooltipContent>{{ $t("chat.claimChat") }}</TooltipContent>
+	            </Tooltip>
+	            <Tooltip v-if="canCloseCurrentChat">
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"
@@ -3493,7 +3795,20 @@ async function sendMediaMessage() {
             </div>
           </Transition>
 
+          <div
+            v-if="
+              contactsStore.isLoadingMessages &&
+              contactsStore.messages.length === 0
+            "
+            class="h-full flex items-center justify-center text-white/50 light:text-gray-500"
+          >
+            <div class="flex items-center gap-2 text-sm">
+              <Loader2 class="h-4 w-4 animate-spin" />
+              <span>{{ $t("common.loading") }}...</span>
+            </div>
+          </div>
           <ScrollArea
+            v-else
             :ref="(el: any) => (messagesScroll.scrollAreaRef.value = el)"
             class="h-full p-3 chat-background"
           >

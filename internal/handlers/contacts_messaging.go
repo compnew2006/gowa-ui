@@ -72,7 +72,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if !a.canReadAllContacts(userID, orgID) {
-		query = query.Where("assigned_user_id = ?", userID)
+		query = applyAssignedOrPublicContactAccessFilter(query, userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -81,7 +81,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	if status == models.ChatStatusClosed {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Closed chats are read-only", nil, "")
 	}
-	if isChatRestrictedForMessageRead(contact) && !a.canBypassPendingChatRestriction(userID, orgID) {
+	if isChatRestrictedForMessageRead(contact) && !a.canAccessRestrictedChatWithoutClaim(contact, userID, orgID) {
 		return r.SendErrorEnvelope(
 			fasthttp.StatusForbidden,
 			"This chat is currently unassigned. Claim it before sending messages.",
@@ -321,7 +321,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if !a.canReadAllContacts(userID, orgID) {
-		query = query.Where("assigned_user_id = ?", userID)
+		query = applyAssignedOrPublicContactAccessFilter(query, userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -330,7 +330,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	if status == models.ChatStatusClosed {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Closed chats are read-only", nil, "")
 	}
-	if isChatRestrictedForMessageRead(contact) && !a.canBypassPendingChatRestriction(userID, orgID) {
+	if isChatRestrictedForMessageRead(contact) && !a.canAccessRestrictedChatWithoutClaim(contact, userID, orgID) {
 		return r.SendErrorEnvelope(
 			fasthttp.StatusForbidden,
 			"This chat is currently unassigned. Claim it before sending messages.",
@@ -498,7 +498,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if !a.canReadAllContacts(userID, orgID) {
-		query = query.Where("assigned_user_id = ?", userID)
+		query = applyAssignedOrPublicContactAccessFilter(query, userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -623,7 +623,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 	var contact models.Contact
 	contactQuery := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if !a.canReadAllContacts(userID, orgID) {
-		contactQuery = contactQuery.Where("assigned_user_id = ?", userID)
+		contactQuery = applyAssignedOrPublicContactAccessFilter(contactQuery, userID)
 	}
 	if err := contactQuery.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")

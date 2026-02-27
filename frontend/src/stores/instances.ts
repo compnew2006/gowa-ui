@@ -165,10 +165,10 @@ export const useInstancesStore = defineStore('instances', () => {
     }
   }
 
-  async function deleteInstance(id: string) {
+  async function deleteInstance(id: string, options?: { deleteChats?: boolean }) {
     loading.value = true
     try {
-      await instancesService.delete(id)
+      await instancesService.delete(id, options)
       instances.value = instances.value.filter(instance => instance.id !== id)
       delete healthByInstance.value[id]
       toast.success(t('instances.toast.deleteSuccess'))

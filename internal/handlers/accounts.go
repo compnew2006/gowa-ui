@@ -300,13 +300,18 @@ func (a *App) DeleteAccount(r *fastglue.Request) error {
 		return nil
 	}
 
+	deleteChats, err := parseDeleteChatsQueryFlag(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "delete_chats")
+	}
+
 	// Get account first for cache invalidation
 	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
 	if err != nil {
 		return nil
 	}
 
-	if err := a.DB.Delete(account).Error; err != nil {
+	if err := a.deleteWhatsAppAccountWithOptionalChatPurge(account, orgID, deleteChats); err != nil {
 		a.Log.Error("Failed to delete account", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete account", nil, "")
 	}

@@ -25,6 +25,7 @@ export interface Contact {
   unread_count: number
   assigned_user_id?: string
   assigned_user_name?: string
+  is_public?: boolean
   closed_at?: string
   closed_by_user_id?: string
   closed_by_name?: string
@@ -110,12 +111,65 @@ function normalizeChatStatus(rawStatus: unknown, assignedUserID?: string): ChatS
 function normalizeContact(contact: Contact): Contact {
   return {
     ...contact,
+    is_public: contact.is_public === true,
     status: normalizeChatStatus(contact.status, contact.assigned_user_id)
   }
 }
 
 function normalizeContacts(contacts: Contact[]): Contact[] {
   return contacts.map(normalizeContact)
+}
+
+function normalizeSearchText(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+function normalizeDigits(value: string): string {
+  let normalized = ''
+
+  for (const char of value) {
+    const code = char.charCodeAt(0)
+
+    if (code >= 0x30 && code <= 0x39) {
+      normalized += char
+      continue
+    }
+
+    if (code >= 0x0660 && code <= 0x0669) {
+      normalized += String(code - 0x0660)
+      continue
+    }
+
+    if (code >= 0x06F0 && code <= 0x06F9) {
+      normalized += String(code - 0x06F0)
+    }
+  }
+
+  return normalized
+}
+
+function contactMatchesSearch(contact: Contact, rawQuery: string): boolean {
+  const query = normalizeSearchText(rawQuery)
+  if (!query) return true
+
+  const name = normalizeSearchText(contact.name)
+  const profileName = normalizeSearchText(contact.profile_name)
+  const phoneNumber = normalizeSearchText(contact.phone_number)
+
+  if (
+    name.includes(query) ||
+    profileName.includes(query) ||
+    phoneNumber.includes(query)
+  ) {
+    return true
+  }
+
+  const queryDigits = normalizeDigits(rawQuery)
+  if (!queryDigits) {
+    return false
+  }
+
+  return normalizeDigits(contact.phone_number || '').includes(queryDigits)
 }
 
 function extractAllowedInstanceIDsFromUserSettings(settings: unknown): string[] {
@@ -284,6 +338,8 @@ export const useContactsStore = defineStore('contacts', () => {
   const isLoadingOlderMessages = ref(false)
   const isMessageAccessRestricted = ref(false)
   const hasMoreMessages = ref(false)
+  let messageFetchSequence = 0
+  let latestMessageFetchSequence = 0
   const searchQuery = ref('')
   const selectedTags = ref<string[]>([])
   const selectedInstanceId = ref('')
@@ -315,7 +371,6 @@ export const useContactsStore = defineStore('contacts', () => {
     return (authStore.userRole || '').toLowerCase() === 'admin'
   })
   const hasMoreContacts = computed(() => {
-    if (isAdminOrSuperAdmin.value) return false
     const activeCount = activeChatTab.value === 'assigned'
       ? assignedChats.value.length
       : pendingChats.value.length
@@ -361,21 +416,13 @@ export const useContactsStore = defineStore('contacts', () => {
   }
 
   const activeTabContacts = computed(() => {
-    if (isAdminOrSuperAdmin.value) {
-      return contacts.value.filter(contact => contact.status !== 'closed')
-    }
     if (activeChatTab.value === 'assigned') return assignedChats.value
     return pendingChats.value
   })
 
   const searchedContacts = computed(() => {
     if (!searchQuery.value) return activeTabContacts.value
-    const query = searchQuery.value.toLowerCase()
-    return activeTabContacts.value.filter(c =>
-      c.name.toLowerCase().includes(query) ||
-      c.phone_number.includes(query) ||
-      (c.profile_name?.toLowerCase().includes(query))
-    )
+    return activeTabContacts.value.filter(c => contactMatchesSearch(c, searchQuery.value))
   })
 
   function getConversationId(contact: Contact): string {
@@ -439,6 +486,7 @@ export const useContactsStore = defineStore('contacts', () => {
         ...latest,
         conversation_id: conversationId || latest.conversation_id || existing.conversation_id,
         is_group_chat: isGroupChat || latest.is_group_chat || existing.is_group_chat,
+        is_public: existing.is_public === true || latest.is_public === true || contact.is_public === true,
         unread_count: (existing.unread_count || 0) + (contact.unread_count || 0),
         tags: Array.from(new Set([...(existing.tags || []), ...(contact.tags || [])])),
       })
@@ -449,6 +497,11 @@ export const useContactsStore = defineStore('contacts', () => {
 
   const sortedContacts = computed(() => {
     return [...filteredContacts.value].sort((a, b) => {
+      const publicA = a.is_public === true ? 1 : 0
+      const publicB = b.is_public === true ? 1 : 0
+      if (publicA !== publicB) {
+        return publicB - publicA
+      }
       const dateA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
       const dateB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
       return dateB - dateA
@@ -458,10 +511,6 @@ export const useContactsStore = defineStore('contacts', () => {
   function setActiveChatTab(tab: ChatBucketTab) {
     activeChatTab.value = tab
     contactsPage.value = 1
-    if (isAdminOrSuperAdmin.value) {
-      contactsTotal.value = pendingChatsTotal.value + assignedChatsTotal.value
-      return
-    }
     contactsTotal.value = tab === 'assigned'
       ? assignedChatsTotal.value
       : pendingChatsTotal.value
@@ -549,11 +598,9 @@ export const useContactsStore = defineStore('contacts', () => {
 
       contacts.value = Array.from(merged.values())
       rebuildChatBucketsFromContacts()
-      contactsTotal.value = isAdminOrSuperAdmin.value
-        ? pendingChatsTotal.value + assignedChatsTotal.value
-        : (activeChatTab.value === 'assigned'
-          ? assignedChatsTotal.value
-          : pendingChatsTotal.value)
+      contactsTotal.value = activeChatTab.value === 'assigned'
+        ? assignedChatsTotal.value
+        : pendingChatsTotal.value
       contactsPage.value = 1
     } catch (error) {
       console.error('Failed to fetch chats:', error)
@@ -712,11 +759,26 @@ export const useContactsStore = defineStore('contacts', () => {
     return updated
   }
 
+  async function setChatPublic(chatId: string, isPublic: boolean) {
+    const response = await chatsService.setPublic(chatId, isPublic)
+    const updated = normalizeContact((response.data.data || response.data) as Contact)
+    upsertContact(updated)
+    return updated
+  }
+
   async function fetchMessages(contactId: string, params?: { page?: number; limit?: number; account?: string }) {
+    const requestSequence = ++messageFetchSequence
+    latestMessageFetchSequence = requestSequence
     isLoadingMessages.value = true
     isMessageAccessRestricted.value = false
+    // Prevent stale thread content from staying visible while switching chats.
+    messages.value = []
+    hasMoreMessages.value = false
     try {
       const response = await chatsService.listMessages(contactId, params)
+      if (requestSequence !== latestMessageFetchSequence) {
+        return
+      }
       const data = response.data.data || response.data
       messages.value = removeSyntheticPlaceholderMessages(data.messages || [])
       hasMoreMessages.value = data.has_more === true
@@ -728,6 +790,9 @@ export const useContactsStore = defineStore('contacts', () => {
         currentContact.value.unread_count = 0
       }
     } catch (error: any) {
+      if (requestSequence !== latestMessageFetchSequence) {
+        return
+      }
       if (error?.response?.status === 403) {
         messages.value = []
         hasMoreMessages.value = false
@@ -735,7 +800,9 @@ export const useContactsStore = defineStore('contacts', () => {
       }
       console.error('Failed to fetch messages:', error)
     } finally {
-      isLoadingMessages.value = false
+      if (requestSequence === latestMessageFetchSequence) {
+        isLoadingMessages.value = false
+      }
     }
   }
 
@@ -751,6 +818,9 @@ export const useContactsStore = defineStore('contacts', () => {
       const response = await chatsService.listMessages(contactId, { before_id: oldestMessageId, account })
       const data = response.data.data || response.data
       const olderMessages = data.messages || []
+      if (currentContact.value?.id !== contactId) {
+        return
+      }
 
       if (olderMessages.length > 0) {
         // Prepend older messages (they come in chronological order, oldest first)
@@ -943,9 +1013,11 @@ export const useContactsStore = defineStore('contacts', () => {
   }
 
   function clearMessages() {
+    latestMessageFetchSequence = ++messageFetchSequence
     messages.value = []
     hasMoreMessages.value = false
     isMessageAccessRestricted.value = false
+    isLoadingMessages.value = false
     accountFilter.value = null
   }
 
@@ -1006,6 +1078,7 @@ export const useContactsStore = defineStore('contacts', () => {
     claimChat,
     closeChat,
     reopenChat,
+    setChatPublic,
     sendMessage,
     sendTemplate,
     addMessage,

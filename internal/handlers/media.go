@@ -156,7 +156,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	// or from contacts with an active team transfer where the user is a team member.
 	if !a.canReadAllContacts(userID, orgID) {
 		var contact models.Contact
-		if err := a.DB.Where("id = ? AND assigned_user_id = ?", message.ContactID, userID).First(&contact).Error; err != nil {
+		if err := a.DB.Where("id = ? AND (assigned_user_id = ? OR is_public = ?)", message.ContactID, userID, true).First(&contact).Error; err != nil {
 			// Not directly assigned — check team membership via active transfer
 			var transfer models.AgentTransfer
 			if err := a.DB.Where("contact_id = ? AND organization_id = ? AND status = ? AND team_id IS NOT NULL",

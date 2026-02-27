@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -13,24 +13,24 @@ import (
 
 // ChatbotSettingsResponse represents the response for chatbot settings
 type ChatbotSettingsResponse struct {
-	Enabled               bool                     `json:"enabled"`
-	GreetingMessage       string                   `json:"greeting_message"`
-	GreetingButtons       []map[string]interface{} `json:"greeting_buttons"`
-	FallbackMessage       string                   `json:"fallback_message"`
-	FallbackButtons       []map[string]interface{} `json:"fallback_buttons"`
-	SessionTimeoutMinutes int                      `json:"session_timeout_minutes"`
-	BusinessHoursEnabled       bool                     `json:"business_hours_enabled"`
-	BusinessHours              []map[string]interface{} `json:"business_hours"`
-	OutOfHoursMessage          string                   `json:"out_of_hours_message"`
-	AllowAutomatedOutsideHours bool                     `json:"allow_automated_outside_hours"`
+	Enabled                      bool                     `json:"enabled"`
+	GreetingMessage              string                   `json:"greeting_message"`
+	GreetingButtons              []map[string]interface{} `json:"greeting_buttons"`
+	FallbackMessage              string                   `json:"fallback_message"`
+	FallbackButtons              []map[string]interface{} `json:"fallback_buttons"`
+	SessionTimeoutMinutes        int                      `json:"session_timeout_minutes"`
+	BusinessHoursEnabled         bool                     `json:"business_hours_enabled"`
+	BusinessHours                []map[string]interface{} `json:"business_hours"`
+	OutOfHoursMessage            string                   `json:"out_of_hours_message"`
+	AllowAutomatedOutsideHours   bool                     `json:"allow_automated_outside_hours"`
 	AllowAgentQueuePickup        bool                     `json:"allow_agent_queue_pickup"`
 	AssignToSameAgent            bool                     `json:"assign_to_same_agent"`
 	AgentCurrentConversationOnly bool                     `json:"agent_current_conversation_only"`
 	AIEnabled                    bool                     `json:"ai_enabled"`
-	AIProvider            models.AIProvider        `json:"ai_provider"`
-	AIModel               string                   `json:"ai_model"`
-	AIMaxTokens           int                      `json:"ai_max_tokens"`
-	AISystemPrompt        string                   `json:"ai_system_prompt"`
+	AIProvider                   models.AIProvider        `json:"ai_provider"`
+	AIModel                      string                   `json:"ai_model"`
+	AIMaxTokens                  int                      `json:"ai_max_tokens"`
+	AISystemPrompt               string                   `json:"ai_system_prompt"`
 	// SLA Settings
 	SLAEnabled             bool     `json:"sla_enabled"`
 	SLAResponseMinutes     int      `json:"sla_response_minutes"`
@@ -62,15 +62,15 @@ type ChatbotStatsResponse struct {
 
 // KeywordRuleResponse represents a keyword rule for API response
 type KeywordRuleResponse struct {
-	ID              string             `json:"id"`
-	Name            string             `json:"name"`
-	Keywords        []string           `json:"keywords"`
-	MatchType       models.MatchType   `json:"match_type"`
+	ID              string              `json:"id"`
+	Name            string              `json:"name"`
+	Keywords        []string            `json:"keywords"`
+	MatchType       models.MatchType    `json:"match_type"`
 	ResponseType    models.ResponseType `json:"response_type"`
-	ResponseContent json.RawMessage    `json:"response_content"`
-	Priority        int                `json:"priority"`
-	Enabled         bool               `json:"enabled"`
-	CreatedAt       string             `json:"created_at"`
+	ResponseContent json.RawMessage     `json:"response_content"`
+	Priority        int                 `json:"priority"`
+	Enabled         bool                `json:"enabled"`
+	CreatedAt       string              `json:"created_at"`
 }
 
 // ChatbotFlowResponse represents a chatbot flow for API response
@@ -86,14 +86,14 @@ type ChatbotFlowResponse struct {
 
 // AIContextResponse represents an AI context for API response
 type AIContextResponse struct {
-	ID              string            `json:"id"`
-	Name            string            `json:"name"`
+	ID              string             `json:"id"`
+	Name            string             `json:"name"`
 	ContextType     models.ContextType `json:"context_type"`
-	TriggerKeywords []string          `json:"trigger_keywords"`
-	StaticContent   string            `json:"static_content"`
-	Enabled         bool              `json:"enabled"`
-	Priority        int               `json:"priority"`
-	CreatedAt       string            `json:"created_at"`
+	TriggerKeywords []string           `json:"trigger_keywords"`
+	StaticContent   string             `json:"static_content"`
+	Enabled         bool               `json:"enabled"`
+	Priority        int                `json:"priority"`
+	CreatedAt       string             `json:"created_at"`
 }
 
 // GetChatbotSettings returns chatbot settings and stats
@@ -201,25 +201,25 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 	}
 
 	var req struct {
-		Enabled                    *bool                      `json:"enabled"`
-		GreetingMessage            *string                    `json:"greeting_message"`
-		GreetingButtons            *[]map[string]interface{}  `json:"greeting_buttons"`
-		FallbackMessage            *string                    `json:"fallback_message"`
-		FallbackButtons            *[]map[string]interface{}  `json:"fallback_buttons"`
-		SessionTimeoutMinutes      *int                       `json:"session_timeout_minutes"`
-		BusinessHoursEnabled       *bool                      `json:"business_hours_enabled"`
-		BusinessHours              *[]map[string]interface{}  `json:"business_hours"`
-		OutOfHoursMessage          *string                    `json:"out_of_hours_message"`
-		AllowAutomatedOutsideHours *bool                      `json:"allow_automated_outside_hours"`
-		AllowAgentQueuePickup        *bool                      `json:"allow_agent_queue_pickup"`
-		AssignToSameAgent            *bool                      `json:"assign_to_same_agent"`
-		AgentCurrentConversationOnly *bool                      `json:"agent_current_conversation_only"`
-		AIEnabled                    *bool                      `json:"ai_enabled"`
-		AIProvider                 *models.AIProvider         `json:"ai_provider"`
-		AIAPIKey                   *string                    `json:"ai_api_key"`
-		AIModel                    *string                    `json:"ai_model"`
-		AIMaxTokens                *int                       `json:"ai_max_tokens"`
-		AISystemPrompt             *string                    `json:"ai_system_prompt"`
+		Enabled                      *bool                     `json:"enabled"`
+		GreetingMessage              *string                   `json:"greeting_message"`
+		GreetingButtons              *[]map[string]interface{} `json:"greeting_buttons"`
+		FallbackMessage              *string                   `json:"fallback_message"`
+		FallbackButtons              *[]map[string]interface{} `json:"fallback_buttons"`
+		SessionTimeoutMinutes        *int                      `json:"session_timeout_minutes"`
+		BusinessHoursEnabled         *bool                     `json:"business_hours_enabled"`
+		BusinessHours                *[]map[string]interface{} `json:"business_hours"`
+		OutOfHoursMessage            *string                   `json:"out_of_hours_message"`
+		AllowAutomatedOutsideHours   *bool                     `json:"allow_automated_outside_hours"`
+		AllowAgentQueuePickup        *bool                     `json:"allow_agent_queue_pickup"`
+		AssignToSameAgent            *bool                     `json:"assign_to_same_agent"`
+		AgentCurrentConversationOnly *bool                     `json:"agent_current_conversation_only"`
+		AIEnabled                    *bool                     `json:"ai_enabled"`
+		AIProvider                   *models.AIProvider        `json:"ai_provider"`
+		AIAPIKey                     *string                   `json:"ai_api_key"`
+		AIModel                      *string                   `json:"ai_model"`
+		AIMaxTokens                  *int                      `json:"ai_max_tokens"`
+		AISystemPrompt               *string                   `json:"ai_system_prompt"`
 		// SLA Settings
 		SLAEnabled             *bool     `json:"sla_enabled"`
 		SLAResponseMinutes     *int      `json:"sla_response_minutes"`
@@ -572,13 +572,13 @@ func (a *App) UpdateKeywordRule(r *fastglue.Request) error {
 	}
 
 	var req struct {
-		Name            *string                 `json:"name"`
-		Keywords        []string                `json:"keywords"`
-		MatchType       *models.MatchType       `json:"match_type"`
-		ResponseType    *models.ResponseType    `json:"response_type"`
-		ResponseContent map[string]interface{}  `json:"response_content"`
-		Priority        *int                    `json:"priority"`
-		Enabled         *bool                   `json:"enabled"`
+		Name            *string                `json:"name"`
+		Keywords        []string               `json:"keywords"`
+		MatchType       *models.MatchType      `json:"match_type"`
+		ResponseType    *models.ResponseType   `json:"response_type"`
+		ResponseContent map[string]interface{} `json:"response_content"`
+		Priority        *int                   `json:"priority"`
+		Enabled         *bool                  `json:"enabled"`
 	}
 
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
@@ -1092,12 +1092,12 @@ func (a *App) CreateAIContext(r *fastglue.Request) error {
 	}
 
 	var req struct {
-		Name            string            `json:"name"`
+		Name            string             `json:"name"`
 		ContextType     models.ContextType `json:"context_type"`
-		TriggerKeywords []string          `json:"trigger_keywords"`
-		StaticContent   string            `json:"static_content"`
-		Priority        int               `json:"priority"`
-		Enabled         bool              `json:"enabled"`
+		TriggerKeywords []string           `json:"trigger_keywords"`
+		StaticContent   string             `json:"static_content"`
+		Priority        int                `json:"priority"`
+		Enabled         bool               `json:"enabled"`
 	}
 
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {

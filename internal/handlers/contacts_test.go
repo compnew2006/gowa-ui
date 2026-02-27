@@ -920,6 +920,60 @@ func TestApp_GetMessages(t *testing.T) {
 		assert.Empty(t, resp.Data.Messages)
 	})
 
+	t.Run("agent can read public unassigned chat messages", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		agentRole := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "support-viewer", []string{"chat:read"})
+		agentUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+		account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+		contact := testutil.CreateTestContactWith(
+			t,
+			app.DB,
+			org.ID,
+			testutil.WithContactAccount(account.Name),
+		)
+		require.NoError(t, app.DB.Model(&contact).Updates(map[string]any{
+			"status":               models.ChatStatusPending,
+			"assigned_user_id":     nil,
+			"is_public":            true,
+			"last_message_at":      time.Now().UTC(),
+			"last_message_preview": "Public pending message",
+		}).Error)
+
+		msg := &models.Message{
+			BaseModel:       models.BaseModel{ID: uuid.New()},
+			OrganizationID:  org.ID,
+			WhatsAppAccount: account.Name,
+			ContactID:       contact.ID,
+			Direction:       models.DirectionIncoming,
+			MessageType:     models.MessageTypeText,
+			Content:         "Need public help",
+			Status:          models.MessageStatusDelivered,
+		}
+		require.NoError(t, app.DB.Create(msg).Error)
+
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, agentUser.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+		err := app.GetMessages(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Messages []handlers.MessageResponse `json:"messages"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		require.Len(t, resp.Data.Messages, 1)
+		assert.Equal(t, int64(1), resp.Data.Total)
+		content, ok := resp.Data.Messages[0].Content.(string)
+		require.True(t, ok)
+		assert.Equal(t, "Need public help", content)
+	})
+
 	t.Run("contact not found", func(t *testing.T) {
 		t.Parallel()
 		app := newTestApp(t)
@@ -2911,6 +2965,42 @@ func TestApp_ClaimChat_CreatesSystemMessage(t *testing.T) {
 	assert.Contains(t, systemMessage.Content, "claimed this chat")
 }
 
+func TestApp_SetChatPublic_CreatesSystemMessage(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID), testutil.WithFullName("Public Agent"))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"is_public": true,
+	})
+	req.RequestCtx.Request.Header.SetMethod("PUT")
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SetChatPublic(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.ContactResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.True(t, resp.Data.IsPublic)
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	assert.True(t, refreshed.IsPublic)
+
+	var systemMessage models.Message
+	require.NoError(t, app.DB.Where("contact_id = ? AND metadata->>'event_type' = ?", contact.ID, "chat_public_enabled").Order("created_at DESC").First(&systemMessage).Error)
+	assert.Equal(t, true, systemMessage.Metadata["system_event"])
+	assert.Contains(t, systemMessage.Content, "made this chat public")
+}
+
 func TestApp_CloseChat_CreatesSystemMessage(t *testing.T) {
 	t.Parallel()
 
@@ -3173,6 +3263,54 @@ func TestApp_ListContacts_IncludesAssignedUserName(t *testing.T) {
 	require.NotNil(t, resp.Data.Contacts[0].AssignedUserID)
 	assert.Equal(t, assignee.ID, *resp.Data.Contacts[0].AssignedUserID)
 	assert.Equal(t, "Assigned Agent", resp.Data.Contacts[0].AssignedUserName)
+}
+
+func TestApp_ListContacts_AgentSeesPublicChatsAndTheyArePinnedFirst(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	agentRole := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent-viewer", []string{"chat:read"})
+	agentUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+	otherAgent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+
+	myChat := testutil.CreateTestContact(t, app.DB, org.ID)
+	publicOtherChat := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	now := time.Now().UTC()
+	require.NoError(t, app.DB.Model(myChat).Updates(map[string]any{
+		"assigned_user_id": agentUser.ID,
+		"status":           models.ChatStatusOpen,
+		"is_public":        false,
+		"last_message_at":  now,
+	}).Error)
+	require.NoError(t, app.DB.Model(publicOtherChat).Updates(map[string]any{
+		"assigned_user_id": otherAgent.ID,
+		"status":           models.ChatStatusOpen,
+		"is_public":        true,
+		"last_message_at":  now.Add(-1 * time.Hour),
+	}).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, agentUser.ID)
+	testutil.SetQueryParam(req, "status", "open")
+
+	err := app.ListContacts(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Contacts []handlers.ContactResponse `json:"contacts"`
+			Total    int64                      `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	require.Len(t, resp.Data.Contacts, 2)
+	assert.Equal(t, int64(2), resp.Data.Total)
+	assert.Equal(t, publicOtherChat.ID, resp.Data.Contacts[0].ID)
+	assert.True(t, resp.Data.Contacts[0].IsPublic)
+	assert.Equal(t, myChat.ID, resp.Data.Contacts[1].ID)
 }
 
 func TestApp_DeleteContact_PermissionBased(t *testing.T) {

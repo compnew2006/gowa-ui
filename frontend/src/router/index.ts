@@ -38,6 +38,13 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: '/pricing',
+      alias: ['/plans', '/offer'],
+      name: 'pricing-landing',
+      component: () => import('@/views/public/PricingLandingView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
       path: '/',
       component: () => import('@/components/layout/AppLayout.vue'),
       meta: { requiresAuth: true },

@@ -317,6 +317,7 @@ type Contact struct {
 	WhatsAppAccount    string     `gorm:"size:100;index" json:"whatsapp_account"` // References WhatsAppAccount.Name
 	Status             ChatStatus `gorm:"size:20;default:'pending';index" json:"status"`
 	AssignedUserID     *uuid.UUID `gorm:"type:uuid;index" json:"assigned_user_id,omitempty"`
+	IsPublic           bool       `gorm:"column:is_public;default:false;index" json:"is_public"`
 	ClosedAt           *time.Time `json:"closed_at,omitempty"`
 	ClosedByUserID     *uuid.UUID `gorm:"type:uuid;index" json:"closed_by_user_id,omitempty"`
 	LastMessageAt      *time.Time `json:"last_message_at,omitempty"`

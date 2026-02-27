@@ -3,11 +3,12 @@ package handlers_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -597,4 +598,162 @@ func TestApp_DeleteAccount_CrossOrgIsolation(t *testing.T) {
 	var count int64
 	app.DB.Model(&models.WhatsAppAccount{}).Where("id = ?", account.ID).Count(&count)
 	assert.Equal(t, int64(1), count)
+}
+
+func TestApp_DeleteAccount_PreservesChatsByDefault(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAccountsAuthorizedUser(t, app, org.ID)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	message := &models.Message{
+		BaseModel:         models.BaseModel{ID: uuid.New()},
+		OrganizationID:    org.ID,
+		WhatsAppAccount:   account.Name,
+		ContactID:         contact.ID,
+		Direction:         models.DirectionIncoming,
+		MessageType:       models.MessageTypeText,
+		Content:           "hello",
+		WhatsAppMessageID: "wamid-" + uuid.New().String(),
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", account.ID.String())
+
+	err := app.DeleteAccount(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var contactCount int64
+	require.NoError(t, app.DB.Model(&models.Contact{}).Where("id = ?", contact.ID).Count(&contactCount).Error)
+	assert.Equal(t, int64(1), contactCount)
+
+	var messageCount int64
+	require.NoError(t, app.DB.Model(&models.Message{}).Where("id = ?", message.ID).Count(&messageCount).Error)
+	assert.Equal(t, int64(1), messageCount)
+}
+
+func TestApp_DeleteAccount_DeletesRelatedChatsWhenRequested(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAccountsAuthorizedUser(t, app, org.ID)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	otherAccount := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	targetContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	otherContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(otherAccount.Name))
+
+	targetMessage := &models.Message{
+		BaseModel:         models.BaseModel{ID: uuid.New()},
+		OrganizationID:    org.ID,
+		WhatsAppAccount:   account.Name,
+		ContactID:         targetContact.ID,
+		Direction:         models.DirectionIncoming,
+		MessageType:       models.MessageTypeText,
+		Content:           "target message",
+		WhatsAppMessageID: "wamid-" + uuid.New().String(),
+	}
+	require.NoError(t, app.DB.Create(targetMessage).Error)
+
+	otherMessage := &models.Message{
+		BaseModel:         models.BaseModel{ID: uuid.New()},
+		OrganizationID:    org.ID,
+		WhatsAppAccount:   otherAccount.Name,
+		ContactID:         otherContact.ID,
+		Direction:         models.DirectionIncoming,
+		MessageType:       models.MessageTypeText,
+		Content:           "other message",
+		WhatsAppMessageID: "wamid-" + uuid.New().String(),
+	}
+	require.NoError(t, app.DB.Create(otherMessage).Error)
+
+	note := &models.ConversationNote{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      targetContact.ID,
+		CreatedByID:    user.ID,
+		Content:        "internal note",
+	}
+	require.NoError(t, app.DB.Create(note).Error)
+
+	session := &models.ChatbotSession{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       targetContact.ID,
+		WhatsAppAccount: account.Name,
+		PhoneNumber:     targetContact.PhoneNumber,
+		Status:          models.SessionStatusActive,
+		CurrentStep:     "start",
+		LastActivityAt:  time.Now(),
+	}
+	require.NoError(t, app.DB.Create(session).Error)
+
+	sessionMessage := &models.ChatbotSessionMessage{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		SessionID: session.ID,
+		Direction: models.DirectionOutgoing,
+		Message:   "bot reply",
+		StepName:  "start",
+	}
+	require.NoError(t, app.DB.Create(sessionMessage).Error)
+
+	transfer := &models.AgentTransfer{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       targetContact.ID,
+		WhatsAppAccount: account.Name,
+		PhoneNumber:     targetContact.PhoneNumber,
+		Status:          models.TransferStatusActive,
+	}
+	require.NoError(t, app.DB.Create(transfer).Error)
+
+	rating := &models.ChatClosureRating{
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       org.ID,
+		ContactID:            targetContact.ID,
+		ChatID:               targetContact.ID,
+		ClosingAgentID:       user.ID,
+		ClosedAt:             time.Now(),
+		State:                models.ChatClosureRatingStatePending,
+		CloseMessageID:       &targetMessage.ID,
+		RatingMessageID:      &targetMessage.ID,
+		CloseMessage:         "bye",
+		CloseMessageLanguage: "en",
+	}
+	require.NoError(t, app.DB.Create(rating).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", account.ID.String())
+	testutil.SetQueryParam(req, "delete_chats", true)
+
+	err := app.DeleteAccount(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	assertUnscopedCount := func(model any, where string, args ...any) int64 {
+		t.Helper()
+		var count int64
+		require.NoError(t, app.DB.Unscoped().Model(model).Where(where, args...).Count(&count).Error)
+		return count
+	}
+
+	assert.Equal(t, int64(0), assertUnscopedCount(&models.Contact{}, "id = ?", targetContact.ID))
+	assert.Equal(t, int64(0), assertUnscopedCount(&models.Message{}, "id = ?", targetMessage.ID))
+	assert.Equal(t, int64(0), assertUnscopedCount(&models.ConversationNote{}, "id = ?", note.ID))
+	assert.Equal(t, int64(0), assertUnscopedCount(&models.ChatbotSession{}, "id = ?", session.ID))
+	assert.Equal(t, int64(0), assertUnscopedCount(&models.ChatbotSessionMessage{}, "id = ?", sessionMessage.ID))
+	assert.Equal(t, int64(0), assertUnscopedCount(&models.AgentTransfer{}, "id = ?", transfer.ID))
+	assert.Equal(t, int64(0), assertUnscopedCount(&models.ChatClosureRating{}, "id = ?", rating.ID))
+
+	// Unrelated chats must remain.
+	assert.Equal(t, int64(1), assertUnscopedCount(&models.Contact{}, "id = ?", otherContact.ID))
+	assert.Equal(t, int64(1), assertUnscopedCount(&models.Message{}, "id = ?", otherMessage.ID))
 }

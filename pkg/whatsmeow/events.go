@@ -51,6 +51,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if len(v.Codes) > 0 {
 			code = v.Codes[0]
 		}
+		cm.CacheQRCode(instanceID, code, 20)
 
 		if cm.hub != nil {
 			cm.hub.BroadcastToOrg(orgID, websocket.WSMessage{
@@ -65,6 +66,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.logger.Info("QR code received", "component", "whatsmeow", "event", "qr_code", "instance_id", instanceID)
 
 	case *events.PairSuccess:
+		cm.ClearCachedQRCode(instanceID)
 		jid := v.ID.String()
 		phoneNumber := v.ID.User
 
@@ -104,6 +106,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.logger.Info("Instance paired successfully", "component", "whatsmeow", "event", "pair_success", "instance_id", instanceID, "jid", jid)
 
 	case *events.Connected:
+		cm.ClearCachedQRCode(instanceID)
 		phoneNumber := ""
 		var instance models.WhatsAppInstance
 		if err := cm.db.WithContext(context.Background()).
@@ -124,6 +127,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.logger.Info("Instance connected", "component", "whatsmeow", "event", "connected", "instance_id", instanceID)
 
 	case *events.Disconnected:
+		cm.ClearCachedQRCode(instanceID)
 		cm.clearActiveCalls(instanceID)
 		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusDisconnected); err != nil {
 			cm.logger.Error("Failed to update status on disconnect", "error", err)
@@ -143,6 +147,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.logger.Info("Instance disconnected", "component", "whatsmeow", "event", "disconnected", "instance_id", instanceID)
 
 	case *events.TemporaryBan:
+		cm.ClearCachedQRCode(instanceID)
 		cm.clearActiveCalls(instanceID)
 		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusBanned); err != nil {
 			cm.logger.Error("Failed to update status on ban", "error", err)
@@ -175,6 +180,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.logger.Warn("Instance temporarily banned", "component", "whatsmeow", "event", "banned", "instance_id", instanceID, "reason", v.String())
 
 	case *events.LoggedOut:
+		cm.ClearCachedQRCode(instanceID)
 		cm.clearActiveCalls(instanceID)
 		if err := cm.updateInstanceIdentity(context.Background(), instanceID, "", ""); err != nil {
 			cm.logger.Error("Failed to clear instance identity on logout", "error", err)

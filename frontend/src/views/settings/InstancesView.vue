@@ -6,6 +6,7 @@ import InstanceCard from "@/components/whatsmeow/InstanceCard.vue";
 import QRCodeModal from "@/components/whatsmeow/QRCodeModal.vue";
 import { DeleteConfirmDialog, PageHeader } from "@/components/shared";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -58,6 +59,7 @@ interface CachedQRCode {
 }
 
 const CONNECT_EVENT_TIMEOUT_MS = 15000;
+const QR_SNAPSHOT_POLL_INTERVAL_MS = 1000;
 
 // State
 const qrModalOpen = ref(false);
@@ -71,6 +73,8 @@ const pairingPhoneNumber = ref("");
 const isRequestingPairCode = ref(false);
 const qrErrorMessage = ref("");
 let connectWatchdogTimer: number | null = null;
+let qrSnapshotPollTimer: number | null = null;
+let qrSnapshotPollInFlight = false;
 
 // Create Dialog State
 const createDialogOpen = ref(false);
@@ -78,6 +82,7 @@ const newInstanceName = ref("");
 const isCreating = ref(false);
 const deleteDialogOpen = ref(false);
 const deletingInstance = ref<{ id: string; name: string } | null>(null);
+const deleteChatsWithInstance = ref(false);
 const isDeleting = ref(false);
 const editDialogOpen = ref(false);
 const editInstanceId = ref("");
@@ -105,6 +110,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   stopHealthPolling();
   wsService.unsubscribe("instance_qr_code", handleQRCode);
   wsService.unsubscribe("instance_connected", handleConnected);
@@ -154,6 +160,76 @@ function clearConnectWatchdog() {
   }
 }
 
+function clearQRSnapshotPoll() {
+  if (qrSnapshotPollTimer !== null) {
+    clearInterval(qrSnapshotPollTimer);
+    qrSnapshotPollTimer = null;
+  }
+  qrSnapshotPollInFlight = false;
+}
+
+async function fetchQRSnapshot(instanceID: string): Promise<boolean> {
+  if (!instanceID) return false;
+
+  try {
+    const response = await instancesService.getQRCode(instanceID);
+    const payload = (response.data?.data || response.data) as {
+      instance_id?: string;
+      available?: boolean;
+      qr_code?: string;
+      timeout_seconds?: number;
+    };
+
+    if (payload?.available !== true || !payload.qr_code) {
+      return false;
+    }
+
+    const timeoutSeconds = Number(payload.timeout_seconds) || 20;
+    cacheQRCode(instanceID, payload.qr_code, timeoutSeconds);
+
+    if (instanceID === currentInstanceId.value && qrModalOpen.value) {
+      clearConnectWatchdog();
+      setQRError("");
+      qrCode.value = payload.qr_code;
+      qrTimeout.value = timeoutSeconds;
+      isRefreshingQR.value = false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function startQRSnapshotPoll(instanceID: string) {
+  clearQRSnapshotPoll();
+
+  qrSnapshotPollTimer = window.setInterval(async () => {
+    if (
+      qrSnapshotPollInFlight ||
+      !instanceID ||
+      instanceID !== currentInstanceId.value ||
+      !qrModalOpen.value ||
+      qrCode.value
+    ) {
+      if (!instanceID || instanceID !== currentInstanceId.value || !qrModalOpen.value || qrCode.value) {
+        clearQRSnapshotPoll();
+      }
+      return;
+    }
+
+    qrSnapshotPollInFlight = true;
+    try {
+      const loaded = await fetchQRSnapshot(instanceID);
+      if (loaded) {
+        clearQRSnapshotPoll();
+      }
+    } finally {
+      qrSnapshotPollInFlight = false;
+    }
+  }, QR_SNAPSHOT_POLL_INTERVAL_MS);
+}
+
 function setQRError(message: string) {
   qrErrorMessage.value = message.trim();
 }
@@ -187,6 +263,10 @@ function scheduleConnectWatchdog(instanceID: string) {
       return;
     }
 
+    if (await fetchQRSnapshot(instanceID)) {
+      return;
+    }
+
     const latest = await syncInstanceStatus(instanceID);
     if (latest?.status === "connected") {
       return;
@@ -195,6 +275,7 @@ function scheduleConnectWatchdog(instanceID: string) {
     const timeoutMessage = t("instances.qr_modal.validation.connectionTimeout");
     setQRError(timeoutMessage);
     isRefreshingQR.value = false;
+    clearQRSnapshotPoll();
     toast.error(timeoutMessage);
   }, CONNECT_EVENT_TIMEOUT_MS);
 }
@@ -207,6 +288,7 @@ function handleQRCode(payload: any) {
   if (payload.instance_id !== currentInstanceId.value) return;
 
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   setQRError("");
   if (payload.qr_code) {
     qrCode.value = payload.qr_code;
@@ -218,6 +300,7 @@ function handleQRCode(payload: any) {
 
 function handleConnected(payload: any) {
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   clearCachedQRCode(payload.instance_id);
   if (payload.instance_id === currentInstanceId.value) {
     qrCode.value = "";
@@ -237,6 +320,7 @@ function handleConnected(payload: any) {
 
 function handleDisconnected(payload: any) {
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   clearCachedQRCode(payload.instance_id);
   if (payload.instance_id === currentInstanceId.value) {
     qrCode.value = "";
@@ -248,6 +332,7 @@ function handleDisconnected(payload: any) {
 
 function handleBanned(payload: any) {
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   clearCachedQRCode(payload.instance_id);
   if (payload.instance_id === currentInstanceId.value) {
     qrCode.value = "";
@@ -259,6 +344,7 @@ function handleBanned(payload: any) {
 
 function handleLoggedOut(payload: any) {
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   clearCachedQRCode(payload.instance_id);
   if (payload.instance_id === currentInstanceId.value) {
     qrCode.value = "";
@@ -272,6 +358,7 @@ function handleQRTimeout(payload: any) {
   if (!payload?.instance_id) return;
 
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   clearCachedQRCode(payload.instance_id);
   instancesStore.updateInstanceStatus(payload.instance_id, "disconnected");
   instancesStore.fetchInstanceHealth(payload.instance_id);
@@ -290,6 +377,7 @@ function handleReconnectFailed(payload: any) {
   if (!payload?.instance_id) return;
 
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   clearCachedQRCode(payload.instance_id);
   instancesStore.updateInstanceStatus(payload.instance_id, "disconnected");
   instancesStore.fetchInstanceHealth(payload.instance_id);
@@ -309,6 +397,7 @@ function handleReconnectFailed(payload: any) {
 
 async function handleConnect(id: string) {
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   currentInstanceId.value = id;
   isRefreshingQR.value = false;
   isRequestingPairCode.value = false;
@@ -331,6 +420,9 @@ async function handleConnect(id: string) {
   }
 
   if (!qrCode.value) {
+    if (!(await fetchQRSnapshot(id))) {
+      startQRSnapshotPoll(id);
+    }
     scheduleConnectWatchdog(id);
   }
 }
@@ -339,6 +431,7 @@ async function handleRegenerateQRCode() {
   if (!currentInstanceId.value || isRefreshingQR.value) return;
 
   clearConnectWatchdog();
+  clearQRSnapshotPoll();
   isRefreshingQR.value = true;
   pairingCode.value = "";
   pairingPhoneNumber.value = "";
@@ -348,6 +441,9 @@ async function handleRegenerateQRCode() {
   qrTimeout.value = 20;
   try {
     await reconnectInstance(currentInstanceId.value);
+    if (!(await fetchQRSnapshot(currentInstanceId.value))) {
+      startQRSnapshotPoll(currentInstanceId.value);
+    }
     scheduleConnectWatchdog(currentInstanceId.value);
   } catch {
     setQRError(t("instances.qr_modal.validation.connectionFailed"));
@@ -384,6 +480,7 @@ function handleQRModalOpenChange(open: boolean) {
   qrModalOpen.value = open;
   if (!open) {
     clearConnectWatchdog();
+    clearQRSnapshotPoll();
     setQRError("");
     isRefreshingQR.value = false;
   }
@@ -407,6 +504,7 @@ function openDeleteDialog(id: string) {
   const instance = instancesStore.instances.find((item) => item.id === id);
   if (!instance) return;
   deletingInstance.value = { id: instance.id, name: instance.name };
+  deleteChatsWithInstance.value = false;
   deleteDialogOpen.value = true;
 }
 
@@ -414,6 +512,7 @@ function closeDeleteDialog() {
   if (isDeleting.value) return;
   deleteDialogOpen.value = false;
   deletingInstance.value = null;
+  deleteChatsWithInstance.value = false;
 }
 
 async function handleDeleteInstance() {
@@ -421,7 +520,9 @@ async function handleDeleteInstance() {
 
   isDeleting.value = true;
   try {
-    await deleteInstance(deletingInstance.value.id);
+    await deleteInstance(deletingInstance.value.id, {
+      deleteChats: deleteChatsWithInstance.value,
+    });
     if (currentInstanceId.value === deletingInstance.value.id) {
       currentInstanceId.value = "";
       qrModalOpen.value = false;
@@ -431,6 +532,7 @@ async function handleDeleteInstance() {
     }
     deleteDialogOpen.value = false;
     deletingInstance.value = null;
+    deleteChatsWithInstance.value = false;
   } finally {
     isDeleting.value = false;
   }
@@ -790,6 +892,28 @@ async function handleAutoCampaignMediaClear(id: string) {
     >
       <template #description>
         {{ $t("settings.instances.dialog.deleteDescription") }}
+      </template>
+      <template #details>
+        <div class="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+          <div class="flex items-start gap-2">
+            <Checkbox
+              id="delete-instance-chats"
+              :checked="deleteChatsWithInstance"
+              @update:checked="deleteChatsWithInstance = $event === true"
+            />
+            <div class="space-y-1">
+              <Label
+                for="delete-instance-chats"
+                class="cursor-pointer text-white light:text-gray-900"
+              >
+                {{ $t("settings.instances.dialog.deleteRelatedChatsLabel") }}
+              </Label>
+              <p class="text-xs text-white/60 light:text-gray-600">
+                {{ $t("settings.instances.dialog.deleteRelatedChatsHint") }}
+              </p>
+            </div>
+          </div>
+        </div>
       </template>
     </DeleteConfirmDialog>
   </div>

@@ -38,6 +38,7 @@ function mergeDisplayContact(existing: Contact, incoming: Contact): Contact {
   return {
     ...existing,
     ...latest,
+    is_public: existing.is_public === true || incoming.is_public === true || latest.is_public === true,
     unread_count: (existing.unread_count || 0) + (incoming.unread_count || 0),
     tags: Array.from(new Set([...(existing.tags || []), ...(incoming.tags || [])]))
   }
@@ -165,7 +166,14 @@ export class ChatSidebarUnifier {
           isUnified: entry.isUnified
         }
       })
-      .sort((a, b) => getTimestamp(b.displayContact.last_message_at) - getTimestamp(a.displayContact.last_message_at))
+      .sort((a, b) => {
+        const publicA = a.displayContact.is_public === true ? 1 : 0
+        const publicB = b.displayContact.is_public === true ? 1 : 0
+        if (publicA !== publicB) {
+          return publicB - publicA
+        }
+        return getTimestamp(b.displayContact.last_message_at) - getTimestamp(a.displayContact.last_message_at)
+      })
   }
 
   findEntryByContactID(entries: SidebarContactEntry[], contactID: string): SidebarContactEntry | undefined {

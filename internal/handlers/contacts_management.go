@@ -51,6 +51,32 @@ func (a *App) appendClosedChatSystemMessage(contact *models.Contact, userID uuid
 	})
 }
 
+func (a *App) appendPublicChatSystemMessage(contact *models.Contact, userID uuid.UUID, isPublic bool) {
+	if a == nil || contact == nil {
+		return
+	}
+
+	actorName := strings.TrimSpace(a.resolveActivityActorName(userID))
+	if actorName == "" {
+		actorName = "An agent"
+	}
+
+	if isPublic {
+		a.appendSystemChatMessage(contact, fmt.Sprintf("System: %s made this chat public for all agents.", actorName), models.JSONB{
+			"event_type":          "chat_public_enabled",
+			"public_by_user_id":   userID.String(),
+			"public_by_user_name": actorName,
+		})
+		return
+	}
+
+	a.appendSystemChatMessage(contact, fmt.Sprintf("System: %s removed public visibility from this chat.", actorName), models.JSONB{
+		"event_type":          "chat_public_disabled",
+		"public_by_user_id":   userID.String(),
+		"public_by_user_name": actorName,
+	})
+}
+
 // AssignContact assigns a contact to a user (agent)
 // Only users with write permission can assign contacts
 func (a *App) AssignContact(r *fastglue.Request) error {
@@ -257,6 +283,58 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
 }
 
+type SetChatPublicRequest struct {
+	IsPublic bool `json:"is_public"`
+}
+
+// SetChatPublic toggles public visibility for a chat so all agents can access it.
+func (a *App) SetChatPublic(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	if !a.HasPermission(userID, models.ResourceChatAssign, models.ActionWrite, orgID) &&
+		!a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) &&
+		!a.HasPermission(userID, models.ResourceChat, models.ActionWrite, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to change chat visibility", nil, "")
+	}
+
+	contactID, err := parsePathUUID(r, "id", "chat")
+	if err != nil {
+		return nil
+	}
+
+	var req SetChatPublicRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+
+	var contact models.Contact
+	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat not found", nil, "")
+	}
+
+	if contact.IsPublic == req.IsPublic {
+		_ = a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
+		return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+	}
+
+	if err := a.DB.Model(&contact).Update("is_public", req.IsPublic).Error; err != nil {
+		a.Log.Error("Failed to update chat public visibility", "error", err, "chat_id", contactID, "user_id", userID, "is_public", req.IsPublic)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update chat visibility", nil, "")
+	}
+
+	if err := a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
+	}
+
+	a.appendPublicChatSystemMessage(&contact, userID, req.IsPublic)
+	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
+
+	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+}
+
 // ContactSessionDataResponse represents the session data for a contact's info panel
 type ContactSessionDataResponse struct {
 	SessionID   *uuid.UUID     `json:"session_id,omitempty"`
@@ -282,7 +360,7 @@ func (a *App) GetContactSessionData(r *fastglue.Request) error {
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if !a.canReadAllContacts(userID, orgID) {
-		query = query.Where("assigned_user_id = ?", userID)
+		query = applyAssignedOrPublicContactAccessFilter(query, userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -753,6 +831,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) Con
 		UnreadCount:        int(unreadCount),
 		AssignedUserID:     contact.AssignedUserID,
 		AssignedUserName:   assignedUserName,
+		IsPublic:           contact.IsPublic,
 		ClosedAt:           closedAt,
 		ClosedByUserID:     closedByUserID,
 		ClosedByName:       strings.TrimSpace(userFullName(contact.ClosedByUser)),
@@ -804,6 +883,7 @@ func (a *App) broadcastContactLifecycleUpdate(orgID uuid.UUID, contact *models.C
 		"id":                 contact.ID.String(),
 		"assigned_user_id":   assignedUserID,
 		"assigned_user_name": assignedUserName,
+		"is_public":          contact.IsPublic,
 		"status":             status.String(),
 		"profile_name":       profileName,
 	}
@@ -818,6 +898,7 @@ func (a *App) broadcastContactLifecycleUpdate(orgID uuid.UUID, contact *models.C
 			"id":                 contact.ID.String(),
 			"assigned_user_id":   assignedUserID,
 			"assigned_user_name": assignedUserName,
+			"is_public":          contact.IsPublic,
 			"status":             status.String(),
 			"profile_name":       profileName,
 			"notify_assignment":  true,
