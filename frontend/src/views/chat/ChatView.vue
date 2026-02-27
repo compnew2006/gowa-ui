@@ -129,6 +129,7 @@ import {
   type SidebarContactEntry,
 } from "@/lib/chat-sidebar-unifier";
 import { MentionContactResolver } from "@/lib/mention-contact-resolver";
+import { MessageHistoryNavigator } from "@/lib/message-history-navigator";
 import { useColorMode } from "@/composables/useColorMode";
 import { useInfiniteScroll } from "@/composables/useInfiniteScroll";
 import CannedResponsePicker from "@/components/chat/CannedResponsePicker.vue";
@@ -325,6 +326,9 @@ const pendingCannedResponse = ref<{
 const stickyDate = ref("");
 const showStickyDate = ref(false);
 let stickyDateTimeout: ReturnType<typeof setTimeout> | null = null;
+let quoteHighlightTimeout: ReturnType<typeof setTimeout> | null = null;
+const isQuoteNavigationInProgress = ref(false);
+const QUOTE_NAVIGATION_MAX_HISTORY_REQUESTS = 64;
 
 // Emoji picker state
 const emojiPickerOpen = ref(false);
@@ -1128,6 +1132,7 @@ onUnmounted(() => {
   mediaBlobCache.clear();
   // Clear sticky date timeout
   if (stickyDateTimeout) clearTimeout(stickyDateTimeout);
+  if (quoteHighlightTimeout) clearTimeout(quoteHighlightTimeout);
 });
 
 function updateStickyDate(scrollContainer: HTMLElement) {
@@ -1429,6 +1434,12 @@ watch(
   () => contactsStore.messages.length,
   () => {
     void resolveMentionsForCurrentMessages();
+    if (
+      contactsStore.isLoadingOlderMessages ||
+      isQuoteNavigationInProgress.value
+    ) {
+      return;
+    }
     scrollToBottom();
     try {
       loadMediaForMessages();
@@ -1906,13 +1917,81 @@ function getReplyingToAuthorLabel(message: Message | null): string {
   );
 }
 
-function scrollToMessage(messageId: string | undefined) {
+function scrollAndHighlightMessageElement(messageEl: HTMLElement): void {
+  messageEl.scrollIntoView({ behavior: "smooth", block: "center" });
+  messageEl.classList.add("highlight-message");
+  if (quoteHighlightTimeout) {
+    clearTimeout(quoteHighlightTimeout);
+  }
+  quoteHighlightTimeout = setTimeout(() => {
+    messageEl.classList.remove("highlight-message");
+    quoteHighlightTimeout = null;
+  }, 2000);
+}
+
+async function scrollToMessage(messageId: string | undefined) {
   if (!messageId) return;
-  const messageEl = document.getElementById(`message-${messageId}`);
-  if (messageEl) {
-    messageEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    messageEl.classList.add("highlight-message");
-    setTimeout(() => messageEl.classList.remove("highlight-message"), 2000);
+
+  const targetElement = () =>
+    document.getElementById(`message-${messageId}`) as HTMLElement | null;
+
+  const existing = targetElement();
+  if (existing) {
+    scrollAndHighlightMessageElement(existing);
+    return;
+  }
+
+  if (
+    !contactsStore.currentContact ||
+    isQuoteNavigationInProgress.value ||
+    !contactsStore.hasMoreMessages
+  ) {
+    return;
+  }
+
+  const activeContactId = contactsStore.currentContact.id;
+  const messageHistoryNavigator = new MessageHistoryNavigator({
+    hasMessage: (targetMessageId: string) =>
+      contactsStore.currentContact?.id === activeContactId &&
+      contactsStore.messages.some(
+        (message: Message) => message.id === targetMessageId,
+      ),
+    hasMoreMessages: () =>
+      contactsStore.currentContact?.id === activeContactId &&
+      contactsStore.hasMoreMessages,
+    getBoundaryToken: () =>
+      contactsStore.currentContact?.id === activeContactId
+        ? contactsStore.messages[0]?.id || null
+        : null,
+    loadOlderMessages: async () => {
+      if (contactsStore.currentContact?.id !== activeContactId) {
+        return;
+      }
+      const accountFilter = selectedAccountFilter(selectedAccount.value);
+      await messagesScroll.preserveScrollPosition(async () => {
+        await contactsStore.fetchOlderMessages(activeContactId, accountFilter);
+        await nextTick();
+      });
+    },
+  });
+
+  isQuoteNavigationInProgress.value = true;
+  try {
+    const found = await messageHistoryNavigator.loadUntilMessage(messageId, {
+      maxRequests: QUOTE_NAVIGATION_MAX_HISTORY_REQUESTS,
+    });
+    if (!found) {
+      return;
+    }
+
+    await nextTick();
+    const loadedElement = targetElement();
+    if (!loadedElement) {
+      return;
+    }
+    scrollAndHighlightMessageElement(loadedElement);
+  } finally {
+    isQuoteNavigationInProgress.value = false;
   }
 }
 

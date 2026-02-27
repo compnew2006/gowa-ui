@@ -216,7 +216,10 @@ QA is no longer a separate step — it is **built into Phase 3 (TEST)** of every
 
 ## Immediate Task:
 
-<YOUR REQUEST HERE>
+When a user clicks on a quoted message in the chat, the application should automatically navigate to and highlight the original message being referenced. Currently, this functionality only works when the original message is already loaded and visible in the current viewport. If the original message is not loaded because it's located further back in the conversation history and hasn't been fetched yet, clicking on the quote does nothing—the user is forced to manually scroll up to load more messages before attempting to click the quote again. Implement a solution that automatically fetches and loads the necessary message history when a user clicks on a quote, then smoothly scrolls to and highlights the original message, ensuring the redirect works regardless of whether the original message is currently loaded in the view.
+
+
+
 
 deploy this project to my server :
 vps ip : 31.97.192.53
