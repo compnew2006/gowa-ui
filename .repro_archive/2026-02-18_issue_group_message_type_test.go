@@ -21,7 +21,7 @@ func TestExtractMessageContentWithMedia_ReproGroupIssue(t *testing.T) {
 		}
 
 		msgType, content, _, _, _ := cm.extractMessageContentWithMedia(ctx, nil, msg)
-		
+
 		// We expect this to be identified as Ignore, fixing the bug.
 		if msgType != models.MessageTypeIgnore {
 			t.Fatalf("expected ignore type for sender key distribution message, got %q", msgType)

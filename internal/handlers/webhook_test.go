@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -85,8 +85,8 @@ func TestVerifyWebhookSignature(t *testing.T) {
 			want:      false,
 		},
 		{
-			name:      "empty body with valid signature for empty body",
-			body:      []byte{},
+			name: "empty body with valid signature for empty body",
+			body: []byte{},
 			signature: func() []byte {
 				m := hmac.New(sha256.New, appSecret)
 				m.Write([]byte{})

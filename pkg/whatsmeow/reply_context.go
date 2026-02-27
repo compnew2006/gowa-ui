@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"gorm.io/gorm"
 )

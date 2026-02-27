@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -258,8 +258,8 @@ func TestApp_UpdateRole_SystemRoleOnlyDescription(t *testing.T) {
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-sys-role")))
 
 	reqBody := handlers.RoleRequest{
-		Name:        "Changed Name",        // Should be ignored for system roles
-		Description: "Updated description", // Only this should be updated
+		Name:        "Changed Name",         // Should be ignored for system roles
+		Description: "Updated description",  // Only this should be updated
 		Permissions: []string{"users:read"}, // Should be ignored for system roles
 	}
 

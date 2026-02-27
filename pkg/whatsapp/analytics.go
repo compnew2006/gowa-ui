@@ -10,9 +10,9 @@ import (
 
 // AnalyticsRequest represents parameters for fetching analytics from Meta API
 type AnalyticsRequest struct {
-	Start        int64    `json:"start"`        // Unix timestamp (seconds)
-	End          int64    `json:"end"`          // Unix timestamp (seconds)
-	Granularity  string   `json:"granularity"`  // "HALF_HOUR", "DAY", "MONTH"
+	Start        int64    `json:"start"`         // Unix timestamp (seconds)
+	End          int64    `json:"end"`           // Unix timestamp (seconds)
+	Granularity  string   `json:"granularity"`   // "HALF_HOUR", "DAY", "MONTH"
 	PhoneNumbers []string `json:"phone_numbers"` // Optional filter by phone numbers
 	TemplateIDs  []string `json:"template_ids"`  // Optional filter for template analytics
 	CountryCodes []string `json:"country_codes"` // Optional filter by country codes
@@ -61,12 +61,12 @@ type MessagingAnalytics struct {
 type PricingAnalyticsDataPoint struct {
 	Start           int64   `json:"start"`
 	End             int64   `json:"end"`
-	Volume          int64   `json:"volume"`                      // Message count
-	Cost            float64 `json:"cost"`                        // Cost in account currency
-	Country         string  `json:"country,omitempty"`           // Country code (IN, US, etc.)
-	PricingType     string  `json:"pricing_type,omitempty"`      // FREE_CUSTOMER_SERVICE, FREE_ENTRY_POINT, REGULAR
-	PricingCategory string  `json:"pricing_category,omitempty"`  // MARKETING, UTILITY, AUTHENTICATION, SERVICE, etc.
-	Tier            string  `json:"tier,omitempty"`              // Pricing tier
+	Volume          int64   `json:"volume"`                     // Message count
+	Cost            float64 `json:"cost"`                       // Cost in account currency
+	Country         string  `json:"country,omitempty"`          // Country code (IN, US, etc.)
+	PricingType     string  `json:"pricing_type,omitempty"`     // FREE_CUSTOMER_SERVICE, FREE_ENTRY_POINT, REGULAR
+	PricingCategory string  `json:"pricing_category,omitempty"` // MARKETING, UTILITY, AUTHENTICATION, SERVICE, etc.
+	Tier            string  `json:"tier,omitempty"`             // Pricing tier
 }
 
 // PricingAnalyticsEntry represents a single phone number's pricing data
@@ -474,4 +474,3 @@ func (c *Client) parseTemplateAnalyticsResponse(ctx context.Context, account *Ac
 
 	return response, nil
 }
-

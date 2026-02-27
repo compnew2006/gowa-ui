@@ -3,18 +3,18 @@ package handlers
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
 
 // TeamRequest represents create/update team request
 type TeamRequest struct {
-	Name               string                   `json:"name" validate:"required"`
-	Description        string                   `json:"description"`
+	Name               string                    `json:"name" validate:"required"`
+	Description        string                    `json:"description"`
 	AssignmentStrategy models.AssignmentStrategy `json:"assignment_strategy"` // round_robin, load_balanced, manual
-	IsActive           bool                     `json:"is_active"`
+	IsActive           bool                      `json:"is_active"`
 }
 
 // TeamMemberRequest represents add member request

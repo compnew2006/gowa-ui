@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/compnew2006/whatomate/internal/config"
+	"github.com/redis/go-redis/v9"
 )
 
 // NewRedis creates a new Redis client

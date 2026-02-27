@@ -31,6 +31,7 @@ func (a *App) ensureMediaDir(subdir string) error {
 
 // getExtensionFromMimeType returns file extension based on mime type
 func getExtensionFromMimeType(mimeType string) string {
+	// Prefix matching as implemented before
 	switch {
 	case strings.HasPrefix(mimeType, "image/jpeg"):
 		return ".jpg"
@@ -70,6 +71,76 @@ func getExtensionFromMimeType(mimeType string) string {
 		return ".pptx"
 	case strings.HasPrefix(mimeType, "text/plain"):
 		return ".txt"
+	default:
+		return ""
+	}
+}
+
+// getContentTypeFromExt maps a file extension to its corresponding MIME content type.
+func getContentTypeFromExt(ext string) string {
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".tif", ".tiff":
+		return "image/tiff"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".bmp":
+		return "image/bmp"
+	case ".svg":
+		return "image/svg+xml"
+	case ".mp4":
+		return "video/mp4"
+	case ".3gp":
+		return "video/3gpp"
+	case ".mov":
+		return "video/quicktime"
+	case ".webm":
+		return "video/webm"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".aac":
+		return "audio/aac"
+	case ".m4a":
+		return "audio/mp4"
+	case ".ogg":
+		return "audio/ogg"
+	case ".oga":
+		return "audio/ogg"
+	case ".amr":
+		return "audio/amr"
+	case ".opus":
+		return "audio/ogg"
+	case ".wav":
+		return "audio/wav"
+	case ".pdf":
+		return "application/pdf"
+	case ".doc":
+		return "application/msword"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".xls":
+		return "application/vnd.ms-excel"
+	case ".xlsx":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case ".ppt":
+		return "application/vnd.ms-powerpoint"
+	case ".pptx":
+		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	case ".csv":
+		return "text/csv"
+	case ".zip":
+		return "application/zip"
+	case ".rar":
+		return "application/vnd.rar"
+	case ".7z":
+		return "application/x-7z-compressed"
+	case ".txt":
+		return "text/plain"
 	default:
 		return ""
 	}
@@ -209,72 +280,12 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		contentType = strings.TrimSpace(strings.Split(strings.ToLower(message.MediaMimeType), ";")[0])
 	}
 	ext := strings.ToLower(filepath.Ext(filePath))
-	if contentType == "" || contentType == "application/octet-stream" {
+	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	switch ext {
-	case ".jpg", ".jpeg":
-		contentType = "image/jpeg"
-	case ".png":
-		contentType = "image/png"
-	case ".tif", ".tiff":
-		contentType = "image/tiff"
-	case ".gif":
-		contentType = "image/gif"
-	case ".webp":
-		contentType = "image/webp"
-	case ".bmp":
-		contentType = "image/bmp"
-	case ".svg":
-		contentType = "image/svg+xml"
-	case ".mp4":
-		contentType = "video/mp4"
-	case ".3gp":
-		contentType = "video/3gpp"
-	case ".mov":
-		contentType = "video/quicktime"
-	case ".webm":
-		contentType = "video/webm"
-	case ".mp3":
-		contentType = "audio/mpeg"
-	case ".aac":
-		contentType = "audio/aac"
-	case ".m4a":
-		contentType = "audio/mp4"
-	case ".ogg":
-		contentType = "audio/ogg"
-	case ".oga":
-		contentType = "audio/ogg"
-	case ".amr":
-		contentType = "audio/amr"
-	case ".opus":
-		contentType = "audio/ogg"
-	case ".wav":
-		contentType = "audio/wav"
-	case ".pdf":
-		contentType = "application/pdf"
-	case ".doc":
-		contentType = "application/msword"
-	case ".docx":
-		contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	case ".xls":
-		contentType = "application/vnd.ms-excel"
-	case ".xlsx":
-		contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	case ".ppt":
-		contentType = "application/vnd.ms-powerpoint"
-	case ".pptx":
-		contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-	case ".csv":
-		contentType = "text/csv"
-	case ".zip":
-		contentType = "application/zip"
-	case ".rar":
-		contentType = "application/vnd.rar"
-	case ".7z":
-		contentType = "application/x-7z-compressed"
-	case ".txt":
-		contentType = "text/plain"
+
+	if mappedType := getContentTypeFromExt(ext); mappedType != "" && contentType == "application/octet-stream" {
+		contentType = mappedType
 	}
 
 	r.RequestCtx.Response.Header.Set("Content-Type", contentType)

@@ -461,4 +461,3 @@ func TestClient_SendTemplateMessage_WithComponents(t *testing.T) {
 	sentComponents := template["components"].([]interface{})
 	assert.Len(t, sentComponents, 2)
 }
-

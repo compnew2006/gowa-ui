@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 )
 
 // JobType represents the type of job
@@ -18,13 +18,13 @@ const (
 
 // RecipientJob represents a single recipient message job
 type RecipientJob struct {
-	CampaignID     uuid.UUID     `json:"campaign_id"`
-	RecipientID    uuid.UUID     `json:"recipient_id"`
-	OrganizationID uuid.UUID     `json:"organization_id"`
-	PhoneNumber    string        `json:"phone_number"`
-	RecipientName  string        `json:"recipient_name"`
-	TemplateParams models.JSONB  `json:"template_params"`
-	EnqueuedAt     time.Time     `json:"enqueued_at"`
+	CampaignID     uuid.UUID    `json:"campaign_id"`
+	RecipientID    uuid.UUID    `json:"recipient_id"`
+	OrganizationID uuid.UUID    `json:"organization_id"`
+	PhoneNumber    string       `json:"phone_number"`
+	RecipientName  string       `json:"recipient_name"`
+	TemplateParams models.JSONB `json:"template_params"`
+	EnqueuedAt     time.Time    `json:"enqueued_at"`
 }
 
 // Queue defines the interface for job queue operations

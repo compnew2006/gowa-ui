@@ -74,12 +74,12 @@ type WhatsAppConfig struct {
 }
 
 type WhatsmeowConfig struct {
-	RateLimitMinDelayMs int `koanf:"rate_limit_min_delay_ms"`
-	RateLimitMaxDelayMs int `koanf:"rate_limit_max_delay_ms"`
-	QueueTimeoutSeconds int `koanf:"queue_timeout_seconds"`
-	MaxInstancesPerOrg  int `koanf:"max_instances_per_org"`
-	UploadRetryCount    int `koanf:"upload_retry_count"`
-	UploadRetryDelaySec int `koanf:"upload_retry_delay_sec"`
+	RateLimitMinDelayMs int    `koanf:"rate_limit_min_delay_ms"`
+	RateLimitMaxDelayMs int    `koanf:"rate_limit_max_delay_ms"`
+	QueueTimeoutSeconds int    `koanf:"queue_timeout_seconds"`
+	MaxInstancesPerOrg  int    `koanf:"max_instances_per_org"`
+	UploadRetryCount    int    `koanf:"upload_retry_count"`
+	UploadRetryDelaySec int    `koanf:"upload_retry_delay_sec"`
 	Identity            string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")
 }
 

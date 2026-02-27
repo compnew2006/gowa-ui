@@ -1,8 +1,8 @@
 package contactutil
 
 import (
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 

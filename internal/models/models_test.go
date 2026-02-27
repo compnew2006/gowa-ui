@@ -18,9 +18,9 @@ func TestJSONB_Value(t *testing.T) {
 		wantNil  bool
 	}{
 		{
-			name:     "nil JSONB returns nil",
-			input:    nil,
-			wantNil:  true,
+			name:    "nil JSONB returns nil",
+			input:   nil,
+			wantNil: true,
 		},
 		{
 			name:     "empty JSONB returns empty object",

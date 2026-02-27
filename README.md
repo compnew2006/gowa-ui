@@ -37,6 +37,18 @@ Modern, open-source WhatsApp Business Platform. Support for both **WhatsApp Clou
 - **Canned Responses**
   Pre-defined quick replies with slash commands (`/shortcut`) and dynamic placeholders.
 
+- **Conversation Notes**
+  Add private notes to chats for internal team collaboration and historical context.
+
+- **Message History Navigation**
+  Effortlessly navigate through historical messages and search conversation history directly in the chat view.
+
+- **Assigned Chat Reset**
+  Reset assigned chats to unassigned status or reassign them to different agents to optimize workload.
+
+- **Contact Management & Localization**
+  Comprehensive contact management with custom fields, tagging, and multi-language support (including Spanish).
+
 - **Analytics Dashboard**
   Track messages, engagement, and campaign performance.
 

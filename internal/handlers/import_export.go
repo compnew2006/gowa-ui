@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -28,13 +28,13 @@ type ExportConfig struct {
 
 // ImportConfig defines allowed tables and their importable columns
 type ImportConfig struct {
-	Model            interface{}
-	Resource         string // For permission check
-	RequiredColumns  []string
-	OptionalColumns  []string
-	ColumnTransform  map[string]func(string) (interface{}, error)
-	UniqueColumn     string // Column to check for duplicates (e.g., "phone_number")
-	BeforeCreate     func(db *gorm.DB, orgID uuid.UUID, record map[string]interface{}) error
+	Model           interface{}
+	Resource        string // For permission check
+	RequiredColumns []string
+	OptionalColumns []string
+	ColumnTransform map[string]func(string) (interface{}, error)
+	UniqueColumn    string // Column to check for duplicates (e.g., "phone_number")
+	BeforeCreate    func(db *gorm.DB, orgID uuid.UUID, record map[string]interface{}) error
 }
 
 // Supported export/import configurations

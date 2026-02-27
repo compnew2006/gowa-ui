@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
+	"github.com/google/uuid"
 )
 
 // MockSentMessage records a message sent through the mock WhatsApp client.

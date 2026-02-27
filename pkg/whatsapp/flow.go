@@ -55,10 +55,10 @@ type FlowListResponse struct {
 
 // FlowJSON represents the flow definition
 type FlowJSON struct {
-	Version       string        `json:"version"`
-	DataAPIVersion string       `json:"data_api_version,omitempty"`
-	RoutingModel  map[string]interface{} `json:"routing_model,omitempty"`
-	Screens       []interface{} `json:"screens"`
+	Version        string                 `json:"version"`
+	DataAPIVersion string                 `json:"data_api_version,omitempty"`
+	RoutingModel   map[string]interface{} `json:"routing_model,omitempty"`
+	Screens        []interface{}          `json:"screens"`
 }
 
 // CreateFlow creates a new flow in Meta

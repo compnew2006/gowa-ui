@@ -10,7 +10,7 @@ import (
 
 // TemplateSubmission represents a template to be submitted to Meta
 type TemplateSubmission struct {
-	MetaTemplateID  string        // If set, update existing template instead of creating new
+	MetaTemplateID  string // If set, update existing template instead of creating new
 	Name            string
 	Language        string
 	Category        string

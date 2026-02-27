@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -461,7 +461,7 @@ func TestApp_UpdateCannedResponse(t *testing.T) {
 		cr := createTestCannedResponse(t, app, org.ID, user.ID, "Keep Name", "/keep", "Keep content", "keep-cat")
 
 		req := testutil.NewJSONRequest(t, map[string]any{
-			"content":  "Only content changed",
+			"content":   "Only content changed",
 			"is_active": true,
 		})
 		testutil.SetAuthContext(req, org.ID, user.ID)

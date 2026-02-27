@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
+	"github.com/google/uuid"
 )
 
 func (cm *ConnectionManager) createInstanceNotification(ctx context.Context, orgID, instanceID uuid.UUID, eventType, message string) (*models.InstanceNotification, error) {

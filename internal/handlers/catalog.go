@@ -3,9 +3,9 @@ package handlers
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -33,7 +33,7 @@ type CatalogResponse struct {
 type CatalogProductRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Price       int64  `json:"price"`    // Price in cents
+	Price       int64  `json:"price"` // Price in cents
 	Currency    string `json:"currency"`
 	URL         string `json:"url"`
 	ImageURL    string `json:"image_url"`
