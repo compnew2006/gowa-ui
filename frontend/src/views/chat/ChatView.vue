@@ -113,6 +113,16 @@ import {
   resolveMediaFilename,
 } from "@/lib/media-actions";
 import {
+  getCachedMediaBlob,
+  prefetchMediaBlob,
+  storeMediaBlobInPersistentCache,
+} from "@/lib/media_prefetch_cache";
+import {
+  resolveWhatsAppMediaCategoryForFile,
+  validateWhatsAppMediaFile,
+  type WhatsAppMediaCategory,
+} from "@/lib/whatsapp-media-policy";
+import {
   mergePhotosAndPdfsAndOpenPrintDialog,
 } from "@/lib/media-merge-print";
 import {
@@ -293,6 +303,7 @@ function formatAccountToggleLabel(toggleKey: string): string {
 // File upload state
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const selectedFile = ref<File | null>(null);
+const selectedFileCategory = ref<WhatsAppMediaCategory | null>(null);
 const filePreviewUrl = ref<string | null>(null);
 const isMediaDialogOpen = ref(false);
 const isProfilePhotoDialogOpen = ref(false);
@@ -2715,6 +2726,18 @@ async function loadMediaForMessage(
     return;
   }
 
+  const persistentCachedBlob = await getCachedMediaBlob(message.id);
+  if (persistentCachedBlob) {
+    mediaBlobCache.set(message.id, persistentCachedBlob);
+    if (generation !== mediaLoadGeneration) {
+      return;
+    }
+    if (!mediaBlobUrls.value[message.id]) {
+      mediaBlobUrls.value[message.id] = URL.createObjectURL(persistentCachedBlob);
+    }
+    return;
+  }
+
   if (mediaBlobUrls.value[message.id]) {
     return;
   }
@@ -2724,22 +2747,12 @@ async function loadMediaForMessage(
   mediaLoadingStates.value[message.id] = true;
 
   try {
-    const basePath = ((window as any).__BASE_PATH__ ?? "").replace(/\/$/, "");
-    const response = await fetch(`${basePath}/api/media/${message.id}`, {
-      credentials: "include",
-      signal: controller.signal,
-    });
-
-    if (generation !== mediaLoadGeneration) {
-      return;
+    const blob = await prefetchMediaBlob(message.id, { signal: controller.signal });
+    if (!blob) {
+      throw new Error("Failed to load media: empty response");
     }
-
-    if (!response.ok) {
-      throw new Error(`Failed to load media: ${response.status}`);
-    }
-
-    const blob = await response.blob();
     mediaBlobCache.set(message.id, blob);
+    void storeMediaBlobInPersistentCache(message.id, blob);
     if (generation !== mediaLoadGeneration) {
       return;
     }
@@ -2849,25 +2862,31 @@ async function resolveMessageBlobForBatchPrint(message: Message): Promise<Blob> 
     return cachedBlob;
   }
 
+  const persistentCachedBlob = await getCachedMediaBlob(message.id);
+  if (persistentCachedBlob) {
+    mediaBlobCache.set(message.id, persistentCachedBlob);
+    if (!mediaBlobUrls.value[message.id]) {
+      mediaBlobUrls.value[message.id] = URL.createObjectURL(persistentCachedBlob);
+    }
+    return persistentCachedBlob;
+  }
+
   await loadMediaForMessage(message);
   const loadedBlob = mediaBlobCache.get(message.id);
   if (loadedBlob) {
     return loadedBlob;
   }
 
-  const basePath = ((window as any).__BASE_PATH__ ?? "").replace(/\/$/, "");
-  const response = await fetch(`${basePath}/api/media/${message.id}`, {
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load media: ${response.status}`);
+  const fallbackBlob = await prefetchMediaBlob(message.id);
+  if (!fallbackBlob) {
+    throw new Error("Failed to load media: empty response");
   }
-  const blob = await response.blob();
-  mediaBlobCache.set(message.id, blob);
+  mediaBlobCache.set(message.id, fallbackBlob);
+  void storeMediaBlobInPersistentCache(message.id, fallbackBlob);
   if (!mediaBlobUrls.value[message.id]) {
-    mediaBlobUrls.value[message.id] = URL.createObjectURL(blob);
+    mediaBlobUrls.value[message.id] = URL.createObjectURL(fallbackBlob);
   }
-  return blob;
+  return fallbackBlob;
 }
 
 async function mergeSelectedMessageBubblesAndPrint() {
@@ -2950,37 +2969,33 @@ function handleFileSelect(event: Event) {
   const file = input.files?.[0];
   if (!file) return;
 
-  // Validate file type
-  const allowedTypes = [
-    "image/",
-    "video/",
-    "audio/",
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument",
-  ];
-  const isAllowed = allowedTypes.some((type) => file.type.startsWith(type));
-  if (!isAllowed) {
-    toast.error(t("chat.unsupportedFileType"), {
-      description: t("chat.unsupportedFileTypeDesc"),
-    });
-    return;
-  }
+  const validation = validateWhatsAppMediaFile(file);
+  if (!validation.isValid) {
+    let sizeErrorKey = "chat.fileTooLargeDocumentDesc";
+    if (validation.category === "image") {
+      sizeErrorKey = "chat.fileTooLargeImageDesc";
+    } else if (validation.category === "video") {
+      sizeErrorKey = "chat.fileTooLargeVideoDesc";
+    } else if (validation.category === "audio") {
+      sizeErrorKey = "chat.fileTooLargeAudioDesc";
+    }
 
-  // Validate file size (16MB limit for WhatsApp)
-  const maxSize = 16 * 1024 * 1024;
-  if (file.size > maxSize) {
     toast.error(t("chat.fileTooLarge"), {
-      description: t("chat.fileTooLargeDesc"),
+      description: t(sizeErrorKey),
     });
+    input.value = "";
     return;
   }
 
   selectedFile.value = file;
+  selectedFileCategory.value = resolveWhatsAppMediaCategoryForFile(file);
   mediaCaption.value = "";
 
   // Create preview URL for images and videos
-  if (file.type.startsWith("image/") || file.type.startsWith("video/")) {
+  if (
+    selectedFileCategory.value === "image" ||
+    selectedFileCategory.value === "video"
+  ) {
     filePreviewUrl.value = URL.createObjectURL(file);
   } else {
     filePreviewUrl.value = null;
@@ -2999,14 +3014,8 @@ function closeMediaDialog() {
     filePreviewUrl.value = null;
   }
   selectedFile.value = null;
+  selectedFileCategory.value = null;
   mediaCaption.value = "";
-}
-
-function getMediaType(mimeType: string): string {
-  if (mimeType.startsWith("image/")) return "image";
-  if (mimeType.startsWith("video/")) return "video";
-  if (mimeType.startsWith("audio/")) return "audio";
-  return "document";
 }
 
 async function sendMediaMessage() {
@@ -3018,7 +3027,10 @@ async function sendMediaMessage() {
     const formData = new FormData();
     formData.append("file", selectedFile.value);
     formData.append("contact_id", contactsStore.currentContact.id);
-    formData.append("type", getMediaType(selectedFile.value.type));
+    const mediaType =
+      selectedFileCategory.value ||
+      resolveWhatsAppMediaCategoryForFile(selectedFile.value);
+    formData.append("type", mediaType);
     if (mediaCaption.value.trim()) {
       formData.append("caption", mediaCaption.value.trim());
     }
@@ -3453,6 +3465,12 @@ async function sendMediaMessage() {
 	                  >
 	                    {{ $t("chat.publicShort") }}
 	                  </Badge>
+                    <Badge
+                      v-if="entry.displayContact.status === 'closed'"
+                      class="h-5 text-[10px] bg-rose-500/20 text-rose-300 uppercase light:bg-rose-100 light:text-rose-700"
+                    >
+                      {{ entry.displayContact.status }}
+                    </Badge>
 	                  <Badge
 	                    v-if="entry.displayContact.unread_count > 0"
 	                    class="h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700"
@@ -4845,7 +4863,7 @@ async function sendMediaMessage() {
             <input
               ref="fileInputRef"
               type="file"
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+              accept="*/*"
               class="hidden"
               @change="handleFileSelect"
             />
@@ -5052,20 +5070,18 @@ async function sendMediaMessage() {
         <div class="py-4 space-y-4">
           <!-- Image preview -->
           <div
-            v-if="selectedFile?.type.startsWith('image/') && filePreviewUrl"
+            v-if="selectedFileCategory === 'image' && filePreviewUrl"
             class="flex justify-center"
           >
             <img
               :src="filePreviewUrl"
-              :alt="selectedFile.name"
+              :alt="selectedFile?.name || ''"
               class="max-w-full max-h-[300px] rounded-lg object-contain"
             />
           </div>
           <!-- Video preview -->
           <div
-            v-else-if="
-              selectedFile?.type.startsWith('video/') && filePreviewUrl
-            "
+            v-else-if="selectedFileCategory === 'video' && filePreviewUrl"
             class="flex justify-center"
           >
             <video
@@ -5076,7 +5092,7 @@ async function sendMediaMessage() {
           </div>
           <!-- Audio preview -->
           <div
-            v-else-if="selectedFile?.type.startsWith('audio/')"
+            v-else-if="selectedFileCategory === 'audio'"
             class="flex justify-center"
           >
             <div class="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
@@ -5086,7 +5102,7 @@ async function sendMediaMessage() {
                 <Paperclip class="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p class="font-medium text-sm">{{ selectedFile.name }}</p>
+                <p class="font-medium text-sm">{{ selectedFile?.name }}</p>
                 <p class="text-xs text-muted-foreground">
                   {{ $t("chat.audioFile") }}
                 </p>
@@ -5113,7 +5129,7 @@ async function sendMediaMessage() {
           </div>
 
           <!-- Caption input (not for audio) -->
-          <div v-if="selectedFile && !selectedFile.type.startsWith('audio/')">
+          <div v-if="selectedFile && selectedFileCategory !== 'audio'">
             <Textarea
               v-model="mediaCaption"
               :placeholder="$t('chat.mediaCaption') + '...'"

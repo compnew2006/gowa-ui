@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -108,6 +109,7 @@ interface AgentAnalyticsResponse {
 }
 
 const { t } = useI18n()
+const router = useRouter()
 const authStore = useAuthStore()
 const usersStore = useUsersStore()
 const isAdminOrManager = computed(() => ['admin', 'manager'].includes(authStore.user?.role?.name || ''))
@@ -255,6 +257,11 @@ const formatDateTime = (value: string): string => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString()
+}
+
+const openRatingChat = async (record: AgentRatingRecord) => {
+  if (!record.contact_id) return
+  await router.push({ name: 'chat-conversation', params: { contactId: record.contact_id } })
 }
 
 const extractFollowupComments = (context: Record<string, unknown> | undefined): string[] => {
@@ -958,7 +965,16 @@ void _displayStats.value // Suppress unused warning
                     <TableBody>
                       <TableRow v-for="record in analytics.rating_records" :key="record.id">
                         <TableCell>{{ record.agent_name || '-' }}</TableCell>
-                        <TableCell class="font-mono text-xs">{{ record.chat_id }}</TableCell>
+                        <TableCell class="font-mono text-xs">
+                          <button
+                            type="button"
+                            class="text-primary hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:text-muted-foreground"
+                            :disabled="!record.contact_id"
+                            @click="openRatingChat(record)"
+                          >
+                            {{ record.contact_phone || '-' }}
+                          </button>
+                        </TableCell>
                         <TableCell>{{ record.contact || record.contact_phone }}</TableCell>
                         <TableCell>{{ record.rating }}</TableCell>
                         <TableCell>{{ formatDateTime(record.rated_at) }}</TableCell>

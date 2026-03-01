@@ -3313,6 +3313,154 @@ func TestApp_ListContacts_AgentSeesPublicChatsAndTheyArePinnedFirst(t *testing.T
 	assert.Equal(t, myChat.ID, resp.Data.Contacts[1].ID)
 }
 
+func TestApp_ListContacts_ClosedChatFilters(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	closerAlpha := testutil.CreateTestUser(
+		t,
+		app.DB,
+		org.ID,
+		testutil.WithRoleID(&adminRole.ID),
+		testutil.WithFullName("Closer Alpha"),
+	)
+	closerBravo := testutil.CreateTestUser(
+		t,
+		app.DB,
+		org.ID,
+		testutil.WithRoleID(&adminRole.ID),
+		testutil.WithFullName("Closer Bravo"),
+	)
+
+	closedOnFeb12 := time.Date(2026, time.February, 12, 9, 30, 0, 0, time.UTC)
+	closedOnFeb18 := time.Date(2026, time.February, 18, 12, 0, 0, 0, time.UTC)
+	alphaPhone := "565534614"
+
+	closedByAlpha := testutil.CreateTestContact(t, app.DB, org.ID)
+	closedByBravo := testutil.CreateTestContact(t, app.DB, org.ID)
+	openContact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	require.NoError(t, app.DB.Model(closedByAlpha).Updates(map[string]any{
+		"phone_number":      alphaPhone,
+		"status":            models.ChatStatusClosed,
+		"assigned_user_id":  closerAlpha.ID,
+		"closed_by_user_id": closerAlpha.ID,
+		"closed_at":         &closedOnFeb12,
+	}).Error)
+	require.NoError(t, app.DB.Model(closedByBravo).Updates(map[string]any{
+		"status":            models.ChatStatusClosed,
+		"assigned_user_id":  closerBravo.ID,
+		"closed_by_user_id": closerBravo.ID,
+		"closed_at":         &closedOnFeb18,
+	}).Error)
+	require.NoError(t, app.DB.Model(openContact).Updates(map[string]any{
+		"status": models.ChatStatusOpen,
+	}).Error)
+
+	t.Run("filters by closed_by", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, adminUser.ID)
+		testutil.SetQueryParam(req, "status", "closed")
+		testutil.SetQueryParam(req, "closed_by", "Closer Alpha")
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		require.Len(t, resp.Data.Contacts, 1)
+		assert.Equal(t, int64(1), resp.Data.Total)
+		assert.Equal(t, closedByAlpha.ID, resp.Data.Contacts[0].ID)
+	})
+
+	t.Run("filters by closed date range", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, adminUser.ID)
+		testutil.SetQueryParam(req, "status", "closed")
+		testutil.SetQueryParam(req, "closed_from", "2026-02-18")
+		testutil.SetQueryParam(req, "closed_to", "2026-02-18")
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		require.Len(t, resp.Data.Contacts, 1)
+		assert.Equal(t, int64(1), resp.Data.Total)
+		assert.Equal(t, closedByBravo.ID, resp.Data.Contacts[0].ID)
+	})
+
+	t.Run("search includes closer name for closed chats", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, adminUser.ID)
+		testutil.SetQueryParam(req, "status", "closed")
+		testutil.SetQueryParam(req, "search", "bravo")
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		require.Len(t, resp.Data.Contacts, 1)
+		assert.Equal(t, int64(1), resp.Data.Total)
+		assert.Equal(t, closedByBravo.ID, resp.Data.Contacts[0].ID)
+	})
+
+	t.Run("search includes phone number for closed chats", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, adminUser.ID)
+		testutil.SetQueryParam(req, "status", "closed")
+		testutil.SetQueryParam(req, "search", alphaPhone)
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		require.Len(t, resp.Data.Contacts, 1)
+		assert.Equal(t, int64(1), resp.Data.Total)
+		assert.Equal(t, closedByAlpha.ID, resp.Data.Contacts[0].ID)
+	})
+
+	t.Run("rejects invalid closed date format", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, adminUser.ID)
+		testutil.SetQueryParam(req, "status", "closed")
+		testutil.SetQueryParam(req, "closed_from", "18-02-2026")
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+	})
+}
+
 func TestApp_DeleteContact_PermissionBased(t *testing.T) {
 	t.Parallel()
 

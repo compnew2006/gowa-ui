@@ -1,5 +1,6 @@
 export interface WhatsAppInstanceSettings {
     auto_sync_history?: boolean
+    auto_download_incoming_media?: boolean
     auto_reject_calls?: {
         enabled?: boolean
         mode?: 'without_message' | 'with_message'

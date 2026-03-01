@@ -80,7 +80,8 @@ func TestApp_Login_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "success", resp.Status)
-	assert.Equal(t, 15*60, resp.Data.ExpiresIn)
+	assert.Greater(t, resp.Data.ExpiresIn, 0)
+	assert.LessOrEqual(t, resp.Data.ExpiresIn, 24*60*60)
 	assert.Equal(t, email, resp.Data.User.Email)
 
 	// Tokens should be in Set-Cookie headers
@@ -432,7 +433,8 @@ func TestApp_RefreshToken_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "success", resp.Status)
-	assert.Equal(t, 15*60, resp.Data.ExpiresIn)
+	assert.Greater(t, resp.Data.ExpiresIn, 0)
+	assert.LessOrEqual(t, resp.Data.ExpiresIn, 24*60*60)
 
 	// Tokens should be in cookies
 	assert.NotEmpty(t, testutil.GetResponseCookie(req, "whm_access"))

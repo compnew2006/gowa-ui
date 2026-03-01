@@ -46,6 +46,7 @@ const props = defineProps<{
   paletteIndex?: number;
   tagSettingsSaving?: boolean;
   autoSyncSaving?: boolean;
+  autoDownloadIncomingMediaSaving?: boolean;
   autoRejectSaving?: boolean;
   autoCampaignSaving?: boolean;
   autoCampaignUploading?: boolean;
@@ -66,6 +67,7 @@ const emit = defineEmits<{
     },
   ): void;
   (e: "update-auto-sync", id: string, enabled: boolean): void;
+  (e: "update-auto-download-incoming-media", id: string, enabled: boolean): void;
   (
     e: "update-auto-reject-settings",
     id: string,
@@ -102,6 +104,10 @@ const isConnecting = computed(() => props.instance.status === "connecting");
 const autoSyncEnabled = computed(() => {
   const setting = props.instance.settings?.auto_sync_history;
   return typeof setting === "boolean" ? setting : true;
+});
+const autoDownloadIncomingMediaEnabled = computed(() => {
+  const setting = props.instance.settings?.auto_download_incoming_media;
+  return typeof setting === "boolean" ? setting : false;
 });
 
 const autoRejectSettings = computed(() =>
@@ -269,6 +275,34 @@ function formatUptime(totalSeconds?: number) {
                 :disabled="autoSyncSaving"
                 @update:checked="
                   (enabled) => emit('update-auto-sync', instance.id, enabled)
+                "
+              />
+            </div>
+          </div>
+        </div>
+        <div
+          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-medium text-white light:text-gray-900">
+                {{ $t("instances.card.autoDownloadIncomingMedia") }}
+              </p>
+              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
+                {{ $t("instances.card.autoDownloadIncomingMediaDesc") }}
+              </p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <Loader2
+                v-if="autoDownloadIncomingMediaSaving"
+                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+              />
+              <Switch
+                :checked="autoDownloadIncomingMediaEnabled"
+                :disabled="autoDownloadIncomingMediaSaving"
+                @update:checked="
+                  (enabled) =>
+                    emit('update-auto-download-incoming-media', instance.id, enabled)
                 "
               />
             </div>

@@ -474,10 +474,23 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	assignedToParam := string(r.RequestCtx.QueryArgs().Peek("assigned_to"))
 
 	var contacts []models.Contact
-	query := a.ScopeToOrg(a.DB, userID, orgID)
+	// Use explicit contacts table qualification so later JOINs (closed chat filters)
+	// cannot make organization_id references ambiguous.
+	query := a.DB.Model(&models.Contact{}).Where("contacts.organization_id = ?", orgID)
 	statusFilter, parseStatusErr := parseChatStatusFilter(statusParam)
 	if parseStatusErr != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, parseStatusErr.Error(), nil, "status")
+	}
+	closedChatFilters, closedFiltersField, parseClosedFiltersErr := parseClosedChatFilters(r)
+	if parseClosedFiltersErr != nil {
+		errorType := fastglue.ErrorType("")
+		if closedFiltersField == "closed_from" {
+			errorType = "closed_from"
+		}
+		if closedFiltersField == "closed_to" {
+			errorType = "closed_to"
+		}
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, parseClosedFiltersErr.Error(), nil, errorType)
 	}
 	assignedToUserID, hasAssignedToFilter, parseAssignedToErr := parseAssignedToFilter(assignedToParam, userID)
 	if parseAssignedToErr != nil {
@@ -528,11 +541,14 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		query = query.Where("created_at <= ?", endOfDay(createdTo))
 	}
 
-	if search != "" {
-		// Limit search string length to prevent abuse
-		if len(search) > 1000 {
-			search = search[:1000]
-		}
+	if len(search) > 1000 {
+		search = search[:1000]
+	}
+
+	isClosedChatList := statusFilter != nil && *statusFilter == models.ChatStatusClosed
+	if isClosedChatList {
+		query = applyClosedChatFilters(query, search, closedChatFilters)
+	} else if search != "" {
 		searchPattern := "%" + search + "%"
 		// Use ILIKE for case-insensitive search on profile_name
 		query = query.Where("phone_number LIKE ? OR profile_name ILIKE ?", searchPattern, searchPattern)

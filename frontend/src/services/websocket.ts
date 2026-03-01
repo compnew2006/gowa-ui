@@ -3,6 +3,7 @@ import { useTransfersStore } from '@/stores/transfers'
 import { useAuthStore } from '@/stores/auth'
 import { useNotesStore } from '@/stores/notes'
 import { contactsService } from '@/services/api'
+import { maybeAutoDownloadIncomingMedia } from '@/lib/incoming_media_autodownload'
 import { toast } from 'vue-sonner'
 import router from '@/router'
 
@@ -443,6 +444,10 @@ class WebSocketService {
     const isNewMessage = store.addMessage(incomingMessage, {
       appendToActiveThread: isViewingThisContact
     })
+
+    if (isNewMessage) {
+      maybeAutoDownloadIncomingMedia(payload)
+    }
 
     const hasContactStatus = typeof payload.contact_status === 'string'
     const hasAssignedUserField = typeof payload.assigned_user_id === 'string'

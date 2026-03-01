@@ -380,7 +380,6 @@ export const useContactsStore = defineStore('contacts', () => {
   function rebuildChatBucketsFromContacts() {
     pendingChats.value = contacts.value.filter(c => c.status === 'pending' && !c.assigned_user_id)
     assignedChats.value = contacts.value.filter(c => c.status === 'open' && !!c.assigned_user_id)
-    closedChats.value = contacts.value.filter(c => c.status === 'closed')
   }
 
   function mergeContactsIntoStore(nextContacts: Contact[]) {
@@ -421,8 +420,20 @@ export const useContactsStore = defineStore('contacts', () => {
   })
 
   const searchedContacts = computed(() => {
-    if (!searchQuery.value) return activeTabContacts.value
-    return activeTabContacts.value.filter(c => contactMatchesSearch(c, searchQuery.value))
+    const trimmedQuery = searchQuery.value.trim()
+    if (!trimmedQuery) return activeTabContacts.value
+
+    // While searching from /chat, include recently-fetched closed chats so
+    // agents can locate and open historical conversations without switching pages.
+    const merged = new Map<string, Contact>()
+    for (const contact of activeTabContacts.value) {
+      merged.set(contact.id, contact)
+    }
+    for (const contact of closedChats.value) {
+      merged.set(contact.id, contact)
+    }
+
+    return Array.from(merged.values()).filter(c => contactMatchesSearch(c, trimmedQuery))
   })
 
   function getConversationId(contact: Contact): string {
@@ -561,14 +572,19 @@ export const useContactsStore = defineStore('contacts', () => {
   }) {
     isLoading.value = true
     try {
+      const trimmedSearch = typeof params?.search === 'string'
+        ? params.search.trim()
+        : ''
+      const includeClosedInSearch = trimmedSearch !== ''
+      const closedSearchLimit = Math.max(params?.limit ?? contactsLimit.value, 500)
       const listParams = {
         ...buildListParams(),
-        search: params?.search,
+        search: trimmedSearch || undefined,
         page: 1,
         limit: params?.limit ?? contactsLimit.value
       }
 
-      const [pendingResponse, assignedResponse] = await Promise.all([
+      const [pendingResponse, assignedResponse, closedResponse] = await Promise.all([
         chatsService.list({
           ...listParams,
           status: 'pending'
@@ -576,7 +592,14 @@ export const useContactsStore = defineStore('contacts', () => {
         chatsService.list({
           ...listParams,
           status: 'open'
-        })
+        }),
+        includeClosedInSearch
+          ? chatsService.list({
+            ...listParams,
+            limit: closedSearchLimit,
+            status: 'closed'
+          })
+          : Promise.resolve(null)
       ])
 
       const pendingData = pendingResponse.data.data || pendingResponse.data
@@ -585,9 +608,15 @@ export const useContactsStore = defineStore('contacts', () => {
       const assignedList = normalizeContacts(assignedData.contacts || [])
       pendingChatsTotal.value = pendingData.total ?? pendingList.length
       assignedChatsTotal.value = assignedData.total ?? assignedList.length
+      const searchedClosed = includeClosedInSearch && closedResponse
+        ? normalizeContacts((closedResponse.data.data || closedResponse.data).contacts || [])
+        : null
+      if (searchedClosed) {
+        closedChats.value = searchedClosed
+      }
 
       // Preserve already-fetched closed chats while refreshing active buckets.
-      const retainedClosed = contacts.value.filter(c => c.status === 'closed')
+      const retainedClosed = searchedClosed ?? contacts.value.filter(c => c.status === 'closed')
       const merged = new Map<string, Contact>()
       for (const item of retainedClosed) {
         merged.set(item.id, item)
@@ -713,25 +742,46 @@ export const useContactsStore = defineStore('contacts', () => {
     }
   }
 
-  async function fetchClosedChats(params?: { search?: string; limit?: number }) {
+  async function fetchClosedChats(params?: {
+    search?: string
+    page?: number
+    limit?: number
+    closed_by?: string
+    closed_from?: string
+    closed_to?: string
+  }) {
     isLoading.value = true
     try {
       const response = await chatsService.list({
         ...buildListParams(),
         search: params?.search,
-        page: 1,
+        page: params?.page ?? 1,
         limit: params?.limit ?? contactsLimit.value,
-        status: 'closed'
+        status: 'closed',
+        closed_by: params?.closed_by,
+        closed_from: params?.closed_from,
+        closed_to: params?.closed_to
       })
       const data = response.data.data || response.data
       const nextClosed = normalizeContacts(data.contacts || [])
 
       mergeContactsIntoStore(nextClosed)
       closedChats.value = nextClosed
-      return nextClosed
+      return {
+        chats: nextClosed,
+        total: data.total ?? nextClosed.length,
+        page: data.page ?? (params?.page ?? 1),
+        limit: data.limit ?? (params?.limit ?? contactsLimit.value)
+      }
     } catch (error) {
       console.error('Failed to fetch closed chats:', error)
-      return []
+      closedChats.value = []
+      return {
+        chats: [],
+        total: 0,
+        page: params?.page ?? 1,
+        limit: params?.limit ?? contactsLimit.value
+      }
     } finally {
       isLoading.value = false
     }

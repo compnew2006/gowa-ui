@@ -33,12 +33,13 @@ type AppConfig struct {
 }
 
 type ServerConfig struct {
-	Host           string `koanf:"host"`
-	Port           int    `koanf:"port"`
-	ReadTimeout    int    `koanf:"read_timeout"`
-	WriteTimeout   int    `koanf:"write_timeout"`
-	BasePath       string `koanf:"base_path"`       // Base path for frontend (e.g., "/whatomate" for proxy pass)
-	AllowedOrigins string `koanf:"allowed_origins"` // Comma-separated list of allowed CORS origins
+	Host                 string `koanf:"host"`
+	Port                 int    `koanf:"port"`
+	ReadTimeout          int    `koanf:"read_timeout"`
+	WriteTimeout         int    `koanf:"write_timeout"`
+	MaxRequestBodySizeMB int    `koanf:"max_request_body_size_mb"`
+	BasePath             string `koanf:"base_path"`       // Base path for frontend (e.g., "/whatomate" for proxy pass)
+	AllowedOrigins       string `koanf:"allowed_origins"` // Comma-separated list of allowed CORS origins
 }
 
 type DatabaseConfig struct {
@@ -167,6 +168,9 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Server.WriteTimeout == 0 {
 		cfg.Server.WriteTimeout = 30
+	}
+	if cfg.Server.MaxRequestBodySizeMB == 0 {
+		cfg.Server.MaxRequestBodySizeMB = 110
 	}
 	if cfg.Database.Port == 0 {
 		cfg.Database.Port = 5432

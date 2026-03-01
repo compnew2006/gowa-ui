@@ -273,12 +273,6 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid contact ID", nil, "")
 	}
 
-	// Get media type (image, document, video, audio)
-	mediaType := "image"
-	if typeValues := form.Value["type"]; len(typeValues) > 0 {
-		mediaType = typeValues[0]
-	}
-
 	// Get caption (optional)
 	caption := ""
 	if captionValues := form.Value["caption"]; len(captionValues) > 0 {
@@ -305,16 +299,26 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	}
 	defer func() { _ = file.Close() }()
 
-	// Read file data
-	fileData, err := io.ReadAll(file)
+	// Read at most 100MB + 1 byte to enforce bounded memory usage and policy limits.
+	fileData, err := io.ReadAll(io.LimitReader(file, whatsappDocumentMaxBytes+1))
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read file data", nil, "")
 	}
 
-	// Get MIME type
-	mimeType := fileHeader.Header.Get("Content-Type")
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
+	effectiveMIMEType := resolveWhatsAppMediaMIME(
+		fileHeader.Header.Get("Content-Type"),
+		fileHeader.Filename,
+		fileData,
+	)
+	mediaType := deriveWhatsAppMediaMessageType(effectiveMIMEType)
+	maxAllowedBytes := whatsappMediaMaxSizeBytes(mediaType)
+	if int64(len(fileData)) > maxAllowedBytes {
+		return r.SendErrorEnvelope(
+			fasthttp.StatusBadRequest,
+			fmt.Sprintf("%s file is too large (max %dMB)", mediaType, whatsappMediaMaxSizeMB(mediaType)),
+			nil,
+			"file",
+		)
 	}
 
 	// Get contact (users without full read permission can only message their assigned contacts)
@@ -362,7 +366,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	}
 
 	// Save file locally first
-	localPath, err := a.saveMediaLocally(fileData, mimeType, fileHeader.Filename)
+	localPath, err := a.saveMediaLocally(fileData, effectiveMIMEType, fileHeader.Filename)
 	if err != nil {
 		a.Log.Error("Failed to save media locally", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save media", nil, "")
@@ -373,10 +377,10 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		Account:       account,
 		Contact:       &contact,
 		InstanceID:    selectedInstanceID,
-		Type:          models.MessageType(mediaType),
+		Type:          mediaType,
 		MediaData:     fileData,
 		MediaURL:      localPath,
-		MediaMimeType: mimeType,
+		MediaMimeType: effectiveMIMEType,
 		MediaFilename: fileHeader.Filename,
 		Caption:       caption,
 	}

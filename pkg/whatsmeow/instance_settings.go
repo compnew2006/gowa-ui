@@ -21,6 +21,7 @@ func EnsureInstanceSettingsDefaults(settings models.JSONB) models.JSONB {
 	if _, ok := normalized[InstanceSettingAutoSyncHistory]; !ok {
 		normalized[InstanceSettingAutoSyncHistory] = true
 	}
+	normalized = injectAutoDownloadIncomingMediaDefault(normalized)
 	normalized[InstanceSettingAutoRejectCalls] = NormalizeAutoRejectCallSettings(
 		normalized[InstanceSettingAutoRejectCalls],
 	).ToJSONB()
@@ -116,6 +117,9 @@ func ValidateInstanceSettings(settings models.JSONB) error {
 	}
 	if err := ValidateAutoCampaignSettings(settings[InstanceSettingAutoCampaign]); err != nil {
 		return fmt.Errorf("invalid %s: %w", InstanceSettingAutoCampaign, err)
+	}
+	if err := ValidateAutoDownloadIncomingMediaSetting(settings[InstanceSettingAutoDownloadIncomingMedia]); err != nil {
+		return fmt.Errorf("invalid %s: %w", InstanceSettingAutoDownloadIncomingMedia, err)
 	}
 
 	return nil

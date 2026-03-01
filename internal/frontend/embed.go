@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/valyala/fasthttp"
@@ -37,6 +38,8 @@ var distFS embed.FS
 // cachedIndexHTML stores the modified index.html with injected base path
 var cachedIndexHTML []byte
 
+const basePathBootstrapScriptName = "__whatomate_base_path__.js"
+
 // Handler returns a fasthttp handler that serves the embedded frontend files
 // basePath should be empty string for root deployment or "/subpath" for subdirectory
 // If frontend is not embedded, returns a handler that shows a helpful message
@@ -65,9 +68,9 @@ func Handler(basePath string) fasthttp.RequestHandler {
 	baseTag := fmt.Sprintf(`<head><base href="%s">`, baseHref)
 	modifiedHTML := strings.Replace(string(indexContent), "<head>", baseTag, 1)
 
-	// Inject base path script before </head>
-	basePathScript := fmt.Sprintf(`<script>window.__BASE_PATH__ = "%s";</script></head>`, basePath)
-	cachedIndexHTML = []byte(strings.Replace(modifiedHTML, "</head>", basePathScript, 1))
+	// Inject external base path bootstrap script to avoid inline script CSP violations.
+	basePathScriptTag := fmt.Sprintf(`<script src="./%s"></script></head>`, basePathBootstrapScriptName)
+	cachedIndexHTML = []byte(strings.Replace(modifiedHTML, "</head>", basePathScriptTag, 1))
 
 	// Create file server
 	fileServer := http.FileServer(http.FS(distSubFS))
@@ -75,6 +78,14 @@ func Handler(basePath string) fasthttp.RequestHandler {
 	// Wrap with SPA fallback and proper MIME types
 	spaHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
+
+		// Serve base path bootstrap script.
+		if path == "/"+basePathBootstrapScriptName {
+			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write([]byte("window.__BASE_PATH__ = " + strconv.Quote(basePath) + ";"))
+			return
+		}
 
 		// Try to serve the file
 		if path != "/" && !strings.HasPrefix(path, "/api") {

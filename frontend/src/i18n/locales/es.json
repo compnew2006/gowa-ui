@@ -131,7 +131,7 @@
     "ratingsTableTitle": "Valoraciones de clientes",
     "ratingsTableSubtitle": "Últimas valoraciones de chats cerrados",
     "agentColumn": "Agente",
-    "chatIdColumn": "ID de chat",
+    "chatIdColumn": "Número de teléfono",
     "contactColumn": "Contacto",
     "ratingColumn": "Valoración",
     "ratedAtColumn": "Fecha de valoración",

@@ -108,7 +108,7 @@ func (a *App) Login(r *fastglue.Request) error {
 	}
 
 	// Generate tokens
-	accessToken, err := a.generateAccessToken(&user)
+	accessToken, accessTokenExpiresAt, err := a.generateAccessToken(&user)
 	if err != nil {
 		a.Log.Error("Failed to generate access token", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
@@ -120,11 +120,12 @@ func (a *App) Login(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 	}
 
-	a.setAuthCookies(r, accessToken, refreshToken)
+	a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken)
 	a.LogAuthSuccess(r, &user)
 
+	now := time.Now()
 	return r.SendEnvelope(CookieAuthResponse{
-		ExpiresIn: a.Config.JWT.AccessExpiryMins * 60,
+		ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
 		User:      user,
 	})
 }
@@ -292,7 +293,7 @@ func (a *App) Register(r *fastglue.Request) error {
 		existingUser.Role = &defaultRole
 		existingUser.RoleID = &defaultRole.ID
 
-		accessToken, err := a.generateAccessToken(&existingUser)
+		accessToken, accessTokenExpiresAt, err := a.generateAccessToken(&existingUser)
 		if err != nil {
 			a.Log.Error("Failed to generate access token", "error", err, "user_id", existingUser.ID)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
@@ -303,10 +304,11 @@ func (a *App) Register(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 		}
 
-		a.setAuthCookies(r, accessToken, refreshToken)
+		a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken)
 
+		now := time.Now()
 		return r.SendEnvelope(CookieAuthResponse{
-			ExpiresIn: a.Config.JWT.AccessExpiryMins * 60,
+			ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
 			User:      existingUser,
 		})
 	}
@@ -363,7 +365,7 @@ func (a *App) Register(r *fastglue.Request) error {
 
 	user.Role = &defaultRole
 
-	accessToken, err := a.generateAccessToken(&user)
+	accessToken, accessTokenExpiresAt, err := a.generateAccessToken(&user)
 	if err != nil {
 		a.Log.Error("Failed to generate access token", "error", err, "user_id", user.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
@@ -374,10 +376,11 @@ func (a *App) Register(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 	}
 
-	a.setAuthCookies(r, accessToken, refreshToken)
+	a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken)
 
+	now := time.Now()
 	return r.SendEnvelope(CookieAuthResponse{
-		ExpiresIn: a.Config.JWT.AccessExpiryMins * 60,
+		ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
 		User:      user,
 	})
 }
@@ -439,7 +442,7 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 	}
 
 	// Generate new tokens (rotation: new refresh token with new JTI)
-	accessToken, err := a.generateAccessToken(&user)
+	accessToken, accessTokenExpiresAt, err := a.generateAccessToken(&user)
 	if err != nil {
 		a.Log.Error("Failed to generate access token", "error", err, "user_id", user.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
@@ -450,15 +453,19 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 	}
 
-	a.setAuthCookies(r, accessToken, newRefreshToken)
+	a.setAuthCookies(r, accessToken, accessTokenExpiresAt, newRefreshToken)
 
+	now := time.Now()
 	return r.SendEnvelope(CookieAuthResponse{
-		ExpiresIn: a.Config.JWT.AccessExpiryMins * 60,
+		ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
 		User:      user,
 	})
 }
 
-func (a *App) generateAccessToken(user *models.User) (string, error) {
+func (a *App) generateAccessToken(user *models.User) (string, time.Time, error) {
+	now := time.Now()
+	expiresAt := nextAccessTokenExpiry(now)
+
 	claims := middleware.JWTClaims{
 		UserID:         user.ID,
 		OrganizationID: user.OrganizationID,
@@ -466,8 +473,8 @@ func (a *App) generateAccessToken(user *models.User) (string, error) {
 		RoleID:         user.RoleID,
 		IsSuperAdmin:   user.IsSuperAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(a.Config.JWT.AccessExpiryMins) * time.Minute)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(now),
 			Issuer:    "whatomate",
 		},
 	}
@@ -475,9 +482,14 @@ func (a *App) generateAccessToken(user *models.User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signingKey, err := a.jwtSecretBytes()
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
-	return token.SignedString(signingKey)
+	signed, err := token.SignedString(signingKey)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return signed, expiresAt, nil
 }
 
 func (a *App) generateRefreshToken(user *models.User) (string, error) {
@@ -595,7 +607,7 @@ func (a *App) SwitchOrg(r *fastglue.Request) error {
 	}
 
 	// Generate new tokens with the target org
-	accessToken, err := a.generateAccessToken(&user)
+	accessToken, accessTokenExpiresAt, err := a.generateAccessToken(&user)
 	if err != nil {
 		a.Log.Error("Failed to generate access token", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
@@ -607,10 +619,11 @@ func (a *App) SwitchOrg(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 	}
 
-	a.setAuthCookies(r, accessToken, refreshToken)
+	a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken)
 
+	now := time.Now()
 	return r.SendEnvelope(CookieAuthResponse{
-		ExpiresIn: a.Config.JWT.AccessExpiryMins * 60,
+		ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
 		User:      user,
 	})
 }

@@ -341,7 +341,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 	}
 
 	// Generate JWT tokens
-	accessToken, err := a.generateAccessToken(&user)
+	accessToken, accessTokenExpiresAt, err := a.generateAccessToken(&user)
 	if err != nil {
 		a.Log.Error("Failed to generate access token", "error", err)
 		a.redirectWithError(r, "Failed to complete authentication")
@@ -356,7 +356,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 	}
 
 	// Set auth cookies (tokens no longer exposed in URL)
-	a.setAuthCookies(r, accessToken, refreshToken)
+	a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken)
 
 	// Redirect to frontend SSO callback page (cookies already set)
 	basePath := sanitizeRedirectPath(a.Config.Server.BasePath)

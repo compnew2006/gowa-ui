@@ -7,6 +7,7 @@ interface MockInstance {
   is_default: boolean
   auto_read_receipt: boolean
   organization_id: string
+  settings?: Record<string, unknown>
   created_at: string
   updated_at: string
 }
@@ -104,6 +105,9 @@ async function mockInstancesApi(page: Page, instances: MockInstance[], hooks: Mo
           updated_at: new Date().toISOString(),
         }),
         ...(typeof payload.name === 'string' ? { name: payload.name } : {}),
+        ...(payload.settings && typeof payload.settings === 'object'
+          ? { settings: payload.settings as Record<string, unknown> }
+          : {}),
         updated_at: new Date().toISOString(),
       }
       if (index >= 0) {
@@ -364,5 +368,86 @@ test.describe('WhatsApp Instances', () => {
     await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Instance logged out' })).toBeVisible()
     await expect(page.getByRole('button', { name: /Connect \/ Scan QR/i }).first()).toBeVisible()
     expect(disconnectCalls).toEqual([instance.id])
+  })
+
+  test('should send auto_download_incoming_media=true and preserve existing settings', async ({ page }) => {
+    await loginAsSuperAdmin(page)
+
+    const now = new Date().toISOString()
+    const instance: MockInstance = {
+      id: 'e2e-instance-auto-download-on-id',
+      name: `Auto Download ON ${Date.now()}`,
+      status: 'connected',
+      is_default: false,
+      auto_read_receipt: true,
+      organization_id: 'e2e-org-id',
+      settings: {
+        auto_sync_history: true,
+        custom_existing_setting: 'keep-me',
+      },
+      created_at: now,
+      updated_at: now,
+    }
+    const instances: MockInstance[] = [instance]
+    let receivedUpdatePayload: Record<string, any> | null = null
+
+    await mockInstancesApi(page, instances, {
+      onUpdate: (_, payload) => {
+        receivedUpdatePayload = payload as Record<string, any>
+      },
+    })
+
+    await page.goto('/settings/instances')
+    await expect(page.locator('h3').filter({ hasText: instance.name })).toBeVisible()
+
+    const autoDownloadLabel = page.getByText('Auto-download incoming media')
+    await expect(autoDownloadLabel).toBeVisible()
+    const autoDownloadSwitch = autoDownloadLabel.locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]').getByRole('switch')
+    await autoDownloadSwitch.click()
+
+    await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Instance updated successfully' })).toBeVisible()
+    expect(receivedUpdatePayload).not.toBeNull()
+    expect(receivedUpdatePayload?.settings?.auto_download_incoming_media).toBe(true)
+    expect(receivedUpdatePayload?.settings?.auto_sync_history).toBe(true)
+    expect(receivedUpdatePayload?.settings?.custom_existing_setting).toBe('keep-me')
+  })
+
+  test('should send auto_download_incoming_media=false when toggled off', async ({ page }) => {
+    await loginAsSuperAdmin(page)
+
+    const now = new Date().toISOString()
+    const instance: MockInstance = {
+      id: 'e2e-instance-auto-download-off-id',
+      name: `Auto Download OFF ${Date.now()}`,
+      status: 'connected',
+      is_default: false,
+      auto_read_receipt: true,
+      organization_id: 'e2e-org-id',
+      settings: {
+        auto_download_incoming_media: true,
+      },
+      created_at: now,
+      updated_at: now,
+    }
+    const instances: MockInstance[] = [instance]
+    let receivedUpdatePayload: Record<string, any> | null = null
+
+    await mockInstancesApi(page, instances, {
+      onUpdate: (_, payload) => {
+        receivedUpdatePayload = payload as Record<string, any>
+      },
+    })
+
+    await page.goto('/settings/instances')
+    await expect(page.locator('h3').filter({ hasText: instance.name })).toBeVisible()
+
+    const autoDownloadLabel = page.getByText('Auto-download incoming media')
+    await expect(autoDownloadLabel).toBeVisible()
+    const autoDownloadSwitch = autoDownloadLabel.locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]').getByRole('switch')
+    await autoDownloadSwitch.click()
+
+    await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Instance updated successfully' })).toBeVisible()
+    expect(receivedUpdatePayload).not.toBeNull()
+    expect(receivedUpdatePayload?.settings?.auto_download_incoming_media).toBe(false)
   })
 })

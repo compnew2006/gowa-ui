@@ -90,6 +90,7 @@ const editInstanceName = ref("");
 const isUpdatingName = ref(false);
 const tagSettingsSaving = ref<Record<string, boolean>>({});
 const autoSyncSaving = ref<Record<string, boolean>>({});
+const autoDownloadIncomingMediaSaving = ref<Record<string, boolean>>({});
 const autoRejectSaving = ref<Record<string, boolean>>({});
 const autoCampaignSaving = ref<Record<string, boolean>>({});
 const autoCampaignUploading = ref<Record<string, boolean>>({});
@@ -604,6 +605,22 @@ async function handleAutoSyncUpdate(id: string, enabled: boolean) {
   }
 }
 
+async function handleAutoDownloadIncomingMediaUpdate(id: string, enabled: boolean) {
+  const instance = instancesStore.instances.find((item) => item.id === id);
+  if (!instance) return;
+
+  autoDownloadIncomingMediaSaving.value[id] = true;
+  try {
+    const settings = {
+      ...(instance.settings || {}),
+      auto_download_incoming_media: enabled,
+    };
+    await instancesStore.updateInstance(id, { settings });
+  } finally {
+    autoDownloadIncomingMediaSaving.value[id] = false;
+  }
+}
+
 async function handleAutoRejectSettingsUpdate(
   id: string,
   payload: AutoRejectCallSettings,
@@ -760,6 +777,9 @@ async function handleAutoCampaignMediaClear(id: string) {
           :palette-index="index"
           :tag-settings-saving="tagSettingsSaving[instance.id] || false"
           :auto-sync-saving="autoSyncSaving[instance.id] || false"
+          :auto-download-incoming-media-saving="
+            autoDownloadIncomingMediaSaving[instance.id] || false
+          "
           :auto-reject-saving="autoRejectSaving[instance.id] || false"
           :auto-campaign-saving="autoCampaignSaving[instance.id] || false"
           :auto-campaign-uploading="
@@ -771,6 +791,9 @@ async function handleAutoCampaignMediaClear(id: string) {
           @delete="openDeleteDialog"
           @save-tag-settings="handleSaveTagSettings"
           @update-auto-sync="handleAutoSyncUpdate"
+          @update-auto-download-incoming-media="
+            handleAutoDownloadIncomingMediaUpdate
+          "
           @update-auto-reject-settings="handleAutoRejectSettingsUpdate"
           @update-auto-campaign-settings="handleAutoCampaignSettingsUpdate"
           @upload-auto-campaign-media="handleAutoCampaignMediaUpload"

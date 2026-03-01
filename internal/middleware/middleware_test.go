@@ -272,7 +272,7 @@ func TestSecurityHeaders(t *testing.T) {
 	assert.Contains(t, csp, "script-src 'self'")
 	assert.Contains(t, csp, "img-src 'self' data: blob: https:")
 	assert.Contains(t, csp, "media-src 'self' data: blob: https:")
-	assert.Contains(t, csp, "connect-src 'self' ws: wss:")
+	assert.Contains(t, csp, "connect-src 'self' ws: wss: blob:")
 }
 
 func TestAuth_ValidJWT(t *testing.T) {

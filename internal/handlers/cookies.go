@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"time"
 
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -15,7 +16,7 @@ const (
 )
 
 // setAuthCookies sets httpOnly auth cookies and a JS-readable CSRF cookie.
-func (a *App) setAuthCookies(r *fastglue.Request, accessToken, refreshToken string) {
+func (a *App) setAuthCookies(r *fastglue.Request, accessToken string, accessTokenExpiresAt time.Time, refreshToken string) {
 	secure := a.Config.Cookie.Secure
 	domain := a.Config.Cookie.Domain
 	bp := a.Config.Server.BasePath // e.g. "/whatomate" or ""
@@ -28,7 +29,7 @@ func (a *App) setAuthCookies(r *fastglue.Request, accessToken, refreshToken stri
 	ac.SetSecure(secure)
 	ac.SetSameSite(fasthttp.CookieSameSiteLaxMode)
 	ac.SetPath(bp + "/api")
-	ac.SetMaxAge(a.Config.JWT.AccessExpiryMins * 60)
+	ac.SetMaxAge(accessTokenTTLSeconds(time.Now(), accessTokenExpiresAt))
 	if domain != "" {
 		ac.SetDomain(domain)
 	}

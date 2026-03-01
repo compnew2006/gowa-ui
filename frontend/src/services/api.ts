@@ -149,6 +149,9 @@ export const chatsService = {
     chat_types?: string
     status?: 'pending' | 'open' | 'closed'
     assigned_to?: 'me' | 'unassigned' | string
+    closed_by?: string
+    closed_from?: string
+    closed_to?: string
   }) => api.get('/chats', { params }),
   claim: (id: string) => api.put(`/chats/${id}/claim`),
   close: (id: string) => api.put(`/chats/${id}/close`),
