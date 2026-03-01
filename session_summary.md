@@ -608,3 +608,10 @@ Fix live typing indicator visibility in WhatsApp when an agent types in the chat
 1. Add deterministic seeded writable chat data for typing E2E to avoid fallback skip.
 2. Optionally mirror typing state in websocket telemetry for operational debugging.
 3. Tune typing throttle/idle values from production usage metrics.
+
+## 2026-03-01 20:46 Fix Cross-Chat Message Contamination
+
+- **Objective**: Fix the bug where new incoming messages from unknown contacts appear in the currently open conversation.
+- **Modules Touched**: `frontend/src/stores/contacts.ts`, `frontend/e2e/tests/chat/chat-message-isolation.spec.ts`
+- **Technical Decisions**: Modified `fetchContact` inside `contactsStore` to conditionally update `currentContact.value` only if the fetch was explicitly requested for the currently viewed contact ID. This prevents the WebSocket listener (which automatically calls `fetchContact` for new, unknown senders) from hijacking the active chat thread.
+- **Next Steps**: None.

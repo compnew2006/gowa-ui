@@ -63,3 +63,6 @@
 
 ## Past Learnings
 *   (Refer to RALPH_MEMORY for previous session learnings).
+
+## 2026-03-01 20:46
+- Identified and fixed a data contamination bug where `contactsStore.fetchContact()` unconditionally overwrote `currentContact.value`, causing WebSocket-driven background fetches for new contacts to hijack the UI.

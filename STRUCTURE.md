@@ -145,6 +145,9 @@
         - 📄 **chat-attachments-policy.spec.ts**
           > *', async route => { const pathname = new URL(route.request().url()).pathname if (pathname.endsWith(`/api/contacts/${CONTACT_ID}`)) { await route.fulfi*
           - ⚙️ `MockWebSocket`, `close`, `constructor`, `if`, `installChatAttachmentMocks`, `installMockWebSocket`, `send`
+        - 📄 **chat-message-isolation.spec.ts**
+          > *Source file.*
+          - ⚙️ `if`
         - 📄 **chat-system-messages.spec.ts**
           > *Source file.*
           - ⚙️ `if`
@@ -1428,6 +1431,7 @@
     - 📄 04fff875-1674-4403-8fe8-f23d0f8ad7d1.jpg
     - 📄 05195aa5-119c-421c-9773-06358e3ef90d.jpg
     - 📄 05644e1d-471f-42b3-90d8-e3d0d7ed5148.jpg
+    - 📄 056881cc-4093-458b-9553-96a326b4c47d.jpg
     - 📄 0574a8fb-3686-4971-a52e-9973c6c019df.jpg
     - 📄 057a41f5-4c21-4ccb-a6ca-8ce40baf99dd.jpg
     - 📄 05e3492e-cec8-4b22-a333-975c71417a61.jpg
