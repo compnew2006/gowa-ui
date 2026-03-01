@@ -3,9 +3,12 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/crypto"
@@ -18,6 +21,60 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type stubMessageProvider struct {
+	sendCount int
+	sendErr   error
+}
+
+func (m *stubMessageProvider) SendText(context.Context, string, string, string) (string, error) {
+	m.sendCount++
+	return "wamid.stub.text", m.sendErr
+}
+
+func (m *stubMessageProvider) SendImage(context.Context, string, string, string, string) (string, error) {
+	m.sendCount++
+	return "wamid.stub.image", m.sendErr
+}
+
+func (m *stubMessageProvider) SendDocument(context.Context, string, string, string, string) (string, error) {
+	m.sendCount++
+	return "wamid.stub.document", m.sendErr
+}
+
+func (m *stubMessageProvider) SendVideo(context.Context, string, string, string, string) (string, error) {
+	m.sendCount++
+	return "wamid.stub.video", m.sendErr
+}
+
+func (m *stubMessageProvider) SendAudio(context.Context, string, string, string) (string, error) {
+	m.sendCount++
+	return "wamid.stub.audio", m.sendErr
+}
+
+func (m *stubMessageProvider) MarkRead(context.Context, string, string) error {
+	return nil
+}
+
+func (m *stubMessageProvider) SendReaction(context.Context, string, string, string) error {
+	return nil
+}
+
+func (m *stubMessageProvider) RevokeMessage(context.Context, string, string) error {
+	return nil
+}
+
+func (m *stubMessageProvider) GetMediaURL(context.Context, string, string) (string, error) {
+	return "", nil
+}
+
+func (m *stubMessageProvider) DownloadMedia(context.Context, string, string) ([]byte, error) {
+	return nil, nil
+}
+
+func (m *stubMessageProvider) UploadMedia(context.Context, string, string, []byte) (string, error) {
+	return "", nil
+}
 
 func testWorker(t *testing.T) *Worker {
 	t.Helper()
@@ -37,6 +94,86 @@ func testWorker(t *testing.T) *Worker {
 	}
 
 	return w
+}
+
+func testWhatsmeowWorker(t *testing.T, messageProvider *stubMessageProvider) *Worker {
+	t.Helper()
+	w := testWorker(t)
+	w.Config = &config.Config{
+		WhatsApp: config.WhatsAppConfig{
+			Provider: "whatsmeow",
+		},
+	}
+	w.MessageProvider = messageProvider
+	return w
+}
+
+func createWhatsmeowCampaignData(t *testing.T, w *Worker, status models.CampaignStatus) (*models.Organization, *models.WhatsAppInstance, *models.BulkMessageCampaign, *models.BulkMessageRecipient) {
+	t.Helper()
+	unique := uuid.NewString()[:8]
+
+	org := &models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "WM Org " + unique,
+		Slug:      "wm-org-" + unique,
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, w.DB.Create(org).Error)
+
+	role := createTestRole(t, w, org.ID)
+	user := &models.User{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Email:          fmt.Sprintf("wm-%s@example.com", unique),
+		PasswordHash:   "hashed",
+		FullName:       "WM User",
+		RoleID:         &role.ID,
+		IsActive:       true,
+	}
+	require.NoError(t, w.DB.Create(user).Error)
+
+	instance := &models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "WM Instance " + unique,
+		Status:         models.InstanceStatusConnected,
+	}
+	require.NoError(t, w.DB.Create(instance).Error)
+
+	template := &models.Template{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		WhatsAppAccount: instance.ID.String(),
+		Name:            "wm_template_" + unique,
+		Language:        "en",
+		Category:        "UTILITY",
+		Status:          "APPROVED",
+		BodyContent:     "Hello {{1}}",
+	}
+	require.NoError(t, w.DB.Create(template).Error)
+
+	campaign := &models.BulkMessageCampaign{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		Name:            "WM Campaign " + unique,
+		WhatsAppAccount: instance.ID.String(),
+		TemplateID:      template.ID,
+		Status:          status,
+		CreatedBy:       user.ID,
+	}
+	require.NoError(t, w.DB.Create(campaign).Error)
+
+	recipient := &models.BulkMessageRecipient{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		CampaignID:     campaign.ID,
+		PhoneNumber:    "201234567890",
+		RecipientName:  "Recipient " + unique,
+		TemplateParams: models.JSONB{"1": "User"},
+		Status:         models.MessageStatusPending,
+	}
+	require.NoError(t, w.DB.Create(recipient).Error)
+
+	return org, instance, campaign, recipient
 }
 
 // getOrCreateTestPermissions gets existing permissions or creates them for testing.
@@ -1028,4 +1165,108 @@ func TestReplaceTemplateContent_NoParams(t *testing.T) {
 	result := templateutil.ReplaceWithJSONBParams(bodyContent, content, params)
 
 	assert.Equal(t, "Hello, your order is ready!", result)
+}
+
+func TestWorker_HandleRecipientJob_PolicyGate_NoInboundHistory(t *testing.T) {
+	provider := &stubMessageProvider{}
+	w := testWhatsmeowWorker(t, provider)
+	org, _, campaign, recipient := createWhatsmeowCampaignData(t, w, models.CampaignStatusProcessing)
+
+	require.NoError(t, w.DB.Model(&models.Organization{}).
+		Where("id = ?", org.ID).
+		Update("settings", models.JSONB{
+			"strict_sending_restrictions_enabled": true,
+			"outbound_mode":                       "inbound_only",
+			"strict_sending_apply_to_system":      true,
+		}).Error)
+
+	job := &queue.RecipientJob{
+		CampaignID:     campaign.ID,
+		RecipientID:    recipient.ID,
+		OrganizationID: org.ID,
+		PhoneNumber:    recipient.PhoneNumber,
+		RecipientName:  recipient.RecipientName,
+		TemplateParams: recipient.TemplateParams,
+	}
+
+	err := w.HandleRecipientJob(context.Background(), job)
+	require.NoError(t, err)
+
+	var updatedRecipient models.BulkMessageRecipient
+	require.NoError(t, w.DB.First(&updatedRecipient, recipient.ID).Error)
+	assert.Equal(t, models.MessageStatusFailed, updatedRecipient.Status)
+	assert.Contains(t, updatedRecipient.ErrorMessage, "POLICY_NO_INBOUND")
+	assert.Equal(t, 0, provider.sendCount)
+}
+
+func TestWorker_HandleRecipientJob_PolicyGate_AllowsWithInboundHistory(t *testing.T) {
+	provider := &stubMessageProvider{}
+	w := testWhatsmeowWorker(t, provider)
+	org, _, campaign, recipient := createWhatsmeowCampaignData(t, w, models.CampaignStatusProcessing)
+
+	require.NoError(t, w.DB.Model(&models.Organization{}).
+		Where("id = ?", org.ID).
+		Update("settings", models.JSONB{
+			"strict_sending_restrictions_enabled": true,
+			"outbound_mode":                       "inbound_only",
+			"strict_sending_apply_to_system":      true,
+		}).Error)
+
+	contact := testutil.CreateTestContactWith(t, w.DB, org.ID, testutil.WithPhoneNumber(recipient.PhoneNumber))
+	require.NoError(t, w.DB.Create(&models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      contact.ID,
+		Direction:      models.DirectionIncoming,
+		MessageType:    models.MessageTypeText,
+		Content:        "hello",
+		Status:         models.MessageStatusReceived,
+	}).Error)
+
+	job := &queue.RecipientJob{
+		CampaignID:     campaign.ID,
+		RecipientID:    recipient.ID,
+		OrganizationID: org.ID,
+		PhoneNumber:    recipient.PhoneNumber,
+		RecipientName:  recipient.RecipientName,
+		TemplateParams: recipient.TemplateParams,
+	}
+
+	err := w.HandleRecipientJob(context.Background(), job)
+	require.NoError(t, err)
+
+	var updatedRecipient models.BulkMessageRecipient
+	require.NoError(t, w.DB.First(&updatedRecipient, recipient.ID).Error)
+	assert.Equal(t, models.MessageStatusSent, updatedRecipient.Status)
+	assert.Equal(t, 1, provider.sendCount)
+}
+
+func TestWorker_HandleRecipientJob_InstanceBlocked(t *testing.T) {
+	provider := &stubMessageProvider{}
+	w := testWhatsmeowWorker(t, provider)
+	org, instance, campaign, recipient := createWhatsmeowCampaignData(t, w, models.CampaignStatusProcessing)
+
+	blockedUntil := time.Now().UTC().Add(45 * time.Minute)
+	require.NoError(t, w.DB.Model(instance).Updates(map[string]any{
+		"send_blocked_until": blockedUntil,
+		"send_block_reason":  "platform block",
+	}).Error)
+
+	job := &queue.RecipientJob{
+		CampaignID:     campaign.ID,
+		RecipientID:    recipient.ID,
+		OrganizationID: org.ID,
+		PhoneNumber:    recipient.PhoneNumber,
+		RecipientName:  recipient.RecipientName,
+		TemplateParams: recipient.TemplateParams,
+	}
+
+	err := w.HandleRecipientJob(context.Background(), job)
+	require.NoError(t, err)
+
+	var updatedRecipient models.BulkMessageRecipient
+	require.NoError(t, w.DB.First(&updatedRecipient, recipient.ID).Error)
+	assert.Equal(t, models.MessageStatusFailed, updatedRecipient.Status)
+	assert.Contains(t, strings.ToLower(updatedRecipient.ErrorMessage), "block")
+	assert.Equal(t, 0, provider.sendCount)
 }

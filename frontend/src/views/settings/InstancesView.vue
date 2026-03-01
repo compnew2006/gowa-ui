@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Smartphone, Plus, Loader2 } from "lucide-vue-next";
 import { wsService } from "@/services/websocket";
-import { instancesService } from "@/services/api";
+import { instancesService, organizationService } from "@/services/api";
 import { toast } from "vue-sonner";
 import { useI18n } from "vue-i18n";
 import {
@@ -94,9 +94,11 @@ const autoDownloadIncomingMediaSaving = ref<Record<string, boolean>>({});
 const autoRejectSaving = ref<Record<string, boolean>>({});
 const autoCampaignSaving = ref<Record<string, boolean>>({});
 const autoCampaignUploading = ref<Record<string, boolean>>({});
+const campaignDraftOnlyEnforced = ref(false);
 
 // Lifecycle
 onMounted(async () => {
+  await loadOrganizationPolicySettings();
   await fetchInstances();
   await fetchAllHealth();
   startHealthPolling(30000);
@@ -121,6 +123,16 @@ onUnmounted(() => {
   wsService.unsubscribe("instance_qr_timeout", handleQRTimeout);
   wsService.unsubscribe("instance_reconnect_failed", handleReconnectFailed);
 });
+
+async function loadOrganizationPolicySettings() {
+  try {
+    const response = await organizationService.getSettings();
+    const payload = response.data?.data || response.data || {};
+    campaignDraftOnlyEnforced.value = payload.settings?.campaign_draft_only === true;
+  } catch {
+    campaignDraftOnlyEnforced.value = false;
+  }
+}
 
 function cacheQRCode(instanceId: string, code: string, timeoutSeconds: number) {
   if (!code) return;
@@ -655,6 +667,12 @@ async function handleAutoCampaignSettingsUpdate(
       ...payload,
       last_generated_at: current.last_generated_at,
     });
+    if (campaignDraftOnlyEnforced.value && next.target_status === "run") {
+      next.target_status = "draft";
+      toast.error(
+        "Campaign draft-only policy is active. Target status was set to draft.",
+      );
+    }
 
     const settings = {
       ...(instance.settings || {}),

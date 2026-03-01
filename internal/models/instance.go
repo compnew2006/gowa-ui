@@ -19,6 +19,8 @@ type WhatsAppInstance struct {
 	AutoReadReceipt bool           `gorm:"default:false" json:"auto_read_receipt"`
 	Settings        JSONB          `gorm:"type:jsonb;default:'{}'" json:"settings"`
 	LastConnectedAt *time.Time     `json:"last_connected_at"`
+	SendBlockedUntil *time.Time    `json:"send_blocked_until,omitempty"`
+	SendBlockReason  string        `json:"send_block_reason,omitempty"`
 
 	// Relations
 	Organization Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`

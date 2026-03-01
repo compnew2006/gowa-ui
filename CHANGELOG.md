@@ -3,6 +3,11 @@
 ## [Unreleased] - 2026-02-28
 
 ### Added
+- Whatsmeow typing-indicator planner module with cooldown and provider context skip support.
+- Campaign/send policy helper modules and explicit reason-code constants for strict sending enforcement.
+- Backend tests for campaign delay scope, typing indicator behavior, and send error classification.
+- Frontend unit tests for instances store and auto-campaign normalization.
+- E2E specs for instances health dashboard and chat policy-blocked send flow.
 - Message history navigation in the chat view (954019f)
 - Contact management functionality with backend API and Spanish localization (e0a23f5)
 - Whatomate MCP sidecar with SDK transports (80f6185)
@@ -11,6 +16,11 @@
 - Auto campaign settings and chat rating features (93f8a57)
 
 ### Changed
+- Enforced campaign start/delay guardrails for Whatsmeow instances (connected + block checks + draft-only policy).
+- Updated worker campaign delay limiter from campaign scope to instance scope and added permanent-error retry classification.
+- Persisted instance send blocking metadata from Whatsmeow events and surfaced send-block details in instances UI.
+- Improved instances and chat UX for policy failures using `reason_code` mapping and better status transitions.
+- Expanded instances E2E coverage for websocket status events, watchdog timeout, auto-campaign payload behavior, and delete-chats payload.
 - Updated frontend routing and backend handlers for media and messaging (cc8cbc8)
 - Enhanced Whatsmeow media processing and handler logic (93f8a57)
 - Improved contact management and chat assignment persistence (644c4f0)

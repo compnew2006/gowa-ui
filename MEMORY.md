@@ -1,5 +1,15 @@
 # MEMORY.md
 
+## 2026-03-01 17:41 Context
+*   **Project state**: Strict outbound guardrails, Whatsmeow typing simulation, and instance block metadata are now enforced across handlers/workers with frontend visibility.
+*   **Current Session Goal**: Complete the full anti-ban hardening rollout with backend + frontend + unit/E2E coverage and policy-specific UX handling.
+*   **Architectural Decisions**:
+    1.  Split campaign/policy checks into dedicated modules (`campaign_policy.go`, `send_policy.go`) and reused reason codes in API responses.
+    2.  Implemented typing indicator as a standalone planner module with per-chat cooldown, direct-chat filtering, and context-based skip for campaign sends.
+    3.  Switched campaign delay limiter scope to instance-level keys and classified permanent send errors to stop pointless retries.
+    4.  Added frontend enforcement for `campaign_draft_only` by forcing auto-campaign target status to `draft` before save and surfacing explicit toast feedback.
+    5.  Added focused test coverage: backend unit tests (policy, delay, typing, error classification), frontend unit tests (instances store + auto-campaign normalization), and E2E for instances/health plus chat policy-blocked send.
+
 ## 2026-02-25 19:25 Context
 *   **Project state**: Agent-name message prefixing is now user-configurable from Send Restrictions.
 *   **Current Session Goal**: Move prefix control from role permissions to per-user Send Restrictions settings.

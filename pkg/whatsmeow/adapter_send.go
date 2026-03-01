@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"mime"
 	"path/filepath"
+	"strings"
 
 	"go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	waTypes "go.mau.fi/whatsmeow/types"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -22,6 +24,7 @@ func (a *WhatsmeowAdapter) SendText(ctx context.Context, instanceID string, to s
 	if err != nil {
 		return "", fmt.Errorf("invalid JID: %w", err)
 	}
+	a.simulateTypingIndicator(ctx, client, jid, text)
 
 	resp, err := client.SendMessage(ctx, jid, &waE2E.Message{
 		Conversation: proto.String(text),
@@ -44,6 +47,7 @@ func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string,
 	if err != nil {
 		return "", fmt.Errorf("invalid JID: %w", err)
 	}
+	a.simulateTypingIndicator(ctx, client, jid, text)
 
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
@@ -75,6 +79,11 @@ func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to 
 	if err != nil {
 		return "", fmt.Errorf("invalid JID: %w", err)
 	}
+	preview := strings.TrimSpace(caption)
+	if preview == "" {
+		preview = "image"
+	}
+	a.simulateTypingIndicator(ctx, client, jid, preview)
 
 	data, mimeType, err := a.downloadMediaFromURL(imageURL)
 	if err != nil {
@@ -118,6 +127,11 @@ func (a *WhatsmeowAdapter) SendDocument(ctx context.Context, instanceID string, 
 	if err != nil {
 		return "", fmt.Errorf("invalid JID: %w", err)
 	}
+	preview := strings.TrimSpace(filename)
+	if preview == "" {
+		preview = "document"
+	}
+	a.simulateTypingIndicator(ctx, client, jid, preview)
 
 	data, mimeType, err := a.downloadMediaFromURL(docURL)
 	if err != nil {
@@ -170,6 +184,11 @@ func (a *WhatsmeowAdapter) SendVideo(ctx context.Context, instanceID string, to 
 	if err != nil {
 		return "", fmt.Errorf("invalid JID: %w", err)
 	}
+	preview := strings.TrimSpace(caption)
+	if preview == "" {
+		preview = "video"
+	}
+	a.simulateTypingIndicator(ctx, client, jid, preview)
 
 	data, mimeType, err := a.downloadMediaFromURL(videoURL)
 	if err != nil {
@@ -213,6 +232,7 @@ func (a *WhatsmeowAdapter) SendAudio(ctx context.Context, instanceID string, to 
 	if err != nil {
 		return "", fmt.Errorf("invalid JID: %w", err)
 	}
+	a.simulateTypingIndicator(ctx, client, jid, "audio")
 
 	data, mimeType, err := a.downloadMediaFromURL(audioURL)
 	if err != nil {
@@ -243,4 +263,11 @@ func (a *WhatsmeowAdapter) SendAudio(ctx context.Context, instanceID string, to 
 	}
 
 	return resp.ID, nil
+}
+
+func (a *WhatsmeowAdapter) simulateTypingIndicator(ctx context.Context, client *whatsmeow.Client, jid waTypes.JID, previewText string) {
+	if a == nil || a.manager == nil || a.manager.typingIndicator == nil {
+		return
+	}
+	a.manager.typingIndicator.simulate(ctx, client, jid, previewText)
 }

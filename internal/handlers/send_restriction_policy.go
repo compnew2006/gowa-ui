@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
@@ -14,12 +15,22 @@ import (
 
 const (
 	organizationSettingStrictSendingRestrictionsEnabled = "strict_sending_restrictions_enabled"
+	organizationSettingOutboundMode                     = "outbound_mode"
+	organizationSettingStrictSendingApplyToSystem       = "strict_sending_apply_to_system"
+	organizationSettingCampaignDraftOnly                = "campaign_draft_only"
+	organizationSettingStrictRolloutMode                = "strict_rollout_mode"
+	organizationSettingStrictRolloutEnforceAt           = "strict_rollout_enforce_at"
+	organizationOutboundModeInboundOnly                 = "inbound_only"
+	organizationOutboundModeMixed                       = "mixed"
+	organizationStrictRolloutModeAudit                  = "audit"
+	organizationStrictRolloutModeEnforce                = "enforce"
 	userSettingSendRestrictions                         = "send_restrictions"
 )
 
 // restrictedSendViolationError is returned when a user is blocked by strict send restrictions.
 type restrictedSendViolationError struct {
-	message string
+	message    string
+	reasonCode string
 }
 
 func (e *restrictedSendViolationError) Error() string {
@@ -33,14 +44,28 @@ func (e *restrictedSendViolationError) Error() string {
 }
 
 func asRestrictedSendViolation(err error) (string, bool) {
+	message, _, ok := asRestrictedSendViolationWithReason(err)
+	return message, ok
+}
+
+func asRestrictedSendViolationWithReason(err error) (string, string, bool) {
 	if err == nil {
-		return "", false
+		return "", "", false
 	}
 	var violation *restrictedSendViolationError
 	if !errors.As(err, &violation) {
-		return "", false
+		return "", "", false
 	}
-	return violation.Error(), true
+	return violation.Error(), strings.TrimSpace(violation.reasonCode), true
+}
+
+type organizationStrictPolicySettings struct {
+	StrictEnabled      bool
+	OutboundMode       string
+	ApplyToSystem      bool
+	CampaignDraftOnly  bool
+	StrictRolloutMode  string
+	StrictRolloutAfter *time.Time
 }
 
 type sendRestrictionsSettings struct {
@@ -386,20 +411,143 @@ func mergeRestrictedNumbers(existing []string, additions []string) ([]string, bo
 }
 
 func (a *App) isStrictSendingRestrictionsEnabled(orgID uuid.UUID) bool {
+	return a.loadOrganizationStrictPolicySettings(orgID).StrictEnabled
+}
+
+func parseOrganizationBoolSetting(settings models.JSONB, key string, fallback bool) bool {
+	if settings == nil {
+		return fallback
+	}
+	switch typed := settings[key].(type) {
+	case bool:
+		return typed
+	case string:
+		normalized := strings.TrimSpace(strings.ToLower(typed))
+		switch normalized {
+		case "true", "1", "yes", "on":
+			return true
+		case "false", "0", "no", "off":
+			return false
+		default:
+			return fallback
+		}
+	default:
+		return fallback
+	}
+}
+
+func parseOrganizationTimeSetting(settings models.JSONB, key string) *time.Time {
+	if settings == nil {
+		return nil
+	}
+	raw := settings[key]
+	switch typed := raw.(type) {
+	case time.Time:
+		ts := typed.UTC()
+		return &ts
+	case string:
+		text := strings.TrimSpace(typed)
+		if text == "" {
+			return nil
+		}
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05"} {
+			if parsed, err := time.Parse(layout, text); err == nil {
+				ts := parsed.UTC()
+				return &ts
+			}
+		}
+	case []byte:
+		return parseOrganizationTimeSetting(models.JSONB{key: string(typed)}, key)
+	}
+	return nil
+}
+
+func parseOrganizationStringSetting(settings models.JSONB, key, fallback string) string {
+	if settings == nil {
+		return fallback
+	}
+	raw, ok := settings[key]
+	if !ok || raw == nil {
+		return fallback
+	}
+	switch typed := raw.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return fallback
+		}
+		return trimmed
+	case []byte:
+		trimmed := strings.TrimSpace(string(typed))
+		if trimmed == "" {
+			return fallback
+		}
+		return trimmed
+	default:
+		return fallback
+	}
+}
+
+func normalizeOutboundMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case organizationOutboundModeMixed:
+		return organizationOutboundModeMixed
+	default:
+		return organizationOutboundModeInboundOnly
+	}
+}
+
+func normalizeRolloutMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case organizationStrictRolloutModeAudit:
+		return organizationStrictRolloutModeAudit
+	default:
+		return organizationStrictRolloutModeEnforce
+	}
+}
+
+func (a *App) loadOrganizationStrictPolicySettings(orgID uuid.UUID) organizationStrictPolicySettings {
+	defaults := organizationStrictPolicySettings{
+		StrictEnabled:      false,
+		OutboundMode:       organizationOutboundModeMixed,
+		ApplyToSystem:      true,
+		CampaignDraftOnly:  false,
+		StrictRolloutMode:  organizationStrictRolloutModeEnforce,
+		StrictRolloutAfter: nil,
+	}
+
 	if a == nil || a.DB == nil || orgID == uuid.Nil {
-		return false
+		return defaults
 	}
 
 	var org models.Organization
 	if err := a.DB.Select("settings").Where("id = ?", orgID).First(&org).Error; err != nil {
-		return false
+		return defaults
 	}
 
 	if org.Settings == nil {
+		return defaults
+	}
+
+	settings := defaults
+	settings.StrictEnabled = parseOrganizationBoolSetting(org.Settings, organizationSettingStrictSendingRestrictionsEnabled, false)
+	settings.OutboundMode = normalizeOutboundMode(parseOrganizationStringSetting(org.Settings, organizationSettingOutboundMode, defaults.OutboundMode))
+	settings.ApplyToSystem = parseOrganizationBoolSetting(org.Settings, organizationSettingStrictSendingApplyToSystem, true)
+	settings.CampaignDraftOnly = parseOrganizationBoolSetting(org.Settings, organizationSettingCampaignDraftOnly, false)
+	settings.StrictRolloutMode = normalizeRolloutMode(parseOrganizationStringSetting(org.Settings, organizationSettingStrictRolloutMode, defaults.StrictRolloutMode))
+	settings.StrictRolloutAfter = parseOrganizationTimeSetting(org.Settings, organizationSettingStrictRolloutEnforceAt)
+
+	return settings
+}
+
+func (s organizationStrictPolicySettings) shouldEnforceStrictPolicy(now time.Time) bool {
+	if normalizeRolloutMode(s.StrictRolloutMode) == organizationStrictRolloutModeEnforce {
+		return true
+	}
+	if s.StrictRolloutAfter == nil {
 		return false
 	}
-	enabled, ok := org.Settings[organizationSettingStrictSendingRestrictionsEnabled].(bool)
-	return ok && enabled
+	return !now.UTC().Before(s.StrictRolloutAfter.UTC())
 }
 
 func (a *App) loadUserForSendRestrictions(orgID, userID uuid.UUID) (*models.User, error) {
@@ -574,7 +722,7 @@ func resolveOutgoingInstanceID(req OutgoingMessageRequest) *uuid.UUID {
 }
 
 func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMessageRequest, opts MessageSendOptions) error {
-	if a == nil || a.DB == nil || opts.SentByUserID == nil || req.Contact == nil {
+	if a == nil || a.DB == nil || req.Contact == nil {
 		return nil
 	}
 
@@ -586,38 +734,66 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 	if orgID == uuid.Nil && req.Account != nil {
 		orgID = req.Account.OrganizationID
 	}
-	if orgID == uuid.Nil || !a.isStrictSendingRestrictionsEnabled(orgID) {
+	if orgID == uuid.Nil {
 		return nil
 	}
 
-	user, err := a.loadUserForSendRestrictions(orgID, *opts.SentByUserID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	policy := a.loadOrganizationStrictPolicySettings(orgID)
+	if !policy.StrictEnabled {
+		return nil
+	}
+	if normalizeOutboundMode(policy.OutboundMode) != organizationOutboundModeInboundOnly {
+		return nil
+	}
+
+	isSystemSend := opts.SentByUserID == nil
+	if isSystemSend && !policy.ApplyToSystem {
+		return nil
+	}
+
+	shouldEnforce := policy.shouldEnforceStrictPolicy(time.Now().UTC())
+
+	var (
+		user *models.User
+		cfg  sendRestrictionsSettings
+		err  error
+	)
+	if opts.SentByUserID != nil {
+		user, err = a.loadUserForSendRestrictions(orgID, *opts.SentByUserID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return fmt.Errorf("failed to load user send restrictions: %w", err)
+		}
+
+		cfg = readSendRestrictionsSettings(user.Settings)
+		if !cfg.Enabled {
 			return nil
 		}
-		return fmt.Errorf("failed to load user send restrictions: %w", err)
-	}
 
-	cfg := readSendRestrictionsSettings(user.Settings)
-	if !cfg.Enabled {
-		return nil
-	}
-
-	cfg, err = a.syncUserRestrictionsWithSources(orgID, user, cfg)
-	if err != nil {
-		return fmt.Errorf("failed to sync authorized numbers: %w", err)
+		cfg, err = a.syncUserRestrictionsWithSources(orgID, user, cfg)
+		if err != nil {
+			return fmt.Errorf("failed to sync authorized numbers: %w", err)
+		}
 	}
 
 	targetPhone := strings.TrimSpace(req.Contact.PhoneNumber)
 	if canonical := a.resolveDirectRecipientFromConversation(ctx, req.Contact); canonical != "" {
 		targetPhone = canonical
 	}
-	if a.isWhatsmeowProvider() {
+	if a.isWhatsmeowProvider() && opts.SentByUserID != nil {
 		allowedInstanceIDs := allowedInstanceIDsForRestrictions(cfg)
 		if len(allowedInstanceIDs) == 0 {
 			reason := "restricted user does not have an allowed instance configured"
-			a.logRestrictedSendBlocked(orgID, *opts.SentByUserID, req.Contact, req.Type, targetPhone, reason)
-			return &restrictedSendViolationError{message: "Message blocked by strict sending restrictions. Your user must be assigned to a WhatsApp instance."}
+			a.logRestrictedSendBlocked(orgID, opts.SentByUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
+			if !shouldEnforce {
+				return nil
+			}
+			return &restrictedSendViolationError{
+				message:    "Message blocked by strict sending restrictions. Your user must be assigned to a WhatsApp instance.",
+				reasonCode: ReasonCodePolicyNoInstance,
+			}
 		}
 
 		outgoingInstanceID := resolveOutgoingInstanceID(req)
@@ -627,19 +803,31 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 				requestedInstance = outgoingInstanceID.String()
 			}
 			reason := fmt.Sprintf("instance mismatch (allowed=%s, requested=%s)", strings.Join(stringifyUUIDs(allowedInstanceIDs), ","), requestedInstance)
-			a.logRestrictedSendBlocked(orgID, *opts.SentByUserID, req.Contact, req.Type, targetPhone, reason)
-			return &restrictedSendViolationError{message: "Message blocked by strict sending restrictions. You can only send and receive chats on your assigned WhatsApp instances."}
+			a.logRestrictedSendBlocked(orgID, opts.SentByUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
+			if !shouldEnforce {
+				return nil
+			}
+			return &restrictedSendViolationError{
+				message:    "Message blocked by strict sending restrictions. You can only send and receive chats on your assigned WhatsApp instances.",
+				reasonCode: ReasonCodePolicyNoInstance,
+			}
 		}
 	}
 
 	targetNumber := normalizeRestrictedPhoneNumber(targetPhone)
 	if targetNumber == "" {
 		reason := "contact phone number could not be normalized"
-		a.logRestrictedSendBlocked(orgID, *opts.SentByUserID, req.Contact, req.Type, targetPhone, reason)
-		return &restrictedSendViolationError{message: "Message blocked by strict sending restrictions. This chat does not map to a valid phone number."}
+		a.logRestrictedSendBlocked(orgID, opts.SentByUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInbound, "blocked")
+		if !shouldEnforce {
+			return nil
+		}
+		return &restrictedSendViolationError{
+			message:    "Message blocked by strict sending restrictions. This chat does not map to a valid phone number.",
+			reasonCode: ReasonCodePolicyNoInbound,
+		}
 	}
 
-	if containsRestrictedNumber(cfg.AuthorizedNumbers, targetNumber) {
+	if opts.SentByUserID != nil && containsRestrictedNumber(cfg.AuthorizedNumbers, targetNumber) {
 		return nil
 	}
 
@@ -648,24 +836,39 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 		return fmt.Errorf("failed to validate incoming history: %w", err)
 	}
 	if hasIncomingHistory {
-		cfg.AuthorizedNumbers, _ = mergeRestrictedNumbers(cfg.AuthorizedNumbers, []string{targetNumber})
-		if err := a.saveUserSendRestrictions(user.ID, user.Settings, cfg); err != nil {
-			return fmt.Errorf("failed to persist authorized number: %w", err)
+		if user != nil {
+			cfg.AuthorizedNumbers, _ = mergeRestrictedNumbers(cfg.AuthorizedNumbers, []string{targetNumber})
+			if err := a.saveUserSendRestrictions(user.ID, user.Settings, cfg); err != nil {
+				return fmt.Errorf("failed to persist authorized number: %w", err)
+			}
 		}
 		return nil
 	}
 
 	reason := "number is not present in user's authorized list and has no prior incoming history"
-	a.logRestrictedSendBlocked(orgID, *opts.SentByUserID, req.Contact, req.Type, targetNumber, reason)
-	return &restrictedSendViolationError{message: "Message blocked by strict sending restrictions. You can only send to phone numbers that have previously sent incoming messages in your assigned chats."}
+	status := "blocked"
+	if !shouldEnforce {
+		status = "audit"
+	}
+	a.logRestrictedSendBlocked(orgID, opts.SentByUserID, req.Contact, req.Type, targetNumber, reason, ReasonCodePolicyNoInbound, status)
+	if !shouldEnforce {
+		return nil
+	}
+	return &restrictedSendViolationError{
+		message:    "Message blocked by strict sending restrictions. You can only send to phone numbers that have previously sent incoming messages in your assigned chats.",
+		reasonCode: ReasonCodePolicyNoInbound,
+	}
 }
 
 func (a *App) logRestrictedSendBlocked(
-	orgID, userID uuid.UUID,
+	orgID uuid.UUID,
+	userID *uuid.UUID,
 	contact *models.Contact,
 	messageType models.MessageType,
 	targetPhone,
-	reason string,
+	reason,
+	reasonCode,
+	status string,
 ) {
 	if a == nil || a.DB == nil {
 		return
@@ -676,14 +879,21 @@ func (a *App) logRestrictedSendBlocked(
 		"target_phone": normalizeActivityText(targetPhone, 80),
 		"reason":       normalizeActivityText(reason, 220),
 	}
+	if code := strings.TrimSpace(reasonCode); code != "" {
+		metadata["reason_code"] = code
+	}
+	normalizedStatus := strings.TrimSpace(status)
+	if normalizedStatus == "" {
+		normalizedStatus = "blocked"
+	}
 
 	entry := &models.ActivityLog{
 		OrganizationID: &orgID,
-		UserID:         &userID,
+		UserID:         userID,
 		Category:       "security",
 		EventType:      "security.restricted_send_blocked",
 		Action:         "send_message",
-		Status:         "blocked",
+		Status:         normalizedStatus,
 		Source:         "security",
 		Metadata:       metadata,
 	}

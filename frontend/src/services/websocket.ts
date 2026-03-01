@@ -727,6 +727,11 @@ class WebSocketService {
     this.eventSubscribers[eventType] = callbacks.filter(cb => cb !== callback)
   }
 
+  // Test-only helper to trigger websocket subscribers from E2E.
+  emitForTest(eventType: string, payload: any) {
+    this.emit(eventType, payload)
+  }
+
   private emit(eventType: string, payload: any) {
     const callbacks = this.eventSubscribers[eventType]
     if (!callbacks || callbacks.length === 0) {
@@ -798,3 +803,15 @@ class WebSocketService {
 
 // Export singleton instance
 export const wsService = new WebSocketService()
+
+declare global {
+  interface Window {
+    __WHM_WS_TEST_EMIT__?: (eventType: string, payload: any) => void
+  }
+}
+
+if (typeof window !== 'undefined' && (import.meta.env.DEV || import.meta.env.MODE === 'test')) {
+  window.__WHM_WS_TEST_EMIT__ = (eventType: string, payload: any) => {
+    wsService.emitForTest(eventType, payload)
+  }
+}

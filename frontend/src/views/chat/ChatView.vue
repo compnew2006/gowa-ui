@@ -1737,7 +1737,7 @@ async function sendMessage() {
     await nextTick();
     scrollToBottom();
   } catch (error: any) {
-    const message = error?.response?.data?.message || t("chat.sendMessageFailed");
+    const message = resolveSendErrorMessage(error, t("chat.sendMessageFailed"));
     toast.error(message);
   } finally {
     isSending.value = false;
@@ -1778,7 +1778,7 @@ async function retryMessage(message: Message) {
 
     toast.success(t("chat.messageSent"));
   } catch (error: any) {
-    const message = error?.response?.data?.message || t("chat.sendMessageFailed");
+    const message = resolveSendErrorMessage(error, t("chat.sendMessageFailed"));
     toast.error(message);
   } finally {
     retryingMessageId.value = null;
@@ -2105,11 +2105,43 @@ async function sendTemplateMessage() {
     templateParamNames.value = [];
     templateParamValues.value = {};
   } catch (error: any) {
-    const message = error?.response?.data?.message || t("chat.templateSendFailed");
+    const message = resolveSendErrorMessage(error, t("chat.templateSendFailed"));
     toast.error(message);
   } finally {
     isSendingTemplate.value = false;
   }
+}
+
+function resolveSendErrorMessage(error: any, fallbackMessage: string): string {
+  const responseData = error?.response?.data || {};
+  const details =
+    responseData?.details ||
+    responseData?.data?.details ||
+    {};
+  const reasonCode = String(
+    details?.reason_code ||
+      responseData?.reason_code ||
+      responseData?.data?.reason_code ||
+      "",
+  ).trim();
+
+  const baseMessage = responseData?.message || fallbackMessage;
+  if (reasonCode === "POLICY_NO_INBOUND") {
+    return `Cannot send: inbound-only policy is active (${reasonCode})`;
+  }
+  if (reasonCode === "INSTANCE_BLOCKED") {
+    return `Cannot send: selected instance is blocked (${reasonCode})`;
+  }
+  if (reasonCode === "INSTANCE_NOT_CONNECTED") {
+    return `Cannot send: selected instance is not connected (${reasonCode})`;
+  }
+  if (reasonCode === "POLICY_DRAFT_ONLY") {
+    return `Cannot send: campaign draft-only policy is active (${reasonCode})`;
+  }
+  if (reasonCode !== "") {
+    return `${baseMessage} (${reasonCode})`;
+  }
+  return baseMessage;
 }
 
 // Reaction handling

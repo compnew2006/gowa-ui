@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	campaignDelayKeyPrefix      = "whatomate:campaign:delay:"
+	campaignDelayKeyPrefix      = "whatomate:instance:delay:"
 	campaignDelayReservationTTL = 24 * time.Hour
 )
 
@@ -34,11 +35,26 @@ redis.call("PSETEX", key, ttl_ms, tostring(next_at))
 return send_at
 `)
 
-func campaignDelayRedisKey(campaignID uuid.UUID) string {
-	return campaignDelayKeyPrefix + campaignID.String()
+func campaignDelayRedisKey(scopeKey string) string {
+	normalized := strings.TrimSpace(scopeKey)
+	if normalized == "" {
+		normalized = "default"
+	}
+	return campaignDelayKeyPrefix + normalized
 }
 
-func (w *Worker) applyCampaignSendDelay(ctx context.Context, campaignID uuid.UUID, minDelaySeconds, maxDelaySeconds int) error {
+func resolveCampaignDelayScopeKey(instanceID string, fallbackCampaignID uuid.UUID) string {
+	normalizedInstanceID := strings.TrimSpace(instanceID)
+	if normalizedInstanceID != "" {
+		return normalizedInstanceID
+	}
+	if fallbackCampaignID != uuid.Nil {
+		return fallbackCampaignID.String()
+	}
+	return "default"
+}
+
+func (w *Worker) applyCampaignSendDelay(ctx context.Context, delayScopeKey string, minDelaySeconds, maxDelaySeconds int) error {
 	if minDelaySeconds < 0 {
 		minDelaySeconds = 0
 	}
@@ -69,19 +85,19 @@ func (w *Worker) applyCampaignSendDelay(ctx context.Context, campaignID uuid.UUI
 	rawSendAt, err := reserveCampaignDelaySlotScript.Run(
 		ctx,
 		w.Redis,
-		[]string{campaignDelayRedisKey(campaignID)},
+		[]string{campaignDelayRedisKey(delayScopeKey)},
 		nowMs,
 		gapMs,
 		ttlMs,
 	).Result()
 	if err != nil {
-		w.Log.Warn("Failed to reserve campaign delay slot, falling back to local delay", "campaign_id", campaignID, "error", err)
+		w.Log.Warn("Failed to reserve campaign delay slot, falling back to local delay", "delay_scope", strings.TrimSpace(delayScopeKey), "error", err)
 		return sleepWithContext(ctx, time.Duration(gapMs)*time.Millisecond)
 	}
 
 	sendAtMs, err := parseScriptResultInt64(rawSendAt)
 	if err != nil {
-		w.Log.Warn("Failed to parse reserved campaign delay slot, falling back to local delay", "campaign_id", campaignID, "error", err)
+		w.Log.Warn("Failed to parse reserved campaign delay slot, falling back to local delay", "delay_scope", strings.TrimSpace(delayScopeKey), "error", err)
 		return sleepWithContext(ctx, time.Duration(gapMs)*time.Millisecond)
 	}
 

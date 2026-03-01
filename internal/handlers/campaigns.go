@@ -179,6 +179,9 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
+	if err := validateCampaignDelayFloor(minDelaySeconds, maxDelaySeconds, a.campaignDelayFloorSeconds(orgID)); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
 
 	campaign := models.BulkMessageCampaign{
 		OrganizationID:  orgID,
@@ -303,6 +306,11 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 	)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
+	if req.MinDelaySeconds != nil || req.MaxDelaySeconds != nil {
+		if err := validateCampaignDelayFloor(minDelaySeconds, maxDelaySeconds, a.campaignDelayFloorSeconds(orgID)); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+		}
 	}
 
 	// Update fields
@@ -533,6 +541,16 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 	// Check if campaign can be started
 	if campaign.Status != models.CampaignStatusDraft && campaign.Status != models.CampaignStatusScheduled && campaign.Status != models.CampaignStatusPaused {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign cannot be started in current state", nil, "")
+	}
+	if err := a.enforceCampaignStartPolicy(orgID, campaign.WhatsAppAccount); err != nil {
+		if message, reasonCode, ok := asCampaignPolicyViolation(err); ok {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, message, reasonCodeDetails(reasonCode), "")
+		}
+		a.Log.Error("Failed to validate campaign start policy", "error", err, "campaign_id", id, "organization_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate campaign policy", nil, "")
+	}
+	if err := validateCampaignDelayFloor(campaign.MinDelaySeconds, campaign.MaxDelaySeconds, a.campaignDelayFloorSeconds(orgID)); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 
 	// Get all pending recipients

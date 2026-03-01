@@ -143,6 +143,17 @@ const autoCampaignSummary = computed(() => {
         : t("instances.auto_campaign.statusDraft"),
   });
 });
+const sendBlockedNotice = computed(() => {
+  const blockedUntilRaw = props.instance.send_blocked_until;
+  if (!blockedUntilRaw) return "";
+
+  const blockedUntil = new Date(blockedUntilRaw);
+  if (Number.isNaN(blockedUntil.getTime())) return "";
+  if (blockedUntil.getTime() <= Date.now()) return "";
+
+  const reason = (props.instance.send_block_reason || "Instance sending is temporarily blocked").trim();
+  return `${reason} (${blockedUntil.toLocaleString()})`;
+});
 
 function formatUptime(totalSeconds?: number) {
   const seconds = totalSeconds || 0;
@@ -209,6 +220,12 @@ function formatUptime(totalSeconds?: number) {
         <div class="flex items-center">
           <Smartphone class="h-4 w-4 mr-2 opacity-70" />
           <span>{{ instance.jid || $t("instances.status.not_paired") }}</span>
+        </div>
+        <div
+          v-if="sendBlockedNotice"
+          class="rounded-md border border-red-400/30 bg-red-500/10 px-2 py-1 text-xs text-red-200 light:border-red-200 light:bg-red-50 light:text-red-700"
+        >
+          {{ sendBlockedNotice }}
         </div>
         <div v-if="instance.health" class="grid grid-cols-2 gap-2 text-xs">
           <div

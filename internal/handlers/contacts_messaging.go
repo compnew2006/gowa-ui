@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -97,6 +96,9 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	if a.isWhatsmeowProvider() {
 		instance, resolveErr := a.resolveOutboundInstance(orgID, req.InstanceID, contact.InstanceID)
 		if resolveErr != nil {
+			if _, reasonCode, ok := asInstanceSelectionError(resolveErr); ok {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), reasonCodeDetails(reasonCode), "instance_id")
+			}
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "instance_id")
 		}
 		selectedInstance = instance
@@ -155,9 +157,8 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
 	if err != nil {
-		var restrictedErr *restrictedSendViolationError
-		if errors.As(err, &restrictedErr) {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedErr.Error(), nil, "")
+		if restrictedMessage, reasonCode, ok := asRestrictedSendViolationWithReason(err); ok {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedMessage, reasonCodeDetails(reasonCode), "")
 		}
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send message", nil, "")
 	}
@@ -354,6 +355,9 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	if a.isWhatsmeowProvider() {
 		instance, resolveErr := a.resolveOutboundInstance(orgID, requestedInstanceID, contact.InstanceID)
 		if resolveErr != nil {
+			if _, reasonCode, ok := asInstanceSelectionError(resolveErr); ok {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), reasonCodeDetails(reasonCode), "instance_id")
+			}
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "instance_id")
 		}
 		selectedInstance = instance
@@ -391,9 +395,8 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
 	if err != nil {
-		var restrictedErr *restrictedSendViolationError
-		if errors.As(err, &restrictedErr) {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedErr.Error(), nil, "")
+		if restrictedMessage, reasonCode, ok := asRestrictedSendViolationWithReason(err); ok {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedMessage, reasonCodeDetails(reasonCode), "")
 		}
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send message", nil, "")
 	}

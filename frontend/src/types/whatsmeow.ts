@@ -41,6 +41,8 @@ export interface WhatsAppInstance {
     status: string
     jid?: string
     phone_number?: string
+    send_blocked_until?: string | null
+    send_block_reason?: string | null
     is_default: boolean
     auto_read_receipt: boolean
     organization_id: string

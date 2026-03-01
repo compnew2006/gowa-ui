@@ -214,6 +214,7 @@ export const useInstancesStore = defineStore('instances', () => {
   async function reconnectInstance(id: string) {
     try {
       await instancesService.reconnect(id)
+      updateInstanceStatus(id, 'connecting')
       toast.info(t('instances.toast.reconnectRequested'))
     } catch (err: any) {
       const msg = err.response?.data?.message || t('instances.toast.reconnectFailed')

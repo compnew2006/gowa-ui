@@ -178,6 +178,10 @@ func (q *InstanceQueue) process(job Job) {
 		if err == nil {
 			return // Success
 		}
+		if !shouldRetrySendError(err) {
+			q.logger.Warn("job failed with permanent error; skipping retries", "instance_id", q.instanceID, "error", err)
+			return
+		}
 
 		if i == maxRetries {
 			q.logger.Error("job failed after retries", "instance_id", q.instanceID, "error", err)

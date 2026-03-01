@@ -3,6 +3,7 @@ package whatsmeow
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ type ConnectionManager struct {
 	connectFn     func(context.Context, uuid.UUID) error
 	qrCodesMu     sync.RWMutex
 	qrCodes       map[uuid.UUID]cachedQRCode
+	typingIndicator *typingIndicatorPlanner
 	// mediaStoragePath is the local root directory where inbound media is persisted.
 	mediaStoragePath string
 }
@@ -63,6 +65,7 @@ func NewConnectionManager(db *gorm.DB, store *sqlstore.Container, logger logf.Lo
 		mediaStoragePath: mediaStoragePath,
 		activeCallIDs:    make(map[uuid.UUID]map[string]struct{}),
 		qrCodes:          make(map[uuid.UUID]cachedQRCode),
+		typingIndicator:  newTypingIndicatorPlanner(cfg),
 	}
 	cm.connectFn = cm.Connect
 	return cm
@@ -308,6 +311,20 @@ func (cm *ConnectionManager) updateInstanceStatus(ctx context.Context, instanceI
 	return cm.db.WithContext(ctx).Model(&models.WhatsAppInstance{}).
 		Where("id = ?", instanceID).
 		Update("status", status).Error
+}
+
+func (cm *ConnectionManager) updateInstanceSendBlock(ctx context.Context, instanceID uuid.UUID, blockedUntil *time.Time, reason string) error {
+	updates := map[string]any{
+		"send_blocked_until": blockedUntil,
+		"send_block_reason":  strings.TrimSpace(reason),
+	}
+	return cm.db.WithContext(ctx).Model(&models.WhatsAppInstance{}).
+		Where("id = ?", instanceID).
+		Updates(updates).Error
+}
+
+func (cm *ConnectionManager) clearInstanceSendBlock(ctx context.Context, instanceID uuid.UUID) error {
+	return cm.updateInstanceSendBlock(ctx, instanceID, nil, "")
 }
 
 // ReconcileStartupStatuses resets stale transient statuses after process restarts.

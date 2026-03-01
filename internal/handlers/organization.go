@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/database"
@@ -16,6 +17,11 @@ import (
 type OrganizationSettings struct {
 	MaskPhoneNumbers                     bool              `json:"mask_phone_numbers"`
 	StrictSendingRestrictions            bool              `json:"strict_sending_restrictions_enabled"`
+	OutboundMode                         string            `json:"outbound_mode"`
+	StrictSendingApplyToSystem           bool              `json:"strict_sending_apply_to_system"`
+	CampaignDraftOnly                    bool              `json:"campaign_draft_only"`
+	StrictRolloutMode                    string            `json:"strict_rollout_mode"`
+	StrictRolloutEnforceAt               *time.Time        `json:"strict_rollout_enforce_at,omitempty"`
 	Timezone                             string            `json:"timezone"`
 	DateFormat                           string            `json:"date_format"`
 	AssignedChatResetEnabled             bool              `json:"assigned_chat_reset_enabled"`
@@ -43,6 +49,10 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 	settings := OrganizationSettings{
 		MaskPhoneNumbers:                     false,
 		StrictSendingRestrictions:            false,
+		OutboundMode:                         organizationOutboundModeMixed,
+		StrictSendingApplyToSystem:           true,
+		CampaignDraftOnly:                    false,
+		StrictRolloutMode:                    organizationStrictRolloutModeEnforce,
 		Timezone:                             "UTC",
 		DateFormat:                           "YYYY-MM-DD",
 		AssignedChatResetEnabled:             true,
@@ -61,6 +71,11 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		if v, ok := org.Settings[organizationSettingStrictSendingRestrictionsEnabled].(bool); ok {
 			settings.StrictSendingRestrictions = v
 		}
+		settings.OutboundMode = normalizeOutboundMode(parseOrganizationStringSetting(org.Settings, organizationSettingOutboundMode, settings.OutboundMode))
+		settings.StrictSendingApplyToSystem = parseOrganizationBoolSetting(org.Settings, organizationSettingStrictSendingApplyToSystem, settings.StrictSendingApplyToSystem)
+		settings.CampaignDraftOnly = parseOrganizationBoolSetting(org.Settings, organizationSettingCampaignDraftOnly, settings.CampaignDraftOnly)
+		settings.StrictRolloutMode = normalizeRolloutMode(parseOrganizationStringSetting(org.Settings, organizationSettingStrictRolloutMode, settings.StrictRolloutMode))
+		settings.StrictRolloutEnforceAt = parseOrganizationTimeSetting(org.Settings, organizationSettingStrictRolloutEnforceAt)
 		if v, ok := org.Settings["timezone"].(string); ok && v != "" {
 			settings.Timezone = v
 		}
@@ -96,6 +111,11 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	var req struct {
 		MaskPhoneNumbers                     *bool              `json:"mask_phone_numbers"`
 		StrictSendingRestrictions            *bool              `json:"strict_sending_restrictions_enabled"`
+		OutboundMode                         *string            `json:"outbound_mode"`
+		StrictSendingApplyToSystem           *bool              `json:"strict_sending_apply_to_system"`
+		CampaignDraftOnly                    *bool              `json:"campaign_draft_only"`
+		StrictRolloutMode                    *string            `json:"strict_rollout_mode"`
+		StrictRolloutEnforceAt               *string            `json:"strict_rollout_enforce_at"`
 		Timezone                             *string            `json:"timezone"`
 		DateFormat                           *string            `json:"date_format"`
 		Name                                 *string            `json:"name"`
@@ -135,6 +155,27 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 			)
 		}
 	}
+	if req.OutboundMode != nil {
+		rawMode := strings.ToLower(strings.TrimSpace(*req.OutboundMode))
+		if rawMode != organizationOutboundModeInboundOnly && rawMode != organizationOutboundModeMixed {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "outbound_mode must be inbound_only or mixed", nil, "outbound_mode")
+		}
+	}
+	if req.StrictRolloutMode != nil {
+		rawMode := strings.ToLower(strings.TrimSpace(*req.StrictRolloutMode))
+		if rawMode != organizationStrictRolloutModeAudit && rawMode != organizationStrictRolloutModeEnforce {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "strict_rollout_mode must be audit or enforce", nil, "strict_rollout_mode")
+		}
+	}
+	if req.StrictRolloutEnforceAt != nil {
+		text := strings.TrimSpace(*req.StrictRolloutEnforceAt)
+		if text != "" {
+			parsed := parseOrganizationTimeSetting(models.JSONB{organizationSettingStrictRolloutEnforceAt: text}, organizationSettingStrictRolloutEnforceAt)
+			if parsed == nil {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "strict_rollout_enforce_at must be a valid timestamp", nil, "strict_rollout_enforce_at")
+			}
+		}
+	}
 
 	var org models.Organization
 	if err := a.DB.Where("id = ?", orgID).First(&org).Error; err != nil {
@@ -151,6 +192,26 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	}
 	if req.StrictSendingRestrictions != nil {
 		org.Settings[organizationSettingStrictSendingRestrictionsEnabled] = *req.StrictSendingRestrictions
+	}
+	if req.OutboundMode != nil {
+		org.Settings[organizationSettingOutboundMode] = normalizeOutboundMode(*req.OutboundMode)
+	}
+	if req.StrictSendingApplyToSystem != nil {
+		org.Settings[organizationSettingStrictSendingApplyToSystem] = *req.StrictSendingApplyToSystem
+	}
+	if req.CampaignDraftOnly != nil {
+		org.Settings[organizationSettingCampaignDraftOnly] = *req.CampaignDraftOnly
+	}
+	if req.StrictRolloutMode != nil {
+		org.Settings[organizationSettingStrictRolloutMode] = normalizeRolloutMode(*req.StrictRolloutMode)
+	}
+	if req.StrictRolloutEnforceAt != nil {
+		text := strings.TrimSpace(*req.StrictRolloutEnforceAt)
+		if text == "" {
+			org.Settings[organizationSettingStrictRolloutEnforceAt] = nil
+		} else if parsed := parseOrganizationTimeSetting(models.JSONB{organizationSettingStrictRolloutEnforceAt: text}, organizationSettingStrictRolloutEnforceAt); parsed != nil {
+			org.Settings[organizationSettingStrictRolloutEnforceAt] = parsed.UTC().Format(time.RFC3339)
+		}
 	}
 	if req.Timezone != nil {
 		org.Settings["timezone"] = *req.Timezone

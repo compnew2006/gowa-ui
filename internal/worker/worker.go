@@ -109,6 +109,17 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		return nil // Not an error, just skip
 	}
 
+	orgPolicy, err := w.loadOrganizationSendPolicy(job.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("failed to load organization send policy: %w", err)
+	}
+	if w.isWhatsmeowProvider() && orgPolicy.CampaignDraftOnly {
+		reason := "Campaign execution blocked by organization policy (POLICY_DRAFT_ONLY)"
+		w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", reason)
+		w.incrementCampaignCount(job.CampaignID, "failed_count")
+		return nil
+	}
+
 	// Get or create contact for this recipient
 	contact, _, err := contactutil.GetOrCreateContact(w.DB, job.OrganizationID, job.PhoneNumber, job.RecipientName)
 	if err != nil || contact == nil {
@@ -116,6 +127,29 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", "Failed to create contact")
 		w.incrementCampaignCount(job.CampaignID, "failed_count")
 		return nil // Don't retry
+	}
+
+	if w.isWhatsmeowProvider() {
+		if failureReason, validationErr := w.validateWhatsmeowCampaignInstance(job.OrganizationID, campaign.WhatsAppAccount); validationErr != nil {
+			return fmt.Errorf("failed to validate campaign sender instance: %w", validationErr)
+		} else if failureReason != "" {
+			w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", failureReason)
+			w.incrementCampaignCount(job.CampaignID, "failed_count")
+			return nil
+		}
+
+		if orgPolicy.ShouldEnforceInboundOnlyForSystemSends() {
+			hasIncomingHistory, inboundErr := w.contactHasIncomingHistory(job.OrganizationID, contact.ID)
+			if inboundErr != nil {
+				return fmt.Errorf("failed to evaluate inbound history for contact: %w", inboundErr)
+			}
+			if !hasIncomingHistory {
+				reason := "Message blocked by strict sending restrictions (POLICY_NO_INBOUND)"
+				w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", reason)
+				w.incrementCampaignCount(job.CampaignID, "failed_count")
+				return nil
+			}
+		}
 	}
 
 	// Build recipient for sending
@@ -138,7 +172,8 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		TemplateParams: mergedTemplateParams,
 	}
 
-	if err := w.applyCampaignSendDelay(ctx, job.CampaignID, campaign.MinDelaySeconds, campaign.MaxDelaySeconds); err != nil {
+	delayScopeKey := resolveCampaignDelayScopeKey(campaign.WhatsAppAccount, campaign.ID)
+	if err := w.applyCampaignSendDelay(ctx, delayScopeKey, campaign.MinDelaySeconds, campaign.MaxDelaySeconds); err != nil {
 		return fmt.Errorf("failed to apply campaign send delay: %w", err)
 	}
 
@@ -366,6 +401,7 @@ func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID 
 	if w.MessageProvider == nil {
 		return "", fmt.Errorf("message provider is not configured")
 	}
+	sendCtx := provider.WithSkipTypingIndicator(ctx)
 
 	instanceID = strings.TrimSpace(instanceID)
 	if instanceID == "" {
@@ -395,17 +431,17 @@ func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID 
 
 		switch classifyCampaignMediaType(campaign.HeaderMediaMimeType, mediaFilename) {
 		case "image":
-			return w.MessageProvider.SendImage(ctx, instanceID, recipient.PhoneNumber, mediaRef, body)
+			return w.MessageProvider.SendImage(sendCtx, instanceID, recipient.PhoneNumber, mediaRef, body)
 		case "video":
-			return w.MessageProvider.SendVideo(ctx, instanceID, recipient.PhoneNumber, mediaRef, body)
+			return w.MessageProvider.SendVideo(sendCtx, instanceID, recipient.PhoneNumber, mediaRef, body)
 		case "audio":
-			return w.MessageProvider.SendAudio(ctx, instanceID, recipient.PhoneNumber, mediaRef)
+			return w.MessageProvider.SendAudio(sendCtx, instanceID, recipient.PhoneNumber, mediaRef)
 		default:
-			return w.MessageProvider.SendDocument(ctx, instanceID, recipient.PhoneNumber, mediaRef, mediaFilename)
+			return w.MessageProvider.SendDocument(sendCtx, instanceID, recipient.PhoneNumber, mediaRef, mediaFilename)
 		}
 	}
 
-	return w.MessageProvider.SendText(ctx, instanceID, recipient.PhoneNumber, body)
+	return w.MessageProvider.SendText(sendCtx, instanceID, recipient.PhoneNumber, body)
 }
 
 func classifyCampaignMediaType(mimeType, filename string) string {

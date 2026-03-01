@@ -1,10 +1,12 @@
 package handlers_test
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
@@ -59,6 +61,7 @@ func TestApp_SendMessage_BlockedByStrictSendRestrictions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 	assert.Contains(t, string(testutil.GetResponseBody(req)), "Message blocked by strict sending restrictions")
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "POLICY_NO_INBOUND")
 
 	var logEntry models.ActivityLog
 	require.NoError(t, app.DB.
@@ -67,6 +70,7 @@ func TestApp_SendMessage_BlockedByStrictSendRestrictions(t *testing.T) {
 		First(&logEntry).Error)
 	assert.Equal(t, "blocked", logEntry.Status)
 	assert.Equal(t, "security", logEntry.Category)
+	assert.Equal(t, "POLICY_NO_INBOUND", logEntry.Metadata["reason_code"])
 }
 
 func TestApp_SendMessage_StrictRestrictionsAutoAuthorizeFromIncomingHistory(t *testing.T) {
@@ -144,4 +148,80 @@ func TestApp_SendMessage_StrictRestrictionsAutoAuthorizeFromIncomingHistory(t *t
 
 	// Number is normalized before persistence, so + is removed.
 	assert.True(t, strings.Contains(string(authorizedJSON), "15551234567"), string(authorizedJSON))
+}
+
+func TestApp_SendOutgoingMessage_SystemBlockedWithoutInboundHistory(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	var persistedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&persistedOrg).Error)
+	if persistedOrg.Settings == nil {
+		persistedOrg.Settings = models.JSONB{}
+	}
+	persistedOrg.Settings["strict_sending_restrictions_enabled"] = true
+	persistedOrg.Settings["outbound_mode"] = "inbound_only"
+	persistedOrg.Settings["strict_sending_apply_to_system"] = true
+	persistedOrg.Settings["strict_rollout_mode"] = "enforce"
+	require.NoError(t, app.DB.Model(&persistedOrg).Update("settings", persistedOrg.Settings).Error)
+
+	msg, err := app.SendOutgoingMessage(context.Background(), handlers.OutgoingMessageRequest{
+		Account: account,
+		Contact: contact,
+		Type:    models.MessageTypeText,
+		Content: "system outbound without inbound history",
+	}, handlers.MessageSendOptions{Async: false})
+	require.Nil(t, msg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "strict sending restrictions")
+}
+
+func TestApp_SendOutgoingMessage_SystemAllowedWithInboundHistory(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name), testutil.WithPhoneNumber("+15554443333"))
+
+	var persistedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&persistedOrg).Error)
+	if persistedOrg.Settings == nil {
+		persistedOrg.Settings = models.JSONB{}
+	}
+	persistedOrg.Settings["strict_sending_restrictions_enabled"] = true
+	persistedOrg.Settings["outbound_mode"] = "inbound_only"
+	persistedOrg.Settings["strict_sending_apply_to_system"] = true
+	persistedOrg.Settings["strict_rollout_mode"] = "enforce"
+	require.NoError(t, app.DB.Model(&persistedOrg).Update("settings", persistedOrg.Settings).Error)
+
+	require.NoError(t, app.DB.Create(&models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      contact.ID,
+		Direction:      models.DirectionIncoming,
+		MessageType:    models.MessageTypeText,
+		Content:        "incoming seed",
+		Status:         models.MessageStatusReceived,
+	}).Error)
+
+	msg, err := app.SendOutgoingMessage(context.Background(), handlers.OutgoingMessageRequest{
+		Account: account,
+		Contact: contact,
+		Type:    models.MessageTypeText,
+		Content: "system outbound after inbound history",
+	}, handlers.MessageSendOptions{Async: false})
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+	assert.Equal(t, models.MessageTypeText, msg.MessageType)
 }

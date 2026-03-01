@@ -716,6 +716,11 @@ export const organizationService = {
   updateSettings: (data: {
     mask_phone_numbers?: boolean
     strict_sending_restrictions_enabled?: boolean
+    outbound_mode?: 'inbound_only' | 'mixed'
+    strict_sending_apply_to_system?: boolean
+    campaign_draft_only?: boolean
+    strict_rollout_mode?: 'audit' | 'enforce'
+    strict_rollout_enforce_at?: string | null
     timezone?: string
     date_format?: string
     name?: string

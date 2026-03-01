@@ -46,6 +46,41 @@ func createTestRecipient(t *testing.T, app *handlers.App, campaignID uuid.UUID, 
 	return recipient
 }
 
+func createTestWhatsmeowInstance(
+	t *testing.T,
+	app *handlers.App,
+	orgID uuid.UUID,
+	status models.InstanceStatus,
+	sendBlockedUntil *time.Time,
+	sendBlockReason string,
+) *models.WhatsAppInstance {
+	t.Helper()
+
+	instance := &models.WhatsAppInstance{
+		BaseModel:        models.BaseModel{ID: uuid.New()},
+		OrganizationID:   orgID,
+		Name:             "Instance " + uuid.NewString()[:6],
+		Status:           status,
+		SendBlockedUntil: sendBlockedUntil,
+		SendBlockReason:  sendBlockReason,
+	}
+	require.NoError(t, app.DB.Create(instance).Error)
+	return instance
+}
+
+func updateOrganizationSettings(t *testing.T, app *handlers.App, orgID uuid.UUID, settings models.JSONB) {
+	t.Helper()
+	var org models.Organization
+	require.NoError(t, app.DB.Where("id = ?", orgID).First(&org).Error)
+	if org.Settings == nil {
+		org.Settings = models.JSONB{}
+	}
+	for key, value := range settings {
+		org.Settings[key] = value
+	}
+	require.NoError(t, app.DB.Model(&org).Update("settings", org.Settings).Error)
+}
+
 // --- ListCampaigns Tests ---
 
 func TestApp_ListCampaigns_Success(t *testing.T) {
@@ -559,6 +594,102 @@ func TestApp_StartCampaign_CanResumePaused(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 	assert.Len(t, mockQueue.Jobs, 1)
+}
+
+func TestApp_StartCampaign_FailsWhenInstanceNotConnected(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	app.Config.WhatsApp.Provider = "whatsmeow"
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-not-connected")), testutil.WithPassword("password"))
+	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusDisconnected, nil, "")
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusDraft)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+
+	req := testutil.NewJSONRequest(t, nil)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	err := app.StartCampaign(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "INSTANCE_NOT_CONNECTED")
+}
+
+func TestApp_StartCampaign_FailsWhenInstanceBlocked(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	app.Config.WhatsApp.Provider = "whatsmeow"
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-blocked")), testutil.WithPassword("password"))
+	blockedUntil := time.Now().UTC().Add(30 * time.Minute)
+	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusConnected, &blockedUntil, "temporary platform block")
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusDraft)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+
+	req := testutil.NewJSONRequest(t, nil)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	err := app.StartCampaign(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "INSTANCE_BLOCKED")
+}
+
+func TestApp_StartCampaign_FailsWhenDelayBelowStrictFloor(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	app.Config.WhatsApp.Provider = "whatsmeow"
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-delay-floor")), testutil.WithPassword("password"))
+	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusConnected, nil, "")
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusDraft)
+	require.NoError(t, app.DB.Model(campaign).Updates(map[string]any{
+		"min_delay_seconds": 0,
+		"max_delay_seconds": 0,
+	}).Error)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+	updateOrganizationSettings(t, app, org.ID, models.JSONB{
+		"strict_sending_restrictions_enabled": true,
+		"outbound_mode":                       "inbound_only",
+	})
+
+	req := testutil.NewJSONRequest(t, nil)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	err := app.StartCampaign(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "at least 3 seconds")
+}
+
+func TestApp_StartCampaign_FailsWhenCampaignDraftOnlyEnabled(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	app.Config.WhatsApp.Provider = "whatsmeow"
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-draft-only")), testutil.WithPassword("password"))
+	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusConnected, nil, "")
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusDraft)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+	updateOrganizationSettings(t, app, org.ID, models.JSONB{
+		"campaign_draft_only": true,
+	})
+
+	req := testutil.NewJSONRequest(t, nil)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	err := app.StartCampaign(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "POLICY_DRAFT_ONLY")
 }
 
 // --- PauseCampaign Tests ---

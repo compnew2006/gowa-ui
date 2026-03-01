@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/compnew2006/whatomate/internal/models"
@@ -81,6 +80,9 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 	if a.isWhatsmeowProvider() {
 		instance, resolveErr := a.resolveOutboundInstance(orgID, req.InstanceID, contact.InstanceID)
 		if resolveErr != nil {
+			if _, reasonCode, ok := asInstanceSelectionError(resolveErr); ok {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), reasonCodeDetails(reasonCode), "instance_id")
+			}
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "instance_id")
 		}
 		selectedInstance = instance
@@ -126,9 +128,8 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 		}
 		message, sendErr := a.SendOutgoingMessage(sendCtx, textRequest, opts)
 		if sendErr != nil {
-			var restrictedErr *restrictedSendViolationError
-			if errors.As(sendErr, &restrictedErr) {
-				return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedErr.Error(), nil, "")
+			if restrictedMessage, reasonCode, ok := asRestrictedSendViolationWithReason(sendErr); ok {
+				return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedMessage, reasonCodeDetails(reasonCode), "")
 			}
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send canned response text", nil, "")
 		}
@@ -159,9 +160,8 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 		}
 		message, sendErr := a.SendOutgoingMessage(sendCtx, mediaRequest, opts)
 		if sendErr != nil {
-			var restrictedErr *restrictedSendViolationError
-			if errors.As(sendErr, &restrictedErr) {
-				return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedErr.Error(), nil, "")
+			if restrictedMessage, reasonCode, ok := asRestrictedSendViolationWithReason(sendErr); ok {
+				return r.SendErrorEnvelope(fasthttp.StatusForbidden, restrictedMessage, reasonCodeDetails(reasonCode), "")
 			}
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send canned response attachment", nil, "")
 		}

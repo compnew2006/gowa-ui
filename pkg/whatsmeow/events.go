@@ -2,6 +2,8 @@ package whatsmeow
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
@@ -101,6 +103,9 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 			cm.logger.Error("Failed to update status on pair success", "error", err)
 			cm.MarkError(instanceID)
 		}
+		if err := cm.clearInstanceSendBlock(context.Background(), instanceID); err != nil {
+			cm.logger.Warn("Failed to clear send block on pair success", "error", err, "instance_id", instanceID)
+		}
 		cm.MarkConnected(instanceID)
 		cm.broadcastInstanceConnected(orgID, instanceID, phoneNumber)
 		cm.logger.Info("Instance paired successfully", "component", "whatsmeow", "event", "pair_success", "instance_id", instanceID, "jid", jid)
@@ -121,6 +126,9 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusConnected); err != nil {
 			cm.logger.Error("Failed to update status on connect", "error", err)
 			cm.MarkError(instanceID)
+		}
+		if err := cm.clearInstanceSendBlock(context.Background(), instanceID); err != nil {
+			cm.logger.Warn("Failed to clear send block on connect", "error", err, "instance_id", instanceID)
 		}
 		cm.MarkConnected(instanceID)
 		cm.broadcastInstanceConnected(orgID, instanceID, phoneNumber)
@@ -149,6 +157,14 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 	case *events.TemporaryBan:
 		cm.ClearCachedQRCode(instanceID)
 		cm.clearActiveCalls(instanceID)
+		reason := strings.TrimSpace(v.String())
+		if reason == "" {
+			reason = "WhatsApp temporary ban detected"
+		}
+		blockedUntil := time.Now().UTC().Add(24 * time.Hour)
+		if err := cm.updateInstanceSendBlock(context.Background(), instanceID, &blockedUntil, reason); err != nil {
+			cm.logger.Warn("Failed to persist temporary send block", "error", err, "instance_id", instanceID)
+		}
 		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusBanned); err != nil {
 			cm.logger.Error("Failed to update status on ban", "error", err)
 			cm.MarkError(instanceID)
@@ -160,7 +176,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 			orgID,
 			instanceID,
 			"banned",
-			v.String(),
+			reason,
 		)
 		if err != nil {
 			cm.logger.Error("Failed to create banned notification", "error", err, "instance_id", instanceID)
@@ -177,7 +193,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 			})
 		}
 		cm.broadcastInstanceNotification(orgID, notification)
-		cm.logger.Warn("Instance temporarily banned", "component", "whatsmeow", "event", "banned", "instance_id", instanceID, "reason", v.String())
+		cm.logger.Warn("Instance temporarily banned", "component", "whatsmeow", "event", "banned", "instance_id", instanceID, "reason", reason, "blocked_until", blockedUntil)
 
 	case *events.LoggedOut:
 		cm.ClearCachedQRCode(instanceID)

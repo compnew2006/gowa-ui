@@ -69,7 +69,7 @@ func (w *InstanceAutoCampaignWorker) runOnce(nowUTC time.Time) {
 	}
 
 	var instances []models.WhatsAppInstance
-	if err := w.app.DB.Select("id", "organization_id", "settings").Find(&instances).Error; err != nil {
+	if err := w.app.DB.Select("id", "organization_id", "settings", "status", "send_blocked_until", "send_block_reason").Find(&instances).Error; err != nil {
 		w.app.Log.Error("Auto campaign worker failed to load instances", "error", err)
 		return
 	}
@@ -183,7 +183,19 @@ func (w *InstanceAutoCampaignWorker) processInstance(nowUTC time.Time, instance 
 	}
 
 	if settings.TargetStatus == waManager.AutoCampaignTargetStatusRun {
-		if err := w.startAutoCampaign(instance.OrganizationID, campaign, recipients); err != nil {
+		if err := w.enforceAutoCampaignRunPolicy(instance); err != nil {
+			if message, reasonCode, ok := asCampaignPolicyViolation(err); ok {
+				w.app.Log.Warn(
+					"Auto campaign kept as draft by policy",
+					"instance_id", instance.ID,
+					"campaign_id", campaign.ID,
+					"reason_code", reasonCode,
+					"message", message,
+				)
+			} else {
+				return err
+			}
+		} else if err := w.startAutoCampaign(instance.OrganizationID, campaign, recipients); err != nil {
 			return err
 		}
 	}
@@ -201,6 +213,25 @@ func (w *InstanceAutoCampaignWorker) processInstance(nowUTC time.Time, instance 
 		"recipient_count", len(recipients),
 		"target_status", settings.TargetStatus,
 	)
+	return nil
+}
+
+func (w *InstanceAutoCampaignWorker) enforceAutoCampaignRunPolicy(instance models.WhatsAppInstance) error {
+	if err := w.app.enforceCampaignStartPolicy(instance.OrganizationID, instance.ID.String()); err != nil {
+		return err
+	}
+	if instance.Status != models.InstanceStatusConnected {
+		return &campaignPolicyViolationError{
+			message:    "Campaign sender instance is not connected",
+			reasonCode: ReasonCodeInstanceNotConn,
+		}
+	}
+	if blockReason := instanceSendBlockReason(&instance); blockReason != "" {
+		return &campaignPolicyViolationError{
+			message:    blockReason,
+			reasonCode: ReasonCodeInstanceBlocked,
+		}
+	}
 	return nil
 }
 

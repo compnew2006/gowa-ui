@@ -518,3 +518,58 @@ Synchronize messages sent from the connected WhatsApp mobile device into the Wha
 
 1. Run the new DB-backed Whatsmeow tests in CI/local with `TEST_DATABASE_URL` set to validate persistence behavior end-to-end.
 2. Optionally add an integration test asserting frontend WebSocket rendering for a device-sent outgoing event in `ChatView`.
+
+---
+
+# Session Summary - 2026-03-01 17:41
+
+## Objective
+
+Complete the strict anti-ban hardening rollout (Inbound-only enforcement, Whatsmeow typing indicator, instance block handling) with required backend/frontend tests and instances E2E updates.
+
+## Modules Touched
+
+- `internal/handlers/campaign_policy.go`
+- `internal/handlers/campaigns.go`
+- `internal/handlers/instance_auto_campaign_worker.go`
+- `internal/worker/send_policy.go`
+- `internal/worker/worker.go`
+- `internal/worker/campaign_delay.go`
+- `internal/worker/campaign_delay_test.go`
+- `internal/worker/worker_test.go`
+- `pkg/provider/context.go`
+- `pkg/whatsmeow/typing_indicator.go`
+- `pkg/whatsmeow/typing_indicator_test.go`
+- `pkg/whatsmeow/send_error_classification.go`
+- `pkg/whatsmeow/send_error_classification_test.go`
+- `pkg/whatsmeow/queue.go`
+- `pkg/whatsmeow/adapter_send.go`
+- `pkg/whatsmeow/events.go`
+- `pkg/whatsmeow/manager.go`
+- `internal/config/config.go`
+- `internal/models/instance.go`
+- `internal/database/postgres.go`
+- `internal/handlers/send_restriction_policy_test.go`
+- `internal/handlers/campaigns_test.go`
+- `frontend/src/views/settings/InstancesView.vue`
+- `frontend/src/services/websocket.ts`
+- `frontend/src/stores/instances.test.ts`
+- `frontend/src/lib/instance-auto-campaign.test.ts`
+- `frontend/e2e/tests/settings/instances.spec.ts`
+- `frontend/e2e/tests/settings/instances-health.spec.ts`
+- `frontend/e2e/tests/chat/policy-blocked-send.spec.ts`
+
+## Technical Decisions
+
+- Enforced strict campaign start policy centrally and reused shared reason codes across handlers and API envelopes.
+- Added typing simulation as a dedicated planner with safe failure semantics (presence errors never break send).
+- Disabled typing simulation for campaign worker sends via provider context to avoid unnatural automation signals.
+- Switched delay throttling key scope to `instance_id` to avoid per-campaign bypasses.
+- Added frontend `campaign_draft_only` pre-save guard to prevent `target_status=run` payloads when policy is active.
+- Exposed a test-only websocket emitter hook for deterministic E2E validation of instance status events.
+
+## Next Steps
+
+1. Add localization keys for new draft-only toast copy in `InstancesView`.
+2. Add a small integration test for `send_blocked_until` rendering in `InstanceCard`.
+3. Monitor real Whatsmeow ban events and tune typing delay bounds from production telemetry.

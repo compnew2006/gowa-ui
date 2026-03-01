@@ -82,6 +82,11 @@ type WhatsmeowConfig struct {
 	UploadRetryCount    int    `koanf:"upload_retry_count"`
 	UploadRetryDelaySec int    `koanf:"upload_retry_delay_sec"`
 	Identity            string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")
+	TypingIndicatorEnabled bool `koanf:"typing_indicator_enabled"`
+	TypingMinDelayMs       int  `koanf:"typing_min_delay_ms"`
+	TypingMaxDelayMs       int  `koanf:"typing_max_delay_ms"`
+	TypingCharDelayMs      int  `koanf:"typing_char_delay_ms"`
+	TypingCooldownMs       int  `koanf:"typing_cooldown_ms"`
 }
 
 type AIConfig struct {
@@ -222,6 +227,18 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Whatsmeow.UploadRetryDelaySec == 0 {
 		cfg.Whatsmeow.UploadRetryDelaySec = 2
+	}
+	if cfg.Whatsmeow.TypingMinDelayMs == 0 {
+		cfg.Whatsmeow.TypingMinDelayMs = 600
+	}
+	if cfg.Whatsmeow.TypingMaxDelayMs == 0 {
+		cfg.Whatsmeow.TypingMaxDelayMs = 2200
+	}
+	if cfg.Whatsmeow.TypingCharDelayMs == 0 {
+		cfg.Whatsmeow.TypingCharDelayMs = 40
+	}
+	if cfg.Whatsmeow.TypingCooldownMs == 0 {
+		cfg.Whatsmeow.TypingCooldownMs = 1200
 	}
 	if cfg.Storage.Type == "" {
 		cfg.Storage.Type = "local"
