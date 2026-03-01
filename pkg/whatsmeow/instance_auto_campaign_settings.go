@@ -39,8 +39,8 @@ func DefaultAutoCampaignSettings() AutoCampaignSettings {
 		NamePrefix:      "",
 		Message:         "",
 		IntervalDays:    7,
-		MinDelayMinutes: 0,
-		MaxDelayMinutes: 0,
+		MinDelayMinutes: 1,
+		MaxDelayMinutes: 3,
 		TargetStatus:    AutoCampaignTargetStatusDraft,
 	}
 }

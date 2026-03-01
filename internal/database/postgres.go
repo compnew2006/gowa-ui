@@ -232,10 +232,32 @@ func getIndexes() []string {
 		`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS closed_by_user_id uuid`,
 		`ALTER TABLE whatsapp_instances ADD COLUMN IF NOT EXISTS send_blocked_until timestamptz`,
 		`ALTER TABLE whatsapp_instances ADD COLUMN IF NOT EXISTS send_block_reason text`,
+		`ALTER TABLE whatsapp_instances ALTER COLUMN send_block_reason SET DEFAULT ''`,
+		`UPDATE whatsapp_instances SET send_block_reason = '' WHERE send_block_reason IS NULL`,
+		`ALTER TABLE whatsapp_instances ALTER COLUMN send_block_reason SET NOT NULL`,
 		`UPDATE contacts SET status = 'pending' WHERE status IS NULL OR status = ''`,
 		`ALTER TABLE chatbot_sessions ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE agent_transfers ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE bulk_message_recipients ALTER COLUMN phone_number TYPE varchar(50)`,
+		`ALTER TABLE bulk_message_recipients ADD COLUMN IF NOT EXISTS phone_normalized varchar(32)`,
+		`WITH normalized AS (
+			SELECT id,
+				campaign_id,
+				COALESCE(NULLIF(regexp_replace(COALESCE(phone_number, ''), '[^0-9]', '', 'g'), ''), '') AS normalized_phone,
+				ROW_NUMBER() OVER (
+					PARTITION BY campaign_id, COALESCE(NULLIF(regexp_replace(COALESCE(phone_number, ''), '[^0-9]', '', 'g'), ''), '')
+					ORDER BY created_at ASC, id ASC
+				) AS row_num
+			FROM bulk_message_recipients
+		)
+		UPDATE bulk_message_recipients AS r
+		SET phone_normalized = CASE
+			WHEN normalized.row_num = 1 THEN normalized.normalized_phone
+			ELSE ''
+		END
+		FROM normalized
+		WHERE normalized.id = r.id`,
+		`UPDATE bulk_message_recipients SET phone_normalized = '' WHERE phone_normalized IS NULL`,
 		`ALTER TABLE bulk_message_campaigns ADD COLUMN IF NOT EXISTS min_delay_seconds integer DEFAULT 0`,
 		`ALTER TABLE bulk_message_campaigns ADD COLUMN IF NOT EXISTS max_delay_seconds integer DEFAULT 0`,
 		// Indexes
@@ -249,6 +271,7 @@ func getIndexes() []string {
 		`DROP INDEX IF EXISTS idx_whatsapp_instances_j_id`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_instances_j_id ON whatsapp_instances(jid) WHERE jid <> ''`,
 		`CREATE INDEX IF NOT EXISTS idx_whatsapp_instances_send_blocked_until ON whatsapp_instances(send_blocked_until) WHERE send_blocked_until IS NOT NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_bulk_recipients_campaign_phone_normalized ON bulk_message_recipients(campaign_id, phone_normalized) WHERE phone_normalized <> ''`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_assigned_read ON contacts(assigned_user_id, is_read)`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_status_assignee ON contacts(status, assigned_user_id, last_message_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_closed_at ON contacts(closed_at DESC)`,

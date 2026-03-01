@@ -746,8 +746,13 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 		return nil
 	}
 
-	isSystemSend := opts.SentByUserID == nil
-	if isSystemSend && !policy.ApplyToSystem {
+	actorType := opts.resolvedActorType()
+	isUserSend := actorType == MessageActorUser && opts.SentByUserID != nil
+	var logUserID *uuid.UUID
+	if isUserSend {
+		logUserID = opts.SentByUserID
+	}
+	if !isUserSend && !policy.ApplyToSystem {
 		return nil
 	}
 
@@ -758,7 +763,7 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 		cfg  sendRestrictionsSettings
 		err  error
 	)
-	if opts.SentByUserID != nil {
+	if isUserSend {
 		user, err = a.loadUserForSendRestrictions(orgID, *opts.SentByUserID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -782,11 +787,11 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 	if canonical := a.resolveDirectRecipientFromConversation(ctx, req.Contact); canonical != "" {
 		targetPhone = canonical
 	}
-	if a.isWhatsmeowProvider() && opts.SentByUserID != nil {
+	if a.isWhatsmeowProvider() && isUserSend {
 		allowedInstanceIDs := allowedInstanceIDsForRestrictions(cfg)
 		if len(allowedInstanceIDs) == 0 {
 			reason := "restricted user does not have an allowed instance configured"
-			a.logRestrictedSendBlocked(orgID, opts.SentByUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
+			a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
 			if !shouldEnforce {
 				return nil
 			}
@@ -803,7 +808,7 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 				requestedInstance = outgoingInstanceID.String()
 			}
 			reason := fmt.Sprintf("instance mismatch (allowed=%s, requested=%s)", strings.Join(stringifyUUIDs(allowedInstanceIDs), ","), requestedInstance)
-			a.logRestrictedSendBlocked(orgID, opts.SentByUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
+			a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
 			if !shouldEnforce {
 				return nil
 			}
@@ -817,7 +822,7 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 	targetNumber := normalizeRestrictedPhoneNumber(targetPhone)
 	if targetNumber == "" {
 		reason := "contact phone number could not be normalized"
-		a.logRestrictedSendBlocked(orgID, opts.SentByUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInbound, "blocked")
+		a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInbound, "blocked")
 		if !shouldEnforce {
 			return nil
 		}
@@ -827,7 +832,7 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 		}
 	}
 
-	if opts.SentByUserID != nil && containsRestrictedNumber(cfg.AuthorizedNumbers, targetNumber) {
+	if isUserSend && containsRestrictedNumber(cfg.AuthorizedNumbers, targetNumber) {
 		return nil
 	}
 
@@ -850,7 +855,7 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 	if !shouldEnforce {
 		status = "audit"
 	}
-	a.logRestrictedSendBlocked(orgID, opts.SentByUserID, req.Contact, req.Type, targetNumber, reason, ReasonCodePolicyNoInbound, status)
+	a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetNumber, reason, ReasonCodePolicyNoInbound, status)
 	if !shouldEnforce {
 		return nil
 	}

@@ -913,6 +913,7 @@ func TestDefaultSendOptions(t *testing.T) {
 	assert.True(t, opts.DispatchWebhook)
 	assert.False(t, opts.TrackSLA)
 	assert.True(t, opts.Async)
+	assert.Equal(t, handlers.MessageActorUser, opts.ActorType)
 	assert.Nil(t, opts.SentByUserID)
 }
 
@@ -923,6 +924,7 @@ func TestChatbotSendOptions(t *testing.T) {
 	assert.False(t, opts.DispatchWebhook)
 	assert.True(t, opts.TrackSLA)
 	assert.False(t, opts.Async)
+	assert.Equal(t, handlers.MessageActorSystem, opts.ActorType)
 	assert.Nil(t, opts.SentByUserID)
 }
 
@@ -933,6 +935,7 @@ func TestAPISendOptions(t *testing.T) {
 	assert.True(t, opts.DispatchWebhook)
 	assert.False(t, opts.TrackSLA)
 	assert.True(t, opts.Async)
+	assert.Equal(t, handlers.MessageActorSystem, opts.ActorType)
 	assert.Nil(t, opts.SentByUserID)
 }
 
@@ -943,6 +946,7 @@ func TestSLASendOptions(t *testing.T) {
 	assert.False(t, opts.DispatchWebhook)
 	assert.False(t, opts.TrackSLA)
 	assert.False(t, opts.Async)
+	assert.Equal(t, handlers.MessageActorSystem, opts.ActorType)
 	assert.Nil(t, opts.SentByUserID)
 }
 

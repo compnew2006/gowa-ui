@@ -24,6 +24,8 @@ func createTestCampaign(t *testing.T, app *handlers.App, orgID, templateID, user
 		Name:            "Test Campaign " + uuid.New().String()[:8],
 		WhatsAppAccount: whatsappAccount,
 		TemplateID:      templateID,
+		MinDelaySeconds: 20,
+		MaxDelaySeconds: 45,
 		Status:          status,
 		CreatedBy:       userID,
 	}
@@ -186,6 +188,8 @@ func TestApp_CreateCampaign_Success(t *testing.T) {
 	assert.Equal(t, "Test Campaign", resp.Data.Name)
 	assert.Equal(t, models.CampaignStatusDraft, resp.Data.Status)
 	assert.Equal(t, template.ID, resp.Data.TemplateID)
+	assert.Equal(t, 20, resp.Data.MinDelaySeconds)
+	assert.Equal(t, 45, resp.Data.MaxDelaySeconds)
 }
 
 func TestApp_CreateCampaign_WithScheduledAt(t *testing.T) {
@@ -665,7 +669,7 @@ func TestApp_StartCampaign_FailsWhenDelayBelowStrictFloor(t *testing.T) {
 	err := app.StartCampaign(req)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
-	assert.Contains(t, string(testutil.GetResponseBody(req)), "at least 3 seconds")
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "at least 10 seconds")
 }
 
 func TestApp_StartCampaign_FailsWhenCampaignDraftOnlyEnabled(t *testing.T) {
@@ -690,6 +694,37 @@ func TestApp_StartCampaign_FailsWhenCampaignDraftOnlyEnabled(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 	assert.Contains(t, string(testutil.GetResponseBody(req)), "POLICY_DRAFT_ONLY")
+}
+
+func TestApp_StartCampaign_FailsWhenRecipientsWithoutInboundHistory(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	app.Config.WhatsApp.Provider = "whatsmeow"
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-no-inbound")), testutil.WithPassword("password"))
+	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusConnected, nil, "")
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusDraft)
+	require.NoError(t, app.DB.Model(campaign).Updates(map[string]any{
+		"min_delay_seconds": 20,
+		"max_delay_seconds": 45,
+	}).Error)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+	updateOrganizationSettings(t, app, org.ID, models.JSONB{
+		"strict_sending_restrictions_enabled": true,
+		"outbound_mode":                       "inbound_only",
+		"strict_sending_apply_to_system":      true,
+		"strict_rollout_mode":                 "enforce",
+	})
+
+	req := testutil.NewJSONRequest(t, nil)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	err := app.StartCampaign(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "POLICY_NO_INBOUND")
 }
 
 // --- PauseCampaign Tests ---
@@ -848,6 +883,77 @@ func TestApp_ImportRecipients_WithTemplateParams(t *testing.T) {
 	var recipient models.BulkMessageRecipient
 	app.DB.Where("campaign_id = ?", campaign.ID).First(&recipient)
 	assert.NotNil(t, recipient.TemplateParams)
+	assert.Equal(t, "1234567890", recipient.PhoneNormalized)
+	assert.Equal(t, "1234567890", recipient.PhoneNumber)
+}
+
+func TestApp_ImportRecipients_DeduplicatesNormalizedPhoneNumbers(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-dedupe")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("import-dedupe-account"))
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"recipients": []map[string]interface{}{
+			{"phone_number": "+1 (234) 567-890"},
+			{"phone_number": "1234567890"},
+			{"phone_number": "1-234-567-890"},
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	err := app.ImportRecipients(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			AddedCount      int   `json:"added_count"`
+			TotalRecipients int64 `json:"total_recipients"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, 1, resp.Data.AddedCount)
+	assert.Equal(t, int64(1), resp.Data.TotalRecipients)
+
+	var recipients []models.BulkMessageRecipient
+	require.NoError(t, app.DB.Where("campaign_id = ?", campaign.ID).Find(&recipients).Error)
+	require.Len(t, recipients, 1)
+	assert.Equal(t, "1234567890", recipients[0].PhoneNormalized)
+}
+
+func TestApp_ImportRecipients_StrictInboundOnlyRejectsUnknownNumber(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-inbound-policy")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("import-inbound-policy-account"))
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
+
+	updateOrganizationSettings(t, app, org.ID, models.JSONB{
+		"strict_sending_restrictions_enabled": true,
+		"outbound_mode":                       "inbound_only",
+		"strict_sending_apply_to_system":      true,
+		"strict_rollout_mode":                 "enforce",
+	})
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"recipients": []map[string]interface{}{
+			{"phone_number": "+15550001111"},
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	err := app.ImportRecipients(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "POLICY_NO_INBOUND")
 }
 
 func TestApp_ImportRecipients_NotDraft(t *testing.T) {

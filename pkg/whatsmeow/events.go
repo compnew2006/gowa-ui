@@ -165,6 +165,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if err := cm.updateInstanceSendBlock(context.Background(), instanceID, &blockedUntil, reason); err != nil {
 			cm.logger.Warn("Failed to persist temporary send block", "error", err, "instance_id", instanceID)
 		}
+		cm.pauseActiveCampaignsForInstance(context.Background(), orgID, instanceID, "temporary_ban")
 		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusBanned); err != nil {
 			cm.logger.Error("Failed to update status on ban", "error", err)
 			cm.MarkError(instanceID)
@@ -198,6 +199,12 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 	case *events.LoggedOut:
 		cm.ClearCachedQRCode(instanceID)
 		cm.clearActiveCalls(instanceID)
+		logoutReason := "WhatsApp session was logged out. Reconnect and scan QR code again."
+		blockedUntil := time.Now().UTC().Add(24 * time.Hour)
+		if err := cm.updateInstanceSendBlock(context.Background(), instanceID, &blockedUntil, logoutReason); err != nil {
+			cm.logger.Warn("Failed to persist logged-out send block", "error", err, "instance_id", instanceID)
+		}
+		cm.pauseActiveCampaignsForInstance(context.Background(), orgID, instanceID, "logged_out")
 		if err := cm.updateInstanceIdentity(context.Background(), instanceID, "", ""); err != nil {
 			cm.logger.Error("Failed to clear instance identity on logout", "error", err)
 			cm.MarkError(instanceID)
@@ -214,7 +221,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 			orgID,
 			instanceID,
 			"logged_out",
-			"WhatsApp session was logged out. Reconnect and scan QR code again.",
+			logoutReason,
 		)
 		if err != nil {
 			cm.logger.Error("Failed to create logged out notification", "error", err, "instance_id", instanceID)

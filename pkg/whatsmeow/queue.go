@@ -23,15 +23,18 @@ type InstanceQueue struct {
 	logger     logf.Logger
 	lastActive time.Time
 	mu         sync.Mutex // protects lastActive and checks
+	onDepth    func(instanceID string, depth int64)
 }
 
 // QueueManager manages queues for multiple instances
 type QueueManager struct {
-	queues sync.Map // map[string]*InstanceQueue
-	config config.WhatsmeowConfig
-	logger logf.Logger
-	ctx    context.Context
-	cancel context.CancelFunc
+	queues      sync.Map // map[string]*InstanceQueue
+	config      config.WhatsmeowConfig
+	logger      logf.Logger
+	ctx         context.Context
+	cancel      context.CancelFunc
+	mu          sync.RWMutex
+	depthReport func(instanceID string, depth int64)
 }
 
 // NewQueueManager creates a new QueueManager
@@ -50,6 +53,16 @@ func NewQueueManager(cfg config.WhatsmeowConfig, logger logf.Logger) *QueueManag
 	return qm
 }
 
+// SetDepthObserver registers a callback invoked whenever queue depth changes for an instance.
+func (m *QueueManager) SetDepthObserver(observer func(instanceID string, depth int64)) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.depthReport = observer
+}
+
 // Enqueue adds a job to the instance's queue
 func (m *QueueManager) Enqueue(instanceID string, job Job) error {
 	q, _ := m.queues.LoadOrStore(instanceID, m.newInstanceQueue(instanceID))
@@ -61,6 +74,7 @@ func (m *QueueManager) Enqueue(instanceID string, job Job) error {
 	select {
 	case queue.jobs <- job:
 		queue.updateActivity()
+		queue.reportDepth()
 		return nil
 	case <-m.ctx.Done():
 		return m.ctx.Err()
@@ -72,6 +86,7 @@ func (m *QueueManager) Enqueue(instanceID string, job Job) error {
 		select {
 		case queue.jobs <- job:
 			queue.updateActivity()
+			queue.reportDepth()
 			return nil
 		case <-time.After(5 * time.Second):
 			return errors.New("queue full, timed out")
@@ -85,6 +100,7 @@ func (m *QueueManager) Close() {
 	m.queues.Range(func(key, value interface{}) bool {
 		q := value.(*InstanceQueue)
 		close(q.stop)
+		q.reportDepthWithValue(0)
 		return true
 	})
 }
@@ -97,6 +113,7 @@ func (m *QueueManager) newInstanceQueue(instanceID string) *InstanceQueue {
 		config:     m.config,
 		logger:     m.logger, // Passed directly, fields added in log calls
 		lastActive: time.Now(),
+		onDepth:    m.reportDepth,
 	}
 	go q.worker()
 	return q
@@ -125,6 +142,7 @@ func (m *QueueManager) cleanupLoop() {
 				if idle > limit {
 					m.logger.Info("removing idle queue", "instance_id", key, "idle_duration", idle)
 					close(q.stop)
+					q.reportDepthWithValue(0)
 					m.queues.Delete(key)
 				}
 				return true
@@ -149,7 +167,9 @@ func (q *InstanceQueue) worker() {
 			return
 		case job := <-q.jobs:
 			q.updateActivity()
+			q.reportDepth()
 			q.process(job)
+			q.reportDepth()
 		}
 	}
 }
@@ -164,17 +184,33 @@ func (q *InstanceQueue) process(job Job) {
 	if maxDelay == 0 {
 		maxDelay = 3000
 	}
+	if minDelay < 0 {
+		minDelay = 0
+	}
+	if maxDelay < minDelay {
+		maxDelay = minDelay
+	}
 
 	// Random delay
-	delay := time.Duration(minDelay+rand.Intn(maxDelay-minDelay+1)) * time.Millisecond
+	delayMs := minDelay
+	if maxDelay > minDelay {
+		delayMs += rand.Intn(maxDelay - minDelay + 1)
+	}
+	delay := time.Duration(delayMs) * time.Millisecond
 	time.Sleep(delay)
 
 	// 2. Execution with Exponential Backoff
 	maxRetries := 3
 	baseBackoff := 1 * time.Second
+	jobTimeout := time.Duration(q.config.QueueTimeoutSeconds) * time.Second
+	if jobTimeout <= 0 {
+		jobTimeout = 30 * time.Second
+	}
 
 	for i := 0; i <= maxRetries; i++ {
-		err := job(context.Background()) // Should we pass a timeout ctx?
+		jobCtx, cancel := context.WithTimeout(context.Background(), jobTimeout)
+		err := job(jobCtx)
+		cancel()
 		if err == nil {
 			return // Success
 		}
@@ -199,4 +235,34 @@ func (q *InstanceQueue) process(job Job) {
 			return
 		}
 	}
+}
+
+func (q *InstanceQueue) reportDepth() {
+	if q == nil {
+		return
+	}
+	q.reportDepthWithValue(int64(len(q.jobs)))
+}
+
+func (q *InstanceQueue) reportDepthWithValue(depth int64) {
+	if q == nil || q.onDepth == nil {
+		return
+	}
+	if depth < 0 {
+		depth = 0
+	}
+	q.onDepth(q.instanceID, depth)
+}
+
+func (m *QueueManager) reportDepth(instanceID string, depth int64) {
+	if m == nil {
+		return
+	}
+	m.mu.RLock()
+	reporter := m.depthReport
+	m.mu.RUnlock()
+	if reporter == nil {
+		return
+	}
+	reporter(instanceID, depth)
 }

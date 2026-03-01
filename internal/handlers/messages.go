@@ -64,6 +64,15 @@ type OutgoingMessageRequest struct {
 	ReplyToMessage *models.Message
 }
 
+type MessageActorType string
+
+const (
+	MessageActorUser         MessageActorType = "user"
+	MessageActorSystem       MessageActorType = "system"
+	MessageActorWorker       MessageActorType = "worker"
+	MessageActorAutoCampaign MessageActorType = "auto_campaign"
+)
+
 // MessageSendOptions configures optional behaviors for message sending
 type MessageSendOptions struct {
 	// BroadcastWebSocket enables WebSocket broadcast to org (default: true)
@@ -78,9 +87,23 @@ type MessageSendOptions struct {
 	// SentByUserID sets the user who sent the message (for agent messages)
 	SentByUserID *uuid.UUID
 
+	// ActorType identifies sender context explicitly (user|system|worker|auto_campaign).
+	ActorType MessageActorType
+
 	// Async if true, sends in background goroutine and returns immediately
 	// Message is persisted before send, status updated after
 	Async bool
+}
+
+func (o MessageSendOptions) resolvedActorType() MessageActorType {
+	switch o.ActorType {
+	case MessageActorUser, MessageActorSystem, MessageActorWorker, MessageActorAutoCampaign:
+		return o.ActorType
+	}
+	if o.SentByUserID != nil {
+		return MessageActorUser
+	}
+	return MessageActorSystem
 }
 
 // DefaultSendOptions returns options suitable for agent UI sends
@@ -89,6 +112,7 @@ func DefaultSendOptions() MessageSendOptions {
 		BroadcastWebSocket: true,
 		DispatchWebhook:    true,
 		TrackSLA:           false,
+		ActorType:          MessageActorUser,
 		Async:              true,
 	}
 }
@@ -99,6 +123,7 @@ func ChatbotSendOptions() MessageSendOptions {
 		BroadcastWebSocket: true,
 		DispatchWebhook:    false,
 		TrackSLA:           true,
+		ActorType:          MessageActorSystem,
 		Async:              false,
 	}
 }
@@ -109,6 +134,7 @@ func APISendOptions() MessageSendOptions {
 		BroadcastWebSocket: false,
 		DispatchWebhook:    true,
 		TrackSLA:           false,
+		ActorType:          MessageActorSystem,
 		Async:              true,
 	}
 }
@@ -119,6 +145,7 @@ func SLASendOptions() MessageSendOptions {
 		BroadcastWebSocket: true,
 		DispatchWebhook:    false,
 		TrackSLA:           false,
+		ActorType:          MessageActorSystem,
 		Async:              false, // Sync to ensure message is sent before continuing
 	}
 }

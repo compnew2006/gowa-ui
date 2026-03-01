@@ -177,6 +177,9 @@
         - 📄 **template-sending.spec.ts**
           > *Run a SQL statement against the test database using node-postgres. Used to seed APPROVED templates (API only creates DRAFT). Works in CI without needi*
           - ⚙️ `execSQL`, `if`
+        - 📄 **typing-indicator.spec.ts**
+          > *Source file.*
+          - ⚙️ `for`, `if`
       - 📁 **auth/**
         - 📄 **login.spec.ts**
           > *Source file.*
@@ -1250,6 +1253,7 @@
     - 📄 contacts_management.go
     - 📄 contacts_messaging.go
     - 📄 contacts_messaging_media_policy_test.go
+    - 📄 contacts_messaging_typing_test.go
     - 📄 contacts_test.go
     - 📄 conversation_notes.go
     - 📄 conversation_notes_test.go
@@ -2211,6 +2215,7 @@
     - 📄 8c314d46-03f8-44c4-9212-0474327ff6f4.jpg
     - 📄 8c70c4eb-3af3-4e7f-970a-9fc02341b72d.jpg
     - 📄 8c9ccb67-1c13-450d-b646-20f29cd718bc.jpg
+    - 📄 8ca61c54-65ee-45a1-8a0d-f60d87dd6cee.jpg
     - 📄 8cbcc5d0-a51a-4e96-9c2e-ffdc5bc94d6f.jpg
     - 📄 8cc8725e-006d-4017-8f5d-1d79438eb730.jpg
     - 📄 8cdc9066-1c84-4bf4-a20e-f6ecab4c204a.jpg
@@ -3960,6 +3965,7 @@
     - 📄 events.go
     - 📄 events_call.go
     - 📄 events_call_auto_reject_render.go
+    - 📄 events_campaign_pause.go
     - 📄 events_history_sync.go
     - 📄 events_identity.go
     - 📄 events_identity_test.go
@@ -3991,11 +3997,14 @@
     - 📄 qr_cache.go
     - 📄 qr_cache_test.go
     - 📄 queue.go
+    - 📄 queue_test.go
     - 📄 reply_context.go
     - 📄 send_error_classification.go
     - 📄 send_error_classification_test.go
     - 📄 typing_indicator.go
     - 📄 typing_indicator_test.go
+    - 📄 typing_presence.go
+    - 📄 typing_presence_test.go
   - 📁 **migration/**
     - 📄 migrate.go
   - 📁 **whatsapp/**

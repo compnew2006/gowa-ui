@@ -4,6 +4,8 @@
 
 ### Added
 - Whatsmeow typing-indicator planner module with cooldown and provider context skip support.
+- Live chat typing presence endpoint `POST /api/contacts/{id}/typing` for composing/paused signaling from frontend composer.
+- Whatsmeow typing presence module (`typing_presence.go`) with direct-chat validation and recipient normalization tests.
 - Campaign/send policy helper modules and explicit reason-code constants for strict sending enforcement.
 - Backend tests for campaign delay scope, typing indicator behavior, and send error classification.
 - Frontend unit tests for instances store and auto-campaign normalization.
@@ -17,6 +19,7 @@
 
 ### Changed
 - Enforced campaign start/delay guardrails for Whatsmeow instances (connected + block checks + draft-only policy).
+- Updated `ChatView` composer flow to send live `composing`/`paused` typing presence with throttling, idle pause, and cleanup on send/chat-switch/unmount.
 - Updated worker campaign delay limiter from campaign scope to instance scope and added permanent-error retry classification.
 - Persisted instance send blocking metadata from Whatsmeow events and surfaced send-block details in instances UI.
 - Improved instances and chat UX for policy failures using `reason_code` mapping and better status transitions.

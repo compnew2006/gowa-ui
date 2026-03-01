@@ -28,9 +28,13 @@ func classifySendError(err error) sendErrorClass {
 
 	permanentMarkers := []string{
 		"policy_no_inbound",
+		"policy_no_instance",
 		"policy_draft_only",
 		"instance_blocked",
+		"instance_banned",
 		"instance_not_connected",
+		"instance_logged_out",
+		"logged out",
 		"instance is not connected",
 		"instance not connected",
 		"instance disconnected",

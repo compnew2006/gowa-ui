@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const strictCampaignDelayFloorSeconds = 3
+const strictCampaignDelayFloorSeconds = 10
 
 type campaignPolicyViolationError struct {
 	message    string
@@ -39,13 +39,7 @@ func asCampaignPolicyViolation(err error) (string, string, bool) {
 }
 
 func (a *App) campaignDelayFloorSeconds(orgID uuid.UUID) int {
-	policy := a.loadOrganizationStrictPolicySettings(orgID)
-	if !policy.StrictEnabled {
-		return 0
-	}
-	if normalizeOutboundMode(policy.OutboundMode) != organizationOutboundModeInboundOnly {
-		return 0
-	}
+	_ = orgID
 	return strictCampaignDelayFloorSeconds
 }
 

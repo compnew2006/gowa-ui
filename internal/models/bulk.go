@@ -44,8 +44,9 @@ func (BulkMessageCampaign) TableName() string {
 // BulkMessageRecipient represents a recipient in a bulk message campaign
 type BulkMessageRecipient struct {
 	BaseModel
-	CampaignID        uuid.UUID     `gorm:"type:uuid;index;not null" json:"campaign_id"`
+	CampaignID        uuid.UUID     `gorm:"type:uuid;index;not null;uniqueIndex:idx_bulk_recipients_campaign_phone_normalized,priority:1" json:"campaign_id"`
 	PhoneNumber       string        `gorm:"size:50;not null" json:"phone_number"`
+	PhoneNormalized   string        `gorm:"size:32;default:'';uniqueIndex:idx_bulk_recipients_campaign_phone_normalized,priority:2" json:"phone_normalized,omitempty"`
 	RecipientName     string        `gorm:"size:255" json:"recipient_name"`
 	TemplateParams    JSONB         `gorm:"type:jsonb;default:'{}'" json:"template_params"`
 	Status            MessageStatus `gorm:"size:20;default:'pending'" json:"status"` // pending, sent, delivered, read, failed

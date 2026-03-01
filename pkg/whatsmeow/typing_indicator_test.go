@@ -86,6 +86,7 @@ func TestTypingIndicatorSkipsGroupsChannelsAndEmptyPreview(t *testing.T) {
 	assert.False(t, planner.shouldSimulate(context.Background(), group, "hello group"))
 	assert.False(t, planner.shouldSimulate(context.Background(), channel, "hello channel"))
 	assert.False(t, planner.shouldSimulate(context.Background(), direct, "   "))
+	assert.False(t, planner.shouldSimulate(context.Background(), direct, "ok"))
 }
 
 func TestTypingIndicatorSkipsWhenContextDisablesIt(t *testing.T) {

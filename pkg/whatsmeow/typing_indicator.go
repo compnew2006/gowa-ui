@@ -23,25 +23,29 @@ type typingIndicatorPlanner struct {
 	maxDelay  time.Duration
 	charDelay time.Duration
 	cooldown  time.Duration
+	minChars  int
 
 	mu         sync.Mutex
 	lastByChat map[string]time.Time
 	random     *rand.Rand
 	now        func() time.Time
 	sleep      func(context.Context, time.Duration) error
+	warn       func(string, ...any)
 }
 
 func newTypingIndicatorPlanner(cfg *config.WhatsmeowConfig) *typingIndicatorPlanner {
 	planner := &typingIndicatorPlanner{
-		enabled:   cfg != nil && cfg.TypingIndicatorEnabled,
-		minDelay:  durationFromMs(cfg, 600, func(c *config.WhatsmeowConfig) int { return c.TypingMinDelayMs }),
-		maxDelay:  durationFromMs(cfg, 2200, func(c *config.WhatsmeowConfig) int { return c.TypingMaxDelayMs }),
-		charDelay: durationFromMs(cfg, 40, func(c *config.WhatsmeowConfig) int { return c.TypingCharDelayMs }),
-		cooldown:  durationFromMs(cfg, 1200, func(c *config.WhatsmeowConfig) int { return c.TypingCooldownMs }),
+		enabled:    cfg != nil && cfg.TypingIndicatorEnabled,
+		minDelay:   durationFromMs(cfg, 700, func(c *config.WhatsmeowConfig) int { return c.TypingMinDelayMs }),
+		maxDelay:   durationFromMs(cfg, 3000, func(c *config.WhatsmeowConfig) int { return c.TypingMaxDelayMs }),
+		charDelay:  durationFromMs(cfg, 35, func(c *config.WhatsmeowConfig) int { return c.TypingCharDelayMs }),
+		cooldown:   durationFromMs(cfg, 4000, func(c *config.WhatsmeowConfig) int { return c.TypingCooldownMs }),
+		minChars:   3,
 		lastByChat: make(map[string]time.Time),
 		random:     rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec
 		now:        func() time.Time { return time.Now().UTC() },
 		sleep:      sleepWithTypingContext,
+		warn:       func(string, ...any) {},
 	}
 
 	if planner.maxDelay < planner.minDelay {
@@ -77,6 +81,7 @@ func (p *typingIndicatorPlanner) simulate(ctx context.Context, client chatPresen
 	}
 
 	if err := client.SendChatPresence(ctx, chatJID, types.ChatPresenceComposing, types.ChatPresenceMediaText); err != nil {
+		p.warn("Typing indicator composing presence failed", "chat_jid", chatJID.String(), "error", err)
 		return
 	}
 
@@ -98,6 +103,9 @@ func (p *typingIndicatorPlanner) shouldSimulate(ctx context.Context, chatJID typ
 		return false
 	}
 	if strings.TrimSpace(previewText) == "" {
+		return false
+	}
+	if p.minChars > 0 && utf8.RuneCountInString(strings.TrimSpace(previewText)) < p.minChars {
 		return false
 	}
 

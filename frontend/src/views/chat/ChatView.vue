@@ -195,10 +195,19 @@ const isRTL = computed(() =>
   localeDirectionManager.isRTL(String(locale.value)),
 );
 
+type TypingPresenceState = "composing" | "paused";
+
+const TYPING_COMPOSING_THROTTLE_MS = 2500;
+const TYPING_IDLE_PAUSE_MS = 3500;
+
 const messageInput = ref("");
 const messagesEndRef = ref<HTMLElement | null>(null);
 const messageInputRef = ref<HTMLTextAreaElement | null>(null);
 const isSending = ref(false);
+let typingPauseTimer: ReturnType<typeof setTimeout> | null = null;
+const typingLastComposeAt = ref(0);
+const typingLastState = ref<TypingPresenceState | null>(null);
+const typingLastContactID = ref<string | null>(null);
 const isAssignDialogOpen = ref(false);
 const isTransferring = ref(false);
 const isResuming = ref(false);
@@ -241,6 +250,109 @@ function contactIDFromToggleKey(toggleKey?: string | null): string {
 function selectedAccountFilter(toggleKey?: string | null): string | undefined {
   const account = accountFromToggleKey(toggleKey);
   return account || undefined;
+}
+
+function clearTypingPauseTimer() {
+  if (typingPauseTimer) {
+    clearTimeout(typingPauseTimer);
+    typingPauseTimer = null;
+  }
+}
+
+function resetTypingPresenceState() {
+  typingLastComposeAt.value = 0;
+  typingLastState.value = null;
+  typingLastContactID.value = null;
+}
+
+function isTypingPresenceEligibleContact(contact: Contact | null): boolean {
+  if (!contact) return false;
+  if (contact.is_group_chat === true) return false;
+
+  const metadata = contact.metadata || {};
+  if (metadata.is_group_chat === true || metadata.is_channel_chat === true) {
+    return false;
+  }
+
+  const phone = String(contact.phone_number || "").trim().toLowerCase();
+  if (!phone) return false;
+  if (phone.endsWith("@g.us") || phone.endsWith("@newsletter")) return false;
+
+  return true;
+}
+
+function resolveTypingInstanceID(contact: Contact): string | undefined {
+  if (typeof contactsStore.selectedInstanceId === "string") {
+    const selected = contactsStore.selectedInstanceId.trim();
+    if (selected !== "") return selected;
+  }
+
+  if (typeof contact.instance_id === "string") {
+    const instanceID = contact.instance_id.trim();
+    if (instanceID !== "") return instanceID;
+  }
+
+  return undefined;
+}
+
+async function sendTypingPresenceForContact(
+  contact: Contact | null,
+  state: TypingPresenceState,
+  options?: { force?: boolean },
+) {
+  if (!isTypingPresenceEligibleContact(contact)) return;
+  if (!contact) return;
+
+  const contactID = contact.id;
+  const force = options?.force === true;
+
+  if (!force) {
+    if (
+      state === "paused" &&
+      typingLastState.value === "paused" &&
+      typingLastContactID.value === contactID
+    ) {
+      return;
+    }
+
+    if (
+      state === "composing" &&
+      typingLastContactID.value === contactID &&
+      Date.now() - typingLastComposeAt.value < TYPING_COMPOSING_THROTTLE_MS
+    ) {
+      return;
+    }
+  }
+
+  if (state === "composing") {
+    typingLastComposeAt.value = Date.now();
+  }
+  typingLastState.value = state;
+  typingLastContactID.value = contactID;
+
+  try {
+    await messagesService.sendTyping(contactID, {
+      state,
+      instance_id: resolveTypingInstanceID(contact),
+    });
+  } catch {
+    // Typing presence is best-effort and should not interrupt chat UX.
+  }
+}
+
+function scheduleTypingPaused(contact: Contact | null) {
+  clearTypingPauseTimer();
+  if (!isTypingPresenceEligibleContact(contact)) return;
+
+  typingPauseTimer = setTimeout(() => {
+    void sendTypingPresenceForContact(contact, "paused");
+    clearTypingPauseTimer();
+  }, TYPING_IDLE_PAUSE_MS);
+}
+
+function stopTypingForContact(contact: Contact | null, options?: { force?: boolean }) {
+  clearTypingPauseTimer();
+  void sendTypingPresenceForContact(contact, "paused", options);
 }
 
 function findSidebarEntrySourceContact(
@@ -1117,6 +1229,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  const activeContact = contactsStore.currentContact;
+  stopTypingForContact(activeContact, { force: true });
+  resetTypingPresenceState();
   contactsSearchPrefetchRunToken++;
   if (contactsSearchRefreshTimer !== null) {
     window.clearTimeout(contactsSearchRefreshTimer);
@@ -1184,6 +1299,9 @@ function updateStickyDate(scrollContainer: HTMLElement) {
 
 // Watch for route changes
 watch(contactId, (newId) => {
+  const previousContact = contactsStore.currentContact;
+  stopTypingForContact(previousContact, { force: true });
+  resetTypingPresenceState();
   const selectionSequence = ++contactSelectionSequence;
   resetBatchPrintSelection();
   resetMediaLoadingPipeline();
@@ -1633,6 +1751,8 @@ async function deleteSidebarEntry(entry: SidebarContactEntry) {
       : false;
 
     if (deletedCurrentContact) {
+      stopTypingForContact(contactsStore.currentContact, { force: true });
+      resetTypingPresenceState();
       wsService.setCurrentContact(null);
       contactsStore.setCurrentContact(null);
       contactsStore.clearMessages();
@@ -1679,6 +1799,8 @@ function handleProfilePhotoDialogOpenChange(open: boolean) {
 
 async function handleContactDeleted(contactId: string) {
   if (contactsStore.currentContact?.id === contactId) {
+    stopTypingForContact(contactsStore.currentContact, { force: true });
+    resetTypingPresenceState();
     wsService.setCurrentContact(null);
     contactsStore.setCurrentContact(null);
     contactsStore.clearMessages();
@@ -1696,6 +1818,7 @@ async function sendMessage() {
   if (isCurrentChatRestricted.value || isCurrentChatClosed.value) return;
   if (!canSendMessage.value || !contactsStore.currentContact) return;
 
+  stopTypingForContact(contactsStore.currentContact);
   isSending.value = true;
   try {
     const activeAccountFilter = selectedAccountFilter(selectedAccount.value);
@@ -2184,15 +2307,41 @@ function replyToMessage(message: Message) {
 
 // Watch for slash commands in message input
 watch(messageInput, (val) => {
+  const activeContact = contactsStore.currentContact;
+
   if (val.startsWith("/")) {
     const query = val.slice(1); // Remove the leading /
     cannedSearchQuery.value = query;
     cannedPickerOpen.value = true;
+    stopTypingForContact(activeContact);
   } else if (cannedPickerOpen.value) {
     // Close picker if user removes the /
     cannedPickerOpen.value = false;
     cannedSearchQuery.value = "";
   }
+
+  if (!activeContact) {
+    clearTypingPauseTimer();
+    resetTypingPresenceState();
+    return;
+  }
+
+  if (val.startsWith("/")) {
+    return;
+  }
+
+  if (isCurrentChatRestricted.value || isCurrentChatClosed.value) {
+    stopTypingForContact(activeContact);
+    return;
+  }
+
+  if (val.trim() === "") {
+    stopTypingForContact(activeContact);
+    return;
+  }
+
+  void sendTypingPresenceForContact(activeContact, "composing");
+  scheduleTypingPaused(activeContact);
 });
 
 async function assignContactToUser(userId: string | null) {
@@ -2245,6 +2394,8 @@ async function closeCurrentChat() {
     await contactsStore.closeChat(contactsStore.currentContact.id);
     toast.success("Chat closed");
     await refreshContactsSidebar();
+    stopTypingForContact(contactsStore.currentContact, { force: true });
+    resetTypingPresenceState();
     wsService.setCurrentContact(null);
     contactsStore.setCurrentContact(null);
     contactsStore.clearMessages();
@@ -2365,6 +2516,8 @@ async function resumeChatbot() {
       );
       if (!stillExists) {
         // Contact no longer visible to this user, navigate away
+        stopTypingForContact(contactsStore.currentContact, { force: true });
+        resetTypingPresenceState();
         contactsStore.setCurrentContact(null);
         contactsStore.clearMessages();
         router.push("/chat");

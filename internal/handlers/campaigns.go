@@ -19,6 +19,11 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+const (
+	defaultCampaignMinDelaySeconds = 20
+	defaultCampaignMaxDelaySeconds = 45
+)
+
 // CampaignRequest represents campaign create/update request
 type CampaignRequest struct {
 	Name            string     `json:"name" validate:"required"`
@@ -175,7 +180,12 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 	templateID := template.ID
-	minDelaySeconds, maxDelaySeconds, err := normalizeCampaignDelayRange(0, 0, req.MinDelaySeconds, req.MaxDelaySeconds)
+	minDelaySeconds, maxDelaySeconds, err := normalizeCampaignDelayRange(
+		defaultCampaignMinDelaySeconds,
+		defaultCampaignMaxDelaySeconds,
+		req.MinDelaySeconds,
+		req.MaxDelaySeconds,
+	)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
@@ -389,9 +399,16 @@ func (a *App) validateCampaignSender(orgID uuid.UUID, sender string) error {
 
 		var instance models.WhatsAppInstance
 		if err := a.DB.
+			Select("id", "organization_id", "status", "send_blocked_until", "send_block_reason").
 			Where("id = ? AND organization_id = ?", instanceID, orgID).
 			First(&instance).Error; err != nil {
 			return fmt.Errorf("WhatsApp instance not found")
+		}
+		if instance.Status != models.InstanceStatusConnected {
+			return fmt.Errorf("WhatsApp instance is not connected")
+		}
+		if blockReason := instanceSendBlockReason(&instance); blockReason != "" {
+			return fmt.Errorf("WhatsApp instance is blocked: %s", blockReason)
 		}
 		return nil
 	}
@@ -480,6 +497,86 @@ func normalizeCampaignDelayRange(currentMin, currentMax int, requestedMin, reque
 	return minDelay, maxDelay, nil
 }
 
+func normalizeCampaignRecipientPhone(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func (a *App) shouldEnforceInboundOnlyForSystemSends(orgID uuid.UUID) bool {
+	policy := a.loadOrganizationStrictPolicySettings(orgID)
+	if !policy.StrictEnabled || !policy.ApplyToSystem {
+		return false
+	}
+	if normalizeOutboundMode(policy.OutboundMode) != organizationOutboundModeInboundOnly {
+		return false
+	}
+	return policy.shouldEnforceStrictPolicy(time.Now().UTC())
+}
+
+func (a *App) loadInboundHistoryPhoneSet(orgID uuid.UUID) (map[string]struct{}, error) {
+	phoneSet := make(map[string]struct{})
+	if a == nil || a.DB == nil || orgID == uuid.Nil {
+		return phoneSet, nil
+	}
+
+	var phones []string
+	if err := a.DB.Model(&models.Contact{}).
+		Joins("JOIN messages ON messages.contact_id = contacts.id").
+		Where("contacts.organization_id = ? AND messages.organization_id = ? AND messages.direction = ?", orgID, orgID, models.DirectionIncoming).
+		Distinct().
+		Pluck("contacts.phone_number", &phones).Error; err != nil {
+		return nil, err
+	}
+
+	for _, phone := range phones {
+		if normalized := normalizeCampaignRecipientPhone(phone); normalized != "" {
+			phoneSet[normalized] = struct{}{}
+		}
+	}
+	return phoneSet, nil
+}
+
+func (a *App) countInboundPolicyViolationsForRecipients(orgID uuid.UUID, recipients []models.BulkMessageRecipient) (int, error) {
+	if len(recipients) == 0 {
+		return 0, nil
+	}
+
+	inboundSet, err := a.loadInboundHistoryPhoneSet(orgID)
+	if err != nil {
+		return 0, err
+	}
+	if len(inboundSet) == 0 {
+		return len(recipients), nil
+	}
+
+	violations := 0
+	seen := make(map[string]struct{}, len(recipients))
+	for _, recipient := range recipients {
+		phone := normalizeCampaignRecipientPhone(recipient.PhoneNumber)
+		if phone == "" {
+			violations++
+			continue
+		}
+		if _, exists := seen[phone]; exists {
+			continue
+		}
+		seen[phone] = struct{}{}
+		if _, ok := inboundSet[phone]; !ok {
+			violations++
+		}
+	}
+	return violations, nil
+}
+
 // DeleteCampaign implements campaign deletion
 func (a *App) DeleteCampaign(r *fastglue.Request) error {
 	orgID, err := a.getOrgID(r)
@@ -562,6 +659,17 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 
 	if len(recipients) == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign has no pending recipients", nil, "")
+	}
+	if blockedCount, err := a.countInboundPolicyViolationsForRecipients(orgID, recipients); err != nil {
+		a.Log.Error("Failed to validate campaign recipients against strict inbound policy", "campaign_id", id, "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate campaign recipients", nil, "")
+	} else if blockedCount > 0 && a.shouldEnforceInboundOnlyForSystemSends(orgID) {
+		return r.SendErrorEnvelope(
+			fasthttp.StatusForbidden,
+			fmt.Sprintf("Campaign contains %d recipient(s) without inbound history in strict inbound-only mode", blockedCount),
+			reasonCodeDetails(ReasonCodePolicyNoInbound),
+			"",
+		)
 	}
 
 	// Validate template still exists
@@ -802,22 +910,60 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Create recipients
-	recipients := make([]models.BulkMessageRecipient, len(req.Recipients))
-	for i, rec := range req.Recipients {
-		recipients[i] = models.BulkMessageRecipient{
-			CampaignID:     id,
-			PhoneNumber:    rec.PhoneNumber,
-			RecipientName:  rec.RecipientName,
-			TemplateParams: models.JSONB(rec.TemplateParams),
-			Status:         models.MessageStatusPending,
+	normalizedInboundSet, err := a.loadInboundHistoryPhoneSet(orgID)
+	if err != nil {
+		a.Log.Error("Failed to load inbound history set for recipient import", "error", err, "campaign_id", id)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate recipients", nil, "")
+	}
+	enforceInboundOnly := a.shouldEnforceInboundOnlyForSystemSends(orgID)
+
+	recipients := make([]models.BulkMessageRecipient, 0, len(req.Recipients))
+	seenPhones := make(map[string]struct{}, len(req.Recipients))
+	for _, rec := range req.Recipients {
+		normalizedPhone := normalizeCampaignRecipientPhone(rec.PhoneNumber)
+		if normalizedPhone == "" {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid recipient phone_number", nil, "phone_number")
 		}
+
+		if enforceInboundOnly {
+			if _, ok := normalizedInboundSet[normalizedPhone]; !ok {
+				return r.SendErrorEnvelope(
+					fasthttp.StatusForbidden,
+					"Recipient rejected by strict inbound-only policy (no inbound history)",
+					reasonCodeDetails(ReasonCodePolicyNoInbound),
+					"",
+				)
+			}
+		}
+
+		if _, exists := seenPhones[normalizedPhone]; exists {
+			continue
+		}
+		seenPhones[normalizedPhone] = struct{}{}
+
+		recipients = append(recipients, models.BulkMessageRecipient{
+			CampaignID:      id,
+			PhoneNumber:     normalizedPhone,
+			PhoneNormalized: normalizedPhone,
+			RecipientName:   strings.TrimSpace(rec.RecipientName),
+			TemplateParams:  models.JSONB(rec.TemplateParams),
+			Status:          models.MessageStatusPending,
+		})
 	}
 
-	if err := a.DB.Create(&recipients).Error; err != nil {
-		a.Log.Error("Failed to add recipients", "error", err)
+	if len(recipients) == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No valid recipients to import", nil, "")
+	}
+
+	result := a.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "campaign_id"}, {Name: "phone_normalized"}},
+		DoNothing: true,
+	}).Create(&recipients)
+	if result.Error != nil {
+		a.Log.Error("Failed to add recipients", "error", result.Error)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to add recipients", nil, "")
 	}
+	addedCount := int(result.RowsAffected)
 
 	// Update total recipients count
 	var totalCount int64
@@ -828,7 +974,7 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 
 	return r.SendEnvelope(map[string]interface{}{
 		"message":          "Recipients added successfully",
-		"added_count":      len(req.Recipients),
+		"added_count":      addedCount,
 		"total_recipients": totalCount,
 	})
 }

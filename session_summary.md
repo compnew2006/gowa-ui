@@ -573,3 +573,38 @@ Complete the strict anti-ban hardening rollout (Inbound-only enforcement, Whatsm
 1. Add localization keys for new draft-only toast copy in `InstancesView`.
 2. Add a small integration test for `send_blocked_until` rendering in `InstanceCard`.
 3. Monitor real Whatsmeow ban events and tune typing delay bounds from production telemetry.
+
+---
+
+# Session Summary - 2026-03-01 18:18
+
+## Objective
+
+Fix live typing indicator visibility in WhatsApp when an agent types in the chat composer (before sending).
+
+## Modules Touched
+
+- `cmd/whatomate/main.go`
+- `internal/handlers/contacts_messaging.go`
+- `internal/handlers/contacts_messaging_typing_test.go`
+- `pkg/whatsmeow/typing_presence.go`
+- `pkg/whatsmeow/typing_presence_test.go`
+- `frontend/src/services/api.ts`
+- `frontend/src/views/chat/ChatView.vue`
+- `frontend/e2e/tests/chat/typing-indicator.spec.ts`
+- `MEMORY.md`
+- `CHANGELOG.md`
+
+## Technical Decisions
+
+- Implemented a best-effort typing API endpoint to avoid user-facing send failures when presence cannot be delivered.
+- Kept strict scope to direct chats only; groups/channels are skipped by backend guardrails.
+- Added frontend throttling (`2.5s`) and idle pause timeout (`3.5s`) to reduce noisy presence traffic.
+- Added explicit pause emission on send, route switch, and unmount to avoid stale composing state.
+- Added unit tests for typing state parsing/recipient normalization and an E2E coverage path for typing endpoint calls.
+
+## Next Steps
+
+1. Add deterministic seeded writable chat data for typing E2E to avoid fallback skip.
+2. Optionally mirror typing state in websocket telemetry for operational debugging.
+3. Tune typing throttle/idle values from production usage metrics.

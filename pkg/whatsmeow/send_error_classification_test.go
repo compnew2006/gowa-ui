@@ -40,6 +40,12 @@ func TestShouldRetrySendError(t *testing.T) {
 			expected:  sendErrorPermanent,
 		},
 		{
+			name:      "policy no instance is permanent",
+			err:       errors.New("POLICY_NO_INSTANCE"),
+			retryable: false,
+			expected:  sendErrorPermanent,
+		},
+		{
 			name:      "instance blocked is permanent",
 			err:       errors.New("instance_blocked"),
 			retryable: false,
@@ -48,6 +54,12 @@ func TestShouldRetrySendError(t *testing.T) {
 		{
 			name:      "instance disconnected is permanent",
 			err:       errors.New("instance is not connected"),
+			retryable: false,
+			expected:  sendErrorPermanent,
+		},
+		{
+			name:      "instance logged out is permanent",
+			err:       errors.New("instance_logged_out"),
 			retryable: false,
 			expected:  sendErrorPermanent,
 		},

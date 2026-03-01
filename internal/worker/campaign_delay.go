@@ -16,6 +16,7 @@ import (
 const (
 	campaignDelayKeyPrefix      = "whatomate:instance:delay:"
 	campaignDelayReservationTTL = 24 * time.Hour
+	campaignDelayFloorSeconds   = 10
 )
 
 var reserveCampaignDelaySlotScript = redis.NewScript(`
@@ -55,15 +56,7 @@ func resolveCampaignDelayScopeKey(instanceID string, fallbackCampaignID uuid.UUI
 }
 
 func (w *Worker) applyCampaignSendDelay(ctx context.Context, delayScopeKey string, minDelaySeconds, maxDelaySeconds int) error {
-	if minDelaySeconds < 0 {
-		minDelaySeconds = 0
-	}
-	if maxDelaySeconds < 0 {
-		maxDelaySeconds = 0
-	}
-	if maxDelaySeconds < minDelaySeconds {
-		maxDelaySeconds = minDelaySeconds
-	}
+	minDelaySeconds, maxDelaySeconds = normalizeCampaignDelaySeconds(minDelaySeconds, maxDelaySeconds)
 	if minDelaySeconds == 0 && maxDelaySeconds == 0 {
 		return nil
 	}
@@ -129,6 +122,28 @@ func randomDelayMilliseconds(minDelaySeconds, maxDelaySeconds int) (int64, error
 
 	selectedSeconds := minDelaySeconds + int(randomValue.Int64())
 	return int64(selectedSeconds) * int64(time.Second/time.Millisecond), nil
+}
+
+func normalizeCampaignDelaySeconds(minDelaySeconds, maxDelaySeconds int) (int, int) {
+	if minDelaySeconds < 0 {
+		minDelaySeconds = 0
+	}
+	if maxDelaySeconds < 0 {
+		maxDelaySeconds = 0
+	}
+	if minDelaySeconds == 0 && maxDelaySeconds == 0 {
+		return 0, 0
+	}
+	if minDelaySeconds < campaignDelayFloorSeconds {
+		minDelaySeconds = campaignDelayFloorSeconds
+	}
+	if maxDelaySeconds < campaignDelayFloorSeconds {
+		maxDelaySeconds = campaignDelayFloorSeconds
+	}
+	if maxDelaySeconds < minDelaySeconds {
+		maxDelaySeconds = minDelaySeconds
+	}
+	return minDelaySeconds, maxDelaySeconds
 }
 
 func sleepWithContext(ctx context.Context, duration time.Duration) error {

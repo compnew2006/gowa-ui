@@ -23,20 +23,20 @@ import (
 
 // ConnectionManager manages whatsmeow clients for multiple instances
 type ConnectionManager struct {
-	db            *gorm.DB
-	store         *sqlstore.Container
-	clients       map[uuid.UUID]*whatsmeow.Client
-	clientsMu     sync.RWMutex
-	metrics       sync.Map // map[uuid.UUID]*instanceMetrics
-	avatarSync    sync.Map // map[uuid.UUID]struct{}
-	activeCallsMu sync.Mutex
-	activeCallIDs map[uuid.UUID]map[string]struct{}
-	logger        logf.Logger
-	cfg           *config.WhatsmeowConfig
-	hub           *websocket.Hub
-	connectFn     func(context.Context, uuid.UUID) error
-	qrCodesMu     sync.RWMutex
-	qrCodes       map[uuid.UUID]cachedQRCode
+	db              *gorm.DB
+	store           *sqlstore.Container
+	clients         map[uuid.UUID]*whatsmeow.Client
+	clientsMu       sync.RWMutex
+	metrics         sync.Map // map[uuid.UUID]*instanceMetrics
+	avatarSync      sync.Map // map[uuid.UUID]struct{}
+	activeCallsMu   sync.Mutex
+	activeCallIDs   map[uuid.UUID]map[string]struct{}
+	logger          logf.Logger
+	cfg             *config.WhatsmeowConfig
+	hub             *websocket.Hub
+	connectFn       func(context.Context, uuid.UUID) error
+	qrCodesMu       sync.RWMutex
+	qrCodes         map[uuid.UUID]cachedQRCode
 	typingIndicator *typingIndicatorPlanner
 	// mediaStoragePath is the local root directory where inbound media is persisted.
 	mediaStoragePath string
@@ -66,6 +66,9 @@ func NewConnectionManager(db *gorm.DB, store *sqlstore.Container, logger logf.Lo
 		activeCallIDs:    make(map[uuid.UUID]map[string]struct{}),
 		qrCodes:          make(map[uuid.UUID]cachedQRCode),
 		typingIndicator:  newTypingIndicatorPlanner(cfg),
+	}
+	if cm.typingIndicator != nil {
+		cm.typingIndicator.warn = logger.Warn
 	}
 	cm.connectFn = cm.Connect
 	return cm

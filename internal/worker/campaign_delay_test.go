@@ -43,3 +43,17 @@ func TestCampaignDelayRedisKey_UsesInstanceScopeAcrossCampaigns(t *testing.T) {
 	assert.Equal(t, keyOne, keyTwo)
 	assert.Equal(t, campaignDelayKeyPrefix+instanceID, keyOne)
 }
+
+func TestNormalizeCampaignDelaySeconds_ZeroDisablesDelay(t *testing.T) {
+	minDelay, maxDelay := normalizeCampaignDelaySeconds(0, 0)
+
+	assert.Equal(t, 0, minDelay)
+	assert.Equal(t, 0, maxDelay)
+}
+
+func TestNormalizeCampaignDelaySeconds_EnforcesFloor(t *testing.T) {
+	minDelay, maxDelay := normalizeCampaignDelaySeconds(1, 5)
+
+	assert.Equal(t, campaignDelayFloorSeconds, minDelay)
+	assert.Equal(t, campaignDelayFloorSeconds, maxDelay)
+}

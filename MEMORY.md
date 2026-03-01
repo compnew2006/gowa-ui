@@ -1,5 +1,14 @@
 # MEMORY.md
 
+## 2026-03-01 18:18 Context
+*   **Project state**: Live WhatsApp typing presence is now wired from chat composer input (not only pre-send simulation).
+*   **Current Session Goal**: Fix employee chat typing indicator visibility by adding real-time composing/paused presence before send.
+*   **Architectural Decisions**:
+    1.  Added a dedicated backend endpoint `POST /api/contacts/{id}/typing` with best-effort semantics for Whatsmeow-only deployments.
+    2.  Added `ConnectionManager.SendTypingPresence` in a separate module (`pkg/whatsmeow/typing_presence.go`) with direct-chat validation and recipient normalization.
+    3.  Implemented frontend chat composer typing flow in `ChatView.vue` using throttle + idle timeout (`composing` then `paused`), and explicit pause on send/chat-switch/unmount.
+    4.  Added regression coverage for typing presence parsing/normalization (backend unit tests) and chat typing API behavior (frontend E2E spec with seeded-data fallback skip).
+
 ## 2026-03-01 17:41 Context
 *   **Project state**: Strict outbound guardrails, Whatsmeow typing simulation, and instance block metadata are now enforced across handlers/workers with frontend visibility.
 *   **Current Session Goal**: Complete the full anti-ban hardening rollout with backend + frontend + unit/E2E coverage and policy-specific UX handling.

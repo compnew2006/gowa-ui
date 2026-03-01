@@ -280,6 +280,8 @@ export const messagesService = {
     api.get(`/contacts/${contactId}/messages`, { params }),
   send: (contactId: string, data: { type: string; content: any; reply_to_message_id?: string; instance_id?: string; whatsapp_account?: string }) =>
     api.post(`/contacts/${contactId}/messages`, data),
+  sendTyping: (contactId: string, data: { state: 'composing' | 'paused'; instance_id?: string }) =>
+    api.post(`/contacts/${contactId}/typing`, data),
   sendTemplate: (contactId: string, data: { template_name: string; template_params?: Record<string, string>; account_name?: string }) =>
     api.post('/messages/template', { contact_id: contactId, ...data }),
   sendReaction: (contactId: string, messageId: string, emoji: string) =>

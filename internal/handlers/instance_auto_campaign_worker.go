@@ -245,8 +245,9 @@ func (w *InstanceAutoCampaignWorker) loadInstanceContactsInWindow(
 		Where("organization_id = ? AND instance_id = ?", orgID, instanceID).
 		Where("COALESCE(metadata->>'is_group_chat', 'false') <> 'true'").
 		Where("COALESCE(metadata->>'is_channel_chat', 'false') <> 'true'").
-		Where("COALESCE(last_inbound_at, created_at) >= ? AND COALESCE(last_inbound_at, created_at) < ?", windowStartUTC, windowEndUTC).
-		Order("COALESCE(last_inbound_at, created_at) ASC").
+		Where("last_inbound_at IS NOT NULL").
+		Where("last_inbound_at >= ? AND last_inbound_at < ?", windowStartUTC, windowEndUTC).
+		Order("last_inbound_at ASC").
 		Find(&seeds).Error; err != nil {
 		return nil, err
 	}
@@ -320,9 +321,10 @@ func (w *InstanceAutoCampaignWorker) createAutoCampaign(
 			recipientName = seed.PhoneNumber
 		}
 		campaignRecipients = append(campaignRecipients, models.BulkMessageRecipient{
-			CampaignID:    campaign.ID,
-			PhoneNumber:   seed.PhoneNumber,
-			RecipientName: recipientName,
+			CampaignID:      campaign.ID,
+			PhoneNumber:     seed.PhoneNumber,
+			PhoneNormalized: seed.PhoneNumber,
+			RecipientName:   recipientName,
 			TemplateParams: models.JSONB{
 				"contact_name": recipientName,
 				"phone_number": seed.PhoneNumber,

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/pkg/whatsmeow"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -246,6 +248,13 @@ func runServer(args []string) {
 		adapter := whatsmeow.NewWhatsmeowAdapter(whatsmeowManager, db, lo)
 		app.MessageProvider = adapter
 		app.WhatsmeowQueue = whatsmeow.NewQueueManager(cfg.Whatsmeow, lo)
+		app.WhatsmeowQueue.SetDepthObserver(func(instanceID string, depth int64) {
+			parsedInstanceID, err := uuid.Parse(strings.TrimSpace(instanceID))
+			if err != nil {
+				return
+			}
+			whatsmeowManager.SetQueueDepth(parsedInstanceID, depth)
+		})
 		lo.Info("MessageProvider set to whatsmeow")
 	default: // "meta" or empty
 		metaAdapter := whatsapp.NewMetaAdapter(waClient, db, lo)
@@ -716,6 +725,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Messages
 	g.GET("/api/contacts/{id}/messages", app.GetMessages)
 	g.POST("/api/contacts/{id}/messages", app.SendMessage)
+	g.POST("/api/contacts/{id}/typing", app.SendTypingPresence)
 	g.POST("/api/contacts/{id}/messages/{message_id}/reaction", app.SendReaction)
 	g.POST("/api/contacts/{id}/messages/{message_id}/revoke", app.RevokeMessage)
 	g.POST("/api/messages", app.SendMessage) // Legacy route

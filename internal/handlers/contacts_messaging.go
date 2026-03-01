@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,9 +16,11 @@ import (
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
+	whatsmeowpkg "github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	waTypes "go.mau.fi/whatsmeow/types"
 )
 
 // SendMessageRequest represents a send message request
@@ -47,6 +50,11 @@ type InteractiveContent struct {
 type ButtonContent struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
+}
+
+type sendTypingPresenceRequest struct {
+	State      string `json:"state"`
+	InstanceID string `json:"instance_id,omitempty"`
 }
 
 // SendMessage sends a message to a contact
@@ -198,6 +206,113 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(response)
+}
+
+// SendTypingPresence sends live typing presence (composing/paused) for chat compose UX.
+// This endpoint is best-effort and returns success even when typing presence is skipped.
+func (a *App) SendTypingPresence(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	if !a.isWhatsmeowProvider() || a.WhatsmeowManager == nil {
+		return r.SendEnvelope(map[string]string{"status": "ignored"})
+	}
+
+	var req sendTypingPresenceRequest
+	body := strings.TrimSpace(string(r.RequestCtx.PostBody()))
+	if body != "" {
+		if err := json.Unmarshal([]byte(body), &req); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+		}
+	}
+
+	state, err := parseTypingPresenceState(req.State)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "state")
+	}
+
+	var contact models.Contact
+	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	if !a.canReadAllContacts(userID, orgID) {
+		query = applyAssignedOrPublicContactAccessFilter(query, userID)
+	}
+	if err := query.First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+	if isChannelOrGroupContact(contact) {
+		return r.SendEnvelope(map[string]string{"status": "skipped"})
+	}
+
+	instance, resolveErr := a.resolveOutboundInstance(orgID, req.InstanceID, contact.InstanceID)
+	if resolveErr != nil {
+		if _, reasonCode, ok := asInstanceSelectionError(resolveErr); ok {
+			return r.SendEnvelope(map[string]string{
+				"status":      "skipped",
+				"reason_code": reasonCode,
+			})
+		}
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to resolve outbound instance", nil, "")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = a.WhatsmeowManager.SendTypingPresence(ctx, instance.ID, contact.PhoneNumber, state)
+	if err != nil {
+		switch {
+		case errors.Is(err, whatsmeowpkg.ErrTypingPresenceUnsupportedChat):
+			return r.SendEnvelope(map[string]string{"status": "skipped"})
+		case errors.Is(err, whatsmeowpkg.ErrTypingPresenceInstanceUnavailable):
+			return r.SendEnvelope(map[string]string{"status": "skipped", "reason_code": ReasonCodeInstanceNotConn})
+		case errors.Is(err, whatsmeowpkg.ErrTypingPresenceInvalidRecipient):
+			return r.SendEnvelope(map[string]string{"status": "skipped"})
+		default:
+			a.Log.Warn("Failed to send typing presence",
+				"contact_id", contact.ID,
+				"instance_id", instance.ID,
+				"state", state,
+				"error", err,
+			)
+			return r.SendEnvelope(map[string]string{"status": "skipped"})
+		}
+	}
+
+	return r.SendEnvelope(map[string]string{"status": "ok"})
+}
+
+func parseTypingPresenceState(raw string) (waTypes.ChatPresence, error) {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	switch normalized {
+	case "", "composing":
+		return waTypes.ChatPresenceComposing, nil
+	case "paused":
+		return waTypes.ChatPresencePaused, nil
+	default:
+		return "", fmt.Errorf("state must be one of: composing, paused")
+	}
+}
+
+func isChannelOrGroupContact(contact models.Contact) bool {
+	phone := strings.ToLower(strings.TrimSpace(contact.PhoneNumber))
+	if strings.HasSuffix(phone, "@g.us") || strings.HasSuffix(phone, "@newsletter") {
+		return true
+	}
+	if contact.Metadata == nil {
+		return false
+	}
+	if isGroup, ok := contact.Metadata["is_group_chat"].(bool); ok && isGroup {
+		return true
+	}
+	if isChannel, ok := contact.Metadata["is_channel_chat"].(bool); ok && isChannel {
+		return true
+	}
+	return false
 }
 
 // resolveWhatsAppAccount gets the WhatsApp account for sending messages
