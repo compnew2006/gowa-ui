@@ -10,9 +10,9 @@
   - 📄 CONTRIBUTING.md
   - 📄 CORS_WEBSOCKET_ORIGIN_HARDENING_REPORT.md
   - 📄 LICENSE
-  - 📄 MEMORY.md
   - 📄 Makefile
   - 📄 PLAN.md
+  - 📄 RALPH_MEMORY.md
   - 📄 README.md
   - 📄 acp_guide.html
   - 📄 config.example.toml
@@ -32,7 +32,6 @@
   - 📄 logo.svg
   - 📄 prompt.md
   - 📄 serve_acp_with_proxy.py
-  - 📄 session_summary.md
   - 📄 whatomate
 - 📁 **cmd/**
   - 📁 **whatomate/**
@@ -3193,6 +3192,7 @@
     - 📄 1cd6fcb3-8d06-49d1-8e45-0259fb7cc274.pdf
     - 📄 1ebac03d-b605-47f3-8036-f3f2e0d86f06.pdf
     - 📄 1ef03a6d-17a3-4ef6-a893-cd2bbf25f6ed.pdf
+    - 📄 1f1c4cf0-f6a6-416d-849d-9e97fe0eaf42.md
     - 📄 1f2fadf9-579d-40bd-80c4-fbdb2faa2ddf.pdf
     - 📄 1f9b0d9a-ae36-4cc2-9746-4af66037611a.pdf
     - 📄 203909cd-fa0b-47c4-9341-3a1ede445f4c.jpg
@@ -3221,6 +3221,7 @@
       > *Source file.*
     - 📄 28ea6dd8-1e40-4b4a-ab86-e1cb6f81e4f9.pdf
     - 📄 2915275c-b749-4a80-b2b4-5bae993ae86c.zip
+    - 📄 2d1a06cc-90bb-40ac-9b53-2268345c26a7.json
     - 📄 2d792dbe-b65c-4cce-87bf-2ee3cc0842e3.pdf
     - 📄 2e241eed-78be-4f4a-9275-490d23d8c746.pdf
     - 📄 2e4a5c9f-bd62-4245-b64e-8d42e39a4cca.xlsx
@@ -3243,6 +3244,7 @@
     - 📄 344143ec-7ddc-4862-9c5b-28f67f3ad91b.ai
     - 📄 3556818b-feb9-4dc2-9f91-ceeb1d2a6c2a.zip
     - 📄 3591b4dd-4592-4d23-b62d-2924284f8c69.pdf
+    - 📄 35dc2318-c2d7-470c-b853-c03fe43ffcfe.json
     - 📄 368de024-5b52-4b80-8959-18f0d0ada0cc.zip
     - 📄 37816b0a-3514-42cc-8428-bcafea641b77.dxf
     - 📄 37cd0960-f8a3-44c3-acd0-907a82b15c38.pdf
@@ -3283,6 +3285,7 @@
     - 📄 449d9309-5fb9-49f8-87f5-39153d04c8e3.pdf
     - 📄 457defbb-c15c-4552-9451-82425100b264.zip
     - 📄 46334d1f-35ef-449e-aae3-8926914935e2.pdf
+    - 📄 4670d2e6-6a30-4eb5-b851-2bda7b837d8a.py
     - 📄 46af6c7d-ff51-4d8d-a2a9-678a10e92795.pdf
     - 📄 46c2b087-ae99-4bab-916a-1bd25af93b65.pdf
     - 📄 477f5b9d-6472-4cc4-900e-a3567450c520.zip
@@ -3351,6 +3354,7 @@
     - 📄 60ff03a6-278f-434b-959d-a2c64c2fc159.pdf
     - 📄 6149a80c-c8f4-4879-8ffb-86ad76bfb230.pdf
     - 📄 61a2892b-8212-4960-b16b-e18d2512c024.pdf
+    - 📄 628d1272-c230-413f-95e0-a16da32f5a4a.md
     - 📄 62b56066-1a56-49bf-8b14-55826357b776.pdf
     - 📄 62f41ac8-e9c8-4099-9777-4eb45a2041a7.pdf
     - 📄 6379612c-4b98-4024-8835-6c01313daec7.pdf
@@ -3371,6 +3375,7 @@
     - 📄 69f29a20-a073-4eda-b15b-aec5ac8d326b.pdf
     - 📄 6a3e42bc-ead8-4c54-956c-c8a4c26c3256.json
     - 📄 6a77449b-7ee7-4ab0-9b4e-0fda442171a1.xlsx
+    - 📄 6acc02b3-ab1d-4c87-9b6e-26387740cda4.md
     - 📄 6b636c4b-e502-4df3-bd3b-3b04924c104c.pdf
     - 📄 6b99b449-d689-44cb-98b6-319ace656dd1.pdf
     - 📄 6bc97570-4c77-4164-9c5f-d69c02901ff0.pdf
@@ -3404,6 +3409,7 @@
     - 📄 7987e45a-9b2d-4f19-8a95-4cba2e757a81.pdf
     - 📄 79a1963f-cdf6-403c-99b0-1fe4a4e361fa.pdf
     - 📄 79c0dd5d-f4b3-41a9-bc25-02971b56f7be.pdf
+    - 📄 79d87954-0789-4d2a-8996-09cea4ec545f.md
     - 📄 7a16aeba-b0bd-4bb7-8763-afc6ed8d94b5.pdf
     - 📄 7a5b8aa2-acd1-489c-a994-e9f8af4cc365.pdf
     - 📄 7a5c8e7e-7a14-4beb-9cb2-c976b9bf62a9.ods
@@ -3520,6 +3526,7 @@
     - 📄 ab5cee93-8f96-476b-bdae-2041592c9b1f.pdf
     - 📄 abb6b64c-3775-4d74-afab-ebb48211cb5c.pdf
     - 📄 acce4818-b237-4ed2-a8ae-66106b181053.pdf
+    - 📄 ade9b89c-b9d5-4bf0-b6e2-03ca57a9f0a2.zip
     - 📄 af8f336f-2b58-4e52-93ad-b2c98e8055b6.pdf
     - 📄 aff1090d-464a-4d8f-828f-303905fbfd5f.pdf
     - 📄 b01100d8-29cd-44ed-a5cb-f359ebd95d78.pdf
@@ -3550,6 +3557,7 @@
     - 📄 b8855600-752f-45b0-acb8-88b7bd078b84.pdf
     - 📄 b8fea298-3111-4714-8383-320e686111d0.pdf
     - 📄 b92b00b0-8190-4bdf-bb91-7abdee094334.rtf
+    - 📄 b958892b-e660-4fe4-bb31-59441880f81f.htm
     - 📄 b998c85c-3cc2-44fc-8d5c-39e5938b8f2e.pdf
     - 📄 b99c2fca-1485-405b-8760-90314c54cb19.pdf
     - 📄 ba1ad3f6-3637-43a5-9196-482cf258ac5d.ai
@@ -3642,8 +3650,10 @@
     - 📄 dedd8c9c-a5ae-491a-9a31-9a659cb85a3f.pdf
     - 📄 df375169-c00d-4288-83b7-c9d804606501.pdf
     - 📄 df51f179-ecc0-40e3-b95a-16abc168811e.md
+    - 📄 df7178d0-b89a-4fbb-9b12-0ed58106634a.md
     - 📄 dfd1fb71-b3cd-4ed8-ad24-8b7efc67d20d.dxf
     - 📄 dff065c4-c92d-43a2-89eb-324152e2dc7f.pdf
+    - 📄 e08b5798-015b-417c-9ee5-95b9caba160f.md
     - 📄 e099c1f6-4548-48c5-a4e1-a2137df449bb.json
     - 📄 e0f6541a-1593-4f7d-bc9e-a771e8422364.pdf
     - 📄 e109d1d7-8d45-47f8-91ea-3136afb35102.pdf
