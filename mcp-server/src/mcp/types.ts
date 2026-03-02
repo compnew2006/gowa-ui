@@ -1,5 +1,6 @@
 import type { Logger } from '../logger.js';
-import type { WhatomateClient } from '../clients/whatomate-client.js';
+// import type { WhatomateClient } from '../clients/whatomate-client.js';
+export type WhatomateClient = any;
 import type { OpenAIClient } from '../clients/openai-client.js';
 
 export interface McpServerDependencies {

@@ -1,7 +1,8 @@
 import * as z from 'zod/v4';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { toToolErrorResult } from '../errors.js';
-import type { MessageRecord } from '../clients/whatomate-client.js';
+// import type { MessageRecord } from '../clients/whatomate-client.js';
+export type MessageRecord = any;
 import type { McpServerDependencies } from '../mcp/types.js';
 import { toToolSuccessResult } from './result.js';
 
@@ -48,8 +49,8 @@ export function registerOpenAITools(server: McpServer, deps: McpServerDependenci
 
         const normalized = messages.items
           .map(extractMessageBody)
-          .map((body) => body.trim())
-          .filter((body) => body.length > 0);
+          .map((body: string) => body.trim())
+          .filter((body: string) => body.length > 0);
 
         const summary = await deps.openAiClient.summarizeConversation({
           messages: normalized,

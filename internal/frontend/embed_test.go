@@ -10,6 +10,19 @@ import (
 )
 
 func TestHandler_ServesBasePathBootstrapScript(t *testing.T) {
+	// The embed FS will always have dist as a directory locally in source, but inside dist we need index.html
+	entries, _ := distFS.ReadDir("dist")
+	hasIndex := false
+	for _, e := range entries {
+		if e.Name() == "index.html" {
+			hasIndex = true
+			break
+		}
+	}
+	if !hasIndex {
+		t.Skip("Skipping test because frontend index.html is not embedded")
+	}
+
 	handler := Handler("/portal")
 
 	resp := performRequest(t, handler, "/"+basePathBootstrapScriptName)
@@ -21,6 +34,18 @@ func TestHandler_ServesBasePathBootstrapScript(t *testing.T) {
 }
 
 func TestHandler_IndexUsesExternalBasePathScript(t *testing.T) {
+	entries, _ := distFS.ReadDir("dist")
+	hasIndex := false
+	for _, e := range entries {
+		if e.Name() == "index.html" {
+			hasIndex = true
+			break
+		}
+	}
+	if !hasIndex {
+		t.Skip("Skipping test because frontend index.html is not embedded")
+	}
+
 	handler := Handler("/portal")
 
 	resp := performRequest(t, handler, "/")

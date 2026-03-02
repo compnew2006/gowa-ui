@@ -168,7 +168,10 @@ func (a *App) GetMetaAnalytics(r *fastglue.Request) error {
 
 	var results []MetaAnalyticsResponse
 	for i := range accounts {
-		a.decryptAccountSecrets(&accounts[i])
+		if err := a.decryptAccountSecrets(&accounts[i]); err != nil {
+			a.Log.Error("Failed to decrypt account secrets", "error", err, "account_id", accounts[i].ID)
+			continue
+		}
 		account := accounts[i]
 		waAccount := a.toWhatsAppAccount(&account)
 

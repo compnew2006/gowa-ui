@@ -352,10 +352,6 @@ func MaskPhoneNumbersInText(text string) string {
 	return result.String()
 }
 
-func isDigit(c byte) bool {
-	return c >= '0' && c <= '9'
-}
-
 // LooksLikePhoneNumber checks if a string looks like a phone number
 // (mostly digits, optionally with common phone formatting characters)
 func LooksLikePhoneNumber(s string) bool {

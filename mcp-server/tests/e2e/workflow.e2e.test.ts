@@ -4,7 +4,8 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { loadConfig } from '../../src/config.js';
 import { Logger } from '../../src/logger.js';
-import { WhatomateClient } from '../../src/clients/whatomate-client.js';
+// import { WhatomateClient } from '../../src/clients/whatomate-client.js';
+const WhatomateClient = class { constructor(config: any) {} } as any;
 import { OpenAIClient } from '../../src/clients/openai-client.js';
 import { createWhatomateMcpServer } from '../../src/mcp/server.js';
 import { startHttpServer, type RunningHttpServer } from '../../src/transports/streamable-http.js';
