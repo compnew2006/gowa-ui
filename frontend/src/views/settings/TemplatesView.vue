@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import DOMPurify from 'dompurify'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -503,22 +502,38 @@ function formatVariableLabel(paramName: string): string {
   return `{{${paramName}}}`
 }
 
-// Format template preview with sample values (sanitized to prevent XSS)
-function formatPreview(text: string, samples: any[]): string {
-  // Sanitize the base text first
-  let result = DOMPurify.sanitize(text, { ALLOWED_TAGS: [] })
+interface PreviewPart {
+  text: string;
+  type: 'text' | 'sample' | 'missing';
+}
 
-  // Handle named parameters with param_name field
-  samples.forEach((sample) => {
-    if (sample && sample.param_name && sample.value) {
-      const sanitizedSample = DOMPurify.sanitize(String(sample.value), { ALLOWED_TAGS: [] })
-      result = result.replace(`{{${sample.param_name}}}`, `<span class="bg-green-900 light:bg-green-100 px-1 rounded">${sanitizedSample}</span>`)
+function parseFormatPreview(text: string, samples: any[]): PreviewPart[] {
+  if (!text) return []
+  const parts: PreviewPart[] = []
+  const regex = /\{\{([^}]+)\}\}/g
+  let lastIndex = 0
+  let match
+  
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: text.substring(lastIndex, match.index), type: 'text' })
     }
-  })
-
-  // Replace remaining variables (both named and positional)
-  result = result.replace(/\{\{([^}]+)\}\}/g, '<span class="bg-yellow-900 light:bg-yellow-100 px-1 rounded">{{$1}}</span>')
-  return result
+    const paramName = match[1]
+    const sample = samples.find(s => s && s.param_name === paramName)
+    
+    if (sample && sample.value) {
+      parts.push({ text: String(sample.value), type: 'sample' })
+    } else {
+      parts.push({ text: match[0], type: 'missing' })
+    }
+    lastIndex = regex.lastIndex
+  }
+  
+  if (lastIndex < text.length) {
+    parts.push({ text: text.substring(lastIndex), type: 'text' })
+  }
+  
+  return parts
 }
 </script>
 
@@ -973,7 +988,13 @@ function formatPreview(text: string, samples: any[]): string {
 
               <!-- Body -->
               <div class="p-3">
-                <p class="text-sm whitespace-pre-wrap" v-html="formatPreview(previewTemplate.body_content, previewTemplate.sample_values || [])"></p>
+                <p class="text-sm whitespace-pre-wrap">
+                  <template v-for="(part, idx) in parseFormatPreview(previewTemplate.body_content, previewTemplate.sample_values || [])" :key="idx">
+                    <span v-if="part.type === 'sample'" class="bg-green-900 light:bg-green-100 px-1 rounded">{{ part.text }}</span>
+                    <span v-else-if="part.type === 'missing'" class="bg-yellow-900 light:bg-yellow-100 px-1 rounded">{{ part.text }}</span>
+                    <template v-else>{{ part.text }}</template>
+                  </template>
+                </p>
               </div>
 
               <!-- Footer -->

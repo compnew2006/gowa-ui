@@ -1,9 +1,8 @@
 # Binaries and build artifacts
 bin/
 /whatomate
-whatomate
-whatomate*
-whatomate_*
+/whatomate*
+/whatomate_*
 *.bin
 /server
 /main

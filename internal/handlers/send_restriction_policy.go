@@ -43,11 +43,6 @@ func (e *restrictedSendViolationError) Error() string {
 	return e.message
 }
 
-func asRestrictedSendViolation(err error) (string, bool) {
-	message, _, ok := asRestrictedSendViolationWithReason(err)
-	return message, ok
-}
-
 func asRestrictedSendViolationWithReason(err error) (string, string, bool) {
 	if err == nil {
 		return "", "", false
@@ -410,10 +405,6 @@ func mergeRestrictedNumbers(existing []string, additions []string) ([]string, bo
 	return merged, false
 }
 
-func (a *App) isStrictSendingRestrictionsEnabled(orgID uuid.UUID) bool {
-	return a.loadOrganizationStrictPolicySettings(orgID).StrictEnabled
-}
-
 func parseOrganizationBoolSetting(settings models.JSONB, key string, fallback bool) bool {
 	if settings == nil {
 		return fallback
@@ -700,15 +691,6 @@ func (a *App) getRestrictedInstancesForUser(orgID, userID uuid.UUID) ([]uuid.UUI
 	}
 
 	return allowedInstanceIDs, nil
-}
-
-func (a *App) getRestrictedInstanceForUser(orgID, userID uuid.UUID) (*uuid.UUID, error) {
-	ids, err := a.getRestrictedInstancesForUser(orgID, userID)
-	if err != nil || len(ids) == 0 {
-		return nil, err
-	}
-	id := ids[0]
-	return &id, nil
 }
 
 func resolveOutgoingInstanceID(req OutgoingMessageRequest) *uuid.UUID {

@@ -1237,30 +1237,3 @@ func (a *App) ExportAgentRatings(r *fastglue.Request) error {
 
 	return nil
 }
-
-func (a *App) applyAgentRatingFilters(
-	query *gorm.DB,
-	orgID uuid.UUID,
-	start, end time.Time,
-	filterAgentID *uuid.UUID,
-	minRating, maxRating *int,
-) *gorm.DB {
-	query = query.Where("organization_id = ? AND state = ? AND rated_at IS NOT NULL AND rated_at >= ? AND rated_at <= ?",
-		orgID,
-		models.ChatClosureRatingStateRated,
-		start,
-		end,
-	)
-
-	if filterAgentID != nil {
-		query = query.Where("agent_user_id = ?", *filterAgentID)
-	}
-	if minRating != nil {
-		query = query.Where("rating >= ?", *minRating)
-	}
-	if maxRating != nil {
-		query = query.Where("rating <= ?", *maxRating)
-	}
-
-	return query
-}

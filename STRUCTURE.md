@@ -17,7 +17,10 @@
   - 📄 acp_guide.html
   - 📄 config.example.toml
   - 📄 config.toml
+  - 📄 coverage.html
+  - 📄 coverage.out
   - 📄 crowdin.yml
+  - 📄 deep_learning.py
   - 📄 diagnostics_report.md
   - 📄 frontend_audit.json
   - 📄 frontend_lint.json
@@ -1234,10 +1237,13 @@
     - 📄 apikeys.go
     - 📄 apikeys_test.go
     - 📄 app.go
-    - 📄 auth.go
+    - 📄 auth_crypto.go
     - 📄 auth_expiry.go
     - 📄 auth_expiry_test.go
+    - 📄 auth_handlers.go
     - 📄 auth_test.go
+    - 📄 auth_types.go
+    - 📄 auth_utils.go
     - 📄 business_profile.go
     - 📄 cache.go
     - 📄 campaign_policy.go
@@ -1320,7 +1326,9 @@
     - 📄 sla_processor.go
     - 📄 sla_processor_internal_test.go
     - 📄 sla_processor_test.go
-    - 📄 sso.go
+    - 📄 sso_handlers.go
+    - 📄 sso_types.go
+    - 📄 sso_utils.go
     - 📄 stubs.go
     - 📄 tags.go
     - 📄 tags_test.go
@@ -1352,6 +1360,7 @@
     - 📄 widgets.go
     - 📄 widgets_test.go
 - 📁 **.claude/**
+  - 📄 settings.json
   - 📄 settings.local.json
 - 📁 **uploads/**
   - 📁 **stickers/**
@@ -2043,6 +2052,7 @@
     - 📄 6c2678c0-c296-4218-b869-83336d4a48c2.jpg
     - 📄 6c6646df-a4da-487b-bf8a-0566463ad20f.jpg
     - 📄 6c95a6c7-7bab-4db0-9a21-fcac525f1731.jpg
+    - 📄 6ce373a6-5d6d-43f1-a6d3-34ecfd404d60.jpg
     - 📄 6cf7a814-6b4b-43f0-a858-cf87e641c98f.jpg
     - 📄 6cfa1788-fe55-4ab1-8f9f-ce29b3d0239f.jpg
     - 📄 6d244cc8-18b1-4829-bff0-db4362d2dbc1.jpg
@@ -2364,6 +2374,7 @@
     - 📄 a2fb8593-ea71-49bf-b187-11e7d7afc0bb.jpg
     - 📄 a3045f73-a890-45f2-8343-8bd0b05a34cb.jpg
     - 📄 a33c29fb-32b0-4eac-9339-ea900927ba38.jpg
+    - 📄 a3717b4e-99a6-4323-b676-1ca7b7edd8f5.jpg
     - 📄 a37f69c8-bd52-4903-9af0-848a65024f8f.jpg
     - 📄 a393c96c-1b2d-4ddd-9427-74fa952b930b.jpg
     - 📄 a395acf4-393b-459f-ac10-fc0fd4d1fb6c.jpg
@@ -4629,6 +4640,7 @@
     - 📄 plan-template.md
     - 📄 spec-template.md
     - 📄 tasks-template.md
+- 📁 **antigravity/**
 - 📁 **pkg/**
   - 📁 **provider/**
     - 📄 context.go

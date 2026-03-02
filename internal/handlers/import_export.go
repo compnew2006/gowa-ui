@@ -316,9 +316,10 @@ func (a *App) ExportData(r *fastglue.Request) error {
 		// Apply phone masking for contacts export
 		if req.Table == "contacts" && a.ShouldMaskPhoneNumbers(orgID) {
 			for i, col := range safeColumns {
-				if col == "phone_number" {
+				switch col {
+				case "phone_number":
 					csvRow[i] = MaskPhoneNumber(csvRow[i])
-				} else if col == "profile_name" {
+				case "profile_name":
 					csvRow[i] = MaskIfPhoneNumber(csvRow[i])
 				}
 			}

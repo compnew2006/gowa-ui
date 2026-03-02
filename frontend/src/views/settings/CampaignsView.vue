@@ -1311,17 +1311,32 @@ function getTemplateParamNames(template: Template): string[] {
   return names
 }
 
-function highlightTemplateParams(content: string): string {
-  // Escape HTML first to prevent XSS
-  const escaped = content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-  // Highlight parameters with a styled span
-  return escaped.replace(
-    /\{\{([^}]+)\}\}/g,
-    '<span class="bg-primary/20 text-primary px-1 rounded font-medium">{{$1}}</span>'
-  )
+interface TextPart {
+  text: string;
+  isParam: boolean;
+  value?: string;
+}
+
+function parseTemplateParams(content: string): TextPart[] {
+  if (!content) return []
+  const parts: TextPart[] = []
+  const regex = /\{\{([^}]+)\}\}/g
+  let lastIndex = 0
+  let match
+  
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: content.substring(lastIndex, match.index), isParam: false })
+    }
+    parts.push({ text: match[0], isParam: true, value: match[1] })
+    lastIndex = regex.lastIndex
+  }
+  
+  if (lastIndex < content.length) {
+    parts.push({ text: content.substring(lastIndex), isParam: false })
+  }
+  
+  return parts
 }
 
 function hasMixedParamTypes(paramNames: string[]): boolean {
@@ -2066,7 +2081,12 @@ async function addRecipientsFromCSV() {
             <MessageSquare class="h-4 w-4 text-muted-foreground" />
             <span class="text-sm font-medium">{{ $t('campaigns.templatePreview') }}</span>
           </div>
-          <p class="text-sm whitespace-pre-wrap" v-html="highlightTemplateParams(selectedTemplate.body_content)"></p>
+          <p class="text-sm whitespace-pre-wrap">
+            <template v-for="(part, idx) in parseTemplateParams(selectedTemplate.body_content)" :key="idx">
+              <span v-if="part.isParam" class="bg-primary/20 text-primary px-1 rounded font-medium">{{ part.text }}</span>
+              <template v-else>{{ part.text }}</template>
+            </template>
+          </p>
         </div>
 
         <Tabs v-model="addRecipientsTab" class="w-full">

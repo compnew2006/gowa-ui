@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -1249,8 +1250,14 @@ func applyFilter(query *gorm.DB, filter FilterInput) *gorm.DB {
 	return query.Where(condition, value)
 }
 
+var validFieldRegex = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+
 func buildFilterSQL(filter FilterInput) (string, interface{}) {
 	field := filter.Field
+	if !validFieldRegex.MatchString(field) {
+		// Fallback to a safe string to prevent injection while keeping query valid syntactically
+		field = "invalid_field_name"
+	}
 	value := filter.Value
 
 	switch filter.Operator {

@@ -3,6 +3,8 @@ package database
 import (
 	"context"
 	"fmt"
+	"net"
+	"strconv"
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/redis/go-redis/v9"
@@ -11,7 +13,7 @@ import (
 // NewRedis creates a new Redis client
 func NewRedis(cfg *config.RedisConfig) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Addr:     net.JoinHostPort(cfg.Host, strconv.Itoa(int(cfg.Port))),
 		Password: cfg.Password,
 		DB:       cfg.DB,
 	})

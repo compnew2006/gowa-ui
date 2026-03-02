@@ -14,6 +14,22 @@
 - Resolved multiple `errcheck` lint warnings by correctly handling resource `Close()` calls in `import_export.go` and `business_profile.go`.
 - Restored missing `MarkMessageRead` method in `pkg/whatsapp/client.go` to fix compilation issues.
 
+### Security
+- Fixed a SQL Injection vulnerability in `widgets.go` by strictly validating dynamically ingested group and filter fields against an alphanumeric regex whitelist prior to injecting into raw PostgreSQL queries. 
+- Eliminated Cross-Site Scripting (XSS) risks inside `CampaignsView.vue` and `TemplatesView.vue` by removing `v-html` and `DOMPurify` entirely in favor of chunked parsing structures natively rendered securely by Vue's `v-for` HTML evasion capabilities.
+- Resolved Database Connection String (DSN) Injection vulnerabilities in `postgres.go` and `redis.go` by replacing `fmt.Sprintf` with safe builders (`url.URL` and `net.JoinHostPort`) that automatically handle URL encoding, IPv6 formats, and special characters in passwords.
+
+
+## 2026-03-02 [Testing Session]
+
+### Added
+- Created a comprehensive test report artifact providing a baseline for backend/frontend unit tests and Go benchmarks.
+- Verified Go benchmarks for webhook processing and chatbot expression evaluation, establishing performance metrics.
+
+### Fixed
+- Identified and documented gaps in backend test coverage caused by missing database environment variables.
+- Identified non-discoverable frontend unit tests (Vitest) and recommended `package.json` script updates.
+
 ## [Unreleased] - 2026-03-01
 
 ### Added

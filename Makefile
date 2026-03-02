@@ -47,6 +47,17 @@ run-migrate:
 test:
 	$(GOTEST) -v ./...
 
+# Run database tests with an ephemeral container
+test-db:
+	@echo "Starting ephemeral test database..."
+	docker run --rm --name whatomate-test-db -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=test -p 5433:5432 -d postgres:17-alpine
+	@echo "Waiting for PostgreSQL to be ready..."
+	@sleep 5
+	@TEST_DATABASE_URL="postgres://test:test@127.0.0.1:5433/test?sslmode=disable" $(GOTEST) -v -p 1 -coverprofile=coverage-db.out ./internal/database ./internal/contactutil || (docker stop whatomate-test-db && exit 1)
+	@echo "Stopping test database..."
+	docker stop whatomate-test-db
+	$(GOCMD) tool cover -func=coverage-db.out || true
+
 # Run tests with coverage
 test-coverage:
 	$(GOTEST) -v -coverprofile=coverage.out ./...

@@ -343,17 +343,13 @@ func MaskPhoneNumbersInText(text string) string {
 		} else {
 			result.WriteString(rawNumber)
 		}
-		
+
 		lastIndex = groupEnd
 	}
 
 	// Append any remaining trailing characters after the last processed capture group
 	result.WriteString(text[lastIndex:])
 	return result.String()
-}
-
-func isDigit(c byte) bool {
-	return c >= '0' && c <= '9'
 }
 
 // LooksLikePhoneNumber checks if a string looks like a phone number

@@ -260,7 +260,7 @@ func TestConsume_ProcessesJob(t *testing.T) {
 	// Create consumer.
 	consumer, err := queue.NewRedisConsumer(client, log)
 	require.NoError(t, err)
-	defer consumer.Close()
+	defer func() { _ = consumer.Close() }()
 
 	handler := &mockHandler{}
 
@@ -295,7 +295,7 @@ func TestConsume_EmptyQueue(t *testing.T) {
 
 	consumer, err := queue.NewRedisConsumer(client, log)
 	require.NoError(t, err)
-	defer consumer.Close()
+	defer func() { _ = consumer.Close() }()
 
 	handler := &mockHandler{}
 
@@ -329,7 +329,7 @@ func TestConsume_MultipleJobs(t *testing.T) {
 
 	consumer, err := queue.NewRedisConsumer(client, log)
 	require.NoError(t, err)
-	defer consumer.Close()
+	defer func() { _ = consumer.Close() }()
 
 	handler := &mockHandler{}
 
@@ -382,7 +382,7 @@ func TestConsume_PermanentFailureMovesToDLQ(t *testing.T) {
 
 	consumer, err := queue.NewRedisConsumer(client, log)
 	require.NoError(t, err)
-	defer consumer.Close()
+	defer func() { _ = consumer.Close() }()
 
 	handler := &mockHandler{}
 	consumeCtx, cancel := context.WithCancel(ctx)
@@ -438,7 +438,7 @@ func TestSubscribeCampaignStats_ReceivesUpdate(t *testing.T) {
 
 	pub := queue.NewPublisher(client, log)
 	sub := queue.NewSubscriber(client, log)
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 
 	// Use a unique campaign ID to filter out messages from parallel tests
 	// sharing the same pub/sub channel.
@@ -516,7 +516,7 @@ func TestEnqueueRecipient_InvalidRedis(t *testing.T) {
 		Addr:        "localhost:1", // Invalid port
 		DialTimeout: 100 * time.Millisecond,
 	})
-	defer badClient.Close()
+	defer func() { _ = badClient.Close() }()
 
 	q := queue.NewRedisQueue(badClient, log)
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -535,7 +535,7 @@ func TestEnqueueRecipients_InvalidRedis(t *testing.T) {
 		Addr:        "localhost:1",
 		DialTimeout: 100 * time.Millisecond,
 	})
-	defer badClient.Close()
+	defer func() { _ = badClient.Close() }()
 
 	q := queue.NewRedisQueue(badClient, log)
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -554,7 +554,7 @@ func TestNewRedisConsumer_InvalidRedis(t *testing.T) {
 		Addr:        "localhost:1",
 		DialTimeout: 100 * time.Millisecond,
 	})
-	defer badClient.Close()
+	defer func() { _ = badClient.Close() }()
 
 	_, err := queue.NewRedisConsumer(badClient, log)
 	assert.Error(t, err)
@@ -568,7 +568,7 @@ func TestPublishCampaignStats_InvalidRedis(t *testing.T) {
 		Addr:        "localhost:1",
 		DialTimeout: 100 * time.Millisecond,
 	})
-	defer badClient.Close()
+	defer func() { _ = badClient.Close() }()
 
 	pub := queue.NewPublisher(badClient, log)
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)

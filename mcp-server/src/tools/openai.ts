@@ -48,8 +48,8 @@ export function registerOpenAITools(server: McpServer, deps: McpServerDependenci
 
         const normalized = messages.items
           .map(extractMessageBody)
-          .map((body) => body.trim())
-          .filter((body) => body.length > 0);
+          .map((body: string) => body.trim())
+          .filter((body: string) => body.length > 0);
 
         const summary = await deps.openAiClient.summarizeConversation({
           messages: normalized,
