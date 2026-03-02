@@ -1,0 +1,12 @@
+{
+    "project": "whatomate",
+    "hooks": {
+        "enabled": true,
+        "pretrain": true,
+        "stats": true,
+        "vector_store": ".ruvector"
+    },
+    "agents": {
+        "default_focus": "fullstack"
+    }
+}

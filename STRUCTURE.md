@@ -32,6 +32,7 @@
   - 📄 logo.svg
   - 📄 prompt.md
   - 📄 serve_acp_with_proxy.py
+  - 📄 tmp_arabic.go
   - 📄 whatomate
 - 📁 **cmd/**
   - 📁 **whatomate/**
@@ -1006,6 +1007,8 @@
     - 📄 http.go
     - 📄 mocks.go
     - 📄 testutil.go
+- 📁 **bin/**
+  - 📄 whatomate
 - 📁 **specs/**
   - 📁 **001-whatsmeow-integration/**
     - 📄 data-model.md
@@ -1019,6 +1022,8 @@
     - 📁 **contracts/**
       - 📄 instances-api.md
       - 📄 messaging-api.md
+- 📁 **.ruvector/**
+  - 📄 intelligence.json
 - 📁 **.serena/**
   - 📄 project.yml
   - 📁 **cache/**
@@ -1690,6 +1695,7 @@
     - 📄 3471b9e0-3cde-47a2-980f-1e1ce58a3d6f.jpg
     - 📄 34dcfc9f-aee7-476b-83f5-0c1574bb4e0f.jpg
     - 📄 3513bdae-efc3-4273-ab0c-0eecc3ead5c0.jpg
+    - 📄 3544de3d-768e-4e13-b3f9-e9f58995cd51.jpg
     - 📄 359e85f7-8989-44b1-afd8-5d2076646209.jpg
     - 📄 35a1c204-9498-4105-b195-4fe19ff49206.jpg
     - 📄 35e28b27-2a61-4cb4-afaa-0cf83f9199d4.jpg
@@ -1699,6 +1705,7 @@
     - 📄 36c4a303-7adf-4174-94ac-3f335325ac5f.jpg
     - 📄 36e6743b-e18c-4417-93e7-637f9c578c31.jpg
     - 📄 36e70523-c217-47bc-9bda-1080a8916945.jpg
+    - 📄 36eadee1-d207-4a83-9cb1-8367609332ee.jpg
     - 📄 3704f8d3-e547-43d0-b85c-de4187e59942.jpg
     - 📄 3720d812-8cc6-4bbf-b48c-b567f7106620.jpg
     - 📄 3763cda4-d443-4e3f-a3a5-6bb67934ba5c.jpg
@@ -1825,6 +1832,7 @@
     - 📄 4cf405e8-d640-435d-91cd-0f236a3cec16.jpg
     - 📄 4cf85076-76ab-4162-b43b-c217e627297c.jpg
     - 📄 4d28d750-b338-42b2-b29e-c77116dcb821.jpg
+    - 📄 4d339fcd-fa30-407f-a3c1-826f93cb6732.jpg
     - 📄 4d564df8-2464-4593-a37e-335591df6243.jpg
     - 📄 4d845b0e-3fa0-402b-a741-e4e90e75e04b.jpg
     - 📄 4d96b6ff-7677-47b1-a9ef-b1ca1eb9f6e7.jpg
@@ -2029,6 +2037,7 @@
     - 📄 6b3032a1-9020-4524-9843-886ab0ba136a.jpg
     - 📄 6b540455-efb5-4337-a940-33ef435f23be.jpg
     - 📄 6b59418d-2c21-492f-8a07-344f55bbe357.jpg
+    - 📄 6b70a4e3-f823-43e4-ab20-0e7fec446068.jpg
     - 📄 6bb180d6-5eeb-4cde-a371-a4ca91d48a61.jpg
     - 📄 6bba0129-073b-4108-ad89-a6cdf371bc9a.jpg
     - 📄 6c2678c0-c296-4218-b869-83336d4a48c2.jpg
@@ -2099,6 +2108,7 @@
     - 📄 76a75680-c404-4f57-85e1-7826c8385efd.jpg
     - 📄 76af3d19-8310-4d29-8955-f0151fd949c8.jpg
     - 📄 76e5b4c8-8009-491b-b7e6-334cab8cd973.jpg
+    - 📄 7732d3db-e002-40a8-acbe-311db07cab04.jpg
     - 📄 77623a37-4b8f-4e9b-b763-79b54fa5101b.jpg
     - 📄 777622fe-39a1-47c4-ad91-3af5ee07143f.jpg
     - 📄 77f36019-b5fa-46ca-a8f9-844824b0b71d.jpg
@@ -2376,6 +2386,7 @@
     - 📄 a60826a5-d386-467d-bc34-54e046de898d.jpg
     - 📄 a6307d5c-9b6e-471c-b264-14581faf859e.jpg
     - 📄 a641d4e2-c11d-490b-9a6e-37eb9aebda2c.jpg
+    - 📄 a64b3f85-1744-435f-9b83-444084139eb6.jpg
     - 📄 a67ace08-8056-4478-aad9-e9b90c37d8b3.jpg
     - 📄 a6f4bb3f-1d74-421d-a62d-8ca3de58188f.jpg
     - 📄 a733db7a-570a-445e-b282-440d3d3cbeec.jpg
@@ -2624,6 +2635,7 @@
     - 📄 ce37cb55-1528-4a05-a5f8-3b59cd3f00c1.jpg
     - 📄 ce4f4cd9-588c-4ac8-b71f-f55591e9e261.jpg
     - 📄 ce51d497-3c43-4f91-899e-06f801a3af1c.jpg
+    - 📄 cec39ec6-c8c7-4f63-8b15-bbb8d9125321.jpg
     - 📄 cec3b5f6-be3a-4260-a2f3-e7af50a47a1c.jpg
     - 📄 ceda67ee-696a-41b3-89c8-f906ad7b0059.jpg
     - 📄 ceff2947-6a09-4b3a-99e8-e4fb0781ea0f.jpg
@@ -2934,6 +2946,7 @@
     - 📄 3218331b-2871-43db-b5f7-02adb045eb66.mp4
     - 📄 36323572-0631-407c-abb6-f8bb6f3d265b.mp4
     - 📄 378ec25c-13a4-4f5e-a6e4-aa694c63507b.mp4
+    - 📄 3baa8819-9e75-440b-8859-9c18944f10ca.mp4
     - 📄 3edb965b-f408-4170-b187-4a0dd91edb4d.mp4
     - 📄 43e9261a-29ad-4322-a48f-2e63c07f1005.mp4
     - 📄 464e2d9f-b84a-49e8-840f-acdcbd270173.mp4
@@ -2968,6 +2981,7 @@
     - 📄 7dfb2b6a-2109-4b78-9277-fa38ac932dda.mp4
     - 📄 7f1baed8-8f46-48bf-b272-1a21e1fbec08.mp4
     - 📄 80fbe974-3400-4537-bd25-bf4d21950536.mp4
+    - 📄 83c6dcc9-832d-46ff-8029-922bfc5cfdad.mp4
     - 📄 861961ea-b136-41a6-b610-6e18fe55040c.mp4
     - 📄 881bd5e9-749b-4045-ab5e-858df10bcba4.mp4
     - 📄 8abe31af-3a3d-4565-bc64-4b007ee39cad.mp4
@@ -3070,6 +3084,7 @@
     - 📄 5c39e8ab-2eb7-42e2-95f6-5a8877bfddcb.ogg
     - 📄 5fa877a2-c431-44a5-91f0-26beaf180b0d.ogg
     - 📄 61ad65b5-ad4b-4e92-881c-a9ad0483f0ea.ogg
+    - 📄 635169a8-0172-47d9-943b-c744adc3266b.ogg
     - 📄 6455fc86-acea-47f3-ae34-32c8a694a88b.m4a
     - 📄 6c185e10-3570-4b88-a881-727591e49515.ogg
     - 📄 6fcb1020-38ab-494e-a1b5-bf4ebf539901.ogg
