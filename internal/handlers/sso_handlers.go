@@ -2,13 +2,8 @@ package handlers
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -18,90 +13,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/facebook"
-	"golang.org/x/oauth2/github"
-	"golang.org/x/oauth2/google"
-	"golang.org/x/oauth2/microsoft"
 )
-
-// OAuth provider configurations (endpoints are hardcoded, only need client credentials)
-var oauthProviders = map[string]struct {
-	Endpoint    oauth2.Endpoint
-	Scopes      []string
-	UserInfoURL string
-}{
-	"google": {
-		Endpoint:    google.Endpoint,
-		Scopes:      []string{"openid", "email", "profile"},
-		UserInfoURL: "https://www.googleapis.com/oauth2/v2/userinfo",
-	},
-	"microsoft": {
-		Endpoint:    microsoft.AzureADEndpoint("common"),
-		Scopes:      []string{"openid", "email", "profile", "User.Read"},
-		UserInfoURL: "https://graph.microsoft.com/v1.0/me",
-	},
-	"github": {
-		Endpoint:    github.Endpoint,
-		Scopes:      []string{"user:email", "read:user"},
-		UserInfoURL: "https://api.github.com/user",
-	},
-	"facebook": {
-		Endpoint:    facebook.Endpoint,
-		Scopes:      []string{"email", "public_profile"},
-		UserInfoURL: "https://graph.facebook.com/me?fields=id,email,name",
-	},
-}
-
-// SSOState represents the state stored in Redis during OAuth flow
-type SSOState struct {
-	OrgID     string    `json:"org_id"`
-	Provider  string    `json:"provider"`
-	Nonce     string    `json:"nonce"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-// SSOProviderPublic represents public SSO provider info (no secrets)
-type SSOProviderPublic struct {
-	Provider string `json:"provider"`
-	Name     string `json:"name"`
-}
-
-// SSOProviderRequest represents SSO provider config from admin
-type SSOProviderRequest struct {
-	ClientID        string `json:"client_id" validate:"required"`
-	ClientSecret    string `json:"client_secret"`
-	IsEnabled       bool   `json:"is_enabled"`
-	AllowAutoCreate bool   `json:"allow_auto_create"`
-	DefaultRole     string `json:"default_role"`
-	AllowedDomains  string `json:"allowed_domains"`
-	// Custom provider fields
-	AuthURL     string `json:"auth_url"`
-	TokenURL    string `json:"token_url"`
-	UserInfoURL string `json:"user_info_url"`
-}
-
-// SSOProviderResponse represents SSO provider config response (masked secret)
-type SSOProviderResponse struct {
-	Provider        string `json:"provider"`
-	ClientID        string `json:"client_id"`
-	HasSecret       bool   `json:"has_secret"`
-	IsEnabled       bool   `json:"is_enabled"`
-	AllowAutoCreate bool   `json:"allow_auto_create"`
-	DefaultRole     string `json:"default_role"`
-	AllowedDomains  string `json:"allowed_domains"`
-	AuthURL         string `json:"auth_url,omitempty"`
-	TokenURL        string `json:"token_url,omitempty"`
-	UserInfoURL     string `json:"user_info_url,omitempty"`
-}
-
-// providerDisplayNames maps provider keys to display names
-var providerDisplayNames = map[string]string{
-	"google":    "Google",
-	"microsoft": "Microsoft",
-	"github":    "GitHub",
-	"facebook":  "Facebook",
-	"custom":    "Custom SSO",
-}
 
 // GetPublicSSOProviders returns enabled SSO providers for login page (public, no auth)
 func (a *App) GetPublicSSOProviders(r *fastglue.Request) error {
@@ -151,7 +63,12 @@ func (a *App) InitSSO(r *fastglue.Request) error {
 	}
 
 	// Generate state token
-	nonce := generateRandomString(32)
+	nonce, err := generateRandomString(32)
+	if err != nil {
+		a.Log.Error("Failed to generate SSO nonce", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO", nil, "")
+	}
+
 	state := SSOState{
 		OrgID:     ssoConfig.OrganizationID.String(),
 		Provider:  provider,
@@ -356,7 +273,11 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 	}
 
 	// Set auth cookies (tokens no longer exposed in URL)
-	a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken)
+	if err := a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken); err != nil {
+		a.Log.Error("Failed to set auth cookies", "error", err)
+		a.redirectWithError(r, "Failed to complete authentication")
+		return nil
+	}
 
 	// Redirect to frontend SSO callback page (cookies already set)
 	basePath := sanitizeRedirectPath(a.Config.Server.BasePath)
@@ -514,230 +435,4 @@ func (a *App) DeleteSSOProvider(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(map[string]string{"message": "SSO provider deleted"})
-}
-
-// Helper functions
-
-func (a *App) buildOAuthConfig(provider string, ssoConfig *models.SSOProvider, r *fastglue.Request) *oauth2.Config {
-	var endpoint oauth2.Endpoint
-	var scopes []string
-
-	if provider == "custom" {
-		endpoint = oauth2.Endpoint{
-			AuthURL:  ssoConfig.AuthURL,
-			TokenURL: ssoConfig.TokenURL,
-		}
-		scopes = []string{"openid", "email", "profile"}
-	} else {
-		providerCfg := oauthProviders[provider]
-		endpoint = providerCfg.Endpoint
-		scopes = providerCfg.Scopes
-	}
-
-	// Build callback URL from request
-	scheme := "https"
-	if !r.RequestCtx.IsTLS() && a.Config.App.Environment == "development" {
-		scheme = "http"
-	}
-	host := string(r.RequestCtx.Host())
-	basePath := sanitizeRedirectPath(a.Config.Server.BasePath)
-	callbackURL := fmt.Sprintf("%s://%s%s/api/auth/sso/%s/callback", scheme, host, basePath, provider)
-
-	// Decrypt SSO client secret
-	decryptedSecret, err := appcrypto.Decrypt(ssoConfig.ClientSecret, a.Config.App.EncryptionKey)
-	if err != nil {
-		a.Log.Error("Failed to decrypt SSO client secret", "error", err)
-		return nil
-	}
-
-	return &oauth2.Config{
-		ClientID:     ssoConfig.ClientID,
-		ClientSecret: decryptedSecret,
-		Endpoint:     endpoint,
-		Scopes:       scopes,
-		RedirectURL:  callbackURL,
-	}
-}
-
-// UserInfo represents normalized user info from OAuth providers
-type UserInfo struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-	Name  string `json:"name"`
-}
-
-func (a *App) fetchUserInfo(provider string, ssoConfig *models.SSOProvider, token *oauth2.Token) (*UserInfo, error) {
-	var userInfoURL string
-
-	if provider == "custom" {
-		userInfoURL = ssoConfig.UserInfoURL
-	} else {
-		userInfoURL = oauthProviders[provider].UserInfoURL
-	}
-
-	req, err := http.NewRequest(http.MethodGet, userInfoURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
-	if provider == "github" {
-		req.Header.Set("Accept", "application/vnd.github+json")
-	}
-
-	resp, err := a.HTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("user info request failed: %s", string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse based on provider
-	var userInfo UserInfo
-	var rawData map[string]interface{}
-	if err := json.Unmarshal(body, &rawData); err != nil {
-		return nil, err
-	}
-
-	switch provider {
-	case "google":
-		userInfo.ID = getString(rawData, "id")
-		userInfo.Email = getString(rawData, "email")
-		userInfo.Name = getString(rawData, "name")
-	case "microsoft":
-		userInfo.ID = getString(rawData, "id")
-		userInfo.Email = getString(rawData, "mail")
-		if userInfo.Email == "" {
-			userInfo.Email = getString(rawData, "userPrincipalName")
-		}
-		userInfo.Name = getString(rawData, "displayName")
-	case "github":
-		userInfo.ID = fmt.Sprintf("%v", rawData["id"])
-		userInfo.Email = getString(rawData, "email")
-		userInfo.Name = getString(rawData, "name")
-		if userInfo.Name == "" {
-			userInfo.Name = getString(rawData, "login")
-		}
-		// GitHub might not return email in user info, need separate API call
-		if userInfo.Email == "" {
-			email, err := a.fetchGitHubEmail(token)
-			if err == nil {
-				userInfo.Email = email
-			}
-		}
-	case "facebook":
-		userInfo.ID = getString(rawData, "id")
-		userInfo.Email = getString(rawData, "email")
-		userInfo.Name = getString(rawData, "name")
-	default: // custom
-		userInfo.ID = getString(rawData, "sub")
-		if userInfo.ID == "" {
-			userInfo.ID = getString(rawData, "id")
-		}
-		userInfo.Email = getString(rawData, "email")
-		userInfo.Name = getString(rawData, "name")
-		if userInfo.Name == "" {
-			userInfo.Name = getString(rawData, "preferred_username")
-		}
-	}
-
-	if userInfo.Email == "" {
-		return nil, fmt.Errorf("email not provided by SSO provider")
-	}
-
-	return &userInfo, nil
-}
-
-func (a *App) fetchGitHubEmail(token *oauth2.Token) (string, error) {
-	req, err := http.NewRequest("GET", "https://api.github.com/user/emails", nil)
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
-	req.Header.Set("Accept", "application/vnd.github+json")
-
-	resp, err := a.HTTPClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	var emails []struct {
-		Email    string `json:"email"`
-		Primary  bool   `json:"primary"`
-		Verified bool   `json:"verified"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&emails); err != nil {
-		return "", err
-	}
-
-	// Find primary verified email
-	for _, e := range emails {
-		if e.Primary && e.Verified {
-			return e.Email, nil
-		}
-	}
-
-	// Fallback to first verified email
-	for _, e := range emails {
-		if e.Verified {
-			return e.Email, nil
-		}
-	}
-
-	return "", fmt.Errorf("no verified email found")
-}
-
-func (a *App) redirectWithError(r *fastglue.Request, message string) {
-	basePath := sanitizeRedirectPath(a.Config.Server.BasePath)
-	encodedMsg := url.QueryEscape(message)
-	redirectURL := fmt.Sprintf("%s/login?sso_error=%s", basePath, encodedMsg)
-	r.RequestCtx.Redirect(redirectURL, fasthttp.StatusTemporaryRedirect)
-}
-
-// sanitizeRedirectPath ensures the path is safe for redirects by preventing
-// open redirect vulnerabilities (e.g., //evil.com or /\evil.com)
-func sanitizeRedirectPath(path string) string {
-	if path == "" {
-		return ""
-	}
-	// Ensure path starts with /
-	if path[0] != '/' {
-		path = "/" + path
-	}
-	// Prevent protocol-relative URLs (//...) and backslash escapes (/\...)
-	// by stripping dangerous characters after the leading slash
-	for len(path) > 1 && (path[1] == '/' || path[1] == '\\') {
-		path = "/" + path[2:]
-	}
-	return path
-}
-
-func generateRandomString(n int) string {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback: this should never happen but don't silently continue with zero bytes
-		panic("crypto/rand.Read failed: " + err.Error())
-	}
-	return base64.URLEncoding.EncodeToString(b)[:n]
-}
-
-func getString(data map[string]interface{}, key string) string {
-	if val, ok := data[key]; ok {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return ""
 }

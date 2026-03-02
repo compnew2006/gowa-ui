@@ -1,0 +1,151 @@
+package handlers
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/compnew2006/whatomate/internal/middleware"
+	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+)
+
+func (a *App) generateAccessToken(user *models.User) (string, time.Time, error) {
+	now := time.Now()
+	expiresAt := nextAccessTokenExpiry(now)
+
+	claims := middleware.JWTClaims{
+		UserID:         user.ID,
+		OrganizationID: user.OrganizationID,
+		Email:          user.Email,
+		RoleID:         user.RoleID,
+		IsSuperAdmin:   user.IsSuperAdmin,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    "whatomate",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signingKey, err := a.jwtSecretBytes()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	signed, err := token.SignedString(signingKey)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return signed, expiresAt, nil
+}
+
+func (a *App) generateRefreshToken(user *models.User) (string, error) {
+	jti := uuid.New().String()
+	expiry := time.Duration(a.Config.JWT.RefreshExpiryDays) * 24 * time.Hour
+
+	claims := middleware.JWTClaims{
+		UserID:         user.ID,
+		OrganizationID: user.OrganizationID,
+		Email:          user.Email,
+		RoleID:         user.RoleID,
+		IsSuperAdmin:   user.IsSuperAdmin,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "whatomate",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signingKey, err := a.jwtSecretBytes()
+	if err != nil {
+		return "", err
+	}
+
+	signed, err := token.SignedString(signingKey)
+	if err != nil {
+		return "", err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := a.Redis.Set(ctx, refreshTokenKey(jti), user.ID.String(), expiry).Err(); err != nil {
+		a.Log.Error("Failed to store refresh token in Redis", "error", err)
+	}
+
+	return signed, nil
+}
+
+func (a *App) generateRegisterInviteToken(orgID uuid.UUID, ttl time.Duration) (string, time.Time, error) {
+	expiresAt := time.Now().Add(ttl)
+	claims := RegisterInviteClaims{
+		OrganizationID: orgID,
+		Purpose:        registerInvitePurpose,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "whatomate",
+			Subject:   "org_registration_invite",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signingKey, err := a.jwtSecretBytes()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	signed, err := token.SignedString(signingKey)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return signed, expiresAt, nil
+}
+
+func (a *App) validateRegisterInviteToken(tokenString string) (uuid.UUID, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &RegisterInviteClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return a.jwtSecretBytes()
+	})
+	if err != nil || !token.Valid {
+		return uuid.Nil, fmt.Errorf("invalid invite token")
+	}
+
+	claims, ok := token.Claims.(*RegisterInviteClaims)
+	if !ok {
+		return uuid.Nil, fmt.Errorf("invalid invite claims")
+	}
+	if claims.OrganizationID == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("missing organization id in invite")
+	}
+	if claims.Purpose != registerInvitePurpose {
+		return uuid.Nil, fmt.Errorf("invalid invite purpose")
+	}
+
+	return claims.OrganizationID, nil
+}
+
+func refreshTokenKey(jti string) string {
+	return fmt.Sprintf("refresh:%s", jti)
+}
+
+func generateSlug(name string) string {
+	slug := ""
+	for _, c := range name {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			slug += string(c)
+		} else if c >= 'A' && c <= 'Z' {
+			slug += string(c + 32)
+		} else if c == ' ' || c == '-' {
+			slug += "-"
+		}
+	}
+	u := uuid.New().String()
+	if len(u) > 8 {
+		return slug + "-" + u[:8]
+	}
+	return slug + "-" + u
+}

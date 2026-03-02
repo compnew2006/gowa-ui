@@ -18,3 +18,10 @@
 - **The Reality:** The browser maintains `scrollTop` without an `overflow-anchor: auto` effect available, meaning any async block-level expansion shifts the viewport.
 - **The Fix:** Bound native `@load` listeners onto all chat `<img>` renders that re-trigger an instant `scrollToBottom` _only if_ the user's viewport is still near the bottom when the event fires.
 - **The Law:** Async-rendered media inside a reverse-chronological view must strictly preserve scroll anchor intent (bottom-pinning) via explicit resize/load handlers.
+
+## [2026-03-02] Issue: Build failure after handler refactoring
+
+- **The Trap:** Splitting large files (auth.go, sso.go) based on surface-level usage, assuming all types and methods were moved correctly.
+- **The Reality:** Significant handlers (CreateRegisterInvite) and specific request types (SwitchOrgRequest, LogoutRequest) were missed, leading to build errors in cmd/main.go and missing symbols in handlers.
+- **The Fix:** Restored missing handlers from the original file (via git), defined missing request types in auth_types.go, and verified with a full project build.
+- **The Law:** Never delete the original monolithic or critical file until a full project build (go build ./cmd/...) confirms no undefined symbols or broken dependencies.

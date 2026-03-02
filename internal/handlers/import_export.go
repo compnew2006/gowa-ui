@@ -264,7 +264,11 @@ func (a *App) ExportData(r *fastglue.Request) error {
 		a.Log.Error("Failed to export data", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to export data", nil, "")
 	}
-	defer rows.Close()
+	defer func() {
+		if cerr := rows.Close(); cerr != nil {
+			a.Log.Error("Failed to close DB rows", "error", cerr)
+		}
+	}()
 
 	// Get column types
 	colTypes, _ := rows.ColumnTypes()
@@ -403,7 +407,11 @@ func (a *App) ImportData(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to read file", nil, "")
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			a.Log.Error("Failed to close import file", "error", cerr)
+		}
+	}()
 
 	// Limit CSV file size to 10MB
 	const maxCSVSize = 10 << 20

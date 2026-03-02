@@ -1,5 +1,19 @@
 # CHANGELOG.md
 
+## 2026-03-02
+
+### Changed
+
+- Refactored monolithic `auth.go` and `sso.go` into modular handler, type, and utility files (`auth_handlers.go`, `sso_handlers.go`, etc.) to reduce cyclomatic complexity and improve maintainability.
+- Centralized auth cryptographic helpers in `auth_crypto.go` with explicit error handling, replacing legacy `panic` calls.
+- Simplified `sendWhatsAppReaction` by delegating provider-specific logic to the `MessageProvider` interface, improving code reuse for Meta and Whatsmeow.
+
+### Fixed
+
+- Fixed build errors in `cmd/main.go` and `internal/handlers` caused by missing symbol migrations (`CreateRegisterInvite`, `SwitchOrgRequest`, `LogoutRequest`) during the initial refactoring split.
+- Resolved multiple `errcheck` lint warnings by correctly handling resource `Close()` calls in `import_export.go` and `business_profile.go`.
+- Restored missing `MarkMessageRead` method in `pkg/whatsapp/client.go` to fix compilation issues.
+
 ## [Unreleased] - 2026-03-01
 
 ### Added

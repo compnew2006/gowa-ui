@@ -415,6 +415,31 @@ func (c *Client) MarkMessageRead(ctx context.Context, account *Account, messageI
 	return nil
 }
 
+// SendReactionMessage sends a reaction emoji to a message
+func (c *Client) SendReactionMessage(ctx context.Context, account *Account, phoneNumber, messageID, emoji string) error {
+	payload := map[string]interface{}{
+		"messaging_product": "whatsapp",
+		"recipient_type":    "individual",
+		"to":                phoneNumber,
+		"type":              "reaction",
+		"reaction": map[string]interface{}{
+			"message_id": messageID,
+			"emoji":      emoji,
+		},
+	}
+
+	url := c.buildMessagesURL(account)
+	c.Log.Debug("Sending reaction", "message_id", messageID, "emoji", emoji)
+
+	_, err := c.doRequest(ctx, "POST", url, payload, account.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to send reaction: %w", err)
+	}
+
+	c.Log.Debug("Reaction sent", "message_id", messageID)
+	return nil
+}
+
 // ResumableUploadResponse represents response from creating upload session
 type ResumableUploadResponse struct {
 	ID string `json:"id"` // Upload session ID

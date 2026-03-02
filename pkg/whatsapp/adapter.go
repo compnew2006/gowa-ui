@@ -119,12 +119,30 @@ func (m *MetaAdapter) MarkRead(ctx context.Context, instanceID string, messageID
 
 // SendReaction sends a reaction emoji via Meta Cloud API.
 func (m *MetaAdapter) SendReaction(ctx context.Context, instanceID string, messageID string, emoji string) error {
-	// Meta reactions are handled inline by the contacts.go handler
-	// (sendWhatsAppReaction). This is a no-op at the adapter level
-	// since the handler already constructs the raw API call.
-	// TODO: Move reaction sending logic from handler into this adapter.
-	m.logger.Warn("MetaAdapter.SendReaction is not yet fully wired — reactions still use direct API call in handler")
-	return nil
+	account, err := m.resolveAccount(instanceID)
+	if err != nil {
+		return err
+	}
+
+	// For Meta, we also need the recipient's phone number.
+	// However, the SendReaction interface only provides messageID and emoji.
+	// Since this adapter adheres to the MessageProvider interface, we might need
+	// to resolve the message from the DB to get the recipient.
+	// For now, we'll keep the previous behavior or implement the missing bits.
+	// Actually, the handler SendReaction already has contact info.
+	// Let's check if we can improve the interface or resolve it here.
+
+	var msg models.Message
+	if err := m.db.Where("whats_app_message_id = ?", messageID).First(&msg).Error; err != nil {
+		return fmt.Errorf("message not found to send reaction: %w", err)
+	}
+
+	var contact models.Contact
+	if err := m.db.Where("id = ?", msg.ContactID).First(&contact).Error; err != nil {
+		return fmt.Errorf("contact not found to send reaction: %w", err)
+	}
+
+	return m.client.SendReactionMessage(ctx, account, contact.PhoneNumber, messageID, emoji)
 }
 
 // RevokeMessage is not supported for Meta provider in this adapter path.

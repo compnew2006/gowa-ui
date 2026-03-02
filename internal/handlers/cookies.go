@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -16,7 +14,7 @@ const (
 )
 
 // setAuthCookies sets httpOnly auth cookies and a JS-readable CSRF cookie.
-func (a *App) setAuthCookies(r *fastglue.Request, accessToken string, accessTokenExpiresAt time.Time, refreshToken string) {
+func (a *App) setAuthCookies(r *fastglue.Request, accessToken string, accessTokenExpiresAt time.Time, refreshToken string) error {
 	secure := a.Config.Cookie.Secure
 	domain := a.Config.Cookie.Domain
 	bp := a.Config.Server.BasePath // e.g. "/whatomate" or ""
@@ -52,7 +50,10 @@ func (a *App) setAuthCookies(r *fastglue.Request, accessToken string, accessToke
 	fasthttp.ReleaseCookie(rc)
 
 	// CSRF token cookie — NOT httpOnly (JS-readable), broad path
-	csrfToken := generateCSRFToken()
+	csrfToken, err := generateCSRFToken()
+	if err != nil {
+		return err
+	}
 	cc := fasthttp.AcquireCookie()
 	cc.SetKey(cookieCSRFName)
 	cc.SetValue(csrfToken)
@@ -66,6 +67,7 @@ func (a *App) setAuthCookies(r *fastglue.Request, accessToken string, accessToke
 	}
 	r.RequestCtx.Response.Header.SetCookie(cc)
 	fasthttp.ReleaseCookie(cc)
+	return nil
 }
 
 // clearAuthCookies expires all auth cookies.
@@ -95,13 +97,4 @@ func (a *App) clearAuthCookies(r *fastglue.Request) {
 		r.RequestCtx.Response.Header.SetCookie(c)
 		fasthttp.ReleaseCookie(c)
 	}
-}
-
-// generateCSRFToken returns 32 random bytes, base64url encoded.
-func generateCSRFToken() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand.Read failed: " + err.Error())
-	}
-	return base64.RawURLEncoding.EncodeToString(b)
 }

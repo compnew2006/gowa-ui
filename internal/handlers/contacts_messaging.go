@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -821,65 +819,27 @@ func (a *App) sendWhatsAppReaction(account *models.WhatsAppAccount, contact *mod
 		return
 	}
 
+	if a.MessageProvider == nil {
+		a.Log.Warn("Message provider not configured - cannot send reaction", "message_id", message.ID)
+		return
+	}
+
 	// Use timeout context for external API calls
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Route through MessageProvider if using whatsmeow
-	if a.isWhatsmeowProvider() && a.MessageProvider != nil && message.InstanceID != nil {
-		if err := a.MessageProvider.SendReaction(ctx, message.InstanceID.String(), message.WhatsAppMessageID, emoji); err != nil {
-			a.Log.Error("Failed to send reaction via provider", "error", err, "message_id", message.ID)
-		} else {
-			a.Log.Info("Reaction sent successfully via provider", "message_id", message.WhatsAppMessageID, "emoji", emoji)
-		}
-		return
+	// Use unified MessageProvider. For Meta, it will resolve the account and contact again.
+	// For whatsmeow, it will use the client.
+	instanceID := ""
+	if message.InstanceID != nil {
+		instanceID = message.InstanceID.String()
+	} else if contact.InstanceID != nil {
+		instanceID = contact.InstanceID.String()
 	}
 
-	// Meta path: direct API call
-	if account == nil {
-		a.Log.Error("Cannot send reaction via Meta - WhatsApp account is nil", "message_id", message.ID)
-		return
+	if err := a.MessageProvider.SendReaction(ctx, instanceID, message.WhatsAppMessageID, emoji); err != nil {
+		a.Log.Error("Failed to send reaction via provider", "error", err, "message_id", message.ID)
+	} else {
+		a.Log.Info("Reaction sent successfully via provider", "message_id", message.WhatsAppMessageID, "emoji", emoji)
 	}
-	url := fmt.Sprintf("%s/%s/%s/messages", a.Config.WhatsApp.BaseURL, account.APIVersion, account.PhoneID)
-
-	payload := map[string]any{
-		"messaging_product": "whatsapp",
-		"recipient_type":    "individual",
-		"to":                contact.PhoneNumber,
-		"type":              "reaction",
-		"reaction": map[string]any{
-			"message_id": message.WhatsAppMessageID,
-			"emoji":      emoji, // Empty string removes the reaction
-		},
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		a.Log.Error("Failed to marshal reaction payload", "error", err)
-		return
-	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		a.Log.Error("Failed to create reaction request", "error", err)
-		return
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+account.AccessToken)
-
-	resp, err := a.HTTPClient.Do(req)
-	if err != nil {
-		a.Log.Error("Failed to send reaction", "error", err)
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		a.Log.Error("WhatsApp API reaction error", "status", resp.StatusCode, "body", string(body))
-		return
-	}
-
-	a.Log.Info("Reaction sent successfully", "message_id", message.WhatsAppMessageID, "emoji", emoji)
 }
