@@ -996,6 +996,9 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 		}
 
 		normalizedContent := normalizeDeletedMessageBody(m.Content)
+		if shouldMaskPhoneNumbers {
+			normalizedContent = MaskPhoneNumbersInText(normalizedContent)
+		}
 		var content any
 		if m.MessageType == models.MessageTypeText {
 			content = map[string]string{"body": normalizedContent}
@@ -1048,9 +1051,13 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 				if shouldMaskPhoneNumbers && replySenderPhone != "" {
 					replySenderPhone = MaskPhoneNumber(replySenderPhone)
 				}
+				replyContent := normalizeDeletedMessageBody(m.ReplyToMessage.Content)
+				if shouldMaskPhoneNumbers {
+					replyContent = MaskPhoneNumbersInText(replyContent)
+				}
 				msgResp.ReplyToMessage = &ReplyPreview{
 					ID:          m.ReplyToMessage.ID.String(),
-					Content:     map[string]string{"body": normalizeDeletedMessageBody(m.ReplyToMessage.Content)},
+					Content:     map[string]string{"body": replyContent},
 					MessageType: m.ReplyToMessage.MessageType,
 					Direction:   m.ReplyToMessage.Direction,
 					SenderPhone: replySenderPhone,
@@ -1059,8 +1066,21 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 
 			if msgResp.ReplyToMessage == nil {
 				msgResp.ReplyToMessage = buildReplyPreviewFromMetadata(m.Metadata)
-				if msgResp.ReplyToMessage != nil && shouldMaskPhoneNumbers && msgResp.ReplyToMessage.SenderPhone != "" {
-					msgResp.ReplyToMessage.SenderPhone = MaskPhoneNumber(msgResp.ReplyToMessage.SenderPhone)
+				if msgResp.ReplyToMessage != nil && shouldMaskPhoneNumbers {
+					if msgResp.ReplyToMessage.SenderPhone != "" {
+						msgResp.ReplyToMessage.SenderPhone = MaskPhoneNumber(msgResp.ReplyToMessage.SenderPhone)
+					}
+					if cMap, ok := msgResp.ReplyToMessage.Content.(map[string]interface{}); ok {
+						if bodyAny, ok := cMap["body"]; ok {
+							if bodyStr, ok := bodyAny.(string); ok {
+								cMap["body"] = MaskPhoneNumbersInText(bodyStr)
+							}
+						}
+					} else if cMapStr, ok := msgResp.ReplyToMessage.Content.(map[string]string); ok {
+						if bodyStr, ok := cMapStr["body"]; ok {
+							cMapStr["body"] = MaskPhoneNumbersInText(bodyStr)
+						}
+					}
 				}
 			}
 		}

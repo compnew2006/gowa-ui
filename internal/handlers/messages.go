@@ -725,12 +725,17 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 		return
 	}
 
+	contentBody := msg.Content
+	if a.ShouldMaskPhoneNumbers(orgID) {
+		contentBody = MaskPhoneNumbersInText(contentBody)
+	}
+
 	payload := map[string]any{
 		"id":           msg.ID,
 		"contact_id":   contact.ID.String(),
 		"direction":    msg.Direction,
 		"message_type": msg.MessageType,
-		"content":      map[string]string{"body": msg.Content},
+		"content":      map[string]string{"body": contentBody},
 		"status":       msg.Status,
 		"created_at":   msg.CreatedAt,
 		"updated_at":   msg.UpdatedAt,
@@ -791,9 +796,13 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 		// Include reply preview for UI
 		var replyToMsg models.Message
 		if err := a.DB.First(&replyToMsg, msg.ReplyToMessageID).Error; err == nil {
+			replyContent := replyToMsg.Content
+			if a.ShouldMaskPhoneNumbers(orgID) {
+				replyContent = MaskPhoneNumbersInText(replyContent)
+			}
 			replyPayload := map[string]any{
 				"id":           replyToMsg.ID.String(),
-				"content":      replyToMsg.Content,
+				"content":      replyContent,
 				"message_type": replyToMsg.MessageType,
 				"direction":    replyToMsg.Direction,
 			}

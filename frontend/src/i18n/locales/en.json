@@ -566,8 +566,6 @@
     "selectResetHour": "Select reset hour",
     "chatCloseRatingEnabled": "Close Chat Rating",
     "chatCloseRatingEnabledDesc": "When an agent manually closes a chat, send a rating request to the customer.",
-    "chatCloseRatingWindowDays": "Rating Window (days)",
-    "chatCloseRatingWindowDaysDesc": "How long to accept rating replies after a manual close (1-30 days).",
     "chatCloseRatingFollowupWindowMinutes": "Follow-up Window (minutes)",
     "chatCloseRatingFollowupWindowMinutesDesc": "After close, process up to 3 text replies as rating flow within this many minutes (1-1440).",
     "chatCloseRatingTemplates": "Rating Message Templates",
@@ -2418,6 +2416,15 @@
         "connectionTimeout": "No QR code or connection confirmation was received. Please regenerate QR code.",
         "qrTimeout": "QR code timed out before pairing completed. Please regenerate a new code."
       }
+    },
+    "chat_close_rating": {
+      "configureButton": "Configure rating message",
+      "title": "Chat Close Rating Settings",
+      "description": "Configure the chat close rating messages for this specific instance.",
+      "overrideOrg": "Override Organization Settings",
+      "overrideOrgDesc": "When enabled, this instance will use these custom rating templates instead of the organization default.",
+      "usingOrgDefault": "Using organization defaults",
+      "usingCustomTemplates": "Using custom templates"
     },
     "auto_reject": {
       "configureButton": "Configure call auto-reject",

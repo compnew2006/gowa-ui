@@ -2,7 +2,7 @@ import { test, expect, request as playwrightRequest } from '@playwright/test'
 import { TablePage, DialogPage } from '../../pages'
 import { loginAsAdmin, login, createUserFixture, ApiHelper } from '../../helpers'
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:8080'
+// const BASE_URL = process.env.BASE_URL || 'http://localhost:8080'
 
 test.describe('Users Management', () => {
   let tablePage: TablePage
@@ -17,7 +17,7 @@ test.describe('Users Management', () => {
     dialogPage = new DialogPage(page)
   })
 
-  test('should display users list', async ({ page }) => {
+  test('should display users list', async () => {
     // Should show table with users
     await expect(tablePage.tableBody).toBeVisible()
     // At least the admin user should exist
@@ -140,7 +140,7 @@ test.describe('Users Management', () => {
 })
 
 test.describe('Users - Role-based Access', () => {
-  test.skip('agent should not access users page', async ({ page }) => {
+  test.skip('agent should not access users page', async () => {
     // Skip: Role-based access control may be implemented differently
     // This test should be updated based on actual RBAC implementation
   })
@@ -189,7 +189,7 @@ test.describe('Users - Add Existing User (Single Org)', () => {
 })
 
 test.describe('Users - Add Existing User (Multi Org)', () => {
-  let tablePage: TablePage
+  // let tablePage: TablePage
   let testUserEmail: string
   let testUserId: string
   let testRoleId: string
@@ -247,7 +247,7 @@ test.describe('Users - Add Existing User (Multi Org)', () => {
     await login(page, { email: testUserEmail, password: testPassword, role: 'admin' })
     await page.goto('/settings/users')
     await page.waitForLoadState('networkidle')
-    tablePage = new TablePage(page)
+    // tablePage = new TablePage(page)
   })
 
   test('should show add existing user button in multi-org mode', async ({ page }) => {

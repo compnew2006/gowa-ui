@@ -8,7 +8,7 @@ test.describe('Chat Policy-Blocked Send', () => {
     await page.waitForLoadState('networkidle')
 
     const chatRows = page.locator('.cursor-pointer').filter({
-      has: page.locator('button[aria-label^=\"Delete chat:\"]'),
+      has: page.locator('button[aria-label^="Delete chat:"]'),
     })
     await expect(chatRows.first()).toBeVisible()
     await chatRows.first().click()

@@ -11,6 +11,7 @@ require (
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.0
 	github.com/knadh/koanf/v2 v2.1.0
+	github.com/nyaruka/phonenumbers v1.6.10
 	github.com/redis/go-redis/v9 v9.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valyala/fasthttp v1.58.0

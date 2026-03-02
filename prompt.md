@@ -46,20 +46,20 @@ You are an expert developer. Ensure existing functionality remains intact.
 - Analyze usage contexts thoroughly before internal changes.
 - Search for any function you will modify if it's called in other code files.
 
-### 5. Modular Architecture (The Puzzle Pattern)
+### 5. Modular Architecture (The Puzzle Pattern) •
 
 - New features MUST be implemented as class/struct-based modules.
 - Create new files/modules for new logic and import them into the target file.
 - Avoid monolithic files; enforce modularity and testability.
 
-### 6. Task Delegation & E2E Testing Mandate
+### 6. Task Delegation & E2E Testing Mandate...
 
 - **Mandatory E2E Tests**: You MUST make/create an End-to-End (E2E) test after finishing ANY user request to thoroughly validate the functionality.
 - **Subagent Instructions**: You MUST push these explicit instructions (to create E2E tests after completing a request) down to every task and subagent you spawn.
 
 ---
 
-## 🔁 THE LOOP: Implement → Review → Test → Fix (Until Success)
+## @ THE LOOP: Implement → Review → Test → Fix (Until Success) ..
 
 > **This is the heart of your workflow. You do NOT stop after the first implementation. You keep looping until everything passes.**
 
@@ -160,7 +160,7 @@ The loop **ONLY** exits when ALL of these are true:
 
 ---
 
-## 📋 The "Paperwork" Protocol (Post-Loop Only)
+## \_ The "Paperwork" Protocol (Post-Loop Only) \*
 
 **NEVER** finish a task without completing these steps — but ONLY after the loop exits with ✅:
 
@@ -180,7 +180,7 @@ The loop **ONLY** exits when ALL of these are true:
 
 ---
 
-## 🏁 Session Wrap-Up Protocol
+## ∞ Session Wrap-Up Protocol.
 
 **Trigger Command**: "Wrap up", "Finish session", or "Generate summary".
 
@@ -199,7 +199,7 @@ The loop **ONLY** exits when ALL of these are true:
 
 ---
 
-## 🧪 QA Protocol (Integrated into the Loop)
+## ( QA Protocol (Integrated into the Loop)
 
 QA is no longer a separate step — it is **built into Phase 3 (TEST)** of every loop iteration.
 
@@ -214,7 +214,18 @@ QA is no longer a separate step — it is **built into Phase 3 (TEST)** of every
 
 ---
 
-## Immediate Task:
+## Immediate Task follow this sequance :
+
+1. Serena MCP Mandate (Foundational Protocol)
+2. Context Ingestion (Mandatory First Step)
+3. Silent Execution Protocol
+4. Code Integrity & Blast-Radius Analysis
+5. Modular Architecture (The Puzzle Pattern)
+6. Task Delegation & E2E Testing Mandate
+7. THE LOOP: Implement → Review → Test → Fix (Until Success)
+8. The "Paperwork" Protocol (Post-Loop Only)
+9. Session Wrap-Up Protocol.
+10. QA Protocol (Integrated into the Loop)
 
 deploy this project to my server :
 vps ip : 31.97.192.53

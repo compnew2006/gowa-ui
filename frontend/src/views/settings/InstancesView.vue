@@ -26,14 +26,9 @@ import {
   type InstanceTagColorKey,
   type InstanceTagDisplayMode,
 } from "@/lib/instance-tag";
-import {
-  normalizeAutoRejectCallSettings,
-  type AutoRejectCallSettings,
-} from "@/lib/instance-auto-reject";
-import {
-  normalizeAutoCampaignSettings,
-  type AutoCampaignSettings,
-} from "@/lib/instance-auto-campaign";
+import { normalizeAutoRejectCallSettings, type AutoRejectCallSettings } from "@/lib/instance-auto-reject";
+import { type AutoCampaignSettings, normalizeAutoCampaignSettings } from "@/lib/instance-auto-campaign";
+import { type InstanceChatCloseRatingSettings } from "@/lib/instance-chat-close-rating";
 
 const instancesStore = useInstancesStore();
 const { t } = useI18n();
@@ -94,6 +89,7 @@ const autoDownloadIncomingMediaSaving = ref<Record<string, boolean>>({});
 const autoRejectSaving = ref<Record<string, boolean>>({});
 const autoCampaignSaving = ref<Record<string, boolean>>({});
 const autoCampaignUploading = ref<Record<string, boolean>>({});
+const chatCloseRatingSaving = ref<Record<string, boolean>>({});
 const campaignDraftOnlyEnforced = ref(false);
 
 // Lifecycle
@@ -724,6 +720,46 @@ async function handleAutoCampaignMediaClear(id: string) {
     autoCampaignSaving.value[id] = false;
   }
 }
+async function handleUpdateChatCloseRatingSettings(
+  id: string,
+  payload: InstanceChatCloseRatingSettings,
+) {
+  const instance = instancesStore.instances.find((item) => item.id === id);
+  if (!instance) return;
+
+  chatCloseRatingSaving.value[id] = true;
+  try {
+    let settingsPayload: Record<string, any>;
+    if (payload.override_org_settings) {
+      settingsPayload = {
+        ...(instance.settings || {}),
+        chat_close_rating_enabled: payload.enabled,
+        chat_close_rating_followup_window_minutes: payload.followup_window_minutes,
+      };
+      
+      // Filter out empty templates
+      const templates: Record<string, string> = {};
+      for (const [lang, template] of Object.entries(payload.templates || {})) {
+        if (template && template.trim() !== '') {
+          templates[lang] = template.trim();
+        }
+      }
+      settingsPayload.chat_close_rating_templates = templates;
+    } else {
+      // Clear instance overrides to fallback to org settings
+      settingsPayload = {
+        ...(instance.settings || {}),
+      };
+      delete settingsPayload.chat_close_rating_enabled;
+      delete settingsPayload.chat_close_rating_followup_window_minutes;
+      delete settingsPayload.chat_close_rating_templates;
+    }
+
+    await instancesStore.updateInstance(id, { settings: settingsPayload });
+  } finally {
+    chatCloseRatingSaving.value[id] = false;
+  }
+}
 </script>
 
 <template>
@@ -803,6 +839,7 @@ async function handleAutoCampaignMediaClear(id: string) {
           :auto-campaign-uploading="
             autoCampaignUploading[instance.id] || false
           "
+          :chat-close-rating-saving="chatCloseRatingSaving[instance.id] || false"
           @connect="handleConnect"
           @disconnect="disconnectInstance"
           @edit="openEditDialog"
@@ -816,6 +853,7 @@ async function handleAutoCampaignMediaClear(id: string) {
           @update-auto-campaign-settings="handleAutoCampaignSettingsUpdate"
           @upload-auto-campaign-media="handleAutoCampaignMediaUpload"
           @clear-auto-campaign-media="handleAutoCampaignMediaClear"
+          @update-chat-close-rating-settings="handleUpdateChatCloseRatingSettings"
         />
       </div>
     </div>

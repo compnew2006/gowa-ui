@@ -50,6 +50,7 @@
   - 📄 components.json
   - 📄 crowdin.yml
   - 📄 index.html
+  - 📄 lint.txt
   - 📄 package-lock.json
   - 📄 package.json
   - 📄 **playwright.config.ts**
@@ -144,6 +145,8 @@
         - 📄 **chat-attachments-policy.spec.ts**
           > *', async route => { const pathname = new URL(route.request().url()).pathname if (pathname.endsWith(`/api/contacts/${CONTACT_ID}`)) { await route.fulfi*
           - ⚙️ `MockWebSocket`, `close`, `constructor`, `if`, `installChatAttachmentMocks`, `installMockWebSocket`, `send`
+        - 📄 **chat-image-scroll.spec.ts**
+          > *Source file.*
         - 📄 **chat-message-isolation.spec.ts**
           > *Source file.*
           - ⚙️ `if`
@@ -165,6 +168,9 @@
         - 📄 **incoming-media-cache.spec.ts**
           > *', async route => { const pathname = new URL(route.request().url()).pathname if (pathname.endsWith(`/api/contacts/${CONTACT_ID}`)) { await route.fulfi*
           - ⚙️ `MockWebSocket`, `close`, `constructor`, `for`, `if`, `installMockWebSocket`, `pushMockServerMessage`, `pushServerMessage`, ... (+1 more)
+        - 📄 **mask-phone-numbers.spec.ts**
+          > *Source file.*
+          - ⚙️ `if`
         - 📄 **policy-blocked-send.spec.ts**
           > *Source file.*
         - 📄 **quote-navigation.spec.ts**
@@ -810,6 +816,7 @@
         - 📄 AutoRejectSettingsPanel.vue
         - 📄 HealthDashboard.vue
         - 📄 InstanceCard.vue
+        - 📄 InstanceChatCloseRatingPanel.vue
         - 📄 InstanceTagSettings.vue
         - 📄 QRCodeModal.vue
     - 📁 **lib/**
@@ -852,6 +859,9 @@
       - 📄 **instance-auto-reject.ts**
         > *Source file.*
         - ⚙️ `DEFAULT_AUTO_REJECT_SETTINGS`, `DEFAULT_TIMEZONE`, `add`, `autoRejectScheduleSummary`, `booleanValue`, `bypassContactsFromEditorValue`, `bypassContactsToEditorValue`, `cloneAutoRejectSettings`, ... (+7 more)
+      - 📄 **instance-chat-close-rating.ts**
+        > *Source file.*
+        - ⚙️ `cloneInstanceChatCloseRatingSettings`, `normalizeInstanceChatCloseRatingSettings`
       - 📄 **instance-tag.ts**
         > *Source file.*
         - ⚙️ `INSTANCE_TAG_COLOR_PRESETS`, `getInstanceTagLabel`, `getInstanceTagPresetByKey`, `if`, `isInstanceTagColorKey`, `isInstanceTagDisplayMode`, `normalizeOptionalLabel`, `readInstanceTagSettings`, ... (+3 more)
@@ -1467,6 +1477,7 @@
     - 📄 0cc1860e-4b76-4986-abd3-9b1560fb3486.jpg
     - 📄 0d269d9e-7d1c-4e88-98de-07b69c0784c3.jpg
     - 📄 0d41b9ab-c57b-4535-9272-36f26939b337.jpg
+    - 📄 0d951928-371d-4031-9c64-c2c94982b682.jpg
     - 📄 0da47bd8-6782-4c41-8e29-e76c1d42ebb2.jpg
     - 📄 0dbb0499-566d-4e06-aba9-4b81f10b8a26.jpg
     - 📄 0e0e4e6e-b974-4b42-8a29-a9d0b1b3d470.jpg
@@ -2590,6 +2601,7 @@
     - 📄 caf447bb-bb88-47c9-bfb3-b86737f6775c.jpg
     - 📄 cb22abd7-ee22-4ced-a057-83631c519064.jpg
     - 📄 cb2d55ef-a967-4ca1-9c4b-271f3cc7a89b.jpg
+    - 📄 cb45739a-3a5d-41aa-ae22-f4146c57af36.jpg
     - 📄 cb74807a-0d1e-45aa-b839-c1e643b687c9.jpg
     - 📄 cb8678f7-e6a4-41e7-aa5e-60b10f8d3c20.png
     - 📄 cb872b60-a40e-4247-9579-abfe691b5e5a.jpg
@@ -2615,6 +2627,7 @@
     - 📄 cec3b5f6-be3a-4260-a2f3-e7af50a47a1c.jpg
     - 📄 ceda67ee-696a-41b3-89c8-f906ad7b0059.jpg
     - 📄 ceff2947-6a09-4b3a-99e8-e4fb0781ea0f.jpg
+    - 📄 ceff4322-f35d-4d83-b92c-0244454cd4f6.jpg
     - 📄 cf0cd553-eed6-4218-a3b2-46f5f4f9ee6d.jpg
     - 📄 cf1552f0-86d2-4966-a901-80ef5f9b7fd9.jpg
     - 📄 cfc0cd14-a2ee-48f9-9789-c43ea211f88c.jpg
@@ -2939,6 +2952,7 @@
     - 📄 5c827b68-58aa-426b-ac6d-0c376c7c1087.mp4
     - 📄 5dd2b3d6-e710-4843-aa31-bf7c144ec849.mp4
     - 📄 5fd998a1-d5c7-4efb-9f92-7e6b458d85ae.mp4
+    - 📄 63704742-aca8-4493-add9-a1da41d837de.mp4
     - 📄 63c20442-7589-49c3-99bb-2fb640756ef0.mp4
     - 📄 65dc980b-08cd-4c93-9e3c-435769be7576.mp4
     - 📄 6628b87e-0171-4888-8d11-31d72c2b36cc.mp4
@@ -3900,11 +3914,290 @@
     - 📄 speckit.specify.md
     - 📄 speckit.tasks.md
     - 📄 speckit.taskstoissues.md
+  - 📁 **rules/**
+    - 📄 specify-rules.md
   - 📁 **skills/**
+    - 📁 **nextjs-developer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 app-router.md
+        - 📄 data-fetching.md
+        - 📄 deployment.md
+        - 📄 server-actions.md
+        - 📄 server-components.md
+    - 📁 **database-optimizer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 index-strategies.md
+        - 📄 monitoring-analysis.md
+        - 📄 mysql-tuning.md
+        - 📄 postgresql-tuning.md
+        - 📄 query-optimization.md
+    - 📁 **fullstack-guardian/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 api-design-standards.md
+        - 📄 architecture-decisions.md
+        - 📄 backend-patterns.md
+        - 📄 common-patterns.md
+        - 📄 deliverables-checklist.md
+        - 📄 design-template.md
+        - 📄 error-handling.md
+        - 📄 frontend-patterns.md
+        - 📄 integration-patterns.md
+        - 📄 security-checklist.md
+    - 📁 **spark-engineer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 partitioning-caching.md
+        - 📄 performance-tuning.md
+        - 📄 rdd-operations.md
+        - 📄 spark-sql-dataframes.md
+        - 📄 streaming-patterns.md
+    - 📁 **fine-tuning-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 dataset-preparation.md
+        - 📄 deployment-optimization.md
+        - 📄 evaluation-metrics.md
+        - 📄 hyperparameter-tuning.md
+        - 📄 lora-peft.md
+    - 📁 **wordpress-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 gutenberg-blocks.md
+        - 📄 hooks-filters.md
+        - 📄 performance-security.md
+        - 📄 plugin-architecture.md
+        - 📄 theme-development.md
+    - 📁 **code-documenter/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 api-docs-fastapi-django.md
+        - 📄 api-docs-nestjs-express.md
+        - 📄 coverage-reports.md
+        - 📄 documentation-systems.md
+        - 📄 interactive-api-docs.md
+        - 📄 python-docstrings.md
+        - 📄 typescript-jsdoc.md
+        - 📄 user-guides-tutorials.md
+    - 📁 **microservices-architect/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 communication.md
+        - 📄 data.md
+        - 📄 decomposition.md
+        - 📄 observability.md
+        - 📄 patterns.md
     - 📁 **08-speckit.checker/**
       - 📄 SKILL.md
+    - 📁 **kotlin-specialist/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 android-compose.md
+        - 📄 coroutines-flow.md
+        - 📄 dsl-idioms.md
+        - 📄 ktor-server.md
+        - 📄 multiplatform-kmp.md
+    - 📁 **spec-miner/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 analysis-checklist.md
+        - 📄 analysis-process.md
+        - 📄 ears-format.md
+        - 📄 specification-template.md
+    - 📁 **fastapi-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 async-sqlalchemy.md
+        - 📄 authentication.md
+        - 📄 endpoints-routing.md
+        - 📄 migration-from-django.md
+        - 📄 pydantic-v2.md
+        - 📄 testing-async.md
+    - 📁 **atlassian-mcp/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 authentication-patterns.md
+        - 📄 common-workflows.md
+        - 📄 confluence-operations.md
+        - 📄 jira-queries.md
+        - 📄 mcp-server-setup.md
+    - 📁 **golang-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 concurrency.md
+        - 📄 generics.md
+        - 📄 interfaces.md
+        - 📄 project-structure.md
+        - 📄 testing.md
+    - 📁 **shopify-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 app-development.md
+        - 📄 checkout-customization.md
+        - 📄 liquid-templating.md
+        - 📄 performance-optimization.md
+        - 📄 storefront-api.md
+    - 📁 **cli-developer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 design-patterns.md
+        - 📄 go-cli.md
+        - 📄 node-cli.md
+        - 📄 python-cli.md
+        - 📄 ux-patterns.md
+    - 📁 **salesforce-developer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 apex-development.md
+        - 📄 deployment-devops.md
+        - 📄 integration-patterns.md
+        - 📄 lightning-web-components.md
+        - 📄 soql-sosl.md
+    - 📁 **dotnet-core-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 authentication.md
+        - 📄 clean-architecture.md
+        - 📄 cloud-native.md
+        - 📄 entity-framework.md
+        - 📄 minimal-apis.md
+    - 📁 **web-design-guidelines/**
+      - 📄 SKILL.md
+    - 📁 **prompt-engineer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 evaluation-frameworks.md
+        - 📄 prompt-optimization.md
+        - 📄 prompt-patterns.md
+        - 📄 structured-outputs.md
+        - 📄 system-prompts.md
+    - 📁 **monitoring-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 alerting-rules.md
+        - 📄 application-profiling.md
+        - 📄 capacity-planning.md
+        - 📄 dashboards.md
+        - 📄 opentelemetry.md
+        - 📄 performance-testing.md
+        - 📄 prometheus-metrics.md
+        - 📄 structured-logging.md
+    - 📁 **vue-expert-js/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 component-architecture.md
+        - 📄 composables-patterns.md
+        - 📄 jsdoc-typing.md
+        - 📄 state-management.md
+        - 📄 testing-patterns.md
+    - 📁 **swift-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 async-concurrency.md
+        - 📄 memory-performance.md
+        - 📄 protocol-oriented.md
+        - 📄 swiftui-patterns.md
+        - 📄 testing-patterns.md
+    - 📁 **embedded-systems/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 communication-protocols.md
+        - 📄 memory-optimization.md
+        - 📄 microcontroller-programming.md
+        - 📄 power-optimization.md
+        - 📄 rtos-patterns.md
+    - 📁 **rust-engineer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 async.md
+        - 📄 error-handling.md
+        - 📄 ownership.md
+        - 📄 testing.md
+        - 📄 traits.md
+    - 📁 **legacy-modernizer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 legacy-testing.md
+        - 📄 migration-strategies.md
+        - 📄 refactoring-patterns.md
+        - 📄 strangler-fig-pattern.md
+        - 📄 system-assessment.md
+    - 📁 **devops-engineer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 deployment-strategies.md
+        - 📄 docker-patterns.md
+        - 📄 github-actions.md
+        - 📄 incident-response.md
+        - 📄 kubernetes.md
+        - 📄 platform-engineering.md
+        - 📄 release-automation.md
+        - 📄 terraform-iac.md
+    - 📁 **api-designer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 error-handling.md
+        - 📄 openapi.md
+        - 📄 pagination.md
+        - 📄 rest-patterns.md
+        - 📄 versioning.md
+    - 📁 **sre-engineer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 automation-toil.md
+        - 📄 error-budget-policy.md
+        - 📄 incident-chaos.md
+        - 📄 monitoring-alerting.md
+        - 📄 slo-sli-management.md
     - 📁 **07-speckit.implement/**
       - 📄 SKILL.md
+    - 📁 **debugging-wizard/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 common-patterns.md
+        - 📄 debugging-tools.md
+        - 📄 quick-fixes.md
+        - 📄 strategies.md
+        - 📄 systematic-debugging.md
+    - 📁 **angular-architect/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 components.md
+        - 📄 ngrx.md
+        - 📄 routing.md
+        - 📄 rxjs.md
+        - 📄 testing.md
+    - 📁 **typescript-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 advanced-types.md
+        - 📄 configuration.md
+        - 📄 patterns.md
+        - 📄 type-guards.md
+        - 📄 utility-types.md
+    - 📁 **php-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 async-patterns.md
+        - 📄 laravel-patterns.md
+        - 📄 modern-php-features.md
+        - 📄 symfony-patterns.md
+        - 📄 testing-quality.md
+    - 📁 **test-master/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 automation-frameworks.md
+        - 📄 e2e-testing.md
+        - 📄 integration-testing.md
+        - 📄 performance-testing.md
+        - 📄 qa-methodology.md
+        - 📄 security-testing.md
+        - 📄 tdd-iron-laws.md
+        - 📄 test-reports.md
+        - 📄 testing-anti-patterns.md
+        - 📄 unit-testing.md
     - 📁 **02-speckit.specify/**
       - 📄 SKILL.md
       - 📁 **templates/**
@@ -3913,10 +4206,129 @@
       - 📄 SKILL.md
       - 📁 **templates/**
         - 📄 tasks-template.md
+    - 📁 **django-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 authentication.md
+        - 📄 drf-serializers.md
+        - 📄 models-orm.md
+        - 📄 testing-django.md
+        - 📄 viewsets-views.md
+    - 📁 **nestjs-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 authentication.md
+        - 📄 controllers-routing.md
+        - 📄 dtos-validation.md
+        - 📄 migration-from-express.md
+        - 📄 services-di.md
+        - 📄 testing-patterns.md
+    - 📁 **secure-code-guardian/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 authentication.md
+        - 📄 input-validation.md
+        - 📄 owasp-prevention.md
+        - 📄 security-headers.md
+        - 📄 xss-csrf.md
+    - 📁 **java-architect/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 jpa-optimization.md
+        - 📄 reactive-webflux.md
+        - 📄 spring-boot-setup.md
+        - 📄 spring-security.md
+        - 📄 testing-patterns.md
+    - 📁 **pandas-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 aggregation-groupby.md
+        - 📄 data-cleaning.md
+        - 📄 dataframe-operations.md
+        - 📄 merging-joining.md
+        - 📄 performance-optimization.md
+    - 📁 **cpp-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 build-tooling.md
+        - 📄 concurrency.md
+        - 📄 memory-performance.md
+        - 📄 modern-cpp.md
+        - 📄 templates.md
+    - 📁 **kubernetes-specialist/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 configuration.md
+        - 📄 cost-optimization.md
+        - 📄 custom-operators.md
+        - 📄 gitops.md
+        - 📄 helm-charts.md
+        - 📄 multi-cluster.md
+        - 📄 networking.md
+        - 📄 service-mesh.md
+        - 📄 storage.md
+        - 📄 troubleshooting.md
+        - 📄 workloads.md
+    - 📁 **laravel-specialist/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 eloquent.md
+        - 📄 livewire.md
+        - 📄 queues.md
+        - 📄 routing.md
+        - 📄 testing.md
+    - 📁 **python-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 async-patterns.md
+        - 📄 packaging.md
+        - 📄 standard-library.md
+        - 📄 testing.md
+        - 📄 type-system.md
+    - 📁 **spring-boot-engineer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 cloud.md
+        - 📄 data.md
+        - 📄 security.md
+        - 📄 testing.md
+        - 📄 web.md
     - 📁 **10-speckit.reviewer/**
       - 📄 SKILL.md
+    - 📁 **architecture-designer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 adr-template.md
+        - 📄 architecture-patterns.md
+        - 📄 database-selection.md
+        - 📄 nfr-checklist.md
+        - 📄 system-design.md
+    - 📁 **ml-pipeline/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 experiment-tracking.md
+        - 📄 feature-engineering.md
+        - 📄 model-validation.md
+        - 📄 pipeline-orchestration.md
+        - 📄 training-pipelines.md
+    - 📁 **terraform-engineer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 best-practices.md
+        - 📄 module-patterns.md
+        - 📄 providers.md
+        - 📄 state-management.md
+        - 📄 testing.md
     - 📁 **06-speckit.analyze/**
       - 📄 SKILL.md
+    - 📁 **rag-architect/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 chunking-strategies.md
+        - 📄 embedding-models.md
+        - 📄 rag-evaluation.md
+        - 📄 retrieval-optimization.md
+        - 📄 vector-databases.md
     - 📁 **scripts/**
       - 📁 **bash/**
         - 📄 check-prerequisites.sh
@@ -3931,16 +4343,260 @@
       - 📁 **templates/**
         - 📄 agent-file-template.md
         - 📄 plan-template.md
+    - 📁 **rails-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 active-record.md
+        - 📄 api-development.md
+        - 📄 background-jobs.md
+        - 📄 hotwire-turbo.md
+        - 📄 rspec-testing.md
+    - 📁 **react-native-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 expo-router.md
+        - 📄 list-optimization.md
+        - 📄 platform-handling.md
+        - 📄 project-structure.md
+        - 📄 storage-hooks.md
     - 📁 **speckit.checklist/**
       - 📄 SKILL.md
       - 📁 **templates/**
         - 📄 checklist-template.md
+    - 📁 **csharp-developer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 aspnet-core.md
+        - 📄 blazor.md
+        - 📄 entity-framework.md
+        - 📄 modern-csharp.md
+        - 📄 performance.md
+    - 📁 **graphql-architect/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 federation.md
+        - 📄 migration-from-rest.md
+        - 📄 resolvers.md
+        - 📄 schema-design.md
+        - 📄 security.md
+        - 📄 subscriptions.md
+    - 📁 **code-reviewer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 common-issues.md
+        - 📄 feedback-examples.md
+        - 📄 receiving-feedback.md
+        - 📄 report-template.md
+        - 📄 review-checklist.md
+        - 📄 spec-compliance-review.md
+    - 📁 **chaos-engineer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 chaos-tools.md
+        - 📄 experiment-design.md
+        - 📄 game-days.md
+        - 📄 infrastructure-chaos.md
+        - 📄 kubernetes-chaos.md
+    - 📁 **vue-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 build-tooling.md
+        - 📄 components.md
+        - 📄 composition-api.md
+        - 📄 mobile-hybrid.md
+        - 📄 nuxt.md
+        - 📄 state-management.md
+        - 📄 typescript.md
+    - 📁 **react-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 hooks-patterns.md
+        - 📄 migration-class-to-modern.md
+        - 📄 performance.md
+        - 📄 react-19-features.md
+        - 📄 server-components.md
+        - 📄 state-management.md
+        - 📄 testing-react.md
     - 📁 **09-speckit.tester/**
       - 📄 SKILL.md
+    - 📁 **vercel-react-best-practices/**
+      - 📄 AGENTS.md
+      - 📄 README.md
+      - 📄 SKILL.md
+      - 📁 **rules/**
+        - 📄 advanced-event-handler-refs.md
+        - 📄 advanced-init-once.md
+        - 📄 advanced-use-latest.md
+        - 📄 async-api-routes.md
+        - 📄 async-defer-await.md
+        - 📄 async-dependencies.md
+        - 📄 async-parallel.md
+        - 📄 async-suspense-boundaries.md
+        - 📄 bundle-barrel-imports.md
+        - 📄 bundle-conditional.md
+        - 📄 bundle-defer-third-party.md
+        - 📄 bundle-dynamic-imports.md
+        - 📄 bundle-preload.md
+        - 📄 client-event-listeners.md
+        - 📄 client-localstorage-schema.md
+        - 📄 client-passive-event-listeners.md
+        - 📄 client-swr-dedup.md
+        - 📄 js-batch-dom-css.md
+        - 📄 js-cache-function-results.md
+        - 📄 js-cache-property-access.md
+        - 📄 js-cache-storage.md
+        - 📄 js-combine-iterations.md
+        - 📄 js-early-exit.md
+        - 📄 js-hoist-regexp.md
+        - 📄 js-index-maps.md
+        - 📄 js-length-check-first.md
+        - 📄 js-min-max-loop.md
+        - 📄 js-set-map-lookups.md
+        - 📄 js-tosorted-immutable.md
+        - 📄 rendering-activity.md
+        - 📄 rendering-animate-svg-wrapper.md
+        - 📄 rendering-conditional-render.md
+        - 📄 rendering-content-visibility.md
+        - 📄 rendering-hoist-jsx.md
+        - 📄 rendering-hydration-no-flicker.md
+        - 📄 rendering-hydration-suppress-warning.md
+        - 📄 rendering-svg-precision.md
+        - 📄 rendering-usetransition-loading.md
+        - 📄 rerender-defer-reads.md
+        - 📄 rerender-dependencies.md
+        - 📄 rerender-derived-state-no-effect.md
+        - 📄 rerender-derived-state.md
+        - 📄 rerender-functional-setstate.md
+        - 📄 rerender-lazy-state-init.md
+        - 📄 rerender-memo-with-default-value.md
+        - 📄 rerender-memo.md
+        - 📄 rerender-move-effect-to-event.md
+        - 📄 rerender-simple-expression-in-memo.md
+        - 📄 rerender-transitions.md
+        - 📄 rerender-use-ref-transient-values.md
+        - 📄 server-after-nonblocking.md
+        - 📄 server-auth-actions.md
+        - 📄 server-cache-lru.md
+        - 📄 server-cache-react.md
+        - 📄 server-dedup-props.md
+        - 📄 server-parallel-fetching.md
+        - 📄 server-serialization.md
+    - 📁 **playwright-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 api-mocking.md
+        - 📄 configuration.md
+        - 📄 debugging-flaky.md
+        - 📄 page-object-model.md
+        - 📄 selectors-locators.md
     - 📁 **11-speckit.validate/**
       - 📄 SKILL.md
+    - 📁 **game-developer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 ecs-patterns.md
+        - 📄 multiplayer-networking.md
+        - 📄 performance-optimization.md
+        - 📄 unity-patterns.md
+        - 📄 unreal-cpp.md
+    - 📁 **the-fool/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 dialectic-synthesis.md
+        - 📄 evidence-audit.md
+        - 📄 mode-selection-guide.md
+        - 📄 pre-mortem-analysis.md
+        - 📄 red-team-adversarial.md
+        - 📄 socratic-questioning.md
+    - 📁 **javascript-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 async-patterns.md
+        - 📄 browser-apis.md
+        - 📄 modern-syntax.md
+        - 📄 modules.md
+        - 📄 node-essentials.md
+    - 📁 **mcp-developer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 protocol.md
+        - 📄 python-sdk.md
+        - 📄 resources.md
+        - 📄 tools.md
+        - 📄 typescript-sdk.md
+    - 📁 **feature-forge/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 acceptance-criteria.md
+        - 📄 ears-syntax.md
+        - 📄 interview-questions.md
+        - 📄 pre-discovery-subagents.md
+        - 📄 specification-template.md
+    - 📁 **postgres-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 extensions.md
+        - 📄 jsonb.md
+        - 📄 maintenance.md
+        - 📄 performance.md
+        - 📄 replication.md
+    - 📁 **sql-pro/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 database-design.md
+        - 📄 dialect-differences.md
+        - 📄 optimization.md
+        - 📄 query-patterns.md
+        - 📄 window-functions.md
+    - 📁 **vercel-composition-patterns/**
+      - 📄 AGENTS.md
+      - 📄 README.md
+      - 📄 SKILL.md
+      - 📁 **rules/**
+        - 📄 architecture-avoid-boolean-props.md
+        - 📄 architecture-compound-components.md
+        - 📄 patterns-children-over-render-props.md
+        - 📄 patterns-explicit-variants.md
+        - 📄 react19-no-forwardref.md
+        - 📄 state-context-interface.md
+        - 📄 state-decouple-implementation.md
+        - 📄 state-lift-state.md
+    - 📁 **security-reviewer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 infrastructure-security.md
+        - 📄 penetration-testing.md
+        - 📄 report-template.md
+        - 📄 sast-tools.md
+        - 📄 secret-scanning.md
+        - 📄 vulnerability-patterns.md
+    - 📁 **cloud-architect/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 aws.md
+        - 📄 azure.md
+        - 📄 cost.md
+        - 📄 gcp.md
+        - 📄 multi-cloud.md
     - 📁 **01-speckit.constitution/**
       - 📄 SKILL.md
+    - 📁 **flutter-expert/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 bloc-state.md
+        - 📄 gorouter-navigation.md
+        - 📄 performance.md
+        - 📄 project-structure.md
+        - 📄 riverpod-state.md
+        - 📄 widget-patterns.md
+    - 📁 **websocket-engineer/**
+      - 📄 SKILL.md
+      - 📁 **references/**
+        - 📄 alternatives.md
+        - 📄 patterns.md
+        - 📄 protocol.md
+        - 📄 scaling.md
+        - 📄 security.md
 - 📁 **.specify/**
   - 📁 **memory/**
     - 📄 constitution.md

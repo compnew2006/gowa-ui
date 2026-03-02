@@ -575,7 +575,7 @@ test.describe('WhatsApp Instances', () => {
       updated_at: now,
     }
     const instances: MockInstance[] = [instance]
-    let receivedUpdatePayload: Record<string, any> | null = null
+    let receivedUpdatePayload: any = null
 
     await mockInstancesApi(page, instances, {
       onUpdate: (_id, payload) => {
@@ -594,9 +594,9 @@ test.describe('WhatsApp Instances', () => {
       .getByRole('switch')
       .click()
     await dialog.getByPlaceholder('e.g. promo-').fill('promo-')
-    await dialog.locator('input[type=\"number\"]').nth(0).fill('9')
-    await dialog.locator('input[type=\"number\"]').nth(1).fill('1')
-    await dialog.locator('input[type=\"number\"]').nth(2).fill('3')
+    await dialog.locator('input[type="number"]').nth(0).fill('9')
+    await dialog.locator('input[type="number"]').nth(1).fill('1')
+    await dialog.locator('input[type="number"]').nth(2).fill('3')
     await dialog.getByRole('combobox').click()
     await page.getByRole('option', { name: 'Run immediately' }).click()
     await dialog.locator('textarea').fill('Hello {contact_name}')
@@ -629,7 +629,7 @@ test.describe('WhatsApp Instances', () => {
       updated_at: now,
     }
     const instances: MockInstance[] = [instance]
-    let receivedUpdatePayload: Record<string, any> | null = null
+    let receivedUpdatePayload: any = null
 
     await mockInstancesApi(page, instances, {
       onOrganizationSettings: () => ({ campaign_draft_only: true }),
@@ -715,7 +715,7 @@ test.describe('WhatsApp Instances', () => {
       updated_at: now,
     }
     const instances: MockInstance[] = [instance]
-    let receivedUpdatePayload: Record<string, any> | null = null
+    let receivedUpdatePayload: any = null
 
     await mockInstancesApi(page, instances, {
       onUpdate: (_, payload) => {
@@ -756,7 +756,7 @@ test.describe('WhatsApp Instances', () => {
       updated_at: now,
     }
     const instances: MockInstance[] = [instance]
-    let receivedUpdatePayload: Record<string, any> | null = null
+    let receivedUpdatePayload: any = null
 
     await mockInstancesApi(page, instances, {
       onUpdate: (_, payload) => {
@@ -775,5 +775,66 @@ test.describe('WhatsApp Instances', () => {
     await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Instance updated successfully' })).toBeVisible()
     expect(receivedUpdatePayload).not.toBeNull()
     expect(receivedUpdatePayload?.settings?.auto_download_incoming_media).toBe(false)
+  })
+
+  test('should save instance specific chat close rating settings', async ({ page }) => {
+    await loginAsSuperAdmin(page)
+
+    const now = new Date().toISOString()
+    const instance: MockInstance = {
+      id: 'e2e-instance-chat-close-rating-id',
+      name: `Chat Close Rating ${Date.now()}`,
+      status: 'connected',
+      is_default: false,
+      auto_read_receipt: true,
+      organization_id: 'e2e-org-id',
+      settings: {},
+      created_at: now,
+      updated_at: now,
+    }
+    const instances: MockInstance[] = [instance]
+    let receivedUpdatePayload: any = null
+
+    await mockInstancesApi(page, instances, {
+      onUpdate: (_id, payload) => {
+        receivedUpdatePayload = payload as Record<string, any>
+      },
+    })
+
+    await page.goto('/settings/instances')
+
+    // Find the right accordion/panel button since they are added side-by-side or below
+    await page.getByRole('button', { name: 'Configure Rating Message' }).first().click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('Chat Close Rating Settings')).toBeVisible()
+    
+    // Toggle the override switch
+    const overrideLabel = dialog.getByText('Override Organization Settings')
+    await overrideLabel
+      .locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+      .getByRole('switch')
+      .click()
+      
+    // Fill the english template
+    await dialog.locator('textarea').nth(1).fill('Rate us!')
+    await dialog.getByRole('button', { name: 'Save' }).click()
+
+    await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Instance updated successfully' })).toBeVisible()
+    expect(receivedUpdatePayload).not.toBeNull()
+    expect(receivedUpdatePayload?.settings?.chat_close_rating_enabled).toBe(true)
+    expect(receivedUpdatePayload?.settings?.chat_close_rating_templates?.en).toBe('Rate us!')
+
+    // Reopen dialog to verify persistence
+    await page.getByRole('button', { name: 'Configure Rating Message' }).first().click()
+    const reopenDialog = page.getByRole('dialog')
+    await expect(reopenDialog.getByText('Chat Close Rating Settings')).toBeVisible()
+    await expect(
+      reopenDialog
+        .getByText('Override Organization Settings')
+        .locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+        .getByRole('switch')
+    ).toBeChecked()
+    await expect(reopenDialog.locator('textarea').nth(1)).toHaveValue('Rate us!')
   })
 })

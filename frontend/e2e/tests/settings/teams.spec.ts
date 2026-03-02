@@ -15,7 +15,7 @@ test.describe('Teams Management', () => {
     dialogPage = new DialogPage(page)
   })
 
-  test('should display teams list', async ({ page }) => {
+  test('should display teams list', async () => {
     await expect(tablePage.tableBody).toBeVisible()
   })
 
@@ -34,13 +34,13 @@ test.describe('Teams Management', () => {
     }
   })
 
-  test('should open create team dialog', async ({ page }) => {
+  test('should open create team dialog', async () => {
     await tablePage.clickAddButton()
     await dialogPage.waitForOpen()
     await expect(dialogPage.dialog).toBeVisible()
   })
 
-  test('should create a new team', async ({ page }) => {
+  test('should create a new team', async () => {
     const newTeam = createTeamFixture()
 
     await tablePage.clickAddButton()
@@ -57,7 +57,7 @@ test.describe('Teams Management', () => {
     await tablePage.expectRowExists(newTeam.name)
   })
 
-  test('should show validation error for empty name', async ({ page }) => {
+  test('should show validation error for empty name', async () => {
     await tablePage.clickAddButton()
     await dialogPage.waitForOpen()
 
@@ -69,7 +69,7 @@ test.describe('Teams Management', () => {
     await expect(dialogPage.dialog).toBeVisible()
   })
 
-  test('should edit existing team', async ({ page }) => {
+  test('should edit existing team', async () => {
     // First create a team to edit
     const team = createTeamFixture()
 
@@ -95,7 +95,7 @@ test.describe('Teams Management', () => {
     await tablePage.expectRowExists(updatedName)
   })
 
-  test('should delete team', async ({ page }) => {
+  test('should delete team', async () => {
     // First create a team to delete
     const team = createTeamFixture({ name: 'Team To Delete ' + Date.now() })
 
@@ -119,7 +119,7 @@ test.describe('Teams Management', () => {
     await tablePage.expectRowNotExists(team.name)
   })
 
-  test('should cancel team creation', async ({ page }) => {
+  test('should cancel team creation', async () => {
     const teamName = 'Cancelled Team ' + Date.now()
 
     await tablePage.clickAddButton()

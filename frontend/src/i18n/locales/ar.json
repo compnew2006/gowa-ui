@@ -541,8 +541,6 @@
     "selectResetHour": "اختر ساعة إعادة التعيين",
     "chatCloseRatingEnabled": "تقييم إغلاق الدردشة",
     "chatCloseRatingEnabledDesc": "عند إغلاق المحادثة يدويًا بواسطة الوكيل، يتم إرسال طلب تقييم للعميل.",
-    "chatCloseRatingWindowDays": "نافذة التقييم (بالأيام)",
-    "chatCloseRatingWindowDaysDesc": "المدة المسموح بها لاستقبال ردود التقييم بعد الإغلاق اليدوي (من 1 إلى 30 يومًا).",
     "chatCloseRatingFollowupWindowMinutes": "نافذة المتابعة (بالدقائق)",
     "chatCloseRatingFollowupWindowMinutesDesc": "بعد الإغلاق، تتم معالجة حتى 3 رسائل نصية كمسار تقييم خلال هذه المدة (1-1440 دقيقة).",
     "chatCloseRatingTemplates": "قوالب رسالة التقييم",
@@ -2381,6 +2379,15 @@
         "connectionTimeout": "لم يتم استلام رمز QR أو تأكيد الاتصال. يرجى إعادة إنشاء رمز QR.",
         "qrTimeout": "انتهت صلاحية رمز QR قبل اكتمال الاقتران. يرجى إنشاء رمز جديد."
       }
+    },
+    "chat_close_rating": {
+      "configureButton": "تكوين رسالة التقييم",
+      "title": "إعدادات تقييم إغلاق الدردشة",
+      "description": "تكوين رسائل التقييم عند إغلاق الدردشة لهذه النسخة المحددة.",
+      "overrideOrg": "تخطي إعدادات المؤسسة",
+      "overrideOrgDesc": "عند التفعيل، ستستخدم هذه النسخة قوالب التقييم المخصصة بدلاً من إعدادات المؤسسة الافتراضية.",
+      "usingOrgDefault": "استخدام إعدادات المؤسسة الافتراضية",
+      "usingCustomTemplates": "استخدام قوالب مخصصة"
     },
     "auto_reject": {
       "configureButton": "تكوين الرفض التلقائي للمكالمات",

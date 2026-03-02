@@ -61,7 +61,7 @@ test.describe('Organization Switching (Super Admin)', () => {
     }
 
     // Look for organization switcher in sidebar
-    const orgSwitcher = page.locator('[data-testid="org-switcher"]').or(
+    page.locator('[data-testid="org-switcher"]').or(
       page.locator('aside').locator('button').filter({ hasText: /organization|org/i })
     ).or(
       page.locator('aside select')
@@ -73,7 +73,7 @@ test.describe('Organization Switching (Super Admin)', () => {
     expect(page.url()).not.toContain('/login')
   })
 
-  test('switching organization updates users list', async ({ page, request }) => {
+  test('switching organization updates users list', async ({ page }) => {
     // This test verifies that when super admin switches org, the users list updates
     await page.goto('/login')
     await page.locator('input[type="email"]').fill(ADMIN_EMAIL)

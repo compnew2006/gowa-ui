@@ -274,6 +274,39 @@ func TestMaskPhoneNumber(t *testing.T) {
 	}
 }
 
+// --- MaskPhoneNumbersInText ---
+
+func TestMaskPhoneNumbersInText(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"standard international", "Call me at +1 234 567 8900 tomorrow", "Call me at ***********8900 tomorrow"},
+		{"international with 00", "My number is 00447911123456 please", "My number is **********3456 please"},
+		{"saudi format 05", "Number is 0561853319", "Number is ******3319"},
+		{"saudi format without +", "Number is 966561853319", "Number is ********3319"},
+		{"egyptian format 010", "Hit me on 01007181781 later", "Hit me on *******1781 later"},
+		{"egyptian format arabic", "Hit me on ٠١٠٠٧١٨١٧٨١ later", "Hit me on *******١٧٨١ later"},
+		{"egyptian format without +", "Hit me on 201007181781 later", "Hit me on ********1781 later"},
+		{"multiple numbers", "Here: +44 7911 123456 and 01007181781", "Here: ***********3456 and *******1781"},
+		{"not a phone number", "My order number is 123456789", "My order number is 123456789"},
+		{"national id", "National ID is 10234567890123", "National ID is 10234567890123"},
+		{"bank account", "Transfer to 3012345678901234", "Transfer to 3012345678901234"},
+		{"short number with plus", "Wait +123 is too short", "Wait +123 is too short"},
+		{"with dashes and dots", "Contact: +1-234.567-8900.", "Contact: ***********8900."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, MaskPhoneNumbersInText(tt.text))
+		})
+	}
+}
+
 // --- LooksLikePhoneNumber ---
 
 func TestLooksLikePhoneNumber(t *testing.T) {

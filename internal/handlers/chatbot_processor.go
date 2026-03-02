@@ -2373,7 +2373,7 @@ func (a *App) shouldSkipClosedChatAutoReopenForIncomingMessage(orgID uuid.UUID, 
 		return false
 	}
 
-	cycle, _, err := a.findActiveChatCloseRatingCycle(orgID, contact.ID, time.Now().UTC())
+	cycle, _, err := a.findActiveChatCloseRatingCycle(orgID, contact, time.Now().UTC())
 	if err != nil {
 		a.Log.Error("Failed to resolve pending close rating cycle before auto-reopen", "error", err, "organization_id", orgID, "contact_id", contact.ID)
 		return false

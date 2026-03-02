@@ -3,12 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/database"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
+	"github.com/nyaruka/phonenumbers"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -88,7 +90,7 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		settings.AssignedChatResetMode = string(chatResetSettings.Mode)
 		settings.AssignedChatResetHour = chatResetSettings.Hour
 
-		chatCloseRatingSettings := readChatCloseRatingSettings(org.Settings)
+		chatCloseRatingSettings := readChatCloseRatingSettings(org.Settings, nil)
 		settings.ChatCloseRatingEnabled = chatCloseRatingSettings.Enabled
 		settings.ChatCloseRatingWindowDays = chatCloseRatingSettings.WindowDays
 		settings.ChatCloseRatingFollowupWindowMinutes = chatCloseRatingSettings.FollowupWindowMinutes
@@ -123,7 +125,6 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 		AssignedChatResetMode                *string            `json:"assigned_chat_reset_mode"`
 		AssignedChatResetHour                *int               `json:"assigned_chat_reset_hour"`
 		ChatCloseRatingEnabled               *bool              `json:"chat_close_rating_enabled"`
-		ChatCloseRatingWindowDays            *int               `json:"chat_close_rating_window_days"`
 		ChatCloseRatingFollowupWindowMinutes *int               `json:"chat_close_rating_followup_window_minutes"`
 		ChatCloseRatingTemplates             *map[string]string `json:"chat_close_rating_templates"`
 	}
@@ -134,16 +135,6 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 
 	if err := validateChatAssignmentResetInputs(req.AssignedChatResetMode, req.AssignedChatResetHour); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
-	}
-	if req.ChatCloseRatingWindowDays != nil {
-		if *req.ChatCloseRatingWindowDays < 1 || *req.ChatCloseRatingWindowDays > maxChatCloseRatingWindowDays {
-			return r.SendErrorEnvelope(
-				fasthttp.StatusBadRequest,
-				fmt.Sprintf("chat_close_rating_window_days must be between 1 and %d", maxChatCloseRatingWindowDays),
-				nil,
-				"",
-			)
-		}
 	}
 	if req.ChatCloseRatingFollowupWindowMinutes != nil {
 		if *req.ChatCloseRatingFollowupWindowMinutes < 1 || *req.ChatCloseRatingFollowupWindowMinutes > maxChatCloseRatingFollowupWindowMinutes {
@@ -225,9 +216,7 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	if req.ChatCloseRatingEnabled != nil {
 		org.Settings[organizationSettingChatCloseRatingEnabled] = *req.ChatCloseRatingEnabled
 	}
-	if req.ChatCloseRatingWindowDays != nil {
-		org.Settings[organizationSettingChatCloseRatingWindowDays] = *req.ChatCloseRatingWindowDays
-	}
+
 	if req.ChatCloseRatingFollowupWindowMinutes != nil {
 		org.Settings[organizationSettingChatCloseRatingFollowupWindowMinutes] = *req.ChatCloseRatingFollowupWindowMinutes
 	}
@@ -268,14 +257,103 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 
 // MaskPhoneNumber masks a phone number showing only last 4 digits
 func MaskPhoneNumber(phone string) string {
-	if len(phone) <= 4 {
+	runes := []rune(phone)
+	if len(runes) <= 4 {
 		return phone
 	}
 	masked := ""
-	for i := 0; i < len(phone)-4; i++ {
+	for i := 0; i < len(runes)-4; i++ {
 		masked += "*"
 	}
-	return masked + phone[len(phone)-4:]
+	return masked + string(runes[len(runes)-4:])
+}
+
+// A generalized chunker that plucks 9-16 digit sequences natively starting with generic indicators.
+// This is intentionally broad since structural validation is outsourced to Google libphonenumber.
+var intlPhoneRegex = regexp.MustCompile(`(?:^|[^\p{Nd}])((?:\+|00|0|٠٠|٠)[\s\-\.]?[\p{Nd}][\p{Nd}\s\-\.]{5,18}[\p{Nd}]|[\p{Nd}][\p{Nd}\s\-\.]{6,18}[\p{Nd}])(?:[^\p{Nd}]|$)`)
+
+// arabicToASCII maps Arabic-Indic digits to ASCII digits for consistent internal prefix validation
+var arabicToASCII = strings.NewReplacer(
+	"٠", "0", "١", "1", "٢", "2", "٣", "3", "٤", "4",
+	"٥", "5", "٦", "6", "٧", "7", "٨", "8", "٩", "9",
+	"۴", "4", "۵", "5", "۶", "6", // Persian extended
+)
+
+// defaultPhoneParsingRegions defines regions to cross-check when a local number is provided.
+var defaultPhoneParsingRegions = []string{"SA", "EG", "AE", "US", "GB"}
+
+func MaskPhoneNumbersInText(text string) string {
+	matches := intlPhoneRegex.FindAllStringSubmatchIndex(text, -1)
+	if len(matches) == 0 {
+		return text
+	}
+
+	var result strings.Builder
+	lastIndex := 0
+
+	for _, matchIdxs := range matches {
+		if len(matchIdxs) < 4 {
+			continue // Safeguard against weird regex parses (should always have group 1)
+		}
+
+		// matchIdxs[0:2] is the FULL match (including non-digit boundaries)
+		// matchIdxs[2:4] is the FIRST capture group (just the phone sequence)
+		groupStart := matchIdxs[2]
+		groupEnd := matchIdxs[3]
+
+		// Append everything from the end of the last processed chunk up to the start of the CAPTURE GROUP
+		// This preserves the leading boundary character, if any
+		result.WriteString(text[lastIndex:groupStart])
+		rawNumber := text[groupStart:groupEnd]
+
+		// Ensure any Arabic-Indic digits are mapped to standard digits so HasPrefix("00") works seamlessly
+		normalizedNumber := arabicToASCII.Replace(rawNumber)
+
+		// Cleanup raw strings slightly for faster parsing attempts
+		stripped := strings.ReplaceAll(normalizedNumber, " ", "")
+		stripped = strings.ReplaceAll(stripped, "-", "")
+		stripped = strings.ReplaceAll(stripped, ".", "")
+
+		isValid := false
+
+		asIntl := stripped
+		if strings.HasPrefix(asIntl, "00") {
+			asIntl = "+" + asIntl[2:]
+		} else if !strings.HasPrefix(asIntl, "+") && !strings.HasPrefix(asIntl, "0") {
+			asIntl = "+" + asIntl
+		}
+
+		numIntl, errIntl := phonenumbers.Parse(asIntl, "ZZ")
+		if errIntl == nil && phonenumbers.IsValidNumber(numIntl) {
+			isValid = true
+		}
+
+		if !isValid {
+			for _, region := range defaultPhoneParsingRegions {
+				numLocal, errLocal := phonenumbers.Parse(stripped, region)
+				if errLocal == nil && phonenumbers.IsValidNumber(numLocal) {
+					isValid = true
+					break
+				}
+			}
+		}
+
+		if isValid {
+			result.WriteString(MaskPhoneNumber(rawNumber))
+		} else {
+			result.WriteString(rawNumber)
+		}
+		
+		lastIndex = groupEnd
+	}
+
+	// Append any remaining trailing characters after the last processed capture group
+	result.WriteString(text[lastIndex:])
+	return result.String()
+}
+
+func isDigit(c byte) bool {
+	return c >= '0' && c <= '9'
 }
 
 // LooksLikePhoneNumber checks if a string looks like a phone number

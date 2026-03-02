@@ -1,0 +1,152 @@
+
+> whatomate-frontend@0.1.0 lint
+> eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore
+
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/pages/BasePage.ts
+  1:16  warning  'Locator' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/auth/login.spec.ts
+  13:46  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  19:69  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  24:63  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/campaigns/campaigns.spec.ts
+   35:65  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  185:64  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  266:62  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  269:11  warning  'statsLabels' is assigned a value but never used                        @typescript-eslint/no-unused-vars
+  273:57  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  278:62  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/chat/conversation-notes.spec.ts
+  106:43  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/chat/policy-blocked-send.spec.ts
+  11:45  error  Unnecessary escape character: \"  no-useless-escape
+  11:59  error  Unnecessary escape character: \"  no-useless-escape
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/chatbot/keywords.spec.ts
+  205:62  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  221:54  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  237:66  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  253:61  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/flows/flows.spec.ts
+  132:11  warning  'hasDuplicate' is assigned a value but never used                       @typescript-eslint/no-unused-vars
+  161:54  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  166:56  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  171:58  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  234:11  warning  'hasToggle' is assigned a value but never used                          @typescript-eslint/no-unused-vars
+  240:11  warning  'hasDelete' is assigned a value but never used                          @typescript-eslint/no-unused-vars
+  263:11  warning  'hasEdit' is assigned a value but never used                            @typescript-eslint/no-unused-vars
+  277:54  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  282:52  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  287:47  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  292:58  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/profile/profile.spec.ts
+  78:62  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  87:58  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  96:62  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/canned-responses.spec.ts
+  43:57  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  66:50  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/contacts.spec.ts
+   57:49  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   82:42  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  104:43  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  212:52  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/general-settings.spec.ts
+  168:54  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/instances.spec.ts
+  597:38  error  Unnecessary escape character: \"  no-useless-escape
+  597:46  error  Unnecessary escape character: \"  no-useless-escape
+  598:38  error  Unnecessary escape character: \"  no-useless-escape
+  598:46  error  Unnecessary escape character: \"  no-useless-escape
+  599:38  error  Unnecessary escape character: \"  no-useless-escape
+  599:46  error  Unnecessary escape character: \"  no-useless-escape
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/organization-switch.spec.ts
+  64:11  warning  'orgSwitcher' is assigned a value but never used                           @typescript-eslint/no-unused-vars
+  76:68  warning  'request' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/permissions.spec.ts
+  2:24  warning  'login' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/roles.spec.ts
+   18:46  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   37:51  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   45:52  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   80:68  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   98:44  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  125:46  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  206:48  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/tags.spec.ts
+  31:44  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  42:61  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  53:45  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  76:38  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/teams.spec.ts
+   18:46  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   37:51  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   43:45  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   60:64  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   72:46  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   98:39  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  122:48  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/users.spec.ts
+    5:7   warning  'BASE_URL' is assigned a value but never used                           @typescript-eslint/no-unused-vars
+   20:46  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  143:60  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  192:7   warning  'tablePage' is assigned a value but never used                          @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/e2e/tests/settings/webhooks.spec.ts
+   18:49  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   22:54  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   28:48  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   47:65  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   61:73  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+   75:49  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  100:42  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  122:49  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  142:51  warning  'page' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/components/chat/MetadataSection.vue
+  12:7  warning  'props' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/components/flow-builder/FlowBuilder.vue
+  333:19  warning  'id' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/components/layout/OrganizationSwitcher.vue
+  22:7  warning  'props' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/components/shared/DataTable.vue
+  15:25  warning  '_T' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/components/shared/DeleteConfirmDialog.vue
+  15:7  warning  'props' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/components/ui/dropdown-menu/DropdownMenu.vue
+  4:7  warning  'props' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/stores/contacts.ts
+  416:9  warning  'isAdminOrSuperAdmin' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/views/public/PricingLandingView.vue
+  20:3  warning  'Monitor' is defined but never used  @typescript-eslint/no-unused-vars
+  21:3  warning  'Moon' is defined but never used     @typescript-eslint/no-unused-vars
+  27:3  warning  'Sun' is defined but never used      @typescript-eslint/no-unused-vars
+
+/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/views/settings/FlowsView.vue
+  206:137  warning  'id' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 89 problems (8 errors, 81 warnings)
+

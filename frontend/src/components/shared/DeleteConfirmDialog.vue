@@ -12,7 +12,7 @@ import {
 
 const open = defineModel<boolean>('open', { default: false })
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   title?: string
   itemName?: string
   description?: string

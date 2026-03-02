@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test'
-import { loginAsAdmin, login, ApiHelper, generateUniqueName, generateUniqueEmail } from '../../helpers'
+import { loginAsAdmin, ApiHelper, generateUniqueName, generateUniqueEmail } from '../../helpers'
 
 // Helper to get visible sidebar menu items
 async function getSidebarMenuItems(page: Page): Promise<string[]> {

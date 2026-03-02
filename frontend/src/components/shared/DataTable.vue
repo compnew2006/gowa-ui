@@ -10,9 +10,8 @@ import {
 } from '@/components/ui/table'
 import { Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-vue-next'
 import PaginationControls from './PaginationControls.vue'
-import type { Component } from 'vue'
-
-export interface Column<_T = unknown> {
+import type { Component } from 'vue'// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export interface Column<__T = unknown> {
   key: string
   label: string
   width?: string

@@ -202,7 +202,7 @@ test.describe('Keyword Rules Management', () => {
     await keywordsPage.expectRuleExists(uniqueKeyword)
   })
 
-  test('should show match type badge in rule card', async ({ page }) => {
+  test('should show match type badge in rule card', async () => {
     const keyword = `badge${Date.now()}`
 
     await keywordsPage.openCreateDialog()
@@ -218,7 +218,7 @@ test.describe('Keyword Rules Management', () => {
     await expect(card).toContainText('exact')
   })
 
-  test('should show priority in rule card', async ({ page }) => {
+  test('should show priority in rule card', async () => {
     const keyword = `priority${Date.now()}`
 
     await keywordsPage.openCreateDialog()
@@ -234,7 +234,7 @@ test.describe('Keyword Rules Management', () => {
     await expect(card).toContainText('50')
   })
 
-  test('should show transfer badge for transfer rules', async ({ page }) => {
+  test('should show transfer badge for transfer rules', async () => {
     const keyword = `transfer${Date.now()}`
 
     await keywordsPage.openCreateDialog()
@@ -250,7 +250,7 @@ test.describe('Keyword Rules Management', () => {
     await expect(card).toContainText('Transfer')
   })
 
-  test('should show active/inactive status badge', async ({ page }) => {
+  test('should show active/inactive status badge', async () => {
     const keyword = `status${Date.now()}`
 
     await keywordsPage.openCreateDialog()

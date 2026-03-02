@@ -347,3 +347,36 @@ func TestDecodeRatingContextMessages_ParsesJSONBPayload(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, []string{"text 1", "text 2"}, asStringSlice(followup[chatCloseRatingFollowupCommentsKey]))
 }
+
+func TestReadChatCloseRatingSettings(t *testing.T) {
+	orgSettings := models.JSONB{
+		"chat_close_rating_enabled":                 true,
+		"chat_close_rating_followup_window_minutes": 20,
+		"chat_close_rating_templates": map[string]interface{}{
+			"en": "Org English",
+		},
+	}
+
+	instanceSettings := models.JSONB{
+		"chat_close_rating_enabled":                 false,
+		"chat_close_rating_followup_window_minutes": 10,
+		"chat_close_rating_templates": map[string]interface{}{
+			"en": "Instance English",
+			"es": "Instance Spanish",
+		},
+	}
+
+	// Test org settings only
+	settingsOrgOnly := readChatCloseRatingSettings(orgSettings, nil)
+	assert.True(t, settingsOrgOnly.Enabled)
+	assert.Equal(t, 20, settingsOrgOnly.FollowupWindowMinutes)
+	assert.Equal(t, "Org English", settingsOrgOnly.Templates["en"])
+	assert.Equal(t, defaultChatCloseRatingTemplates["es"], settingsOrgOnly.Templates["es"])
+
+	// Test override with instance settings
+	settingsOverride := readChatCloseRatingSettings(orgSettings, instanceSettings)
+	assert.False(t, settingsOverride.Enabled)
+	assert.Equal(t, 10, settingsOverride.FollowupWindowMinutes)
+	assert.Equal(t, "Instance English", settingsOverride.Templates["en"])
+	assert.Equal(t, "Instance Spanish", settingsOverride.Templates["es"])
+}

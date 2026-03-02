@@ -19,7 +19,7 @@ import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/lib/api-utils'
 import { Building2, Plus, Loader2, Trash2 } from 'lucide-vue-next'
 
-const props = defineProps<{
+defineProps<{
   collapsed?: boolean
 }>()
 

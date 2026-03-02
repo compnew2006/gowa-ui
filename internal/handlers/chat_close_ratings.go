@@ -87,7 +87,7 @@ func cloneDefaultChatCloseRatingTemplates() map[string]string {
 	return out
 }
 
-func readChatCloseRatingSettings(settings models.JSONB) chatCloseRatingSettings {
+func readChatCloseRatingSettings(orgSettings models.JSONB, instanceSettings models.JSONB) chatCloseRatingSettings {
 	result := chatCloseRatingSettings{
 		Enabled:               true,
 		WindowDays:            defaultChatCloseRatingWindowDays,
@@ -95,30 +95,57 @@ func readChatCloseRatingSettings(settings models.JSONB) chatCloseRatingSettings 
 		FollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
 	}
 
-	if settings == nil {
+	if orgSettings == nil && instanceSettings == nil {
 		return result
 	}
 
-	if rawEnabled, ok := settings[organizationSettingChatCloseRatingEnabled]; ok {
-		if enabled, ok := rawEnabled.(bool); ok {
-			result.Enabled = enabled
+	if orgSettings != nil {
+		if rawEnabled, ok := orgSettings[organizationSettingChatCloseRatingEnabled]; ok {
+			if enabled, ok := rawEnabled.(bool); ok {
+				result.Enabled = enabled
+			}
+		}
+
+		if rawWindow, ok := orgSettings[organizationSettingChatCloseRatingWindowDays]; ok {
+			if parsed := parseChatCloseRatingWindowDays(rawWindow); parsed > 0 {
+				result.WindowDays = parsed
+			}
+		}
+
+		if rawTemplates, ok := orgSettings[organizationSettingChatCloseRatingTemplates]; ok {
+			for lang, template := range parseChatCloseRatingTemplates(rawTemplates) {
+				result.Templates[lang] = template
+			}
+		}
+		if rawFollowupWindow, ok := orgSettings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
+			if parsed := parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
+				result.FollowupWindowMinutes = parsed
+			}
 		}
 	}
 
-	if rawWindow, ok := settings[organizationSettingChatCloseRatingWindowDays]; ok {
-		if parsed := parseChatCloseRatingWindowDays(rawWindow); parsed > 0 {
-			result.WindowDays = parsed
+	if instanceSettings != nil {
+		if rawEnabled, ok := instanceSettings[organizationSettingChatCloseRatingEnabled]; ok {
+			if enabled, ok := rawEnabled.(bool); ok {
+				result.Enabled = enabled
+			}
 		}
-	}
 
-	if rawTemplates, ok := settings[organizationSettingChatCloseRatingTemplates]; ok {
-		for lang, template := range parseChatCloseRatingTemplates(rawTemplates) {
-			result.Templates[lang] = template
+		if rawWindow, ok := instanceSettings[organizationSettingChatCloseRatingWindowDays]; ok {
+			if parsed := parseChatCloseRatingWindowDays(rawWindow); parsed > 0 {
+				result.WindowDays = parsed
+			}
 		}
-	}
-	if rawFollowupWindow, ok := settings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
-		if parsed := parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
-			result.FollowupWindowMinutes = parsed
+
+		if rawTemplates, ok := instanceSettings[organizationSettingChatCloseRatingTemplates]; ok {
+			for lang, template := range parseChatCloseRatingTemplates(rawTemplates) {
+				result.Templates[lang] = template
+			}
+		}
+		if rawFollowupWindow, ok := instanceSettings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
+			if parsed := parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
+				result.FollowupWindowMinutes = parsed
+			}
 		}
 	}
 
@@ -464,7 +491,15 @@ func (a *App) handleManualChatCloseRatingPrompt(orgID, closingUserID uuid.UUID, 
 		return
 	}
 
-	settings := readChatCloseRatingSettings(org.Settings)
+	var instanceSettings models.JSONB
+	if contact.InstanceID != nil && *contact.InstanceID != uuid.Nil {
+		var instance models.WhatsAppInstance
+		if err := a.DB.Select("settings").Where("id = ?", *contact.InstanceID).First(&instance).Error; err == nil {
+			instanceSettings = instance.Settings
+		}
+	}
+
+	settings := readChatCloseRatingSettings(org.Settings, instanceSettings)
 	if !settings.Enabled {
 		return
 	}
@@ -649,19 +684,28 @@ func parseInboundRatingValue(raw string) (int, bool) {
 	return rating, true
 }
 
-func (a *App) loadChatCloseRatingSettings(orgID uuid.UUID) (chatCloseRatingSettings, error) {
+func (a *App) loadChatCloseRatingSettings(orgID uuid.UUID, instanceID *uuid.UUID) (chatCloseRatingSettings, error) {
 	var org models.Organization
 	if err := a.DB.Select("settings").Where("id = ?", orgID).First(&org).Error; err != nil {
 		return chatCloseRatingSettings{}, err
 	}
-	return readChatCloseRatingSettings(org.Settings), nil
+
+	var instanceSettings models.JSONB
+	if instanceID != nil && *instanceID != uuid.Nil {
+		var instance models.WhatsAppInstance
+		if err := a.DB.Select("settings").Where("id = ?", *instanceID).First(&instance).Error; err == nil {
+			instanceSettings = instance.Settings
+		}
+	}
+
+	return readChatCloseRatingSettings(org.Settings, instanceSettings), nil
 }
 
 func (a *App) findActiveChatCloseRatingCycle(
-	orgID, contactID uuid.UUID,
+	orgID uuid.UUID, contact *models.Contact,
 	now time.Time,
 ) (*models.ChatClosureRating, chatCloseRatingFollowupState, error) {
-	settings, err := a.loadChatCloseRatingSettings(orgID)
+	settings, err := a.loadChatCloseRatingSettings(orgID, contact.InstanceID)
 	if err != nil {
 		return nil, chatCloseRatingFollowupState{}, err
 	}
@@ -674,7 +718,7 @@ func (a *App) findActiveChatCloseRatingCycle(
 	var cycle models.ChatClosureRating
 	if err := a.DB.Where("organization_id = ? AND contact_id = ? AND state IN ? AND closed_at >= ?",
 		orgID,
-		contactID,
+		contact.ID,
 		[]models.ChatClosureRatingState{
 			models.ChatClosureRatingStatePending,
 			models.ChatClosureRatingStateRated,
@@ -712,7 +756,7 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 	}
 
 	now := time.Now().UTC()
-	cycle, followup, err := a.findActiveChatCloseRatingCycle(orgID, contact.ID, now)
+	cycle, followup, err := a.findActiveChatCloseRatingCycle(orgID, contact, now)
 	if err != nil {
 		a.Log.Error("Failed to resolve close rating cycle", "error", err, "organization_id", orgID, "contact_id", contact.ID)
 		return false

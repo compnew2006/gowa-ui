@@ -2542,6 +2542,18 @@ function scrollToBottom(instant = false) {
   });
 }
 
+function handleImageLoad() {
+  const viewport = messagesScroll.getViewport();
+  if (viewport) {
+    // If the user is within 250px of the bottom, keep them pinned to the bottom.
+    // This prevents layout jumps when images load asynchronously after opening a chat.
+    const isNearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 250;
+    if (isNearBottom) {
+      scrollToBottom(true);
+    }
+  }
+}
+
 function getMessageStatusIcon(status: string) {
   switch (status) {
     case "sent":
@@ -4229,6 +4241,7 @@ async function sendMediaMessage() {
                         class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
                         @click="openMediaPreview(message, $event)"
                         @error="handleImageError($event)"
+                        @load="handleImageLoad"
                       />
                       <div
                         v-else
@@ -4290,6 +4303,7 @@ async function sendMediaMessage() {
                         class="max-w-[128px] max-h-[128px] cursor-pointer"
                         @click="openMediaPreview(message, $event)"
                         @error="handleImageError($event)"
+                        @load="handleImageLoad"
                       />
                       <div
                         v-else

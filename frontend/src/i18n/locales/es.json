@@ -46,8 +46,6 @@
     "showDownloadButtonsDesc": "Muestra u oculta las acciones de descarga en mensajes de medios y documentos.",
     "chatCloseRatingEnabled": "Valoración al cerrar chat",
     "chatCloseRatingEnabledDesc": "Cuando un agente cierre manualmente un chat, se enviará una solicitud de valoración al cliente.",
-    "chatCloseRatingWindowDays": "Ventana de valoración (días)",
-    "chatCloseRatingWindowDaysDesc": "Cuánto tiempo aceptar respuestas de valoración tras el cierre manual (1-30 días).",
     "chatCloseRatingFollowupWindowMinutes": "Ventana de seguimiento (minutos)",
     "chatCloseRatingFollowupWindowMinutesDesc": "Tras el cierre, procesa hasta 3 respuestas de texto como flujo de valoración dentro de este tiempo (1-1440 minutos).",
     "chatCloseRatingTemplates": "Plantillas del mensaje de valoración",
@@ -167,5 +165,16 @@
     "batchPrintFailed": "No se pudo preparar el archivo combinado para imprimir",
     "batchPrintFailedDesc": "Inténtalo de nuevo con archivos válidos.",
     "printDialogFailed": "No se pudo abrir el diálogo de impresión."
+  },
+  "instances": {
+    "chat_close_rating": {
+      "configureButton": "Configurar mensaje de valoración",
+      "title": "Configuración de valoración al cerrar chat",
+      "description": "Configura los mensajes de valoración al cerrar el chat para esta instancia específica.",
+      "overrideOrg": "Anular la configuración de la organización",
+      "overrideOrgDesc": "Cuando se activa, esta instancia utilizará estas plantillas de valoración personalizadas en lugar del valor predeterminado de la organización.",
+      "usingOrgDefault": "Usando los valores predeterminados",
+      "usingCustomTemplates": "Usando plantillas personalizadas"
+    }
   }
 }

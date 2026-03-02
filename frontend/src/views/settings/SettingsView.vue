@@ -44,9 +44,7 @@ const configStore = useConfigStore();
 type NotificationSoundKey = "notification1" | "notification2" | "notification";
 const DEFAULT_NOTIFICATION_SOUND: NotificationSoundKey = "notification1";
 type AssignedChatResetMode = "midnight" | "custom_hour";
-const DEFAULT_CHAT_CLOSE_RATING_WINDOW_DAYS = 2;
-const CHAT_CLOSE_RATING_WINDOW_MIN_DAYS = 1;
-const CHAT_CLOSE_RATING_WINDOW_MAX_DAYS = 30;
+
 const DEFAULT_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES = 15;
 const CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MIN_MINUTES = 1;
 const CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MAX_MINUTES = 1440;
@@ -160,20 +158,7 @@ function normalizeAssignedChatResetHour(value: unknown): number {
   return Math.min(23, Math.max(0, rounded));
 }
 
-function normalizeChatCloseRatingWindowDays(value: unknown): number {
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value)
-        : Number.NaN;
-  if (!Number.isFinite(parsed)) return DEFAULT_CHAT_CLOSE_RATING_WINDOW_DAYS;
-  const rounded = Math.trunc(parsed);
-  return Math.min(
-    CHAT_CLOSE_RATING_WINDOW_MAX_DAYS,
-    Math.max(CHAT_CLOSE_RATING_WINDOW_MIN_DAYS, rounded),
-  );
-}
+
 
 function normalizeChatCloseRatingFollowupWindowMinutes(value: unknown): number {
   const parsed =
@@ -227,7 +212,7 @@ const chatSettings = ref({
   assigned_chat_reset_mode: "midnight" as AssignedChatResetMode,
   assigned_chat_reset_hour: 0,
   chat_close_rating_enabled: true,
-  chat_close_rating_window_days: DEFAULT_CHAT_CLOSE_RATING_WINDOW_DAYS,
+
   chat_close_rating_followup_window_minutes:
     DEFAULT_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES,
   chat_close_rating_templates: { ...DEFAULT_CHAT_CLOSE_RATING_TEMPLATES },
@@ -306,10 +291,7 @@ onMounted(async () => {
         resetMode === "midnight" ? 0 : resetHour;
       chatSettings.value.chat_close_rating_enabled =
         orgData.settings?.chat_close_rating_enabled !== false;
-      chatSettings.value.chat_close_rating_window_days =
-        normalizeChatCloseRatingWindowDays(
-          orgData.settings?.chat_close_rating_window_days,
-        );
+
       chatSettings.value.chat_close_rating_followup_window_minutes =
         normalizeChatCloseRatingFollowupWindowMinutes(
           orgData.settings?.chat_close_rating_followup_window_minutes,
@@ -412,10 +394,7 @@ async function saveChatSettings() {
       : normalizeAssignedChatResetHour(
           chatSettings.value.assigned_chat_reset_hour,
         );
-  const normalizedChatCloseRatingWindowDays =
-    normalizeChatCloseRatingWindowDays(
-      chatSettings.value.chat_close_rating_window_days,
-    );
+
   const normalizedChatCloseRatingFollowupWindowMinutes =
     normalizeChatCloseRatingFollowupWindowMinutes(
       chatSettings.value.chat_close_rating_followup_window_minutes,
@@ -428,8 +407,7 @@ async function saveChatSettings() {
   chatSettings.value.sidebar_view_mode = sidebarViewMode;
   chatSettings.value.assigned_chat_reset_mode = normalizedMode;
   chatSettings.value.assigned_chat_reset_hour = normalizedHour;
-  chatSettings.value.chat_close_rating_window_days =
-    normalizedChatCloseRatingWindowDays;
+
   chatSettings.value.chat_close_rating_followup_window_minutes =
     normalizedChatCloseRatingFollowupWindowMinutes;
   chatSettings.value.chat_close_rating_templates =
@@ -446,7 +424,7 @@ async function saveChatSettings() {
       assigned_chat_reset_mode: normalizedMode,
       assigned_chat_reset_hour: normalizedHour,
       chat_close_rating_enabled: chatSettings.value.chat_close_rating_enabled,
-      chat_close_rating_window_days: normalizedChatCloseRatingWindowDays,
+
       chat_close_rating_followup_window_minutes:
         normalizedChatCloseRatingFollowupWindowMinutes,
       chat_close_rating_templates: normalizedChatCloseRatingTemplates,
@@ -1077,33 +1055,7 @@ onBeforeUnmount(() => {
                     />
                   </div>
 
-                  <div class="space-y-2">
-                    <Label class="text-white/70 light:text-gray-700">{{
-                      $t("settings.chatCloseRatingWindowDays")
-                    }}</Label>
-                    <p class="text-xs text-white/40 light:text-gray-500">
-                      {{ $t("settings.chatCloseRatingWindowDaysDesc") }}
-                    </p>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="30"
-                      step="1"
-                      class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700"
-                      :model-value="
-                        String(chatSettings.chat_close_rating_window_days)
-                      "
-                      :disabled="!chatSettings.chat_close_rating_enabled"
-                      @update:model-value="
-                        (v: unknown) => {
-                          if (typeof v === 'string') {
-                            chatSettings.chat_close_rating_window_days =
-                              Number(v);
-                          }
-                        }
-                      "
-                    />
-                  </div>
+
 
                   <div class="space-y-2">
                     <Label class="text-white/70 light:text-gray-700">{{

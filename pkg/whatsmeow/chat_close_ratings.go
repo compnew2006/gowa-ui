@@ -15,11 +15,7 @@ import (
 
 const (
 	organizationSettingChatCloseRatingEnabled               = "chat_close_rating_enabled"
-	organizationSettingChatCloseRatingWindowDays            = "chat_close_rating_window_days"
 	organizationSettingChatCloseRatingFollowupWindowMinutes = "chat_close_rating_followup_window_minutes"
-
-	defaultChatCloseRatingWindowDays            = 2
-	maxChatCloseRatingWindowDays                = 30
 	defaultChatCloseRatingFollowupWindowMinutes = 15
 	maxChatCloseRatingFollowupWindowMinutes     = 1440
 	chatCloseRatingFollowupMessageLimit         = 3
@@ -38,14 +34,12 @@ var localizedRatingDigitReplacer = strings.NewReplacer(
 
 type chatCloseRatingSettings struct {
 	Enabled               bool
-	WindowDays            int
 	FollowupWindowMinutes int
 }
 
 func readChatCloseRatingSettings(settings models.JSONB) chatCloseRatingSettings {
 	result := chatCloseRatingSettings{
 		Enabled:               true,
-		WindowDays:            defaultChatCloseRatingWindowDays,
 		FollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
 	}
 
@@ -58,41 +52,11 @@ func readChatCloseRatingSettings(settings models.JSONB) chatCloseRatingSettings 
 			result.Enabled = enabled
 		}
 	}
-
-	if rawWindow, ok := settings[organizationSettingChatCloseRatingWindowDays]; ok {
-		result.WindowDays = parseChatCloseRatingWindowDays(rawWindow)
-	}
 	if rawFollowupWindow, ok := settings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
 		result.FollowupWindowMinutes = parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow)
 	}
 
 	return result
-}
-
-func parseChatCloseRatingWindowDays(raw any) int {
-	parsed := 0
-	switch v := raw.(type) {
-	case int:
-		parsed = v
-	case int32:
-		parsed = int(v)
-	case int64:
-		parsed = int(v)
-	case float64:
-		parsed = int(v)
-	case string:
-		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
-			parsed = n
-		}
-	}
-
-	if parsed < 1 {
-		return defaultChatCloseRatingWindowDays
-	}
-	if parsed > maxChatCloseRatingWindowDays {
-		return maxChatCloseRatingWindowDays
-	}
-	return parsed
 }
 
 func parseChatCloseRatingFollowupWindowMinutes(raw any) int {
@@ -400,7 +364,7 @@ func (cm *ConnectionManager) findActiveChatCloseRatingCycle(
 		return nil, chatCloseRatingFollowupState{}, nil
 	}
 
-	windowStart := now.UTC().Add(-time.Duration(settings.WindowDays) * 24 * time.Hour)
+	windowStart := now.UTC().Add(-2 * 24 * time.Hour)
 
 	var cycle models.ChatClosureRating
 	if err := cm.db.WithContext(ctx).Where(

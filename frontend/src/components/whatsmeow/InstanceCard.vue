@@ -27,9 +27,15 @@ import {
   normalizeAutoCampaignSettings,
   type AutoCampaignSettings,
 } from "@/lib/instance-auto-campaign";
+import {
+  cloneInstanceChatCloseRatingSettings,
+  normalizeInstanceChatCloseRatingSettings,
+  type InstanceChatCloseRatingSettings,
+} from "@/lib/instance-chat-close-rating";
 import InstanceTagSettings from "@/components/whatsmeow/InstanceTagSettings.vue";
 import AutoRejectSettingsPanel from "@/components/whatsmeow/AutoRejectSettingsPanel.vue";
 import AutoCampaignSettingsPanel from "@/components/whatsmeow/AutoCampaignSettingsPanel.vue";
+import InstanceChatCloseRatingPanel from "@/components/whatsmeow/InstanceChatCloseRatingPanel.vue";
 import {
   Loader2,
   Power,
@@ -50,6 +56,7 @@ const props = defineProps<{
   autoRejectSaving?: boolean;
   autoCampaignSaving?: boolean;
   autoCampaignUploading?: boolean;
+  chatCloseRatingSaving?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -80,6 +87,11 @@ const emit = defineEmits<{
   ): void;
   (e: "upload-auto-campaign-media", id: string, file: File): void;
   (e: "clear-auto-campaign-media", id: string): void;
+  (
+    e: "update-chat-close-rating-settings",
+    id: string,
+    payload: InstanceChatCloseRatingSettings,
+  ): void;
 }>();
 
 const statusColor = computed(() => {
@@ -143,6 +155,17 @@ const autoCampaignSummary = computed(() => {
         : t("instances.auto_campaign.statusDraft"),
   });
 });
+
+const chatCloseRatingSettings = computed(() =>
+  normalizeInstanceChatCloseRatingSettings(props.instance.settings),
+);
+const chatCloseRatingSummary = computed(() => {
+  const s = chatCloseRatingSettings.value;
+  if (!s.enabled) return t("common.off");
+  if (!s.override_org_settings) return t("instances.chat_close_rating.usingOrgDefault");
+  return t("instances.chat_close_rating.usingCustomTemplates");
+});
+
 const sendBlockedNotice = computed(() => {
   const blockedUntilRaw = props.instance.send_blocked_until;
   if (!blockedUntilRaw) return "";
@@ -424,6 +447,54 @@ function formatUptime(totalSeconds?: number) {
               (file) => emit('upload-auto-campaign-media', instance.id, file)
             "
             @clear-media="() => emit('clear-auto-campaign-media', instance.id)"
+          />
+        </div>
+        <div
+          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="text-xs font-medium text-white light:text-gray-900">
+                  {{ $t("instances.chat_close_rating.title") }}
+                </p>
+                <Badge
+                  v-if="chatCloseRatingSettings.enabled"
+                  variant="default"
+                  class="text-[10px] px-1.5 py-0"
+                  >{{ $t("common.on") }}</Badge
+                >
+              </div>
+              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
+                {{ chatCloseRatingSummary }}
+              </p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <Loader2
+                v-if="chatCloseRatingSaving"
+                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+              />
+              <Switch
+                :checked="chatCloseRatingSettings.enabled"
+                :disabled="chatCloseRatingSaving"
+                @update:checked="
+                  (enabled) =>
+                    emit('update-chat-close-rating-settings', instance.id, {
+                      ...cloneInstanceChatCloseRatingSettings(chatCloseRatingSettings),
+                      enabled,
+                    })
+                "
+              />
+            </div>
+          </div>
+
+          <InstanceChatCloseRatingPanel
+            :settings="chatCloseRatingSettings"
+            :saving="chatCloseRatingSaving || false"
+            @save="
+              (payload) =>
+                emit('update-chat-close-rating-settings', instance.id, payload)
+            "
           />
         </div>
       </div>

@@ -413,10 +413,11 @@ export const useContactsStore = defineStore("contacts", () => {
       ? restrictedAllowedInstanceIDs.value[0]
       : "";
   });
-  const isAdminOrSuperAdmin = computed(() => {
-    if (authStore.user?.is_super_admin === true) return true;
-    return (authStore.userRole || "").toLowerCase() === "admin";
-  });
+  // const isAdminOrSuperAdmin = computed(() => {
+  //   if (authStore.user?.is_super_admin === true) return true;
+  //   const role = sessionStore.user?.role?.name?.toLowerCase() === "admin";
+  //   return (authStore.userRole || "").toLowerCase() === "admin";
+  // });
   const hasMoreContacts = computed(() => {
     const activeCount =
       activeChatTab.value === "assigned"

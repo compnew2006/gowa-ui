@@ -103,7 +103,7 @@ test.describe('Conversation Notes - UI', () => {
     await expect(chatPage.getNoteCard(updatedContent)).toBeVisible()
   })
 
-  test('should delete own note', async ({ page }) => {
+  test('should delete own note', async () => {
     await cleanupAllNotes(contactId)
     const reqContext = await playwrightRequest.newContext()
     const api = new ApiHelper(reqContext)
