@@ -80,6 +80,7 @@ func GetMigrationModels() []MigrationModel {
 		{"Contact", &models.Contact{}},
 		{"Tag", &models.Tag{}},
 		{"Message", &models.Message{}},
+		{"WhatsAppStatus", &models.WhatsAppStatus{}},
 		{"ChatClosureRating", &models.ChatClosureRating{}},
 		{"Template", &models.Template{}},
 		{"WhatsAppFlow", &models.WhatsAppFlow{}},
@@ -120,6 +121,10 @@ func GetMigrationModels() []MigrationModel {
 
 // AutoMigrate runs auto migration for all models (silent mode)
 func AutoMigrate(db *gorm.DB) error {
+	if err := applyPreMigrationFixes(db); err != nil {
+		return err
+	}
+
 	migrationModels := GetMigrationModels()
 	for _, m := range migrationModels {
 		if err := db.AutoMigrate(m.Model); err != nil {
@@ -133,6 +138,10 @@ func AutoMigrate(db *gorm.DB) error {
 func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) error {
 	// Silence GORM logging during migration
 	silentDB := db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})
+
+	if err := applyPreMigrationFixes(silentDB); err != nil {
+		return fmt.Errorf("failed pre-migration fixes: %w", err)
+	}
 
 	migrationModels := GetMigrationModels()
 	indexes := getIndexes()
@@ -229,6 +238,127 @@ func repeatChar(char string, n int) string {
 	return result
 }
 
+func applyPreMigrationFixes(db *gorm.DB) error {
+	if err := normalizeWhatsAppStatusRows(db); err != nil {
+		return fmt.Errorf("failed to normalize whatsapp statuses: %w", err)
+	}
+	return nil
+}
+
+func normalizeWhatsAppStatusRows(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&models.WhatsAppStatus{}) {
+		return nil
+	}
+
+	if err := db.Exec(`
+		UPDATE whatsapp_statuses AS ws
+		SET organization_id = wi.organization_id
+		FROM whatsapp_instances AS wi
+		WHERE ws.organization_id IS NULL
+		  AND ws.instance_id = wi.id
+	`).Error; err != nil {
+		return err
+	}
+
+	if err := db.Exec(`
+		DELETE FROM whatsapp_statuses
+		WHERE organization_id IS NULL OR instance_id IS NULL
+	`).Error; err != nil {
+		return err
+	}
+
+	senderColumn := ""
+	if hasSenderJID, err := hasTableColumn(db, "whatsapp_statuses", "sender_jid"); err != nil {
+		return err
+	} else if hasSenderJID {
+		senderColumn = "sender_jid"
+	}
+	if senderColumn == "" {
+		if hasSenderJIDLegacy, err := hasTableColumn(db, "whatsapp_statuses", "sender_j_id"); err != nil {
+			return err
+		} else if hasSenderJIDLegacy {
+			senderColumn = "sender_j_id"
+		}
+	}
+
+	if senderColumn != "" {
+		query := fmt.Sprintf(`
+			UPDATE whatsapp_statuses
+			SET %s = 'unknown@s.whatsapp.net'
+			WHERE %s IS NULL OR btrim(%s) = ''
+		`, senderColumn, senderColumn, senderColumn)
+		if err := db.Exec(query).Error; err != nil {
+			return err
+		}
+	}
+
+	if hasStatusType, err := hasTableColumn(db, "whatsapp_statuses", "status_type"); err != nil {
+		return err
+	} else if hasStatusType {
+		if err := db.Exec(`
+			UPDATE whatsapp_statuses
+			SET status_type = 'text'
+			WHERE status_type IS NULL OR btrim(status_type) = ''
+		`).Error; err != nil {
+			return err
+		}
+	}
+
+	if hasExpiresAt, err := hasTableColumn(db, "whatsapp_statuses", "expires_at"); err != nil {
+		return err
+	} else if hasExpiresAt {
+		if err := db.Exec(`
+			UPDATE whatsapp_statuses
+			SET expires_at = COALESCE(created_at + interval '24 hours', NOW() + interval '24 hours')
+			WHERE expires_at IS NULL
+		`).Error; err != nil {
+			return err
+		}
+	}
+
+	if hasMetadata, err := hasTableColumn(db, "whatsapp_statuses", "metadata"); err != nil {
+		return err
+	} else if hasMetadata {
+		if err := db.Exec(`
+			UPDATE whatsapp_statuses
+			SET metadata = '{}'::jsonb
+			WHERE metadata IS NULL
+		`).Error; err != nil {
+			return err
+		}
+	}
+
+	if hasWhatsAppAccount, err := hasTableColumn(db, "whatsapp_statuses", "whats_app_account"); err != nil {
+		return err
+	} else if hasWhatsAppAccount {
+		if err := db.Exec(`
+			UPDATE whatsapp_statuses
+			SET whats_app_account = ''
+			WHERE whats_app_account IS NULL
+		`).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func hasTableColumn(db *gorm.DB, tableName, columnName string) (bool, error) {
+	var exists bool
+	if err := db.Raw(`
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_schema = current_schema()
+			  AND table_name = ?
+			  AND column_name = ?
+		)
+	`, tableName, columnName).Scan(&exists).Error; err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 // getIndexes returns all index creation SQL statements
 func getIndexes() []string {
 	return []string{
@@ -290,6 +420,8 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_team ON agent_transfers(team_id, status) WHERE team_id IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_accounts_org_phone ON whatsapp_accounts(organization_id, phone_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_account_name_lang ON templates(whats_app_account, name, language)`,
+		`CREATE INDEX IF NOT EXISTS idx_whatsapp_statuses_org_instance_expires ON whatsapp_statuses(organization_id, instance_id, expires_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_whatsapp_statuses_sender_created ON whatsapp_statuses(organization_id, sender_jid, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_keyword_rules_account ON keyword_rules(whats_app_account, is_enabled, priority DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_chatbot_flows_account ON chatbot_flows(whats_app_account, is_enabled)`,
 		`CREATE INDEX IF NOT EXISTS idx_ai_contexts_account ON ai_contexts(whats_app_account, is_enabled, priority DESC)`,

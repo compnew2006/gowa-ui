@@ -147,6 +147,7 @@ function showNotification(title: string, body: string, contactId: string) {
 // WebSocket message types
 const WS_TYPE_AUTH = 'auth'
 const WS_TYPE_NEW_MESSAGE = 'new_message'
+const WS_TYPE_MESSAGE_MEDIA_UPDATED = 'message_media_updated'
 const WS_TYPE_STATUS_UPDATE = 'status_update'
 const WS_TYPE_CONTACT_UPDATE = 'contact_update'
 const WS_TYPE_SET_CONTACT = 'set_contact'
@@ -337,6 +338,9 @@ class WebSocketService {
         case WS_TYPE_NEW_MESSAGE:
           void this.handleNewMessage(store, message.payload)
           break
+        case WS_TYPE_MESSAGE_MEDIA_UPDATED:
+          this.handleMessageMediaUpdated(store, message.payload)
+          break
         case WS_TYPE_STATUS_UPDATE:
           this.handleStatusUpdate(store, message.payload)
           break
@@ -520,6 +524,37 @@ class WebSocketService {
 
   private handleStatusUpdate(store: ReturnType<typeof useContactsStore>, payload: any) {
     store.updateMessageStatus(payload.message_id, payload.status, payload.error_message)
+  }
+
+  private handleMessageMediaUpdated(store: ReturnType<typeof useContactsStore>, payload: any) {
+    const messageID = typeof payload?.id === 'string' ? payload.id : ''
+    if (!messageID) return
+
+    const existing = store.messages.find(message => message.id === messageID)
+    const contactID = typeof payload?.contact_id === 'string'
+      ? payload.contact_id
+      : existing?.contact_id
+    if (!contactID) return
+
+    store.patchMessage({
+      id: messageID,
+      contact_id: contactID,
+      direction: existing?.direction ?? 'incoming',
+      message_type: existing?.message_type ?? 'document',
+      content: payload?.content ?? existing?.content ?? { body: '' },
+      status: existing?.status ?? 'received',
+      created_at: typeof payload?.created_at === 'string'
+        ? payload.created_at
+        : (existing?.created_at ?? new Date().toISOString()),
+      updated_at: typeof payload?.updated_at === 'string'
+        ? payload.updated_at
+        : new Date().toISOString(),
+      media_url: typeof payload?.media_url === 'string' ? payload.media_url : existing?.media_url,
+      media_mime_type: typeof payload?.media_mime_type === 'string' ? payload.media_mime_type : existing?.media_mime_type,
+      media_filename: typeof payload?.media_filename === 'string' ? payload.media_filename : existing?.media_filename,
+      metadata: payload?.metadata ?? existing?.metadata,
+      error_message: typeof payload?.error_message === 'string' ? payload.error_message : existing?.error_message,
+    })
   }
 
   private handleContactUpdate(store: ReturnType<typeof useContactsStore>, payload: any) {

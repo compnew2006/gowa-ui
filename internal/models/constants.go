@@ -47,6 +47,15 @@ const (
 	MessageStatusReceived  MessageStatus = "received"
 )
 
+// WhatsAppStatusType represents the type of a WhatsApp status/story payload.
+type WhatsAppStatusType string
+
+const (
+	WhatsAppStatusTypeText  WhatsAppStatusType = "text"
+	WhatsAppStatusTypeImage WhatsAppStatusType = "image"
+	WhatsAppStatusTypeVideo WhatsAppStatusType = "video"
+)
+
 // InstanceStatus represents WhatsApp instance connection state
 type InstanceStatus string
 

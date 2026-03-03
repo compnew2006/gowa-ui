@@ -257,12 +257,14 @@ func (m *MockWhatsAppClient) GetMessagesSentTo(phone string) []MockSentMessage {
 
 // MockQueue is a mock implementation of queue.Queue.
 type MockQueue struct {
-	mu   sync.Mutex
-	Jobs []*queue.RecipientJob
+	mu               sync.Mutex
+	Jobs             []*queue.RecipientJob
+	InboundMediaJobs []*queue.InboundMediaJob
 
 	// Configurable behavior
-	EnqueueFunc  func(ctx context.Context, job *queue.RecipientJob) error
-	EnqueuesFunc func(ctx context.Context, jobs []*queue.RecipientJob) error
+	EnqueueFunc        func(ctx context.Context, job *queue.RecipientJob) error
+	EnqueuesFunc       func(ctx context.Context, jobs []*queue.RecipientJob) error
+	EnqueueInboundFunc func(ctx context.Context, job *queue.InboundMediaJob) error
 
 	// Error to return
 	Error error
@@ -271,7 +273,8 @@ type MockQueue struct {
 // NewMockQueue creates a new mock queue.
 func NewMockQueue() *MockQueue {
 	return &MockQueue{
-		Jobs: make([]*queue.RecipientJob, 0),
+		Jobs:             make([]*queue.RecipientJob, 0),
+		InboundMediaJobs: make([]*queue.InboundMediaJob, 0),
 	}
 }
 
@@ -309,6 +312,23 @@ func (m *MockQueue) EnqueueRecipients(ctx context.Context, jobs []*queue.Recipie
 	return nil
 }
 
+// EnqueueInboundMedia mocks enqueueing a single inbound-media recovery job.
+func (m *MockQueue) EnqueueInboundMedia(ctx context.Context, job *queue.InboundMediaJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+
+	m.InboundMediaJobs = append(m.InboundMediaJobs, job)
+
+	if m.EnqueueInboundFunc != nil {
+		return m.EnqueueInboundFunc(ctx, job)
+	}
+	return nil
+}
+
 // Close is a no-op for the mock.
 func (m *MockQueue) Close() error {
 	return nil
@@ -336,23 +356,27 @@ func (m *MockQueue) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.Jobs = m.Jobs[:0]
+	m.InboundMediaJobs = m.InboundMediaJobs[:0]
 	m.Error = nil
 }
 
 // MockJobHandler is a mock implementation of queue.JobHandler.
 type MockJobHandler struct {
-	mu          sync.Mutex
-	ProcessedCh chan *queue.RecipientJob
-	Processed   []*queue.RecipientJob
-	HandleFunc  func(ctx context.Context, job *queue.RecipientJob) error
-	Error       error
+	mu                sync.Mutex
+	ProcessedCh       chan *queue.RecipientJob
+	Processed         []*queue.RecipientJob
+	InboundProcessed  []*queue.InboundMediaJob
+	HandleFunc        func(ctx context.Context, job *queue.RecipientJob) error
+	HandleInboundFunc func(ctx context.Context, job *queue.InboundMediaJob) error
+	Error             error
 }
 
 // NewMockJobHandler creates a new mock job handler.
 func NewMockJobHandler() *MockJobHandler {
 	return &MockJobHandler{
-		ProcessedCh: make(chan *queue.RecipientJob, 100),
-		Processed:   make([]*queue.RecipientJob, 0),
+		ProcessedCh:      make(chan *queue.RecipientJob, 100),
+		Processed:        make([]*queue.RecipientJob, 0),
+		InboundProcessed: make([]*queue.InboundMediaJob, 0),
 	}
 }
 
@@ -373,6 +397,21 @@ func (m *MockJobHandler) HandleRecipientJob(ctx context.Context, job *queue.Reci
 	}
 	if m.HandleFunc != nil {
 		return m.HandleFunc(ctx, job)
+	}
+	return nil
+}
+
+// HandleInboundMediaJob mocks handling an inbound-media job.
+func (m *MockJobHandler) HandleInboundMediaJob(ctx context.Context, job *queue.InboundMediaJob) error {
+	m.mu.Lock()
+	m.InboundProcessed = append(m.InboundProcessed, job)
+	m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+	if m.HandleInboundFunc != nil {
+		return m.HandleInboundFunc(ctx, job)
 	}
 	return nil
 }

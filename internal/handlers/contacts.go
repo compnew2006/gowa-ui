@@ -76,11 +76,14 @@ type MessageResponse struct {
 
 // ReplyPreview contains a preview of the replied-to message
 type ReplyPreview struct {
-	ID          string             `json:"id"`
-	Content     any                `json:"content"`
-	MessageType models.MessageType `json:"message_type"`
-	Direction   models.Direction   `json:"direction"`
-	SenderPhone string             `json:"sender_phone,omitempty"`
+	ID            string             `json:"id"`
+	Content       any                `json:"content"`
+	MessageType   models.MessageType `json:"message_type"`
+	Direction     models.Direction   `json:"direction"`
+	SenderPhone   string             `json:"sender_phone,omitempty"`
+	MediaURL      string             `json:"media_url,omitempty"`
+	MediaMimeType string             `json:"media_mime_type,omitempty"`
+	MediaFilename string             `json:"media_filename,omitempty"`
 }
 
 // ReactionInfo represents a reaction on a message
@@ -1056,16 +1059,19 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 					replyContent = MaskPhoneNumbersInText(replyContent)
 				}
 				msgResp.ReplyToMessage = &ReplyPreview{
-					ID:          m.ReplyToMessage.ID.String(),
-					Content:     map[string]string{"body": replyContent},
-					MessageType: m.ReplyToMessage.MessageType,
-					Direction:   m.ReplyToMessage.Direction,
-					SenderPhone: replySenderPhone,
+					ID:            m.ReplyToMessage.ID.String(),
+					Content:       map[string]string{"body": replyContent},
+					MessageType:   m.ReplyToMessage.MessageType,
+					Direction:     m.ReplyToMessage.Direction,
+					SenderPhone:   replySenderPhone,
+					MediaURL:      m.ReplyToMessage.MediaURL,
+					MediaMimeType: m.ReplyToMessage.MediaMimeType,
+					MediaFilename: m.ReplyToMessage.MediaFilename,
 				}
 			}
 
 			if msgResp.ReplyToMessage == nil {
-				msgResp.ReplyToMessage = buildReplyPreviewFromMetadata(m.Metadata)
+				msgResp.ReplyToMessage = buildReplyPreviewFromMetadata(a.DB, m.OrganizationID, m.InstanceID, m.Metadata)
 				if msgResp.ReplyToMessage != nil && shouldMaskPhoneNumbers {
 					if msgResp.ReplyToMessage.SenderPhone != "" {
 						msgResp.ReplyToMessage.SenderPhone = MaskPhoneNumber(msgResp.ReplyToMessage.SenderPhone)

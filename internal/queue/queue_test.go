@@ -38,6 +38,19 @@ func cleanStream(t *testing.T, client *redis.Client) {
 	})
 }
 
+// cleanInboundMediaStream deletes inbound-media streams/groups used by tests.
+func cleanInboundMediaStream(t *testing.T, client *redis.Client) {
+	t.Helper()
+	ctx := context.Background()
+	client.Del(ctx, queue.InboundMediaStreamName)
+	client.Del(ctx, queue.InboundMediaDeadLetterStreamName)
+	t.Cleanup(func() {
+		client.Del(ctx, queue.InboundMediaStreamName)
+		client.Del(ctx, queue.InboundMediaDeadLetterStreamName)
+		client.XGroupDestroy(ctx, queue.InboundMediaStreamName, queue.InboundMediaConsumerGroup)
+	})
+}
+
 // makeRecipientJob creates a RecipientJob with random IDs for testing.
 func makeRecipientJob() *queue.RecipientJob {
 	return &queue.RecipientJob{
@@ -50,11 +63,28 @@ func makeRecipientJob() *queue.RecipientJob {
 	}
 }
 
+// makeInboundMediaJob creates an InboundMediaJob with random IDs for testing.
+func makeInboundMediaJob() *queue.InboundMediaJob {
+	return &queue.InboundMediaJob{
+		MessageID:          uuid.New(),
+		OrganizationID:     uuid.New(),
+		InstanceID:         uuid.New(),
+		WhatsAppMessageID:  "wamid.inbound.media.test",
+		MessageType:        models.MessageTypeDocument,
+		MediaKind:          "document",
+		MimeType:           "application/pdf",
+		FallbackFilename:   "test.pdf",
+		MediaPayloadBase64: "dGVzdA==",
+		LastError:          "hash of media ciphertext doesn't match",
+	}
+}
+
 // mockHandler implements queue.JobHandler for testing.
 type mockHandler struct {
-	mu   sync.Mutex
-	jobs []*queue.RecipientJob
-	err  error // if set, HandleRecipientJob returns this error
+	mu               sync.Mutex
+	jobs             []*queue.RecipientJob
+	inboundMediaJobs []*queue.InboundMediaJob
+	err              error // if set, handler returns this error
 }
 
 func (h *mockHandler) HandleRecipientJob(_ context.Context, job *queue.RecipientJob) error {
@@ -64,11 +94,26 @@ func (h *mockHandler) HandleRecipientJob(_ context.Context, job *queue.Recipient
 	return h.err
 }
 
+func (h *mockHandler) HandleInboundMediaJob(_ context.Context, job *queue.InboundMediaJob) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.inboundMediaJobs = append(h.inboundMediaJobs, job)
+	return h.err
+}
+
 func (h *mockHandler) getJobs() []*queue.RecipientJob {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	dst := make([]*queue.RecipientJob, len(h.jobs))
 	copy(dst, h.jobs)
+	return dst
+}
+
+func (h *mockHandler) getInboundMediaJobs() []*queue.InboundMediaJob {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	dst := make([]*queue.InboundMediaJob, len(h.inboundMediaJobs))
+	copy(dst, h.inboundMediaJobs)
 	return dst
 }
 
@@ -227,6 +272,35 @@ func TestEnqueueRecipients_SetsEnqueuedAt(t *testing.T) {
 	for _, j := range jobs {
 		assert.False(t, j.EnqueuedAt.IsZero())
 	}
+}
+
+func TestEnqueueInboundMedia_Single(t *testing.T) {
+	client := skipIfNoRedis(t)
+	cleanInboundMediaStream(t, client)
+	log := testutil.NopLogger()
+	ctx := testutil.TestContext(t)
+
+	q := queue.NewRedisQueue(client, log)
+	job := makeInboundMediaJob()
+
+	err := q.EnqueueInboundMedia(ctx, job)
+	require.NoError(t, err)
+
+	msgs, err := client.XRange(ctx, queue.InboundMediaStreamName, "-", "+").Result()
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	assert.Equal(t, string(queue.JobTypeInboundMedia), msgs[0].Values["type"])
+
+	var decoded queue.InboundMediaJob
+	err = json.Unmarshal([]byte(msgs[0].Values["payload"].(string)), &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, job.MessageID, decoded.MessageID)
+	assert.Equal(t, job.OrganizationID, decoded.OrganizationID)
+	assert.Equal(t, job.InstanceID, decoded.InstanceID)
+	assert.Equal(t, job.MediaKind, decoded.MediaKind)
+	assert.Equal(t, job.MediaPayloadBase64, decoded.MediaPayloadBase64)
+	assert.False(t, decoded.EnqueuedAt.IsZero())
 }
 
 // --- Consumer tests ---
@@ -401,6 +475,82 @@ func TestConsume_PermanentFailureMovesToDLQ(t *testing.T) {
 
 	// Invalid message should not remain pending indefinitely.
 	pending, err := client.XPending(ctx, queue.StreamName, queue.ConsumerGroup).Result()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), pending.Count)
+}
+
+func TestConsumeInboundMedia_ProcessesJob(t *testing.T) {
+	client := skipIfNoRedis(t)
+	cleanInboundMediaStream(t, client)
+	log := testutil.NopLogger()
+	ctx := testutil.TestContextWithTimeout(t, 10*time.Second)
+
+	q := queue.NewRedisQueue(client, log)
+	job := makeInboundMediaJob()
+	err := q.EnqueueInboundMedia(ctx, job)
+	require.NoError(t, err)
+
+	consumer, err := queue.NewRedisInboundMediaConsumer(client, log)
+	require.NoError(t, err)
+	defer func() { _ = consumer.Close() }()
+
+	handler := &mockHandler{}
+
+	consumeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		_ = consumer.Consume(consumeCtx, handler)
+	}()
+
+	testutil.AssertEventually(t, func() bool {
+		return len(handler.getInboundMediaJobs()) >= 1
+	}, 8*time.Second, "handler should have received inbound media job")
+
+	cancel()
+
+	received := handler.getInboundMediaJobs()
+	require.Len(t, received, 1)
+	assert.Equal(t, job.MessageID, received[0].MessageID)
+	assert.Equal(t, job.InstanceID, received[0].InstanceID)
+	assert.Equal(t, job.WhatsAppMessageID, received[0].WhatsAppMessageID)
+}
+
+func TestConsumeInboundMedia_PermanentFailureMovesToDLQ(t *testing.T) {
+	client := skipIfNoRedis(t)
+	cleanInboundMediaStream(t, client)
+	log := testutil.NopLogger()
+	ctx := testutil.TestContextWithTimeout(t, 15*time.Second)
+
+	_, err := client.XAdd(ctx, &redis.XAddArgs{
+		Stream: queue.InboundMediaStreamName,
+		Values: map[string]interface{}{
+			"type":    string(queue.JobTypeInboundMedia),
+			"payload": "{not-json",
+		},
+	}).Result()
+	require.NoError(t, err)
+
+	consumer, err := queue.NewRedisInboundMediaConsumer(client, log)
+	require.NoError(t, err)
+	defer func() { _ = consumer.Close() }()
+
+	handler := &mockHandler{}
+	consumeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		_ = consumer.Consume(consumeCtx, handler)
+	}()
+
+	testutil.AssertEventually(t, func() bool {
+		msgs, dlqErr := client.XRange(ctx, queue.InboundMediaDeadLetterStreamName, "-", "+").Result()
+		return dlqErr == nil && len(msgs) >= 1
+	}, 10*time.Second, "invalid inbound media job should be moved to dead-letter stream")
+
+	cancel()
+
+	pending, err := client.XPending(ctx, queue.InboundMediaStreamName, queue.InboundMediaConsumerGroup).Result()
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), pending.Count)
 }

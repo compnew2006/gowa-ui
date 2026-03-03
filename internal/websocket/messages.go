@@ -10,13 +10,14 @@ type WSMessage struct {
 
 // Message types
 const (
-	TypeAuth          = "auth"
-	TypeNewMessage    = "new_message"
-	TypeStatusUpdate  = "status_update"
-	TypeContactUpdate = "contact_update"
-	TypeSetContact    = "set_contact"
-	TypePing          = "ping"
-	TypePong          = "pong"
+	TypeAuth                = "auth"
+	TypeNewMessage          = "new_message"
+	TypeMessageMediaUpdated = "message_media_updated"
+	TypeStatusUpdate        = "status_update"
+	TypeContactUpdate       = "contact_update"
+	TypeSetContact          = "set_contact"
+	TypePing                = "ping"
+	TypePong                = "pong"
 
 	// Agent transfer types
 	TypeAgentTransfer       = "agent_transfer"

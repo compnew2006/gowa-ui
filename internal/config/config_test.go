@@ -45,6 +45,9 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, 5, cfg.Whatsmeow.MaxInstancesPerOrg)
 	assert.Equal(t, 1, cfg.Whatsmeow.UploadRetryCount)
 	assert.Equal(t, 2, cfg.Whatsmeow.UploadRetryDelaySec)
+	assert.Equal(t, 4, cfg.Whatsmeow.InboundMediaAsyncRetryCount)
+	assert.Equal(t, 5000, cfg.Whatsmeow.InboundMediaAsyncRetryDelayMs)
+	assert.Equal(t, 60000, cfg.Whatsmeow.InboundMediaAsyncRetryMaxDelayMs)
 	assert.True(t, cfg.Whatsmeow.TypingIndicatorEnabled)
 	assert.Equal(t, 700, cfg.Whatsmeow.TypingMinDelayMs)
 	assert.Equal(t, 3000, cfg.Whatsmeow.TypingMaxDelayMs)
@@ -73,6 +76,7 @@ func TestLoad_EnvironmentVariables(t *testing.T) {
 	t.Setenv("WHATOMATE_SERVER_PORT", "9090")
 	t.Setenv("WHATOMATE_DATABASE_USER", "dbuser")
 	t.Setenv("WHATOMATE_WHATSMEOW_TYPING_INDICATOR_ENABLED", "false")
+	t.Setenv("WHATOMATE_WHATSMEOW_INBOUND_MEDIA_ASYNC_RETRY_COUNT", "7")
 	t.Setenv("WHATOMATE_APP_ENVIRONMENT", "production")
 
 	cfg, err := Load("")
@@ -82,6 +86,7 @@ func TestLoad_EnvironmentVariables(t *testing.T) {
 	assert.Equal(t, 9090, cfg.Server.Port)
 	assert.Equal(t, "dbuser", cfg.Database.User)
 	assert.Equal(t, "production", cfg.App.Environment)
+	assert.Equal(t, 7, cfg.Whatsmeow.InboundMediaAsyncRetryCount)
 	assert.True(t, cfg.Cookie.Secure) // Auto-set to true when environment=production
 }
 

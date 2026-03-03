@@ -2,15 +2,22 @@ package whatsmeow
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zerodha/logf"
+	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestFindOrCreateContact_CreatesSeparateContactsPerInstance(t *testing.T) {
@@ -435,4 +442,127 @@ func TestFindOrCreateContact_RestoresSoftDeletedLegacyContact(t *testing.T) {
 		Where("organization_id = ? AND phone_number = ?", org.ID, "15550000005").
 		Count(&count).Error)
 	assert.Equal(t, int64(1), count)
+}
+
+func TestPersistParsedMessage_FailedInboundMediaEnqueuesRecoveryJob(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Inbound Queue Org",
+		Slug:      "inbound-queue-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Inbound Queue Instance",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{
+		InboundMediaRetryCount:      2,
+		InboundMediaRetryDelayMs:    0,
+		InboundMediaRetryMaxDelayMs: 0,
+	}, nil, t.TempDir())
+	mockQueue := testutil.NewMockQueue()
+	cm.SetInboundMediaQueue(mockQueue)
+
+	evt := makeInboundDocumentEventForPersistTest(t, "wamid.inbound.media.queue.1")
+	message, err := cm.persistParsedMessage(context.Background(), nil, evt, instance.ID, org.ID, persistMessageOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, message)
+
+	require.Len(t, mockQueue.InboundMediaJobs, 1)
+	job := mockQueue.InboundMediaJobs[0]
+	assert.Equal(t, message.ID, job.MessageID)
+	assert.Equal(t, org.ID, job.OrganizationID)
+	assert.Equal(t, instance.ID, job.InstanceID)
+	assert.Equal(t, models.MessageTypeDocument, job.MessageType)
+	assert.Equal(t, "document", job.MediaKind)
+	assert.Equal(t, "application/pdf", job.MimeType)
+	assert.Equal(t, "report.pdf", job.FallbackFilename)
+	assert.NotEmpty(t, job.MediaPayloadBase64)
+	assert.Equal(t, "client is nil", job.LastError)
+
+	var saved models.Message
+	require.NoError(t, db.First(&saved, "id = ?", message.ID).Error)
+	assert.Equal(t, inboundMediaAsyncStatusQueued, saved.Metadata[inboundMediaAsyncStatusKey])
+	assert.NotEmpty(t, saved.Metadata[inboundMediaAsyncEnqueuedAtKey])
+	assert.Equal(t, "client is nil", saved.Metadata[inboundMediaAsyncLastErrorKey])
+	assert.Contains(t, saved.ErrorMessage, "queued for async recovery")
+}
+
+func TestPersistParsedMessage_EnqueueFailureMarksMessageMetadata(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Inbound Queue Fail Org",
+		Slug:      "inbound-queue-fail-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Inbound Queue Fail Instance",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{
+		InboundMediaRetryCount:      2,
+		InboundMediaRetryDelayMs:    0,
+		InboundMediaRetryMaxDelayMs: 0,
+	}, nil, t.TempDir())
+	mockQueue := testutil.NewMockQueue()
+	mockQueue.EnqueueInboundFunc = func(context.Context, *queue.InboundMediaJob) error {
+		return errors.New("redis unavailable")
+	}
+	cm.SetInboundMediaQueue(mockQueue)
+
+	evt := makeInboundDocumentEventForPersistTest(t, "wamid.inbound.media.queue.2")
+	message, err := cm.persistParsedMessage(context.Background(), nil, evt, instance.ID, org.ID, persistMessageOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, message)
+
+	var saved models.Message
+	require.NoError(t, db.First(&saved, "id = ?", message.ID).Error)
+	assert.Equal(t, inboundMediaAsyncStatusEnqueueFail, saved.Metadata[inboundMediaAsyncStatusKey])
+	assert.Contains(t, saved.Metadata[inboundMediaAsyncEnqueueErrorKey], "redis unavailable")
+	assert.Equal(t, "client is nil", saved.Metadata[inboundMediaAsyncLastErrorKey])
+	assert.Contains(t, saved.ErrorMessage, "async enqueue failed")
+}
+
+func makeInboundDocumentEventForPersistTest(t *testing.T, waMessageID string) *events.Message {
+	t.Helper()
+	chatJID, err := types.ParseJID("15550001234@s.whatsapp.net")
+	require.NoError(t, err)
+
+	return &events.Message{
+		Info: types.MessageInfo{
+			MessageSource: types.MessageSource{
+				Chat:     chatJID,
+				Sender:   chatJID,
+				IsFromMe: false,
+				IsGroup:  false,
+			},
+			ID:        waMessageID,
+			PushName:  "Customer",
+			Timestamp: time.Now().UTC(),
+		},
+		Message: &waE2E.Message{
+			DocumentMessage: &waE2E.DocumentMessage{
+				FileName: proto.String("report.pdf"),
+				Mimetype: proto.String("application/pdf"),
+			},
+		},
+	}
 }

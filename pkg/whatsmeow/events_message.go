@@ -62,7 +62,8 @@ func (cm *ConnectionManager) handleMessage(ctx context.Context, evt *events.Mess
 		}
 		allowFromMe = true
 	}
-	if evt.Info.Chat == types.StatusBroadcastJID {
+	if isStatusMessageInfo(evt.Info) {
+		cm.handleStatusMessage(ctx, evt, instanceID, orgID)
 		return
 	}
 

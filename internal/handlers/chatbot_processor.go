@@ -2484,10 +2484,13 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 			var replyToMsg models.Message
 			if err := a.DB.First(&replyToMsg, message.ReplyToMessageID).Error; err == nil {
 				wsPayload["reply_to_message"] = map[string]any{
-					"id":           replyToMsg.ID.String(),
-					"content":      map[string]string{"body": replyToMsg.Content},
-					"message_type": replyToMsg.MessageType,
-					"direction":    replyToMsg.Direction,
+					"id":              replyToMsg.ID.String(),
+					"content":         map[string]string{"body": replyToMsg.Content},
+					"message_type":    replyToMsg.MessageType,
+					"direction":       replyToMsg.Direction,
+					"media_url":       replyToMsg.MediaURL,
+					"media_mime_type": replyToMsg.MediaMimeType,
+					"media_filename":  replyToMsg.MediaFilename,
 				}
 			}
 		}

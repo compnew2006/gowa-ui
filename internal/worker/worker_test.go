@@ -27,6 +27,12 @@ type stubMessageProvider struct {
 	sendErr   error
 }
 
+type stubInboundMediaProvider struct {
+	stubMessageProvider
+	processCount int
+	processFunc  func(context.Context, *queue.InboundMediaJob) error
+}
+
 func (m *stubMessageProvider) SendText(context.Context, string, string, string) (string, error) {
 	m.sendCount++
 	return "wamid.stub.text", m.sendErr
@@ -74,6 +80,14 @@ func (m *stubMessageProvider) DownloadMedia(context.Context, string, string) ([]
 
 func (m *stubMessageProvider) UploadMedia(context.Context, string, string, []byte) (string, error) {
 	return "", nil
+}
+
+func (m *stubInboundMediaProvider) ProcessInboundMediaJob(ctx context.Context, job *queue.InboundMediaJob) error {
+	m.processCount++
+	if m.processFunc != nil {
+		return m.processFunc(ctx, job)
+	}
+	return nil
 }
 
 func testWorker(t *testing.T) *Worker {
@@ -1269,4 +1283,136 @@ func TestWorker_HandleRecipientJob_InstanceBlocked(t *testing.T) {
 	assert.Equal(t, models.MessageStatusFailed, updatedRecipient.Status)
 	assert.Contains(t, strings.ToLower(updatedRecipient.ErrorMessage), "block")
 	assert.Equal(t, 0, provider.sendCount)
+}
+
+func TestWorker_HandleInboundMediaJob_ProcessesAndUpdatesMessage(t *testing.T) {
+	provider := &stubInboundMediaProvider{}
+	w := testWorker(t)
+	w.Config = &config.Config{
+		WhatsApp: config.WhatsAppConfig{Provider: "whatsmeow"},
+	}
+	w.MessageProvider = provider
+
+	org, instance, _, message := createInboundMediaMessageFixture(t, w, false)
+	provider.processFunc = func(ctx context.Context, job *queue.InboundMediaJob) error {
+		return w.DB.WithContext(ctx).Model(&models.Message{}).
+			Where("id = ?", job.MessageID).
+			Updates(map[string]any{
+				"media_url":       "documents/recovered.pdf",
+				"media_mime_type": "application/pdf",
+				"media_filename":  "recovered.pdf",
+			}).Error
+	}
+
+	err := w.HandleInboundMediaJob(context.Background(), &queue.InboundMediaJob{
+		MessageID:          message.ID,
+		OrganizationID:     org.ID,
+		InstanceID:         instance.ID,
+		MediaKind:          "document",
+		MediaPayloadBase64: "dGVzdA==",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, provider.processCount)
+
+	var updated models.Message
+	require.NoError(t, w.DB.First(&updated, "id = ?", message.ID).Error)
+	assert.Equal(t, "documents/recovered.pdf", updated.MediaURL)
+	assert.Equal(t, "application/pdf", updated.MediaMimeType)
+	assert.Equal(t, "recovered.pdf", updated.MediaFilename)
+}
+
+func TestWorker_HandleInboundMediaJob_SkipsAlreadyRecoveredMessage(t *testing.T) {
+	provider := &stubInboundMediaProvider{}
+	w := testWorker(t)
+	w.Config = &config.Config{
+		WhatsApp: config.WhatsAppConfig{Provider: "whatsmeow"},
+	}
+	w.MessageProvider = provider
+
+	org, instance, _, message := createInboundMediaMessageFixture(t, w, true)
+
+	err := w.HandleInboundMediaJob(context.Background(), &queue.InboundMediaJob{
+		MessageID:          message.ID,
+		OrganizationID:     org.ID,
+		InstanceID:         instance.ID,
+		MediaKind:          "document",
+		MediaPayloadBase64: "dGVzdA==",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, provider.processCount)
+}
+
+func TestWorker_HandleInboundMediaJob_UnsupportedProviderIsPermanent(t *testing.T) {
+	w := testWorker(t)
+	w.Config = &config.Config{
+		WhatsApp: config.WhatsAppConfig{Provider: "whatsmeow"},
+	}
+	w.MessageProvider = &stubMessageProvider{}
+
+	org, instance, _, message := createInboundMediaMessageFixture(t, w, false)
+
+	err := w.HandleInboundMediaJob(context.Background(), &queue.InboundMediaJob{
+		MessageID:          message.ID,
+		OrganizationID:     org.ID,
+		InstanceID:         instance.ID,
+		MediaKind:          "document",
+		MediaPayloadBase64: "dGVzdA==",
+	})
+	require.Error(t, err)
+	assert.True(t, queue.IsPermanentError(err))
+}
+
+func createInboundMediaMessageFixture(t *testing.T, w *Worker, recovered bool) (*models.Organization, *models.WhatsAppInstance, *models.Contact, *models.Message) {
+	t.Helper()
+	unique := uuid.NewString()[:8]
+
+	org := &models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Inbound Media Org " + unique,
+		Slug:      "inbound-media-org-" + unique,
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, w.DB.Create(org).Error)
+
+	instance := &models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Inbound Media Instance " + unique,
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, w.DB.Create(instance).Error)
+
+	contact := &models.Contact{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		InstanceID:     &instance.ID,
+		PhoneNumber:    "1555000" + unique,
+		ProfileName:    "Inbound Media Contact",
+		Metadata:       models.JSONB{},
+	}
+	require.NoError(t, w.DB.Create(contact).Error)
+
+	mediaURL := ""
+	if recovered {
+		mediaURL = "documents/already.pdf"
+	}
+	message := &models.Message{
+		BaseModel:         models.BaseModel{ID: uuid.New()},
+		OrganizationID:    org.ID,
+		InstanceID:        &instance.ID,
+		WhatsAppAccount:   instance.ID.String(),
+		ContactID:         contact.ID,
+		WhatsAppMessageID: "wamid.inbound.worker." + unique,
+		Direction:         models.DirectionIncoming,
+		MessageType:       models.MessageTypeDocument,
+		Content:           "",
+		MediaURL:          mediaURL,
+		MediaMimeType:     "application/pdf",
+		MediaFilename:     "document.pdf",
+		Status:            models.MessageStatusReceived,
+		Metadata:          models.JSONB{},
+	}
+	require.NoError(t, w.DB.Create(message).Error)
+
+	return org, instance, contact, message
 }

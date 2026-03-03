@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/compnew2006/whatomate/internal/models"
@@ -11,25 +12,34 @@ import (
 )
 
 const (
-	replyMetadataWAMIDKey       = "reply_to_wamid"
-	replyMetadataSenderPhoneKey = "reply_sender_phone"
-	replyMetadataPreviewBodyKey = "reply_preview_body"
-	replyMetadataPreviewTypeKey = "reply_preview_type"
-	replyMetadataDirectionKey   = "reply_direction"
+	replyMetadataWAMIDKey                = "reply_to_wamid"
+	replyMetadataSenderPhoneKey          = "reply_sender_phone"
+	replyMetadataPreviewBodyKey          = "reply_preview_body"
+	replyMetadataPreviewTypeKey          = "reply_preview_type"
+	replyMetadataDirectionKey            = "reply_direction"
+	replyMetadataPreviewMediaURLKey      = "reply_preview_media_url"
+	replyMetadataPreviewMediaMimeTypeKey = "reply_preview_media_mime_type"
+	replyMetadataPreviewMediaFilenameKey = "reply_preview_media_filename"
 )
 
 type incomingReplyContext struct {
-	IsReply          bool
-	ReplyToWAMID     string
-	ReplyToMessageID *uuid.UUID
-	ReplySenderPhone string
-	ReplyPreviewType models.MessageType
-	ReplyPreviewBody string
-	ReplyDirection   models.Direction
+	IsReply                   bool
+	ReplyToWAMID              string
+	ReplyToMessageID          *uuid.UUID
+	ReplySenderPhone          string
+	ReplyPreviewType          models.MessageType
+	ReplyPreviewBody          string
+	ReplyDirection            models.Direction
+	ReplyPreviewMediaURL      string
+	ReplyPreviewMediaMimeType string
+	ReplyPreviewMediaFilename string
 }
 
 func (rc incomingReplyContext) hasPreview() bool {
-	return rc.ReplyPreviewType != "" || strings.TrimSpace(rc.ReplyPreviewBody) != "" || strings.TrimSpace(rc.ReplySenderPhone) != ""
+	return rc.ReplyPreviewType != "" ||
+		strings.TrimSpace(rc.ReplyPreviewBody) != "" ||
+		strings.TrimSpace(rc.ReplySenderPhone) != "" ||
+		strings.TrimSpace(rc.ReplyPreviewMediaURL) != ""
 }
 
 func (rc incomingReplyContext) applyMetadata(metadata models.JSONB) {
@@ -50,6 +60,15 @@ func (rc incomingReplyContext) applyMetadata(metadata models.JSONB) {
 	}
 	if rc.ReplyDirection != "" {
 		metadata[replyMetadataDirectionKey] = string(rc.ReplyDirection)
+	}
+	if rc.ReplyPreviewMediaURL != "" {
+		metadata[replyMetadataPreviewMediaURLKey] = rc.ReplyPreviewMediaURL
+	}
+	if rc.ReplyPreviewMediaMimeType != "" {
+		metadata[replyMetadataPreviewMediaMimeTypeKey] = rc.ReplyPreviewMediaMimeType
+	}
+	if rc.ReplyPreviewMediaFilename != "" {
+		metadata[replyMetadataPreviewMediaFilenameKey] = rc.ReplyPreviewMediaFilename
 	}
 }
 
@@ -112,6 +131,22 @@ func (cm *ConnectionManager) resolveIncomingReplyContext(
 		if err != gorm.ErrRecordNotFound {
 			cm.logger.Warn("Failed to resolve quoted message", "error", err, "reply_to_wamid", replyCtx.ReplyToWAMID)
 		}
+		status, statusErr := cm.resolveReplyStatusByWAMID(ctx, orgID, instanceID, replyCtx.ReplyToWAMID)
+		if statusErr != nil {
+			cm.logger.Warn("Failed to resolve quoted status", "error", statusErr, "reply_to_wamid", replyCtx.ReplyToWAMID)
+			return replyCtx
+		}
+		if status != nil {
+			if replyCtx.ReplyPreviewType == "" {
+				replyCtx.ReplyPreviewType = mapStatusTypeToReplyMessageType(status.StatusType)
+			}
+			if strings.TrimSpace(replyCtx.ReplyPreviewBody) == "" {
+				replyCtx.ReplyPreviewBody = strings.TrimSpace(status.Content)
+			}
+			replyCtx.ReplyPreviewMediaURL = resolveReplyStatusMediaURL(*status)
+			replyCtx.ReplyPreviewMediaMimeType = strings.TrimSpace(status.MediaMimeType)
+			replyCtx.ReplyPreviewMediaFilename = strings.TrimSpace(status.MediaFilename)
+		}
 		return replyCtx
 	}
 
@@ -126,8 +161,65 @@ func (cm *ConnectionManager) resolveIncomingReplyContext(
 	if replyCtx.ReplySenderPhone == "" {
 		replyCtx.ReplySenderPhone = metadataString(replyMessage.Metadata, "sender_phone")
 	}
+	replyCtx.ReplyPreviewMediaURL = strings.TrimSpace(replyMessage.MediaURL)
+	replyCtx.ReplyPreviewMediaMimeType = strings.TrimSpace(replyMessage.MediaMimeType)
+	replyCtx.ReplyPreviewMediaFilename = strings.TrimSpace(replyMessage.MediaFilename)
 
 	return replyCtx
+}
+
+func (cm *ConnectionManager) resolveReplyStatusByWAMID(ctx context.Context, orgID, instanceID uuid.UUID, wamid string) (*models.WhatsAppStatus, error) {
+	if cm == nil || cm.db == nil {
+		return nil, nil
+	}
+	wamid = strings.TrimSpace(wamid)
+	if wamid == "" {
+		return nil, nil
+	}
+
+	query := cm.db.WithContext(ctx).Where("organization_id = ? AND whats_app_message_id = ?", orgID, wamid)
+	if instanceID != uuid.Nil {
+		query = query.Where("instance_id = ?", instanceID)
+	}
+
+	var status models.WhatsAppStatus
+	err := query.Order("created_at DESC").First(&status).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &status, nil
+}
+
+func resolveReplyStatusMediaURL(status models.WhatsAppStatus) string {
+	mediaURL := strings.TrimSpace(status.MediaURL)
+	if mediaURL == "" {
+		return ""
+	}
+
+	lowerMediaURL := strings.ToLower(mediaURL)
+	if strings.HasPrefix(lowerMediaURL, "http://") ||
+		strings.HasPrefix(lowerMediaURL, "https://") ||
+		strings.HasPrefix(lowerMediaURL, "data:") {
+		return mediaURL
+	}
+	if strings.HasPrefix(mediaURL, "/api/statuses/") {
+		return mediaURL
+	}
+	return "/api/statuses/" + status.ID.String() + "/media"
+}
+
+func mapStatusTypeToReplyMessageType(statusType models.WhatsAppStatusType) models.MessageType {
+	switch statusType {
+	case models.WhatsAppStatusTypeImage:
+		return models.MessageTypeImage
+	case models.WhatsAppStatusTypeVideo:
+		return models.MessageTypeVideo
+	default:
+		return models.MessageTypeText
+	}
 }
 
 func incomingReplyContextInfo(msg *waE2E.Message) *waE2E.ContextInfo {

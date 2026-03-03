@@ -1340,6 +1340,94 @@ func TestApp_GetMessages(t *testing.T) {
 		assert.Equal(t, "15551112222", resp.Data.Messages[0].ReplyToMessage.SenderPhone)
 	})
 
+	t.Run("reply preview resolves status thumbnail when quoted status exists", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+		account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+		contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+		instance := models.WhatsAppInstance{
+			BaseModel:      models.BaseModel{ID: uuid.New()},
+			OrganizationID: org.ID,
+			Name:           "Main Instance",
+			PhoneNumber:    "15550000001",
+			Status:         models.InstanceStatusConnected,
+			Settings:       models.JSONB{},
+		}
+		require.NoError(t, app.DB.Create(&instance).Error)
+
+		statusID := uuid.New()
+		status := models.WhatsAppStatus{
+			BaseModel: models.BaseModel{
+				ID:        statusID,
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			},
+			OrganizationID:    org.ID,
+			InstanceID:        instance.ID,
+			WhatsAppAccount:   account.Name,
+			SenderJID:         "15551112222@s.whatsapp.net",
+			SenderName:        "Status Sender",
+			WhatsAppMessageID: "wamid.status.thumbnail",
+			StatusType:        models.WhatsAppStatusTypeImage,
+			MediaURL:          "images/status-thumbnail.jpg",
+			MediaMimeType:     "image/jpeg",
+			MediaFilename:     "status-thumbnail.jpg",
+			ExpiresAt:         time.Now().Add(24 * time.Hour),
+			Metadata:          models.JSONB{},
+		}
+		require.NoError(t, app.DB.Create(&status).Error)
+
+		msg := &models.Message{
+			BaseModel: models.BaseModel{
+				ID:        uuid.New(),
+				CreatedAt: time.Now(),
+			},
+			OrganizationID:    org.ID,
+			InstanceID:        &instance.ID,
+			WhatsAppAccount:   account.Name,
+			ContactID:         contact.ID,
+			WhatsAppMessageID: "wamid.reply.with.status.thumb",
+			Direction:         models.DirectionIncoming,
+			MessageType:       models.MessageTypeText,
+			Content:           "Replying to a status",
+			Status:            models.MessageStatusDelivered,
+			IsReply:           true,
+			Metadata: models.JSONB{
+				"reply_to_wamid":     status.WhatsAppMessageID,
+				"reply_sender_phone": "15551112222",
+				"reply_preview_type": "image",
+				"reply_preview_body": "",
+				"reply_direction":    "incoming",
+			},
+		}
+		require.NoError(t, app.DB.Create(msg).Error)
+
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+		testutil.SetQueryParam(req, "limit", 50)
+
+		err := app.GetMessages(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Messages []handlers.MessageResponse `json:"messages"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		require.Len(t, resp.Data.Messages, 1)
+		require.NotNil(t, resp.Data.Messages[0].ReplyToMessage)
+		assert.Equal(t, "/api/statuses/"+statusID.String()+"/media", resp.Data.Messages[0].ReplyToMessage.MediaURL)
+		assert.Equal(t, "image/jpeg", resp.Data.Messages[0].ReplyToMessage.MediaMimeType)
+		assert.Equal(t, "status-thumbnail.jpg", resp.Data.Messages[0].ReplyToMessage.MediaFilename)
+	})
+
 	t.Run("group conversation fetch aggregates messages across participant contacts", func(t *testing.T) {
 		t.Parallel()
 		app := newTestApp(t)

@@ -244,6 +244,13 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 
 // handleReceipt processes incoming read/delivered/sent receipts from WhatsApp.
 func (cm *ConnectionManager) handleReceipt(ctx context.Context, evt *events.Receipt, instanceID, orgID uuid.UUID) {
+	if evt == nil {
+		return
+	}
+	if isStatusMessageSource(evt.MessageSource) {
+		return
+	}
+
 	var newStatus models.MessageStatus
 	switch evt.Type {
 	case types.ReceiptTypeRead, types.ReceiptTypeReadSelf:
@@ -255,16 +262,24 @@ func (cm *ConnectionManager) handleReceipt(ctx context.Context, evt *events.Rece
 	}
 
 	for _, msgID := range evt.MessageIDs {
+		trimmedMessageID := strings.TrimSpace(string(msgID))
+		if trimmedMessageID == "" {
+			continue
+		}
+		if cm.isStatusReceiptMessageID(ctx, orgID, instanceID, trimmedMessageID) {
+			continue
+		}
+
 		result := cm.db.WithContext(ctx).
 			Model(&models.Message{}).
 			Where("whats_app_message_id = ? AND instance_id = ? AND status NOT IN ?",
-				msgID, instanceID, statusesAtOrAbove(newStatus)).
+				trimmedMessageID, instanceID, statusesAtOrAbove(newStatus)).
 			Update("status", newStatus)
 
 		if result.Error != nil {
 			cm.logger.Error("Failed to update message receipt status",
 				"error", result.Error,
-				"message_id", msgID,
+				"message_id", trimmedMessageID,
 				"new_status", newStatus)
 			cm.MarkError(instanceID)
 			continue
@@ -276,7 +291,7 @@ func (cm *ConnectionManager) handleReceipt(ctx context.Context, evt *events.Rece
 
 		var message models.Message
 		if err := cm.db.WithContext(ctx).
-			Where("whats_app_message_id = ? AND instance_id = ?", msgID, instanceID).
+			Where("whats_app_message_id = ? AND instance_id = ?", trimmedMessageID, instanceID).
 			First(&message).Error; err != nil {
 			continue
 		}
@@ -292,10 +307,32 @@ func (cm *ConnectionManager) handleReceipt(ctx context.Context, evt *events.Rece
 		}
 
 		cm.logger.Debug("Receipt processed",
-			"wa_message_id", msgID,
+			"wa_message_id", trimmedMessageID,
 			"status", newStatus,
 			"contact_id", message.ContactID)
 	}
+}
+
+func (cm *ConnectionManager) isStatusReceiptMessageID(ctx context.Context, orgID, instanceID uuid.UUID, waMessageID string) bool {
+	if cm == nil || cm.db == nil {
+		return false
+	}
+	trimmedMessageID := strings.TrimSpace(waMessageID)
+	if trimmedMessageID == "" {
+		return false
+	}
+
+	var count int64
+	if err := cm.db.WithContext(ctx).
+		Model(&models.WhatsAppStatus{}).
+		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?",
+			orgID, instanceID, trimmedMessageID).
+		Count(&count).Error; err != nil {
+		cm.logger.Debug("Failed to check status receipt message id", "message_id", trimmedMessageID, "error", err)
+		return false
+	}
+
+	return count > 0
 }
 
 // statusesAtOrAbove returns statuses that are at or above the given status.

@@ -2,7 +2,9 @@ package whatsmeow
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime"
 	"os"
@@ -11,71 +13,98 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	waClient "go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
 	maxMessageUnwrapDepth = 8
 	deletedMessageCaption = "(This message was deleted)"
+
+	defaultInboundMediaDownloadMaxAttempts = 3
+	defaultInboundMediaDownloadBaseBackoff = 500 * time.Millisecond
+	defaultInboundMediaDownloadMaxBackoff  = 2 * time.Second
 )
 
 var mentionTokenPattern = regexp.MustCompile(`@\d+`)
 
+type inboundMediaRetryArtifact struct {
+	MediaKind          string
+	MediaPayloadBase64 string
+	MimeType           string
+	FallbackFilename   string
+	LastError          string
+}
+
+type inboundMediaDownloader interface {
+	Download(ctx context.Context, msg waClient.DownloadableMessage) ([]byte, error)
+}
+
 // extractMessageContentWithMedia extracts message content and persists inbound media locally.
 // It handles wrapped message formats (ephemeral/view-once/document-with-caption) and populates media_url.
 func (cm *ConnectionManager) extractMessageContentWithMedia(ctx context.Context, client *waClient.Client, msg *waE2E.Message) (models.MessageType, string, string, string, string) {
+	msgType, content, mediaURL, mimeType, filename, _ := cm.extractMessageContentWithMediaRetryArtifact(ctx, client, msg)
+	return msgType, content, mediaURL, mimeType, filename
+}
+
+func (cm *ConnectionManager) extractMessageContentWithMediaRetryArtifact(
+	ctx context.Context,
+	client *waClient.Client,
+	msg *waE2E.Message,
+) (models.MessageType, string, string, string, string, *inboundMediaRetryArtifact) {
 	if isIncomingRevokeMessage(msg) {
-		return models.MessageTypeText, deletedMessageCaption, "", "", ""
+		return models.MessageTypeText, deletedMessageCaption, "", "", "", nil
 	}
 
 	// Ignore key-distribution control messages (group encryption technical payloads).
 	if msg != nil && (msg.SenderKeyDistributionMessage != nil || msg.FastRatchetKeySenderKeyDistributionMessage != nil) {
-		return models.MessageTypeIgnore, "", "", "", ""
+		return models.MessageTypeIgnore, "", "", "", "", nil
 	}
 
 	unwrapped := unwrapIncomingMessage(msg)
 	if unwrapped == nil {
-		return models.MessageTypeText, "", "", "", ""
+		return models.MessageTypeText, "", "", "", "", nil
 	}
 	if unwrapped.GetSenderKeyDistributionMessage() != nil || unwrapped.GetFastRatchetKeySenderKeyDistributionMessage() != nil {
-		return models.MessageTypeIgnore, "", "", "", ""
+		return models.MessageTypeIgnore, "", "", "", "", nil
 	}
 
 	if protocol := unwrapped.GetProtocolMessage(); protocol != nil &&
 		protocol.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT &&
 		protocol.GetEditedMessage() != nil {
-		return cm.extractMessageContentWithMedia(ctx, client, protocol.GetEditedMessage())
+		return cm.extractMessageContentWithMediaRetryArtifact(ctx, client, protocol.GetEditedMessage())
 	}
 
 	if msgType, content, ok := cm.extractTextualIncomingMessage(ctx, client, unwrapped); ok {
-		return msgType, content, "", "", ""
+		return msgType, content, "", "", "", nil
 	}
 	if img := unwrapped.ImageMessage; img != nil {
 		caption := img.GetCaption()
 		mimeType := sanitizeMimeType(img.GetMimetype(), "image/jpeg")
 		filename := defaultMediaFilename("image", mimeType, "image.jpg")
-		mediaURL := cm.downloadAndPersistIncomingMedia(ctx, client, img, models.MessageTypeImage, mimeType, filename)
-		return models.MessageTypeImage, caption, mediaURL, mimeType, filename
+		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, img, models.MessageTypeImage, mimeType, filename)
+		return models.MessageTypeImage, caption, mediaURL, mimeType, filename, artifact
 	}
 
 	if sticker := unwrapped.StickerMessage; sticker != nil {
 		mimeType := sanitizeMimeType(sticker.GetMimetype(), "image/webp")
 		filename := defaultMediaFilename("sticker", mimeType, "sticker.webp")
-		mediaURL := cm.downloadAndPersistIncomingMedia(ctx, client, sticker, models.MessageTypeSticker, mimeType, filename)
-		return models.MessageTypeSticker, "", mediaURL, mimeType, filename
+		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, sticker, models.MessageTypeSticker, mimeType, filename)
+		return models.MessageTypeSticker, "", mediaURL, mimeType, filename, artifact
 	}
 
 	if vid := unwrapped.VideoMessage; vid != nil {
 		caption := vid.GetCaption()
 		mimeType := sanitizeMimeType(vid.GetMimetype(), "video/mp4")
 		filename := defaultMediaFilename("video", mimeType, "video.mp4")
-		mediaURL := cm.downloadAndPersistIncomingMedia(ctx, client, vid, models.MessageTypeVideo, mimeType, filename)
-		return models.MessageTypeVideo, caption, mediaURL, mimeType, filename
+		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, vid, models.MessageTypeVideo, mimeType, filename)
+		return models.MessageTypeVideo, caption, mediaURL, mimeType, filename, artifact
 	}
 
 	// PTV (video notes) is delivered as a separate field but behaves like video media.
@@ -83,15 +112,15 @@ func (cm *ConnectionManager) extractMessageContentWithMedia(ctx context.Context,
 		caption := ptv.GetCaption()
 		mimeType := sanitizeMimeType(ptv.GetMimetype(), "video/mp4")
 		filename := defaultMediaFilename("video-note", mimeType, "video.mp4")
-		mediaURL := cm.downloadAndPersistIncomingMedia(ctx, client, ptv, models.MessageTypeVideo, mimeType, filename)
-		return models.MessageTypeVideo, caption, mediaURL, mimeType, filename
+		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, ptv, models.MessageTypeVideo, mimeType, filename)
+		return models.MessageTypeVideo, caption, mediaURL, mimeType, filename, artifact
 	}
 
 	if aud := unwrapped.AudioMessage; aud != nil {
 		mimeType := sanitizeMimeType(aud.GetMimetype(), "audio/ogg")
 		filename := defaultMediaFilename("audio", mimeType, "audio.ogg")
-		mediaURL := cm.downloadAndPersistIncomingMedia(ctx, client, aud, models.MessageTypeAudio, mimeType, filename)
-		return models.MessageTypeAudio, "", mediaURL, mimeType, filename
+		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, aud, models.MessageTypeAudio, mimeType, filename)
+		return models.MessageTypeAudio, "", mediaURL, mimeType, filename, artifact
 	}
 
 	if doc := unwrapped.DocumentMessage; doc != nil {
@@ -105,12 +134,12 @@ func (cm *ConnectionManager) extractMessageContentWithMedia(ctx context.Context,
 		if filename == "" {
 			filename = defaultMediaFilename("document", mimeType, "document.bin")
 		}
-		mediaURL := cm.downloadAndPersistIncomingMedia(ctx, client, doc, models.MessageTypeDocument, mimeType, filename)
-		return models.MessageTypeDocument, caption, mediaURL, mimeType, filename
+		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, doc, models.MessageTypeDocument, mimeType, filename)
+		return models.MessageTypeDocument, caption, mediaURL, mimeType, filename, artifact
 	}
 
 	// Default
-	return models.MessageTypeText, "[Unsupported message type]", "", "", ""
+	return models.MessageTypeText, "[Unsupported message type]", "", "", "", nil
 }
 
 func (cm *ConnectionManager) extractTextualIncomingMessage(ctx context.Context, client *waClient.Client, msg *waE2E.Message) (models.MessageType, string, bool) {
@@ -536,33 +565,257 @@ func incomingRevokeTargetID(msg *waE2E.Message) (string, bool) {
 
 func (cm *ConnectionManager) downloadAndPersistIncomingMedia(
 	ctx context.Context,
-	client *waClient.Client,
+	downloader inboundMediaDownloader,
 	media waClient.DownloadableMessage,
 	msgType models.MessageType,
 	mimeType string,
 	fallbackFilename string,
-) string {
-	if client == nil {
-		cm.logger.Warn("Cannot download inbound media: client is nil", "message_type", msgType)
-		return ""
+) (string, *inboundMediaRetryArtifact) {
+	buildArtifact := func(lastErr string) *inboundMediaRetryArtifact {
+		return cm.buildInboundMediaRetryArtifact(msgType, media, mimeType, fallbackFilename, lastErr)
 	}
 
-	data, err := client.Download(ctx, media)
-	if err != nil {
-		cm.logger.Warn("Failed to download inbound media", "message_type", msgType, "mime_type", mimeType, "error", err)
-		return ""
+	if downloader == nil || (reflect.ValueOf(downloader).Kind() == reflect.Ptr && reflect.ValueOf(downloader).IsNil()) {
+		cm.logger.Warn("Cannot download inbound media: client is nil", "message_type", msgType)
+		return "", buildArtifact("client is nil")
 	}
-	if len(data) == 0 {
-		cm.logger.Warn("Inbound media download returned empty data", "message_type", msgType, "mime_type", mimeType)
-		return ""
+	maxAttempts, baseBackoff, maxBackoff := cm.inboundMediaDownloadRetrySettings()
+
+	var (
+		data            []byte
+		err             error
+		lastFailureText string
+	)
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		data, err = downloader.Download(ctx, media)
+		if err == nil && len(data) > 0 {
+			break
+		}
+
+		if err != nil {
+			lastFailureText = err.Error()
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				cm.logger.Warn(
+					"Inbound media download aborted by context",
+					"message_type", msgType,
+					"mime_type", mimeType,
+					"attempt", attempt,
+					"max_attempts", maxAttempts,
+					"error", err,
+				)
+				return "", nil
+			}
+			if attempt >= maxAttempts || !shouldRetryInboundMediaDownload(err) {
+				cm.logger.Warn(
+					"Failed to download inbound media",
+					"message_type", msgType,
+					"mime_type", mimeType,
+					"attempt", attempt,
+					"max_attempts", maxAttempts,
+					"error", err,
+				)
+				return "", buildArtifact(lastFailureText)
+			}
+			backoff := inboundMediaDownloadBackoff(attempt, baseBackoff, maxBackoff)
+			cm.logger.Warn(
+				"Retrying inbound media download after failure",
+				"message_type", msgType,
+				"mime_type", mimeType,
+				"attempt", attempt,
+				"max_attempts", maxAttempts,
+				"backoff", backoff.String(),
+				"error", err,
+			)
+			if waitErr := sleepWithInboundMediaContext(ctx, backoff); waitErr != nil {
+				cm.logger.Warn(
+					"Inbound media retry aborted",
+					"message_type", msgType,
+					"mime_type", mimeType,
+					"error", waitErr,
+				)
+				lastFailureText = waitErr.Error()
+				if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
+					return "", nil
+				}
+				return "", buildArtifact(lastFailureText)
+			}
+			continue
+		}
+
+		if attempt >= maxAttempts {
+			cm.logger.Warn(
+				"Inbound media download returned empty data",
+				"message_type", msgType,
+				"mime_type", mimeType,
+				"attempt", attempt,
+				"max_attempts", maxAttempts,
+			)
+			lastFailureText = "inbound media download returned empty data"
+			return "", buildArtifact(lastFailureText)
+		}
+
+		backoff := inboundMediaDownloadBackoff(attempt, baseBackoff, maxBackoff)
+		cm.logger.Warn(
+			"Retrying inbound media download after empty payload",
+			"message_type", msgType,
+			"mime_type", mimeType,
+			"attempt", attempt,
+			"max_attempts", maxAttempts,
+			"backoff", backoff.String(),
+		)
+		if waitErr := sleepWithInboundMediaContext(ctx, backoff); waitErr != nil {
+			cm.logger.Warn(
+				"Inbound media retry aborted",
+				"message_type", msgType,
+				"mime_type", mimeType,
+				"error", waitErr,
+			)
+			lastFailureText = waitErr.Error()
+			if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
+				return "", nil
+			}
+			return "", buildArtifact(lastFailureText)
+		}
 	}
 
 	relPath, err := cm.persistInboundMedia(data, msgType, mimeType, fallbackFilename)
 	if err != nil {
 		cm.logger.Warn("Failed to persist inbound media", "message_type", msgType, "mime_type", mimeType, "error", err)
-		return ""
+		lastFailureText = err.Error()
+		return "", buildArtifact(lastFailureText)
 	}
-	return relPath
+	return relPath, nil
+}
+
+func (cm *ConnectionManager) buildInboundMediaRetryArtifact(
+	msgType models.MessageType,
+	media waClient.DownloadableMessage,
+	mimeType string,
+	fallbackFilename string,
+	lastErr string,
+) *inboundMediaRetryArtifact {
+	if media == nil {
+		return nil
+	}
+
+	pb, ok := media.(proto.Message)
+	if !ok {
+		cm.logger.Warn("Cannot build inbound media retry artifact: media payload is not proto message", "message_type", msgType)
+		return nil
+	}
+
+	rawPayload, err := proto.Marshal(pb)
+	if err != nil {
+		cm.logger.Warn("Cannot build inbound media retry artifact: failed to marshal payload", "message_type", msgType, "error", err)
+		return nil
+	}
+	if len(rawPayload) == 0 {
+		cm.logger.Warn("Cannot build inbound media retry artifact: marshaled payload is empty", "message_type", msgType)
+		return nil
+	}
+
+	return &inboundMediaRetryArtifact{
+		MediaKind:          inboundMediaKindFromMessageType(msgType, mimeType),
+		MediaPayloadBase64: base64.StdEncoding.EncodeToString(rawPayload),
+		MimeType:           mimeType,
+		FallbackFilename:   fallbackFilename,
+		LastError:          strings.TrimSpace(lastErr),
+	}
+}
+
+func inboundMediaKindFromMessageType(msgType models.MessageType, mimeType string) string {
+	switch msgType {
+	case models.MessageTypeImage:
+		return "image"
+	case models.MessageTypeSticker:
+		return "sticker"
+	case models.MessageTypeVideo:
+		return "video"
+	case models.MessageTypeAudio:
+		return "audio"
+	case models.MessageTypeDocument:
+		return "document"
+	}
+
+	switch {
+	case strings.HasPrefix(mimeType, "image/"):
+		return "image"
+	case strings.HasPrefix(mimeType, "video/"):
+		return "video"
+	case strings.HasPrefix(mimeType, "audio/"):
+		return "audio"
+	default:
+		return "document"
+	}
+}
+
+func (cm *ConnectionManager) inboundMediaDownloadRetrySettings() (int, time.Duration, time.Duration) {
+	maxAttempts := defaultInboundMediaDownloadMaxAttempts
+	baseBackoff := defaultInboundMediaDownloadBaseBackoff
+	maxBackoff := defaultInboundMediaDownloadMaxBackoff
+
+	if cm != nil && cm.cfg != nil {
+		if cm.cfg.InboundMediaRetryCount > 0 {
+			maxAttempts = cm.cfg.InboundMediaRetryCount
+		}
+		if cm.cfg.InboundMediaRetryDelayMs > 0 {
+			baseBackoff = time.Duration(cm.cfg.InboundMediaRetryDelayMs) * time.Millisecond
+		}
+		if cm.cfg.InboundMediaRetryMaxDelayMs > 0 {
+			maxBackoff = time.Duration(cm.cfg.InboundMediaRetryMaxDelayMs) * time.Millisecond
+		}
+	}
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+	if baseBackoff < 0 {
+		baseBackoff = 0
+	}
+	if maxBackoff < baseBackoff {
+		maxBackoff = baseBackoff
+	}
+	return maxAttempts, baseBackoff, maxBackoff
+}
+
+func shouldRetryInboundMediaDownload(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	return true
+}
+
+func inboundMediaDownloadBackoff(failedAttempt int, baseBackoff, maxBackoff time.Duration) time.Duration {
+	if failedAttempt < 1 {
+		failedAttempt = 1
+	}
+	if baseBackoff < 0 {
+		baseBackoff = 0
+	}
+	if maxBackoff < baseBackoff {
+		maxBackoff = baseBackoff
+	}
+	backoff := baseBackoff * (1 << (failedAttempt - 1))
+	if backoff > maxBackoff {
+		return maxBackoff
+	}
+	return backoff
+}
+
+func sleepWithInboundMediaContext(ctx context.Context, duration time.Duration) error {
+	if duration <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (cm *ConnectionManager) persistInboundMedia(data []byte, msgType models.MessageType, mimeType, fallbackFilename string) (string, error) {

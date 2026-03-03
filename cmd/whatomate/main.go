@@ -191,6 +191,7 @@ func runServer(args []string) {
 
 	// Initialize whatsmeow manager
 	whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, wsHub, cfg.Storage.LocalPath)
+	whatsmeowManager.SetInboundMediaQueue(jobQueue)
 
 	// Auto-connect linked sessions and reconnect active instances in background.
 	if cfg.WhatsApp.Provider == "whatsmeow" {
@@ -473,6 +474,8 @@ func runWorker(args []string) {
 		}
 
 		whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
+		whatsmeowQueue := queue.NewRedisQueue(rdb, lo)
+		whatsmeowManager.SetInboundMediaQueue(whatsmeowQueue)
 		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := whatsmeowManager.ReconcileStartupStatuses(reconcileCtx); err != nil {
 			lo.Warn("Failed to reconcile stale instance statuses on startup", "error", err)
@@ -732,6 +735,10 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/messages/template", app.SendTemplateMessage)
 	g.POST("/api/messages/media", app.SendMediaMessage)
 	g.PUT("/api/messages/{id}/read", app.MarkMessageRead)
+	g.GET("/api/statuses", app.ListStatuses)
+	g.GET("/api/statuses/{id}/media", app.ServeStatusMedia)
+	g.POST("/api/statuses/{id}/reply", app.ReplyToStatus)
+	g.POST("/api/statuses/{id}/mark-seen", app.MarkStatusSeen)
 
 	// WhatsApp Instances (whatsmeow)
 	g.GET("/api/instances", app.ListInstances)
@@ -745,6 +752,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/instances/{id}/pair-phone", app.PairPhoneInstance)
 	g.POST("/api/instances/{id}/disconnect", app.DisconnectInstance)
 	g.POST("/api/instances/{id}/reconnect", app.ReconnectInstance)
+	g.POST("/api/instances/{id}/status/send", app.SendStatus)
 	g.POST("/api/instances/{id}/auto-campaign/media", app.UploadInstanceAutoCampaignMedia)
 	g.GET("/api/notifications", app.ListNotifications)
 	g.PUT("/api/notifications/{id}/dismiss", app.DismissNotification)

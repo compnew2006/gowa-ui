@@ -196,10 +196,13 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		replyToID := message.ReplyToMessageID.String()
 		response.ReplyToMessageID = &replyToID
 		response.ReplyToMessage = &ReplyPreview{
-			ID:          replyToMessage.ID.String(),
-			Content:     map[string]string{"body": replyToMessage.Content},
-			MessageType: replyToMessage.MessageType,
-			Direction:   replyToMessage.Direction,
+			ID:            replyToMessage.ID.String(),
+			Content:       map[string]string{"body": replyToMessage.Content},
+			MessageType:   replyToMessage.MessageType,
+			Direction:     replyToMessage.Direction,
+			MediaURL:      replyToMessage.MediaURL,
+			MediaMimeType: replyToMessage.MediaMimeType,
+			MediaFilename: replyToMessage.MediaFilename,
 		}
 	}
 

@@ -9,6 +9,21 @@ import (
 	"github.com/knadh/koanf/v2"
 )
 
+var envTopLevelSections = []string{
+	"default_admin",
+	"rate_limit",
+	"whatsmeow",
+	"whatsapp",
+	"database",
+	"storage",
+	"server",
+	"cookie",
+	"redis",
+	"app",
+	"jwt",
+	"ai",
+}
+
 // Config holds all configuration for the application
 type Config struct {
 	App          AppConfig          `koanf:"app"`
@@ -75,18 +90,24 @@ type WhatsAppConfig struct {
 }
 
 type WhatsmeowConfig struct {
-	RateLimitMinDelayMs    int    `koanf:"rate_limit_min_delay_ms"`
-	RateLimitMaxDelayMs    int    `koanf:"rate_limit_max_delay_ms"`
-	QueueTimeoutSeconds    int    `koanf:"queue_timeout_seconds"`
-	MaxInstancesPerOrg     int    `koanf:"max_instances_per_org"`
-	UploadRetryCount       int    `koanf:"upload_retry_count"`
-	UploadRetryDelaySec    int    `koanf:"upload_retry_delay_sec"`
-	Identity               string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")
-	TypingIndicatorEnabled bool   `koanf:"typing_indicator_enabled"`
-	TypingMinDelayMs       int    `koanf:"typing_min_delay_ms"`
-	TypingMaxDelayMs       int    `koanf:"typing_max_delay_ms"`
-	TypingCharDelayMs      int    `koanf:"typing_char_delay_ms"`
-	TypingCooldownMs       int    `koanf:"typing_cooldown_ms"`
+	RateLimitMinDelayMs              int    `koanf:"rate_limit_min_delay_ms"`
+	RateLimitMaxDelayMs              int    `koanf:"rate_limit_max_delay_ms"`
+	QueueTimeoutSeconds              int    `koanf:"queue_timeout_seconds"`
+	MaxInstancesPerOrg               int    `koanf:"max_instances_per_org"`
+	UploadRetryCount                 int    `koanf:"upload_retry_count"`
+	UploadRetryDelaySec              int    `koanf:"upload_retry_delay_sec"`
+	InboundMediaRetryCount           int    `koanf:"inbound_media_retry_count"`
+	InboundMediaRetryDelayMs         int    `koanf:"inbound_media_retry_delay_ms"`
+	InboundMediaRetryMaxDelayMs      int    `koanf:"inbound_media_retry_max_delay_ms"`
+	InboundMediaAsyncRetryCount      int    `koanf:"inbound_media_async_retry_count"`
+	InboundMediaAsyncRetryDelayMs    int    `koanf:"inbound_media_async_retry_delay_ms"`
+	InboundMediaAsyncRetryMaxDelayMs int    `koanf:"inbound_media_async_retry_max_delay_ms"`
+	Identity                         string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")
+	TypingIndicatorEnabled           bool   `koanf:"typing_indicator_enabled"`
+	TypingMinDelayMs                 int    `koanf:"typing_min_delay_ms"`
+	TypingMaxDelayMs                 int    `koanf:"typing_max_delay_ms"`
+	TypingCharDelayMs                int    `koanf:"typing_char_delay_ms"`
+	TypingCooldownMs                 int    `koanf:"typing_cooldown_ms"`
 }
 
 type AIConfig struct {
@@ -139,7 +160,7 @@ func Load(configPath string) (*Config, error) {
 	// Load from environment variables (WHATOMATE_ prefix)
 	// e.g., WHATOMATE_DATABASE_HOST -> database.host
 	if err := k.Load(env.Provider("WHATOMATE_", ".", func(s string) string {
-		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "WHATOMATE_")), "_", ".")
+		return envKeyToKoanfPath(s)
 	}), nil); err != nil {
 		return nil, err
 	}
@@ -153,6 +174,30 @@ func Load(configPath string) (*Config, error) {
 	setDefaults(&cfg)
 
 	return &cfg, nil
+}
+
+func envKeyToKoanfPath(raw string) string {
+	key := strings.ToLower(strings.TrimPrefix(raw, "WHATOMATE_"))
+	if key == "" {
+		return ""
+	}
+
+	for _, section := range envTopLevelSections {
+		if key == section {
+			return section
+		}
+		prefix := section + "_"
+		if strings.HasPrefix(key, prefix) {
+			remainder := strings.TrimPrefix(key, prefix)
+			if remainder == "" {
+				return section
+			}
+			return section + "." + remainder
+		}
+	}
+
+	// Fallback for unknown keys to preserve legacy behavior.
+	return strings.ReplaceAll(key, "_", ".")
 }
 
 func setDefaults(cfg *Config) {
@@ -227,6 +272,24 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Whatsmeow.UploadRetryDelaySec == 0 {
 		cfg.Whatsmeow.UploadRetryDelaySec = 2
+	}
+	if cfg.Whatsmeow.InboundMediaRetryCount == 0 {
+		cfg.Whatsmeow.InboundMediaRetryCount = 3
+	}
+	if cfg.Whatsmeow.InboundMediaRetryDelayMs == 0 {
+		cfg.Whatsmeow.InboundMediaRetryDelayMs = 500
+	}
+	if cfg.Whatsmeow.InboundMediaRetryMaxDelayMs == 0 {
+		cfg.Whatsmeow.InboundMediaRetryMaxDelayMs = 2000
+	}
+	if cfg.Whatsmeow.InboundMediaAsyncRetryCount == 0 {
+		cfg.Whatsmeow.InboundMediaAsyncRetryCount = 4
+	}
+	if cfg.Whatsmeow.InboundMediaAsyncRetryDelayMs == 0 {
+		cfg.Whatsmeow.InboundMediaAsyncRetryDelayMs = 5000
+	}
+	if cfg.Whatsmeow.InboundMediaAsyncRetryMaxDelayMs == 0 {
+		cfg.Whatsmeow.InboundMediaAsyncRetryMaxDelayMs = 60000
 	}
 	if !cfg.Whatsmeow.TypingIndicatorEnabled {
 		// Default to enabled to improve human-like direct chat sends unless explicitly disabled in config.

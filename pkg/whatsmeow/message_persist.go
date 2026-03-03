@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
 	waClient "go.mau.fi/whatsmeow"
@@ -24,6 +25,18 @@ type persistMessageOptions struct {
 	HistorySync   bool
 	UpdateMetrics bool
 }
+
+const (
+	inboundMediaAsyncStatusKey         = "inbound_media_async_status"
+	inboundMediaAsyncEnqueuedAtKey     = "inbound_media_async_enqueued_at"
+	inboundMediaAsyncLastErrorKey      = "inbound_media_async_last_error"
+	inboundMediaAsyncEnqueueErrorKey   = "inbound_media_async_enqueue_error"
+	inboundMediaAsyncRecoveredAtKey    = "inbound_media_async_recovered_at"
+	inboundMediaAsyncStatusQueued      = "queued"
+	inboundMediaAsyncStatusEnqueueFail = "enqueue_failed"
+	inboundMediaAsyncStatusSucceeded   = "succeeded"
+	inboundMediaAsyncStatusFailed      = "failed"
+)
 
 var wamidPhonePattern = regexp.MustCompile(`\d{10,15}`)
 
@@ -121,7 +134,7 @@ func (cm *ConnectionManager) persistParsedMessage(
 	if !opts.AllowFromMe && evt.Info.IsFromMe {
 		return nil, nil
 	}
-	if evt.Info.Chat == types.StatusBroadcastJID {
+	if isStatusMessageInfo(evt.Info) {
 		return nil, nil
 	}
 
@@ -227,7 +240,7 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 	cm.scheduleContactAvatarRefresh(instanceID, contact)
 
-	msgType, content, mediaURL, mimeType, filename := cm.extractMessageContent(ctx, client, evt.Message)
+	msgType, content, mediaURL, mimeType, filename, mediaRetryArtifact := cm.extractMessageContentWithMediaRetryArtifact(ctx, client, evt.Message)
 	if msgType == models.MessageTypeIgnore {
 		return nil, nil
 	}
@@ -370,6 +383,43 @@ func (cm *ConnectionManager) persistParsedMessage(
 	if err := cm.db.WithContext(ctx).Create(&message).Error; err != nil {
 		return nil, fmt.Errorf("failed to save message: %w", err)
 	}
+
+	if direction == models.DirectionIncoming && mediaRetryArtifact != nil {
+		enqueueErr := cm.enqueueInboundMediaRecovery(ctx, &message, mediaRetryArtifact)
+
+		nextMetadata := cloneJSONBMap(message.Metadata)
+		if nextMetadata == nil {
+			nextMetadata = models.JSONB{}
+		}
+		nextMetadata[inboundMediaAsyncLastErrorKey] = strings.TrimSpace(mediaRetryArtifact.LastError)
+		nextMetadata[inboundMediaAsyncRecoveredAtKey] = nil
+
+		var nextErrorMessage string
+		if enqueueErr == nil {
+			nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusQueued
+			nextMetadata[inboundMediaAsyncEnqueuedAtKey] = time.Now().UTC().Format(time.RFC3339Nano)
+			delete(nextMetadata, inboundMediaAsyncEnqueueErrorKey)
+			nextErrorMessage = "Inbound media download failed inline; queued for async recovery"
+		} else {
+			nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusEnqueueFail
+			nextMetadata[inboundMediaAsyncEnqueueErrorKey] = enqueueErr.Error()
+			nextErrorMessage = fmt.Sprintf("Inbound media download failed inline and async enqueue failed: %v", enqueueErr)
+		}
+
+		if err := cm.db.WithContext(ctx).
+			Model(&models.Message{}).
+			Where("id = ?", message.ID).
+			Updates(map[string]any{
+				"metadata":      nextMetadata,
+				"error_message": nextErrorMessage,
+			}).Error; err != nil {
+			cm.logger.Warn("Failed to persist inbound media async recovery marker", "message_id", message.ID, "error", err)
+		} else {
+			message.Metadata = nextMetadata
+			message.ErrorMessage = nextErrorMessage
+		}
+	}
+
 	if direction == models.DirectionIncoming {
 		cm.maybeCaptureChatCloseRating(ctx, orgID, contact, &message)
 	}
@@ -437,6 +487,49 @@ func (cm *ConnectionManager) persistParsedMessage(
 	cm.logger.Info("Message persisted", logFields...)
 
 	return &message, nil
+}
+
+func (cm *ConnectionManager) enqueueInboundMediaRecovery(ctx context.Context, message *models.Message, artifact *inboundMediaRetryArtifact) error {
+	if cm == nil {
+		return fmt.Errorf("connection manager is nil")
+	}
+	if cm.inboundMediaQueue == nil {
+		return fmt.Errorf("inbound media queue is not configured")
+	}
+	if message == nil {
+		return fmt.Errorf("message is nil")
+	}
+	if artifact == nil {
+		return fmt.Errorf("inbound media retry artifact is nil")
+	}
+	if message.InstanceID == nil || *message.InstanceID == uuid.Nil {
+		return fmt.Errorf("message %s has no instance id for inbound media recovery", message.ID)
+	}
+	if strings.TrimSpace(artifact.MediaPayloadBase64) == "" {
+		return fmt.Errorf("inbound media retry artifact is missing media payload")
+	}
+	if strings.TrimSpace(artifact.MediaKind) == "" {
+		return fmt.Errorf("inbound media retry artifact is missing media kind")
+	}
+
+	job := &queue.InboundMediaJob{
+		MessageID:          message.ID,
+		OrganizationID:     message.OrganizationID,
+		InstanceID:         *message.InstanceID,
+		WhatsAppMessageID:  strings.TrimSpace(message.WhatsAppMessageID),
+		MessageType:        message.MessageType,
+		MediaKind:          strings.TrimSpace(artifact.MediaKind),
+		MimeType:           strings.TrimSpace(artifact.MimeType),
+		FallbackFilename:   strings.TrimSpace(artifact.FallbackFilename),
+		MediaPayloadBase64: strings.TrimSpace(artifact.MediaPayloadBase64),
+		LastError:          strings.TrimSpace(artifact.LastError),
+	}
+
+	if err := cm.inboundMediaQueue.EnqueueInboundMedia(ctx, job); err != nil {
+		return fmt.Errorf("failed to enqueue inbound media recovery job for message %s: %w", message.ID, err)
+	}
+
+	return nil
 }
 
 func (cm *ConnectionManager) reconcilePendingOutgoingMessage(
@@ -551,6 +644,15 @@ func (cm *ConnectionManager) broadcastPersistedMessage(
 			}
 			if replyCtx.ReplySenderPhone != "" {
 				replyPreviewPayload["sender_phone"] = replyCtx.ReplySenderPhone
+			}
+			if replyCtx.ReplyPreviewMediaURL != "" {
+				replyPreviewPayload["media_url"] = replyCtx.ReplyPreviewMediaURL
+			}
+			if replyCtx.ReplyPreviewMediaMimeType != "" {
+				replyPreviewPayload["media_mime_type"] = replyCtx.ReplyPreviewMediaMimeType
+			}
+			if replyCtx.ReplyPreviewMediaFilename != "" {
+				replyPreviewPayload["media_filename"] = replyCtx.ReplyPreviewMediaFilename
 			}
 			wsPayload["reply_to_message"] = replyPreviewPayload
 		}

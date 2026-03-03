@@ -2,9 +2,11 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
@@ -30,17 +32,26 @@ type Worker struct {
 	WhatsApp        *whatsapp.Client
 	MessageProvider provider.MessageProvider
 	Consumer        *queue.RedisConsumer
+	InboundConsumer *queue.RedisConsumer
 	Publisher       *queue.Publisher
 }
 
 // Ensure Worker implements JobHandler interface
 var _ queue.JobHandler = (*Worker)(nil)
 
+type inboundMediaJobProcessor interface {
+	ProcessInboundMediaJob(ctx context.Context, job *queue.InboundMediaJob) error
+}
+
 // New creates a new Worker instance
 func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, messageProvider provider.MessageProvider) (*Worker, error) {
 	consumer, err := queue.NewRedisConsumer(rdb, log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consumer: %w", err)
+	}
+	inboundConsumer, err := queue.NewRedisInboundMediaConsumer(rdb, log)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create inbound-media consumer: %w", err)
 	}
 
 	publisher := queue.NewPublisher(rdb, log)
@@ -53,6 +64,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, me
 		WhatsApp:        whatsapp.NewWithBaseURL(log, cfg.WhatsApp.BaseURL),
 		MessageProvider: messageProvider,
 		Consumer:        consumer,
+		InboundConsumer: inboundConsumer,
 		Publisher:       publisher,
 	}, nil
 }
@@ -61,9 +73,46 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, me
 func (w *Worker) Run(ctx context.Context) error {
 	w.Log.Info("Worker starting")
 
-	err := w.Consumer.Consume(ctx, w)
-	if err != nil && ctx.Err() == nil {
-		return fmt.Errorf("consumer error: %w", err)
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+
+	startConsumer := func(name string, consumer *queue.RedisConsumer) {
+		if consumer == nil {
+			return
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := consumer.Consume(runCtx, w); err != nil && !errors.Is(err, context.Canceled) {
+				errCh <- fmt.Errorf("%s consumer error: %w", name, err)
+			}
+		}()
+	}
+
+	startConsumer("campaign", w.Consumer)
+	startConsumer("inbound_media", w.InboundConsumer)
+
+	var retErr error
+	select {
+	case <-ctx.Done():
+		retErr = ctx.Err()
+	case err := <-errCh:
+		retErr = err
+	}
+
+	cancel()
+	wg.Wait()
+
+	if errors.Is(retErr, context.Canceled) {
+		w.Log.Info("Worker stopped")
+		return retErr
+	}
+	if retErr != nil {
+		return retErr
 	}
 
 	w.Log.Info("Worker stopped")
@@ -253,6 +302,65 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 
 	// Check if campaign is complete (all recipients processed)
 	w.checkCampaignCompletion(ctx, job.CampaignID, job.OrganizationID)
+
+	return nil
+}
+
+// HandleInboundMediaJob processes a single inbound-media recovery job.
+func (w *Worker) HandleInboundMediaJob(ctx context.Context, job *queue.InboundMediaJob) error {
+	if job == nil {
+		return queue.NewPermanentError(fmt.Errorf("inbound media job is nil"))
+	}
+	if job.MessageID == uuid.Nil {
+		return queue.NewPermanentError(fmt.Errorf("inbound media job missing message_id"))
+	}
+	if job.OrganizationID == uuid.Nil {
+		return queue.NewPermanentError(fmt.Errorf("inbound media job missing organization_id"))
+	}
+	if job.InstanceID == uuid.Nil {
+		return queue.NewPermanentError(fmt.Errorf("inbound media job missing instance_id"))
+	}
+	if strings.TrimSpace(job.MediaKind) == "" {
+		return queue.NewPermanentError(fmt.Errorf("inbound media job missing media_kind"))
+	}
+	if strings.TrimSpace(job.MediaPayloadBase64) == "" {
+		return queue.NewPermanentError(fmt.Errorf("inbound media job missing media_payload_base64"))
+	}
+
+	var message models.Message
+	if err := w.DB.WithContext(ctx).
+		Select("id", "organization_id", "instance_id", "media_url").
+		Where("id = ? AND organization_id = ?", job.MessageID, job.OrganizationID).
+		First(&message).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return queue.NewPermanentError(fmt.Errorf("message %s not found in organization %s", job.MessageID, job.OrganizationID))
+		}
+		return fmt.Errorf("failed to load target message %s: %w", job.MessageID, err)
+	}
+
+	if strings.TrimSpace(message.MediaURL) != "" {
+		w.Log.Debug("Skipping inbound media job because message already has media_url",
+			"message_id", message.ID,
+			"organization_id", job.OrganizationID,
+		)
+		return nil
+	}
+
+	if message.InstanceID == nil {
+		return queue.NewPermanentError(fmt.Errorf("message %s has no instance_id", message.ID))
+	}
+	if *message.InstanceID != job.InstanceID {
+		return queue.NewPermanentError(fmt.Errorf("message %s instance mismatch: message=%s job=%s", message.ID, message.InstanceID.String(), job.InstanceID.String()))
+	}
+
+	processor, ok := w.MessageProvider.(inboundMediaJobProcessor)
+	if !ok || processor == nil {
+		return queue.NewPermanentError(fmt.Errorf("message provider does not support inbound media recovery"))
+	}
+
+	if err := processor.ProcessInboundMediaJob(ctx, job); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -504,7 +612,14 @@ func (w *Worker) decryptAccountSecrets(account *models.WhatsAppAccount) {
 // Close cleans up worker resources
 func (w *Worker) Close() error {
 	if w.Consumer != nil {
-		return w.Consumer.Close()
+		if err := w.Consumer.Close(); err != nil {
+			return err
+		}
+	}
+	if w.InboundConsumer != nil {
+		if err := w.InboundConsumer.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

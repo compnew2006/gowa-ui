@@ -40,6 +40,9 @@ export interface ReplyPreview {
   message_type: string;
   direction: "incoming" | "outgoing";
   sender_phone?: string;
+  media_url?: string;
+  media_mime_type?: string;
+  media_filename?: string;
 }
 
 export interface Reaction {

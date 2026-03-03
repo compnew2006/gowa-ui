@@ -247,8 +247,12 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "No media found", nil, "")
 	}
 
+	return a.serveLocalMediaFile(r, message.MediaURL, message.MediaMimeType)
+}
+
+func (a *App) serveLocalMediaFile(r *fastglue.Request, relativePath, mimeHint string) error {
 	// Security: prevent directory traversal and symlink attacks
-	filePath := filepath.Clean(message.MediaURL)
+	filePath := filepath.Clean(relativePath)
 	baseDir, err := filepath.Abs(a.getMediaStoragePath())
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Storage configuration error", nil, "")
@@ -276,8 +280,8 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 
 	// Determine content type from message metadata first, then extension fallback.
 	contentType := "application/octet-stream"
-	if message.MediaMimeType != "" {
-		contentType = strings.TrimSpace(strings.Split(strings.ToLower(message.MediaMimeType), ";")[0])
+	if mimeHint != "" {
+		contentType = strings.TrimSpace(strings.Split(strings.ToLower(mimeHint), ";")[0])
 	}
 	ext := strings.ToLower(filepath.Ext(filePath))
 	if contentType == "" {

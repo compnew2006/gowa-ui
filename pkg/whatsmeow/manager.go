@@ -9,6 +9,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
 	"github.com/zerodha/logf"
@@ -39,7 +40,12 @@ type ConnectionManager struct {
 	qrCodes         map[uuid.UUID]cachedQRCode
 	typingIndicator *typingIndicatorPlanner
 	// mediaStoragePath is the local root directory where inbound media is persisted.
-	mediaStoragePath string
+	mediaStoragePath  string
+	inboundMediaQueue inboundMediaJobEnqueuer
+}
+
+type inboundMediaJobEnqueuer interface {
+	EnqueueInboundMedia(ctx context.Context, job *queue.InboundMediaJob) error
 }
 
 type cachedQRCode struct {
@@ -72,6 +78,14 @@ func NewConnectionManager(db *gorm.DB, store *sqlstore.Container, logger logf.Lo
 	}
 	cm.connectFn = cm.Connect
 	return cm
+}
+
+// SetInboundMediaQueue configures the queue used for async inbound-media recovery jobs.
+func (cm *ConnectionManager) SetInboundMediaQueue(q inboundMediaJobEnqueuer) {
+	if cm == nil {
+		return
+	}
+	cm.inboundMediaQueue = q
 }
 
 // Connect initializes and connects a WhatsApp instance
@@ -170,7 +184,7 @@ func (cm *ConnectionManager) Connect(ctx context.Context, instanceID uuid.UUID) 
 
 	// 4. Create whatsmeow client
 	// Use a sub-logger for whatsmeow
-	clientLog := waLog.Stdout("Client", "DEBUG", true)
+	clientLog := newClientLogger(waLog.Stdout("Client", "DEBUG", true))
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 	identityPrefix := ""
 	if cm.cfg != nil {

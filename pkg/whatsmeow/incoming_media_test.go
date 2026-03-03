@@ -2,15 +2,23 @@ package whatsmeow
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/zerodha/logf"
+	waClient "go.mau.fi/whatsmeow"
 	waCommon "go.mau.fi/whatsmeow/proto/waCommon"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"google.golang.org/protobuf/proto"
@@ -22,6 +30,19 @@ func newTestConnectionManager(t *testing.T) *ConnectionManager {
 		logger:           logf.New(logf.Opts{}),
 		mediaStoragePath: t.TempDir(),
 	}
+}
+
+type stubInboundMediaDownloader struct {
+	attempts int
+	download func(attempt int) ([]byte, error)
+}
+
+func (s *stubInboundMediaDownloader) Download(_ context.Context, _ waClient.DownloadableMessage) ([]byte, error) {
+	s.attempts++
+	if s.download == nil {
+		return nil, fmt.Errorf("download stub is not configured")
+	}
+	return s.download(s.attempts)
 }
 
 func TestExtractMessageContentWithMedia_FileTypes_NoClient(t *testing.T) {
@@ -522,4 +543,193 @@ func TestPersistInboundMedia_GeneratesUniqueNames(t *testing.T) {
 	if _, parseErr := uuid.Parse(strings.TrimSuffix(filepath.Base(first), filepath.Ext(first))); parseErr != nil {
 		t.Fatalf("expected UUID filename, got %q", filepath.Base(first))
 	}
+}
+
+func TestShouldRetryInboundMediaDownload(t *testing.T) {
+	t.Run("nil error is not retryable", func(t *testing.T) {
+		if shouldRetryInboundMediaDownload(nil) {
+			t.Fatalf("expected nil error to be non-retryable")
+		}
+	})
+
+	t.Run("context canceled is not retryable", func(t *testing.T) {
+		if shouldRetryInboundMediaDownload(context.Canceled) {
+			t.Fatalf("expected context.Canceled to be non-retryable")
+		}
+	})
+
+	t.Run("deadline exceeded is not retryable", func(t *testing.T) {
+		if shouldRetryInboundMediaDownload(fmt.Errorf("wrapped: %w", context.DeadlineExceeded)) {
+			t.Fatalf("expected context.DeadlineExceeded to be non-retryable")
+		}
+	})
+
+	t.Run("other errors are retryable", func(t *testing.T) {
+		if !shouldRetryInboundMediaDownload(errors.New("hash of media ciphertext doesn't match")) {
+			t.Fatalf("expected hash mismatch to be retryable")
+		}
+	})
+}
+
+func TestInboundMediaDownloadBackoff(t *testing.T) {
+	base := 500 * time.Millisecond
+	max := 2 * time.Second
+
+	tests := []struct {
+		name          string
+		failedAttempt int
+		want          time.Duration
+	}{
+		{name: "attempt 1", failedAttempt: 1, want: 500 * time.Millisecond},
+		{name: "attempt 2", failedAttempt: 2, want: 1 * time.Second},
+		{name: "attempt 3 capped", failedAttempt: 3, want: 2 * time.Second},
+		{name: "attempt 4 still capped", failedAttempt: 4, want: 2 * time.Second},
+		{name: "attempt below one clamps", failedAttempt: 0, want: 500 * time.Millisecond},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := inboundMediaDownloadBackoff(tc.failedAttempt, base, max)
+			if got != tc.want {
+				t.Fatalf("backoff mismatch: got %v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestInboundMediaDownloadRetrySettings(t *testing.T) {
+	t.Run("uses defaults without config", func(t *testing.T) {
+		cm := newTestConnectionManager(t)
+		attempts, baseBackoff, maxBackoff := cm.inboundMediaDownloadRetrySettings()
+		if attempts != defaultInboundMediaDownloadMaxAttempts {
+			t.Fatalf("attempts mismatch: got %d want %d", attempts, defaultInboundMediaDownloadMaxAttempts)
+		}
+		if baseBackoff != defaultInboundMediaDownloadBaseBackoff {
+			t.Fatalf("base backoff mismatch: got %v want %v", baseBackoff, defaultInboundMediaDownloadBaseBackoff)
+		}
+		if maxBackoff != defaultInboundMediaDownloadMaxBackoff {
+			t.Fatalf("max backoff mismatch: got %v want %v", maxBackoff, defaultInboundMediaDownloadMaxBackoff)
+		}
+	})
+
+	t.Run("uses explicit config", func(t *testing.T) {
+		cm := newTestConnectionManager(t)
+		cm.cfg = &config.WhatsmeowConfig{
+			InboundMediaRetryCount:      5,
+			InboundMediaRetryDelayMs:    250,
+			InboundMediaRetryMaxDelayMs: 3000,
+		}
+		attempts, baseBackoff, maxBackoff := cm.inboundMediaDownloadRetrySettings()
+		if attempts != 5 {
+			t.Fatalf("attempts mismatch: got %d want 5", attempts)
+		}
+		if baseBackoff != 250*time.Millisecond {
+			t.Fatalf("base backoff mismatch: got %v want %v", baseBackoff, 250*time.Millisecond)
+		}
+		if maxBackoff != 3*time.Second {
+			t.Fatalf("max backoff mismatch: got %v want %v", maxBackoff, 3*time.Second)
+		}
+	})
+}
+
+func TestDownloadAndPersistIncomingMedia_BuildsArtifactAfterFinalInlineFailure(t *testing.T) {
+	cm := newTestConnectionManager(t)
+	cm.cfg = &config.WhatsmeowConfig{
+		InboundMediaRetryCount:      2,
+		InboundMediaRetryDelayMs:    0,
+		InboundMediaRetryMaxDelayMs: 0,
+	}
+
+	media := &waE2E.DocumentMessage{
+		FileName: proto.String("invoice.pdf"),
+		Mimetype: proto.String("application/pdf"),
+	}
+	downloader := &stubInboundMediaDownloader{
+		download: func(attempt int) ([]byte, error) {
+			return nil, fmt.Errorf("download failed attempt %d", attempt)
+		},
+	}
+
+	mediaURL, artifact := cm.downloadAndPersistIncomingMedia(
+		context.Background(),
+		downloader,
+		media,
+		models.MessageTypeDocument,
+		"application/pdf",
+		"invoice.pdf",
+	)
+
+	require.Equal(t, "", mediaURL)
+	require.NotNil(t, artifact)
+	assert.Equal(t, "document", artifact.MediaKind)
+	assert.Equal(t, "application/pdf", artifact.MimeType)
+	assert.Equal(t, "invoice.pdf", artifact.FallbackFilename)
+	assert.Contains(t, artifact.LastError, "attempt 2")
+	assert.Equal(t, 2, downloader.attempts)
+
+	rawPayload, err := base64.StdEncoding.DecodeString(artifact.MediaPayloadBase64)
+	require.NoError(t, err)
+	var decoded waE2E.DocumentMessage
+	require.NoError(t, proto.Unmarshal(rawPayload, &decoded))
+	assert.Equal(t, "invoice.pdf", decoded.GetFileName())
+}
+
+func TestDownloadAndPersistIncomingMedia_NoArtifactOnInlineSuccess(t *testing.T) {
+	cm := newTestConnectionManager(t)
+	cm.cfg = &config.WhatsmeowConfig{
+		InboundMediaRetryCount:      2,
+		InboundMediaRetryDelayMs:    0,
+		InboundMediaRetryMaxDelayMs: 0,
+	}
+
+	downloader := &stubInboundMediaDownloader{
+		download: func(attempt int) ([]byte, error) {
+			return []byte("ok"), nil
+		},
+	}
+
+	mediaURL, artifact := cm.downloadAndPersistIncomingMedia(
+		context.Background(),
+		downloader,
+		&waE2E.DocumentMessage{
+			FileName: proto.String("report.pdf"),
+			Mimetype: proto.String("application/pdf"),
+		},
+		models.MessageTypeDocument,
+		"application/pdf",
+		"report.pdf",
+	)
+
+	require.NotEmpty(t, mediaURL)
+	require.Nil(t, artifact)
+	assert.Equal(t, 1, downloader.attempts)
+
+	absPath := filepath.Join(cm.mediaStoragePath, filepath.FromSlash(mediaURL))
+	data, err := os.ReadFile(absPath)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", string(data))
+}
+
+func TestInboundMediaAsyncRetrySettings(t *testing.T) {
+	t.Run("uses defaults without config", func(t *testing.T) {
+		cm := newTestConnectionManager(t)
+		attempts, baseBackoff, maxBackoff := cm.inboundMediaAsyncRetrySettings()
+		assert.Equal(t, defaultInboundMediaAsyncMaxAttempts, attempts)
+		assert.Equal(t, defaultInboundMediaAsyncBaseBackoff, baseBackoff)
+		assert.Equal(t, defaultInboundMediaAsyncMaxBackoff, maxBackoff)
+	})
+
+	t.Run("uses configured values", func(t *testing.T) {
+		cm := newTestConnectionManager(t)
+		cm.cfg = &config.WhatsmeowConfig{
+			InboundMediaAsyncRetryCount:      7,
+			InboundMediaAsyncRetryDelayMs:    2500,
+			InboundMediaAsyncRetryMaxDelayMs: 12000,
+		}
+
+		attempts, baseBackoff, maxBackoff := cm.inboundMediaAsyncRetrySettings()
+		assert.Equal(t, 7, attempts)
+		assert.Equal(t, 2500*time.Millisecond, baseBackoff)
+		assert.Equal(t, 12*time.Second, maxBackoff)
+	})
 }

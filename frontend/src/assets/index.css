@@ -445,6 +445,22 @@
   color: #4ade80;
 }
 
+.reply-preview-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reply-preview-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
 .light .reply-preview {
   background: rgba(0, 0, 0, 0.04);
   border-left-color: #16a34a;
@@ -471,6 +487,10 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
+.chat-bubble-outgoing .reply-preview-thumb {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
 .light .chat-bubble-outgoing .reply-preview {
   background: rgba(0, 0, 0, 0.08);
   border-left-color: #166534;
@@ -482,6 +502,10 @@
 
 .light .chat-bubble-outgoing .reply-preview .font-medium {
   color: #166534;
+}
+
+.light .reply-preview-thumb {
+  border-color: rgba(0, 0, 0, 0.2);
 }
 
 /* Button reply style - shows when user clicks a button */

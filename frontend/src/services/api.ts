@@ -290,6 +290,79 @@ export const messagesService = {
     api.post(`/contacts/${contactId}/messages/${messageId}/revoke`)
 }
 
+export interface WhatsAppStatusItem {
+  id: string
+  instance_id: string
+  instance_name: string
+  sender_jid: string
+  sender_name: string
+  whatsapp_message_id: string
+  status_type: 'text' | 'image' | 'video'
+  content: string
+  media_url?: string
+  media_mime_type?: string
+  media_filename?: string
+  text_argb?: number
+  background_argb?: number
+  font?: string
+  is_self: boolean
+  seen_at?: string
+  created_at: string
+  expires_at: string
+}
+
+export interface WhatsAppStatusGroup {
+  group_id: string
+  instance_id: string
+  instance_name: string
+  sender_jid: string
+  sender_name: string
+  is_self: boolean
+  statuses: WhatsAppStatusItem[]
+}
+
+export interface WhatsAppStatusesListPayload {
+  groups: WhatsAppStatusGroup[]
+  total: number
+}
+
+export type WhatsAppStatusesListResponse =
+  | WhatsAppStatusesListPayload
+  | { status?: string; data: WhatsAppStatusesListPayload }
+
+export const statusesService = {
+  list: (params?: { instance_id?: string }) =>
+    api.get<WhatsAppStatusesListResponse>('/statuses', { params }),
+  sendText: (instanceId: string, data: {
+    text: string
+    text_argb?: number
+    background_argb?: number
+    font?: string
+  }) =>
+    api.post(`/instances/${instanceId}/status/send`, {
+      type: 'text',
+      ...data
+    }),
+  sendMedia: (instanceId: string, file: File, options: {
+    type: 'image' | 'video'
+    caption?: string
+  }) => {
+    const formData = new FormData()
+    formData.append('type', options.type)
+    if (options.caption) {
+      formData.append('caption', options.caption)
+    }
+    formData.append('file', file)
+    return api.post(`/instances/${instanceId}/status/send`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  markSeen: (statusId: string) =>
+    api.post(`/statuses/${statusId}/mark-seen`),
+  reply: (statusId: string, text: string) =>
+    api.post(`/statuses/${statusId}/reply`, { text }),
+}
+
 export const templatesService = {
   list: (params?: { status?: string; category?: string; account?: string; search?: string; page?: number; limit?: number }) =>
     api.get<{ templates: any[]; total?: number }>('/templates', { params }),

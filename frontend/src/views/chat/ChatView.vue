@@ -148,6 +148,7 @@ import ContactInfoPanel from "@/components/chat/ContactInfoPanel.vue";
 import ConversationNotes from "@/components/chat/ConversationNotes.vue";
 import InstanceTag from "@/components/chat/InstanceTag.vue";
 import MediaGroupBar from "@/components/chat/MediaGroupBar.vue";
+import StatusStoriesBar from "@/components/chat/status/StatusStoriesBar.vue";
 import { useInstancesStore } from "@/stores/instances";
 import { useNotesStore } from "@/stores/notes";
 import { CreateContactDialog } from "@/components/shared";
@@ -418,6 +419,11 @@ const selectedFile = ref<File | null>(null);
 const selectedFileCategory = ref<WhatsAppMediaCategory | null>(null);
 const filePreviewUrl = ref<string | null>(null);
 const isMediaDialogOpen = ref(false);
+type ChatMediaViewerType = "image" | "video" | "audio" | "document";
+const isChatMediaViewerOpen = ref(false);
+const chatMediaViewerURL = ref("");
+const chatMediaViewerType = ref<ChatMediaViewerType>("image");
+const chatMediaViewerTitle = ref("");
 const isProfilePhotoDialogOpen = ref(false);
 const profilePhotoContact = ref<Contact | null>(null);
 const mediaCaption = ref("");
@@ -2000,7 +2006,19 @@ function getReplyPreviewContent(message: Message): string {
       ? displayBody.substring(0, 50) + "..."
       : displayBody;
   }
-  if (reply.message_type === "image") return "[Photo]";
+  if (reply.message_type === "image") {
+    const body =
+      typeof reply.content === "string"
+        ? reply.content
+        : reply.content?.body || "";
+    const displayBody = applyMentionDisplayNames(body);
+    if (displayBody.trim() !== "") {
+      return displayBody.length > 50
+        ? displayBody.substring(0, 50) + "..."
+        : displayBody;
+    }
+    return "[Photo]";
+  }
   if (reply.message_type === "video") return "[Video]";
   if (reply.message_type === "audio") return "[Audio]";
   if (reply.message_type === "document") return "[Document]";
@@ -2009,6 +2027,80 @@ function getReplyPreviewContent(message: Message): string {
     return "[Contact]";
   if (reply.message_type === "sticker") return "[Sticker]";
   return "[Message]";
+}
+
+function getReplyPreviewMediaURL(message: Message): string {
+  const rawURL =
+    typeof message.reply_to_message?.media_url === "string"
+      ? message.reply_to_message.media_url.trim()
+      : "";
+  if (!rawURL) return "";
+
+  const lower = rawURL.toLowerCase();
+  if (
+    lower.startsWith("http://") ||
+    lower.startsWith("https://") ||
+    lower.startsWith("data:") ||
+    rawURL.startsWith("/")
+  ) {
+    return rawURL;
+  }
+  return "";
+}
+
+function shouldShowReplyPreviewThumbnail(message: Message): boolean {
+  return (
+    message.reply_to_message?.message_type === "image" &&
+    getReplyPreviewMediaURL(message) !== ""
+  );
+}
+
+function resolveReplyPreviewMediaType(message: Message): ChatMediaViewerType {
+  const type = message.reply_to_message?.message_type;
+  if (type === "video") return "video";
+  if (type === "audio") return "audio";
+  if (type === "document") return "document";
+  return "image";
+}
+
+function openChatMediaViewer(
+  url: string,
+  type: ChatMediaViewerType,
+  title?: string,
+): void {
+  const normalizedURL = typeof url === "string" ? url.trim() : "";
+  if (!normalizedURL) return;
+  chatMediaViewerURL.value = normalizedURL;
+  chatMediaViewerType.value = type;
+  chatMediaViewerTitle.value = (title || "").trim();
+  isChatMediaViewerOpen.value = true;
+}
+
+function closeChatMediaViewer(): void {
+  isChatMediaViewerOpen.value = false;
+  chatMediaViewerURL.value = "";
+  chatMediaViewerType.value = "image";
+  chatMediaViewerTitle.value = "";
+}
+
+function openReplyPreviewMedia(message: Message, event?: MouseEvent): void {
+  if (isBatchPrintSelectionMode.value) return;
+  if (isModifiedPointerEvent(event)) return;
+  const mediaURL = getReplyPreviewMediaURL(message);
+  if (!mediaURL) return;
+  event?.preventDefault();
+  event?.stopPropagation();
+  openChatMediaViewer(
+    mediaURL,
+    resolveReplyPreviewMediaType(message),
+    message.reply_to_message?.media_filename,
+  );
+}
+
+function handleReplyPreviewThumbnailError(event: Event): void {
+  const target = event.target as HTMLImageElement | null;
+  if (!target) return;
+  target.style.display = "none";
 }
 
 function getReplyAuthorLabel(message: Message): string {
@@ -2992,9 +3084,12 @@ function openMediaPreview(message: Message, event?: MouseEvent) {
   }
   if (isModifiedPointerEvent(event)) return;
   const url = getMediaBlobUrl(message);
-  if (url) {
-    window.open(url, "_blank");
-  }
+  if (!url) return;
+  openChatMediaViewer(
+    url,
+    message.message_type === "video" ? "video" : "image",
+    getAttachmentFilename(message),
+  );
 }
 
 function handleImageError(event: Event) {
@@ -3291,6 +3386,8 @@ async function sendMediaMessage() {
       "
       :style="{ width: `${contactsSidebarWidth}px` }"
     >
+      <StatusStoriesBar :instances="instancesStore.instances" />
+
       <!-- Search Header -->
       <div class="p-2 border-b border-white/[0.08] light:border-gray-200">
         <div class="flex items-center gap-2">
@@ -4215,9 +4312,19 @@ async function sendMediaMessage() {
                       <p class="font-medium">
                         {{ getReplyAuthorLabel(message) }}
                       </p>
-                      <p class="truncate">
-                        {{ getReplyPreviewContent(message) }}
-                      </p>
+                      <div class="reply-preview-content">
+                        <img
+                          v-if="shouldShowReplyPreviewThumbnail(message)"
+                          :src="getReplyPreviewMediaURL(message)"
+                          alt="Reply image preview"
+                          class="reply-preview-thumb"
+                          @click.stop="openReplyPreviewMedia(message, $event)"
+                          @error="handleReplyPreviewThumbnailError"
+                        />
+                        <p class="truncate">
+                          {{ getReplyPreviewContent(message) }}
+                        </p>
+                      </div>
                     </div>
                     <!-- Image message -->
                     <div
@@ -5253,6 +5360,69 @@ async function sendMediaMessage() {
               </p>
             </div>
           </ScrollArea>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Chat Media Viewer Dialog -->
+    <Dialog
+      v-model:open="isChatMediaViewerOpen"
+      @update:open="(open) => !open && closeChatMediaViewer()"
+    >
+      <DialogContent
+        class="max-w-4xl p-0 overflow-hidden border-white/10 light:border-gray-200"
+      >
+        <div
+          class="bg-black/95 light:bg-black/90 p-3 space-y-3"
+          data-testid="chat-media-viewer-dialog"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <DialogTitle class="text-sm font-medium text-white truncate">
+              {{ chatMediaViewerTitle || "Media Preview" }}
+            </DialogTitle>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-7 w-7 text-white hover:text-white"
+              @click="closeChatMediaViewer"
+            >
+              <X class="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div class="flex items-center justify-center min-h-[220px] max-h-[80vh]">
+            <img
+              v-if="chatMediaViewerType === 'image' && chatMediaViewerURL"
+              :src="chatMediaViewerURL"
+              alt="Media preview"
+              class="max-w-full max-h-[76vh] rounded-md object-contain"
+              data-testid="chat-media-viewer-image"
+            />
+            <video
+              v-else-if="chatMediaViewerType === 'video' && chatMediaViewerURL"
+              :src="chatMediaViewerURL"
+              controls
+              autoplay
+              class="max-w-full max-h-[76vh] rounded-md"
+              data-testid="chat-media-viewer-video"
+            />
+            <audio
+              v-else-if="chatMediaViewerType === 'audio' && chatMediaViewerURL"
+              :src="chatMediaViewerURL"
+              controls
+              class="w-full max-w-md"
+              data-testid="chat-media-viewer-audio"
+            />
+            <a
+              v-else-if="chatMediaViewerURL"
+              :href="chatMediaViewerURL"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-sm text-white underline underline-offset-4"
+            >
+              Open media in new tab
+            </a>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

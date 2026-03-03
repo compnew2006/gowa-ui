@@ -809,6 +809,11 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 			if senderPhone := extractMessageSenderPhone(replyToMsg.Metadata); senderPhone != "" {
 				replyPayload["sender_phone"] = senderPhone
 			}
+			if replyToMsg.MediaURL != "" {
+				replyPayload["media_url"] = replyToMsg.MediaURL
+				replyPayload["media_mime_type"] = replyToMsg.MediaMimeType
+				replyPayload["media_filename"] = replyToMsg.MediaFilename
+			}
 			payload["reply_to_message"] = replyPayload
 		}
 	}
