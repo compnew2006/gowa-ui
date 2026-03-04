@@ -26,7 +26,7 @@ func (a *App) getMediaStoragePath() string {
 // ensureMediaDir ensures the media directory exists
 func (a *App) ensureMediaDir(subdir string) error {
 	path := filepath.Join(a.getMediaStoragePath(), subdir)
-	return os.MkdirAll(path, 0755)
+	return os.MkdirAll(path, 0750)
 }
 
 // getExtensionFromMimeType returns file extension based on mime type
@@ -190,7 +190,7 @@ func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 
 	// Save file
 	filePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		return "", fmt.Errorf("failed to save media file: %w", err)
 	}
 
@@ -272,6 +272,7 @@ func (a *App) serveLocalMediaFile(r *fastglue.Request, relativePath, mimeHint st
 	}
 
 	// Read file
+	// #nosec G304 -- fullPath is sanitized and enforced under baseDir with symlink rejection.
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		a.Log.Error("Failed to read media file", "path", fullPath, "error", err)

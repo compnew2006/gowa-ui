@@ -777,11 +777,25 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 	}
 
 	// Update contact assignment
+	var previousContactAssigneeID *uuid.UUID
+	if transfer.Contact != nil && transfer.Contact.AssignedUserID != nil {
+		prev := *transfer.Contact.AssignedUserID
+		previousContactAssigneeID = &prev
+	}
 	if targetAgentID != nil && transfer.Contact != nil {
 		a.DB.Model(transfer.Contact).Updates(chatAssignmentUpdates(targetAgentID))
 	} else if targetAgentID == nil && transfer.Contact != nil {
 		// Clear assignment when unassigning
 		a.DB.Model(transfer.Contact).Updates(chatAssignmentUpdates(nil))
+	}
+	if transfer.Contact != nil {
+		_ = a.DB.Where("id = ?", transfer.Contact.ID).First(transfer.Contact).Error
+		if targetAgentID != nil {
+			assigneeChanged := previousContactAssigneeID == nil || *previousContactAssigneeID != *targetAgentID
+			if assigneeChanged {
+				a.appendAssignedChatSystemMessage(transfer.Contact, userID, targetAgentID)
+			}
+		}
 	}
 
 	// Broadcast WebSocket notification

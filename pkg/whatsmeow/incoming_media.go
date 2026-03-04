@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,6 +27,8 @@ import (
 const (
 	maxMessageUnwrapDepth = 8
 	deletedMessageCaption = "(This message was deleted)"
+	statusMentionCaption  = "[Status mention]"
+	sharePhoneCaption     = "[Phone number shared]"
 
 	defaultInboundMediaDownloadMaxAttempts = 3
 	defaultInboundMediaDownloadBaseBackoff = 500 * time.Millisecond
@@ -80,6 +83,17 @@ func (cm *ConnectionManager) extractMessageContentWithMediaRetryArtifact(
 		protocol.GetEditedMessage() != nil {
 		return cm.extractMessageContentWithMediaRetryArtifact(ctx, client, protocol.GetEditedMessage())
 	}
+	if protocol := unwrapped.GetProtocolMessage(); protocol != nil {
+		if msgType, content, handled := protocolMessageContent(protocol); handled {
+			return msgType, content, "", "", "", nil
+		}
+	}
+
+	// AlbumMessage is a control wrapper for a media collection; individual media
+	// payloads are delivered as separate messages and should be persisted instead.
+	if unwrapped.GetAlbumMessage() != nil {
+		return models.MessageTypeIgnore, "", "", "", "", nil
+	}
 
 	if msgType, content, ok := cm.extractTextualIncomingMessage(ctx, client, unwrapped); ok {
 		return msgType, content, "", "", "", nil
@@ -125,7 +139,7 @@ func (cm *ConnectionManager) extractMessageContentWithMediaRetryArtifact(
 
 	if doc := unwrapped.DocumentMessage; doc != nil {
 		caption := doc.GetCaption()
-		filename := strings.TrimSpace(doc.GetFileName())
+		filename := sanitizeIncomingFilename(doc.GetFileName())
 		mimeFallback := mimeTypeFromFilename(filename)
 		mimeType := sanitizeMimeType(doc.GetMimetype(), mimeFallback)
 		if mimeType == "" {
@@ -162,6 +176,11 @@ func (cm *ConnectionManager) extractTextualIncomingMessage(ctx context.Context, 
 		protocol.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT &&
 		protocol.GetEditedMessage() != nil {
 		return cm.extractTextualIncomingMessage(ctx, client, protocol.GetEditedMessage())
+	}
+	if protocol := msg.GetProtocolMessage(); protocol != nil {
+		if msgType, content, handled := protocolMessageContent(protocol); handled && msgType != models.MessageTypeIgnore {
+			return msgType, content, true
+		}
 	}
 
 	if templateReply := msg.GetTemplateButtonReplyMessage(); templateReply != nil {
@@ -446,6 +465,25 @@ func firstPollCreationMessage(msg *waE2E.Message) *waE2E.PollCreationMessage {
 		return poll
 	}
 	return nil
+}
+
+func protocolMessageContent(protocol *waE2E.ProtocolMessage) (models.MessageType, string, bool) {
+	if protocol == nil {
+		return models.MessageTypeText, "", false
+	}
+
+	switch protocol.GetType() {
+	case waE2E.ProtocolMessage_STATUS_MENTION_MESSAGE:
+		return models.MessageTypeText, statusMentionCaption, true
+	case waE2E.ProtocolMessage_SHARE_PHONE_NUMBER:
+		return models.MessageTypeText, sharePhoneCaption, true
+	case waE2E.ProtocolMessage_MESSAGE_EDIT:
+		return models.MessageTypeText, "", false
+	default:
+		// Most protocol messages are transport/control events and should not be
+		// persisted as user-facing chat messages.
+		return models.MessageTypeIgnore, "", true
+	}
 }
 
 func firstNonEmpty(values ...string) string {
@@ -826,14 +864,15 @@ func (cm *ConnectionManager) persistInboundMedia(data []byte, msgType models.Mes
 
 	subdir := inboundMediaSubdir(msgType, mimeType)
 	targetDir := filepath.Join(basePath, subdir)
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
+	if err := os.MkdirAll(targetDir, 0750); err != nil {
 		return "", fmt.Errorf("create media directory: %w", err)
 	}
 
-	ext := mediaFileExtension(mimeType, fallbackFilename)
+	resolvedMimeType := resolveInboundMediaMimeType(data, mimeType, fallbackFilename)
+	ext := mediaFileExtension(resolvedMimeType, fallbackFilename)
 	filename := uuid.NewString() + ext
 	absPath := filepath.Join(targetDir, filename)
-	if err := os.WriteFile(absPath, data, 0644); err != nil {
+	if err := os.WriteFile(absPath, data, 0600); err != nil {
 		return "", fmt.Errorf("write media file: %w", err)
 	}
 
@@ -877,8 +916,69 @@ func sanitizeMimeType(mimeType, fallback string) string {
 	return strings.ToLower(strings.TrimSpace(strings.Split(trimmed, ";")[0]))
 }
 
+func sanitizeIncomingFilename(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	normalized := strings.ReplaceAll(trimmed, "\\", "/")
+	base := strings.TrimSpace(filepath.Base(normalized))
+	if base == "" || base == "." || base == "/" || base == ".." {
+		return ""
+	}
+
+	// Strip control chars to avoid log/header injection if the name is surfaced.
+	clean := strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, base)
+	clean = strings.TrimSpace(clean)
+	if clean == "" || clean == "." || clean == ".." {
+		return ""
+	}
+
+	// Keep filesystem-safe max basename length.
+	if len(clean) > 255 {
+		clean = clean[:255]
+	}
+	return clean
+}
+
+func detectMimeTypeFromContent(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+
+	sniffBytes := data
+	if len(sniffBytes) > 512 {
+		sniffBytes = sniffBytes[:512]
+	}
+
+	return sanitizeMimeType(http.DetectContentType(sniffBytes), "")
+}
+
+func resolveInboundMediaMimeType(data []byte, declaredMimeType, fallbackFilename string) string {
+	detectedMimeType := detectMimeTypeFromContent(data)
+	if detectedMimeType != "" && detectedMimeType != "application/octet-stream" {
+		return detectedMimeType
+	}
+
+	fallbackMimeType := sanitizeMimeType(declaredMimeType, mimeTypeFromFilename(fallbackFilename))
+	if fallbackMimeType != "" {
+		return fallbackMimeType
+	}
+
+	if detectedMimeType != "" {
+		return detectedMimeType
+	}
+	return "application/octet-stream"
+}
+
 func mimeTypeFromFilename(filename string) string {
-	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(filename)))
+	ext := strings.ToLower(filepath.Ext(sanitizeIncomingFilename(filename)))
 	if ext == "" {
 		return ""
 	}
@@ -910,6 +1010,8 @@ func mediaFileExtension(mimeType, fallbackFilename string) string {
 		return ".3gp"
 	case "audio/ogg":
 		return ".ogg"
+	case "application/ogg":
+		return ".ogg"
 	case "audio/mpeg":
 		return ".mp3"
 	case "audio/mp4":
@@ -926,13 +1028,32 @@ func mediaFileExtension(mimeType, fallbackFilename string) string {
 	if cleanMime != "" {
 		exts, err := mime.ExtensionsByType(cleanMime)
 		if err == nil && len(exts) > 0 {
-			return strings.ToLower(exts[0])
+			return normalizeMediaFileExtension(exts[0])
 		}
 	}
 
-	if ext := strings.ToLower(filepath.Ext(strings.TrimSpace(fallbackFilename))); ext != "" {
-		return ext
+	if ext := strings.ToLower(filepath.Ext(sanitizeIncomingFilename(fallbackFilename))); ext != "" {
+		return normalizeMediaFileExtension(ext)
 	}
 
 	return ".bin"
+}
+
+func normalizeMediaFileExtension(ext string) string {
+	clean := strings.ToLower(strings.TrimSpace(ext))
+	if clean == "" {
+		return ".bin"
+	}
+	if !strings.HasPrefix(clean, ".") {
+		clean = "." + clean
+	}
+	if len(clean) > 17 || strings.ContainsAny(clean, `/\`) {
+		return ".bin"
+	}
+	for _, r := range clean[1:] {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return ".bin"
+		}
+	}
+	return clean
 }

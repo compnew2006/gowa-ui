@@ -3,7 +3,6 @@ package whatsmeow
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -194,7 +193,7 @@ func (q *InstanceQueue) process(job Job) {
 	// Random delay
 	delayMs := minDelay
 	if maxDelay > minDelay {
-		delayMs += rand.Intn(maxDelay - minDelay + 1)
+		delayMs += secureRandomIntn(maxDelay - minDelay + 1)
 	}
 	delay := time.Duration(delayMs) * time.Millisecond
 	time.Sleep(delay)

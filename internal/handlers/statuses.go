@@ -521,7 +521,7 @@ func parseStatusFont(raw string) (*waE2E.ExtendedTextMessage_FontType, error) {
 		return nil, nil
 	}
 
-	if numeric, err := strconv.Atoi(trimmed); err == nil {
+	if numeric, err := strconv.ParseInt(trimmed, 10, 32); err == nil {
 		font := waE2E.ExtendedTextMessage_FontType(numeric)
 		return &font, nil
 	}

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAsAdmin, loginAsAgent } from '../../helpers'
+import { loginAsAdmin, loginAsAgent, loginAsManager } from '../../helpers'
 
 test.describe('Agent Analytics', () => {
   test.beforeEach(async ({ page }) => {
@@ -39,6 +39,59 @@ test.describe('Agent Analytics', () => {
     await expect(page.getByText('Transfers Handled', { exact: true })).toBeVisible()
     await expect(page.getByText('Active Conversations', { exact: true })).toBeVisible()
   })
+
+  test('should apply agent + instance + date range filters together', async ({ page }) => {
+    let latestAnalyticsUrl = ''
+    page.on('request', (request) => {
+      if (request.url().includes('/api/analytics/agents') && !request.url().includes('/ratings/export')) {
+        latestAnalyticsUrl = request.url()
+      }
+    })
+
+    const comboboxes = page.locator('button[role="combobox"]')
+    await expect(comboboxes.first()).toBeVisible()
+
+    let selectedAgent = false
+    await comboboxes.nth(0).click()
+    const agentItems = page.locator('[cmdk-item]')
+    const agentCount = await agentItems.count()
+    if (agentCount > 1) {
+      await agentItems.nth(1).click()
+      selectedAgent = true
+    } else {
+      await page.keyboard.press('Escape')
+    }
+
+    let selectedInstance = false
+    await comboboxes.nth(1).click()
+    const instanceOptions = page.locator('[role="option"]')
+    const instanceCount = await instanceOptions.count()
+    if (instanceCount > 1) {
+      await instanceOptions.nth(1).click()
+      selectedInstance = true
+    } else {
+      await page.keyboard.press('Escape')
+    }
+
+    await comboboxes.nth(2).click()
+    const rangeOption = page.getByRole('option').filter({ hasText: /7|Last 7 Days/i }).first()
+    if (await rangeOption.count()) {
+      await rangeOption.click()
+    } else {
+      await page.keyboard.press('Escape')
+    }
+
+    await page.waitForLoadState('networkidle')
+    expect(latestAnalyticsUrl).toContain('/api/analytics/agents')
+    expect(latestAnalyticsUrl).toMatch(/from=\d{4}-\d{2}-\d{2}/)
+    expect(latestAnalyticsUrl).toMatch(/to=\d{4}-\d{2}-\d{2}/)
+    if (selectedAgent) {
+      expect(latestAnalyticsUrl).toContain('agent_id=')
+    }
+    if (selectedInstance) {
+      expect(latestAnalyticsUrl).toContain('instance_id=')
+    }
+  })
 })
 
 test.describe('Agent Analytics - Agent Role', () => {
@@ -49,5 +102,15 @@ test.describe('Agent Analytics - Agent Role', () => {
 
     // Agents should be able to see the analytics page (with limited data)
     await expect(page).toHaveURL(/\/analytics\/agents/)
+  })
+})
+
+test.describe('Agent Analytics - Manager Role', () => {
+  test('should show instance filter for manager users', async ({ page }) => {
+    await loginAsManager(page)
+    await page.goto('/analytics/agents')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByTestId('agent-analytics-instance-filter')).toBeVisible()
   })
 })

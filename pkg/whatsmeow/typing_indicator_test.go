@@ -39,7 +39,8 @@ func TestTypingIndicatorComputeDelayWithinBounds(t *testing.T) {
 		TypingCooldownMs:       800,
 	})
 	require.NotNil(t, planner)
-	planner.random = mrand.New(mrand.NewSource(1)) //nolint:gosec
+	source := mrand.New(mrand.NewSource(1)) //nolint:gosec
+	planner.randInt63n = source.Int63n
 
 	delay := planner.computeDelay("hello this is a long enough preview")
 

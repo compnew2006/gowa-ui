@@ -1,0 +1,86 @@
+=== Symbol Results ===
+
+Vulnerability #1: GO-2026-4559
+    Sending certain HTTP/2 frames can cause a server to panic in
+    golang.org/x/net
+  More info: https://pkg.go.dev/vuln/GO-2026-4559
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.50.0
+    Fixed in: golang.org/x/net@v0.51.0
+    Example traces found:
+      #1: internal/handlers/chat_close_ratings.go:1200:74: handlers.App.ExportAgentRatings calls http2.ConnectionError.Error
+      #2: internal/handlers/agent_transfers.go:1432:14: handlers.App.ReturnAgentTransfersToQueue calls logf.Logger.Error, which eventually calls http2.ErrCode.String
+      #3: internal/handlers/agent_transfers.go:1432:14: handlers.App.ReturnAgentTransfersToQueue calls logf.Logger.Error, which eventually calls http2.FrameHeader.String
+      #4: internal/handlers/agent_transfers.go:1432:14: handlers.App.ReturnAgentTransfersToQueue calls logf.Logger.Error, which eventually calls http2.FrameType.String
+      #5: internal/handlers/chat_close_ratings.go:1200:74: handlers.App.ExportAgentRatings calls http2.GoAwayError.Error
+      #6: internal/handlers/agent_transfers.go:1432:14: handlers.App.ReturnAgentTransfersToQueue calls logf.Logger.Error, which eventually calls http2.Setting.String
+      #7: internal/handlers/agent_transfers.go:1432:14: handlers.App.ReturnAgentTransfersToQueue calls logf.Logger.Error, which eventually calls http2.SettingID.String
+      #8: internal/handlers/chat_close_ratings.go:1200:74: handlers.App.ExportAgentRatings calls http2.StreamError.Error
+      #9: internal/handlers/chat_close_ratings.go:1242:14: handlers.App.ExportAgentRatings calls csv.Writer.Flush, which eventually calls http2.bufferedWriterTimeoutWriter.Write
+      #10: internal/handlers/chat_close_ratings.go:1242:14: handlers.App.ExportAgentRatings calls csv.Writer.Flush, which eventually calls http2.chunkWriter.Write
+      #11: internal/handlers/chat_close_ratings.go:1200:74: handlers.App.ExportAgentRatings calls http2.connError.Error
+      #12: internal/handlers/chat_close_ratings.go:1200:74: handlers.App.ExportAgentRatings calls http2.duplicatePseudoHeaderError.Error
+      #13: pkg/whatsapp/client.go:504:36: whatsapp.ResumableUpload calls http2.gzipReader.Close
+      #14: internal/handlers/campaigns.go:1117:25: handlers.App.UploadCampaignMedia calls io.ReadAll, which calls http2.gzipReader.Read
+      #15: internal/handlers/chat_close_ratings.go:1200:74: handlers.App.ExportAgentRatings calls http2.headerFieldNameError.Error
+      #16: internal/handlers/chat_close_ratings.go:1200:74: handlers.App.ExportAgentRatings calls http2.headerFieldValueError.Error
+      #17: internal/handlers/chat_close_ratings.go:1200:74: handlers.App.ExportAgentRatings calls http2.pseudoHeaderError.Error
+      #18: internal/handlers/chat_close_ratings.go:1242:14: handlers.App.ExportAgentRatings calls csv.Writer.Flush, which eventually calls http2.stickyErrWriter.Write
+      #19: pkg/whatsapp/client.go:504:36: whatsapp.ResumableUpload calls http2.transportResponseBody.Close
+      #20: internal/handlers/campaigns.go:1117:25: handlers.App.UploadCampaignMedia calls io.ReadAll, which calls http2.transportResponseBody.Read
+      #21: internal/handlers/agent_transfers.go:1432:14: handlers.App.ReturnAgentTransfersToQueue calls logf.Logger.Error, which eventually calls http2.writeData.String
+
+Vulnerability #2: GO-2026-4341
+    Memory exhaustion in query parameter parsing in net/url
+  More info: https://pkg.go.dev/vuln/GO-2026-4341
+  Standard library
+    Found in: net/url@go1.25.5
+    Fixed in: net/url@go1.25.6
+    Example traces found:
+      #1: internal/handlers/sso_handlers.go:155:36: handlers.App.CallbackSSO calls oauth2.Config.Exchange, which eventually calls url.ParseQuery
+      #2: internal/database/postgres.go:36:22: database.NewPostgres calls gorm.Open, which eventually calls url.URL.Query
+
+Vulnerability #3: GO-2026-4340
+    Handshake messages may be processed at the incorrect encryption level in
+    crypto/tls
+  More info: https://pkg.go.dev/vuln/GO-2026-4340
+  Standard library
+    Found in: crypto/tls@go1.25.5
+    Fixed in: crypto/tls@go1.25.6
+    Example traces found:
+      #1: pkg/whatsapp/client.go:500:30: whatsapp.Client.ResumableUpload calls http.Client.Do, which eventually calls tls.Conn.HandshakeContext
+      #2: internal/crypto/crypto.go:38:26: crypto.Encrypt calls io.ReadFull, which eventually calls tls.Conn.Read
+      #3: pkg/whatsapp/client.go:290:13: whatsapp.Client.UploadMedia calls fmt.Fprintf, which calls tls.Conn.Write
+      #4: internal/database/redis.go:15:27: database.NewRedis calls redis.NewClient, which eventually calls tls.DialWithDialer
+      #5: pkg/whatsapp/client.go:500:30: whatsapp.Client.ResumableUpload calls http.Client.Do, which eventually calls tls.Dialer.DialContext
+
+Vulnerability #4: GO-2026-4337
+    Unexpected session resumption in crypto/tls
+  More info: https://pkg.go.dev/vuln/GO-2026-4337
+  Standard library
+    Found in: crypto/tls@go1.25.5
+    Fixed in: crypto/tls@go1.25.7
+    Example traces found:
+      #1: pkg/whatsapp/client.go:500:30: whatsapp.Client.ResumableUpload calls http.Client.Do, which eventually calls tls.Conn.HandshakeContext
+      #2: internal/crypto/crypto.go:38:26: crypto.Encrypt calls io.ReadFull, which eventually calls tls.Conn.Read
+      #3: pkg/whatsapp/client.go:290:13: whatsapp.Client.UploadMedia calls fmt.Fprintf, which calls tls.Conn.Write
+      #4: internal/database/redis.go:15:27: database.NewRedis calls redis.NewClient, which eventually calls tls.DialWithDialer
+      #5: pkg/whatsapp/client.go:500:30: whatsapp.Client.ResumableUpload calls http.Client.Do, which eventually calls tls.Dialer.DialContext
+
+Vulnerability #5: GO-2025-3540
+    Potential out of order responses when CLIENT SETINFO times out during
+    connection establishment in github.com/redis/go-redis
+  More info: https://pkg.go.dev/vuln/GO-2025-3540
+  Module: github.com/redis/go-redis/v9
+    Found in: github.com/redis/go-redis/v9@v9.4.0
+    Fixed in: github.com/redis/go-redis/v9@v9.6.3
+    Example traces found:
+      #1: internal/queue/pubsub.go:77:31: queue.Subscriber.SubscribeCampaignStats calls redis.Client.Subscribe, which eventually calls redis.baseClient.initConn
+      #2: internal/queue/pubsub.go:77:31: queue.Subscriber.SubscribeCampaignStats calls redis.Client.Subscribe, which eventually calls redis.baseClient.initConn
+      #3: internal/queue/pubsub.go:77:31: queue.Subscriber.SubscribeCampaignStats calls redis.Client.Subscribe, which eventually calls redis.baseClient.initConn
+
+Your code is affected by 5 vulnerabilities from 2 modules and the Go standard library.
+This scan also found 1 vulnerability in packages you import and 1 vulnerability
+in modules you require, but your code doesn't appear to call these
+vulnerabilities.
+Use '-show verbose' for more details.

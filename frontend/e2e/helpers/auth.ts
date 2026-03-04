@@ -6,21 +6,23 @@ export interface TestUser {
   role: 'admin' | 'manager' | 'agent'
 }
 
+const E2E_TEST_PASSWORD = 'Password123!'
+
 // Test users - these should match seeded data in test database
 export const TEST_USERS = {
   admin: {
     email: 'admin@test.com',
-    password: 'password',
+    password: E2E_TEST_PASSWORD,
     role: 'admin' as const,
   },
   manager: {
     email: 'manager@test.com',
-    password: 'password',
+    password: E2E_TEST_PASSWORD,
     role: 'manager' as const,
   },
   agent: {
     email: 'agent@test.com',
-    password: 'password',
+    password: E2E_TEST_PASSWORD,
     role: 'agent' as const,
   },
 }

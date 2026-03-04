@@ -139,6 +139,108 @@ test.describe('Users Management', () => {
   })
 })
 
+test.describe('Users - Restrictions Controls', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAsAdmin(page)
+    await page.goto('/settings/users')
+    await page.waitForLoadState('networkidle')
+  })
+
+  test('should persist strict sending restrictions and unclaimed chat access toggles', async ({ page }) => {
+    let strictSettingsPayload: any = null
+    let sendRestrictionsPayload: any = null
+
+    await page.route('**/api/org/settings', async (route) => {
+      if (route.request().method() === 'PUT') {
+        strictSettingsPayload = route.request().postDataJSON()
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'success',
+            data: { settings: strictSettingsPayload || {} },
+          }),
+        })
+        return
+      }
+      await route.fallback()
+    })
+
+    await page.route('**/api/users/*/send-restrictions', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'success',
+            data: {
+              enabled: false,
+              include_all_contacts: false,
+              authorized_numbers: [],
+              allowed_instance_ids: ['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'],
+              prefix_agent_name: true,
+              allow_unclaimed_chat_view: false,
+              allow_unclaimed_chat_send: false,
+            },
+          }),
+        })
+        return
+      }
+
+      if (route.request().method() === 'PUT') {
+        sendRestrictionsPayload = route.request().postDataJSON()
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'success',
+            data: sendRestrictionsPayload,
+          }),
+        })
+        return
+      }
+
+      await route.fallback()
+    })
+
+    const strictSwitch = page.getByRole('switch').first()
+    const strictWasEnabled = (await strictSwitch.getAttribute('aria-checked')) === 'true'
+    await strictSwitch.click()
+    await page.getByRole('button', { name: /^Save$/i }).first().click()
+
+    await expect.poll(() => strictSettingsPayload).not.toBeNull()
+    expect(strictSettingsPayload?.strict_sending_restrictions_enabled).toBe(!strictWasEnabled)
+
+    const manageRestrictionsButton = page
+      .locator('table tbody tr')
+      .first()
+      .locator('td')
+      .last()
+      .locator('button')
+      .first()
+    await manageRestrictionsButton.click()
+
+    const restrictionsDialog = page.getByRole('dialog').last()
+    await expect(restrictionsDialog.getByText('Allow Unclaimed Chat View')).toBeVisible()
+    const dialogSwitches = restrictionsDialog.getByRole('switch')
+    const viewSwitch = dialogSwitches.nth(3)
+    const sendSwitch = dialogSwitches.nth(4)
+
+    await expect(viewSwitch).toHaveAttribute('aria-checked', 'false')
+    await expect(sendSwitch).toHaveAttribute('aria-checked', 'false')
+
+    await sendSwitch.click()
+    await expect(viewSwitch).toHaveAttribute('aria-checked', 'true')
+    await expect(sendSwitch).toHaveAttribute('aria-checked', 'true')
+
+    await page.getByRole('button', { name: /^Save$/i }).last().click()
+
+    await expect.poll(() => sendRestrictionsPayload).not.toBeNull()
+    expect(sendRestrictionsPayload?.allow_unclaimed_chat_view).toBe(true)
+    expect(sendRestrictionsPayload?.allow_unclaimed_chat_send).toBe(true)
+  })
+})
+
 test.describe('Users - Role-based Access', () => {
   test.skip('agent should not access users page', async () => {
     // Skip: Role-based access control may be implemented differently

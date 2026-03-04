@@ -31,6 +31,7 @@ export interface NavItem {
   icon: Component
   permission?: string
   adminOnly?: boolean
+  managerOrAdminOnly?: boolean
   childPermissions?: string[]
   children?: NavItem[]
 }
@@ -47,12 +48,6 @@ export const navigationItems: NavItem[] = [
     path: '/chat',
     icon: MessageSquare,
     permission: 'chat'
-  },
-  {
-    name: 'nav.activityLogs',
-    path: '/activity-logs',
-    icon: ClipboardList,
-    adminOnly: true
   },
   {
     name: 'nav.chatbot',
@@ -120,6 +115,7 @@ export const navigationItems: NavItem[] = [
       { name: 'nav.tags', path: '/settings/tags', icon: Tags, permission: 'tags' },
       { name: 'nav.teams', path: '/settings/teams', icon: Users, permission: 'teams' },
       { name: 'nav.users', path: '/settings/users', icon: Users, permission: 'users' },
+      { name: 'nav.activityLogs', path: '/settings/activity-logs', icon: ClipboardList, managerOrAdminOnly: true },
       { name: 'nav.roles', path: '/settings/roles', icon: Shield, permission: 'roles' },
       { name: 'nav.apiKeys', path: '/settings/api-keys', icon: Key, permission: 'api_keys' },
       { name: 'nav.webhooks', path: '/settings/webhooks', icon: Webhook, permission: 'webhooks' },

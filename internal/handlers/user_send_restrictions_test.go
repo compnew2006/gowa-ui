@@ -69,14 +69,18 @@ func TestApp_GetUserSendRestrictions_AutoMergesIncomingNumbers(t *testing.T) {
 
 	var resp struct {
 		Data struct {
-			Enabled           bool     `json:"enabled"`
-			AuthorizedNumbers []string `json:"authorized_numbers"`
-			PrefixAgentName   bool     `json:"prefix_agent_name"`
+			Enabled                bool     `json:"enabled"`
+			AuthorizedNumbers      []string `json:"authorized_numbers"`
+			PrefixAgentName        bool     `json:"prefix_agent_name"`
+			AllowUnclaimedChatView bool     `json:"allow_unclaimed_chat_view"`
+			AllowUnclaimedChatSend bool     `json:"allow_unclaimed_chat_send"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
 	assert.True(t, resp.Data.Enabled)
 	assert.True(t, resp.Data.PrefixAgentName)
+	assert.False(t, resp.Data.AllowUnclaimedChatView)
+	assert.False(t, resp.Data.AllowUnclaimedChatSend)
 	assert.Contains(t, resp.Data.AuthorizedNumbers, "15550112233")
 	assert.Contains(t, resp.Data.AuthorizedNumbers, "15550987654")
 
@@ -109,6 +113,8 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 		"allowed_instance_ids": []string{instance.ID.String()},
 		"allowed_instance_id":  instance.ID.String(),
 		"prefix_agent_name":    false,
+		"allow_unclaimed_chat_view": true,
+		"allow_unclaimed_chat_send": true,
 		"authorized_numbers": []string{
 			"+1 555-000-1111",
 			"15550001111",
@@ -124,12 +130,14 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 
 	var resp struct {
 		Data struct {
-			Enabled            bool     `json:"enabled"`
-			IncludeAllContacts bool     `json:"include_all_contacts"`
-			AllowedInstanceIDs []string `json:"allowed_instance_ids"`
-			AllowedInstanceID  string   `json:"allowed_instance_id"`
-			AuthorizedNumbers  []string `json:"authorized_numbers"`
-			PrefixAgentName    bool     `json:"prefix_agent_name"`
+			Enabled                bool     `json:"enabled"`
+			IncludeAllContacts     bool     `json:"include_all_contacts"`
+			AllowedInstanceIDs     []string `json:"allowed_instance_ids"`
+			AllowedInstanceID      string   `json:"allowed_instance_id"`
+			AuthorizedNumbers      []string `json:"authorized_numbers"`
+			PrefixAgentName        bool     `json:"prefix_agent_name"`
+			AllowUnclaimedChatView bool     `json:"allow_unclaimed_chat_view"`
+			AllowUnclaimedChatSend bool     `json:"allow_unclaimed_chat_send"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
@@ -139,6 +147,39 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 	assert.Equal(t, instance.ID.String(), resp.Data.AllowedInstanceID)
 	assert.Equal(t, []string{"15550001111"}, resp.Data.AuthorizedNumbers)
 	assert.False(t, resp.Data.PrefixAgentName)
+	assert.True(t, resp.Data.AllowUnclaimedChatView)
+	assert.True(t, resp.Data.AllowUnclaimedChatSend)
+}
+
+func TestApp_UpdateUserSendRestrictions_NormalizesUnclaimedChatSendAsView(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	targetUser := testutil.CreateTestUser(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"allow_unclaimed_chat_view": false,
+		"allow_unclaimed_chat_send": true,
+	})
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
+	testutil.SetPathParam(req, "id", targetUser.ID.String())
+
+	err := app.UpdateUserSendRestrictions(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			AllowUnclaimedChatView bool `json:"allow_unclaimed_chat_view"`
+			AllowUnclaimedChatSend bool `json:"allow_unclaimed_chat_send"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.True(t, resp.Data.AllowUnclaimedChatView)
+	assert.True(t, resp.Data.AllowUnclaimedChatSend)
 }
 
 func TestApp_UpdateUserSendRestrictions_AllowsMultipleInstances(t *testing.T) {

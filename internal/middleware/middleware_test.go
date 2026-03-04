@@ -14,7 +14,7 @@ import (
 	"github.com/zerodha/fastglue"
 )
 
-const testJWTSecret = "test-secret-key-must-be-at-least-32-chars"
+const testJWTSecret = "unit-test-signing-value-1234567890"
 
 // newTestRequest creates a fastglue request for testing.
 func newTestRequest() *fastglue.Request {
@@ -34,6 +34,7 @@ func generateTestToken(t *testing.T, userID, orgID uuid.UUID, email string, role
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Subject:   "access",
 		},
 	}
 
@@ -373,6 +374,52 @@ func TestAuth_InvalidJWT(t *testing.T) {
 			result := authMiddleware(req)
 
 			assert.Nil(t, result, "should return nil for invalid token")
+			assert.Equal(t, fasthttp.StatusUnauthorized, req.RequestCtx.Response.StatusCode())
+		})
+	}
+}
+
+func TestAuth_RejectsNonAccessTokenSubjects(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		subject string
+	}{
+		{name: "refresh subject", subject: "refresh"},
+		{name: "ws subject", subject: "ws"},
+		{name: "empty subject", subject: ""},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			roleID := uuid.New()
+			claims := middleware.JWTClaims{
+				UserID:         uuid.New(),
+				OrganizationID: uuid.New(),
+				Email:          "test@example.com",
+				RoleID:         &roleID,
+				RegisteredClaims: jwt.RegisteredClaims{
+					ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+					IssuedAt:  jwt.NewNumericDate(time.Now()),
+					Subject:   tt.subject,
+				},
+			}
+
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+			tokenString, err := token.SignedString([]byte(testJWTSecret))
+			require.NoError(t, err)
+
+			req := newTestRequest()
+			req.RequestCtx.Request.Header.Set("Authorization", "Bearer "+tokenString)
+
+			authMiddleware := middleware.Auth(testJWTSecret)
+			result := authMiddleware(req)
+
+			assert.Nil(t, result, "should reject non-access JWT subject")
 			assert.Equal(t, fasthttp.StatusUnauthorized, req.RequestCtx.Response.StatusCode())
 		})
 	}
@@ -796,6 +843,7 @@ func generateTokenWithSecret(t *testing.T, secret string) string {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Subject:   "access",
 		},
 	}
 

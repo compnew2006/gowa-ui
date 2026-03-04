@@ -216,6 +216,23 @@ QA is no longer a separate step — it is **built into Phase 3 (TEST)** of every
 
 ## Immediate Task follow this sequance :
 
+Implement the following feature enhancements:
+
+1. **Claim Chat Toggle Option**: Add a configurable option in user role settings that allows managers and users to enable or disable the claim chat functionality. When disabled, the chat should be displayed without requiring the user to claim it first.
+
+2. **Activity Logs Route Relocation**: Move the /activity-logs route to be nested inside the /settings route, creating a hierarchical structure under Settings for better organization and navigation this show only for managers/admins.
+
+3. **Agent Analytics Enhancement**: In the Agent Analytics section, implement filter options in the navbar that allow filtering by instance beside agent, and date range simultaneously.
+
+4. **Chat Assignment System Message**: When a manager or admin assigns any chat to another agent, display a system message in the chat with the format: "System :{employee} has assigned this chat to {agent}" to provide clear visibility of chat assignments.
+
+5. **Combined Chat Instance Display**: When chats with the same phone number come from multi-instance are combined, it's display a grey tag in the chat list showing the instances from which the chat originated. Replace the current instance display with a multi-instance indicator showing all source instances.
+
+6. **Combined Chat Message Routing**: For combined chats, when a user selects a specific instance tab at the top that indicates the message origin, ensure that outgoing messages are sent from the selected instance rather than a default instance.
+
+7. **Interface Organization**: Relocate the "Strict Sending Restrictions" option from its current position and place it in the user management section, positioned above the "Manage Send Restrictions" area for improved logical grouping and accessibility.
+
+
 1. Serena MCP Mandate (Foundational Protocol)
 2. Context Ingestion (Mandatory First Step)
 3. Silent Execution Protocol

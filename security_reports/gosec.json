@@ -1,0 +1,350 @@
+{
+	"Golang errors": {
+		"": [
+			{
+				"line": 0,
+				"column": 0,
+				"error": "# command-line-arguments\n.repro_archive/2026-02-18_issue_investigation.go:13:8: undefined: newTestConnectionManager"
+			}
+		],
+		"/Users/noiemany/Downloads/whatomate_GOWA/whatomate/.repro_archive/2026-02-18_issue_investigation.go": [
+			{
+				"line": 13,
+				"column": 8,
+				"error": "undefined: newTestConnectionManager"
+			}
+		]
+	},
+	"Issues": [
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion uint64 -\u003e int",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/chat_assignment_reset_settings.go",
+			"code": "83: \tcase uint64:\n84: \t\treturn int(v), true\n85: \tcase float64:\n",
+			"line": "84",
+			"column": "13",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion uint -\u003e int",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/chat_assignment_reset_settings.go",
+			"code": "75: \tcase uint:\n76: \t\treturn int(v), true\n77: \tcase uint8:\n",
+			"line": "76",
+			"column": "13",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion rune -\u003e byte",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/flows.go",
+			"code": "936: \t\t} else if (c \u003e= 'a' \u0026\u0026 c \u003c= 'z') || (c \u003e= 'A' \u0026\u0026 c \u003c= 'Z') || c == '_' {\n937: \t\t\tresult = append(result, byte(c))\n938: \t\t}\n",
+			"line": "937",
+			"column": "32",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion int -\u003e int32",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/statuses.go",
+			"code": "524: \tif numeric, err := strconv.Atoi(trimmed); err == nil {\n525: \t\tfont := waE2E.ExtendedTextMessage_FontType(numeric)\n526: \t\treturn \u0026font, nil\n",
+			"line": "525",
+			"column": "45",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "338",
+				"url": "https://cwe.mitre.org/data/definitions/338.html"
+			},
+			"rule_id": "G404",
+			"details": "Use of weak random number generator (math/rand or math/rand/v2 instead of crypto/rand)",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/typing_indicator.go",
+			"code": "44: \t\tlastByChat: make(map[string]time.Time),\n45: \t\trandom:     rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec\n46: \t\tnow:        func() time.Time { return time.Now().UTC() },\n",
+			"line": "45",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "338",
+				"url": "https://cwe.mitre.org/data/definitions/338.html"
+			},
+			"rule_id": "G404",
+			"details": "Use of weak random number generator (math/rand or math/rand/v2 instead of crypto/rand)",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/queue.go",
+			"code": "196: \tif maxDelay \u003e minDelay {\n197: \t\tdelayMs += rand.Intn(maxDelay - minDelay + 1)\n198: \t}\n",
+			"line": "197",
+			"column": "14",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "400",
+				"url": "https://cwe.mitre.org/data/definitions/400.html"
+			},
+			"rule_id": "G118",
+			"details": "Goroutine uses context.Background/TODO while request-scoped context is available",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/messages.go",
+			"code": "279: \t\ta.wg.Add(1)\n280: \t\tgo func() {\n281: \t\t\tdefer a.wg.Done()\n",
+			"line": "280",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/media.go",
+			"code": "274: \t// Read file\n275: \tdata, err := os.ReadFile(fullPath)\n276: \tif err != nil {\n",
+			"line": "275",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/canned_response_media.go",
+			"code": "258: \n259: \tdata, err := os.ReadFile(fullPath)\n260: \tif err != nil {\n",
+			"line": "259",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/campaigns.go",
+			"code": "1264: \t// Read file\n1265: \tdata, err := os.ReadFile(fullPath)\n1266: \tif err != nil {\n",
+			"line": "1265",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "88",
+				"url": "https://cwe.mitre.org/data/definitions/88.html"
+			},
+			"rule_id": "G107",
+			"details": "Potential HTTP request made with variable url",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/adapter_media_helpers.go",
+			"code": "41: func (a *WhatsmeowAdapter) downloadHTTPMedia(u string) ([]byte, string, error) {\n42: \tresp, err := http.Get(u)\n43: \tif err != nil {\n",
+			"line": "42",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "499",
+				"url": "https://cwe.mitre.org/data/definitions/499.html"
+			},
+			"rule_id": "G117",
+			"details": "Marshaled struct field \"AccessToken\" (JSON key \"access_token\") matches secret pattern",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/cache.go",
+			"code": "258: \t}\n259: \tif data, err := json.Marshal(cacheData); err == nil {\n260: \t\ta.Redis.Set(ctx, cacheKey, data, whatsappAccountCacheTTL)\n",
+			"line": "259",
+			"column": "18",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/incoming_media.go",
+			"code": "865: \ttargetDir := filepath.Join(basePath, subdir)\n866: \tif err := os.MkdirAll(targetDir, 0755); err != nil {\n867: \t\treturn \"\", fmt.Errorf(\"create media directory: %w\", err)\n",
+			"line": "866",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/media.go",
+			"code": "28: \tpath := filepath.Join(a.getMediaStoragePath(), subdir)\n29: \treturn os.MkdirAll(path, 0755)\n30: }\n",
+			"line": "29",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/incoming_media.go",
+			"code": "872: \tabsPath := filepath.Join(targetDir, filename)\n873: \tif err := os.WriteFile(absPath, data, 0644); err != nil {\n874: \t\treturn \"\", fmt.Errorf(\"write media file: %w\", err)\n",
+			"line": "873",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/media.go",
+			"code": "192: \tfilePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)\n193: \tif err := os.WriteFile(filePath, data, 0644); err != nil {\n194: \t\treturn \"\", fmt.Errorf(\"failed to save media file: %w\", err)\n",
+			"line": "193",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/instance_auto_campaign_media.go",
+			"code": "125: \tfilePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)\n126: \tif err := os.WriteFile(filePath, data, 0644); err != nil {\n127: \t\treturn \"\", fmt.Errorf(\"failed to save media file: %w\", err)\n",
+			"line": "126",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/contacts_messaging.go",
+			"code": "579: \t// Save file\n580: \tif err := os.WriteFile(filePath, data, 0644); err != nil {\n581: \t\treturn \"\", fmt.Errorf(\"failed to save media file: %w\", err)\n",
+			"line": "580",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/campaigns.go",
+			"code": "1207: \t// Save file\n1208: \tif err := os.WriteFile(filePath, data, 0644); err != nil {\n1209: \t\treturn \"\", fmt.Errorf(\"failed to save media file: %w\", err)\n",
+			"line": "1208",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/migration_handler.go",
+			"code": "148: \t\t// Get org name.\n149: \t\ta.DB.Table(\"organizations\").\n150: \t\t\tSelect(\"name\").\n151: \t\t\tWhere(\"id = ?\", ac.OrganizationID).\n152: \t\t\tRow().\n153: \t\t\tScan(\u0026status.OrgName) //nolint:errcheck\n154: \n",
+			"line": "149-153",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		}
+	],
+	"Stats": {
+		"files": 187,
+		"lines": 58167,
+		"nosec": 0,
+		"found": 20
+	},
+	"GosecVersion": "dev"
+}

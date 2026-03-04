@@ -21,6 +21,7 @@ type RateLimitOpts struct {
 	Window     time.Duration // Fixed window duration.
 	KeyPrefix  string        // Redis key prefix (e.g., "login", "register").
 	TrustProxy bool          // Trust X-Forwarded-For / X-Real-IP headers.
+	KeyFunc    func(r *fastglue.Request, clientIP string) string
 }
 
 // RateLimit returns a fastglue middleware that enforces a fixed-window
@@ -28,8 +29,18 @@ type RateLimitOpts struct {
 // It fails open: if Redis is unavailable the request is allowed through.
 func RateLimit(opts RateLimitOpts) fastglue.FastMiddleware {
 	return func(r *fastglue.Request) *fastglue.Request {
-		ip := extractClientIP(r, opts.TrustProxy)
-		key := fmt.Sprintf("ratelimit:%s:%s", opts.KeyPrefix, ip)
+		if opts.Redis == nil || opts.Max <= 0 || opts.Window <= 0 {
+			return r
+		}
+
+		clientIP := extractClientIP(r, opts.TrustProxy)
+		keySuffix := clientIP
+		if opts.KeyFunc != nil {
+			if candidate := strings.TrimSpace(opts.KeyFunc(r, clientIP)); candidate != "" {
+				keySuffix = candidate
+			}
+		}
+		key := fmt.Sprintf("ratelimit:%s:%s", opts.KeyPrefix, keySuffix)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()

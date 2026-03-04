@@ -57,8 +57,8 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, "local", cfg.Storage.Type)
 	assert.Equal(t, "./uploads", cfg.Storage.LocalPath)
 
-	assert.Equal(t, "admin@admin.com", cfg.DefaultAdmin.Email)
-	assert.Equal(t, "admin", cfg.DefaultAdmin.Password)
+	assert.Equal(t, "", cfg.DefaultAdmin.Email)
+	assert.Equal(t, "", cfg.DefaultAdmin.Password)
 	assert.Equal(t, "Admin", cfg.DefaultAdmin.FullName)
 
 	assert.False(t, cfg.Cookie.Secure)
@@ -68,6 +68,8 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, 30, cfg.RateLimit.RefreshMaxAttempts)
 	assert.Equal(t, 10, cfg.RateLimit.SSOMaxAttempts)
 	assert.Equal(t, 60, cfg.RateLimit.WindowSeconds)
+	assert.Equal(t, 5, cfg.RateLimit.OutboundPerUserPS)
+	assert.Equal(t, 15, cfg.RateLimit.OutboundPerIPPS)
 }
 
 func TestLoad_EnvironmentVariables(t *testing.T) {
@@ -126,4 +128,59 @@ port = 5433
 func TestLoad_InvalidFile(t *testing.T) {
 	_, err := Load("non_existent_file.toml")
 	assert.Error(t, err)
+}
+
+func TestNormalizeBasePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "dot",
+			input:    ".",
+			expected: "",
+		},
+		{
+			name:     "dot slash",
+			input:    "./",
+			expected: "",
+		},
+		{
+			name:     "root slash",
+			input:    "/",
+			expected: "",
+		},
+		{
+			name:     "relative subpath",
+			input:    "whatomate",
+			expected: "/whatomate",
+		},
+		{
+			name:     "relative subpath with slash",
+			input:    "whatomate/",
+			expected: "/whatomate",
+		},
+		{
+			name:     "relative dot subpath",
+			input:    "./whatomate/",
+			expected: "/whatomate",
+		},
+		{
+			name:     "absolute subpath",
+			input:    "/whatomate/",
+			expected: "/whatomate",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, normalizeBasePath(tc.input))
+		})
+	}
 }

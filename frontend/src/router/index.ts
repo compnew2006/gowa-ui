@@ -9,6 +9,7 @@ declare module 'vue-router' {
     permission?: string // Resource permission required (e.g., 'analytics', 'chat')
     metaOnly?: boolean  // Route only available when provider is "meta"
     adminOnly?: boolean // Route only available for admin/super-admin users
+    managerOrAdminOnly?: boolean // Route only available for manager/admin/super-admin users
   }
 }
 
@@ -76,9 +77,7 @@ const router = createRouter({
         },
         {
           path: 'activity-logs',
-          name: 'activity-logs',
-          component: () => import('@/views/activity/ActivityLogsView.vue'),
-          meta: { adminOnly: true }
+          redirect: '/settings/activity-logs'
         },
         {
           path: 'templates',
@@ -217,6 +216,12 @@ const router = createRouter({
           meta: { permission: 'users' }
         },
         {
+          path: 'settings/activity-logs',
+          name: 'activity-logs',
+          component: () => import('@/views/activity/ActivityLogsView.vue'),
+          meta: { managerOrAdminOnly: true }
+        },
+        {
           path: 'settings/roles',
           name: 'roles',
           component: () => import('@/views/settings/RolesView.vue'),
@@ -299,6 +304,7 @@ const navigationOrder = [
       { path: '/settings/tags', permission: 'tags' },
       { path: '/settings/teams', permission: 'teams' },
       { path: '/settings/users', permission: 'users' },
+      { path: '/settings/activity-logs', permission: 'settings.general' },
       { path: '/settings/roles', permission: 'roles' },
       { path: '/settings/api-keys', permission: 'api_keys' },
       { path: '/settings/webhooks', permission: 'webhooks' },
@@ -370,6 +376,14 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.adminOnly) {
     const isAdmin = authStore.user?.is_super_admin === true || (authStore.userRole || '').toLowerCase() === 'admin'
     if (!isAdmin) {
+      return next({ path: getFirstAccessibleRoute(authStore) })
+    }
+  }
+
+  if (to.meta.managerOrAdminOnly) {
+    const roleName = (authStore.userRole || '').toLowerCase()
+    const isManagerOrAdmin = authStore.user?.is_super_admin === true || roleName === 'admin' || roleName === 'manager'
+    if (!isManagerOrAdmin) {
       return next({ path: getFirstAccessibleRoute(authStore) })
     }
   }

@@ -109,7 +109,7 @@ POST /api/messages/template
 
 ```bash
 curl -X POST "http://your-server:8080/api/messages/template" \
-  -H "X-API-Key: whm_your_api_key" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
     "phone_number": "919876543210",
@@ -230,7 +230,7 @@ Send a message with up to 3 quick reply buttons:
 
 ```bash
 curl -X POST "http://your-server:8080/api/contacts/{contact_id}/messages" \
-  -H "X-API-Key: whm_your_api_key" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
     "type": "interactive",
@@ -265,7 +265,7 @@ Send a message with a call-to-action URL button:
 
 ```bash
 curl -X POST "http://your-server:8080/api/contacts/{contact_id}/messages" \
-  -H "X-API-Key: whm_your_api_key" \
+  -H "X-API-Key: <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
     "type": "interactive",

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
@@ -475,6 +476,20 @@ func CreateIndexes(db *gorm.DB) error {
 // CreateDefaultAdmin creates a default admin user if no users exist
 // This should only be called once during initial setup
 func CreateDefaultAdmin(db *gorm.DB, cfg *config.DefaultAdminConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	cfg.Email = strings.TrimSpace(cfg.Email)
+	cfg.Password = strings.TrimSpace(cfg.Password)
+	cfg.FullName = strings.TrimSpace(cfg.FullName)
+	if cfg.Email == "" || cfg.Password == "" {
+		// Bootstrap admin creation is optional; skip when credentials are not provided.
+		return nil
+	}
+	if cfg.FullName == "" {
+		cfg.FullName = "Admin"
+	}
+
 	// Check if admin already exists (using email from config)
 	var existingAdmin models.User
 	if err := db.Where("email = ?", cfg.Email).First(&existingAdmin).Error; err == nil {

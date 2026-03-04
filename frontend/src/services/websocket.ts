@@ -278,11 +278,10 @@ class WebSocketService {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
     const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-    const params = new URLSearchParams({ token })
-    const url = `${protocol}//${host}${basePath}/ws?${params.toString()}`
+    const url = `${protocol}//${host}${basePath}/ws`
 
     try {
-      this.ws = new WebSocket(url)
+      this.ws = new WebSocket(url, ['whm.v1', `auth.${token}`])
 
       this.ws.onopen = () => {
         // Keep message auth for backward compatibility with existing WS flow.

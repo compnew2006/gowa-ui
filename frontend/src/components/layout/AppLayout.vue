@@ -33,6 +33,10 @@ const isRTL = computed(() => localeDirectionManager.isRTL(locale.value))
 const isAdminUser = computed(() =>
   authStore.user?.is_super_admin === true || (authStore.userRole || '').toLowerCase() === 'admin'
 )
+const isManagerOrAdminUser = computed(() =>
+  authStore.user?.is_super_admin === true ||
+  ['admin', 'manager'].includes((authStore.userRole || '').toLowerCase())
+)
 
 // Connect WebSocket on mount using short-lived WS token
 onMounted(() => {
@@ -64,6 +68,9 @@ const navigation = computed(() => {
       if (item.adminOnly && !isAdminUser.value) {
         return false
       }
+      if (item.managerOrAdminOnly && !isManagerOrAdminUser.value) {
+        return false
+      }
       // Hide entire nav items that are Meta-only when provider is whatsmeow
       if (metaOnlyPaths.has(item.path) && !f.templates && !f.flows && !f.campaigns && !f.meta_insights) {
         // Check specific feature per path
@@ -87,6 +94,8 @@ const navigation = computed(() => {
       // Filter children that are Meta-only
       let filteredChildren = item.children?.filter(child => {
         if (metaOnlyChildPaths.has(child.path) && !f.business_profile) return false
+        if (child.adminOnly && !isAdminUser.value) return false
+        if (child.managerOrAdminOnly && !isManagerOrAdminUser.value) return false
         return !child.permission || authStore.hasPermission(child.permission, 'read')
       })
 

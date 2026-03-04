@@ -958,12 +958,12 @@ func TestWorker_HandleRecipientJob_TemplateParamSubstitution(t *testing.T) {
 func TestWorker_DecryptAccountSecrets_WithEncryptionKey(t *testing.T) {
 	w := &Worker{
 		Config: &config.Config{
-			App: config.AppConfig{EncryptionKey: "test-secret-key-for-aes256"},
+			App: config.AppConfig{EncryptionKey: "00000000000000000000000000000000"},
 		},
 	}
 
-	plainToken := "EAAI2ZCP4ZAMv8BQtest"
-	plainSecret := "app-secret-123"
+	plainToken := "test-token-value"
+	plainSecret := "test-app-value"
 	encToken, err := crypto.Encrypt(plainToken, w.Config.App.EncryptionKey)
 	require.NoError(t, err)
 	encSecret, err := crypto.Encrypt(plainSecret, w.Config.App.EncryptionKey)

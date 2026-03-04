@@ -1205,7 +1205,7 @@ func (a *App) saveCampaignMedia(campaignID string, data []byte, mimeType string)
 	filePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)
 
 	// Save file
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		return "", fmt.Errorf("failed to save media file: %w", err)
 	}
 
@@ -1262,6 +1262,7 @@ func (a *App) ServeCampaignMedia(r *fastglue.Request) error {
 	}
 
 	// Read file
+	// #nosec G304 -- fullPath is sanitized and bounded to baseDir with symlink checks above.
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		a.Log.Error("Failed to read media file", "path", fullPath, "error", err)

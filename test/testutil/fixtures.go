@@ -16,7 +16,7 @@ import (
 )
 
 // TestJWTSecret is the shared JWT secret for tests.
-const TestJWTSecret = "test-secret-key-must-be-at-least-32-chars"
+const TestJWTSecret = "unit-test-signing-value-1234567890"
 
 // --- Organization ---
 
@@ -396,9 +396,11 @@ func GenerateTestRefreshToken(t *testing.T, user *models.User, secret string, ex
 		Email:          user.Email,
 		RoleID:         user.RoleID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "whatomate",
+			Subject:   "refresh",
 		},
 	}
 

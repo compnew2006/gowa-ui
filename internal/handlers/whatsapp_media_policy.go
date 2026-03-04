@@ -67,6 +67,18 @@ func mimeTypeFromFilenameExtension(filename string) string {
 }
 
 func resolveWhatsAppMediaMIME(partContentType, filename string, fileData []byte) string {
+	detectedMIME := ""
+	if len(fileData) > 0 {
+		sniffBytes := fileData
+		if len(sniffBytes) > 512 {
+			sniffBytes = sniffBytes[:512]
+		}
+		detectedMIME = normalizeWhatsAppMediaMIME(http.DetectContentType(sniffBytes))
+	}
+	if detectedMIME != "" && detectedMIME != applicationOctetStreamMIME {
+		return detectedMIME
+	}
+
 	if partMIME := normalizeWhatsAppMediaMIME(partContentType); partMIME != "" && partMIME != applicationOctetStreamMIME {
 		return partMIME
 	}
@@ -75,14 +87,8 @@ func resolveWhatsAppMediaMIME(partContentType, filename string, fileData []byte)
 		return extensionMIME
 	}
 
-	if len(fileData) > 0 {
-		sniffBytes := fileData
-		if len(sniffBytes) > 512 {
-			sniffBytes = sniffBytes[:512]
-		}
-		if detected := normalizeWhatsAppMediaMIME(http.DetectContentType(sniffBytes)); detected != "" {
-			return detected
-		}
+	if detectedMIME != "" {
+		return detectedMIME
 	}
 
 	return applicationOctetStreamMIME

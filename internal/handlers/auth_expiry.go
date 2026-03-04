@@ -4,10 +4,14 @@ import "time"
 
 const minAccessTokenTTLSeconds = 1
 
-// nextAccessTokenExpiry returns the next midnight in the same location as now.
-func nextAccessTokenExpiry(now time.Time) time.Time {
-	year, month, day := now.Date()
-	return time.Date(year, month, day+1, 0, 0, 0, 0, now.Location())
+const defaultAccessTokenExpiryMinutes = 15
+
+// nextAccessTokenExpiry returns expiry relative to now based on configured TTL minutes.
+func nextAccessTokenExpiry(now time.Time, ttlMinutes int) time.Time {
+	if ttlMinutes <= 0 {
+		ttlMinutes = defaultAccessTokenExpiryMinutes
+	}
+	return now.Add(time.Duration(ttlMinutes) * time.Minute)
 }
 
 func accessTokenTTLSeconds(now time.Time, expiresAt time.Time) int {

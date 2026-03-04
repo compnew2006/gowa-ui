@@ -1,8 +1,45 @@
 import axios, { type AxiosInstance, type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 
-// Get base path from server-injected config or fallback
-const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-const API_BASE_URL = import.meta.env.VITE_API_URL || `${basePath}/api`
+function normalizeBasePath(value: unknown): string {
+  const raw = typeof value === 'string' ? value.trim() : ''
+  if (raw === '' || raw === '.' || raw === './' || raw === '/') {
+    return ''
+  }
+
+  const trimmed = raw.replace(/\/+$/, '')
+  if (trimmed === '' || trimmed === '.') {
+    return ''
+  }
+
+  if (trimmed.startsWith('/')) {
+    return trimmed
+  }
+
+  return `/${trimmed.replace(/^\.?\//, '')}`
+}
+
+function normalizeApiBaseURL(value: string): string {
+  const raw = value.trim()
+  if (raw === '') {
+    return '/api'
+  }
+
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('//')) {
+    return raw.replace(/\/+$/, '')
+  }
+
+  const trimmed = raw.replace(/\/+$/, '')
+  if (trimmed.startsWith('/')) {
+    return trimmed
+  }
+
+  return `/${trimmed.replace(/^\.?\//, '')}`
+}
+
+// Get base path from server-injected config or fallback.
+// Keep API base URL absolute to avoid accidental relative calls like "api/statuses".
+const basePath = normalizeBasePath((window as any).__BASE_PATH__)
+const API_BASE_URL = normalizeApiBaseURL(import.meta.env.VITE_API_URL || `${basePath}/api`)
 
 export const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -90,7 +127,7 @@ export const usersService = {
     api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
   getSendRestrictions: (id: string) => api.get(`/users/${id}/send-restrictions`),
-  updateSendRestrictions: (id: string, data: { enabled?: boolean; include_all_contacts?: boolean; authorized_numbers?: string[]; allowed_instance_ids?: string[]; allowed_instance_id?: string | null; prefix_agent_name?: boolean }) =>
+  updateSendRestrictions: (id: string, data: { enabled?: boolean; include_all_contacts?: boolean; authorized_numbers?: string[]; allowed_instance_ids?: string[]; allowed_instance_id?: string | null; prefix_agent_name?: boolean; allow_unclaimed_chat_view?: boolean; allow_unclaimed_chat_send?: boolean }) =>
     api.put(`/users/${id}/send-restrictions`, data),
   me: () => api.get('/me'),
   updateSettings: (data: { email_notifications: boolean; new_message_alerts: boolean; campaign_updates: boolean; notification_sound?: 'notification1' | 'notification2' | 'notification' }) =>
@@ -546,9 +583,9 @@ export const cannedResponsesService = {
 }
 
 export const agentAnalyticsService = {
-  getSummary: (params?: { from?: string; to?: string; agent_id?: string; min_rating?: number; max_rating?: number }) =>
+  getSummary: (params?: { from?: string; to?: string; agent_id?: string; instance_id?: string; min_rating?: number; max_rating?: number }) =>
     api.get('/analytics/agents', { params }),
-  exportRatings: (params?: { from?: string; to?: string; agent_id?: string; min_rating?: number; max_rating?: number }) =>
+  exportRatings: (params?: { from?: string; to?: string; agent_id?: string; instance_id?: string; min_rating?: number; max_rating?: number }) =>
     api.get('/analytics/agents/ratings/export', { params, responseType: 'blob' })
 }
 

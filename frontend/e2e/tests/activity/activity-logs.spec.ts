@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAsAdmin } from '../../helpers'
+import { loginAsAdmin, loginAsManager, loginAsAgent } from '../../helpers'
 import { ApiHelper } from '../../helpers/api'
 import { ActivityLogsPage } from '../../pages'
 
@@ -15,6 +15,12 @@ test.describe('Activity Logs', () => {
   test('should display activity logs page', async () => {
     await activityLogsPage.expectPageVisible()
     await expect(activityLogsPage.refreshButton).toBeVisible()
+  })
+
+  test('should keep legacy activity logs path redirected to settings route', async ({ page }) => {
+    await page.goto('/activity-logs')
+    await page.waitForLoadState('networkidle')
+    await expect(page).toHaveURL(/\/settings\/activity-logs$/)
   })
 
   test('should show custom activity event created via API in history', async ({ request }) => {
@@ -64,5 +70,22 @@ test.describe('Activity Logs', () => {
 
     await activityLogsPage.expectRowContains(matchingEventType)
     await activityLogsPage.expectRowNotContains(otherEventType)
+  })
+})
+
+test.describe('Activity Logs Role Access', () => {
+  test('manager can open settings activity logs route', async ({ page }) => {
+    await loginAsManager(page)
+    await page.goto('/settings/activity-logs')
+    await page.waitForLoadState('networkidle')
+    await expect(page).toHaveURL(/\/settings\/activity-logs$/)
+    await expect(page.getByRole('heading', { name: /activity logs/i })).toBeVisible()
+  })
+
+  test('agent is blocked from settings activity logs route', async ({ page }) => {
+    await loginAsAgent(page)
+    await page.goto('/settings/activity-logs')
+    await page.waitForLoadState('networkidle')
+    await expect(page).not.toHaveURL(/\/settings\/activity-logs$/)
   })
 })

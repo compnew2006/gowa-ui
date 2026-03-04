@@ -150,6 +150,7 @@ func Handler(basePath string) fasthttp.RequestHandler {
 					w.Header().Set("Content-Encoding", contentEncoding)
 				}
 				w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+				// #nosec G705 -- content originates from trusted embedded static assets.
 				_, _ = w.Write(content)
 				return
 			}

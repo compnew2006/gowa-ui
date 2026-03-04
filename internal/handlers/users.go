@@ -193,9 +193,12 @@ func (a *App) ListUsers(r *fastglue.Request) error {
 
 // GetUser returns a single user
 func (a *App) GetUser(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceUsers, models.ActionRead); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "user")
@@ -247,6 +250,9 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 	// Validate required fields
 	if req.Email == "" || req.Password == "" || req.FullName == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Email, password, and full_name are required", nil, "")
+	}
+	if err := validatePasswordStrength(req.Password); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "password")
 	}
 
 	// Determine role
@@ -415,7 +421,7 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 
 	var req UserRequest
 	if err := r.Decode(&req, "json"); err != nil {
-		a.Log.Error("UpdateUser: Failed to decode request", "error", err, "body", string(r.RequestCtx.PostBody()))
+		a.Log.Error("UpdateUser: Failed to decode request", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
 	}
 
@@ -463,6 +469,9 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		user.FullName = req.FullName
 	}
 	if req.Password != "" {
+		if err := validatePasswordStrength(req.Password); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "password")
+		}
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
 			a.Log.Error("Failed to hash password", "error", err)
@@ -732,9 +741,9 @@ func (a *App) ChangePassword(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Current password and new password are required", nil, "")
 	}
 
-	// Validate new password length
-	if len(req.NewPassword) < 6 {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "New password must be at least 6 characters", nil, "")
+	// Validate new password strength
+	if err := validatePasswordStrength(req.NewPassword); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "new_password")
 	}
 
 	// Verify current password

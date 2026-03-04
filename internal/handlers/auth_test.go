@@ -1,7 +1,9 @@
 package handlers_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,6 +17,24 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 )
+
+func seedRefreshTokenState(t *testing.T, app *handlers.App, refreshToken string, userID uuid.UUID) {
+	t.Helper()
+
+	token, err := jwt.ParseWithClaims(refreshToken, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
+		return []byte(testutil.TestJWTSecret), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	require.NoError(t, err)
+	require.True(t, token.Valid)
+
+	claims, ok := token.Claims.(*middleware.JWTClaims)
+	require.True(t, ok)
+	require.NotEmpty(t, claims.ID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, app.Redis.Set(ctx, fmt.Sprintf("refresh:%s", claims.ID), userID.String(), 24*time.Hour).Err())
+}
 
 func createUsersWriteUser(t *testing.T, app *handlers.App, orgID uuid.UUID) *models.User {
 	t.Helper()
@@ -81,7 +101,7 @@ func TestApp_Login_Success(t *testing.T) {
 
 	assert.Equal(t, "success", resp.Status)
 	assert.Greater(t, resp.Data.ExpiresIn, 0)
-	assert.LessOrEqual(t, resp.Data.ExpiresIn, 24*60*60)
+	assert.LessOrEqual(t, resp.Data.ExpiresIn, 15*60)
 	assert.Equal(t, email, resp.Data.User.Email)
 
 	// Tokens should be in Set-Cookie headers
@@ -414,6 +434,7 @@ func TestApp_RefreshToken_Success(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("refresh")), testutil.WithPassword("password123"))
 	refreshToken := testutil.GenerateTestRefreshToken(t, user, testutil.TestJWTSecret, 7*24*time.Hour)
+	seedRefreshTokenState(t, app, refreshToken, user.ID)
 
 	req := testutil.NewJSONRequest(t, map[string]string{
 		"refresh_token": refreshToken,
@@ -434,7 +455,7 @@ func TestApp_RefreshToken_Success(t *testing.T) {
 
 	assert.Equal(t, "success", resp.Status)
 	assert.Greater(t, resp.Data.ExpiresIn, 0)
-	assert.LessOrEqual(t, resp.Data.ExpiresIn, 24*60*60)
+	assert.LessOrEqual(t, resp.Data.ExpiresIn, 15*60)
 
 	// Tokens should be in cookies
 	assert.NotEmpty(t, testutil.GetResponseCookie(req, "whm_access"))
@@ -481,6 +502,7 @@ func TestApp_RefreshToken_UserNotFound(t *testing.T) {
 		Email:          "fake@example.com",
 	}
 	token := testutil.GenerateTestRefreshToken(t, fakeUser, testutil.TestJWTSecret, 7*24*time.Hour)
+	seedRefreshTokenState(t, app, token, fakeUser.ID)
 
 	req := testutil.NewJSONRequest(t, map[string]string{
 		"refresh_token": token,
@@ -496,6 +518,7 @@ func TestApp_RefreshToken_DisabledUser(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("disabled")), testutil.WithPassword("password123"), testutil.WithInactive())
 	token := testutil.GenerateTestRefreshToken(t, user, testutil.TestJWTSecret, 7*24*time.Hour)
+	seedRefreshTokenState(t, app, token, user.ID)
 
 	req := testutil.NewJSONRequest(t, map[string]string{
 		"refresh_token": token,

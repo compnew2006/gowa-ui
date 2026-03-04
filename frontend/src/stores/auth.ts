@@ -7,6 +7,16 @@ export interface UserSettings {
   new_message_alerts?: boolean
   campaign_updates?: boolean
   notification_sound?: 'notification1' | 'notification2' | 'notification'
+  send_restrictions?: {
+    enabled?: boolean
+    include_all_contacts?: boolean
+    authorized_numbers?: string[]
+    allowed_instance_ids?: string[]
+    allowed_instance_id?: string | null
+    prefix_agent_name?: boolean
+    allow_unclaimed_chat_view?: boolean
+    allow_unclaimed_chat_send?: boolean
+  }
 }
 
 export interface Permission {

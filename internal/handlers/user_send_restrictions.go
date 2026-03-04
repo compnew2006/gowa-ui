@@ -13,12 +13,14 @@ import (
 
 // UserSendRestrictionsResponse represents per-user strict send restrictions.
 type UserSendRestrictionsResponse struct {
-	Enabled            bool     `json:"enabled"`
-	IncludeAllContacts bool     `json:"include_all_contacts"`
-	AuthorizedNumbers  []string `json:"authorized_numbers"`
-	AllowedInstanceIDs []string `json:"allowed_instance_ids"`
-	AllowedInstanceID  *string  `json:"allowed_instance_id,omitempty"`
-	PrefixAgentName    bool     `json:"prefix_agent_name"`
+	Enabled                bool     `json:"enabled"`
+	IncludeAllContacts     bool     `json:"include_all_contacts"`
+	AuthorizedNumbers      []string `json:"authorized_numbers"`
+	AllowedInstanceIDs     []string `json:"allowed_instance_ids"`
+	AllowedInstanceID      *string  `json:"allowed_instance_id,omitempty"`
+	PrefixAgentName        bool     `json:"prefix_agent_name"`
+	AllowUnclaimedChatView bool     `json:"allow_unclaimed_chat_view"`
+	AllowUnclaimedChatSend bool     `json:"allow_unclaimed_chat_send"`
 }
 
 func (a *App) getUserSendRestrictionsForOrg(orgID, userID uuid.UUID) (*models.User, sendRestrictionsSettings, error) {
@@ -118,12 +120,14 @@ func (a *App) GetUserSendRestrictions(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(UserSendRestrictionsResponse{
-		Enabled:            cfg.Enabled,
-		IncludeAllContacts: cfg.IncludeAllContacts,
-		AuthorizedNumbers:  cfg.AuthorizedNumbers,
-		AllowedInstanceIDs: stringifyUUIDs(allowedInstanceIDsForRestrictions(cfg)),
-		AllowedInstanceID:  stringifyOptionalUUID(firstRestrictedUUID(allowedInstanceIDsForRestrictions(cfg))),
-		PrefixAgentName:    cfg.PrefixAgentName,
+		Enabled:                cfg.Enabled,
+		IncludeAllContacts:     cfg.IncludeAllContacts,
+		AuthorizedNumbers:      cfg.AuthorizedNumbers,
+		AllowedInstanceIDs:     stringifyUUIDs(allowedInstanceIDsForRestrictions(cfg)),
+		AllowedInstanceID:      stringifyOptionalUUID(firstRestrictedUUID(allowedInstanceIDsForRestrictions(cfg))),
+		PrefixAgentName:        cfg.PrefixAgentName,
+		AllowUnclaimedChatView: cfg.AllowUnclaimedChatView,
+		AllowUnclaimedChatSend: cfg.AllowUnclaimedChatSend,
 	})
 }
 
@@ -143,12 +147,14 @@ func (a *App) UpdateUserSendRestrictions(r *fastglue.Request) error {
 	}
 
 	var req struct {
-		Enabled            *bool     `json:"enabled"`
-		IncludeAllContacts *bool     `json:"include_all_contacts"`
-		AuthorizedNumbers  *[]string `json:"authorized_numbers"`
-		AllowedInstanceIDs *[]string `json:"allowed_instance_ids"`
-		AllowedInstanceID  *string   `json:"allowed_instance_id"`
-		PrefixAgentName    *bool     `json:"prefix_agent_name"`
+		Enabled                *bool     `json:"enabled"`
+		IncludeAllContacts     *bool     `json:"include_all_contacts"`
+		AuthorizedNumbers      *[]string `json:"authorized_numbers"`
+		AllowedInstanceIDs     *[]string `json:"allowed_instance_ids"`
+		AllowedInstanceID      *string   `json:"allowed_instance_id"`
+		PrefixAgentName        *bool     `json:"prefix_agent_name"`
+		AllowUnclaimedChatView *bool     `json:"allow_unclaimed_chat_view"`
+		AllowUnclaimedChatSend *bool     `json:"allow_unclaimed_chat_send"`
 	}
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
@@ -194,6 +200,16 @@ func (a *App) UpdateUserSendRestrictions(r *fastglue.Request) error {
 	if req.PrefixAgentName != nil {
 		cfg.PrefixAgentName = *req.PrefixAgentName
 	}
+	if req.AllowUnclaimedChatView != nil {
+		cfg.AllowUnclaimedChatView = *req.AllowUnclaimedChatView
+	}
+	if req.AllowUnclaimedChatSend != nil {
+		cfg.AllowUnclaimedChatSend = *req.AllowUnclaimedChatSend
+	}
+	cfg.AllowUnclaimedChatView, cfg.AllowUnclaimedChatSend = normalizeUnclaimedChatAccess(
+		cfg.AllowUnclaimedChatView,
+		cfg.AllowUnclaimedChatSend,
+	)
 
 	if cfg.Enabled {
 		if a.isWhatsmeowProvider() && len(allowedInstanceIDsForRestrictions(cfg)) == 0 {
@@ -214,11 +230,13 @@ func (a *App) UpdateUserSendRestrictions(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(UserSendRestrictionsResponse{
-		Enabled:            cfg.Enabled,
-		IncludeAllContacts: cfg.IncludeAllContacts,
-		AuthorizedNumbers:  cfg.AuthorizedNumbers,
-		AllowedInstanceIDs: stringifyUUIDs(allowedInstanceIDsForRestrictions(cfg)),
-		AllowedInstanceID:  stringifyOptionalUUID(firstRestrictedUUID(allowedInstanceIDsForRestrictions(cfg))),
-		PrefixAgentName:    cfg.PrefixAgentName,
+		Enabled:                cfg.Enabled,
+		IncludeAllContacts:     cfg.IncludeAllContacts,
+		AuthorizedNumbers:      cfg.AuthorizedNumbers,
+		AllowedInstanceIDs:     stringifyUUIDs(allowedInstanceIDsForRestrictions(cfg)),
+		AllowedInstanceID:      stringifyOptionalUUID(firstRestrictedUUID(allowedInstanceIDsForRestrictions(cfg))),
+		PrefixAgentName:        cfg.PrefixAgentName,
+		AllowUnclaimedChatView: cfg.AllowUnclaimedChatView,
+		AllowUnclaimedChatSend: cfg.AllowUnclaimedChatSend,
 	})
 }

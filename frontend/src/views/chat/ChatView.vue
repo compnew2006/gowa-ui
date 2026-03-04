@@ -122,9 +122,7 @@ import {
   validateWhatsAppMediaFile,
   type WhatsAppMediaCategory,
 } from "@/lib/whatsapp-media-policy";
-import {
-  mergePhotosAndPdfsAndOpenPrintDialog,
-} from "@/lib/media-merge-print";
+import { mergePhotosAndPdfsAndOpenPrintDialog } from "@/lib/media-merge-print";
 import {
   isMergePrintableBubbleMessage,
   toMergePrintableFile,
@@ -253,6 +251,33 @@ function selectedAccountFilter(toggleKey?: string | null): string | undefined {
   return account || undefined;
 }
 
+function resolveSourceContactForToggle(
+  entry: SidebarContactEntry | null,
+  toggleKey?: string | null,
+): Contact | null {
+  if (!entry || !toggleKey) return null;
+
+  const contactID = contactIDFromToggleKey(toggleKey);
+  if (contactID) {
+    return findSidebarEntrySourceContact(entry, contactID);
+  }
+
+  const accountName = accountFromToggleKey(toggleKey);
+  if (accountName && entry.contactsByAccount[accountName]) {
+    return entry.contactsByAccount[accountName];
+  }
+
+  return null;
+}
+
+function resolveSelectedSourceContact(contact: Contact | null): Contact | null {
+  if (!contact) return null;
+  const entry = currentSidebarEntry.value;
+  const selected = resolveSourceContactForToggle(entry, selectedAccount.value);
+  if (selected) return selected;
+  return contact;
+}
+
 function clearTypingPauseTimer() {
   if (typingPauseTimer) {
     clearTimeout(typingPauseTimer);
@@ -275,7 +300,9 @@ function isTypingPresenceEligibleContact(contact: Contact | null): boolean {
     return false;
   }
 
-  const phone = String(contact.phone_number || "").trim().toLowerCase();
+  const phone = String(contact.phone_number || "")
+    .trim()
+    .toLowerCase();
   if (!phone) return false;
   if (phone.endsWith("@g.us") || phone.endsWith("@newsletter")) return false;
 
@@ -283,14 +310,18 @@ function isTypingPresenceEligibleContact(contact: Contact | null): boolean {
 }
 
 function resolveTypingInstanceID(contact: Contact): string | undefined {
+  const selectedSourceContact = resolveSelectedSourceContact(contact);
+  if (
+    selectedSourceContact &&
+    typeof selectedSourceContact.instance_id === "string"
+  ) {
+    const instanceID = selectedSourceContact.instance_id.trim();
+    if (instanceID !== "") return instanceID;
+  }
+
   if (typeof contactsStore.selectedInstanceId === "string") {
     const selected = contactsStore.selectedInstanceId.trim();
     if (selected !== "") return selected;
-  }
-
-  if (typeof contact.instance_id === "string") {
-    const instanceID = contact.instance_id.trim();
-    if (instanceID !== "") return instanceID;
   }
 
   return undefined;
@@ -351,7 +382,10 @@ function scheduleTypingPaused(contact: Contact | null) {
   }, TYPING_IDLE_PAUSE_MS);
 }
 
-function stopTypingForContact(contact: Contact | null, options?: { force?: boolean }) {
+function stopTypingForContact(
+  contact: Contact | null,
+  options?: { force?: boolean },
+) {
   clearTypingPauseTimer();
   void sendTypingPresenceForContact(contact, "paused", options);
 }
@@ -361,12 +395,16 @@ function findSidebarEntrySourceContact(
   contactID: string,
 ): Contact | null {
   if (!entry || !contactID) return null;
-  return entry.sourceContacts.find((contact) => contact.id === contactID) || null;
+  return (
+    entry.sourceContacts.find((contact) => contact.id === contactID) || null
+  );
 }
 
 function resolveInstanceToggleLabel(instanceID?: string): string {
   if (!instanceID) return "";
-  const instance = instancesStore.instances.find((item) => item.id === instanceID);
+  const instance = instancesStore.instances.find(
+    (item) => item.id === instanceID,
+  );
   if (!instance) return "";
   if (typeof instance.name === "string" && instance.name.trim() !== "") {
     return instance.name.trim();
@@ -378,6 +416,91 @@ function resolveInstanceToggleLabel(instanceID?: string): string {
     return String((instance as Record<string, unknown>).phone_number).trim();
   }
   return "";
+}
+
+function resolveSidebarEntryInstanceLabels(
+  entry: SidebarContactEntry,
+): string[] {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+
+  const appendLabel = (rawLabel?: string) => {
+    const label = (rawLabel || "").trim();
+    if (!label || seen.has(label)) return;
+    seen.add(label);
+    labels.push(label);
+  };
+
+  for (const sourceContact of entry.sourceContacts || []) {
+    const instanceID =
+      typeof sourceContact.instance_id === "string"
+        ? sourceContact.instance_id.trim()
+        : "";
+    if (!instanceID) continue;
+    appendLabel(resolveInstanceToggleLabel(instanceID) || instanceID);
+  }
+
+  for (const instanceID of entry.sourceInstanceIDs || []) {
+    appendLabel(resolveInstanceToggleLabel(instanceID) || instanceID);
+  }
+
+  if (labels.length === 0) {
+    for (const fallbackLabel of entry.sourceInstanceLabels || []) {
+      appendLabel(fallbackLabel);
+    }
+  }
+
+  return labels;
+}
+
+function resolveSidebarEntryInstanceIDs(entry: SidebarContactEntry): string[] {
+  const instanceIDs: string[] = [];
+  const seen = new Set<string>();
+
+  const appendInstanceID = (rawValue?: string) => {
+    const instanceID = (rawValue || "").trim();
+    if (!instanceID || seen.has(instanceID)) return;
+    seen.add(instanceID);
+    instanceIDs.push(instanceID);
+  };
+
+  for (const sourceContact of entry.sourceContacts || []) {
+    appendInstanceID(
+      typeof sourceContact.instance_id === "string"
+        ? sourceContact.instance_id
+        : "",
+    );
+  }
+
+  for (const instanceID of entry.sourceInstanceIDs || []) {
+    appendInstanceID(instanceID);
+  }
+
+  if (instanceIDs.length === 0 && entry.displayContact.instance_id) {
+    appendInstanceID(entry.displayContact.instance_id);
+  }
+
+  return instanceIDs;
+}
+
+function resolveSidebarEntryInstanceSummary(
+  entry: SidebarContactEntry,
+): string {
+  return resolveSidebarEntryInstanceLabels(entry).join(", ");
+}
+
+function getSidebarEntryInstanceCount(entry: SidebarContactEntry): number {
+  return resolveSidebarEntryInstanceIDs(entry).length;
+}
+
+function hasSidebarEntryMultipleInstances(entry: SidebarContactEntry): boolean {
+  return getSidebarEntryInstanceCount(entry) > 1;
+}
+
+function getSidebarEntryPrimaryInstanceID(
+  entry: SidebarContactEntry,
+): string | undefined {
+  return resolveSidebarEntryInstanceIDs(entry)[0];
 }
 
 function formatAccountToggleLabel(toggleKey: string): string {
@@ -393,7 +516,9 @@ function formatAccountToggleLabel(toggleKey: string): string {
       contactsStore.contacts.find((contact) => contact.id === contactID) ||
       null;
     if (sourceContact) {
-      const instanceLabel = resolveInstanceToggleLabel(sourceContact.instance_id);
+      const instanceLabel = resolveInstanceToggleLabel(
+        sourceContact.instance_id,
+      );
       if (instanceLabel) {
         return instanceLabel;
       }
@@ -411,6 +536,33 @@ function formatAccountToggleLabel(toggleKey: string): string {
   }
 
   return toggleKey;
+}
+
+function resolveOutboundInstanceID(
+  contact: Contact | null,
+): string | undefined {
+  const selectedSource = resolveSelectedSourceContact(contact);
+  const instanceID =
+    typeof selectedSource?.instance_id === "string"
+      ? selectedSource.instance_id.trim()
+      : "";
+  if (instanceID !== "") {
+    return instanceID;
+  }
+  return undefined;
+}
+
+function resolveOutboundWhatsAppAccount(
+  contact: Contact | null,
+): string | undefined {
+  const selectedFilter = selectedAccountFilter(selectedAccount.value);
+  if (selectedFilter) return selectedFilter;
+  const selectedSource = resolveSelectedSourceContact(contact);
+  const accountName =
+    typeof selectedSource?.whatsapp_account === "string"
+      ? selectedSource.whatsapp_account.trim()
+      : "";
+  return accountName || undefined;
 }
 
 // File upload state
@@ -500,7 +652,9 @@ const selectedBatchPrintCount = computed(
 );
 
 const hasMergePrintableBubbles = computed(() =>
-  contactsStore.messages.some((message) => isMergePrintableBubbleMessage(message)),
+  contactsStore.messages.some((message) =>
+    isMergePrintableBubbleMessage(message),
+  ),
 );
 
 const canMergeSelectedBubbleFiles = computed(
@@ -760,7 +914,10 @@ function getSidebarEntryPreferredContact(entry: SidebarContactEntry): Contact {
 
   const selectedContactID = contactIDFromToggleKey(selectedAccount.value);
   if (selectedContactID) {
-    const selectedContact = findSidebarEntrySourceContact(entry, selectedContactID);
+    const selectedContact = findSidebarEntrySourceContact(
+      entry,
+      selectedContactID,
+    );
     if (selectedContact) {
       return selectedContact;
     }
@@ -805,22 +962,43 @@ const isCurrentGroupChat = computed(() =>
 const isCurrentChatClosed = computed(
   () => contactsStore.currentContact?.status === "closed",
 );
-const isCurrentChatRestricted = computed(() => {
+
+const currentUserUnclaimedAccess = computed(() => {
+  const restrictions = authStore.user?.settings?.send_restrictions || {};
+  const allowSend = restrictions.allow_unclaimed_chat_send === true;
+  const allowView =
+    restrictions.allow_unclaimed_chat_view === true || allowSend;
+  return {
+    allowView,
+    allowSend,
+  };
+});
+
+const isCurrentChatPendingUnassigned = computed(() => {
   if (!contactsStore.currentContact) return false;
-  if (isAdminUser.value) return false;
-  if (contactsStore.isMessageAccessRestricted) return true;
   if (contactsStore.currentContact.is_public === true) return false;
   return (
     contactsStore.currentContact.status === "pending" ||
     !contactsStore.currentContact.assigned_user_id
   );
 });
+
+const isCurrentChatRestricted = computed(() => {
+  if (!contactsStore.currentContact) return false;
+  if (isAdminUser.value) return false;
+  if (contactsStore.isMessageAccessRestricted) return true;
+  if (!isCurrentChatPendingUnassigned.value) return false;
+  return !currentUserUnclaimedAccess.value.allowView;
+});
+const isCurrentChatSendRestricted = computed(() => {
+  if (!contactsStore.currentContact) return false;
+  if (isAdminUser.value) return false;
+  if (!isCurrentChatPendingUnassigned.value) return false;
+  return !currentUserUnclaimedAccess.value.allowSend;
+});
 const canClaimCurrentChat = computed(() => {
   if (!contactsStore.currentContact || isAdminUser.value) return false;
-  return (
-    contactsStore.currentContact.status === "pending" ||
-    !contactsStore.currentContact.assigned_user_id
-  );
+  return isCurrentChatPendingUnassigned.value;
 });
 const canCloseCurrentChat = computed(() => {
   const contact = contactsStore.currentContact;
@@ -1330,8 +1508,7 @@ watch(contactId, (newId) => {
 });
 
 async function selectContact(id: string, selectionSequence: number) {
-  const isSelectionStale = () =>
-    selectionSequence !== contactSelectionSequence;
+  const isSelectionStale = () => selectionSequence !== contactSelectionSequence;
   resetMediaLoadingPipeline();
   resetBatchPrintSelection();
   let contact = contactsStore.contacts.find((c) => c.id === id);
@@ -1348,10 +1525,9 @@ async function selectContact(id: string, selectionSequence: number) {
   );
   const hasUnifiedAccountGroup = Boolean(
     isSidebarUnifiedMode.value &&
-      sidebarEntry &&
-      (sidebarEntry.accountNames.length > 1 ||
-        (sidebarEntry.accountNames.length === 0 &&
-          sidebarEntry.sourceContactIDs.length > 1)),
+    sidebarEntry &&
+    (sidebarEntry.sourceContactIDs.length > 1 ||
+      sidebarEntry.accountNames.length > 1),
   );
   let activeContact = contact;
 
@@ -1366,66 +1542,69 @@ async function selectContact(id: string, selectionSequence: number) {
   if (
     isSidebarUnifiedMode.value &&
     sidebarEntry &&
+    sidebarEntry.sourceContactIDs.length > 1
+  ) {
+    contactAccounts.value = Array.from(
+      new Set(
+        sidebarEntry.sourceContactIDs.map((sourceID) =>
+          toContactToggleKey(sourceID),
+        ),
+      ),
+    );
+  } else if (
+    isSidebarUnifiedMode.value &&
+    sidebarEntry &&
     sidebarEntry.accountNames.length > 0
   ) {
     contactAccounts.value = sidebarEntry.accountNames.map((accountName) =>
       toAccountToggleKey(accountName),
     );
-  } else if (
-    isSidebarUnifiedMode.value &&
-    sidebarEntry &&
-    sidebarEntry.sourceContactIDs.length > 1
-  ) {
-    contactAccounts.value = Array.from(
-      new Set(sidebarEntry.sourceContactIDs.map((sourceID) => toContactToggleKey(sourceID))),
-    );
   }
 
   if (hasUnifiedAccountGroup && sidebarEntry) {
-    if (sidebarEntry.accountNames.length > 0) {
-      const requestedAccount =
-        typeof contact.whatsapp_account === "string"
-          ? contact.whatsapp_account.trim()
-          : "";
-      const requestedKey = requestedAccount
-        ? toAccountToggleKey(requestedAccount)
+    const requestedContactKey = toContactToggleKey(contact.id);
+    const requestedAccount =
+      typeof contact.whatsapp_account === "string"
+        ? contact.whatsapp_account.trim()
         : "";
-      const selected =
-        requestedKey && contactAccounts.value.includes(requestedKey)
-          ? requestedKey
-          : contactAccounts.value[0];
-      selectedAccount.value = selected || null;
+    const requestedAccountKey = requestedAccount
+      ? toAccountToggleKey(requestedAccount)
+      : "";
 
-      const accountFilter = selectedAccountFilter(selectedAccount.value);
-      if (accountFilter && sidebarEntry.contactsByAccount[accountFilter]) {
-        activeContact = sidebarEntry.contactsByAccount[accountFilter];
-        contactsStore.setAccountFilter(accountFilter);
-      }
-    } else {
-      const requestedKey = toContactToggleKey(contact.id);
-      const selected = contactAccounts.value.includes(requestedKey)
-        ? requestedKey
-        : contactAccounts.value[0];
-      selectedAccount.value = selected || null;
+    const selected =
+      (requestedContactKey &&
+        contactAccounts.value.includes(requestedContactKey) &&
+        requestedContactKey) ||
+      (requestedAccountKey &&
+        contactAccounts.value.includes(requestedAccountKey) &&
+        requestedAccountKey) ||
+      contactAccounts.value[0];
+    selectedAccount.value = selected || null;
 
-      const selectedContactID = contactIDFromToggleKey(selectedAccount.value);
-      const selectedSourceContact = findSidebarEntrySourceContact(
-        sidebarEntry,
-        selectedContactID,
-      );
-      if (selectedSourceContact) {
-        activeContact = selectedSourceContact;
-      }
-      contactsStore.setAccountFilter(null);
+    const selectedSourceContact = resolveSourceContactForToggle(
+      sidebarEntry,
+      selectedAccount.value,
+    );
+    if (selectedSourceContact) {
+      activeContact = selectedSourceContact;
     }
+    contactsStore.setAccountFilter(
+      selectedAccountFilter(selectedAccount.value) || null,
+    );
   }
 
   contactsStore.setCurrentContact(activeContact);
 
+  const allowViewWithoutClaim = (() => {
+    const restrictions = authStore.user?.settings?.send_restrictions || {};
+    const allowSend = restrictions.allow_unclaimed_chat_send === true;
+    return restrictions.allow_unclaimed_chat_view === true || allowSend;
+  })();
   const isRestrictedForNonAdmin =
     !isAdminUser.value &&
     activeContact.is_public !== true &&
-    (activeContact.status === "pending" || !activeContact.assigned_user_id);
+    (activeContact.status === "pending" || !activeContact.assigned_user_id) &&
+    !allowViewWithoutClaim;
   if (isRestrictedForNonAdmin) {
     contactsStore.clearMessages();
     wsService.setCurrentContact(null);
@@ -1433,9 +1612,14 @@ async function selectContact(id: string, selectionSequence: number) {
   }
 
   const initialAccountFilter = selectedAccountFilter(selectedAccount.value);
-  await contactsStore.fetchMessages(activeContact.id, initialAccountFilter ? {
-    account: initialAccountFilter,
-  } : undefined);
+  await contactsStore.fetchMessages(
+    activeContact.id,
+    initialAccountFilter
+      ? {
+          account: initialAccountFilter,
+        }
+      : undefined,
+  );
   if (isSelectionStale()) return;
 
   if (isSidebarUnifiedMode.value) {
@@ -1470,7 +1654,9 @@ async function selectContact(id: string, selectionSequence: number) {
           }
         }
         // Re-fetch messages filtered by selected account
-        const refreshedAccountFilter = selectedAccountFilter(selectedAccount.value);
+        const refreshedAccountFilter = selectedAccountFilter(
+          selectedAccount.value,
+        );
         if (refreshedAccountFilter) {
           contactsStore.setAccountFilter(refreshedAccountFilter);
           await contactsStore.fetchMessages(activeContact.id, {
@@ -1593,9 +1779,10 @@ watch(
       const availableMessageIDs = new Set(
         contactsStore.messages.map((message) => message.id),
       );
-      selectedBatchPrintMessageIds.value = selectedBatchPrintMessageIds.value.filter(
-        (id) => availableMessageIDs.has(id),
-      );
+      selectedBatchPrintMessageIds.value =
+        selectedBatchPrintMessageIds.value.filter((id) =>
+          availableMessageIDs.has(id),
+        );
     }
     try {
       loadMediaForMessages();
@@ -1770,14 +1957,19 @@ async function deleteSidebarEntry(entry: SidebarContactEntry) {
 
     await refreshContactsSidebar();
 
-    if (deletedCurrentContact || (contactId.value && contactIDs.includes(contactId.value))) {
+    if (
+      deletedCurrentContact ||
+      (contactId.value && contactIDs.includes(contactId.value))
+    ) {
       await router.push("/chat");
     }
 
     toast.success(
       t("common.deletedSuccess", {
         resource:
-          contactIDs.length > 1 ? t("resources.contacts") : t("resources.Contact"),
+          contactIDs.length > 1
+            ? t("resources.contacts")
+            : t("resources.Contact"),
       }),
     );
   } catch (error: any) {
@@ -1821,13 +2013,18 @@ async function handleContactDeleted(contactId: string) {
 }
 
 async function sendMessage() {
-  if (isCurrentChatRestricted.value || isCurrentChatClosed.value) return;
+  if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) return;
   if (!canSendMessage.value || !contactsStore.currentContact) return;
 
   stopTypingForContact(contactsStore.currentContact);
   isSending.value = true;
   try {
-    const activeAccountFilter = selectedAccountFilter(selectedAccount.value);
+    const outboundInstanceID = resolveOutboundInstanceID(
+      contactsStore.currentContact,
+    );
+    const activeAccountFilter = resolveOutboundWhatsAppAccount(
+      contactsStore.currentContact,
+    );
     if (
       pendingCannedResponse.value &&
       pendingCannedResponse.value.attachments.length > 0
@@ -1837,7 +2034,7 @@ async function sendMessage() {
         {
           contact_id: contactsStore.currentContact.id,
           content: messageInput.value,
-          instance_id: contactsStore.currentContact.instance_id,
+          instance_id: outboundInstanceID,
           reply_to_message_id: contactsStore.replyingTo?.id,
           whatsapp_account: activeAccountFilter,
         },
@@ -1856,6 +2053,7 @@ async function sendMessage() {
         { body: messageInput.value },
         contactsStore.replyingTo?.id,
         activeAccountFilter,
+        outboundInstanceID,
       );
     }
 
@@ -1890,8 +2088,9 @@ async function retryMessage(message: Message) {
       content,
       undefined,
       message.whatsapp_account ||
-        selectedAccountFilter(selectedAccount.value) ||
-        undefined,
+        resolveOutboundWhatsAppAccount(contactsStore.currentContact),
+      message.instance_id ||
+        resolveOutboundInstanceID(contactsStore.currentContact),
     );
 
     // Remove the failed message from the list after successful retry
@@ -2295,6 +2494,7 @@ function handleTemplateWithParams(template: any, paramNames: string[]) {
 }
 
 async function sendTemplateMessage() {
+  if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) return;
   if (!contactsStore.currentContact || !selectedTemplate.value) return;
 
   // Validate all params are filled
@@ -2312,7 +2512,7 @@ async function sendTemplateMessage() {
       contactsStore.currentContact.id,
       selectedTemplate.value.name,
       templateParamValues.value,
-      selectedAccountFilter(selectedAccount.value),
+      resolveOutboundWhatsAppAccount(contactsStore.currentContact),
     );
     toast.success(t("chat.templateSent"));
     templateDialogOpen.value = false;
@@ -2320,7 +2520,10 @@ async function sendTemplateMessage() {
     templateParamNames.value = [];
     templateParamValues.value = {};
   } catch (error: any) {
-    const message = resolveSendErrorMessage(error, t("chat.templateSendFailed"));
+    const message = resolveSendErrorMessage(
+      error,
+      t("chat.templateSendFailed"),
+    );
     toast.error(message);
   } finally {
     isSendingTemplate.value = false;
@@ -2329,10 +2532,7 @@ async function sendTemplateMessage() {
 
 function resolveSendErrorMessage(error: any, fallbackMessage: string): string {
   const responseData = error?.response?.data || {};
-  const details =
-    responseData?.details ||
-    responseData?.data?.details ||
-    {};
+  const details = responseData?.details || responseData?.data?.details || {};
   const reasonCode = String(
     details?.reason_code ||
       responseData?.reason_code ||
@@ -2422,7 +2622,7 @@ watch(messageInput, (val) => {
     return;
   }
 
-  if (isCurrentChatRestricted.value || isCurrentChatClosed.value) {
+  if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) {
     stopTypingForContact(activeContact);
     return;
   }
@@ -2639,7 +2839,8 @@ function handleImageLoad() {
   if (viewport) {
     // If the user is within 250px of the bottom, keep them pinned to the bottom.
     // This prevents layout jumps when images load asynchronously after opening a chat.
-    const isNearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 250;
+    const isNearBottom =
+      viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 250;
     if (isNearBottom) {
       scrollToBottom(true);
     }
@@ -2884,6 +3085,20 @@ interface CTAUrlData {
   url: string;
 }
 
+function sanitizeCTAUrl(raw: unknown): string {
+  const candidate = typeof raw === "string" ? raw.trim() : "";
+  if (!candidate) return "";
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
 function getCTAUrlData(message: Message): CTAUrlData | null {
   if (message.message_type !== "interactive" || !message.interactive_data) {
     return null;
@@ -2891,11 +3106,15 @@ function getCTAUrlData(message: Message): CTAUrlData | null {
   if (message.interactive_data.type !== "cta_url") {
     return null;
   }
+  const safeURL = sanitizeCTAUrl((message.interactive_data as any).url);
+  if (!safeURL) {
+    return null;
+  }
   return {
     type: "cta_url",
     body: message.interactive_data.body || "",
     button_text: (message.interactive_data as any).button_text || "Open",
-    url: (message.interactive_data as any).url || "",
+    url: safeURL,
   };
 }
 
@@ -3022,7 +3241,8 @@ async function loadMediaForMessage(
       return;
     }
     if (!mediaBlobUrls.value[message.id]) {
-      mediaBlobUrls.value[message.id] = URL.createObjectURL(persistentCachedBlob);
+      mediaBlobUrls.value[message.id] =
+        URL.createObjectURL(persistentCachedBlob);
     }
     return;
   }
@@ -3036,7 +3256,9 @@ async function loadMediaForMessage(
   mediaLoadingStates.value[message.id] = true;
 
   try {
-    const blob = await prefetchMediaBlob(message.id, { signal: controller.signal });
+    const blob = await prefetchMediaBlob(message.id, {
+      signal: controller.signal,
+    });
     if (!blob) {
       throw new Error("Failed to load media: empty response");
     }
@@ -3125,9 +3347,8 @@ function isBatchPrintBubbleSelected(messageId: string): boolean {
 
 function toggleBatchPrintMessageSelection(messageId: string) {
   if (isBatchPrintBubbleSelected(messageId)) {
-    selectedBatchPrintMessageIds.value = selectedBatchPrintMessageIds.value.filter(
-      (id) => id !== messageId,
-    );
+    selectedBatchPrintMessageIds.value =
+      selectedBatchPrintMessageIds.value.filter((id) => id !== messageId);
     return;
   }
   selectedBatchPrintMessageIds.value = [
@@ -3148,7 +3369,9 @@ function handleMessageBubbleClickForBatchPrint(
   toggleBatchPrintMessageSelection(message.id);
 }
 
-async function resolveMessageBlobForBatchPrint(message: Message): Promise<Blob> {
+async function resolveMessageBlobForBatchPrint(
+  message: Message,
+): Promise<Blob> {
   const cachedBlob = mediaBlobCache.get(message.id);
   if (cachedBlob) {
     return cachedBlob;
@@ -3158,7 +3381,8 @@ async function resolveMessageBlobForBatchPrint(message: Message): Promise<Blob> 
   if (persistentCachedBlob) {
     mediaBlobCache.set(message.id, persistentCachedBlob);
     if (!mediaBlobUrls.value[message.id]) {
-      mediaBlobUrls.value[message.id] = URL.createObjectURL(persistentCachedBlob);
+      mediaBlobUrls.value[message.id] =
+        URL.createObjectURL(persistentCachedBlob);
     }
     return persistentCachedBlob;
   }
@@ -3192,7 +3416,8 @@ async function mergeSelectedMessageBubblesAndPrint() {
   const selectedMessageIDs = new Set(selectedBatchPrintMessageIds.value);
   const selectedMessages = contactsStore.messages.filter(
     (message) =>
-      selectedMessageIDs.has(message.id) && isBatchPrintBubbleSelectable(message),
+      selectedMessageIDs.has(message.id) &&
+      isBatchPrintBubbleSelectable(message),
   );
 
   if (selectedMessages.length < 2) {
@@ -3311,7 +3536,7 @@ function closeMediaDialog() {
 }
 
 async function sendMediaMessage() {
-  if (isCurrentChatRestricted.value || isCurrentChatClosed.value) return;
+  if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) return;
   if (!selectedFile.value || !contactsStore.currentContact) return;
 
   isUploadingMedia.value = true;
@@ -3326,7 +3551,15 @@ async function sendMediaMessage() {
     if (mediaCaption.value.trim()) {
       formData.append("caption", mediaCaption.value.trim());
     }
-    const accountFilter = selectedAccountFilter(selectedAccount.value);
+    const outboundInstanceID = resolveOutboundInstanceID(
+      contactsStore.currentContact,
+    );
+    const accountFilter = resolveOutboundWhatsAppAccount(
+      contactsStore.currentContact,
+    );
+    if (outboundInstanceID) {
+      formData.append("instance_id", outboundInstanceID);
+    }
     if (accountFilter) {
       formData.append("whatsapp_account", accountFilter);
     }
@@ -3656,8 +3889,11 @@ async function sendMediaMessage() {
             :key="entry.key"
             :class="[
               'group flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors',
-              isSidebarEntryActive(entry) && 'bg-white/[0.08] light:bg-gray-100',
+              isSidebarEntryActive(entry) &&
+                'bg-white/[0.08] light:bg-gray-100',
             ]"
+            data-testid="chat-sidebar-entry"
+            :data-sidebar-entry-key="entry.key"
             @click="handleContactClick(entry)"
           >
             <button
@@ -3674,13 +3910,15 @@ async function sendMediaMessage() {
                   :class="
                     'text-xs bg-gradient-to-br text-white ' +
                     getAvatarGradient(
-                      entry.displayContact.name || entry.displayContact.phone_number,
+                      entry.displayContact.name ||
+                        entry.displayContact.phone_number,
                     )
                   "
                 >
                   {{
                     getInitials(
-                      entry.displayContact.name || entry.displayContact.phone_number,
+                      entry.displayContact.name ||
+                        entry.displayContact.phone_number,
                     )
                   }}
                 </AvatarFallback>
@@ -3693,7 +3931,10 @@ async function sendMediaMessage() {
                 <p
                   class="text-sm font-medium truncate text-white light:text-gray-900"
                 >
-                  {{ entry.displayContact.name || entry.displayContact.phone_number }}
+                  {{
+                    entry.displayContact.name ||
+                    entry.displayContact.phone_number
+                  }}
                 </p>
                 <span
                   v-if="!isContactsSidebarCompact"
@@ -3711,12 +3952,27 @@ async function sendMediaMessage() {
                     >
                       {{ entry.displayContact.phone_number }}
                     </p>
-                    <InstanceTag
+                    <div
                       v-if="
-                        entry.displayContact.instance_id &&
-                        !(isSidebarUnifiedMode && entry.accountNames.length > 1)
+                        isSidebarUnifiedMode &&
+                        hasSidebarEntryMultipleInstances(entry)
                       "
-                      :instance-id="entry.displayContact.instance_id"
+                      class="flex min-w-0 flex-wrap items-center gap-1"
+                      data-testid="sidebar-multi-instance-tags"
+                      :data-instance-count="
+                        String(getSidebarEntryInstanceCount(entry))
+                      "
+                    >
+                      <InstanceTag
+                        v-for="instanceID in resolveSidebarEntryInstanceIDs(entry)"
+                        :key="`sidebar-instance-tag-${entry.key}-${instanceID}`"
+                        :instance-id="instanceID"
+                        placement="sidebar"
+                      />
+                    </div>
+                    <InstanceTag
+                      v-else-if="getSidebarEntryPrimaryInstanceID(entry)"
+                      :instance-id="getSidebarEntryPrimaryInstanceID(entry)"
                       :class="[
                         isContactsSidebarCompact ? 'max-w-[92px]' : '',
                         isContactsSidebarWide ? 'max-w-[190px]' : '',
@@ -3727,7 +3983,8 @@ async function sendMediaMessage() {
                   <div
                     v-if="
                       isSidebarUnifiedMode &&
-                      entry.accountNames.length > 0 &&
+                      entry.accountNames.length > 1 &&
+                      !hasSidebarEntryMultipleInstances(entry) &&
                       !isContactsSidebarCompact
                     "
                     class="mt-1 flex flex-wrap items-center gap-1"
@@ -3752,22 +4009,22 @@ async function sendMediaMessage() {
                     {{ getAssignedAgentName(entry.displayContact) }}
                   </p>
                 </div>
-	                <div class="ml-2 flex items-center gap-1">
-	                  <Badge
-	                    v-if="entry.displayContact.is_public"
-	                    class="h-5 text-[10px] bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-700"
-	                  >
-	                    {{ $t("chat.publicShort") }}
-	                  </Badge>
-                    <Badge
-                      v-if="entry.displayContact.status === 'closed'"
-                      class="h-5 text-[10px] bg-rose-500/20 text-rose-300 uppercase light:bg-rose-100 light:text-rose-700"
-                    >
-                      {{ entry.displayContact.status }}
-                    </Badge>
-	                  <Badge
-	                    v-if="entry.displayContact.unread_count > 0"
-	                    class="h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700"
+                <div class="ml-2 flex items-center gap-1">
+                  <Badge
+                    v-if="entry.displayContact.is_public"
+                    class="h-5 text-[10px] bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-700"
+                  >
+                    {{ $t("chat.publicShort") }}
+                  </Badge>
+                  <Badge
+                    v-if="entry.displayContact.status === 'closed'"
+                    class="h-5 text-[10px] bg-rose-500/20 text-rose-300 uppercase light:bg-rose-100 light:text-rose-700"
+                  >
+                    {{ entry.displayContact.status }}
+                  </Badge>
+                  <Badge
+                    v-if="entry.displayContact.unread_count > 0"
+                    class="h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700"
                   >
                     {{ entry.displayContact.unread_count }}
                   </Badge>
@@ -3900,21 +4157,21 @@ async function sendMediaMessage() {
             </button>
             <div>
               <div class="flex items-center gap-1.5">
-	                <p class="text-sm font-medium text-white light:text-gray-900">
-	                  {{
-	                    contactsStore.currentContact.name ||
-	                    contactsStore.currentContact.phone_number
-	                  }}
-	                </p>
-	                <Badge
-	                  v-if="contactsStore.currentContact.is_public"
-	                  class="text-[10px] h-5 bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-700"
-	                >
-	                  {{ $t("chat.publicChat") }}
-	                </Badge>
-	                <Badge
-	                  v-if="contactsStore.currentContact.status === 'pending'"
-	                  class="text-[10px] h-5 bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700"
+                <p class="text-sm font-medium text-white light:text-gray-900">
+                  {{
+                    contactsStore.currentContact.name ||
+                    contactsStore.currentContact.phone_number
+                  }}
+                </p>
+                <Badge
+                  v-if="contactsStore.currentContact.is_public"
+                  class="text-[10px] h-5 bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-700"
+                >
+                  {{ $t("chat.publicChat") }}
+                </Badge>
+                <Badge
+                  v-if="contactsStore.currentContact.status === 'pending'"
+                  class="text-[10px] h-5 bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700"
                 >
                   Pending
                 </Badge>
@@ -3937,7 +4194,7 @@ async function sendMediaMessage() {
             </div>
           </div>
           <div class="flex items-center gap-1">
-	            <Tooltip v-if="canAssignContacts">
+            <Tooltip v-if="canAssignContacts">
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"
@@ -3948,59 +4205,59 @@ async function sendMediaMessage() {
                   <UserPlus class="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-	              <TooltipContent>{{ $t("chat.assignToAgent") }}</TooltipContent>
-	            </Tooltip>
-	            <Tooltip v-if="canToggleCurrentChatPublic">
-	              <TooltipTrigger as-child>
-	                <Button
-	                  variant="ghost"
-	                  size="icon"
-	                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
-	                  :disabled="isUpdatingCurrentChatPublic"
-	                  @click="toggleCurrentChatPublicVisibility"
-	                >
-	                  <Loader2
-	                    v-if="isUpdatingCurrentChatPublic"
-	                    class="h-4 w-4 animate-spin"
-	                  />
-	                  <Pin
-	                    v-else
-	                    class="h-4 w-4"
-	                    :class="
-	                      contactsStore.currentContact?.is_public
-	                        ? 'text-sky-300 light:text-sky-700'
-	                        : ''
-	                    "
-	                  />
-	                </Button>
-	              </TooltipTrigger>
-	              <TooltipContent>
-	                {{
-	                  contactsStore.currentContact?.is_public
-	                    ? $t("chat.removePublicChat")
-	                    : $t("chat.makePublicChat")
-	                }}
-	              </TooltipContent>
-	            </Tooltip>
-	            <Tooltip v-if="canClaimCurrentChat && !isCurrentChatRestricted">
-	              <TooltipTrigger as-child>
-	                <Button
-	                  variant="ghost"
-	                  size="icon"
-	                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
-	                  :disabled="isClaimingCurrentChat"
-	                  @click="claimCurrentChat"
-	                >
-	                  <Loader2
-	                    v-if="isClaimingCurrentChat"
-	                    class="h-4 w-4 animate-spin"
-	                  />
-	                  <Check v-else class="h-4 w-4" />
-	                </Button>
-	              </TooltipTrigger>
-	              <TooltipContent>{{ $t("chat.claimChat") }}</TooltipContent>
-	            </Tooltip>
-	            <Tooltip v-if="canCloseCurrentChat">
+              <TooltipContent>{{ $t("chat.assignToAgent") }}</TooltipContent>
+            </Tooltip>
+            <Tooltip v-if="canToggleCurrentChatPublic">
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  :disabled="isUpdatingCurrentChatPublic"
+                  @click="toggleCurrentChatPublicVisibility"
+                >
+                  <Loader2
+                    v-if="isUpdatingCurrentChatPublic"
+                    class="h-4 w-4 animate-spin"
+                  />
+                  <Pin
+                    v-else
+                    class="h-4 w-4"
+                    :class="
+                      contactsStore.currentContact?.is_public
+                        ? 'text-sky-300 light:text-sky-700'
+                        : ''
+                    "
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {{
+                  contactsStore.currentContact?.is_public
+                    ? $t("chat.removePublicChat")
+                    : $t("chat.makePublicChat")
+                }}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip v-if="canClaimCurrentChat && !isCurrentChatRestricted">
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  :disabled="isClaimingCurrentChat"
+                  @click="claimCurrentChat"
+                >
+                  <Loader2
+                    v-if="isClaimingCurrentChat"
+                    class="h-4 w-4 animate-spin"
+                  />
+                  <Check v-else class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t("chat.claimChat") }}</TooltipContent>
+            </Tooltip>
+            <Tooltip v-if="canCloseCurrentChat">
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"
@@ -4117,9 +4374,8 @@ async function sendMediaMessage() {
 
         <!-- Account Tabs (shown when contact has messages from multiple WhatsApp accounts) -->
         <div
-          v-if="
-            isSidebarUnifiedMode && contactAccounts.length > 1
-          "
+          v-if="isSidebarUnifiedMode && contactAccounts.length > 1"
+          data-testid="chat-account-tabs"
           class="flex-shrink-0 px-4 py-2 border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b] light:bg-gray-50"
         >
           <div
@@ -4128,6 +4384,11 @@ async function sendMediaMessage() {
             <button
               v-for="acct in contactAccounts"
               :key="acct"
+              data-testid="chat-account-tab"
+              :data-account-tab-key="acct"
+              :data-account-tab-active="
+                acct === selectedAccount ? 'true' : 'false'
+              "
               :class="[
                 'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all',
                 acct === selectedAccount
@@ -4274,7 +4535,9 @@ async function sendMediaMessage() {
                         ? 'batch-print-selected-bubble'
                         : '',
                     ]"
-                    @click="handleMessageBubbleClickForBatchPrint(message, $event)"
+                    @click="
+                      handleMessageBubbleClickForBatchPrint(message, $event)
+                    "
                   >
                     <button
                       v-if="
@@ -4964,7 +5227,8 @@ async function sendMediaMessage() {
           v-if="
             contactsStore.replyingTo &&
             !isCurrentChatClosed &&
-            !isCurrentChatRestricted
+            !isCurrentChatRestricted &&
+            !isCurrentChatSendRestricted
           "
           class="px-4 py-2 border-t border-white/[0.08] light:border-gray-200 bg-white/[0.04] light:bg-gray-50 flex items-center justify-between"
         >
@@ -4990,6 +5254,14 @@ async function sendMediaMessage() {
           v-if="!isCurrentChatClosed && !isCurrentChatRestricted"
           class="p-4 border-t border-white/[0.08] light:border-gray-200 bg-[#0f0f10] light:bg-white"
         >
+          <div
+            v-if="isCurrentChatSendRestricted"
+            class="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 light:border-amber-200 light:bg-amber-50 light:text-amber-700"
+          >
+            This chat can be viewed without claim, but sending is blocked until
+            you claim it.
+          </div>
+
           <div
             v-if="pendingCannedResponse?.attachments?.length"
             class="mb-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2"
@@ -5062,6 +5334,7 @@ async function sendMediaMessage() {
           <form
             @submit.prevent="sendMessage"
             class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200"
+            :class="isCurrentChatSendRestricted && 'opacity-70'"
           >
             <Tooltip>
               <TooltipTrigger as-child>
@@ -5070,6 +5343,7 @@ async function sendMediaMessage() {
                     <PopoverTrigger as-child>
                       <button
                         type="button"
+                        :disabled="isCurrentChatSendRestricted"
                         class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors"
                       >
                         <Smile
@@ -5097,6 +5371,10 @@ async function sendMediaMessage() {
                     :contact="contactsStore.currentContact"
                     :external-open="cannedPickerOpen"
                     :external-search="cannedSearchQuery"
+                    :class="
+                      isCurrentChatSendRestricted &&
+                      'pointer-events-none opacity-60'
+                    "
                     @select="insertCannedResponse"
                     @close="closeCannedPicker"
                   />
@@ -5109,6 +5387,10 @@ async function sendMediaMessage() {
                 <span ref="templatePickerRef">
                   <TemplatePicker
                     :selected-account="selectedAccount"
+                    :class="
+                      isCurrentChatSendRestricted &&
+                      'pointer-events-none opacity-60'
+                    "
                     @select-with-params="handleTemplateWithParams"
                   />
                 </span>
@@ -5119,6 +5401,7 @@ async function sendMediaMessage() {
               <TooltipTrigger as-child>
                 <button
                   type="button"
+                  :disabled="isCurrentChatSendRestricted"
                   class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors"
                   @click="openFilePicker"
                 >
@@ -5153,7 +5436,9 @@ async function sendMediaMessage() {
                     class="w-[18px] h-[18px] text-white/40 light:text-gray-500"
                   />
                   <span
-                    v-if="isBatchPrintSelectionMode && selectedBatchPrintCount > 0"
+                    v-if="
+                      isBatchPrintSelectionMode && selectedBatchPrintCount > 0
+                    "
                     class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-[10px] font-semibold leading-4 text-white text-center"
                   >
                     {{ selectedBatchPrintCount }}
@@ -5179,13 +5464,16 @@ async function sendMediaMessage() {
               :placeholder="$t('chat.typeMessage') + '...'"
               rows="1"
               class="flex-1 bg-transparent text-[14px] text-white light:text-gray-900 placeholder:text-white/30 light:placeholder:text-gray-400 focus:outline-none resize-none min-h-[36px] max-h-[120px] py-2 overflow-y-auto"
+              :disabled="isCurrentChatSendRestricted || isSending"
               @keydown.enter.exact.prevent="sendMessage"
               @input="autoResizeTextarea"
             />
             <button
               type="submit"
               class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50"
-              :disabled="!canSendMessage || isSending"
+              :disabled="
+                isCurrentChatSendRestricted || !canSendMessage || isSending
+              "
             >
               <Send class="w-4 h-4 text-white" />
             </button>
@@ -5390,7 +5678,9 @@ async function sendMediaMessage() {
             </Button>
           </div>
 
-          <div class="flex items-center justify-center min-h-[220px] max-h-[80vh]">
+          <div
+            class="flex items-center justify-center min-h-[220px] max-h-[80vh]"
+          >
             <img
               v-if="chatMediaViewerType === 'image' && chatMediaViewerURL"
               :src="chatMediaViewerURL"

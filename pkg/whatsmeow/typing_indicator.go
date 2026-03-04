@@ -2,7 +2,6 @@ package whatsmeow
 
 import (
 	"context"
-	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -27,7 +26,7 @@ type typingIndicatorPlanner struct {
 
 	mu         sync.Mutex
 	lastByChat map[string]time.Time
-	random     *rand.Rand
+	randInt63n func(int64) int64
 	now        func() time.Time
 	sleep      func(context.Context, time.Duration) error
 	warn       func(string, ...any)
@@ -42,7 +41,7 @@ func newTypingIndicatorPlanner(cfg *config.WhatsmeowConfig) *typingIndicatorPlan
 		cooldown:   durationFromMs(cfg, 4000, func(c *config.WhatsmeowConfig) int { return c.TypingCooldownMs }),
 		minChars:   3,
 		lastByChat: make(map[string]time.Time),
-		random:     rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec
+		randInt63n: secureRandomInt63n,
 		now:        func() time.Time { return time.Now().UTC() },
 		sleep:      sleepWithTypingContext,
 		warn:       func(string, ...any) {},
@@ -147,7 +146,7 @@ func (p *typingIndicatorPlanner) computeDelay(previewText string) time.Duration 
 			jitterCap = remaining
 		}
 		if jitterCap > 0 {
-			delay += time.Duration(p.random.Int63n(int64(jitterCap + time.Millisecond)))
+			delay += time.Duration(p.randInt63n(int64(jitterCap + time.Millisecond)))
 		}
 	}
 	if delay > p.maxDelay {

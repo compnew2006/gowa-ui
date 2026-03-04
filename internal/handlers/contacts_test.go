@@ -703,6 +703,13 @@ func TestApp_AssignContact(t *testing.T) {
 		require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&updatedContact).Error)
 		require.NotNil(t, updatedContact.AssignedUserID)
 		assert.Equal(t, assignee.ID, *updatedContact.AssignedUserID)
+
+		var systemMessage models.Message
+		require.NoError(t, app.DB.
+			Where("contact_id = ? AND metadata->>'event_type' = ?", contact.ID, "chat_assigned").
+			Order("created_at DESC").
+			First(&systemMessage).Error)
+		assert.Contains(t, systemMessage.Content, "has assigned this chat to")
 	})
 
 	t.Run("success - unassign", func(t *testing.T) {
@@ -972,6 +979,52 @@ func TestApp_GetMessages(t *testing.T) {
 		content, ok := resp.Data.Messages[0].Content.(string)
 		require.True(t, ok)
 		assert.Equal(t, "Need public help", content)
+	})
+
+	t.Run("agent can read unassigned chat when allow_unclaimed_chat_view enabled", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "support-viewer", []string{"chat:read", "contacts:read"})
+		agentUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+		account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+		contact := testutil.CreateTestContactWith(
+			t,
+			app.DB,
+			org.ID,
+			testutil.WithContactAccount(account.Name),
+		)
+		require.NoError(t, app.DB.Model(&contact).Updates(map[string]any{
+			"status":           models.ChatStatusPending,
+			"assigned_user_id": nil,
+			"is_public":        false,
+		}).Error)
+		require.NoError(t, app.DB.Model(&models.User{}).Where("id = ?", agentUser.ID).Update("settings", models.JSONB{
+			"send_restrictions": models.JSONB{
+				"allow_unclaimed_chat_view": true,
+				"allow_unclaimed_chat_send": false,
+			},
+		}).Error)
+
+		msg := &models.Message{
+			BaseModel:       models.BaseModel{ID: uuid.New()},
+			OrganizationID:  org.ID,
+			WhatsAppAccount: account.Name,
+			ContactID:       contact.ID,
+			Direction:       models.DirectionIncoming,
+			MessageType:     models.MessageTypeText,
+			Content:         "Pending unassigned",
+			Status:          models.MessageStatusDelivered,
+		}
+		require.NoError(t, app.DB.Create(msg).Error)
+
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, agentUser.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+
+		err := app.GetMessages(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 	})
 
 	t.Run("contact not found", func(t *testing.T) {
@@ -1799,6 +1852,80 @@ func TestApp_SendMessage(t *testing.T) {
 		assert.Equal(t, contact.ID, resp.Data.ContactID)
 		assert.Equal(t, models.DirectionOutgoing, resp.Data.Direction)
 		assert.Equal(t, models.MessageTypeText, resp.Data.MessageType)
+	})
+
+	t.Run("pending chat send blocked when allow_unclaimed_chat_send is false", func(t *testing.T) {
+		t.Parallel()
+		mockServer := newMockWhatsAppServer()
+		defer mockServer.close()
+
+		app := newMsgTestApp(t, mockServer)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent-send", []string{"chat:write", "contacts:read"})
+		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+		account := createTestAccount(t, app, org.ID)
+		contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+		require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+			"status":           models.ChatStatusPending,
+			"assigned_user_id": nil,
+			"is_public":        false,
+		}).Error)
+		require.NoError(t, app.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("settings", models.JSONB{
+			"send_restrictions": models.JSONB{
+				"allow_unclaimed_chat_view": true,
+				"allow_unclaimed_chat_send": false,
+			},
+		}).Error)
+
+		req := testutil.NewJSONRequest(t, map[string]interface{}{
+			"type": "text",
+			"content": map[string]string{
+				"body": "blocked pending message",
+			},
+		})
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+
+		err := app.SendMessage(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+	})
+
+	t.Run("pending chat send allowed when allow_unclaimed_chat_send is true", func(t *testing.T) {
+		t.Parallel()
+		mockServer := newMockWhatsAppServer()
+		defer mockServer.close()
+
+		app := newMsgTestApp(t, mockServer)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent-send", []string{"chat:write", "contacts:read"})
+		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+		account := createTestAccount(t, app, org.ID)
+		contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+		require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+			"status":           models.ChatStatusPending,
+			"assigned_user_id": nil,
+			"is_public":        false,
+		}).Error)
+		require.NoError(t, app.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("settings", models.JSONB{
+			"send_restrictions": models.JSONB{
+				"allow_unclaimed_chat_view": true,
+				"allow_unclaimed_chat_send": true,
+			},
+		}).Error)
+
+		req := testutil.NewJSONRequest(t, map[string]interface{}{
+			"type": "text",
+			"content": map[string]string{
+				"body": "allowed pending message",
+			},
+		})
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+
+		err := app.SendMessage(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 	})
 
 	t.Run("success - whatsmeow persists outbound account for filtered history", func(t *testing.T) {

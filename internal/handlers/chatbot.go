@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
+	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
@@ -96,11 +98,24 @@ type AIContextResponse struct {
 	CreatedAt       string             `json:"created_at"`
 }
 
+func (a *App) authorizeChatbotRequest(r *fastglue.Request, action string) (uuid.UUID, bool) {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return uuid.Nil, false
+	}
+	if !a.HasPermission(userID, models.ResourceFlowsChatbot, action, orgID) {
+		_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "Permission denied", nil, "")
+		return uuid.Nil, false
+	}
+	return orgID, true
+}
+
 // GetChatbotSettings returns chatbot settings and stats
 func (a *App) GetChatbotSettings(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	// Get or create default settings
@@ -195,9 +210,9 @@ func (a *App) GetChatbotSettings(r *fastglue.Request) error {
 
 // UpdateChatbotSettings updates chatbot settings
 func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
+	if !ok {
+		return nil
 	}
 
 	var req struct {
@@ -318,7 +333,14 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 		settings.AI.Provider = *req.AIProvider
 	}
 	if req.AIAPIKey != nil && *req.AIAPIKey != "" {
-		settings.AI.APIKey = *req.AIAPIKey
+		encryptedKey, encErr := appcrypto.Encrypt(*req.AIAPIKey, a.Config.App.EncryptionKey)
+		if encErr != nil {
+			if errors.Is(encErr, appcrypto.ErrMissingEncryptionKey) {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "app.encryption_key is required to store AI API keys", nil, "")
+			}
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to secure AI API key", nil, "")
+		}
+		settings.AI.APIKey = encryptedKey
 	}
 	if req.AIModel != nil {
 		settings.AI.Model = *req.AIModel
@@ -410,9 +432,9 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 
 // ListKeywordRules lists all keyword rules for the organization
 func (a *App) ListKeywordRules(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	pg := parsePagination(r)
@@ -462,9 +484,9 @@ func (a *App) ListKeywordRules(r *fastglue.Request) error {
 
 // CreateKeywordRule creates a new keyword rule
 func (a *App) CreateKeywordRule(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
+	if !ok {
+		return nil
 	}
 
 	var req struct {
@@ -523,9 +545,9 @@ func (a *App) CreateKeywordRule(r *fastglue.Request) error {
 
 // GetKeywordRule gets a single keyword rule
 func (a *App) GetKeywordRule(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "rule")
@@ -556,9 +578,9 @@ func (a *App) GetKeywordRule(r *fastglue.Request) error {
 
 // UpdateKeywordRule updates a keyword rule
 func (a *App) UpdateKeywordRule(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
+	if !ok {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "rule")
@@ -622,9 +644,9 @@ func (a *App) UpdateKeywordRule(r *fastglue.Request) error {
 
 // DeleteKeywordRule deletes a keyword rule
 func (a *App) DeleteKeywordRule(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionDelete)
+	if !ok {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "rule")
@@ -1037,9 +1059,9 @@ func (a *App) DeleteChatbotFlow(r *fastglue.Request) error {
 
 // ListAIContexts lists all AI contexts
 func (a *App) ListAIContexts(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	pg := parsePagination(r)
@@ -1086,9 +1108,9 @@ func (a *App) ListAIContexts(r *fastglue.Request) error {
 
 // CreateAIContext creates a new AI context
 func (a *App) CreateAIContext(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
+	if !ok {
+		return nil
 	}
 
 	var req struct {
@@ -1137,9 +1159,9 @@ func (a *App) CreateAIContext(r *fastglue.Request) error {
 
 // GetAIContext gets a single AI context
 func (a *App) GetAIContext(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "context")
@@ -1157,9 +1179,9 @@ func (a *App) GetAIContext(r *fastglue.Request) error {
 
 // UpdateAIContext updates an AI context
 func (a *App) UpdateAIContext(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
+	if !ok {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "context")
@@ -1218,9 +1240,9 @@ func (a *App) UpdateAIContext(r *fastglue.Request) error {
 
 // DeleteAIContext deletes an AI context
 func (a *App) DeleteAIContext(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionDelete)
+	if !ok {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "context")
@@ -1246,9 +1268,9 @@ func (a *App) DeleteAIContext(r *fastglue.Request) error {
 
 // ListChatbotSessions lists chatbot sessions
 func (a *App) ListChatbotSessions(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	status := string(r.RequestCtx.QueryArgs().Peek("status"))
@@ -1273,9 +1295,9 @@ func (a *App) ListChatbotSessions(r *fastglue.Request) error {
 
 // GetChatbotSession gets a single chatbot session with messages
 func (a *App) GetChatbotSession(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "session")

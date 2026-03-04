@@ -256,6 +256,7 @@ func (a *App) readCannedAttachmentData(attachment models.CannedResponseAttachmen
 		return nil, fmt.Errorf("invalid attachment path")
 	}
 
+	// #nosec G304 -- fullPath is resolved and constrained to media storage root in resolveMediaFilePath.
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read attachment file")

@@ -77,6 +77,51 @@ func (a *App) appendPublicChatSystemMessage(contact *models.Contact, userID uuid
 	})
 }
 
+func (a *App) canEmitChatAssignmentSystemMessage(userID, orgID uuid.UUID) bool {
+	if a == nil {
+		return false
+	}
+	if a.canBypassPendingChatRestriction(userID, orgID) {
+		return true
+	}
+	perms, err := a.getUserPermissionsCached(userID, orgID)
+	if err != nil {
+		return false
+	}
+	roleName := strings.TrimSpace(strings.ToLower(perms.RoleName))
+	return roleName == "admin" || roleName == "manager"
+}
+
+func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUserID uuid.UUID, assigneeUserID *uuid.UUID) {
+	if a == nil || contact == nil || assigneeUserID == nil || *assigneeUserID == uuid.Nil {
+		return
+	}
+	if !a.canEmitChatAssignmentSystemMessage(actorUserID, contact.OrganizationID) {
+		return
+	}
+
+	actorName := strings.TrimSpace(a.resolveActivityActorName(actorUserID))
+	if actorName == "" {
+		actorName = "An employee"
+	}
+	assigneeName := strings.TrimSpace(a.resolveActivityActorName(*assigneeUserID))
+	if assigneeName == "" {
+		assigneeName = "an agent"
+	}
+
+	a.appendSystemChatMessage(
+		contact,
+		fmt.Sprintf("System :%s has assigned this chat to %s", actorName, assigneeName),
+		models.JSONB{
+			"event_type":             "chat_assigned",
+			"assigned_by_user_id":    actorUserID.String(),
+			"assigned_by_user_name":  actorName,
+			"assigned_to_user_id":    assigneeUserID.String(),
+			"assigned_to_user_name":  assigneeName,
+		},
+	)
+}
+
 // AssignContact assigns a contact to a user (agent)
 // Only users with write permission can assign contacts
 func (a *App) AssignContact(r *fastglue.Request) error {
@@ -134,6 +179,9 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 	notifyAssignee := false
 	if contact.AssignedUserID != nil {
 		notifyAssignee = previousAssignedUserID == nil || *previousAssignedUserID != *contact.AssignedUserID
+	}
+	if notifyAssignee {
+		a.appendAssignedChatSystemMessage(contact, userID, contact.AssignedUserID)
 	}
 	a.broadcastContactLifecycleUpdate(orgID, contact, notifyAssignee)
 

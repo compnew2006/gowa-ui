@@ -44,7 +44,7 @@ func (a *App) WebhookVerify(r *fastglue.Request) error {
 		return nil
 	}
 
-	a.Log.Warn("Webhook verification failed - token not found", "token", token)
+	a.Log.Warn("Webhook verification failed - token not found")
 	return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Verification failed", nil, "")
 }
 

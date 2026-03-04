@@ -9,6 +9,13 @@ interface CreateUser {
   role_name: string
 }
 
+interface ExistingUser {
+  id: string
+  email: string
+}
+
+const E2E_TEST_PASSWORD = 'Password123!'
+
 /**
  * Extract the whm_csrf cookie value from Set-Cookie response headers.
  */
@@ -77,19 +84,23 @@ async function globalSetup() {
 
   // Step 3: Create test users in the default organization
   const usersToCreate: CreateUser[] = [
-    { email: 'admin@test.com', password: 'password', full_name: 'Test Admin', role_name: 'admin' },
-    { email: 'manager@test.com', password: 'password', full_name: 'Test Manager', role_name: 'manager' },
-    { email: 'agent@test.com', password: 'password', full_name: 'Test Agent', role_name: 'agent' },
+    { email: 'admin@test.com', password: E2E_TEST_PASSWORD, full_name: 'Test Admin', role_name: 'admin' },
+    { email: 'manager@test.com', password: E2E_TEST_PASSWORD, full_name: 'Test Manager', role_name: 'manager' },
+    { email: 'agent@test.com', password: E2E_TEST_PASSWORD, full_name: 'Test Agent', role_name: 'agent' },
   ]
 
-  // Get existing users to check for duplicates
-  let existingEmails: Set<string> = new Set()
+  // Get existing users to support idempotent update/create behavior
+  const existingUsersByEmail = new Map<string, ExistingUser>()
   try {
     const listResponse = await context.get('/api/users')
     if (listResponse.ok()) {
       const data = await listResponse.json()
-      const users = data.data?.users || []
-      existingEmails = new Set(users.map((u: { email: string }) => u.email))
+      const users = (data.data?.users || []) as ExistingUser[]
+      users.forEach((u) => {
+        if (u.email) {
+          existingUsersByEmail.set(u.email, u)
+        }
+      })
     }
   } catch (error) {
     console.log(`  ⚠️  Error fetching existing users:`, error)
@@ -98,14 +109,30 @@ async function globalSetup() {
   const csrfHeaders: Record<string, string> = csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
 
   for (const user of usersToCreate) {
-    if (existingEmails.has(user.email)) {
-      console.log(`  ⏭️  User already exists: ${user.email}`)
+    const roleId = roleIds[user.role_name] || null
+    const existingUser = existingUsersByEmail.get(user.email)
+    if (existingUser?.id) {
+      try {
+        const updateResponse = await context.put(`/api/users/${existingUser.id}`, {
+          headers: csrfHeaders,
+          data: {
+            password: user.password,
+            role_id: roleId,
+            is_active: true,
+          },
+        })
+        if (updateResponse.ok()) {
+          console.log(`  ✅ Updated existing user credentials: ${user.email}`)
+        } else {
+          console.log(`  ⚠️  Could not update ${user.email}: ${updateResponse.status()} - ${await updateResponse.text()}`)
+        }
+      } catch (error) {
+        console.log(`  ⚠️  Error updating ${user.email}:`, error)
+      }
       continue
     }
 
     try {
-      const roleId = roleIds[user.role_name] || null
-
       const createResponse = await context.post('/api/users', {
         headers: csrfHeaders,
         data: {

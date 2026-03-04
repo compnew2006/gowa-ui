@@ -29,7 +29,7 @@ func (a *App) canAccessActivityLogs(userID, orgID uuid.UUID) bool {
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(perms.RoleName, "admin")
+	return strings.EqualFold(perms.RoleName, "admin") || strings.EqualFold(perms.RoleName, "manager")
 }
 
 // CreateActivityLog stores a custom activity event for the authenticated user.

@@ -30,6 +30,7 @@ const (
 )
 
 const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; frame-src 'self' data: blob: https:; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss: blob:"
+const accessTokenSubject = "access"
 
 // JWTClaims represents JWT claims
 type JWTClaims struct {
@@ -239,9 +240,11 @@ func Recovery(log logf.Logger) fastglue.FastMiddleware {
 	return func(r *fastglue.Request) *fastglue.Request {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Error("Panic recovered", "error", err, "path", string(r.RequestCtx.Path()))
+				errorRef := uuid.NewString()
+				log.Error("Panic recovered", "error_reference", errorRef, "error", err, "path", string(r.RequestCtx.Path()))
 				r.RequestCtx.SetStatusCode(fasthttp.StatusInternalServerError)
-				r.RequestCtx.SetBodyString(`{"status":"error","message":"Internal server error"}`)
+				r.RequestCtx.Response.Header.SetContentType("application/json")
+				r.RequestCtx.SetBodyString(fmt.Sprintf(`{"status":"error","message":"Internal server error","error_reference":"%s"}`, errorRef))
 			}
 		}()
 		return r
@@ -315,6 +318,11 @@ func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
 		claims, ok := token.Claims.(*JWTClaims)
 		if !ok {
 			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token claims", nil, "")
+			return nil
+		}
+		if claims.Subject != accessTokenSubject {
+			// Enforce access-token type so refresh/ws tokens cannot authenticate API requests.
+			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
 			return nil
 		}
 

@@ -114,7 +114,17 @@ func applyAgentVisibleChatListFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB 
 }
 
 func (a *App) canAccessRestrictedChatWithoutClaim(contact models.Contact, userID, orgID uuid.UUID) bool {
-	return contact.IsPublic || a.canBypassPendingChatRestriction(userID, orgID)
+	if contact.IsPublic {
+		return true
+	}
+	return a.canViewRestrictedChatWithoutClaim(userID, orgID)
+}
+
+func (a *App) canSendRestrictedChatWithoutClaimForContact(contact models.Contact, userID, orgID uuid.UUID) bool {
+	if contact.IsPublic {
+		return true
+	}
+	return a.canSendRestrictedChatWithoutClaim(userID, orgID)
 }
 
 func isChatRestrictedForMessageRead(contact models.Contact) bool {

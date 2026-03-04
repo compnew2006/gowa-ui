@@ -23,9 +23,9 @@ Base Domain Pattern (suggested): <tenant>.ofuqalmadenah.com
 - Config: /opt/whatomate/instances/holol-wenjaz/config.toml
 - PostgreSQL DB: whatomate_holol_wenjaz
 - PostgreSQL User: whatomate_holol_wenjaz
-- PostgreSQL Password: 3efee7e82b30b940d0c615defebb5e8e0e93acc2e682808a
+- PostgreSQL Password: [REDACTED]
 - Default Admin Email: admin+holol-wenjaz@whatomate.local
-- Default Admin Password: Zqxtu8r3mRhwhJ6oLYaxqE/7
+- Default Admin Password: [REDACTED]
 - Nginx vhost: /etc/nginx/sites-available/whatomate-holol-wenjaz.conf
 - Certbot command used: certbot --nginx -d holol-wenjaz.ofuqalmadenah.com
 
@@ -41,9 +41,9 @@ Base Domain Pattern (suggested): <tenant>.ofuqalmadenah.com
 - Config: /opt/whatomate/instances/alarkan-almthalia/config.toml
 - PostgreSQL DB: whatomate_alarkan_almthalia
 - PostgreSQL User: whatomate_alarkan_almthalia
-- PostgreSQL Password: 9975ca4213c2423bffff24f9f07c457b96b57bda32f21d14
+- PostgreSQL Password: [REDACTED]
 - Default Admin Email: admin+alarkan-almthalia@whatomate.local
-- Default Admin Password: lqgZPoOVWgqVqIhLWa2p0gI9
+- Default Admin Password: [REDACTED]
 - Nginx vhost: /etc/nginx/sites-available/whatomate-alarkan-almthalia.conf
 - Certbot command used: certbot --nginx -d alarkan-almthalia.ofuqalmadenah.com
 
@@ -59,9 +59,9 @@ Base Domain Pattern (suggested): <tenant>.ofuqalmadenah.com
 - Config: /opt/whatomate/instances/matbaat-ruya/config.toml
 - PostgreSQL DB: whatomate_matbaat_ruya
 - PostgreSQL User: whatomate_matbaat_ruya
-- PostgreSQL Password: 51eaf94195c125683c528275fbcfab4473eeaabace420917
+- PostgreSQL Password: [REDACTED]
 - Default Admin Email: admin+matbaat-ruya@whatomate.local
-- Default Admin Password: nRiMXl0DuJe8xfOS707NdPnU
+- Default Admin Password: [REDACTED]
 - Nginx vhost: /etc/nginx/sites-available/whatomate-matbaat-ruya.conf
 - Certbot command used: certbot --nginx -d matbaat-ruya.ofuqalmadenah.com
 
@@ -511,3 +511,163 @@ Updated: 2026-03-02 01:04:04 UTC
 ### Note
 
 - The core phone matching algorithm was fundamentally migrated from manual digit grouping loops to Google's official `libphonenumber` regex structural matching library, perfectly isolating Arabic and English multi-byte inputs without polluting explicit standard IDs and accounts.
+
+## Deployment Update
+
+Updated: 2026-03-03 14:48:57 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src` (via `rsync`; excluded caches, `uploads/`, and local build artifacts)
+- Source revision on deploy: `fdfa791` (working tree had local uncommitted changes)
+- Build command: `make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260303_144743.bak`
+- Installed binary SHA256: `deed3269e20ab1b550304c00157f2a24d0e710de251de197ef490ac536991f12`
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Listener ports active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com` -> `200`
+
+### Note
+
+- The deployment was completed successfully using the standard workflow. All services were verified as operational post-restart.
+
+## Deployment Update
+
+Updated: 2026-03-03 15:14:24 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src` (via `rsync`; excluded caches, `uploads/`, and local build artifacts)
+- Source revision on deploy: `fdfa791` (local working tree had uncommitted changes at `17:10`)
+- Build command: `make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260303_151354.bak`
+- Installed binary SHA256: `016c70f911f21051fdf82d504c33fde6a0792fa62a49e4ac6cc89c8b606bace7`
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Listener ports active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com` -> `200`
+
+### Note
+
+- This deployment includes new changes made to `frontend/src/services/api.ts` and `internal/config/config.go` observed at 17:10 local time.
+
+## Deployment Update
+
+Updated: 2026-03-03 15:25:01 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Direct binary upload artifact: `/tmp/whatomate-linux-20260303_172132`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.backup.20260303_152408`
+- Installed binary SHA1: `4a6643270cb44ecfa72ae58b4aadaa677d575e52`
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state: all 4 services `active`
+- Listener ports active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`
+- API check: `https://ofuqalmadenah.com/api/statuses` now returns `401 Missing authorization` (route is present; previous browser-side `404` issue was tied to old backend state before restart)
+
+### Note
+
+- A short startup window produced temporary `502` while services were restarting/migrating; final state is healthy.
+
+## Storage Optimization Update
+
+Updated: 2026-03-03 15:35:00 UTC
+
+### What was implemented on VPS
+
+- Added automated housekeeping script: `/usr/local/bin/whatomate-housekeeping.sh`
+- Added settings file: `/etc/default/whatomate-housekeeping`
+- Added systemd service: `/etc/systemd/system/whatomate-housekeeping.service`
+- Added systemd timer: `/etc/systemd/system/whatomate-housekeeping.timer`
+- Timer schedule: daily at `03:30 UTC` (`RandomizedDelaySec=20m`, `Persistent=true`)
+
+### Housekeeping tasks
+
+- Deduplicate identical media files using hardlinks in:
+  - `/opt/whatomate/uploads`
+  - `/opt/whatomate/instances/holol-wenjaz/uploads`
+- Remove expired WhatsApp statuses from each tenant DB and delete associated local media files
+- Keep only latest 5 binary backups in `/opt/whatomate/bin`
+- Clear source-only artifacts in `/opt/whatomate-src/uploads` and test reports
+- Vacuum systemd journal to a max size of `200M`
+
+### Immediate one-time reclaim completed
+
+- Dry-run estimated reclaim:
+  - `/opt/whatomate/uploads`: `13.57 GiB`
+  - `/opt/whatomate/instances/holol-wenjaz/uploads`: `4.6 GiB`
+- Real dedupe reclaim completed: `18.17 GiB` total
+- Old binary backups pruned: `/opt/whatomate/bin` reduced from `932M` to `262M`
+- Source artifacts cleanup: `/opt/whatomate-src` reduced from `702M` to `514M`
+
+### Current disk snapshot
+
+- `/opt/whatomate/uploads`: `28G` (was `41G`)
+- `/opt/whatomate/instances/holol-wenjaz/uploads`: `3.9G` (was `8.5G`)
+- `/var/log/journal`: `77M`
+- Root filesystem `/`: `64%` used (`62G` used / `35G` free)
+
+### Service health
+
+- `whatomate`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`: all `active`
+
+### How to control policy
+
+- Edit `/etc/default/whatomate-housekeeping` and tune:
+  - `STATUS_GRACE_HOURS`
+  - `KEEP_BACKUPS`
+  - `JOURNAL_MAX_SIZE`
+  - `ENABLE_HARDLINK_DEDUP`
+  - `CLEAN_SOURCE_UPLOADS`
+  - `DRY_RUN`
+- Apply changes:
+  - `systemctl daemon-reload`
+  - `systemctl restart whatomate-housekeeping.timer`
+
+
+## Storage Policy Update (Message Media Safety)
+
+Updated: 2026-03-03 15:51:30 UTC
+
+- Housekeeping policy updated to preserve chat media files.
+- New setting in `/etc/default/whatomate-housekeeping`:
+  - `DELETE_STATUS_MEDIA_FILES=0` (default)
+- Behavior now:
+  - Expired `whatsapp_statuses` DB rows are deleted.
+  - Media files are **not** deleted by default.
+- Safety guard added in script:
+  - If file deletion is enabled in future, script checks `messages.media_url` references first and keeps referenced files.

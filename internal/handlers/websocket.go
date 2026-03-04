@@ -20,7 +20,11 @@ func newUpgrader(allowedOrigins map[string]bool) websocket.FastHTTPUpgrader {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
-			origin := string(ctx.Request.Header.Peek("Origin"))
+			origin := strings.TrimSpace(string(ctx.Request.Header.Peek("Origin")))
+			if origin == "" {
+				// Explicitly reject missing Origin to prevent browser-based CSWSH bypass.
+				return false
+			}
 			return middleware.IsOriginAllowedForRequest(origin, allowedOrigins, string(ctx.Host()), ctx.IsTLS())
 		},
 	}
@@ -71,11 +75,6 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
 }
 
 func wsTokenFromRequest(r *fastglue.Request) (string, error) {
-	token := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("token")))
-	if token != "" {
-		return token, nil
-	}
-
 	authHeader := strings.TrimSpace(string(r.RequestCtx.Request.Header.Peek("Authorization")))
 	if authHeader != "" {
 		parts := strings.SplitN(authHeader, " ", 2)
@@ -85,8 +84,29 @@ func wsTokenFromRequest(r *fastglue.Request) (string, error) {
 		return strings.TrimSpace(parts[1]), nil
 	}
 
-	token = strings.TrimSpace(string(r.RequestCtx.Request.Header.Cookie(cookieAccessName)))
-	return token, nil
+	wsProtocols := strings.TrimSpace(string(r.RequestCtx.Request.Header.Peek("Sec-WebSocket-Protocol")))
+	if token := wsTokenFromProtocols(wsProtocols); token != "" {
+		return token, nil
+	}
+
+	return "", nil
+}
+
+func wsTokenFromProtocols(protocolHeader string) string {
+	if strings.TrimSpace(protocolHeader) == "" {
+		return ""
+	}
+	for _, raw := range strings.Split(protocolHeader, ",") {
+		protocol := strings.TrimSpace(raw)
+		lower := strings.ToLower(protocol)
+		switch {
+		case strings.HasPrefix(lower, "auth.") && len(protocol) > len("auth."):
+			return protocol[len("auth."):]
+		case strings.HasPrefix(lower, "bearer.") && len(protocol) > len("bearer."):
+			return protocol[len("bearer."):]
+		}
+	}
+	return ""
 }
 
 // validateWSTokenFn returns a function that validates a JWT token
@@ -110,6 +130,9 @@ func (a *App) validateWSToken(tokenString string) (uuid.UUID, uuid.UUID, error) 
 
 	claims, ok := token.Claims.(*middleware.JWTClaims)
 	if !ok {
+		return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
+	}
+	if claims.Subject != wsTokenSubject || claims.UserID == uuid.Nil || claims.OrganizationID == uuid.Nil {
 		return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
 	}
 

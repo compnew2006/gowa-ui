@@ -19,6 +19,7 @@ import {
 import { agentAnalyticsService } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useUsersStore } from '@/stores/users'
+import { useInstancesStore } from '@/stores/instances'
 import { PageHeader } from '@/components/shared'
 import {
   Command,
@@ -39,7 +40,8 @@ import {
   Check,
   Coffee,
   Download,
-  Star
+  Star,
+  Loader2
 } from 'lucide-vue-next'
 import type { DateRange } from 'reka-ui'
 import { CalendarDate } from '@internationalized/date'
@@ -112,7 +114,11 @@ const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const usersStore = useUsersStore()
-const isAdminOrManager = computed(() => ['admin', 'manager'].includes(authStore.user?.role?.name || ''))
+const instancesStore = useInstancesStore()
+const isAdminOrManager = computed(() => {
+  const roleName = (authStore.user?.role?.name || authStore.userRole || '').toLowerCase().trim()
+  return authStore.user?.is_super_admin === true || roleName === 'admin' || roleName === 'manager'
+})
 
 const analytics = ref<AgentAnalyticsResponse | null>(null)
 const isLoading = ref(true)
@@ -135,6 +141,7 @@ const selectedAgentName = computed(() => {
 
 const minRating = ref<string>('all')
 const maxRating = ref<string>('all')
+const selectedInstanceId = ref<string>('all')
 const isExporting = ref(false)
 const ratingOptions = Array.from({ length: 10 }, (_, idx) => {
   const value = String(idx + 1)
@@ -376,9 +383,12 @@ const fetchAnalytics = async () => {
   isLoading.value = true
   try {
     const { from, to } = getDateRange.value
-    const params: { from: string; to: string; agent_id?: string; min_rating?: number; max_rating?: number } = { from, to }
+    const params: { from: string; to: string; agent_id?: string; instance_id?: string; min_rating?: number; max_rating?: number } = { from, to }
     if (isAdminOrManager.value && selectedAgentId.value !== 'all') {
       params.agent_id = selectedAgentId.value
+    }
+    if (isAdminOrManager.value && selectedInstanceId.value !== 'all') {
+      params.instance_id = selectedInstanceId.value
     }
     if (isAdminOrManager.value && minRating.value !== 'all') {
       params.min_rating = Number(minRating.value)
@@ -403,9 +413,12 @@ const exportRatings = async () => {
   isExporting.value = true
   try {
     const { from, to } = getDateRange.value
-    const params: { from: string; to: string; agent_id?: string; min_rating?: number; max_rating?: number } = { from, to }
+    const params: { from: string; to: string; agent_id?: string; instance_id?: string; min_rating?: number; max_rating?: number } = { from, to }
     if (selectedAgentId.value !== 'all') {
       params.agent_id = selectedAgentId.value
+    }
+    if (selectedInstanceId.value !== 'all') {
+      params.instance_id = selectedInstanceId.value
     }
     if (minRating.value !== 'all') {
       params.min_rating = Number(minRating.value)
@@ -453,6 +466,10 @@ watch(selectedAgentId, () => {
   fetchAnalytics()
 })
 
+watch(selectedInstanceId, () => {
+  fetchAnalytics()
+})
+
 watch([minRating, maxRating], ([nextMin, nextMax]) => {
   if (nextMin !== 'all' && nextMax !== 'all' && Number(nextMin) > Number(nextMax)) {
     maxRating.value = nextMin
@@ -463,6 +480,7 @@ watch([minRating, maxRating], ([nextMin, nextMax]) => {
 
 onMounted(() => {
   fetchAgents()
+  instancesStore.fetchInstances()
   fetchAnalytics()
 })
 
@@ -645,6 +663,32 @@ void _displayStats.value // Suppress unused warning
               </Command>
             </PopoverContent>
           </Popover>
+        </div>
+
+        <div v-if="isAdminOrManager" class="flex items-center gap-2 mr-4">
+          <Select v-model="selectedInstanceId">
+            <SelectTrigger class="w-[220px]" data-testid="agent-analytics-instance-filter">
+              <SelectValue :placeholder="$t('chat.instance')">
+                <span v-if="selectedInstanceId === 'all'">{{ $t('common.all') }}</span>
+                <span v-else>
+                  {{
+                    instancesStore.instances.find((instance) => instance.id === selectedInstanceId)?.name
+                    || selectedInstanceId
+                  }}
+                </span>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{{ $t('common.all') }}</SelectItem>
+              <SelectItem
+                v-for="instance in instancesStore.instances"
+                :key="instance.id"
+                :value="instance.id"
+              >
+                {{ instance.name || instance.id }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <!-- Time Range Filter -->

@@ -11,9 +11,19 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	accessTokenSubject  = "access"
+	refreshTokenSubject = "refresh"
+	wsTokenSubject      = "ws"
+)
+
 func (a *App) generateAccessToken(user *models.User) (string, time.Time, error) {
 	now := time.Now()
-	expiresAt := nextAccessTokenExpiry(now)
+	ttlMinutes := defaultAccessTokenExpiryMinutes
+	if a != nil && a.Config != nil && a.Config.JWT.AccessExpiryMins > 0 {
+		ttlMinutes = a.Config.JWT.AccessExpiryMins
+	}
+	expiresAt := nextAccessTokenExpiry(now, ttlMinutes)
 
 	claims := middleware.JWTClaims{
 		UserID:         user.ID,
@@ -25,6 +35,7 @@ func (a *App) generateAccessToken(user *models.User) (string, time.Time, error) 
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(now),
 			Issuer:    "whatomate",
+			Subject:   accessTokenSubject,
 		},
 	}
 
@@ -56,6 +67,7 @@ func (a *App) generateRefreshToken(user *models.User) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "whatomate",
+			Subject:   refreshTokenSubject,
 		},
 	}
 

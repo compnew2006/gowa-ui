@@ -991,6 +991,7 @@ func (a *App) calculateAgentRatingSummary(
 	orgID uuid.UUID,
 	start, end time.Time,
 	filterAgentID *uuid.UUID,
+	filterInstanceID *uuid.UUID,
 	minRating, maxRating *int,
 ) (AgentRatingSummary, error) {
 	summary := AgentRatingSummary{
@@ -1007,6 +1008,7 @@ func (a *App) calculateAgentRatingSummary(
 			start,
 			end,
 		)
+	query = applyTransferAnalyticsInstanceFilter(query, orgID, filterInstanceID)
 	if filterAgentID != nil {
 		query = query.Where("agent_user_id = ?", *filterAgentID)
 	}
@@ -1047,6 +1049,7 @@ func (a *App) listAgentRatingRecords(
 	orgID uuid.UUID,
 	start, end time.Time,
 	filterAgentID *uuid.UUID,
+	filterInstanceID *uuid.UUID,
 	minRating, maxRating *int,
 	limit int,
 ) ([]AgentRatingRecord, error) {
@@ -1091,6 +1094,7 @@ func (a *App) listAgentRatingRecords(
 			start,
 			end,
 		)
+	query = applyRatingAnalyticsInstanceFilter(query, filterInstanceID, "c")
 
 	if filterAgentID != nil {
 		query = query.Where("ccr.agent_user_id = ?", *filterAgentID)
@@ -1158,6 +1162,7 @@ func (a *App) ExportAgentRatings(r *fastglue.Request) error {
 	fromStr := string(r.RequestCtx.QueryArgs().Peek("from"))
 	toStr := string(r.RequestCtx.QueryArgs().Peek("to"))
 	agentIDStr := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("agent_id")))
+	instanceIDStr := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("instance_id")))
 	minRating, minErr := parseRatingFilterBound(string(r.RequestCtx.QueryArgs().Peek("min_rating")))
 	if minErr != "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, minErr, nil, "")
@@ -1190,7 +1195,12 @@ func (a *App) ExportAgentRatings(r *fastglue.Request) error {
 		filterAgentID = &parsed
 	}
 
-	records, listErr := a.listAgentRatingRecords(orgID, periodStart, periodEnd, filterAgentID, minRating, maxRating, 0)
+	filterInstanceID, instanceErr := a.parseAnalyticsInstanceID(orgID, instanceIDStr)
+	if instanceErr != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, instanceErr.Error(), nil, "instance_id")
+	}
+
+	records, listErr := a.listAgentRatingRecords(orgID, periodStart, periodEnd, filterAgentID, filterInstanceID, minRating, maxRating, 0)
 	if listErr != nil {
 		a.Log.Error("Failed to export agent ratings", "error", listErr, "organization_id", orgID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to export ratings", nil, "")

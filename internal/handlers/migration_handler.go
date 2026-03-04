@@ -146,11 +146,13 @@ func (a *App) GetMigrationStatus(r *fastglue.Request) error {
 		}
 
 		// Get org name.
-		a.DB.Table("organizations").
+		if err := a.DB.Table("organizations").
 			Select("name").
 			Where("id = ?", ac.OrganizationID).
 			Row().
-			Scan(&status.OrgName) //nolint:errcheck
+			Scan(&status.OrgName); err != nil {
+			a.Log.Warn("Failed to read organization name during migration status", "organization_id", ac.OrganizationID, "error", err)
+		}
 
 		// Count instances for this org.
 		a.DB.Model(&struct{}{}).Table("whatsapp_instances").

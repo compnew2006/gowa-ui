@@ -57,6 +57,9 @@ func (a *App) getChatbotSettingsCached(orgID uuid.UUID, whatsAppAccount string) 
 		if err := json.Unmarshal([]byte(cached), &cacheData); err == nil {
 			// Restore the API key from the cache wrapper
 			cacheData.AI.APIKey = cacheData.AIAPIKey
+			if err := a.decryptChatbotAIKey(&cacheData.ChatbotSettings); err != nil {
+				return nil, err
+			}
 			return &cacheData.ChatbotSettings, nil
 		}
 	}
@@ -81,7 +84,27 @@ func (a *App) getChatbotSettingsCached(orgID uuid.UUID, whatsAppAccount string) 
 		a.Redis.Set(ctx, cacheKey, data, settingsCacheTTL)
 	}
 
+	if err := a.decryptChatbotAIKey(&settings); err != nil {
+		return nil, err
+	}
+
 	return &settings, nil
+}
+
+func (a *App) decryptChatbotAIKey(settings *models.ChatbotSettings) error {
+	if settings == nil || settings.AI.APIKey == "" {
+		return nil
+	}
+	encKey := ""
+	if a.Config != nil {
+		encKey = a.Config.App.EncryptionKey
+	}
+	dec, err := crypto.Decrypt(settings.AI.APIKey, encKey)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt chatbot AI API key: %w", err)
+	}
+	settings.AI.APIKey = dec
+	return nil
 }
 
 // getChatbotFlowsCached retrieves all enabled flows with steps from cache or database
@@ -256,6 +279,7 @@ func (a *App) getWhatsAppAccountCached(phoneID string) (*models.WhatsAppAccount,
 		AccessToken:     account.AccessToken,
 		AppSecret:       account.AppSecret,
 	}
+	// #nosec G117 -- cached secrets are stored encrypted-at-rest and decrypted only at access boundary.
 	if data, err := json.Marshal(cacheData); err == nil {
 		a.Redis.Set(ctx, cacheKey, data, whatsappAccountCacheTTL)
 	}

@@ -123,7 +123,7 @@ func (a *App) saveInstanceAutoCampaignMedia(instanceID, originalFilename string,
 
 	filename := instanceID + ext
 	filePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		return "", fmt.Errorf("failed to save media file: %w", err)
 	}
 

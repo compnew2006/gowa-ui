@@ -216,6 +216,31 @@ func TestApp_CreateActivityLog_InvalidMessageID(t *testing.T) {
 	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "Invalid message ID")
 }
 
+func TestApp_ActivityLogs_AllowedForManager(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	managerRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "manager", true, false, nil)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&managerRole.ID))
+
+	createReq := testutil.NewJSONRequest(t, map[string]any{
+		"category":   "custom",
+		"event_type": "ui.button_click",
+		"action":     "export_contacts",
+	})
+	testutil.SetAuthContext(createReq, org.ID, user.ID)
+
+	err := app.CreateActivityLog(createReq)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(createReq))
+
+	listReq := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(listReq, org.ID, user.ID)
+
+	err = app.ListActivityLogs(listReq)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(listReq))
+}
+
 func TestApp_ActivityLogs_ForbiddenForAgent(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)

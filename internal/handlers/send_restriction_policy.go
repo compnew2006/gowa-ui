@@ -70,6 +70,8 @@ type sendRestrictionsSettings struct {
 	AllowedInstanceID  *uuid.UUID
 	AllowedInstanceIDs []uuid.UUID
 	PrefixAgentName    bool
+	AllowUnclaimedChatView bool
+	AllowUnclaimedChatSend bool
 }
 
 func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSettings {
@@ -80,6 +82,8 @@ func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSetting
 		AllowedInstanceID:  nil,
 		AllowedInstanceIDs: []uuid.UUID{},
 		PrefixAgentName:    true,
+		AllowUnclaimedChatView: false,
+		AllowUnclaimedChatSend: false,
 	}
 	if settings == nil {
 		return cfg
@@ -109,6 +113,12 @@ func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSetting
 	if prefixAgentName, ok := payload["prefix_agent_name"].(bool); ok {
 		cfg.PrefixAgentName = prefixAgentName
 	}
+	if allowUnclaimedChatView, ok := payload["allow_unclaimed_chat_view"].(bool); ok {
+		cfg.AllowUnclaimedChatView = allowUnclaimedChatView
+	}
+	if allowUnclaimedChatSend, ok := payload["allow_unclaimed_chat_send"].(bool); ok {
+		cfg.AllowUnclaimedChatSend = allowUnclaimedChatSend
+	}
 
 	if rawNumbers, ok := payload["authorized_numbers"]; ok {
 		cfg.AuthorizedNumbers = normalizeRestrictedNumbers(asStringSlice(rawNumbers))
@@ -120,6 +130,9 @@ func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSetting
 		}
 	}
 	cfg.AllowedInstanceID = firstRestrictedUUID(cfg.AllowedInstanceIDs)
+	if cfg.AllowUnclaimedChatSend && !cfg.AllowUnclaimedChatView {
+		cfg.AllowUnclaimedChatView = true
+	}
 
 	return cfg
 }
@@ -138,6 +151,8 @@ func writeSendRestrictionsSettings(settings models.JSONB, cfg sendRestrictionsSe
 		"authorized_numbers":   normalizeRestrictedNumbers(cfg.AuthorizedNumbers),
 		"allowed_instance_ids": stringifyUUIDs(allowedInstanceIDs),
 		"prefix_agent_name":    cfg.PrefixAgentName,
+		"allow_unclaimed_chat_view": cfg.AllowUnclaimedChatView,
+		"allow_unclaimed_chat_send": cfg.AllowUnclaimedChatSend,
 	}
 	if len(allowedInstanceIDs) > 0 {
 		restrictions["allowed_instance_id"] = allowedInstanceIDs[0].String()

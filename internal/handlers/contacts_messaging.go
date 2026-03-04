@@ -86,7 +86,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	if status == models.ChatStatusClosed {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Closed chats are read-only", nil, "")
 	}
-	if isChatRestrictedForMessageRead(contact) && !a.canAccessRestrictedChatWithoutClaim(contact, userID, orgID) {
+	if isChatRestrictedForMessageRead(contact) && !a.canSendRestrictedChatWithoutClaimForContact(contact, userID, orgID) {
 		return r.SendErrorEnvelope(
 			fasthttp.StatusForbidden,
 			"This chat is currently unassigned. Claim it before sending messages.",
@@ -451,7 +451,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	if status == models.ChatStatusClosed {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Closed chats are read-only", nil, "")
 	}
-	if isChatRestrictedForMessageRead(contact) && !a.canAccessRestrictedChatWithoutClaim(contact, userID, orgID) {
+	if isChatRestrictedForMessageRead(contact) && !a.canSendRestrictedChatWithoutClaimForContact(contact, userID, orgID) {
 		return r.SendErrorEnvelope(
 			fasthttp.StatusForbidden,
 			"This chat is currently unassigned. Claim it before sending messages.",
@@ -564,12 +564,10 @@ func (a *App) saveMediaLocally(data []byte, mimeType, filename string) (string, 
 	// Get extension from MIME type or filename
 	ext := getExtensionFromMimeType(mimeType)
 	if ext == "" {
-		// Try to get from filename
-		if dotIdx := strings.LastIndex(filename, "."); dotIdx >= 0 {
-			ext = filename[dotIdx:]
-		} else {
-			ext = ".bin"
-		}
+		ext = safeUploadFileExtension(filename)
+	}
+	if ext == "" {
+		ext = ".bin"
 	}
 
 	// Generate unique filename
@@ -577,7 +575,7 @@ func (a *App) saveMediaLocally(data []byte, mimeType, filename string) (string, 
 	filePath := filepath.Join(a.getMediaStoragePath(), subdir, newFilename)
 
 	// Save file
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		return "", fmt.Errorf("failed to save media file: %w", err)
 	}
 
@@ -586,6 +584,21 @@ func (a *App) saveMediaLocally(data []byte, mimeType, filename string) (string, 
 	a.Log.Info("Media saved locally", "path", relativePath, "size", len(data))
 
 	return relativePath, nil
+}
+
+func safeUploadFileExtension(filename string) string {
+	normalized := strings.ReplaceAll(strings.TrimSpace(filename), "\\", "/")
+	base := filepath.Base(normalized)
+	ext := strings.ToLower(strings.TrimSpace(filepath.Ext(base)))
+	if ext == "" || len(ext) > 17 {
+		return ""
+	}
+	for _, r := range ext[1:] {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return ""
+		}
+	}
+	return ext
 }
 
 // SendReactionRequest represents a request to send a reaction

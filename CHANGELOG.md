@@ -1,5 +1,40 @@
 # CHANGELOG.md
 
+## 2026-03-04 01:47
+
+### Added
+
+- Added user-level unclaimed chat access controls via send restrictions payload:
+  - `allow_unclaimed_chat_view`
+  - `allow_unclaimed_chat_send`
+- Added backend helper modules:
+  - `internal/handlers/chat_access_policy.go`
+  - `internal/handlers/analytics_instance_filter.go`
+- Added assignment system-message emission metadata with `event_type: chat_assigned`.
+- Added unified-sidebar multi-instance indicator support and deterministic chat E2E selectors (`data-testid`) for account tabs/instance indicators.
+- Added/extended E2E coverage for:
+  - Activity Logs relocation/access
+  - Agent Analytics combined filters (agent + instance + date range)
+  - Assignment system-message rendering
+  - Combined chat instance tabs and selected-instance send routing
+  - Users restrictions controls (strict sending + unclaimed chat toggles)
+
+### Changed
+
+- Moved Activity Logs frontend route under Settings:
+  - canonical path: `/settings/activity-logs`
+  - legacy redirect retained: `/activity-logs` -> `/settings/activity-logs`
+- Expanded Activity Logs role access to include managers (manager/admin/super-admin).
+- Extended Agent Analytics and ratings export query support with optional `instance_id`.
+- Relocated Strict Sending Restrictions control from General Settings to Users page.
+- Updated chat unified flow to route outbound typing/text/canned/media operations using the selected source instance context.
+
+### Fixed
+
+- Fixed claim restriction handling by separating view and send policy enforcement while preserving admin/super-admin bypass.
+- Fixed chat assignment transparency by appending assignment system messages in manager/admin assignment flows.
+- Fixed chat E2E account-tab and grouped multi-instance scenarios to align with current `/api/chats` loading behavior.
+
 ## 2026-03-02
 
 ### Changed

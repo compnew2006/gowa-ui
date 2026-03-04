@@ -327,6 +327,7 @@ func TestListAgentRatingRecords_MergesFollowupCommentsIntoRatingMessage(t *testi
 		nil,
 		nil,
 		nil,
+		nil,
 		10,
 	)
 	require.NoError(t, err)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,7 +17,7 @@ import (
 )
 
 // downloadMediaFromURL resolves outbound media references.
-// Supported forms: http/https, file://, absolute local paths, and local paths relative to storage root.
+// Supported forms: http/https and local paths relative to storage root.
 func (a *WhatsmeowAdapter) downloadMediaFromURL(mediaRef string) ([]byte, string, error) {
 	ref := strings.TrimSpace(mediaRef)
 	if ref == "" {
@@ -28,8 +29,6 @@ func (a *WhatsmeowAdapter) downloadMediaFromURL(mediaRef string) ([]byte, string
 		switch strings.ToLower(parsed.Scheme) {
 		case "http", "https":
 			return a.downloadHTTPMedia(ref)
-		case "file":
-			return a.readLocalMedia(parsed.Path)
 		default:
 			return nil, "", fmt.Errorf("unsupported media URL scheme: %s", parsed.Scheme)
 		}
@@ -38,8 +37,34 @@ func (a *WhatsmeowAdapter) downloadMediaFromURL(mediaRef string) ([]byte, string
 	return a.readLocalMedia(ref)
 }
 
+const maxRemoteMediaSizeBytes = 32 * 1024 * 1024 // 32MB hard cap for remote fetches
+
 func (a *WhatsmeowAdapter) downloadHTTPMedia(u string) ([]byte, string, error) {
-	resp, err := http.Get(u)
+	parsed, err := validateOutboundMediaURL(u)
+	if err != nil {
+		return nil, "", err
+	}
+
+	client := &http.Client{
+		Timeout: 20 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 4 {
+				return fmt.Errorf("too many redirects")
+			}
+			_, err := validateOutboundMediaURL(req.URL.String())
+			return err
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to build media request: %w", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to download media: %w", err)
 	}
@@ -51,9 +76,12 @@ func (a *WhatsmeowAdapter) downloadHTTPMedia(u string) ([]byte, string, error) {
 		return nil, "", fmt.Errorf("failed to download media, status code: %d", resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxRemoteMediaSizeBytes+1))
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read media body: %w", err)
+	}
+	if len(data) > maxRemoteMediaSizeBytes {
+		return nil, "", fmt.Errorf("remote media exceeds max size of %d bytes", maxRemoteMediaSizeBytes)
 	}
 
 	mimeType := resp.Header.Get("Content-Type")
@@ -67,30 +95,89 @@ func (a *WhatsmeowAdapter) downloadHTTPMedia(u string) ([]byte, string, error) {
 	return data, mimeType, nil
 }
 
+func validateOutboundMediaURL(raw string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return nil, fmt.Errorf("invalid media URL")
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return nil, fmt.Errorf("only http/https media URLs are allowed")
+	}
+	if parsed.Hostname() == "" {
+		return nil, fmt.Errorf("media URL must include a valid host")
+	}
+
+	hostname := parsed.Hostname()
+	if ip := net.ParseIP(hostname); ip != nil {
+		if isBlockedOutboundIP(ip) {
+			return nil, fmt.Errorf("media URL host is not allowed")
+		}
+		return parsed, nil
+	}
+
+	ips, err := net.LookupIP(hostname)
+	if err != nil || len(ips) == 0 {
+		return nil, fmt.Errorf("failed to resolve media URL host")
+	}
+	for _, ip := range ips {
+		if isBlockedOutboundIP(ip) {
+			return nil, fmt.Errorf("media URL host is not allowed")
+		}
+	}
+
+	return parsed, nil
+}
+
+func isBlockedOutboundIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	// Block carrier-grade NAT range: 100.64.0.0/10
+	if v4 := ip.To4(); v4 != nil && v4[0] == 100 && (v4[1]&0xC0) == 64 {
+		return true
+	}
+	return false
+}
+
 func (a *WhatsmeowAdapter) readLocalMedia(pathRef string) ([]byte, string, error) {
 	basePath := "./uploads"
 	if a.manager != nil && a.manager.mediaStoragePath != "" {
 		basePath = a.manager.mediaStoragePath
 	}
 
-	fullPath := ""
-	if filepath.IsAbs(pathRef) {
-		fullPath = pathRef
-	} else {
-		cleanRef := filepath.Clean(pathRef)
-		if cleanRef == "." || cleanRef == "" || cleanRef == ".." ||
-			strings.HasPrefix(cleanRef, ".."+string(os.PathSeparator)) {
-			return nil, "", fmt.Errorf("invalid local media path: %s", pathRef)
-		}
-		fullPath = filepath.Join(basePath, cleanRef)
+	cleanRef := filepath.Clean(strings.TrimSpace(pathRef))
+	if cleanRef == "." || cleanRef == "" || cleanRef == ".." ||
+		filepath.IsAbs(cleanRef) ||
+		strings.HasPrefix(cleanRef, ".."+string(os.PathSeparator)) {
+		return nil, "", fmt.Errorf("invalid local media path")
 	}
 
-	data, err := os.ReadFile(fullPath)
+	baseAbs, err := filepath.Abs(basePath)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to read local media file %s: %w", fullPath, err)
+		return nil, "", fmt.Errorf("failed to resolve media storage path: %w", err)
+	}
+	fullPath := filepath.Join(baseAbs, cleanRef)
+	fullAbs, err := filepath.Abs(fullPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to resolve media path: %w", err)
+	}
+	relPath, err := filepath.Rel(baseAbs, fullAbs)
+	if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
+		return nil, "", fmt.Errorf("invalid local media path")
 	}
 
-	mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(fullPath)))
+	// #nosec G304 -- fullAbs is constrained to media storage root via Abs+Rel validation above.
+	data, err := os.ReadFile(fullAbs)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read local media file: %w", err)
+	}
+
+	mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(fullAbs)))
 	if mimeType == "" {
 		mimeType = http.DetectContentType(data)
 	}

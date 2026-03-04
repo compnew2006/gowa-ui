@@ -64,7 +64,7 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 	if status == models.ChatStatusClosed {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Closed chats are read-only", nil, "")
 	}
-	if isChatRestrictedForMessageRead(contact) && !a.canAccessRestrictedChatWithoutClaim(contact, userID, orgID) {
+	if isChatRestrictedForMessageRead(contact) && !a.canSendRestrictedChatWithoutClaimForContact(contact, userID, orgID) {
 		return r.SendErrorEnvelope(
 			fasthttp.StatusForbidden,
 			"This chat is currently unassigned. Claim it before sending messages.",

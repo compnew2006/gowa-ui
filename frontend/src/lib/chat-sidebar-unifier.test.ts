@@ -84,6 +84,7 @@ describe('ChatSidebarUnifier', () => {
     expect(entries[0].isUnified).toBe(true)
     expect(entries[0].sourceContactIDs).toEqual(['c-1', 'c-2'])
     expect(entries[0].accountNames).toEqual(['account-a', 'account-b'])
+    expect(entries[0].sourceInstanceIDs).toEqual([])
     expect(entries[0].displayContact.unread_count).toBe(3)
     expect(entries[0].displayContact.tags.sort()).toEqual(['priority', 'vip'])
     expect(entries[0].displayContact.name).toBe('Alice B')
@@ -116,6 +117,8 @@ describe('ChatSidebarUnifier', () => {
     expect(entries[0].key).not.toContain('phone:')
     expect(entries[0].sourceContactIDs).toEqual(['g-1', 'g-2'])
     expect(entries[0].accountNames).toEqual(['account-a', 'account-b'])
+    expect(entries[0].sourceInstanceIDs).toEqual(['instance-a', 'instance-b'])
+    expect(entries[0].sourceInstanceLabels).toEqual(['instance-a', 'instance-b'])
     expect(entries[0].displayContact.unread_count).toBe(3)
   })
 

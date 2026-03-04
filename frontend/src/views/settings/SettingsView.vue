@@ -124,7 +124,6 @@ const generalSettings = ref({
   default_timezone: "UTC",
   date_format: "YYYY-MM-DD",
   mask_phone_numbers: false,
-  strict_sending_restrictions_enabled: false,
 });
 
 interface NotificationSettings {
@@ -274,8 +273,6 @@ onMounted(async () => {
         default_timezone: orgData.settings?.timezone || "UTC",
         date_format: orgData.settings?.date_format || "YYYY-MM-DD",
         mask_phone_numbers: orgData.settings?.mask_phone_numbers || false,
-        strict_sending_restrictions_enabled:
-          orgData.settings?.strict_sending_restrictions_enabled || false,
       };
 
       const resetMode = normalizeAssignedChatResetMode(
@@ -329,8 +326,6 @@ async function saveGeneralSettings() {
       timezone: generalSettings.value.default_timezone,
       date_format: generalSettings.value.date_format,
       mask_phone_numbers: generalSettings.value.mask_phone_numbers,
-      strict_sending_restrictions_enabled:
-        generalSettings.value.strict_sending_restrictions_enabled,
     });
     toast.success(t("settings.generalSaved"));
   } catch (error) {
@@ -604,25 +599,6 @@ onBeforeUnmount(() => {
                   />
                 </div>
                 <Separator class="bg-white/[0.08] light:bg-gray-200" />
-                <div class="flex items-center justify-between">
-                  <div>
-                    <p class="font-medium text-white light:text-gray-900">
-                      {{ $t("settings.strictSendingRestrictions") }}
-                    </p>
-                    <p class="text-sm text-white/40 light:text-gray-500">
-                      {{ $t("settings.strictSendingRestrictionsDesc") }}
-                    </p>
-                  </div>
-                  <Switch
-                    :checked="
-                      generalSettings.strict_sending_restrictions_enabled
-                    "
-                    @update:checked="
-                      generalSettings.strict_sending_restrictions_enabled =
-                        $event
-                    "
-                  />
-                </div>
                 <div class="flex justify-end">
                   <Button
                     variant="outline"

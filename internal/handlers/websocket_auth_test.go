@@ -25,26 +25,33 @@ func TestWSTokenFromRequest(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name: "query token takes precedence",
+			name: "authorization header takes precedence",
 			setup: func(req *fastglue.Request) {
-				req.RequestCtx.QueryArgs().Set("token", "query-token")
-				req.RequestCtx.Request.Header.Set("Authorization", "invalid")
+				req.RequestCtx.Request.Header.Set("Authorization", "Bearer bearer-token")
+				req.RequestCtx.Request.Header.Set("Sec-WebSocket-Protocol", "whm.v1, auth.protocol-token")
 			},
-			wantToken: "query-token",
+			wantToken: "bearer-token",
 		},
 		{
-			name: "uses bearer token when query is missing",
+			name: "uses bearer token from authorization header",
 			setup: func(req *fastglue.Request) {
 				req.RequestCtx.Request.Header.Set("Authorization", "Bearer bearer-token")
 			},
 			wantToken: "bearer-token",
 		},
 		{
-			name: "uses access cookie when query and header are missing",
+			name: "uses auth token from websocket subprotocol",
 			setup: func(req *fastglue.Request) {
-				req.RequestCtx.Request.Header.SetCookie(cookieAccessName, "cookie-token")
+				req.RequestCtx.Request.Header.Set("Sec-WebSocket-Protocol", "whm.v1, auth.protocol-token")
 			},
-			wantToken: "cookie-token",
+			wantToken: "protocol-token",
+		},
+		{
+			name: "uses bearer token from websocket subprotocol",
+			setup: func(req *fastglue.Request) {
+				req.RequestCtx.Request.Header.Set("Sec-WebSocket-Protocol", "whm.v1, bearer.protocol-token")
+			},
+			wantToken: "protocol-token",
 		},
 		{
 			name: "returns error for invalid authorization header",
@@ -52,6 +59,12 @@ func TestWSTokenFromRequest(t *testing.T) {
 				req.RequestCtx.Request.Header.Set("Authorization", "Token abc")
 			},
 			wantErr: true,
+		},
+		{
+			name: "returns empty token when no auth is provided",
+			setup: func(req *fastglue.Request) {
+				// intentionally empty
+			},
 		},
 	}
 
@@ -98,7 +111,7 @@ func TestWebSocketHandler_RejectsInvalidTokenBeforeUpgrade(t *testing.T) {
 		Log:    testutil.NopLogger(),
 	}
 	req := testutil.NewGETRequest(t)
-	req.RequestCtx.QueryArgs().Set("token", "not-a-jwt")
+	req.RequestCtx.Request.Header.Set("Authorization", "Bearer not-a-jwt")
 
 	err := app.WebSocketHandler(req)
 	require.NoError(t, err)
@@ -113,7 +126,7 @@ func TestWebSocketHandler_ValidTokenPassesPreUpgradeAuth(t *testing.T) {
 		Log:    testutil.NopLogger(),
 	}
 	req := testutil.NewGETRequest(t)
-	req.RequestCtx.QueryArgs().Set("token", signedWSTokenForTest(t, testutil.TestJWTSecret, jwt.SigningMethodHS256))
+	req.RequestCtx.Request.Header.Set("Authorization", "Bearer "+signedWSTokenForTest(t, testutil.TestJWTSecret, jwt.SigningMethodHS256))
 
 	err := app.WebSocketHandler(req)
 	require.NoError(t, err)

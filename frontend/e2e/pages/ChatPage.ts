@@ -222,23 +222,23 @@ export class ChatPage extends BasePage {
 
   // Account tabs helpers
   get accountTabsContainer(): Locator {
-    return this.page.locator('[class*="flex-shrink-0"]').filter({ has: this.page.locator('button') }).filter({ hasText: /.+/ }).last()
+    return this.page.locator('[data-testid="chat-account-tabs"]')
   }
 
   getAccountTab(accountName: string): Locator {
-    return this.page.locator('button.rounded-md.text-xs').filter({ hasText: accountName })
+    return this.page.locator('[data-testid="chat-account-tab"]').filter({ hasText: accountName })
   }
 
   get accountTabs(): Locator {
-    return this.page.locator('button.rounded-md.text-xs.font-medium')
+    return this.page.locator('[data-testid="chat-account-tab"]')
   }
 
   get activeAccountTab(): Locator {
-    return this.page.locator('button.rounded-md.text-xs[class*="bg-emerald"]')
+    return this.page.locator('[data-testid="chat-account-tab"][data-account-tab-active="true"]')
   }
 
   get inactiveAccountTabs(): Locator {
-    return this.page.locator('button.rounded-md.text-xs:not([class*="bg-emerald"])')
+    return this.page.locator('[data-testid="chat-account-tab"][data-account-tab-active="false"]')
   }
 
   async switchAccount(accountName: string) {

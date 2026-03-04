@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
@@ -927,19 +928,20 @@ func sanitizeID(id string) string {
 		return id
 	}
 
-	// Replace numbers with letters
-	result := make([]byte, 0, len(id))
+	// Replace numbers with letters while preserving non-ASCII letters safely.
+	var builder strings.Builder
+	builder.Grow(len(id))
 	for _, c := range id {
 		if c >= '0' && c <= '9' {
 			// Convert 0-9 to A-J
-			result = append(result, byte('A'+c-'0'))
+			builder.WriteRune('A' + (c - '0'))
 		} else if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' {
-			result = append(result, byte(c))
+			builder.WriteRune(c)
 		}
 		// Skip other characters
 	}
 
-	return string(result)
+	return builder.String()
 }
 
 // sanitizeComponentsWithPayload sanitizes components and auto-populates action payloads

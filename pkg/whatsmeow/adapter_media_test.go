@@ -1,8 +1,6 @@
 package whatsmeow
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,12 +50,8 @@ func TestDownloadMediaFromURL_LocalAbsolutePath(t *testing.T) {
 		t.Fatalf("write failed: %v", err)
 	}
 
-	data, _, err := adapter.downloadMediaFromURL(tmp)
-	if err != nil {
-		t.Fatalf("downloadMediaFromURL failed: %v", err)
-	}
-	if len(data) != 3 {
-		t.Fatalf("expected 3 bytes, got %d", len(data))
+	if _, _, err := adapter.downloadMediaFromURL(tmp); err == nil {
+		t.Fatal("expected absolute path to be rejected")
 	}
 }
 
@@ -69,23 +63,18 @@ func TestDownloadMediaFromURL_RejectsTraversal(t *testing.T) {
 	}
 }
 
-func TestDownloadMediaFromURL_HTTPURL(t *testing.T) {
+func TestDownloadMediaFromURL_RejectsPrivateHTTPHost(t *testing.T) {
 	adapter, _ := newAdapterWithStorage(t)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write([]byte("http-media"))
-	}))
-	defer srv.Close()
+	if _, _, err := adapter.downloadMediaFromURL("http://127.0.0.1/media.txt"); err == nil {
+		t.Fatal("expected private host URL to be rejected")
+	}
+}
 
-	data, mimeType, err := adapter.downloadMediaFromURL(srv.URL)
-	if err != nil {
-		t.Fatalf("downloadMediaFromURL failed: %v", err)
-	}
-	if string(data) != "http-media" {
-		t.Fatalf("data mismatch: got %q", string(data))
-	}
-	if mimeType != "text/plain" {
-		t.Fatalf("mime mismatch: got %q want text/plain", mimeType)
+func TestDownloadMediaFromURL_RejectsFileScheme(t *testing.T) {
+	adapter, _ := newAdapterWithStorage(t)
+
+	if _, _, err := adapter.downloadMediaFromURL("file:///etc/passwd"); err == nil {
+		t.Fatal("expected file scheme URL to be rejected")
 	}
 }

@@ -68,12 +68,12 @@ function messagesEnvelope(messages: any[], accountFilter?: string) {
   }
 }
 
-function contactsEnvelope() {
+function chatsEnvelope(contacts: any[]) {
   return {
     status: 'success',
     data: {
-      contacts: [CONTACT],
-      total: 1,
+      contacts,
+      total: contacts.length,
       page: 1,
       limit: 50,
     },
@@ -91,16 +91,43 @@ function contactEnvelope() {
 async function setupMockRoutes(page: Page, messages: any[]) {
   let currentMessages = messages
 
-  // Mock contacts list
-  await page.route('**/api/contacts?*', async (route: Route) => {
-    await route.fulfill({ json: contactsEnvelope() })
-  })
-  await page.route('**/api/contacts', async (route: Route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({ json: contactsEnvelope() })
-    } else {
-      await route.continue()
+  await page.route('**/api/chats**', async (route: Route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback()
+      return
     }
+
+    const url = new URL(route.request().url())
+    const { pathname, searchParams } = url
+
+    const messagesMatch = pathname.match(/\/api\/chats\/([^/]+)\/messages$/)
+    if (messagesMatch) {
+      const contactId = decodeURIComponent(messagesMatch[1])
+      if (contactId !== CONTACT_ID) {
+        await route.fallback()
+        return
+      }
+      const account = searchParams.get('account') || undefined
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(messagesEnvelope(currentMessages, account)),
+      })
+      return
+    }
+
+    if (/\/api\/chats\/?$/.test(pathname)) {
+      const status = searchParams.get('status')
+      const contacts = status === 'pending' ? [CONTACT] : []
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(chatsEnvelope(contacts)),
+      })
+      return
+    }
+
+    await route.fallback()
   })
 
   // Mock single contact
@@ -108,24 +135,92 @@ async function setupMockRoutes(page: Page, messages: any[]) {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: contactEnvelope() })
     } else {
-      await route.continue()
-    }
-  })
-
-  // Mock messages - respect account filter query param
-  await page.route(`**/api/contacts/${CONTACT_ID}/messages*`, async (route: Route) => {
-    if (route.request().method() === 'GET') {
-      const url = new URL(route.request().url())
-      const account = url.searchParams.get('account') || undefined
-      await route.fulfill({ json: messagesEnvelope(currentMessages, account) })
-    } else {
-      await route.continue()
+      await route.fallback()
     }
   })
 
   // Mock mark-read, session, etc. to avoid 404s
   await page.route(`**/api/contacts/${CONTACT_ID}/session`, async (route: Route) => {
     await route.fulfill({ json: { status: 'success', data: null } })
+  })
+
+  await page.route(`**/api/contacts/${CONTACT_ID}/session-data`, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'success',
+        data: { session_data: {}, panel_config: { sections: [] } },
+      }),
+    })
+  })
+
+  await page.route(`**/api/contacts/${CONTACT_ID}/notes`, async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'success',
+        data: { notes: [], total: 0, has_more: false },
+      }),
+    })
+  })
+
+  await page.route('**/api/chatbot/transfers**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'success',
+        data: {
+          transfers: [],
+          general_queue_count: 0,
+          team_queue_counts: {},
+          total_count: 0,
+        },
+      }),
+    })
+  })
+
+  await page.route('**/api/custom-actions**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'success',
+        data: { custom_actions: [], total: 0 },
+      }),
+    })
+  })
+
+  await page.route('**/api/users**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'success',
+        data: [],
+      }),
+    })
+  })
+
+  await page.route('**/api/tags**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'success',
+        data: { tags: [] },
+      }),
+    })
+  })
+
+  await page.route('**/api/instances**', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'success', data: [] }),
+    })
   })
 
   return {
@@ -138,6 +233,9 @@ test.describe('Multi-Account Tabs', () => {
 
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
+    await page.evaluate(() => {
+      localStorage.setItem('chat.sidebarViewMode', 'unified')
+    })
     chatPage = new ChatPage(page)
   })
 

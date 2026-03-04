@@ -279,7 +279,7 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 		a.wg.Add(1)
 		go func() {
 			defer a.wg.Done()
-			asyncCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			asyncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 			defer cancel()
 
 			wamid, sendErr := sendFn(asyncCtx)

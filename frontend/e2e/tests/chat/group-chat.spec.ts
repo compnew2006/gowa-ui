@@ -113,6 +113,54 @@ async function pushMockServerMessage(page: Page, message: any) {
 }
 
 async function mockChatApi(page: Page, options: MockChatApiOptions) {
+  await page.route('**/api/chats**', async route => {
+    const url = new URL(route.request().url())
+    const pathname = url.pathname
+    const method = route.request().method()
+
+    if (method !== 'GET') {
+      await route.fallback()
+      return
+    }
+
+    const messagesMatch = pathname.match(/\/api\/chats\/([^/]+)\/messages$/)
+    if (messagesMatch) {
+      const contactId = decodeURIComponent(messagesMatch[1])
+      const account = url.searchParams.get('account')
+      const contactMessages = options.messagesByContact[contactId] || []
+      const filteredMessages = account
+        ? contactMessages.filter((message) => message.whatsapp_account === account)
+        : contactMessages
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(buildMessagesResponse(filteredMessages)),
+      })
+      return
+    }
+
+    if (/\/api\/chats\/?$/.test(pathname)) {
+      const status = url.searchParams.get('status')
+      const chats = status === 'open' ? [] : options.contacts
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'success',
+          data: {
+            contacts: chats,
+            total: chats.length,
+            page: 1,
+            limit: 25,
+          },
+        }),
+      })
+      return
+    }
+
+    await route.fallback()
+  })
+
   await page.route('**/api/contacts**', async route => {
     const url = new URL(route.request().url())
     const pathname = url.pathname
@@ -173,13 +221,6 @@ async function mockChatApi(page: Page, options: MockChatApiOptions) {
         })
         return
       }
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(buildMessagesResponse(options.messagesByContact[contactId] || [])),
-      })
-      return
     }
 
     if (pathname.endsWith('/contacts')) {
@@ -194,6 +235,21 @@ async function mockChatApi(page: Page, options: MockChatApiOptions) {
             page: 1,
             limit: 25,
           },
+        }),
+      })
+      return
+    }
+
+    const contactMatch = pathname.match(/\/api\/contacts\/([^/]+)$/)
+    if (contactMatch && method === 'GET') {
+      const contactId = decodeURIComponent(contactMatch[1])
+      const contact = options.contacts.find((item) => item.id === contactId)
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'success',
+          data: contact || options.contacts[0] || null,
         }),
       })
       return
@@ -263,7 +319,13 @@ async function mockChatApi(page: Page, options: MockChatApiOptions) {
 }
 
 test.describe('Group Chat Conversation', () => {
-  test('shows one group row per instance and sends using the selected instance', async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('chat.sidebarViewMode', 'unified')
+    })
+  })
+
+  test('merges multi-instance group rows and sends from the selected instance tab', async ({ page }) => {
     const contacts = [
       {
         id: GROUP_CONTACT_ACC1_ID,
@@ -339,6 +401,9 @@ test.describe('Group Chat Conversation', () => {
     const sentMessages: SentMessageCapture[] = []
 
     await loginAsAdmin(page)
+    await page.evaluate(() => {
+      localStorage.setItem('chat.sidebarViewMode', 'unified')
+    })
     await mockChatApi(page, {
       contacts,
       messagesByContact,
@@ -349,15 +414,24 @@ test.describe('Group Chat Conversation', () => {
     await page.waitForLoadState('networkidle')
 
     const groupConversationRows = page
-      .locator('.cursor-pointer')
+      .locator('[data-testid="chat-sidebar-entry"]')
       .filter({ hasText: 'Support Group' })
-    await expect(groupConversationRows).toHaveCount(2)
+    await expect(groupConversationRows).toHaveCount(1)
 
-    const sidebarInstanceTags = page.locator('[data-instance-tag="true"][data-placement="sidebar"]')
-    await expect(sidebarInstanceTags.filter({ hasText: 'acc1' })).toHaveCount(1)
-    await expect(sidebarInstanceTags.filter({ hasText: 'acc2' })).toHaveCount(1)
+    const multiInstanceIndicator = groupConversationRows
+      .first()
+      .locator('[data-testid="sidebar-multi-instance-indicator"]')
+    await expect(multiInstanceIndicator).toBeVisible()
+    await expect(multiInstanceIndicator).toContainText('acc1')
+    await expect(multiInstanceIndicator).toContainText('acc2')
 
-    await groupConversationRows.filter({ hasText: 'acc2' }).first().click()
+    await groupConversationRows.first().click()
+    await expect(page.getByTestId('chat-account-tabs')).toBeVisible()
+    await expect(page.getByTestId('chat-account-tab').filter({ hasText: 'acc1' })).toBeVisible()
+    await expect(page.getByTestId('chat-account-tab').filter({ hasText: 'acc2' })).toBeVisible()
+
+    await page.getByTestId('chat-account-tab').filter({ hasText: 'acc2' }).click()
+    await page.waitForLoadState('networkidle')
     await expect(page.getByText('Message from acc2 member')).toBeVisible()
 
     const composer = page.getByPlaceholder('Type a message...')
@@ -372,6 +446,9 @@ test.describe('Group Chat Conversation', () => {
   test('keeps websocket messages scoped to the active chat', async ({ page }) => {
     await installMockWebSocket(page)
     await loginAsAdmin(page)
+    await page.evaluate(() => {
+      localStorage.setItem('chat.sidebarViewMode', 'unified')
+    })
 
     const contacts = [
       {
@@ -456,7 +533,10 @@ test.describe('Group Chat Conversation', () => {
       },
     })
 
-    await expect(page.getByText('foreign live message')).toHaveCount(0)
+    const foreignMessageBubble = page
+      .locator('.chat-bubble, [data-testid="message"]')
+      .filter({ hasText: 'foreign live message' })
+    await expect(foreignMessageBubble).toHaveCount(0)
 
     await pushMockServerMessage(page, {
       type: 'new_message',
@@ -473,11 +553,17 @@ test.describe('Group Chat Conversation', () => {
       },
     })
 
-    await expect(page.getByText('active live message')).toBeVisible()
+    const activeMessageBubble = page
+      .locator('.chat-bubble, [data-testid="message"]')
+      .filter({ hasText: 'active live message' })
+    await expect(activeMessageBubble).toBeVisible()
   })
 
   test('does not render false deleted placeholder rows for media companion messages', async ({ page }) => {
     await loginAsAdmin(page)
+    await page.evaluate(() => {
+      localStorage.setItem('chat.sidebarViewMode', 'unified')
+    })
 
     const contacts = [
       {
@@ -547,6 +633,9 @@ test.describe('Group Chat Conversation', () => {
 
   test('sends direct chat messages with the selected contact instance', async ({ page }) => {
     await loginAsAdmin(page)
+    await page.evaluate(() => {
+      localStorage.setItem('chat.sidebarViewMode', 'unified')
+    })
 
     const contacts = [
       {
@@ -625,7 +714,7 @@ test.describe('Group Chat Conversation', () => {
     await expect(sidebarInstanceTags.filter({ hasText: 'acc1' })).toHaveCount(1)
     await expect(sidebarInstanceTags.filter({ hasText: 'acc2' })).toHaveCount(1)
 
-    await page.locator('.cursor-pointer').filter({ hasText: 'Direct acc1' }).first().click()
+    await page.locator('[data-testid="chat-sidebar-entry"]').filter({ hasText: 'Direct acc1' }).first().click()
     await expect(page.getByText('Direct acc1 history')).toBeVisible()
 
     const composer = page.getByPlaceholder('Type a message...')
@@ -636,7 +725,7 @@ test.describe('Group Chat Conversation', () => {
     expect(sentMessages[0].contactId).toBe(DIRECT_CONTACT_ACC1_ID)
     expect(sentMessages[0].body.instance_id).toBe(INSTANCE_ACC1_ID)
 
-    await page.locator('.cursor-pointer').filter({ hasText: 'Direct acc2' }).first().click()
+    await page.locator('[data-testid="chat-sidebar-entry"]').filter({ hasText: 'Direct acc2' }).first().click()
     await expect(page.getByText('Direct acc2 history')).toBeVisible()
 
     await composer.fill('Direct send via acc2')

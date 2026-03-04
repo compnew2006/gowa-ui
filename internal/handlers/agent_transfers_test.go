@@ -521,6 +521,13 @@ func TestApp_AssignAgentTransfer_Success(t *testing.T) {
 	var updatedTransfer models.AgentTransfer
 	require.NoError(t, app.DB.First(&updatedTransfer, transfer.ID).Error)
 	assert.Equal(t, agent.ID, *updatedTransfer.AgentID)
+
+	var systemMessage models.Message
+	require.NoError(t, app.DB.
+		Where("contact_id = ? AND metadata->>'event_type' = ?", contact.ID, "chat_assigned").
+		Order("created_at DESC").
+		First(&systemMessage).Error)
+	assert.Contains(t, systemMessage.Content, "has assigned this chat to")
 }
 
 func TestApp_AssignAgentTransfer_AgentSelfAssign(t *testing.T) {

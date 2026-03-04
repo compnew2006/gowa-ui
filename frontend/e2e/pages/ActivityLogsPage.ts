@@ -18,7 +18,7 @@ export class ActivityLogsPage extends BasePage {
   }
 
   async goto() {
-    await this.page.goto('/activity-logs')
+    await this.page.goto('/settings/activity-logs')
     await this.page.waitForLoadState('networkidle')
   }
 

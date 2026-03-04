@@ -55,6 +55,13 @@ func TestNewUpgrader_CheckOrigin(t *testing.T) {
 			allowedOrigins: nil,
 			wantAllowed:    false,
 		},
+		{
+			name:           "rejects missing origin",
+			host:           "api.example.com",
+			origin:         "",
+			allowedOrigins: nil,
+			wantAllowed:    false,
+		},
 	}
 
 	for _, tc := range tests {

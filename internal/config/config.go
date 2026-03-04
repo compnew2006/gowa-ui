@@ -144,6 +144,8 @@ type RateLimitConfig struct {
 	SSOMaxAttempts      int  `koanf:"sso_max_attempts"`
 	WindowSeconds       int  `koanf:"window_seconds"`
 	TrustProxy          bool `koanf:"trust_proxy"`
+	OutboundPerUserPS   int  `koanf:"outbound_per_user_per_second"`
+	OutboundPerIPPS     int  `koanf:"outbound_per_ip_per_second"`
 }
 
 // Load loads configuration from file and environment variables
@@ -222,6 +224,7 @@ func setDefaults(cfg *Config) {
 	if cfg.Server.MaxRequestBodySizeMB == 0 {
 		cfg.Server.MaxRequestBodySizeMB = 110
 	}
+	cfg.Server.BasePath = normalizeBasePath(cfg.Server.BasePath)
 	if cfg.Database.Port == 0 {
 		cfg.Database.Port = 5432
 	}
@@ -313,13 +316,7 @@ func setDefaults(cfg *Config) {
 	if cfg.Storage.LocalPath == "" {
 		cfg.Storage.LocalPath = "./uploads"
 	}
-	// Default admin credentials (only used during initial setup)
-	if cfg.DefaultAdmin.Email == "" {
-		cfg.DefaultAdmin.Email = "admin@admin.com"
-	}
-	if cfg.DefaultAdmin.Password == "" {
-		cfg.DefaultAdmin.Password = "admin"
-	}
+	// Default admin bootstrap metadata (credentials must be explicitly configured).
 	if cfg.DefaultAdmin.FullName == "" {
 		cfg.DefaultAdmin.FullName = "Admin"
 	}
@@ -343,4 +340,28 @@ func setDefaults(cfg *Config) {
 	if cfg.RateLimit.WindowSeconds == 0 {
 		cfg.RateLimit.WindowSeconds = 60
 	}
+	if cfg.RateLimit.OutboundPerUserPS == 0 {
+		cfg.RateLimit.OutboundPerUserPS = 5
+	}
+	if cfg.RateLimit.OutboundPerIPPS == 0 {
+		cfg.RateLimit.OutboundPerIPPS = 15
+	}
+}
+
+func normalizeBasePath(basePath string) string {
+	trimmed := strings.TrimSpace(basePath)
+	if trimmed == "" || trimmed == "." || trimmed == "./" || trimmed == "/" {
+		return ""
+	}
+
+	trimmed = strings.TrimSuffix(trimmed, "/")
+	if trimmed == "" || trimmed == "." {
+		return ""
+	}
+
+	if strings.HasPrefix(trimmed, "/") {
+		return trimmed
+	}
+
+	return "/" + strings.TrimPrefix(trimmed, "./")
 }

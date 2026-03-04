@@ -1026,14 +1026,18 @@ export const useContactsStore = defineStore("contacts", () => {
     content: any,
     replyToMessageId?: string,
     whatsappAccount?: string,
+    explicitInstanceID?: string,
   ) {
     try {
       const contact = contacts.value.find((item) => item.id === contactId);
+      const resolvedInstanceID = typeof explicitInstanceID === "string" && explicitInstanceID.trim() !== ""
+        ? explicitInstanceID.trim()
+        : contact?.instance_id;
       const response = await messagesService.send(contactId, {
         type,
         content,
         reply_to_message_id: replyToMessageId,
-        instance_id: contact?.instance_id,
+        instance_id: resolvedInstanceID,
         whatsapp_account: whatsappAccount,
       });
       // API returns { status: "success", data: { ... } }

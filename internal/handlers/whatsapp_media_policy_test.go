@@ -39,17 +39,24 @@ func TestResolveWhatsAppMediaMIME(t *testing.T) {
 		expected        string
 	}{
 		{
-			name:            "uses multipart content type when specific",
+			name:            "prefers sniffed content type over multipart header",
 			partContentType: "image/png; charset=binary",
 			filename:        "voice.mp3",
-			fileData:        []byte("not-a-png"),
+			fileData:        jpegBytes,
+			expected:        "image/jpeg",
+		},
+		{
+			name:            "uses multipart content type when sniffing is unavailable",
+			partContentType: "image/png; charset=binary",
+			filename:        "voice.mp3",
+			fileData:        nil,
 			expected:        "image/png",
 		},
 		{
 			name:            "falls back to extension when multipart type is generic",
 			partContentType: "application/octet-stream",
 			filename:        "photo.jpeg",
-			fileData:        []byte("not-a-jpeg"),
+			fileData:        nil,
 			expected:        "image/jpeg",
 		},
 		{

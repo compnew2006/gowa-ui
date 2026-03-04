@@ -215,7 +215,14 @@ func (a *App) Register(r *fastglue.Request) error {
 		})
 	}
 
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err := validatePasswordStrength(req.Password); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "password")
+	}
+
+	hashedPassword, hashErr := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if hashErr != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create account", nil, "")
+	}
 	tx := a.DB.Begin()
 
 	user := models.User{
@@ -282,7 +289,7 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 
 	token, err := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return a.jwtSecretBytes()
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 
 	if err != nil || !token.Valid {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid refresh token", nil, "")
@@ -292,14 +299,18 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 	if !ok {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token claims", nil, "")
 	}
+	if claims.Subject != refreshTokenSubject || claims.ID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid refresh token", nil, "")
+	}
+	if a.Redis == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Refresh token storage is unavailable", nil, "")
+	}
 
-	if claims.ID != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		deleted, err := a.Redis.Del(ctx, refreshTokenKey(claims.ID)).Result()
-		if err != nil || deleted == 0 {
-			return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Refresh token has been revoked", nil, "")
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	deleted, err := a.Redis.Del(ctx, refreshTokenKey(claims.ID)).Result()
+	if err != nil || deleted == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Refresh token has been revoked", nil, "")
 	}
 
 	var user models.User
@@ -471,7 +482,7 @@ func (a *App) GetWSToken(r *fastglue.Request) error {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "whatomate",
-			Subject:   "ws",
+			Subject:   wsTokenSubject,
 		},
 	}
 

@@ -347,6 +347,32 @@ func TestApp_GetAgentAnalytics_EmptyData(t *testing.T) {
 	assert.Empty(t, resp.Data.TrendData)
 }
 
+func TestApp_GetAgentAnalytics_RejectsCrossOrgAgentFilter(t *testing.T) {
+	app := newTestApp(t)
+	orgA := testutil.CreateTestOrganization(t, app.DB)
+	orgB := testutil.CreateTestOrganization(t, app.DB)
+
+	perms := getAnalyticsPermissions(t, app)
+	role := testutil.CreateTestRoleExact(t, app.DB, orgA.ID, "Analytics Scoped", false, false, perms)
+	userA := testutil.CreateTestUser(t, app.DB, orgA.ID,
+		testutil.WithEmail(testutil.UniqueEmail("agent-scope-admin")),
+		testutil.WithPassword("password"),
+		testutil.WithRoleID(&role.ID),
+	)
+	userB := testutil.CreateTestUser(t, app.DB, orgB.ID,
+		testutil.WithEmail(testutil.UniqueEmail("agent-scope-foreign")),
+		testutil.WithPassword("password"),
+	)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, orgA.ID, userA.ID)
+	testutil.SetQueryParam(req, "agent_id", userB.ID.String())
+
+	err := app.GetAgentAnalytics(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusNotFound, "Agent not found")
+}
+
 func TestApp_GetAgentAnalytics_Unauthorized(t *testing.T) {
 	app := newTestApp(t)
 

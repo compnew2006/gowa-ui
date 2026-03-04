@@ -51,6 +51,9 @@
     "vuedraggable": "^4.1.0",
     "zod": "^3.25.76"
   },
+  "overrides": {
+    "minimatch": "^9.0.7"
+  },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@rushstack/eslint-patch": "^1.6.0",

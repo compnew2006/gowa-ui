@@ -7,6 +7,8 @@ export interface SidebarContactEntry {
   displayContact: Contact
   sourceContacts: Contact[]
   sourceContactIDs: string[]
+  sourceInstanceIDs: string[]
+  sourceInstanceLabels: string[]
   accountNames: string[]
   contactsByAccount: Record<string, Contact>
   isUnified: boolean
@@ -155,12 +157,20 @@ export class ChatSidebarUnifier {
       .map((entry) => {
         const accountNames = Object.keys(entry.contactsByAccount).sort((a, b) => a.localeCompare(b))
         const sourceContactIDs = Array.from(new Set(entry.sourceContacts.map((contact) => contact.id)))
+        const sourceInstanceIDs = Array.from(new Set(
+          entry.sourceContacts
+            .map((contact) => (typeof contact.instance_id === 'string' ? contact.instance_id.trim() : ''))
+            .filter(Boolean)
+        ))
+        const sourceInstanceLabels = sourceInstanceIDs.slice()
 
         return {
           key: entry.key,
           displayContact: entry.displayContact,
           sourceContacts: entry.sourceContacts,
           sourceContactIDs,
+          sourceInstanceIDs,
+          sourceInstanceLabels,
           accountNames,
           contactsByAccount: entry.contactsByAccount,
           isUnified: entry.isUnified

@@ -128,6 +128,14 @@ var widgetDataSources = map[string][]string{
 	"sessions":  {"status"},
 }
 
+// Allowed aggregate fields by data source and metric.
+// Keep this strict to prevent SQL expression injection.
+var widgetAggregateFields = map[string]map[string][]string{
+	"transfers": {
+		"avg": {"resolution_time"},
+	},
+}
+
 // Available metrics
 var widgetMetrics = []string{"count", "sum", "avg"}
 
@@ -252,6 +260,10 @@ func (a *App) CreateWidget(r *fastglue.Request) error {
 		if !contains(widgetMetrics, req.Metric) {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid metric", nil, "")
 		}
+	}
+	req.Field = strings.TrimSpace(req.Field)
+	if err := validateWidgetMetricField(req.DataSource, req.Metric, req.Field); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "field")
 	}
 
 	// Get max display order
@@ -411,7 +423,16 @@ func (a *App) UpdateWidget(r *fastglue.Request) error {
 		widget.Metric = req.Metric
 	}
 	if req.Field != "" {
-		widget.Field = req.Field
+		widget.Field = strings.TrimSpace(req.Field)
+	}
+	metricOrFieldChanged := req.DataSource != "" || req.Metric != "" || req.Field != ""
+	if metricOrFieldChanged {
+		if widget.Metric == "count" {
+			widget.Field = ""
+		}
+		if err := validateWidgetMetricField(widget.DataSource, widget.Metric, widget.Field); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "field")
+		}
 	}
 	if req.Filters != nil {
 		filters := make(models.JSONBArray, len(req.Filters))
@@ -863,18 +884,40 @@ func (a *App) queryMessages(orgID uuid.UUID, metric, field string, filters []Fil
 		query.Count(&count)
 		result = float64(count)
 	case "sum", "avg":
-		// For messages, sum/avg might be on a numeric field
-		if field != "" {
-			var val float64
-			if metric == "sum" {
-				query.Select("COALESCE(SUM(" + field + "), 0)").Scan(&val)
-			} else {
-				query.Select("COALESCE(AVG(" + field + "), 0)").Scan(&val)
-			}
-			result = val
-		}
+		// Sum/avg is intentionally disabled for messages to avoid unsafe dynamic aggregation.
+		result = 0
 	}
 	return result
+}
+
+func validateWidgetMetricField(dataSource, metric, field string) error {
+	field = strings.TrimSpace(field)
+
+	switch metric {
+	case "count":
+		if field != "" {
+			return fmt.Errorf("field is not supported for count metric")
+		}
+		return nil
+	case "sum", "avg":
+		if field == "" {
+			return fmt.Errorf("field is required for %s metric", metric)
+		}
+		if !validFieldRegex.MatchString(field) {
+			return fmt.Errorf("invalid field name")
+		}
+		byMetric, ok := widgetAggregateFields[dataSource]
+		if !ok {
+			return fmt.Errorf("%s metric is not supported for this data source", metric)
+		}
+		allowedFields := byMetric[metric]
+		if !contains(allowedFields, field) {
+			return fmt.Errorf("invalid field for %s metric", metric)
+		}
+		return nil
+	default:
+		return fmt.Errorf("invalid metric")
+	}
 }
 
 func (a *App) queryContacts(orgID uuid.UUID, _ string, filters []FilterInput, start, end time.Time) float64 {

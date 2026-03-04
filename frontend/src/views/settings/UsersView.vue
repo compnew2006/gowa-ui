@@ -18,7 +18,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
 import { useOrganizationsStore } from '@/stores/organizations'
 import { useInstancesStore } from '@/stores/instances'
-import { authService, usersService } from '@/services/api'
+import { authService, usersService, organizationService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Plus, Pencil, Trash2, UserMinus, User as UserIcon, Shield, ShieldCheck, UserCog, Users, Link, UserPlus, Loader2 } from 'lucide-vue-next'
 import { useCrudState } from '@/composables/useCrudState'
@@ -95,8 +95,18 @@ function openEditDialog(user: User) {
   baseOpenEditDialog(user, (u) => ({ email: u.email, password: '', full_name: u.full_name, role_id: u.role_id || '', is_active: u.is_active, is_super_admin: u.is_super_admin || false }))
 }
 
-watch(() => organizationsStore.selectedOrgId, () => { fetchUsers(); rolesStore.fetchRoles(); instancesStore.fetchInstances() })
-onMounted(() => { fetchUsers(); rolesStore.fetchRoles(); instancesStore.fetchInstances() })
+watch(() => organizationsStore.selectedOrgId, () => {
+  fetchUsers()
+  rolesStore.fetchRoles()
+  instancesStore.fetchInstances()
+  fetchStrictSendingRestrictions()
+})
+onMounted(() => {
+  fetchUsers()
+  rolesStore.fetchRoles()
+  instancesStore.fetchInstances()
+  fetchStrictSendingRestrictions()
+})
 
 async function fetchUsers() {
   isLoading.value = true
@@ -252,6 +262,8 @@ interface UserSendRestrictionsPayload {
   allowed_instance_ids?: string[]
   allowed_instance_id?: string | null
   prefix_agent_name?: boolean
+  allow_unclaimed_chat_view?: boolean
+  allow_unclaimed_chat_send?: boolean
 }
 
 const isSendRestrictionsOpen = ref(false)
@@ -262,6 +274,8 @@ const sendRestrictionsNumbers = ref<string[]>([])
 const sendRestrictionsNewNumber = ref('')
 const sendRestrictionsAllowedInstanceIDs = ref<string[]>([])
 const sendRestrictionsPrefixAgentName = ref(true)
+const sendRestrictionsAllowUnclaimedChatView = ref(false)
+const sendRestrictionsAllowUnclaimedChatSend = ref(false)
 const isSendRestrictionsLoading = ref(false)
 const isSendRestrictionsSubmitting = ref(false)
 const sendRestrictionsAvailableInstances = computed(() => instancesStore.instances)
@@ -293,6 +307,11 @@ function setSendRestrictionsPayload(payload: UserSendRestrictionsPayload | undef
     sendRestrictionsAllowedInstanceIDs.value = legacy ? [legacy] : []
   }
   sendRestrictionsPrefixAgentName.value = payload?.prefix_agent_name !== false
+  sendRestrictionsAllowUnclaimedChatView.value = payload?.allow_unclaimed_chat_view === true
+  sendRestrictionsAllowUnclaimedChatSend.value = payload?.allow_unclaimed_chat_send === true
+  if (sendRestrictionsAllowUnclaimedChatSend.value && !sendRestrictionsAllowUnclaimedChatView.value) {
+    sendRestrictionsAllowUnclaimedChatView.value = true
+  }
 }
 
 async function openSendRestrictionsDialog(user: User) {
@@ -342,6 +361,13 @@ function toggleAllowedInstance(instanceID: string, checked: boolean) {
   sendRestrictionsAllowedInstanceIDs.value = sendRestrictionsAllowedInstanceIDs.value.filter(id => id !== normalized)
 }
 
+function updateAllowUnclaimedChatSend(checked: boolean) {
+  sendRestrictionsAllowUnclaimedChatSend.value = checked
+  if (checked) {
+    sendRestrictionsAllowUnclaimedChatView.value = true
+  }
+}
+
 async function saveSendRestrictions() {
   if (!sendRestrictionsUser.value) {
     return
@@ -362,6 +388,8 @@ async function saveSendRestrictions() {
       allowed_instance_ids: allowedInstanceIDs,
       allowed_instance_id: allowedInstanceIDs[0] || null,
       prefix_agent_name: sendRestrictionsPrefixAgentName.value,
+      allow_unclaimed_chat_view: sendRestrictionsAllowUnclaimedChatView.value || sendRestrictionsAllowUnclaimedChatSend.value,
+      allow_unclaimed_chat_send: sendRestrictionsAllowUnclaimedChatSend.value,
     })
     const payload = (response.data as any).data || response.data
     setSendRestrictionsPayload(payload)
@@ -371,6 +399,37 @@ async function saveSendRestrictions() {
     toast.error(getErrorMessage(e, t('users.sendRestrictionsSaveFailed')))
   } finally {
     isSendRestrictionsSubmitting.value = false
+  }
+}
+
+const strictSendingRestrictionsEnabled = ref(false)
+const isStrictSendingRestrictionsLoading = ref(false)
+const isStrictSendingRestrictionsSubmitting = ref(false)
+
+async function fetchStrictSendingRestrictions() {
+  isStrictSendingRestrictionsLoading.value = true
+  try {
+    const response = await organizationService.getSettings()
+    const payload = (response.data as any).data || response.data
+    strictSendingRestrictionsEnabled.value = payload?.settings?.strict_sending_restrictions_enabled === true
+  } catch {
+    strictSendingRestrictionsEnabled.value = false
+  } finally {
+    isStrictSendingRestrictionsLoading.value = false
+  }
+}
+
+async function saveStrictSendingRestrictions() {
+  isStrictSendingRestrictionsSubmitting.value = true
+  try {
+    await organizationService.updateSettings({
+      strict_sending_restrictions_enabled: strictSendingRestrictionsEnabled.value,
+    })
+    toast.success(t('settings.generalSaved'))
+  } catch (e) {
+    toast.error(getErrorMessage(e, t('common.failedSave', { resource: t('resources.settings') })))
+  } finally {
+    isStrictSendingRestrictionsSubmitting.value = false
   }
 }
 </script>
@@ -392,6 +451,36 @@ async function saveSendRestrictions() {
     <ScrollArea class="flex-1">
       <div class="p-6">
         <div class="max-w-6xl mx-auto">
+          <Card class="mb-6">
+            <CardHeader>
+              <CardTitle>{{ $t('settings.strictSendingRestrictions') }}</CardTitle>
+              <CardDescription>{{ $t('settings.strictSendingRestrictionsDesc') }}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div class="flex items-center justify-between gap-4">
+                <div class="text-sm text-muted-foreground">
+                  {{ $t('users.manageSendRestrictions') }}
+                </div>
+                <div class="flex items-center gap-2">
+                  <Switch
+                    :checked="strictSendingRestrictionsEnabled"
+                    :disabled="isStrictSendingRestrictionsLoading || isStrictSendingRestrictionsSubmitting"
+                    @update:checked="strictSendingRestrictionsEnabled = $event"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="isStrictSendingRestrictionsLoading || isStrictSendingRestrictionsSubmitting"
+                    @click="saveStrictSendingRestrictions"
+                  >
+                    <Loader2 v-if="isStrictSendingRestrictionsSubmitting" class="h-4 w-4 mr-2 animate-spin" />
+                    {{ $t('common.save') }}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div class="flex items-center justify-between flex-wrap gap-4">
@@ -648,6 +737,30 @@ async function saveSendRestrictions() {
               <p class="text-xs text-muted-foreground">{{ $t('users.prefixAgentNameDesc') }}</p>
             </div>
             <Switch :checked="sendRestrictionsPrefixAgentName" @update:checked="sendRestrictionsPrefixAgentName = $event" :disabled="isSendRestrictionsLoading" />
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <Label class="font-normal">Allow Unclaimed Chat View</Label>
+              <p class="text-xs text-muted-foreground">Allow viewing pending/unassigned chats without claiming first.</p>
+            </div>
+            <Switch
+              :checked="sendRestrictionsAllowUnclaimedChatView"
+              :disabled="isSendRestrictionsLoading"
+              @update:checked="sendRestrictionsAllowUnclaimedChatView = $event"
+            />
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <Label class="font-normal">Allow Unclaimed Chat Send</Label>
+              <p class="text-xs text-muted-foreground">Allow sending messages in pending/unassigned chats without claiming first.</p>
+            </div>
+            <Switch
+              :checked="sendRestrictionsAllowUnclaimedChatSend"
+              :disabled="isSendRestrictionsLoading"
+              @update:checked="updateAllowUnclaimedChatSend"
+            />
           </div>
 
           <div class="space-y-2">

@@ -1,6 +1,7 @@
 import { APIRequestContext } from '@playwright/test'
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080'
+const E2E_TEST_PASSWORD = 'Password123!'
 
 export interface Permission {
   id: string
@@ -77,7 +78,7 @@ export class ApiHelper {
   }
 
   async loginAsAdmin(): Promise<void> {
-    await this.login('admin@test.com', 'password')
+    await this.login('admin@test.com', E2E_TEST_PASSWORD)
   }
 
   // Register a user into an existing organization

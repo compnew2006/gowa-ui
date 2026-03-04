@@ -360,7 +360,7 @@ func (a *App) CustomActionRedirect(r *fastglue.Request) error {
 
 	rt, exists, err := a.consumeRedirectToken(context.Background(), token)
 	if err != nil {
-		a.Log.Error("Failed to consume redirect token", "error", err, "token", token)
+		a.Log.Error("Failed to consume redirect token", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to resolve redirect token", nil, "")
 	}
 	if !exists {

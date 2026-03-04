@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/compnew2006/whatomate/internal/models"
@@ -61,6 +62,11 @@ func isValidChatAssignmentResetHour(hour int) bool {
 }
 
 func parseChatAssignmentResetHour(raw any) (int, bool) {
+	const (
+		maxInt = int(^uint(0) >> 1)
+		minInt = -maxInt - 1
+	)
+
 	switch v := raw.(type) {
 	case int:
 		return v, true
@@ -71,24 +77,46 @@ func parseChatAssignmentResetHour(raw any) (int, bool) {
 	case int32:
 		return int(v), true
 	case int64:
+		if v < int64(minInt) || v > int64(maxInt) {
+			return 0, false
+		}
 		return int(v), true
 	case uint:
+		if uint64(v) > uint64(maxInt) {
+			return 0, false
+		}
 		return int(v), true
 	case uint8:
 		return int(v), true
 	case uint16:
 		return int(v), true
 	case uint32:
+		if uint64(v) > uint64(maxInt) {
+			return 0, false
+		}
 		return int(v), true
 	case uint64:
+		if v > uint64(maxInt) {
+			return 0, false
+		}
 		return int(v), true
 	case float64:
+		if v < float64(minInt) || v > float64(maxInt) || math.Trunc(v) != v {
+			return 0, false
+		}
 		return int(v), true
 	case float32:
+		floatV := float64(v)
+		if floatV < float64(minInt) || floatV > float64(maxInt) || math.Trunc(floatV) != floatV {
+			return 0, false
+		}
 		return int(v), true
 	case json.Number:
 		parsed, err := v.Int64()
 		if err != nil {
+			return 0, false
+		}
+		if parsed < int64(minInt) || parsed > int64(maxInt) {
 			return 0, false
 		}
 		return int(parsed), true

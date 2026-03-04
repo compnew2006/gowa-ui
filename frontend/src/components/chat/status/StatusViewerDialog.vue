@@ -48,6 +48,37 @@ const currentInstanceLabel = computed(() => {
   return 'Unknown Instance'
 })
 
+function formatPhoneFromJID(jid: string | undefined): string {
+  const raw = String(jid || '').trim()
+  if (!raw) return ''
+  const userPart = raw.split('@')[0]?.trim() || ''
+  if (!userPart) return ''
+  return userPart
+}
+
+function formatStatusTime(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toLocaleTimeString()
+}
+
+const currentStatusMetaLine = computed(() => {
+  const status = currentStatus.value
+  if (!status) return ''
+
+  const displayName = String(status.sender_name || status.sender_jid || '').trim()
+  const phoneNumber = formatPhoneFromJID(status.sender_jid)
+  const statusTime = formatStatusTime(status.created_at)
+
+  const parts: string[] = []
+  if (displayName) parts.push(displayName)
+  if (phoneNumber && phoneNumber !== displayName) parts.push(phoneNumber)
+  if (currentInstanceLabel.value) parts.push(currentInstanceLabel.value)
+  if (statusTime) parts.push(statusTime)
+
+  return parts.join(' • ')
+})
+
 function clearAutoAdvanceTimer() {
   if (!autoAdvanceTimer) return
   clearTimeout(autoAdvanceTimer)
@@ -205,11 +236,7 @@ onBeforeUnmount(() => {
         >
           <div class="w-full max-w-2xl space-y-4">
             <p class="text-sm text-white/70">
-              {{ currentStatus.sender_name || currentStatus.sender_jid }}
-              <span class="mx-1">•</span>
-              {{ currentInstanceLabel }}
-              <span class="mx-1">•</span>
-              {{ new Date(currentStatus.created_at).toLocaleTimeString() }}
+              {{ currentStatusMetaLine }}
             </p>
 
             <div

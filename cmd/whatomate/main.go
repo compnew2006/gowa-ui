@@ -127,6 +127,9 @@ func runServer(args []string) {
 	if err := config.ValidateEncryptionKey(cfg); err != nil {
 		lo.Fatal("Invalid encryption configuration", "error", err)
 	}
+	if err := config.ValidateDefaultAdmin(cfg); err != nil {
+		lo.Fatal("Invalid default admin configuration", "error", err)
+	}
 
 	// Warn if debug mode is on in production
 	if cfg.App.Environment == "production" && cfg.App.Debug {
@@ -438,6 +441,9 @@ func runWorker(args []string) {
 	if err := config.ValidateEncryptionKey(cfg); err != nil {
 		lo.Fatal("Invalid encryption configuration", "error", err)
 	}
+	if err := config.ValidateDefaultAdmin(cfg); err != nil {
+		lo.Fatal("Invalid default admin configuration", "error", err)
+	}
 
 	// Set log level based on environment
 	if cfg.App.Environment == "production" {
@@ -553,6 +559,47 @@ func runWorker(args []string) {
 // ============================================================================
 
 func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePath string, rdb *redis.Client, cfg *config.Config) {
+	sendMessageHandler := app.SendMessage
+	sendMediaMessageHandler := app.SendMediaMessage
+	sendTemplateMessageHandler := app.SendTemplateMessage
+	sendCannedResponseHandler := app.SendCannedResponse
+
+	if cfg.RateLimit.OutboundPerUserPS > 0 || cfg.RateLimit.OutboundPerIPPS > 0 {
+		if cfg.RateLimit.OutboundPerUserPS > 0 {
+			opts := middleware.RateLimitOpts{
+				Redis:      rdb,
+				Log:        lo,
+				Max:        cfg.RateLimit.OutboundPerUserPS,
+				Window:     time.Second,
+				KeyPrefix:  "outbound_user",
+				TrustProxy: cfg.RateLimit.TrustProxy,
+				KeyFunc:    outboundRateLimitUserKey,
+			}
+			sendMessageHandler = withRateLimit(sendMessageHandler, opts)
+			sendMediaMessageHandler = withRateLimit(sendMediaMessageHandler, opts)
+			sendTemplateMessageHandler = withRateLimit(sendTemplateMessageHandler, opts)
+			sendCannedResponseHandler = withRateLimit(sendCannedResponseHandler, opts)
+		}
+		if cfg.RateLimit.OutboundPerIPPS > 0 {
+			opts := middleware.RateLimitOpts{
+				Redis:      rdb,
+				Log:        lo,
+				Max:        cfg.RateLimit.OutboundPerIPPS,
+				Window:     time.Second,
+				KeyPrefix:  "outbound_ip",
+				TrustProxy: cfg.RateLimit.TrustProxy,
+			}
+			sendMessageHandler = withRateLimit(sendMessageHandler, opts)
+			sendMediaMessageHandler = withRateLimit(sendMediaMessageHandler, opts)
+			sendTemplateMessageHandler = withRateLimit(sendTemplateMessageHandler, opts)
+			sendCannedResponseHandler = withRateLimit(sendCannedResponseHandler, opts)
+		}
+
+		lo.Info("Outbound message rate limiting enabled",
+			"per_user_per_second", cfg.RateLimit.OutboundPerUserPS,
+			"per_ip_per_second", cfg.RateLimit.OutboundPerIPPS)
+	}
+
 	// Health check
 	g.GET("/health", app.HealthCheck)
 	g.GET("/ready", app.ReadyCheck)
@@ -727,13 +774,13 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Messages
 	g.GET("/api/contacts/{id}/messages", app.GetMessages)
-	g.POST("/api/contacts/{id}/messages", app.SendMessage)
+	g.POST("/api/contacts/{id}/messages", sendMessageHandler)
 	g.POST("/api/contacts/{id}/typing", app.SendTypingPresence)
 	g.POST("/api/contacts/{id}/messages/{message_id}/reaction", app.SendReaction)
 	g.POST("/api/contacts/{id}/messages/{message_id}/revoke", app.RevokeMessage)
-	g.POST("/api/messages", app.SendMessage) // Legacy route
-	g.POST("/api/messages/template", app.SendTemplateMessage)
-	g.POST("/api/messages/media", app.SendMediaMessage)
+	g.POST("/api/messages", sendMessageHandler) // Legacy route
+	g.POST("/api/messages/template", sendTemplateMessageHandler)
+	g.POST("/api/messages/media", sendMediaMessageHandler)
 	g.PUT("/api/messages/{id}/read", app.MarkMessageRead)
 	g.GET("/api/statuses", app.ListStatuses)
 	g.GET("/api/statuses/{id}/media", app.ServeStatusMedia)
@@ -861,7 +908,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/canned-responses/{id}", app.GetCannedResponse)
 	g.PUT("/api/canned-responses/{id}", app.UpdateCannedResponse)
 	g.DELETE("/api/canned-responses/{id}", app.DeleteCannedResponse)
-	g.POST("/api/canned-responses/{id}/send", app.SendCannedResponse)
+	g.POST("/api/canned-responses/{id}/send", sendCannedResponseHandler)
 	g.POST("/api/canned-responses/{id}/use", app.IncrementCannedResponseUsage)
 
 	// Sessions (admin/debug)
@@ -970,6 +1017,20 @@ func withRateLimit(handler fastglue.FastRequestHandler, opts middleware.RateLimi
 		}
 		return handler(r)
 	}
+}
+
+func outboundRateLimitUserKey(r *fastglue.Request, clientIP string) string {
+	userID, ok := r.RequestCtx.UserValue(middleware.ContextKeyUserID).(uuid.UUID)
+	if !ok || userID == uuid.Nil {
+		return "anonymous:" + strings.TrimSpace(clientIP)
+	}
+
+	orgID, ok := r.RequestCtx.UserValue(middleware.ContextKeyOrganizationID).(uuid.UUID)
+	if !ok || orgID == uuid.Nil {
+		return userID.String()
+	}
+
+	return orgID.String() + ":" + userID.String()
 }
 
 // corsWrapper wraps a handler with CORS support at the fasthttp level.

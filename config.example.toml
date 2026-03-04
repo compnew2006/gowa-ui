@@ -80,16 +80,18 @@ secure = false # Set Secure flag on cookies. Auto-set true when environment=prod
 
 # Rate limiting for auth endpoints (uses Redis fixed-window counters)
 [rate_limit]
-enabled = false                # Set to true to enable rate limiting
+enabled = true                 # Keep enabled in deployed environments
 login_max_attempts = 10        # Max login attempts per IP per window
 register_max_attempts = 10     # Max register attempts per IP per window
 refresh_max_attempts = 30      # Max token refresh attempts per IP per window
 sso_max_attempts = 10          # Max SSO init/callback attempts per IP per window
 window_seconds = 60            # Time window in seconds
 trust_proxy = false            # Trust X-Forwarded-For / X-Real-IP headers (set true behind reverse proxy)
+outbound_per_user_per_second = 5   # Max outbound chat/canned sends per user per second
+outbound_per_ip_per_second = 15    # Max outbound chat/canned sends per client IP per second
 
 # Default admin credentials (only used during initial setup when no users exist)
 [default_admin]
-email = "admin@admin.com"
-password = "admin"
+email = ""    # Optional bootstrap admin. Leave empty to disable auto-seeding.
+password = "" # Optional bootstrap admin password (minimum 12 chars in production).
 full_name = "Admin"

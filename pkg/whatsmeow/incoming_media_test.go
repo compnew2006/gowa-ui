@@ -268,6 +268,57 @@ func TestExtractMessageContentWithMedia_TextualVariants(t *testing.T) {
 			t.Fatalf("expected edited body, got %q", content)
 		}
 	})
+
+	t.Run("protocol status mention renders readable placeholder", func(t *testing.T) {
+		msg := &waE2E.Message{
+			ProtocolMessage: &waE2E.ProtocolMessage{
+				Type: waE2E.ProtocolMessage_STATUS_MENTION_MESSAGE.Enum(),
+			},
+		}
+
+		msgType, content, mediaURL, mimeType, filename := cm.extractMessageContentWithMedia(ctx, nil, msg)
+		if msgType != models.MessageTypeText {
+			t.Fatalf("expected text type, got %q", msgType)
+		}
+		if content != statusMentionCaption {
+			t.Fatalf("expected status mention placeholder, got %q", content)
+		}
+		if mediaURL != "" || mimeType != "" || filename != "" {
+			t.Fatalf("expected no media metadata for protocol status mention, got mediaURL=%q mimeType=%q filename=%q", mediaURL, mimeType, filename)
+		}
+	})
+
+	t.Run("protocol control messages are ignored", func(t *testing.T) {
+		msg := &waE2E.Message{
+			ProtocolMessage: &waE2E.ProtocolMessage{
+				Type: waE2E.ProtocolMessage_APP_STATE_SYNC_KEY_REQUEST.Enum(),
+			},
+		}
+
+		msgType, content, mediaURL, mimeType, filename := cm.extractMessageContentWithMedia(ctx, nil, msg)
+		if msgType != models.MessageTypeIgnore {
+			t.Fatalf("expected ignore type for protocol control message, got %q", msgType)
+		}
+		if content != "" || mediaURL != "" || mimeType != "" || filename != "" {
+			t.Fatalf("expected empty payload for ignored control protocol message, got content=%q mediaURL=%q mimeType=%q filename=%q", content, mediaURL, mimeType, filename)
+		}
+	})
+
+	t.Run("album wrapper message is ignored", func(t *testing.T) {
+		msg := &waE2E.Message{
+			AlbumMessage: &waE2E.AlbumMessage{
+				ExpectedImageCount: proto.Uint32(2),
+			},
+		}
+
+		msgType, content, mediaURL, mimeType, filename := cm.extractMessageContentWithMedia(ctx, nil, msg)
+		if msgType != models.MessageTypeIgnore {
+			t.Fatalf("expected ignore type for album wrapper message, got %q", msgType)
+		}
+		if content != "" || mediaURL != "" || mimeType != "" || filename != "" {
+			t.Fatalf("expected empty payload for ignored album wrapper message, got content=%q mediaURL=%q mimeType=%q filename=%q", content, mediaURL, mimeType, filename)
+		}
+	})
 }
 
 func TestExtractMessageContentWithMedia_UnwrapsEphemeral(t *testing.T) {
@@ -493,19 +544,20 @@ func TestPersistInboundMedia_StoresByType(t *testing.T) {
 		msgType  models.MessageType
 		mimeType string
 		nameHint string
+		data     []byte
 		prefix   string
 		ext      string
 	}{
-		{models.MessageTypeImage, "image/png", "photo.png", "images/", ".png"},
-		{models.MessageTypeSticker, "image/webp", "sticker.webp", "stickers/", ".webp"},
-		{models.MessageTypeVideo, "video/mp4", "clip.mp4", "videos/", ".mp4"},
-		{models.MessageTypeAudio, "audio/ogg", "voice.ogg", "audio/", ".ogg"},
-		{models.MessageTypeDocument, "application/pdf", "doc.pdf", "documents/", ".pdf"},
+		{models.MessageTypeImage, "image/png", "photo.png", []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}, "images/", ".png"},
+		{models.MessageTypeSticker, "image/webp", "sticker.webp", []byte("RIFF\x24\x00\x00\x00WEBPVP8 "), "stickers/", ".webp"},
+		{models.MessageTypeVideo, "video/mp4", "clip.mp4", []byte("\x00\x00\x00\x18ftypmp42"), "videos/", ".mp4"},
+		{models.MessageTypeAudio, "audio/ogg", "voice.ogg", []byte("OggS\x00\x02"), "audio/", ".ogg"},
+		{models.MessageTypeDocument, "application/pdf", "doc.pdf", []byte("%PDF-1.7"), "documents/", ".pdf"},
 	}
 
 	for _, tc := range tests {
 		t.Run(string(tc.msgType), func(t *testing.T) {
-			relPath, err := cm.persistInboundMedia([]byte("test-data"), tc.msgType, tc.mimeType, tc.nameHint)
+			relPath, err := cm.persistInboundMedia(tc.data, tc.msgType, tc.mimeType, tc.nameHint)
 			if err != nil {
 				t.Fatalf("persistInboundMedia failed: %v", err)
 			}
@@ -542,6 +594,58 @@ func TestPersistInboundMedia_GeneratesUniqueNames(t *testing.T) {
 
 	if _, parseErr := uuid.Parse(strings.TrimSuffix(filepath.Base(first), filepath.Ext(first))); parseErr != nil {
 		t.Fatalf("expected UUID filename, got %q", filepath.Base(first))
+	}
+}
+
+func TestSanitizeIncomingFilename(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "strips traversal segments", input: "../../../etc/passwd", expected: "passwd"},
+		{name: "handles windows separators", input: `..\..\secret\payload.pdf`, expected: "payload.pdf"},
+		{name: "drops invalid values", input: "   ", expected: ""},
+		{name: "drops dot segments", input: "..", expected: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := sanitizeIncomingFilename(tc.input)
+			if got != tc.expected {
+				t.Fatalf("sanitizeIncomingFilename(%q) = %q, want %q", tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestResolveInboundMediaMimeType_PrefersDetectedContentType(t *testing.T) {
+	htmlPayload := []byte("<!doctype html><html><body>owned</body></html>")
+	mimeType := resolveInboundMediaMimeType(htmlPayload, "image/png", "invoice.png")
+	if mimeType != "text/html" {
+		t.Fatalf("expected content-sniffed mime type to win, got %q", mimeType)
+	}
+}
+
+func TestNormalizeMediaFileExtension_RejectsUnsafeValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "accepts valid extension", input: ".pdf", expected: ".pdf"},
+		{name: "normalizes missing dot", input: "PNG", expected: ".png"},
+		{name: "rejects path separators", input: ".txt/../../etc/passwd", expected: ".bin"},
+		{name: "rejects special characters", input: ".tar.gz", expected: ".bin"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := normalizeMediaFileExtension(tc.input)
+			if got != tc.expected {
+				t.Fatalf("normalizeMediaFileExtension(%q) = %q, want %q", tc.input, got, tc.expected)
+			}
+		})
 	}
 }
 
