@@ -1,5 +1,11 @@
 # CHANGELOG.md
 
+## 2026-03-05 01:50
+
+### Fixed
+
+- Fixed a bug where real-time messages were not updating immediately on the chat interface and dropped the WebSocket connection because the `fastHTTPUpgrader` did not echo the matching `whm.v1` Subprotocol.
+
 ## 2026-03-04 01:47
 
 ### Added

@@ -38,11 +38,14 @@
   - 📄 go_build_err.txt
   - 📄 go_lint.json
   - 📄 go_lint.txt
+  - 📄 go_vuln_scan.txt
   - 📄 large_files_report.md
   - 📄 logo.svg
   - 📄 prompt.md
   - 📄 repro_issue_test_cov.sh
   - 📄 ruvector.db
+  - 📄 semgrep_results.json
+  - 📄 semgrep_summary.json
   - 📄 serve_acp_with_proxy.py
   - 📄 session_summary.md
   - 📄 tmp_arabic.go
@@ -97,7 +100,7 @@
   - 📁 **e2e/**
     - 📄 **global-setup.ts**
       > *Extract the whm_csrf cookie value from Set-Cookie response headers. /*
-      - ⚙️ `extractCSRFToken`, `for`, `globalSetup`
+      - ⚙️ `extractCSRFToken`, `for`, `globalSetup`, `if`
     - 📁 **tests/**
       - 📁 **settings/**
         - 📄 **accounts.spec.ts**
@@ -1209,6 +1212,7 @@
   - 📁 **config/**
     - 📄 config.go
     - 📄 config_test.go
+    - 📄 default_admin_validation.go
     - 📄 encryption_validation.go
     - 📄 encryption_validation_test.go
     - 📄 jwt_validation.go
@@ -1341,6 +1345,7 @@
     - 📄 organization_delete_test.go
     - 📄 organization_members_test.go
     - 📄 organization_test.go
+    - 📄 password_policy.go
     - 📄 provider_guard.go
     - 📄 reason_codes.go
     - 📄 reply_preview_helpers.go
@@ -1383,6 +1388,7 @@
     - 📄 websocket.go
     - 📄 websocket_auth_test.go
     - 📄 websocket_origin_test.go
+    - 📄 websocket_subprotocol_test.go
     - 📄 whatsapp_client.go
     - 📄 whatsapp_media_policy.go
     - 📄 whatsapp_media_policy_test.go
@@ -1474,6 +1480,7 @@
     - 📄 03975b83-316b-42c1-8024-943dd4f03a26.jpg
     - 📄 03b15655-6bd4-469e-94a1-9cd9b25870a7.jpg
     - 📄 03b322f8-864e-48f0-bb73-0a8ff1a61951.jpg
+    - 📄 03cf62fa-4eca-45ab-91d0-4c9814ca6f21.jpg
     - 📄 0408edec-e77a-421f-a5db-c67ae7cc5faa.jpg
     - 📄 0409e815-47b0-4bef-b4e4-5320ce0e7c4c.jpg
     - 📄 041ceef3-7aad-4701-8c78-261d65a7c0ec.jpg
@@ -1482,6 +1489,7 @@
     - 📄 0478493f-c868-4192-8887-f04a280b3d3f.png
     - 📄 04a5926e-efef-45ac-b675-46b72d9f9fa2.jpg
     - 📄 04a7f29b-a33e-483f-8b4a-fb0c0b7c6cea.jpg
+    - 📄 04e18717-18da-4b7a-b386-bec6d34ff60c.jpg
     - 📄 04fff875-1674-4403-8fe8-f23d0f8ad7d1.jpg
     - 📄 05195aa5-119c-421c-9773-06358e3ef90d.jpg
     - 📄 05644e1d-471f-42b3-90d8-e3d0d7ed5148.jpg
@@ -1502,6 +1510,7 @@
     - 📄 07a30467-4201-4111-8f83-9df05df8497b.jpg
     - 📄 081d6455-54f6-4fff-a9a6-bdf39fe3125b.jpg
     - 📄 082ab7ba-8e31-4f2c-8808-5f3027c8f76d.jpg
+    - 📄 083f3d61-513b-4e0d-b668-a2386881038c.jpg
     - 📄 084ea693-3adc-4626-96a8-6a73eeb95ae5.jpg
     - 📄 086bc4e6-6450-44d7-b67a-d80481e4221f.jpg
     - 📄 08c6d03b-b262-4d33-ae58-9caf41cdd010.jpg
@@ -1518,6 +1527,7 @@
     - 📄 0ae75029-d63a-456b-9f82-3283f34d3327.jpg
     - 📄 0af7053d-d13c-4a2f-987c-16f009c2dfb1.jpg
     - 📄 0b51aa89-3e12-4737-92da-7716239bd380.jpg
+    - 📄 0b9c0b26-eb52-4d82-9faf-29696a3ce751.jpg
     - 📄 0bc4681d-3272-4777-912b-69ba08fa37ae.jpg
     - 📄 0bdb37d5-e4aa-4ef2-be5b-37e49ad86c5c.jpg
     - 📄 0bf650c5-0200-4338-b1bd-53d768fd91c7.jpg
@@ -1532,6 +1542,7 @@
     - 📄 0d951928-371d-4031-9c64-c2c94982b682.jpg
     - 📄 0da47bd8-6782-4c41-8e29-e76c1d42ebb2.jpg
     - 📄 0dbb0499-566d-4e06-aba9-4b81f10b8a26.jpg
+    - 📄 0dc0deec-4dba-4276-8553-c6cac42358f1.jpg
     - 📄 0e0e4e6e-b974-4b42-8a29-a9d0b1b3d470.jpg
     - 📄 0e108d96-b24e-4ecf-908a-44046bc275e3.jpg
     - 📄 0e1e3a92-fd57-4d7a-b787-b6487c0f2b29.jpg
@@ -1540,6 +1551,7 @@
     - 📄 0eac8c06-d0fa-4c38-84c7-f5c1b1c84740.jpg
     - 📄 0ecbbfce-5711-40f9-8821-656f17c2eca5.jpg
     - 📄 0ee0b173-6710-4d7d-968c-a10800432c5d.jpg
+    - 📄 0ee7ef6d-e268-4ae8-98c9-32eba7b1407f.jpg
     - 📄 0ef6e511-8cb8-4f37-a748-239106cc535a.jpg
     - 📄 0f0d596a-d8c8-4f40-a3f6-f6fe83949a80.jpg
     - 📄 0f216e71-478b-4bf5-8e3c-74f989619bc3.jpg
@@ -1608,7 +1620,9 @@
     - 📄 194e08aa-2006-4457-952e-adfc178e1a65.jpg
     - 📄 1a3eddab-c158-4e6c-87c6-64c097e27154.jpg
     - 📄 1a409ad9-0c12-48d5-98e8-d2819be75596.jpg
+    - 📄 1a472e2f-4947-4320-8c9b-c5dd3900df2a.jpg
     - 📄 1a65cda9-4b55-4638-a198-525c4000c33d.jpg
+    - 📄 1a6e48b7-dcf6-4bce-8ea3-b086d493ea59.jpg
     - 📄 1a84d581-e68e-4b76-88c8-2d87460e5240.png
     - 📄 1afeaa91-8539-4d20-bcf4-cc396f3ce50e.jpg
     - 📄 1b009fe9-5dde-48e3-a6c7-031ab8f09b51.jpg
@@ -1638,6 +1652,7 @@
     - 📄 1e225817-0f76-47b3-98a5-a61397c5e471.jpg
     - 📄 1eacb5c5-0786-4472-a34b-3f2000ac581c.jpg
     - 📄 1eb66208-f8f1-4472-ac7f-ad51080a822f.jpg
+    - 📄 1eead140-da36-404f-9bc0-f8d08d31aa99.jpg
     - 📄 1f706386-776c-4b10-8e3d-455c8a0bdb13.jpg
     - 📄 1fa35d3e-a713-4f8b-ab60-c10b65a51c20.jpg
     - 📄 1fbbd60a-bb42-4235-b2c6-c18508b40c4e.jpg
@@ -1661,6 +1676,7 @@
     - 📄 22aad173-93e2-455f-b28b-3f1980b4fbdd.jpg
     - 📄 22d8f9b2-73d3-47f3-ba9d-066f59c28e26.jpg
     - 📄 22dea556-7a2f-472b-8467-11f6b99659a7.jpg
+    - 📄 2336da7b-777e-4079-a917-c41aeb6c61da.jpg
     - 📄 234ec7e0-593d-4fec-9435-21d79c46c97c.jpg
     - 📄 235527b7-779d-4890-ad1c-d34c5a8f165f.jpg
     - 📄 238f1635-ed48-442f-a547-a678856c7c85.jpg
@@ -1677,6 +1693,7 @@
     - 📄 2482b061-7512-46e4-ba2e-30270dcf2af9.jpg
     - 📄 254fe92c-b1d8-4514-8a58-400e59f8a9d1.jpg
     - 📄 2556dab1-6311-4199-9447-c9f99cfaa212.jpg
+    - 📄 25763476-a324-4ece-a67f-f49d2acf04b7.jpg
     - 📄 25b60a7a-d9ec-48f9-877d-3c78c5ff3c87.jpg
     - 📄 25cd45c0-3eba-4387-9111-4776f52bf38e.jpg
     - 📄 26300e54-c048-4eab-839a-da82fb3f4468.jpg
@@ -1685,6 +1702,7 @@
     - 📄 26ee5756-f89a-4f1c-9151-a61e810f10ce.jpg
     - 📄 272c7c7d-aecd-4885-b9a2-03bc83f89e73.jpg
     - 📄 2773e89c-08c2-4b26-a2d9-edf474aed93e.jpg
+    - 📄 277ae282-1976-4e77-a4cd-698b98084d8d.jpg
     - 📄 27975e08-48c7-405c-9f90-e0a91d867c70.jpg
     - 📄 27ef80d4-55f4-4686-91cb-0c392dda6ef7.jpg
     - 📄 27f85dad-af2a-4645-bc68-c2efcf889bd1.jpg
@@ -1710,6 +1728,7 @@
     - 📄 2b25f4c6-be9c-4768-9369-ddb5afc9b889.jpg
     - 📄 2b2b7734-b8d7-4e97-ba85-d0fd9f89ea43.jpg
     - 📄 2b4cb054-e837-426a-944e-c5839bfbf8d6.jpg
+    - 📄 2b4d2b30-8340-4c5a-a73c-5d08a1b7adea.jpg
     - 📄 2b62366a-ba7e-40ed-8fc1-b96f18091c68.jpg
     - 📄 2b822bde-dc2c-4bd2-84cf-fe5217966f95.jpg
     - 📄 2b87aaa9-beb4-4a13-9bed-e0368a1d3298.jpg
@@ -1722,6 +1741,7 @@
     - 📄 2c169d38-98b7-42fe-aee6-c188ffdbc124.jpg
     - 📄 2c73d91d-9857-44a8-a1cf-8aa3e3ceb3c0.jpg
     - 📄 2c89bc75-b5d1-4149-a104-430729f63505.jpg
+    - 📄 2d5785d6-0be3-43d9-87bd-a3303cc31b9e.jpg
     - 📄 2d82a266-82d9-48df-bdeb-e9e1adbfe8a7.jpg
     - 📄 2d84454e-2aeb-4c20-ad89-8649e3cfaa67.jpg
     - 📄 2d9b7a6b-f07c-4860-8282-2f0f8c228f3e.jpg
@@ -1790,6 +1810,7 @@
     - 📄 38065647-69b9-4695-9d90-0268deb06a9f.jpg
     - 📄 383a6759-ed74-4b33-b2f2-4156d8e5f8ea.jpg
     - 📄 38416b9d-4d4e-48dc-86d4-ff8df4dc1cde.jpg
+    - 📄 38669433-1cbb-4d27-af68-916a284b5ec6.jpg
     - 📄 387a8654-ed03-4dda-832c-e8063edfb8c3.jpg
     - 📄 38874aa1-a9b3-4e6f-9633-76d723c646a0.jpg
     - 📄 3996ef03-4c1a-427b-9182-bc596d183f66.jpg
@@ -1826,6 +1847,7 @@
     - 📄 3e1f994a-4449-47d9-a2ee-58e68e52f3ad.jpg
     - 📄 3e2a9a32-3c50-4e04-8c47-d3610912f8b6.jpg
     - 📄 3e6f715b-b4af-47dd-8b18-471645d7b9c7.jpg
+    - 📄 3e85595c-e35b-47fa-a1ad-9e524fb3d760.jpg
     - 📄 3e871a1c-e32e-43cd-9ef8-15ce41443eeb.jpg
     - 📄 3ea1f724-12e1-4c66-b41a-eb725006ab23.jpg
     - 📄 3ee690be-6495-498d-a2c3-4b2948d4ae3a.jpg
@@ -1857,6 +1879,7 @@
     - 📄 42d0693c-c220-4f3c-bf97-8f88fadeb707.jpg
     - 📄 42ef7554-cc5b-418e-a2f9-073f8b1e9279.jpg
     - 📄 43651ac3-db9b-4c55-bb1a-5b03c1af1859.jpg
+    - 📄 43e88c8e-f3c2-46e9-ae0e-3abe7b7feeee.jpg
     - 📄 443fc9d1-d1c8-428c-adaf-e1ff99db1da2.jpg
     - 📄 4450561c-bf9b-4ae0-a626-bf9dd2e293b0.jpg
     - 📄 44537f59-0712-4d7d-9ce7-cd317072358d.jpg
@@ -1895,6 +1918,7 @@
     - 📄 4a335cbd-2a0f-4576-ac50-ea89068fb035.jpg
     - 📄 4a3ae10e-25c7-4e7d-b1ee-ed78f529b5a9.jpg
     - 📄 4a910004-bf4b-4b9a-8d65-12743f7de21f.jpg
+    - 📄 4aa8ca50-ec54-4dee-aa3a-4311c8aa96d1.jpg
     - 📄 4aaaa11b-3a1f-4a81-9665-5f2ce7d5ed6a.jpg
     - 📄 4aae29b9-22e3-42bf-8958-814a6ed36336.jpg
     - 📄 4ab4681c-bfcd-4f40-8758-27a809f86a9d.jpg
@@ -1914,6 +1938,7 @@
     - 📄 4d79375f-a0f1-4e66-8ba2-ccaed018a0d7.jpg
     - 📄 4d845b0e-3fa0-402b-a741-e4e90e75e04b.jpg
     - 📄 4d96b6ff-7677-47b1-a9ef-b1ca1eb9f6e7.jpg
+    - 📄 4db684c9-c201-4a66-91ba-690ddb7cfd4e.jpg
     - 📄 4dcf3cae-6094-4ba9-8658-0d50ccb467d4.jpg
     - 📄 4dd652c9-df07-4425-8ae3-f2cf9789bee0.jpg
     - 📄 4dda510b-9ed5-4d49-9442-bfbc3fa4c679.jpg
@@ -1969,6 +1994,7 @@
     - 📄 55b09383-bfe7-4a94-abe9-3771cc0f5bfc.jpg
     - 📄 55ecebaf-5004-43fc-a963-a23b0fa06b4d.jpg
     - 📄 56034256-8c41-4165-a140-0163d25bab5e.jpg
+    - 📄 560e2204-a5d3-4d74-abd7-f50d07b8f124.jpg
     - 📄 563f4a70-c8e9-48d6-86d5-20eac209a010.jpg
     - 📄 569c5375-6f5c-4604-b637-514b318748bc.jpg
     - 📄 56aef456-7084-4a33-8956-ec2e767c31e1.jpg
@@ -1986,10 +2012,12 @@
     - 📄 587cafce-3832-495f-b123-2e05a3c0e5fc.jpg
     - 📄 589b8dfd-a800-4bf9-b978-fa80632a31c3.jpg
     - 📄 58b15b0b-0a70-4d20-961a-e8cc6fdae7f6.jpg
+    - 📄 58b221a1-fc0a-44e7-999b-4440976f9c00.jpg
     - 📄 58b4a60a-a881-47ed-8b89-cf62a66a110f.jpg
     - 📄 58b7b733-bcb1-4896-bb07-4e45a8feb4f4.jpg
     - 📄 58d47b2f-de33-471b-bfb8-06f022534f49.jpg
     - 📄 59019b75-d68f-4c20-ae38-403c90e2e62b.jpg
+    - 📄 590ae272-a12b-41f1-b748-ac91a1b863a1.jpg
     - 📄 592e139e-4e8c-4e95-904a-675556bc5014.jpg
     - 📄 5932492d-8272-4d7f-84a3-3cd913b51e64.jpg
     - 📄 593449f4-0a77-4d2f-9254-b546107246ee.jpg
@@ -2017,14 +2045,17 @@
     - 📄 5c439009-25f5-49f5-b961-a8b1fe25de8a.jpg
     - 📄 5c50a21b-0cd5-4ef6-a8bd-41b8629e6b74.jpg
     - 📄 5c552377-812e-47ae-ba5f-f390a1ecf327.jpg
+    - 📄 5c5fa42f-8792-40ce-a23e-2c8252280fc8.jpg
     - 📄 5c774296-3ec2-422d-ad75-2a5f13111b00.jpg
     - 📄 5ca541a0-1cc4-4f8f-b6b3-ef31cf85b15b.jpg
     - 📄 5ca9c21f-0c6e-4482-8ddc-8fd1b9623710.jpg
     - 📄 5cafa6ef-8d8e-4ddc-b5f5-18dfc95e9f0b.jpg
     - 📄 5cb55f9b-3d0d-4572-a8f7-86d6bde28d4a.jpg
     - 📄 5cb981c7-02a1-409a-97ee-baf57d4fffc7.jpg
+    - 📄 5cb9b673-1128-4852-9d3f-cf7fa1600309.jpg
     - 📄 5cf26d08-d2f1-4e89-8449-57650aa25730.jpg
     - 📄 5cf74839-3124-4e70-ad63-5d41f53aa503.jpg
+    - 📄 5d172bd8-f605-4f5b-be3b-c23af8fabe5e.jpg
     - 📄 5d6dea6f-5095-4f4d-9319-d2b334117f04.jpg
     - 📄 5d6e52b9-6ab8-4d18-a4ba-09a521e3912c.jpg
     - 📄 5dacc0f0-28e5-496c-8abd-d374852691f3.jpg
@@ -2050,7 +2081,9 @@
     - 📄 60875f9c-92f6-413f-95ea-0868fc6315ef.jpg
     - 📄 615a501d-ae82-40a4-be4a-c5fec5fb3a8f.jpg
     - 📄 6163a2d4-56f2-4538-924f-c6c076349fd1.jpg
+    - 📄 6167499a-e7b6-4c2b-9809-f6467f05d0e3.jpg
     - 📄 6169a683-cacd-4cc7-91d3-13534055a8a3.jpg
+    - 📄 6173408d-b7cf-4eec-b331-7f112a5b51c0.jpg
     - 📄 61802eb3-7959-4d97-9886-b151b7990396.jpg
     - 📄 618d02c2-e18c-4d0d-9c25-fecee2023df8.jpg
     - 📄 619247b0-510b-4b13-9820-3e42ff95a09e.jpg
@@ -2093,6 +2126,7 @@
     - 📄 65df3ee1-2452-4b6f-8ba7-70e95c5141fd.jpg
     - 📄 662fa1df-8ea9-4c0e-a6a5-a526f4785ab8.jpg
     - 📄 6667a36c-0e60-454d-9f35-71384bb67902.jpg
+    - 📄 669a71bf-84c5-4451-8175-7a351ca2f901.jpg
     - 📄 669a77e7-53c5-48e1-a309-6e3ff25f1d1f.jpg
     - 📄 66a52d1f-76b3-4b4a-9a23-3f46643c06a4.jpg
     - 📄 66afbdeb-4374-4391-bb66-852849b5f62e.jpg
@@ -2101,6 +2135,7 @@
     - 📄 66e389b9-9d22-49ec-bb29-743231d415bf.jpg
     - 📄 66e612cb-6858-49ee-9d08-21c0d5698032.jpg
     - 📄 670f556e-0c2c-4bc3-8516-0ee7309d2c19.jpg
+    - 📄 67652b0d-f89f-42be-b3a0-ffe0ac870282.jpg
     - 📄 67bd085f-f16b-4d37-bed2-684d61d3e483.jpg
     - 📄 6833bf91-e58a-444c-b882-a4ec7e975198.jpg
     - 📄 6837a7a2-d3c4-4bf1-a2bc-e8a9aedbce93.jpg
@@ -2195,6 +2230,8 @@
     - 📄 74b65560-49c7-4e71-a8c6-60e889c1227c.jpg
     - 📄 74b848dc-38dc-4df8-ad1b-1dd35af5c756.jpg
     - 📄 74d2a7b4-0a55-42f0-8c1a-f375e76297d4.jpg
+    - 📄 750a3c9e-4a17-4a30-874a-681c1e93948f.jpg
+    - 📄 7517bf4b-02e4-4a84-87a2-50d2cfebaf84.jpg
     - 📄 751d9f38-1199-4e63-9a1e-09b75e581df2.jpg
     - 📄 752db762-2882-43c9-afd8-58eed2ca586a.jpg
     - 📄 75b102b6-ad8f-41d3-bb6c-ea1c21872068.jpg
@@ -2262,6 +2299,7 @@
     - 📄 7dda9b41-dfe5-4fa1-944b-20fa78b0c9e5.jpg
     - 📄 7ddad3c7-ebb9-4f83-ac8c-59b72fbdf2b6.jpg
     - 📄 7debb311-4e58-4d66-a2a1-781dcb03814a.jpg
+    - 📄 7e0ed705-a8d5-419e-a723-558b31ef1d6e.jpg
     - 📄 7e294e6b-6ef1-4500-a28d-3cc004b24687.jpg
     - 📄 7e312579-7fd3-4e55-b75b-4c7b2de3a76e.jpg
     - 📄 7e416a89-b3c8-4833-ad17-4314440a3ec9.jpg
@@ -2271,6 +2309,7 @@
     - 📄 7eb601e1-af2e-43e5-993a-6093334baed8.jpg
     - 📄 7f06f83b-ec6b-41d6-b902-76435a6f3f3a.jpg
     - 📄 7f22d88b-c02d-48a9-a68c-7a79e1ab7e9d.jpg
+    - 📄 7f31e96a-42c5-4848-94ac-25bbfa0e16e1.jpg
     - 📄 7f5a51cb-a63a-418e-9b9c-d0318a0eb74b.jpg
     - 📄 7f5ec889-f27a-414d-9128-312ba5a61cfc.jpg
     - 📄 7f76ffc2-c183-47b2-9e76-0e0a0fb1a687.jpg
@@ -2281,12 +2320,14 @@
     - 📄 804ee986-fe32-41d5-934c-57dfa8fe36ca.jpg
     - 📄 8051b8c7-c84f-47e3-8994-eaf84db696db.jpg
     - 📄 806274fa-cea2-42e8-9e04-593f85177f92.jpg
+    - 📄 8064caf8-3f6e-49fd-bfa2-52005fc2c9ed.jpg
     - 📄 80c1930d-e5b5-4a81-98e7-87f418b01f3d.jpg
     - 📄 811ad62c-3def-4330-be61-7ed359fb51cc.jpg
     - 📄 814cc81e-0f5d-4deb-afcc-cbfedc5d464e.jpg
     - 📄 81a8e24c-51d1-4151-9585-3c39e29ceffa.jpg
     - 📄 81fa1884-ddcf-4641-be31-1be51bd37640.jpg
     - 📄 8249175e-f50a-4b3a-b1e8-b26fca55fcfb.jpg
+    - 📄 82a22ebd-8a1b-4a3e-8c22-f52c3be866c3.jpg
     - 📄 82aa9fa7-8054-440c-9f1b-a3e24bd573b2.jpg
     - 📄 82b3c5e0-6aa6-46e3-97ec-55351fc3ef63.jpg
     - 📄 82b533c8-d0d5-4625-a731-3e0748434aa0.jpg
@@ -2331,6 +2372,7 @@
     - 📄 8939aca7-dc59-4116-a712-c231f29c5f7f.jpg
     - 📄 894e5449-4900-4ced-8dda-8383fd9837ac.jpg
     - 📄 89610805-6e90-48fc-8579-dad6f57109e4.jpg
+    - 📄 89e415f9-6e26-409b-a8fd-2f80d760b30e.jpg
     - 📄 89e86127-7797-450a-b230-81cf6c955395.jpg
     - 📄 89f58148-301b-4117-8db4-53db3cec41b1.jpg
     - 📄 8a1d1e59-8cd1-4294-8d30-0def412c4cda.jpg
@@ -2342,7 +2384,9 @@
     - 📄 8a725121-eea0-4442-8a10-7cea4cbb2be9.jpg
     - 📄 8a7c97a8-8b45-4c92-98e0-9bb370804105.jpg
     - 📄 8a82223e-c397-4ff6-91c1-2da6daabcce9.jpg
+    - 📄 8acd6ead-ba2c-40fc-8026-e58a34124172.jpg
     - 📄 8b037b34-1a82-4493-a84b-7774ef45fc2b.jpg
+    - 📄 8b415420-2e13-4528-96eb-870cb208efe9.jpg
     - 📄 8b8af333-6b18-4396-86a7-c4ba9ecde47e.jpg
     - 📄 8bc73440-51dd-4f6c-8205-97cc9bddf334.jpg
     - 📄 8bd3b626-7dec-4976-a50e-77dd1b818cd7.jpg
@@ -2424,6 +2468,7 @@
     - 📄 971e70dd-899b-48bf-9bc2-cd9197888300.jpg
     - 📄 974b59ed-9c6e-4d8f-8a39-a449b702fddd.jpg
     - 📄 975c10d2-3c79-4601-a3aa-0cdd01c664c5.jpg
+    - 📄 976e83cb-b9aa-470a-a2cc-95a8ecdb3d4e.jpg
     - 📄 977fd5ea-5a61-4202-bbee-a75f31d9a231.jpg
     - 📄 97c12a90-d024-492f-b740-89cdea63ab66.jpg
     - 📄 97c715c8-611a-4533-912e-0e06c8321715.jpg
@@ -2497,6 +2542,7 @@
     - 📄 a4439f89-58fe-4196-ad3a-6c3b1c11813d.jpg
     - 📄 a4707610-0147-48ba-9c01-980621184aed.jpg
     - 📄 a4c479fc-a223-4299-830f-c9d0fff81a7d.jpg
+    - 📄 a4e4a51b-d944-40c5-adba-b8d2ba5dfb01.jpg
     - 📄 a50f9b80-d33a-44d9-84e4-ea255ec1ad03.jpg
     - 📄 a5217a0a-222d-49ea-9441-3b6c0ea314d3.jpg
     - 📄 a569ae70-b4de-4cd0-87c1-9495973c6bdb.jpg
@@ -2511,6 +2557,7 @@
     - 📄 a6307d5c-9b6e-471c-b264-14581faf859e.jpg
     - 📄 a641d4e2-c11d-490b-9a6e-37eb9aebda2c.jpg
     - 📄 a64b3f85-1744-435f-9b83-444084139eb6.jpg
+    - 📄 a64d6a59-5948-486d-9f93-4144dc79f9e0.jpg
     - 📄 a67ace08-8056-4478-aad9-e9b90c37d8b3.jpg
     - 📄 a6f4bb3f-1d74-421d-a62d-8ca3de58188f.jpg
     - 📄 a7114e35-e53f-442c-b9a6-8b6f74a65431.jpg
@@ -2566,6 +2613,7 @@
     - 📄 ad4ca017-8b4a-41c2-8237-47149b2ef550.jpg
     - 📄 ad596a9b-fdb3-4f5c-b1cb-cddb3c2634de.jpg
     - 📄 ad6cac37-d841-4fc2-93e4-bb93bb738524.jpg
+    - 📄 ad7fe8fb-b9c1-4854-9d16-dd0e4b36d8b9.jpg
     - 📄 ad8b24d1-7a46-44ce-b4ac-555d91db3e1c.jpg
     - 📄 ad9f7dce-ab84-4956-abde-c259a03d27b8.jpg
     - 📄 ae3adc73-047d-4fff-a73f-4324c3e05f41.jpg
@@ -2602,11 +2650,13 @@
     - 📄 b252609f-e092-4890-b1b4-c48da40ab887.jpg
     - 📄 b258d345-d899-4f02-bcba-5ed211a1ea6e.jpg
     - 📄 b283e475-6e34-4adf-948e-b53acf9f1d8f.jpg
+    - 📄 b28d334b-f0a8-4626-bc77-f9915ea907de.jpg
     - 📄 b2a46b5d-bb3a-4e66-a956-70db27c1d5dd.jpg
     - 📄 b2adb341-acba-46d4-9ee5-d1c77a004073.jpg
     - 📄 b2b73fb7-de5b-4b8b-bec6-15b1a2d3628b.jpg
     - 📄 b2d4efd0-626b-41d1-81c2-e02a13ce6bd7.jpg
     - 📄 b2e75a75-4309-40b4-8177-ec09011c5b17.jpg
+    - 📄 b304fe53-3b3f-4483-89fd-3e6651794045.jpg
     - 📄 b31fd9a4-cf23-463d-a93c-10efcb7abaa2.jpg
     - 📄 b381bfe7-6027-4018-b767-48dc43341396.jpg
     - 📄 b390edee-a4aa-40a2-a19b-180564fde0fc.jpg
@@ -2623,6 +2673,7 @@
     - 📄 b4e2a0c9-8f55-4a00-9f9f-5a11b53fc404.jpg
     - 📄 b501dfff-bc53-48f5-bfcb-5f26334ec476.jpg
     - 📄 b5301764-3125-44bb-9eec-904c48149881.jpg
+    - 📄 b53055c1-3963-4161-9996-bb3c0b8bc239.jpg
     - 📄 b54bdaee-922f-4b49-8850-481f83aac96c.jpg
     - 📄 b56b7143-5a9e-4b0e-a395-4c00646039bf.jpg
     - 📄 b5a90b63-8a0c-49c9-ab9b-3e877214aca1.jpg
@@ -2634,6 +2685,7 @@
     - 📄 b61f5caf-0d8a-4258-9c36-e054809af1bb.jpg
     - 📄 b625f190-0465-4ec1-9efe-e44a5f903a18.jpg
     - 📄 b6a4a631-2fc0-4f5d-af0c-45819dd00bab.jpg
+    - 📄 b6b2778a-041f-41cf-8c8d-96111b0eccf1.jpg
     - 📄 b6ddd8ff-6611-49f8-a4da-c90905a975e7.jpg
     - 📄 b6f8a5c5-952d-4506-b85c-5c3852a33fca.jpg
     - 📄 b7002991-83b2-40e7-9c41-1de07e1c51b3.jpg
@@ -2675,6 +2727,7 @@
     - 📄 bd2331cb-a3a2-4dc0-bf26-74ba14a749d1.jpg
     - 📄 bd53e0a8-14f6-4259-9010-4615857a4529.jpg
     - 📄 bd5929f9-9eaa-4a72-9545-d34ec61bf67b.jpg
+    - 📄 bd68f844-40b8-4855-8aa8-1d37bb15a07c.jpg
     - 📄 bdba0199-ed46-491c-bb46-3727a75b7ac6.jpg
     - 📄 bdd612d8-55ba-4a19-9963-7dc5327e7ff4.jpg
     - 📄 be058c26-3902-41bd-a342-7f71ea94abe2.jpg
@@ -2698,6 +2751,7 @@
     - 📄 c06e663f-eee9-4229-abd2-904d54e7c9ca.jpg
     - 📄 c0accdea-9323-4cc1-a62c-c2db18f95ae2.jpg
     - 📄 c0c94f86-4382-495d-8974-32f4d5eca157.jpg
+    - 📄 c130cc4e-6bba-4b75-a17b-9875ff231c1c.jpg
     - 📄 c14f63da-3e5e-4a8d-9621-488f073d3599.jpg
     - 📄 c154752d-63ac-4ef5-87d7-6e4c706ea404.jpg
     - 📄 c157e775-ab91-446a-81ba-7adb28b33041.jpg
@@ -2713,6 +2767,7 @@
     - 📄 c3ae18ac-59cd-4b93-b063-f11502bd69ca.jpg
     - 📄 c3bd9f09-2c93-4a9e-a4d8-2a39915048a2.jpg
     - 📄 c416238e-256e-445c-92dd-2d8a1981b31e.jpg
+    - 📄 c41aebf9-b8ea-4a80-9d5e-d84e8e2742a6.jpg
     - 📄 c4322da9-4e06-4a93-b89b-dba6240a1ff3.jpg
     - 📄 c43d8d7e-f405-4108-b35e-c2e0f6137273.jpg
     - 📄 c44a62fd-47d0-4b1c-881c-c2b5db053640.jpg
@@ -2726,6 +2781,7 @@
     - 📄 c53db4a1-19f4-413c-bc30-f9008eae3fac.jpg
     - 📄 c59dfac9-6dce-4507-b365-e3829e464c4a.jpg
     - 📄 c5bd7f2b-d757-43fc-a040-a84d273ec4dd.jpg
+    - 📄 c5cbcea7-6aa0-49c5-b6a6-72581aef519d.jpg
     - 📄 c6926a08-a20f-49d1-b9f4-fce45afaa554.jpg
     - 📄 c6bb8959-6988-4316-86e4-86097243aee3.jpg
     - 📄 c6cda855-d2eb-4910-b895-5cc4e345abd8.jpg
@@ -2740,9 +2796,11 @@
     - 📄 c85b45b2-e5e0-4e37-abe6-89dd080e513a.jpg
     - 📄 c85d8be6-1aee-45d1-a72c-efd07b4ba92a.jpg
     - 📄 c8bae63b-1683-4157-93b0-2f22bbb178cd.jpg
+    - 📄 c8bdff60-4c79-4471-8c44-75976b7930fb.jpg
     - 📄 c8d858bf-e29d-41ec-b025-39b689a82beb.jpg
     - 📄 c9157d9a-a110-427f-a243-e37ac4afdbda.jpg
     - 📄 c95a91da-4b6b-4611-8c8b-f4bc3eadadef.jpg
+    - 📄 c967a6d0-fd86-4584-8c80-e49d1f2bcefd.jpg
     - 📄 c981210c-fe36-488c-95d5-e3f3a0c52615.jpg
     - 📄 c99d694e-4338-4f90-b4a4-4a200df4148b.jpg
     - 📄 c99dd6eb-19ec-4955-a832-7fbef0b4b1dc.jpg
@@ -2763,6 +2821,7 @@
     - 📄 cb872b60-a40e-4247-9579-abfe691b5e5a.jpg
     - 📄 cbbafcaa-098d-49fa-b269-f85f1f14673d.jpg
     - 📄 cc13a205-101e-4c3f-847a-c4706f064c3a.jpg
+    - 📄 cc287f0f-8ae5-47e2-88c9-5d0761e9f2d2.jpg
     - 📄 cc2ebf27-957d-469c-9f85-c015595bbed3.jpg
     - 📄 cc43788d-ad25-4809-98d2-ba0a9168b3cf.jpg
     - 📄 cc4b7692-a221-492e-9ee1-a5ac6ea232ec.jpg
@@ -2869,6 +2928,7 @@
     - 📄 daed14a8-ce9b-4077-904b-5357ab57c167.jpg
     - 📄 db08d0e3-3932-4de1-a708-56d7c6710946.jpg
     - 📄 db096e01-4adf-4a64-b8f2-d621eb8db93b.jpg
+    - 📄 db714ea1-5deb-4f77-883e-b1d4bd206015.jpg
     - 📄 db7a69c0-028a-4407-bb74-6f558d16706f.jpg
     - 📄 dbd54352-7153-449b-88a6-574b9e27ed60.jpg
     - 📄 dc1216f4-fcc8-44ef-bcd2-326b1b333049.jpg
@@ -2880,6 +2940,8 @@
     - 📄 dcf6ebf8-4ad4-4101-b104-c1f46945e870.jpg
     - 📄 dd00cf5d-d0c0-47e8-aebc-e0bfb3505e81.jpg
     - 📄 dd32f911-04b1-4454-82da-5dd8e2735e6c.jpg
+    - 📄 dd425ade-f810-4aad-91bb-a3382b7e8aac.jpg
+    - 📄 ddb96b8c-8780-4119-8248-5a427b257d27.jpg
     - 📄 ddbaf503-2a11-4270-8806-5a21dff0c9c9.jpg
     - 📄 de43666f-2157-41f9-8dbf-907898acaebc.jpg
     - 📄 de5e9140-1d72-46df-a27e-b9e780a8c526.jpg
@@ -2894,6 +2956,7 @@
     - 📄 df42783c-e764-4b5e-8bcf-3e4e1056a47b.jpg
     - 📄 df6dc5bd-af6a-436e-b7e1-c42145727bbf.jpg
     - 📄 df7b8054-b9dc-44e2-b56e-bc2e6a7545c0.jpg
+    - 📄 dfbb2e60-d865-48dd-9a4c-703a43a5bb23.jpg
     - 📄 e0210ac1-b763-4f6f-a366-2d5e8401c0be.jpg
     - 📄 e048a7a1-9673-4649-b293-2e02523d6c61.jpg
     - 📄 e08182c8-beb4-4b76-8672-e9eb99036802.jpg
@@ -2901,6 +2964,7 @@
     - 📄 e0f6632e-14fc-43d4-9693-0e464898cf2f.jpg
     - 📄 e100cb06-7419-45b9-8c4b-d772e8500161.jpg
     - 📄 e137efbb-d31d-4ccf-896b-aeedea35a334.jpg
+    - 📄 e13cc99b-e1df-453d-a76f-ccead1974d9e.jpg
     - 📄 e16e9767-542e-4094-bd95-9626bd5ec45b.jpg
     - 📄 e1a14be9-fbc0-4814-ad53-e15de054e1bd.jpg
     - 📄 e21dcddd-5ee3-4e56-8676-d831e5e0a8e5.jpg
@@ -2923,6 +2987,7 @@
     - 📄 e3c7b2b9-42a7-40d4-b022-3b2a670ad9bf.jpg
     - 📄 e3cebeaf-bb6e-4e5a-9c58-6fee0f836321.jpg
     - 📄 e3efaf67-85c3-432d-a9d0-bd5eeeaee52b.jpg
+    - 📄 e4690d9e-420b-41de-99ba-725215c1e7fe.jpg
     - 📄 e4993121-f5fe-423d-b0bc-62081d9329fd.jpg
     - 📄 e4b9db80-ce60-44b5-b5ee-c9d3f1069156.jpg
     - 📄 e4bbff05-a48f-4d9f-8893-69c18017da94.jpg
@@ -3082,6 +3147,7 @@
     - 📄 fef656ae-35b4-439d-802a-b7d42ce6fb41.jpg
     - 📄 ff31058b-2fc4-4914-817c-62f7ee6545da.jpg
     - 📄 ff3a7d9f-4240-43bc-aa90-4221a0bf2fb3.jpg
+    - 📄 ff9075b9-ae31-4407-ac12-07b600cc191a.jpg
     - 📄 ff9dd22f-51b5-4e26-83e6-30f6bece8d34.jpg
     - 📄 ffaeb906-b243-44a3-bc56-340eb57ceca8.jpg
     - 📄 ffee040e-03f0-4e2e-9c40-2abe3801dc55.jpg
@@ -3092,13 +3158,18 @@
     - 📄 058d03d3-2bb6-4345-8616-99efbdd84db1.mp4
     - 📄 0795d455-6318-4ee7-a16a-25ce57641f5d.mp4
     - 📄 07d1664c-8957-4120-87b7-e4c5b2cfd30f.mp4
+    - 📄 08ed4a77-826c-437b-86c4-5d19c2735812.mp4
+    - 📄 0953262b-a959-4c2f-882f-b818d670dc20.mp4
     - 📄 0abd4b55-fa6e-4480-8717-b724b4367b46.mp4
     - 📄 0c9c28bf-08a0-4147-a500-2806c401b050.mp4
     - 📄 0d3fcdbc-b358-4a6e-91af-d4fb530fdc08.mp4
+    - 📄 0fdca672-6d1d-4be7-ba12-84d9f4cd135c.mp4
+    - 📄 1081e4b5-975e-49a2-959a-7c053d12ca7e.mp4
     - 📄 152f3527-b54e-4b66-b40c-005fc67f97b6.mp4
     - 📄 18e69831-b14d-464f-98a4-00c938481a13.mp4
     - 📄 1913a7d7-badf-43be-8fa5-46469292c0dd.mp4
     - 📄 1981d330-1654-44eb-9185-3b1eecbc2bc9.mp4
+    - 📄 19820ed8-73f4-4667-8eb2-66a9fda71787.mp4
     - 📄 199fd67d-7c30-4f63-b1e4-e0c76bfa6adf.mp4
     - 📄 19de8486-fbb9-4d26-9d0f-beed0fe52739.mp4
     - 📄 1a4b448b-074f-43dc-bbc7-5c5f8553f384.mp4
@@ -3119,24 +3190,32 @@
     - 📄 2ec25bea-c99f-4af5-99a0-ac780f3c186e.mp4
     - 📄 308c06a7-619f-473e-9e7e-4bc2a6b8a7ad.mp4
     - 📄 3218331b-2871-43db-b5f7-02adb045eb66.mp4
+    - 📄 33dac674-be3e-4750-8ea0-1d17297ffebd.mp4
     - 📄 36323572-0631-407c-abb6-f8bb6f3d265b.mp4
     - 📄 378ec25c-13a4-4f5e-a6e4-aa694c63507b.mp4
     - 📄 39361c78-f9bf-4e2f-a03e-7a19e3eeaf12.mp4
     - 📄 3baa8819-9e75-440b-8859-9c18944f10ca.mp4
     - 📄 3be952d3-646b-45cd-9449-71301f1833a3.mp4
     - 📄 3c4fd6b9-3dff-4609-970f-259aea703556.mp4
+    - 📄 3dfb3e1f-2101-4b82-9dd5-d12cd6a92646.mp4
     - 📄 3edb965b-f408-4170-b187-4a0dd91edb4d.mp4
+    - 📄 4099f8cf-7f05-4ff0-86ac-fdbf0a2ec6bb.mp4
+    - 📄 4338fc38-2f1b-427d-afe8-fc28349a7d2d.mp4
     - 📄 43e9261a-29ad-4322-a48f-2e63c07f1005.mp4
     - 📄 461413fb-e277-4e9f-95d9-c79b891c37ae.mp4
     - 📄 464e2d9f-b84a-49e8-840f-acdcbd270173.mp4
+    - 📄 48c57a92-93c3-4d27-b4db-09457c09446e.mp4
+    - 📄 4a17c256-5bff-4c66-88a9-9953ad8dbf34.mp4
     - 📄 4ec9e1a9-59ee-4b81-a21f-661ea3420fa7.mp4
     - 📄 4fd3fb25-5b7c-44e8-8d87-20c92ca6716a.mp4
     - 📄 5050ec78-da01-403f-8134-3c5de899799d.mp4
+    - 📄 5054f08d-92ab-4465-8fe1-b8f195f3286c.mp4
     - 📄 5076466a-4d9f-440f-84c8-2b8862aedd2d.mp4
     - 📄 50ea3257-9d4e-42e5-aad6-f5511ecb165a.mp4
     - 📄 524be1d7-530b-41e9-80f1-fe56225f1b92.mp4
     - 📄 52824879-d1d4-4958-bb69-47af4469b223.mp4
     - 📄 52ae5de4-7f7d-4e8d-8717-2afe868d6133.mp4
+    - 📄 53b9df87-6646-493b-8dfe-7a3f439f3161.mp4
     - 📄 56d534d7-c360-4f66-9faa-224d4d1dc943.mp4
     - 📄 571a2550-3cad-4d53-8a65-1e81dcee7c4a.mp4
     - 📄 57f2946f-1ac5-414b-88f2-0bd90a15dafb.mp4
@@ -3150,7 +3229,9 @@
     - 📄 63c20442-7589-49c3-99bb-2fb640756ef0.mp4
     - 📄 65dc980b-08cd-4c93-9e3c-435769be7576.mp4
     - 📄 6628b87e-0171-4888-8d11-31d72c2b36cc.mp4
+    - 📄 66e18392-b00c-41f6-a5bf-af182036d517.mp4
     - 📄 671d2046-499f-44db-840f-a682262205ed.mp4
+    - 📄 67e42181-f6cc-4f60-835e-40429d612818.mp4
     - 📄 68122717-173a-47ce-b3a7-06f234024e12.mp4
     - 📄 69fa06ff-8779-496b-8f6d-c53ff73da6b9.mp4
     - 📄 6a87463c-0545-422d-a282-f3d5df15f680.mp4
@@ -3158,6 +3239,7 @@
     - 📄 725d99ea-1fbf-448b-b130-9c0ce88f6d1a.mp4
     - 📄 727d7bde-2515-460a-b8f7-999575bbae3e.mp4
     - 📄 731c29a5-9ebd-4eec-83e5-e17e11823432.mp4
+    - 📄 742cc98a-9df8-4e21-bded-844d655d98ed.mp4
     - 📄 74605c1c-3ad2-4b91-a03a-b886f2fd00d0.mp4
     - 📄 75fe374d-c9b0-4526-b75e-e3b24af1ea7a.mp4
     - 📄 773d29e0-79db-4f98-8978-efc76bda08a2.mp4
@@ -3167,6 +3249,8 @@
     - 📄 7dfb2b6a-2109-4b78-9277-fa38ac932dda.mp4
     - 📄 7f1baed8-8f46-48bf-b272-1a21e1fbec08.mp4
     - 📄 80fbe974-3400-4537-bd25-bf4d21950536.mp4
+    - 📄 81381c35-31fe-44d4-bc56-d1554fee2221.mp4
+    - 📄 82d4f8d6-bc8a-4c57-8108-00bba765acd3.mp4
     - 📄 83c6dcc9-832d-46ff-8029-922bfc5cfdad.mp4
     - 📄 861961ea-b136-41a6-b610-6e18fe55040c.mp4
     - 📄 881bd5e9-749b-4045-ab5e-858df10bcba4.mp4
@@ -3174,6 +3258,7 @@
     - 📄 8abe31af-3a3d-4565-bc64-4b007ee39cad.mp4
     - 📄 8b4d4665-ca79-4cb3-b17e-bad9e2f738b2.mp4
     - 📄 8b8c8c44-d2b9-4faa-b373-68d2bc86a3bf.mp4
+    - 📄 8bfc0723-1eb9-46a0-a578-3feada352931.mp4
     - 📄 8cf19c12-0195-4912-8909-f8d48092326f.mp4
     - 📄 8ed0f12e-3b3c-442c-84aa-f761e6179977.mp4
     - 📄 8f53e775-472b-4c11-853e-165da252096d.mp4
@@ -3184,24 +3269,31 @@
     - 📄 94296cb0-c769-49cc-8ba6-3e2117642f49.mp4
     - 📄 964ecd54-5a0a-4377-9114-27000d7693e8.mp4
     - 📄 983c6a20-56ac-4755-b6ef-aeeb6c552aeb.mp4
+    - 📄 98af7892-4fda-4e36-98b6-f514cbcf7b29.mp4
     - 📄 9a2a6e97-361d-4a55-bbfd-115523957f54.mp4
     - 📄 9af7c1f1-e579-454c-af2a-bf05887673ff.mp4
     - 📄 9b7ebb18-72e2-49f6-ac5c-05e6d471fb45.mp4
     - 📄 9cb2d4eb-4fae-4b95-a35c-7465ca87d656.mp4
     - 📄 9dc73239-a621-4281-90be-1c4ce4ff7441.mp4
+    - 📄 9f86bd51-d532-46cb-a907-bbc70a1967d6.mp4
     - 📄 9f9a9612-33b1-4b9b-9b38-252db44b2e44.mp4
     - 📄 a1d47645-66d1-454b-a245-8c3b579e64b2.mp4
     - 📄 a2044076-f564-49a4-ac21-531595d3b70e.mp4
+    - 📄 a6a6099a-193d-4ca7-b6e5-bcabab3d976d.mp4
     - 📄 a7a43459-72f0-4405-a342-b322a159dd31.mp4
     - 📄 a85c18fa-a10b-4cce-adb7-c528e79c7ea8.mp4
     - 📄 a8c7af3d-a5da-4e54-83a7-e7151ff131be.mp4
     - 📄 aa8bee7f-f0bd-48e7-965d-00d5b26f46d9.mp4
+    - 📄 aaaf028b-19c7-4fe2-bcc9-737cf0f81a54.mp4
     - 📄 ab931eea-34fd-4ea5-ba1f-924c8e57bd3f.mp4
     - 📄 ad1be786-ced5-4f06-90e5-003965b4e7e8.mp4
+    - 📄 ad43bb03-0bfc-4e97-b4ef-0ec5341e083f.mp4
     - 📄 afcad66a-cbfd-4454-92e3-6047c7255bfa.mp4
     - 📄 b1af4914-73ea-4bd4-9bce-a7210e0e2b37.mp4
+    - 📄 b1f6bfe6-496f-4d91-8953-3b67da8eec3a.mp4
     - 📄 b2eb9554-ce6f-4346-83e3-1ab74acb2817.mp4
     - 📄 b2f47f9d-0356-41f5-9a40-835c636b9a6a.mp4
+    - 📄 b3875d20-9f7e-4ad1-a9e0-1371baae7452.mp4
     - 📄 b412e104-aea0-4666-9eb0-1ba988e37c64.mp4
     - 📄 b4716be9-7014-4d11-99b8-445c685c7541.mp4
     - 📄 b4b64d8e-64c2-43b3-ba6a-7a0f2694bf99.mp4
@@ -3214,19 +3306,24 @@
     - 📄 baf9c5a0-afbe-422e-a497-6637ae3ceed9.mp4
     - 📄 bb7d977d-af2a-4bda-8e09-8662a90de5e2.mp4
     - 📄 bc23e405-8a18-4940-96a2-7bdbb871e94e.mp4
+    - 📄 c0487741-2c51-41eb-924e-86508e9db6e3.mp4
+    - 📄 c0a361df-6d9c-46e9-8757-78d5aa264d5b.mp4
     - 📄 c46cdec0-54d7-4979-b4ba-8ba2a9812e70.mp4
     - 📄 c47e3d05-73f8-4b41-88b3-1e46757974dd.mp4
     - 📄 c597de8a-4203-4032-a058-025cf5da8fc4.mp4
+    - 📄 c7dad82b-9751-4e7e-a921-95db9be53644.mp4
     - 📄 c9841dbc-8d6c-43f1-94d5-e577d6367045.mp4
     - 📄 ca61d19f-bb05-4f1d-a692-2226cd05e776.mp4
     - 📄 caad99c6-8a46-458d-bdd8-933ab37593a8.mp4
     - 📄 cb339f6d-ccb9-4c14-a418-e9dfff474bcb.mp4
     - 📄 cfdb8ef1-b1f0-41ee-aff4-407fc6ddfad9.mp4
+    - 📄 d16e3681-2efb-4ec2-81f0-dae2f2595e56.mp4
     - 📄 d19036cd-72af-4c1c-805f-2c8cb2be154b.mp4
     - 📄 d3e0b555-ebfc-4b76-8a9f-ab865a82cbfc.mp4
     - 📄 d584c5a9-de5c-47a3-894f-267c38481128.mp4
     - 📄 d703869e-04bd-4f58-bba3-c56554795ddd.mp4
     - 📄 d7eafe45-33eb-4415-a6b3-8e4a8ca1400a.mp4
+    - 📄 d8a6cb04-787f-4c72-8acd-d8aa5dc5e71c.mp4
     - 📄 d94ed3b4-5701-4ddd-93ee-757f9866b634.mp4
     - 📄 d9822358-0bb4-4454-9a36-7f24ef5a03c2.mp4
     - 📄 db8dae4e-13fd-451d-972f-e754427657fe.mp4
@@ -3236,11 +3333,14 @@
     - 📄 e484e93e-d532-4eae-90dd-87c0b2c2ef7e.mp4
     - 📄 e6434420-9151-40f8-92fb-39cf0ac2b549.mp4
     - 📄 e70652ff-e59b-4388-a933-3ecd3ce5419e.mp4
+    - 📄 e71d4152-5848-4423-8ec8-abcdfd00f6b8.mp4
     - 📄 e7a3da34-37f2-4863-97b8-58281abb184e.mp4
     - 📄 e8c319b4-5d99-47db-8680-2ebe9f96a678.mp4
+    - 📄 eaff1d42-0210-4105-8e6a-3b0f0892a591.mp4
     - 📄 ec204076-ed45-467c-be25-cc0b5bab28c9.mp4
     - 📄 ec21eaa8-d0af-428f-b74e-96d403bd93dc.mp4
     - 📄 ed178cdf-5bc6-4b9e-8de7-f2c94340ab58.mp4
+    - 📄 edda05ec-0517-48da-b22d-2422d5019963.mp4
     - 📄 efb2998e-34a8-4e35-8f76-976305ef0b26.mp4
     - 📄 efd5cf24-392f-413a-9d4f-66efc8a4745a.mp4
     - 📄 f0ddbda2-8946-41b6-8a2e-ef6c8f118290.mp4
@@ -3255,6 +3355,7 @@
     - 📄 fb9bf1be-0267-43e1-9bec-38a13d8e33e6.mp4
     - 📄 fc327a90-89e4-4f3a-9eae-41bb0a8ebc62.mp4
     - 📄 fd40ad03-7ad6-4d7a-b859-b0d59737a4bf.mp4
+    - 📄 fe803c70-5652-4c17-9445-a2c0b0985e17.mp4
     - 📄 ff7ee6ce-f82c-44cd-87dc-ce62aae898e5.mp4
   - 📁 **audio/**
     - 📄 016cc023-3491-47b7-aa41-3561999dfa75.ogg
@@ -3290,6 +3391,7 @@
     - 📄 53d4a7be-f2eb-4d11-b7d4-0f7271f60c69.ogg
     - 📄 59b10c3f-e834-451b-86cc-ddc75c42454b.ogg
     - 📄 5c39e8ab-2eb7-42e2-95f6-5a8877bfddcb.ogg
+    - 📄 5ecead52-4741-4533-a0fb-9034043d11f0.ogg
     - 📄 5fa877a2-c431-44a5-91f0-26beaf180b0d.ogg
     - 📄 61ad65b5-ad4b-4e92-881c-a9ad0483f0ea.ogg
     - 📄 635169a8-0172-47d9-943b-c744adc3266b.ogg
@@ -3611,6 +3713,7 @@
     - 📄 63b1182d-60be-4447-9399-2e46f8e0896b.ai
     - 📄 6448be94-22a7-433f-be9b-6951c71639de.pdf
     - 📄 64627cc8-c6e1-486d-bdef-8983d09ce269.pdf
+    - 📄 64ad3ea7-e059-4719-a1bb-001ee5b8c73c.jpg
     - 📄 65ab8b60-6244-4b12-81b0-701e62b0d767.pdf
     - 📄 65d2be8c-48cc-4348-b160-eb321276a8c3.md
     - 📄 669cbe3b-e5e5-4c6f-8da3-6ca76099e8d4.pdf
@@ -3707,6 +3810,7 @@
     - 📄 8d44573a-20d6-45e4-a4e8-e22f748d7617.pdf
     - 📄 8eb84d24-8ee7-48da-8162-ac17f5e149e1.plt
     - 📄 8ed3f2ba-4ffc-47d0-a55d-b16988bf4cdb.pdf
+    - 📄 8ee81f3f-1c33-47a4-b92f-b579bc8f444a.conf
     - 📄 8f9cc3f2-d2f5-4d13-b7a0-737960d1b226.ai
     - 📄 8fa00ab6-71da-401a-8045-ee8a977617bd.pdf
     - 📄 8fa09950-a765-4863-a4b6-2ff421ac9722.pdf
@@ -3944,6 +4048,7 @@
     - 📄 eb0afd15-fae7-4649-80c0-2ba02e2af394.pdf
     - 📄 eb738bef-0e16-47e7-bfba-5074bfdacddd.pdf
     - 📄 ec36c8e2-4435-4744-90bd-d8a9125e2fb0.pdf
+    - 📄 ec46a941-9f25-48f5-8ac9-587a746ec39a.jpg
     - 📄 ec61205e-c87b-4a3e-9249-b27201c5c68c.zip
     - 📄 ec865eb4-5859-4fe9-bdac-0c75cd967391.pdf
     - 📄 eccc6da7-7b64-4724-a55e-215a03bef4ae.pdf
@@ -4062,6 +4167,18 @@
   - 📄 user-click-navigation-guide.html
   - 📄 whatomate_multi_instances_info.md
   - 📄 whatsmeow-phone-auth-guide.md
+  - 📁 **.astro/**
+    - 📄 **content-assets.mjs**
+      > *Source file.*
+    - 📄 **content-modules.mjs**
+      > *Source file.*
+    - 📄 **content.d.ts**
+      > *@deprecated Use `getEntry` instead. /*
+      - ⚙️ `getCollection`, `getDataEntryById`, `getEntries`, `getEntry`, `getEntryBySlug`, `getLiveCollection`, `getLiveEntry`, `reference`, ... (+1 more)
+    - 📄 **types.d.ts**
+      > *Source file.*
+    - 📁 **collections/**
+      - 📄 docs.schema.json
   - 📁 **public/**
     - 📁 **images/**
       - 📄 03-keyword-rules.png
@@ -4147,6 +4264,31 @@
   - 📁 **ISSUE_TEMPLATE/**
     - 📄 bug_report.md
     - 📄 feature_request.md
+- 📁 **security_reports/**
+  - 📄 docs_npm_audit.json
+  - 📄 docs_npm_audit_fresh_2026-03-04.json
+  - 📄 docs_npm_audit_prod.json
+  - 📄 final_security_audit_report_2026-03-04.md
+  - 📄 frontend_npm_audit.json
+  - 📄 frontend_npm_audit_fresh_2026-03-04.json
+  - 📄 frontend_npm_audit_prod.json
+  - 📄 gitleaks.json
+  - 📄 gitleaks.log
+  - 📄 gitleaks_docs_fresh_2026-03-04.json
+  - 📄 gitleaks_internal_fresh_2026-03-04.json
+  - 📄 gitleaks_latest.json
+  - 📄 gitleaks_worktree_fresh_2026-03-04.json
+  - 📄 gitleaks_worktree_latest.json
+  - 📄 gosec.json
+  - 📄 gosec_fresh_2026-03-04.json
+  - 📄 gosec_latest.json
+  - 📄 govulncheck.txt
+  - 📄 govulncheck_fresh_2026-03-04.txt
+  - 📄 govulncheck_latest.txt
+  - 📄 govulncheck_latest_verbose.txt
+  - 📄 mcp_server_npm_audit.json
+  - 📄 mcp_server_npm_audit_fresh_2026-03-04.json
+  - 📄 mcp_server_npm_audit_prod.json
 - 📁 **.agent/**
   - 📁 **workflows/**
     - 📄 speckit.analyze.md
@@ -4859,7 +5001,6 @@
     - 📄 spec-template.md
     - 📄 tasks-template.md
 - 📁 **test-results/**
-- 📁 **antigravity/**
 - 📁 **pkg/**
   - 📁 **provider/**
     - 📄 context.go
@@ -4919,6 +5060,7 @@
     - 📄 qr_cache_test.go
     - 📄 queue.go
     - 📄 queue_test.go
+    - 📄 random.go
     - 📄 reply_context.go
     - 📄 send_error_classification.go
     - 📄 send_error_classification_test.go

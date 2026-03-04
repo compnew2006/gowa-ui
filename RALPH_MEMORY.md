@@ -47,3 +47,10 @@
 - **The Fix:** Replaced `fmt.Sprintf` with standard library URL builders (`url.URL` for Postgres) and host/port combinations (`net.JoinHostPort` for Redis and Postgres) to automatically format connection strings appropriately.
 - **The Law:** Always use native standard library builders (such as `url.URL` or `net.JoinHostPort`) for construction of URLs or network addresses instead of raw string interpolation.
 - **The Law:** Never output user data inside `v-html` directives; always construct arrays of atomic data chunks and render them using Vue's safe interpolation syntax `{{ }}` sequentially to maintain styling contexts securely.
+
+## [2026-03-05] Issue: WebSocket Connection Dropped on Auth Subprotocol
+
+- **The Trap:** Changing the frontend to send the WebSocket authentication token via the `Sec-WebSocket-Protocol` header (e.g., `Sec-WebSocket-Protocol: whm.v1, auth.token`) without configuring the backend `fastHTTPUpgrader` to echo back the agreed subprotocol.
+- **The Reality:** According to the WebSocket RFC, if the client sends a list of subprotocols, the server MUST explicitly select and return one in the HTTP 101 Switching Protocols response (e.g., `Sec-WebSocket-Protocol: whm.v1`). If it doesn't, strict clients (browsers, Playwright) instantly terminate the connection.
+- **The Fix:** Explicitly set `up.Subprotocols = []string{"whm.v1"}` in the `fastHTTPUpgrader` configuration right before calling `Upgrade()`.
+- **The Law:** Always echo the negotiated `Sec-WebSocket-Protocol` during the WS handshake if the client requests one, otherwise the client will inevitably sever the connection.
