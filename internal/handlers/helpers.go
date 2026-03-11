@@ -15,8 +15,26 @@ import (
 // written an error envelope to the response. Callers should return nil to the framework.
 var errEnvelopeSent = errors.New("error envelope sent")
 
-// parsePathUUID extracts a UUID from a path parameter. On failure, it sends a
-// 400 error envelope and returns uuid.Nil plus an error.
+// parsePathUUID extracts a UUID from a path parameter.
+//
+// On success, returns the parsed UUID and nil error.
+//
+// On failure (invalid UUID format):
+//   - Sends HTTP 400 error envelope to response: "Invalid <label> ID"
+//   - Returns uuid.Nil and errEnvelopeSent (sentinel error)
+//
+// The errEnvelopeSent sentinel indicates that an error response has already
+// been written to the HTTP response. Callers should return nil to the framework
+// without sending another error response.
+//
+// Parameters:
+//   - r: The HTTP request containing the path parameter
+//   - param: The request context key for the path parameter (e.g., "id", "user_id")
+//   - label: Human-readable label for the parameter (e.g., "user", "organization")
+//
+// Returns:
+//   - uuid.UUID: The parsed UUID, or uuid.Nil on error
+//   - error: nil on success, errEnvelopeSent on failure (error already sent to client)
 func parsePathUUID(r *fastglue.Request, param, label string) (uuid.UUID, error) {
 	idStr, _ := r.RequestCtx.UserValue(param).(string)
 	id, err := uuid.Parse(idStr)
@@ -84,7 +102,30 @@ func endOfDay(t time.Time) time.Time {
 }
 
 // findByIDAndOrg fetches a single record scoped by ID and organization.
-// Sends a 404 error envelope on failure and returns the error.
+//
+// On success, returns a pointer to the fetched model and nil error.
+//
+// On failure (record not found or database error):
+//   - Sends HTTP 404 error envelope to response: "<label> not found"
+//   - Returns nil pointer and errEnvelopeSent (sentinel error)
+//
+// The errEnvelopeSent sentinel indicates that an error response has already
+// been written to the HTTP response. Callers should return nil to the framework
+// without sending another error response.
+//
+// Type Parameters:
+//   - T: The model type to fetch (must have ID and OrganizationID fields)
+//
+// Parameters:
+//   - db: GORM database instance
+//   - r: The HTTP request (for error response)
+//   - id: The UUID of the record to fetch
+//   - orgID: The organization ID to scope the query
+//   - label: Human-readable label for the resource (e.g., "User", "Organization")
+//
+// Returns:
+//   - *T: Pointer to the fetched model on success, nil on failure
+//   - error: nil on success, errEnvelopeSent on failure (error already sent to client)
 func findByIDAndOrg[T any](db *gorm.DB, r *fastglue.Request, id, orgID uuid.UUID, label string) (*T, error) {
 	var model T
 	if err := db.Where("id = ? AND organization_id = ?", id, orgID).First(&model).Error; err != nil {
@@ -95,8 +136,14 @@ func findByIDAndOrg[T any](db *gorm.DB, r *fastglue.Request, id, orgID uuid.UUID
 }
 
 // parseDateRange parses start and end date strings in YYYY-MM-DD format.
-// Applies end-of-day to the end date. Returns an error message suitable for
-// display if parsing fails.
+// Applies end-of-day to the end date.
+//
+// Returns:
+//   - start, end: Parsed dates
+//   - errMsg: Empty string on success, error message on failure (e.g., "Invalid start date format. Use YYYY-MM-DD")
+//
+// On error (parsing failure), both start and end will be zero values and errMsg
+// will contain a user-friendly error message suitable for API responses.
 func parseDateRange(startStr, endStr string) (start, end time.Time, errMsg string) {
 	var err error
 	start, err = time.Parse("2006-01-02", startStr)

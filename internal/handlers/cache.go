@@ -537,7 +537,24 @@ func (a *App) getUserPermissionsCached(userID uuid.UUID, orgIDs ...uuid.UUID) (*
 
 // HasPermission checks if a user has a specific permission.
 // Super admins have all permissions automatically.
-// Optional orgIDs parameter allows checking permissions for a specific org.
+// HasPermission checks if a user has a specific permission.
+//
+// Super admins automatically have all permissions.
+//
+// Returns true if the user has the permission, false otherwise.
+// Returns false on error (failed to fetch permissions from cache/database).
+//
+// Parameters:
+//   - userID: The user ID to check permissions for
+//   - resource: The resource type (e.g., models.ResourceUsers, models.ResourceContacts)
+//   - action: The action type (e.g., models.ActionRead, models.ActionWrite)
+//   - orgIDs: Optional organization IDs to check org-specific permissions for.
+//             If not provided, checks the user's default role permissions.
+//             If multiple orgs are provided, checks if user has permission in ANY of them.
+//
+// Returns:
+//   - true: User has the permission (or is super admin)
+//   - false: User lacks the permission, or error occurred fetching permissions
 func (a *App) HasPermission(userID uuid.UUID, resource, action string, orgIDs ...uuid.UUID) bool {
 	perms, err := a.getUserPermissionsCached(userID, orgIDs...)
 	if err != nil {
@@ -610,7 +627,19 @@ func (a *App) ScopeToOrg(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
 	return query.Where("organization_id = ?", orgID)
 }
 
-// GetRolePermissionsCached retrieves role permissions from cache or database
+// GetRolePermissionsCached retrieves role permissions from cache or database.
+//
+// Returns a slice of permission strings in "resource:action" format (e.g., "users:read", "contacts:write").
+// The permissions are cached in Redis with rolePermissionsCacheTTL.
+//
+// Returns:
+//   - []string: List of permissions in "resource:action" format
+//   - error: Returns error if database query fails (e.g., role not found)
+//
+// Cache behavior:
+//   - First checks Redis cache for cached permissions
+//   - On cache miss, queries database via JOIN to get permissions
+//   - Populates cache with result for future calls
 func (a *App) GetRolePermissionsCached(roleID uuid.UUID) ([]string, error) {
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf("%s%s", rolePermissionsCachePrefix, roleID.String())
@@ -647,7 +676,18 @@ func (a *App) GetRolePermissionsCached(roleID uuid.UUID) ([]string, error) {
 	return perms, nil
 }
 
-// InvalidateUserPermissionsCache invalidates the permissions cache for a user
+// InvalidateUserPermissionsCache invalidates the permissions cache for a user.
+//
+// This function deletes both the base user permissions cache and all org-specific
+// cache entries for the user. Additionally, it sends a WebSocket message to the user
+// to notify them that their permissions have changed (triggering a client-side refresh).
+//
+// Side effects:
+//   - Deletes Redis cache entries for user permissions
+//   - Sends WebSocket notification to user (triggers client-side permissions refresh)
+//
+// Parameters:
+//   - userID: The user ID whose permissions cache should be invalidated
 func (a *App) InvalidateUserPermissionsCache(userID uuid.UUID) {
 	ctx := context.Background()
 	// Delete the base key (no org suffix)
@@ -661,7 +701,22 @@ func (a *App) InvalidateUserPermissionsCache(userID uuid.UUID) {
 	a.notifyUserPermissionsChanged(userID)
 }
 
-// InvalidateRolePermissionsCache invalidates the permissions cache for a role and all users with that role
+// InvalidateRolePermissionsCache invalidates the permissions cache for a role and all users with that role.
+//
+// This function cascades the invalidation: it deletes the role's permissions cache,
+// finds all users assigned this role, invalidates their individual permissions caches,
+// and sends WebSocket notifications to all affected users.
+//
+// Side effects:
+//   - Deletes Redis cache entry for the role permissions
+//   - Deletes Redis cache entries for all users with this role
+//   - Sends WebSocket notifications to all affected users (triggers client-side permissions refresh)
+//
+// If the database query to find users fails, this function logs the error and returns
+// without attempting to notify users (since we don't know who they are).
+//
+// Parameters:
+//   - roleID: The role ID whose cache should be invalidated (affects all users with this role)
 func (a *App) InvalidateRolePermissionsCache(roleID uuid.UUID) {
 	ctx := context.Background()
 
@@ -685,7 +740,21 @@ func (a *App) InvalidateRolePermissionsCache(roleID uuid.UUID) {
 	}
 }
 
-// InvalidateOrgPermissionsCache invalidates all permission caches for an organization
+// InvalidateOrgPermissionsCache invalidates all permission caches for an organization.
+//
+// This function finds all roles belonging to the organization and invalidates
+// each role's permissions cache (which in turn invalidates all user permissions caches
+// for users with those roles and sends WebSocket notifications).
+//
+// Side effects:
+//   - Queries database for all roles in the organization
+//   - Calls InvalidateRolePermissionsCache for each role (see that function for full side effects)
+//
+// If the database query to find roles fails, this function logs the error and returns
+// without attempting to invalidate any caches.
+//
+// Parameters:
+//   - orgID: The organization ID whose role permissions should all be invalidated
 func (a *App) InvalidateOrgPermissionsCache(orgID uuid.UUID) {
 	// Find all roles in this org
 	var roles []models.CustomRole
