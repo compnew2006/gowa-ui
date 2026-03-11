@@ -9,9 +9,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
+
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/pkg/chat_close_ratings"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -41,12 +42,7 @@ var defaultChatCloseRatingTemplates = map[string]string{
 	"es": "Hola {customer_name}, tu chat {chat_id} con {agent_name} en {organization_name} se ha cerrado. Responde con un numero del 1 al 10 para calificar tu experiencia.",
 }
 
-var localizedRatingDigitReplacer = strings.NewReplacer(
-	"٠", "0", "١", "1", "٢", "2", "٣", "3", "٤", "4",
-	"٥", "5", "٦", "6", "٧", "7", "٨", "8", "٩", "9",
-	"۰", "0", "۱", "1", "۲", "2", "۳", "3", "۴", "4",
-	"۵", "5", "۶", "6", "۷", "7", "۸", "8", "۹", "9",
-)
+
 
 type chatCloseRatingSettings struct {
 	Enabled               bool
@@ -118,7 +114,7 @@ func readChatCloseRatingSettings(orgSettings models.JSONB, instanceSettings mode
 			}
 		}
 		if rawFollowupWindow, ok := orgSettings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
-			if parsed := parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
+			if parsed := chat_close_ratings.ParseFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
 				result.FollowupWindowMinutes = parsed
 			}
 		}
@@ -143,7 +139,7 @@ func readChatCloseRatingSettings(orgSettings models.JSONB, instanceSettings mode
 			}
 		}
 		if rawFollowupWindow, ok := instanceSettings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
-			if parsed := parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
+			if parsed := chat_close_ratings.ParseFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
 				result.FollowupWindowMinutes = parsed
 			}
 		}
@@ -178,200 +174,23 @@ func parseChatCloseRatingWindowDays(raw any) int {
 	return parsed
 }
 
-func parseChatCloseRatingFollowupWindowMinutes(raw any) int {
-	parsed := 0
-	switch v := raw.(type) {
-	case int:
-		parsed = v
-	case int32:
-		parsed = int(v)
-	case int64:
-		parsed = int(v)
-	case float64:
-		parsed = int(v)
-	case string:
-		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
-			parsed = n
-		}
-	}
 
-	if parsed < 1 {
-		return defaultChatCloseRatingFollowupWindowMinutes
-	}
-	if parsed > maxChatCloseRatingFollowupWindowMinutes {
-		return maxChatCloseRatingFollowupWindowMinutes
-	}
-	return parsed
-}
 
-type chatCloseRatingFollowupState struct {
-	ExpiresAt         time.Time
-	RemainingMessages int
-	Entries           []any
-	Comments          []string
-}
 
-func newChatCloseRatingFollowupState(closedAt time.Time, settings chatCloseRatingSettings) chatCloseRatingFollowupState {
-	return chatCloseRatingFollowupState{
-		ExpiresAt:         closedAt.Add(time.Duration(settings.FollowupWindowMinutes) * time.Minute),
-		RemainingMessages: chatCloseRatingFollowupMessageLimit,
-		Entries:           make([]any, 0, chatCloseRatingFollowupMessageLimit),
-		Comments:          []string{},
-	}
-}
 
-func readChatCloseRatingFollowupState(cycle *models.ChatClosureRating, settings chatCloseRatingSettings) chatCloseRatingFollowupState {
-	if cycle == nil {
-		return newChatCloseRatingFollowupState(time.Now().UTC(), settings)
-	}
 
-	state := newChatCloseRatingFollowupState(cycle.ClosedAt, settings)
-	if cycle.ContextMessages == nil {
-		return state
-	}
 
-	rawFollowup, ok := cycle.ContextMessages[chatCloseRatingFollowupContextKey]
-	if !ok || rawFollowup == nil {
-		return state
-	}
 
-	var payload map[string]any
-	switch typed := rawFollowup.(type) {
-	case map[string]any:
-		payload = typed
-	case models.JSONB:
-		payload = map[string]any(typed)
-	default:
-		return state
-	}
 
-	if rawExpiresAt, ok := payload["expires_at"]; ok {
-		if parsed := parseJSONTime(rawExpiresAt); !parsed.IsZero() {
-			state.ExpiresAt = parsed
-		}
-	}
-	if rawRemaining, ok := payload["remaining_messages"]; ok {
-		if parsed, ok := parseJSONInt(rawRemaining); ok {
-			state.RemainingMessages = parsed
-		}
-	}
-	if rawEntries, ok := payload[chatCloseRatingFollowupEntriesKey]; ok {
-		switch typed := rawEntries.(type) {
-		case []any:
-			state.Entries = append([]any{}, typed...)
-		case []map[string]any:
-			for _, entry := range typed {
-				state.Entries = append(state.Entries, entry)
-			}
-		}
-	}
-	if rawComments, ok := payload[chatCloseRatingFollowupCommentsKey]; ok {
-		state.Comments = normalizeRatingComments(asStringSlice(rawComments))
-	}
 
-	if state.RemainingMessages < 0 {
-		state.RemainingMessages = 0
-	}
-	return state
-}
 
-func (s chatCloseRatingFollowupState) IsActive(now time.Time) bool {
-	if s.RemainingMessages <= 0 {
-		return false
-	}
-	return !now.After(s.ExpiresAt)
-}
 
-func normalizeRatingComments(values []string) []string {
-	if len(values) == 0 {
-		return []string{}
-	}
 
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		out = append(out, trimmed)
-	}
-	return out
-}
 
-func appendChatCloseRatingFollowupEntry(
-	state *chatCloseRatingFollowupState,
-	incomingMessage *models.Message,
-	content string,
-	kind string,
-	ratingValue *int,
-) {
-	if state == nil {
-		return
-	}
 
-	entry := models.JSONB{
-		"kind":    kind,
-		"content": strings.TrimSpace(content),
-	}
-	if incomingMessage != nil {
-		entry["message_id"] = incomingMessage.ID.String()
-		entry["message_type"] = incomingMessage.MessageType
-		entry["created_at"] = incomingMessage.CreatedAt.UTC().Format(time.RFC3339)
-	}
-	if ratingValue != nil {
-		entry["rating"] = *ratingValue
-	}
 
-	state.Entries = append(state.Entries, entry)
-}
 
-func writeChatCloseRatingFollowupState(contextMessages models.JSONB, state chatCloseRatingFollowupState) models.JSONB {
-	if contextMessages == nil {
-		contextMessages = models.JSONB{}
-	}
 
-	contextMessages[chatCloseRatingFollowupContextKey] = models.JSONB{
-		"expires_at":                       state.ExpiresAt.UTC().Format(time.RFC3339),
-		"remaining_messages":               state.RemainingMessages,
-		chatCloseRatingFollowupEntriesKey:  state.Entries,
-		chatCloseRatingFollowupCommentsKey: state.Comments,
-	}
-	return contextMessages
-}
-
-func parseJSONTime(raw any) time.Time {
-	switch typed := raw.(type) {
-	case string:
-		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(typed))
-		if err == nil {
-			return parsed.UTC()
-		}
-	case time.Time:
-		return typed.UTC()
-	}
-	return time.Time{}
-}
-
-func parseJSONInt(raw any) (int, bool) {
-	switch typed := raw.(type) {
-	case int:
-		return typed, true
-	case int32:
-		return int(typed), true
-	case int64:
-		return int(typed), true
-	case float64:
-		return int(typed), true
-	case string:
-		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
-		if err != nil {
-			return 0, false
-		}
-		return parsed, true
-	default:
-		return 0, false
-	}
-}
 
 func parseChatCloseRatingTemplates(raw any) map[string]string {
 	templates := map[string]string{}
@@ -617,72 +436,11 @@ func (a *App) resolveClosePromptAccount(orgID uuid.UUID, contact *models.Contact
 	return a.resolveWhatsAppAccount(orgID, accountName)
 }
 
-func normalizeInboundRatingText(raw string) string {
-	normalized := strings.TrimSpace(localizedRatingDigitReplacer.Replace(raw))
-	if normalized == "" {
-		return ""
-	}
 
-	runes := []rune(normalized)
-	start := 0
-	for start < len(runes) && (unicode.IsSpace(runes[start]) || isIgnorableRatingRune(runes[start])) {
-		start++
-	}
-	if start >= len(runes) {
-		return ""
-	}
 
-	end := len(runes)
-	for end > start && (unicode.IsSpace(runes[end-1]) || isIgnorableRatingRune(runes[end-1])) {
-		end--
-	}
 
-	return string(runes[start:end])
-}
 
-func isIgnorableRatingRune(r rune) bool {
-	if unicode.IsControl(r) {
-		return true
-	}
-	return unicode.In(r, unicode.Cf)
-}
 
-func parseInboundRatingValue(raw string) (int, bool) {
-	trimmed := normalizeInboundRatingText(raw)
-	if trimmed == "" {
-		return 0, false
-	}
-
-	runes := []rune(trimmed)
-	end := 0
-	for end < len(runes) && runes[end] >= '0' && runes[end] <= '9' {
-		end++
-	}
-	if end == 0 {
-		return 0, false
-	}
-
-	nextIndex := end
-	for nextIndex < len(runes) && isIgnorableRatingRune(runes[nextIndex]) {
-		nextIndex++
-	}
-
-	if nextIndex < len(runes) {
-		next := runes[nextIndex]
-		if !unicode.IsSpace(next) && !unicode.IsPunct(next) && !unicode.IsSymbol(next) {
-			return 0, false
-		}
-	}
-
-	rating, err := strconv.Atoi(string(runes[:end]))
-	if err != nil {
-		return 0, false
-	}
-	if rating < 1 || rating > 10 {
-		return 0, false
-	}
-	return rating, true
-}
 
 func (a *App) loadChatCloseRatingSettings(orgID uuid.UUID, instanceID *uuid.UUID) (chatCloseRatingSettings, error) {
 	var org models.Organization
@@ -704,13 +462,13 @@ func (a *App) loadChatCloseRatingSettings(orgID uuid.UUID, instanceID *uuid.UUID
 func (a *App) findActiveChatCloseRatingCycle(
 	orgID uuid.UUID, contact *models.Contact,
 	now time.Time,
-) (*models.ChatClosureRating, chatCloseRatingFollowupState, error) {
+) (*models.ChatClosureRating, chat_close_ratings.FollowupState, error) {
 	settings, err := a.loadChatCloseRatingSettings(orgID, contact.InstanceID)
 	if err != nil {
-		return nil, chatCloseRatingFollowupState{}, err
+		return nil, chat_close_ratings.FollowupState{}, err
 	}
 	if !settings.Enabled {
-		return nil, chatCloseRatingFollowupState{}, nil
+		return nil, chat_close_ratings.FollowupState{}, nil
 	}
 
 	windowStart := now.UTC().Add(-time.Duration(settings.WindowDays) * 24 * time.Hour)
@@ -726,12 +484,19 @@ func (a *App) findActiveChatCloseRatingCycle(
 		windowStart,
 	).Order("closed_at DESC").First(&cycle).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, chatCloseRatingFollowupState{}, nil
+			return nil, chat_close_ratings.FollowupState{}, nil
 		}
-		return nil, chatCloseRatingFollowupState{}, err
+		return nil, chat_close_ratings.FollowupState{}, err
 	}
 
-	followup := readChatCloseRatingFollowupState(&cycle, settings)
+	var closedAt time.Time
+	if !cycle.ClosedAt.IsZero() {
+		closedAt = cycle.ClosedAt
+	} else {
+		closedAt = now.UTC()
+	}
+
+	followup := chat_close_ratings.ReadFollowupState(closedAt, cycle.ContextMessages, settings.FollowupWindowMinutes)
 	if followup.IsActive(now) {
 		return &cycle, followup, nil
 	}
@@ -766,7 +531,7 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 	}
 
 	trimmedContent := strings.TrimSpace(payload.MessageText)
-	ratingValue, hasRating := parseInboundRatingValue(payload.MessageText)
+	ratingValue, hasRating := chat_close_ratings.ParseInboundRatingValue(payload.MessageText)
 	contextMessages := cycle.ContextMessages
 	if hasRating {
 		contextMessages = a.buildChatCloseRatingContext(contact.ID, incomingMessage)
@@ -781,14 +546,14 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 		ratingPointer = &ratingValue
 		entryKind = "rating"
 	}
-	appendChatCloseRatingFollowupEntry(&followup, incomingMessage, payload.MessageText, entryKind, ratingPointer)
+	followup.Entries = chat_close_ratings.AppendChatCloseRatingFollowupEntry(followup.Entries, incomingMessage, payload.MessageText, entryKind, ratingPointer)
 	if !hasRating && trimmedContent != "" {
 		followup.Comments = append(followup.Comments, trimmedContent)
 	}
 	if followup.RemainingMessages > 0 {
 		followup.RemainingMessages--
 	}
-	contextMessages = writeChatCloseRatingFollowupState(contextMessages, followup)
+	contextMessages = chat_close_ratings.WriteFollowupState(contextMessages, followup)
 
 	updates := map[string]any{
 		"context_messages": contextMessages,
@@ -852,7 +617,7 @@ func (a *App) buildChatCloseRatingContext(contactID uuid.UUID, ratingMessage *mo
 
 	return models.JSONB{
 		"before": mapMessagesForRatingContext(before),
-		"rating": mapSingleMessageForRatingContext(ratingMessage),
+		"rating": chat_close_ratings.MapSingleMessageForRatingContext(ratingMessage),
 		"after":  mapMessagesForRatingContext(after),
 	}
 }
@@ -860,23 +625,12 @@ func (a *App) buildChatCloseRatingContext(contactID uuid.UUID, ratingMessage *mo
 func mapMessagesForRatingContext(messages []models.Message) []any {
 	entries := make([]any, 0, len(messages))
 	for i := range messages {
-		entries = append(entries, mapSingleMessageForRatingContext(&messages[i]))
+		entries = append(entries, chat_close_ratings.MapSingleMessageForRatingContext(&messages[i]))
 	}
 	return entries
 }
 
-func mapSingleMessageForRatingContext(message *models.Message) models.JSONB {
-	if message == nil {
-		return models.JSONB{}
-	}
-	return models.JSONB{
-		"id":           message.ID.String(),
-		"direction":    message.Direction,
-		"message_type": message.MessageType,
-		"content":      message.Content,
-		"created_at":   message.CreatedAt.Format(time.RFC3339),
-	}
-}
+
 
 func extractFollowupCommentsForRatingMessage(contextMessages models.JSONB) []string {
 	if len(contextMessages) == 0 {
@@ -912,7 +666,7 @@ func extractFollowupCommentsForRatingMessage(contextMessages models.JSONB) []str
 		comments = append(comments, trimmed)
 	}
 
-	for _, comment := range asStringSlice(followup[chatCloseRatingFollowupCommentsKey]) {
+	for _, comment := range asStringSliceChatClose(followup[chatCloseRatingFollowupCommentsKey]) {
 		appendUnique(comment)
 	}
 
@@ -934,6 +688,25 @@ func extractFollowupCommentsForRatingMessage(contextMessages models.JSONB) []str
 	}
 
 	return comments
+}
+
+func asStringSliceChatClose(val any) []string {
+	if val == nil {
+		return nil
+	}
+	switch typed := val.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if str, ok := item.(string); ok {
+				out = append(out, str)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 func mergeRatingMessageWithFollowupComments(base string, contextMessages models.JSONB) string {
