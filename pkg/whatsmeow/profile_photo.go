@@ -21,7 +21,7 @@ var avatarRefreshCooldown = 6 * time.Hour
 var errInvalidProfilePhotoJID = errors.New("invalid profile photo jid")
 
 func (cm *ConnectionManager) scheduleContactAvatarRefresh(instanceID uuid.UUID, contact *models.Contact) {
-	if cm == nil || cm.db == nil || contact == nil {
+	if cm == nil || cm.db == nil || contact == nil || cm.disableAvatarSync {
 		return
 	}
 
@@ -46,6 +46,9 @@ func (cm *ConnectionManager) scheduleContactAvatarRefresh(instanceID uuid.UUID, 
 
 // ScheduleContactAvatarRefresh queues a best-effort background avatar sync for a contact.
 func (cm *ConnectionManager) ScheduleContactAvatarRefresh(instanceID uuid.UUID, contact *models.Contact) {
+	if cm.disableAvatarSync {
+		return
+	}
 	cm.scheduleContactAvatarRefresh(instanceID, contact)
 }
 

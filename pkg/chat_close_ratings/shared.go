@@ -56,36 +56,41 @@ func ParseFollowupWindowMinutes(raw any) int {
 func ParseJSONTime(raw any) time.Time {
 	switch v := raw.(type) {
 	case time.Time:
-		return v
+		return v.UTC()
 	case string:
 		if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
-			return t
+			return t.UTC()
 		}
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			return t
+			return t.UTC()
 		}
 	case float64:
-		return time.Unix(int64(v), 0)
+		return time.Unix(int64(v), 0).UTC()
 	case int64:
-		return time.Unix(v, 0)
+		return time.Unix(v, 0).UTC()
 	}
 	return time.Time{}
 }
 
-func ParseJSONInt(raw any) int {
-	switch v := raw.(type) {
-	case float64:
-		return int(v)
+func ParseJSONInt(raw any) (int, bool) {
+	switch typed := raw.(type) {
 	case int:
-		return v
+		return typed, true
+	case int32:
+		return int(typed), true
 	case int64:
-		return int(v)
+		return int(typed), true
+	case float64:
+		return int(typed), true
 	case string:
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
+		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err != nil {
+			return 0, false
 		}
+		return parsed, true
+	default:
+		return 0, false
 	}
-	return 0
 }
 
 func AppendChatCloseRatingFollowupEntry(
@@ -258,7 +263,9 @@ func ReadFollowupState(cycleClosedAt time.Time, contextMessages map[string]any, 
 		}
 	}
 	if rawRemaining, ok := payload["remaining_messages"]; ok {
-		state.RemainingMessages = ParseJSONInt(rawRemaining)
+		if parsed, ok := ParseJSONInt(rawRemaining); ok {
+			state.RemainingMessages = parsed
+		}
 	}
 	if rawEntries, ok := payload[FollowupEntriesKey]; ok {
 		switch typed := rawEntries.(type) {

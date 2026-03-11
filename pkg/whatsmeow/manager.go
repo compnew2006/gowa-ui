@@ -42,6 +42,9 @@ type ConnectionManager struct {
 	// mediaStoragePath is the local root directory where inbound media is persisted.
 	mediaStoragePath  string
 	inboundMediaQueue inboundMediaJobEnqueuer
+
+	// disableAvatarSync allows tests to bypass avatar sync to avoid panics on mock clients
+	disableAvatarSync bool
 }
 
 type inboundMediaJobEnqueuer interface {
