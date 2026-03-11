@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { normalizeRenderableAvatarURL } from "@/components/ui/avatar/avatar-url";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -589,6 +590,9 @@ const chatMediaViewerTitle = ref("");
 const isProfilePhotoDialogOpen = ref(false);
 const profilePhotoContact = ref<Contact | null>(null);
 const profilePhotoImageFailed = ref(false);
+const activeProfilePhotoURL = computed(() =>
+  normalizeRenderableAvatarURL(profilePhotoContact.value?.avatar_url),
+);
 const mediaCaption = ref("");
 const isUploadingMedia = ref(false);
 const isPreparingBatchPrint = ref(false);
@@ -5877,8 +5881,8 @@ async function sendMediaMessage() {
         </DialogHeader>
         <div class="flex items-center justify-center py-2">
           <img
-            v-if="profilePhotoContact?.avatar_url && !profilePhotoImageFailed"
-            :src="profilePhotoContact.avatar_url"
+            v-if="activeProfilePhotoURL !== '' && !profilePhotoImageFailed"
+            :src="activeProfilePhotoURL"
             :alt="
               profilePhotoContact?.name ||
               profilePhotoContact?.phone_number ||

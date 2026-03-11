@@ -1,114 +1,21 @@
 {
-  "command": "scan",
-  "overall_score": 72.2,
-  "objective_score": 85.6,
-  "strict_score": 71.4,
-  "verified_strict_score": 85.4,
-  "prev_overall_score": 72.1,
-  "prev_objective_score": 85.2,
-  "prev_strict_score": 71.2,
-  "prev_verified_strict_score": 85.0,
-  "profile": "full",
-  "noise_budget": 10,
-  "noise_global_budget": 0,
-  "hidden_by_detector": {
-    "test_coverage": 77,
-    "structural": 70,
-    "unused": 68,
-    "review": 52,
-    "signature": 5,
-    "dupes": 2
+  "command": "show",
+  "query": "test_coverage",
+  "status_filter": "open",
+  "total": 10,
+  "summary": {
+    "by_tier": {
+      "T2": 10
+    },
+    "by_detector": {
+      "test_coverage": 10
+    },
+    "files": 10
   },
-  "hidden_total": 274,
-  "diff": {
-    "new": 6,
-    "auto_resolved": 43,
-    "reopened": 3,
-    "total_current": 1365,
-    "suspect_detectors": [
-      "review"
-    ],
-    "chronic_reopeners": [
-      {
-        "id": "test_coverage::internal/queue/redis.go::untested_critical",
-        "detector": "test_coverage",
-        "file": "internal/queue/redis.go",
-        "tier": 2,
-        "confidence": "high",
-        "summary": "Untested critical module (465 LOC, 0 importers) \u2014 high blast radius",
-        "detail": {
-          "kind": "untested_critical",
-          "loc": 465,
-          "importer_count": 0,
-          "loc_weight": 21.563858652847824,
-          "complexity_score": 20
-        },
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::internal/handlers/canned_response_media.go::untested_module",
-        "detector": "test_coverage",
-        "file": "internal/handlers/canned_response_media.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (265 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 265,
-          "importer_count": 0,
-          "loc_weight": 16.278820596099706
-        },
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::internal/handlers/auth_utils.go::untested_module",
-        "detector": "test_coverage",
-        "file": "internal/handlers/auth_utils.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (182 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 182,
-          "importer_count": 0,
-          "loc_weight": 13.490737563232042
-        },
-        "status": "open",
-        "note": "Reopened (\u00d73) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 3,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
+  "by_file": {
+    "internal/handlers/cache.go": [
       {
         "id": "test_coverage::internal/handlers/cache.go::untested_critical",
-        "detector": "test_coverage",
-        "file": "internal/handlers/cache.go",
         "tier": 2,
         "confidence": "high",
         "summary": "Untested critical module (823 LOC, 0 importers) \u2014 high blast radius",
@@ -118,1248 +25,154 @@
           "importer_count": 0,
           "loc_weight": 28.687976575562104,
           "complexity_score": 94
-        },
-        "status": "open",
-        "note": "Reopened (\u00d73) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 3,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::pkg/whatsapp/flow.go::untested_module",
-        "detector": "test_coverage",
-        "file": "pkg/whatsapp/flow.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (357 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 357,
-          "importer_count": 0,
-          "loc_weight": 18.894443627691185
-        },
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::internal/models/chatbot.go::untested_module",
-        "detector": "test_coverage",
-        "file": "internal/models/chatbot.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (312 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 312,
-          "importer_count": 0,
-          "loc_weight": 17.663521732655695
-        },
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::internal/handlers/stubs.go::untested_module",
-        "detector": "test_coverage",
-        "file": "internal/handlers/stubs.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (115 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 115,
-          "importer_count": 0,
-          "loc_weight": 10.723805294763608
-        },
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::internal/handlers/chat_assignment_reset_settings.go::untested_module",
-        "detector": "test_coverage",
-        "file": "internal/handlers/chat_assignment_reset_settings.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (203 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 203,
-          "importer_count": 0,
-          "loc_weight": 14.247806848775006
-        },
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::pkg/whatsmeow/metrics.go::untested_module",
-        "detector": "test_coverage",
-        "file": "pkg/whatsmeow/metrics.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (139 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 139,
-          "importer_count": 0,
-          "loc_weight": 11.789826122551595
-        },
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::internal/handlers/app.go::untested_module",
-        "detector": "test_coverage",
-        "file": "internal/handlers/app.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (228 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 228,
-          "importer_count": 0,
-          "loc_weight": 15.0996688705415
-        },
-        "status": "open",
-        "note": "Reopened (\u00d74) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 4,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::internal/handlers/activity_service.go::untested_module",
-        "detector": "test_coverage",
-        "file": "internal/handlers/activity_service.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (350 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 350,
-          "importer_count": 0,
-          "loc_weight": 18.708286933869708
-        },
-        "status": "open",
-        "note": "Reopened (\u00d75) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 5,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "test_coverage::internal/handlers/business_profile.go::untested_module",
-        "detector": "test_coverage",
-        "file": "internal/handlers/business_profile.go",
-        "tier": 3,
-        "confidence": "high",
-        "summary": "Untested module (166 LOC, 0 importers)",
-        "detail": {
-          "kind": "untested_module",
-          "loc": 166,
-          "importer_count": 0,
-          "loc_weight": 12.884098726725126
-        },
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T12:10:56+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "production",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "unused::internal/handlers/agent_analytics_test.go::unused_import::7",
-        "detector": "unused",
-        "file": "internal/handlers/agent_analytics_test.go",
-        "tier": 3,
-        "confidence": "medium",
-        "summary": "Unused import: com/compnew2006/whatomate/internal/handlers",
-        "detail": {},
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T13:34:41+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "test",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
-      },
-      {
-        "id": "unused::internal/handlers/agent_analytics_test.go::unused_import::8",
-        "detector": "unused",
-        "file": "internal/handlers/agent_analytics_test.go",
-        "tier": 3,
-        "confidence": "medium",
-        "summary": "Unused import: com/compnew2006/whatomate/internal/models",
-        "detail": {},
-        "status": "open",
-        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
-        "first_seen": "2026-03-10T13:34:41+00:00",
-        "last_seen": "2026-03-11T10:19:34+00:00",
-        "resolved_at": null,
-        "reopen_count": 2,
-        "lang": "go",
-        "zone": "test",
-        "suppressed": false,
-        "suppressed_at": null,
-        "suppression_pattern": null
+        }
       }
     ],
-    "skipped_other_lang": 0,
-    "resolved_out_of_scope": 0,
-    "ignored": 0,
-    "ignore_patterns": 0,
-    "raw_issues": 1365,
-    "suppressed_pct": 0.0
-  },
-  "stats": {
-    "total": 1891,
-    "auto_resolved": 462,
-    "false_positive": 0,
-    "fixed": 2,
-    "open": 342,
-    "wontfix": 1085,
-    "by_tier": {
-      "1": {
-        "auto_resolved": 17,
-        "false_positive": 0,
-        "fixed": 1,
-        "open": 30,
-        "wontfix": 0
-      },
-      "2": {
-        "auto_resolved": 8,
-        "false_positive": 0,
-        "fixed": 0,
-        "open": 55,
-        "wontfix": 2
-      },
-      "3": {
-        "auto_resolved": 257,
-        "false_positive": 0,
-        "fixed": 0,
-        "open": 256,
-        "wontfix": 1065
-      },
-      "4": {
-        "auto_resolved": 180,
-        "false_positive": 0,
-        "fixed": 1,
-        "open": 1,
-        "wontfix": 18
-      }
-    }
-  },
-  "open_scope": {
-    "in_scope": 342,
-    "out_of_scope": 0,
-    "global": 342
-  },
-  "warnings": [
-    "\u27f3 14 chronic reopeners \u2014 run `desloppify show --chronic` to see them.",
-    "Coverage reduced (golangci_lint): golangci-lint tooling unavailable (parser_error) Repercussion: Detector results may be under-reported for this scan. Fix: Install/fix the tool command and rerun scan."
-  ],
-  "dimension_scores": {
-    "Code quality": {
-      "score": 84.4,
-      "strict": 84.4,
-      "verified_strict_score": 84.4,
-      "checks": 27,
-      "failing": 6,
-      "tier": 3,
-      "detectors": {
-        "flat_dirs": {
-          "potential": 22,
-          "pass_rate": 0.9363636363636364,
-          "failing": 2,
-          "weighted_failures": 1.4
-        },
-        "responsibility_cohesion": {
-          "potential": 5,
-          "pass_rate": 0.44000000000000006,
-          "failing": 4,
-          "weighted_failures": 2.8
+    "internal/handlers/contacts.go": [
+      {
+        "id": "test_coverage::internal/handlers/contacts.go::untested_critical",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (1272 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 1272,
+          "importer_count": 0,
+          "loc_weight": 35.66510900025401,
+          "complexity_score": 177
         }
       }
-    },
-    "Security": {
-      "score": 100.0,
-      "strict": 98.9,
-      "verified_strict_score": 98.9,
-      "checks": 182,
-      "failing": 0,
-      "tier": 4,
-      "detectors": {
-        "security": {
-          "potential": 182,
-          "pass_rate": 1.0,
-          "failing": 0,
-          "weighted_failures": 0.0
+    ],
+    "internal/handlers/contacts_management.go": [
+      {
+        "id": "test_coverage::internal/handlers/contacts_management.go::untested_critical",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (959 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 959,
+          "importer_count": 0,
+          "loc_weight": 30.967725134404045,
+          "complexity_score": 125
         }
       }
-    },
-    "File health": {
-      "score": 85.8,
-      "strict": 85.8,
-      "verified_strict_score": 85.8,
-      "checks": 182,
-      "failing": 37,
-      "tier": 3,
-      "detectors": {
-        "structural": {
-          "potential": 182,
-          "pass_rate": 0.8576923076923079,
-          "failing": 37,
-          "weighted_failures": 25.899999999999984
+    ],
+    "internal/handlers/contacts_messaging.go": [
+      {
+        "id": "test_coverage::internal/handlers/contacts_messaging.go::untested_critical",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (861 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 861,
+          "importer_count": 0,
+          "loc_weight": 29.34280150224242,
+          "complexity_score": 90
         }
       }
-    },
-    "Duplication": {
-      "score": 99.3,
-      "strict": 99.3,
-      "verified_strict_score": 99.3,
-      "checks": 1422,
-      "failing": 12,
-      "tier": 3,
-      "detectors": {
-        "dupes": {
-          "potential": 1422,
-          "pass_rate": 0.9925457102672293,
-          "failing": 12,
-          "weighted_failures": 10.600000000000001
+    ],
+    "internal/handlers/flows.go": [
+      {
+        "id": "test_coverage::internal/handlers/flows.go::untested_critical",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (1083 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 1083,
+          "importer_count": 0,
+          "loc_weight": 32.90896534380867,
+          "complexity_score": 142
         }
       }
-    },
-    "Test health": {
-      "score": 58.6,
-      "strict": 49.1,
-      "verified_strict_score": 58.6,
-      "checks": 2875,
-      "failing": 87,
-      "tier": 4,
-      "detectors": {
-        "test_coverage": {
-          "potential": 2696,
-          "pass_rate": 0.5589779615891896,
-          "failing": 87,
-          "weighted_failures": 1188.995415555545
-        },
-        "subjective_review": {
-          "potential": 179,
-          "pass_rate": 1.0,
-          "failing": 0,
-          "weighted_failures": 0.0
+    ],
+    "internal/handlers/import_export.go": [
+      {
+        "id": "test_coverage::internal/handlers/import_export.go::untested_critical",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (813 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 813,
+          "importer_count": 0,
+          "loc_weight": 28.513154858766505,
+          "complexity_score": 108
         }
       }
-    },
-    "Abstraction fit": {
-      "score": 54.0,
-      "strict": 54.0,
-      "verified_strict_score": 54.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.54,
-          "failing": 3,
-          "weighted_failures": 4.6,
-          "assessment_score": 54.0,
-          "placeholder": false,
-          "dimension_key": "abstraction_fitness",
-          "configured_weight": 8.0,
-          "components": []
+    ],
+    "internal/handlers/instance_auto_campaign_worker.go": [
+      {
+        "id": "test_coverage::internal/handlers/instance_auto_campaign_worker.go::untested_critical",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (507 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 507,
+          "importer_count": 0,
+          "loc_weight": 22.516660498395403,
+          "complexity_score": 30
         }
       }
-    },
-    "AI generated debt": {
-      "score": 68.0,
-      "strict": 68.0,
-      "verified_strict_score": 68.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.68,
-          "failing": 5,
-          "weighted_failures": 3.2,
-          "assessment_score": 68.0,
-          "placeholder": false,
-          "dimension_key": "ai_generated_debt",
-          "configured_weight": 1.0,
-          "components": []
+    ],
+    "internal/handlers/meta_analytics.go": [
+      {
+        "id": "test_coverage::internal/handlers/meta_analytics.go::untested_critical",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (432 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 432,
+          "importer_count": 0,
+          "loc_weight": 20.784609690826528,
+          "complexity_score": 32
         }
       }
-    },
-    "API coherence": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 2,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
-          "placeholder": false,
-          "dimension_key": "api_surface_coherence",
-          "configured_weight": 1.0,
-          "components": []
+    ],
+    "internal/handlers/send_restriction_policy.go": [
+      {
+        "id": "test_coverage::internal/handlers/send_restriction_policy.go::untested_critical",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (921 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 921,
+          "importer_count": 0,
+          "loc_weight": 30.347981810987037,
+          "complexity_score": 127
         }
       }
-    },
-    "Auth consistency": {
-      "score": 68.0,
-      "strict": 68.0,
-      "verified_strict_score": 68.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.68,
-          "failing": 3,
-          "weighted_failures": 3.2,
-          "assessment_score": 68.0,
-          "placeholder": false,
-          "dimension_key": "authorization_consistency",
-          "configured_weight": 1.0,
-          "components": []
+    ],
+    "internal/handlers/webhooks.go": [
+      {
+        "id": "test_coverage::internal/handlers/webhooks.go::untested_critical",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (416 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 416,
+          "importer_count": 0,
+          "loc_weight": 20.396078054371138,
+          "complexity_score": 28
         }
-      }
-    },
-    "Contracts": {
-      "score": 70.0,
-      "strict": 70.0,
-      "verified_strict_score": 70.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.7,
-          "failing": 4,
-          "weighted_failures": 3.0,
-          "assessment_score": 70.0,
-          "placeholder": false,
-          "dimension_key": "contract_coherence",
-          "configured_weight": 12.0,
-          "components": []
-        }
-      }
-    },
-    "Convention drift": {
-      "score": 68.0,
-      "strict": 68.0,
-      "verified_strict_score": 68.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.68,
-          "failing": 3,
-          "weighted_failures": 3.2,
-          "assessment_score": 68.0,
-          "placeholder": false,
-          "dimension_key": "convention_outlier",
-          "configured_weight": 1.0,
-          "components": []
-        }
-      }
-    },
-    "Cross-module arch": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 3,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
-          "placeholder": false,
-          "dimension_key": "cross_module_architecture",
-          "configured_weight": 1.0,
-          "components": []
-        }
-      }
-    },
-    "Dep health": {
-      "score": 85.0,
-      "strict": 85.0,
-      "verified_strict_score": 85.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.85,
-          "failing": 2,
-          "weighted_failures": 1.5,
-          "assessment_score": 85.0,
-          "placeholder": false,
-          "dimension_key": "dependency_health",
-          "configured_weight": 1.0,
-          "components": []
-        }
-      }
-    },
-    "Design coherence": {
-      "score": 55.0,
-      "strict": 55.0,
-      "verified_strict_score": 55.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.55,
-          "failing": 4,
-          "weighted_failures": 4.5,
-          "assessment_score": 55.0,
-          "placeholder": false,
-          "dimension_key": "design_coherence",
-          "configured_weight": 10.0,
-          "components": []
-        }
-      }
-    },
-    "Error consistency": {
-      "score": 58.0,
-      "strict": 58.0,
-      "verified_strict_score": 58.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.58,
-          "failing": 5,
-          "weighted_failures": 4.2,
-          "assessment_score": 58.0,
-          "placeholder": false,
-          "dimension_key": "error_consistency",
-          "configured_weight": 3.0,
-          "components": []
-        }
-      }
-    },
-    "High elegance": {
-      "score": 62.0,
-      "strict": 62.0,
-      "verified_strict_score": 62.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.62,
-          "failing": 2,
-          "weighted_failures": 3.8,
-          "assessment_score": 62.0,
-          "placeholder": false,
-          "dimension_key": "high_level_elegance",
-          "configured_weight": 22.0,
-          "components": []
-        }
-      }
-    },
-    "Stale migration": {
-      "score": 85.0,
-      "strict": 85.0,
-      "verified_strict_score": 85.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.85,
-          "failing": 2,
-          "weighted_failures": 1.5,
-          "assessment_score": 85.0,
-          "placeholder": false,
-          "dimension_key": "incomplete_migration",
-          "configured_weight": 1.0,
-          "components": []
-        }
-      }
-    },
-    "Init coupling": {
-      "score": 95.0,
-      "strict": 95.0,
-      "verified_strict_score": 95.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.95,
-          "failing": 2,
-          "weighted_failures": 0.5,
-          "assessment_score": 95.0,
-          "placeholder": false,
-          "dimension_key": "initialization_coupling",
-          "configured_weight": 1.0,
-          "components": []
-        }
-      }
-    },
-    "Logic clarity": {
-      "score": 68.0,
-      "strict": 68.0,
-      "verified_strict_score": 68.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.68,
-          "failing": 4,
-          "weighted_failures": 3.2,
-          "assessment_score": 68.0,
-          "placeholder": false,
-          "dimension_key": "logic_clarity",
-          "configured_weight": 6.0,
-          "components": []
-        }
-      }
-    },
-    "Low elegance": {
-      "score": 71.0,
-      "strict": 71.0,
-      "verified_strict_score": 71.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.71,
-          "failing": 2,
-          "weighted_failures": 2.9,
-          "assessment_score": 71.0,
-          "placeholder": false,
-          "dimension_key": "low_level_elegance",
-          "configured_weight": 12.0,
-          "components": []
-        }
-      }
-    },
-    "Mid elegance": {
-      "score": 58.0,
-      "strict": 58.0,
-      "verified_strict_score": 58.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.58,
-          "failing": 3,
-          "weighted_failures": 4.2,
-          "assessment_score": 58.0,
-          "placeholder": false,
-          "dimension_key": "mid_level_elegance",
-          "configured_weight": 22.0,
-          "components": []
-        }
-      }
-    },
-    "Naming quality": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 3,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
-          "placeholder": false,
-          "dimension_key": "naming_quality",
-          "configured_weight": 2.0,
-          "components": []
-        }
-      }
-    },
-    "Structure nav": {
-      "score": 62.0,
-      "strict": 62.0,
-      "verified_strict_score": 62.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.62,
-          "failing": 3,
-          "weighted_failures": 3.8,
-          "assessment_score": 62.0,
-          "placeholder": false,
-          "dimension_key": "package_organization",
-          "configured_weight": 5.0,
-          "components": []
-        }
-      }
-    },
-    "Test strategy": {
-      "score": 45.0,
-      "strict": 45.0,
-      "verified_strict_score": 45.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.45,
-          "failing": 3,
-          "weighted_failures": 5.5,
-          "assessment_score": 45.0,
-          "placeholder": false,
-          "dimension_key": "test_strategy",
-          "configured_weight": 1.0,
-          "components": []
-        }
-      }
-    },
-    "Type safety": {
-      "score": 65.0,
-      "strict": 65.0,
-      "verified_strict_score": 65.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.65,
-          "failing": 4,
-          "weighted_failures": 3.5,
-          "assessment_score": 65.0,
-          "placeholder": false,
-          "dimension_key": "type_safety",
-          "configured_weight": 12.0,
-          "components": []
-        }
-      }
-    }
-  },
-  "score_breakdown": {
-    "overall_score": 72.2,
-    "mechanical_fraction": 0.4,
-    "subjective_fraction": 0.6,
-    "mechanical_avg": 85.60123329907503,
-    "subjective_avg": 63.31707317073171,
-    "entries": [
-      {
-        "name": "Code quality",
-        "pool": "mechanical",
-        "score": 84.4,
-        "checks": 27.0,
-        "sample_factor": 0.135,
-        "configured_weight": 1.0,
-        "effective_weight": 0.135,
-        "pool_share": 0.02774922918807811,
-        "overall_per_point": 0.011099691675231244,
-        "overall_contribution": 0.9368139773895171,
-        "overall_drag": 0.17315519013360733
-      },
-      {
-        "name": "Security",
-        "pool": "mechanical",
-        "score": 100.0,
-        "checks": 182.0,
-        "sample_factor": 0.91,
-        "configured_weight": 1.0,
-        "effective_weight": 0.91,
-        "pool_share": 0.18705035971223022,
-        "overall_per_point": 0.0748201438848921,
-        "overall_contribution": 7.482014388489209,
-        "overall_drag": 0.0
-      },
-      {
-        "name": "File health",
-        "pool": "mechanical",
-        "score": 85.8,
-        "checks": 182.0,
-        "sample_factor": 0.91,
-        "configured_weight": 2.0,
-        "effective_weight": 1.82,
-        "pool_share": 0.37410071942446044,
-        "overall_per_point": 0.1496402877697842,
-        "overall_contribution": 12.839136690647484,
-        "overall_drag": 2.1248920863309357
-      },
-      {
-        "name": "Duplication",
-        "pool": "mechanical",
-        "score": 99.3,
-        "checks": 1422.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.20554984583761562,
-        "overall_per_point": 0.08221993833504626,
-        "overall_contribution": 8.164439876670093,
-        "overall_drag": 0.05755395683453261
-      },
-      {
-        "name": "Test health",
-        "pool": "mechanical",
-        "score": 58.6,
-        "checks": 2875.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.20554984583761562,
-        "overall_per_point": 0.08221993833504626,
-        "overall_contribution": 4.818088386433711,
-        "overall_drag": 3.403905447070915
-      },
-      {
-        "name": "Abstraction fit",
-        "pool": "subjective",
-        "score": 54.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 8.0,
-        "effective_weight": 8.0,
-        "pool_share": 0.06504065040650407,
-        "overall_per_point": 0.03902439024390244,
-        "overall_contribution": 2.107317073170732,
-        "overall_drag": 1.7951219512195122
-      },
-      {
-        "name": "AI generated debt",
-        "pool": "subjective",
-        "score": 68.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.004878048780487805,
-        "overall_contribution": 0.33170731707317075,
-        "overall_drag": 0.15609756097560976
-      },
-      {
-        "name": "API coherence",
-        "pool": "subjective",
-        "score": 72.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.004878048780487805,
-        "overall_contribution": 0.35121951219512193,
-        "overall_drag": 0.13658536585365855
-      },
-      {
-        "name": "Auth consistency",
-        "pool": "subjective",
-        "score": 68.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.004878048780487805,
-        "overall_contribution": 0.33170731707317075,
-        "overall_drag": 0.15609756097560976
-      },
-      {
-        "name": "Contracts",
-        "pool": "subjective",
-        "score": 70.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 12.0,
-        "effective_weight": 12.0,
-        "pool_share": 0.0975609756097561,
-        "overall_per_point": 0.058536585365853655,
-        "overall_contribution": 4.097560975609756,
-        "overall_drag": 1.7560975609756095
-      },
-      {
-        "name": "Convention drift",
-        "pool": "subjective",
-        "score": 68.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.004878048780487805,
-        "overall_contribution": 0.33170731707317075,
-        "overall_drag": 0.15609756097560976
-      },
-      {
-        "name": "Cross-module arch",
-        "pool": "subjective",
-        "score": 72.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.004878048780487805,
-        "overall_contribution": 0.35121951219512193,
-        "overall_drag": 0.13658536585365855
-      },
-      {
-        "name": "Dep health",
-        "pool": "subjective",
-        "score": 85.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.004878048780487805,
-        "overall_contribution": 0.4146341463414634,
-        "overall_drag": 0.07317073170731707
-      },
-      {
-        "name": "Design coherence",
-        "pool": "subjective",
-        "score": 55.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 10.0,
-        "effective_weight": 10.0,
-        "pool_share": 0.08130081300813008,
-        "overall_per_point": 0.048780487804878044,
-        "overall_contribution": 2.6829268292682924,
-        "overall_drag": 2.195121951219512
-      },
-      {
-        "name": "Error consistency",
-        "pool": "subjective",
-        "score": 58.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 3.0,
-        "effective_weight": 3.0,
-        "pool_share": 0.024390243902439025,
-        "overall_per_point": 0.014634146341463414,
-        "overall_contribution": 0.848780487804878,
-        "overall_drag": 0.6146341463414634
-      },
-      {
-        "name": "High elegance",
-        "pool": "subjective",
-        "score": 62.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 22.0,
-        "effective_weight": 22.0,
-        "pool_share": 0.17886178861788618,
-        "overall_per_point": 0.1073170731707317,
-        "overall_contribution": 6.6536585365853655,
-        "overall_drag": 4.078048780487805
-      },
-      {
-        "name": "Stale migration",
-        "pool": "subjective",
-        "score": 85.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.004878048780487805,
-        "overall_contribution": 0.4146341463414634,
-        "overall_drag": 0.07317073170731707
-      },
-      {
-        "name": "Init coupling",
-        "pool": "subjective",
-        "score": 95.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.004878048780487805,
-        "overall_contribution": 0.4634146341463415,
-        "overall_drag": 0.024390243902439025
-      },
-      {
-        "name": "Logic clarity",
-        "pool": "subjective",
-        "score": 68.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 6.0,
-        "effective_weight": 6.0,
-        "pool_share": 0.04878048780487805,
-        "overall_per_point": 0.029268292682926828,
-        "overall_contribution": 1.9902439024390244,
-        "overall_drag": 0.9365853658536585
-      },
-      {
-        "name": "Low elegance",
-        "pool": "subjective",
-        "score": 71.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 12.0,
-        "effective_weight": 12.0,
-        "pool_share": 0.0975609756097561,
-        "overall_per_point": 0.058536585365853655,
-        "overall_contribution": 4.15609756097561,
-        "overall_drag": 1.697560975609756
-      },
-      {
-        "name": "Mid elegance",
-        "pool": "subjective",
-        "score": 58.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 22.0,
-        "effective_weight": 22.0,
-        "pool_share": 0.17886178861788618,
-        "overall_per_point": 0.1073170731707317,
-        "overall_contribution": 6.224390243902439,
-        "overall_drag": 4.507317073170731
-      },
-      {
-        "name": "Naming quality",
-        "pool": "subjective",
-        "score": 72.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 2.0,
-        "effective_weight": 2.0,
-        "pool_share": 0.016260162601626018,
-        "overall_per_point": 0.00975609756097561,
-        "overall_contribution": 0.7024390243902439,
-        "overall_drag": 0.2731707317073171
-      },
-      {
-        "name": "Structure nav",
-        "pool": "subjective",
-        "score": 62.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 5.0,
-        "effective_weight": 5.0,
-        "pool_share": 0.04065040650406504,
-        "overall_per_point": 0.024390243902439022,
-        "overall_contribution": 1.5121951219512193,
-        "overall_drag": 0.9268292682926829
-      },
-      {
-        "name": "Test strategy",
-        "pool": "subjective",
-        "score": 45.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.004878048780487805,
-        "overall_contribution": 0.21951219512195122,
-        "overall_drag": 0.2682926829268293
-      },
-      {
-        "name": "Type safety",
-        "pool": "subjective",
-        "score": 65.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 12.0,
-        "effective_weight": 12.0,
-        "pool_share": 0.0975609756097561,
-        "overall_per_point": 0.058536585365853655,
-        "overall_contribution": 3.8048780487804876,
-        "overall_drag": 2.048780487804878
       }
     ]
   },
-  "subjective_integrity": {
-    "status": "warn",
-    "target_score": 95.0,
-    "matched_count": 1,
-    "matched_dimensions": [
-      "initialization_coupling"
-    ],
-    "reset_dimensions": []
+  "total_matching": 87,
+  "hidden": {
+    "by_detector": {
+      "test_coverage": 77
+    },
+    "total": 77
   },
-  "score_confidence": {
-    "status": "reduced",
-    "confidence": 0.0,
-    "detectors": [
-      {
-        "detector": "golangci_lint",
-        "status": "reduced",
-        "confidence": 0.0,
-        "summary": "golangci-lint tooling unavailable (parser_error)",
-        "impact": "Detector results may be under-reported for this scan.",
-        "remediation": "Install/fix the tool command and rerun scan.",
-        "tool": "golangci-lint",
-        "reason": "parser_error"
-      }
-    ],
-    "dimensions": []
-  },
-  "potentials": {
-    "go": {
-      "structural": 182,
-      "flat_dirs": 22,
-      "responsibility_cohesion": 5,
-      "unused_imports": 1143,
-      "signature": 15,
-      "test_coverage": 2696,
-      "security": 182,
-      "subjective_review": 179,
-      "boilerplate_duplication": 0,
-      "dupes": 1422,
-      "stale_wontfix": 1085
-    }
-  },
-  "scan_coverage": {
-    "go": {
-      "status": "reduced",
-      "confidence": 0.0,
-      "detectors": {
-        "golangci_lint": {
-          "detector": "golangci_lint",
-          "status": "reduced",
-          "confidence": 0.0,
-          "summary": "golangci-lint tooling unavailable (parser_error)",
-          "impact": "Detector results may be under-reported for this scan.",
-          "remediation": "Install/fix the tool command and rerun scan.",
-          "tool": "golangci-lint",
-          "reason": "parser_error"
-        },
-        "security": {
-          "detector": "security",
-          "status": "full",
-          "confidence": 1.0,
-          "summary": "Security coverage complete for enabled detectors.",
-          "impact": "",
-          "remediation": "",
-          "tool": "",
-          "reason": ""
-        }
-      },
-      "warnings": [
-        {
-          "detector": "golangci_lint",
-          "status": "reduced",
-          "confidence": 0.0,
-          "summary": "golangci-lint tooling unavailable (parser_error)",
-          "impact": "Detector results may be under-reported for this scan.",
-          "remediation": "Install/fix the tool command and rerun scan.",
-          "tool": "golangci-lint",
-          "reason": "parser_error"
-        }
-      ],
-      "updated_at": "2026-03-11T10:19:34+00:00"
-    }
-  },
-  "zone_distribution": {
-    "production": 182,
-    "test": 135
-  },
+  "noise_budget": 10,
+  "noise_global_budget": 0,
   "narrative": {
     "phase": "stagnation",
     "headline": "Score plateaued at 71.4 for 5 scans. Test strategy (45.0%) is where the breakthrough is. 1085 wontfix items may also be worth revisiting. (62 review issues \u2014 run `desloppify show review --status open`)",
@@ -1532,62 +345,44 @@
         "type": "reorganize",
         "detector": "flat_dirs",
         "count": 2,
-        "description": "2 flat_dirs issues in 1 cluster(s) \u2014 run `desloppify next`",
-        "command": "desloppify next",
+        "description": "2 flat_dirs issues \u2014 create subdirectories and use `desloppify move`",
+        "command": "desloppify show flat_dirs --status open",
         "impact": 0.0,
         "dimension": "Code quality",
         "priority": 1,
-        "clusters": [
-          "auto/flat_dirs-overload"
-        ],
-        "cluster_count": 1,
         "lane": "restructure"
       },
       {
         "type": "refactor",
         "detector": "structural",
         "count": 80,
-        "description": "80 structural issues in 2 cluster(s) \u2014 run `desloppify next`",
-        "command": "desloppify next",
+        "description": "80 structural issues \u2014 review large files \u2014 split only when responsibilities are clearly separable",
+        "command": "desloppify show structural --status open",
         "impact": 0.0,
         "dimension": "File health",
         "priority": 2,
-        "clusters": [
-          "auto/structural-chat_close_ratings.go",
-          "auto/structural-webhook_test.go"
-        ],
-        "cluster_count": 2,
         "lane": "refactor_0"
       },
       {
         "type": "refactor",
         "detector": "dupes",
         "count": 12,
-        "description": "12 dupes issues in 2 cluster(s) \u2014 run `desloppify next`",
-        "command": "desloppify next",
+        "description": "12 dupes issues \u2014 extract shared utility or consolidate duplicates",
+        "command": "desloppify show dupes --status open",
         "impact": 0.0,
         "dimension": "Duplication",
         "priority": 3,
-        "clusters": [
-          "auto/dupes-exact",
-          "auto/dupes-near-duplicate"
-        ],
-        "cluster_count": 2,
         "lane": "refactor_0"
       },
       {
         "type": "refactor",
         "detector": "test_coverage",
         "count": 87,
-        "description": "87 test_coverage issues in 1 cluster(s) \u2014 run `desloppify next`",
-        "command": "desloppify next",
+        "description": "87 test_coverage issues \u2014 add tests for untested production modules \u2014 prioritize by import count",
+        "command": "desloppify show test_coverage --status open",
         "impact": 0.0,
         "dimension": "Test health",
         "priority": 4,
-        "clusters": [
-          "auto/test_coverage"
-        ],
-        "cluster_count": 1,
         "lane": "test_coverage"
       },
       {
@@ -1627,15 +422,11 @@
         "type": "manual_fix",
         "detector": "unused",
         "count": 78,
-        "description": "78 unused issues in 1 cluster(s) \u2014 run `desloppify next`",
-        "command": "desloppify next",
+        "description": "78 unused issues \u2014 inspect with `desloppify next` and fix manually",
+        "command": "desloppify show unused --status open",
         "impact": 0.0,
         "dimension": "Code quality",
         "priority": 8,
-        "clusters": [
-          "auto/unused"
-        ],
-        "cluster_count": 1,
         "lane": "refactor_0"
       },
       {
@@ -1740,8 +531,8 @@
     },
     "milestone": null,
     "primary_action": {
-      "command": "desloppify next",
-      "description": "2 flat_dirs issues in 1 cluster(s) \u2014 run `desloppify next`"
+      "command": "desloppify show flat_dirs --status open",
+      "description": "2 flat_dirs issues \u2014 create subdirectories and use `desloppify move`"
     },
     "why_now": "5 independent workstreams, safe to parallelize. Rescan after each phase to verify. Review: 62 issue(s) \u2014 `desloppify show review --status open`.",
     "verification_step": {
@@ -1762,16 +553,7 @@
       "state": "below",
       "warning": null
     },
-    "reminders": [
-      {
-        "type": "report_scores",
-        "message": "ALWAYS share ALL scores with the user: overall, objective, and strict, plus every dimension score (lenient + strict), including subjective dimensions. The goal is to maximize strict scores.",
-        "command": null,
-        "no_decay": true,
-        "priority": 3,
-        "severity": "low"
-      }
-    ],
+    "reminders": [],
     "reminder_history": {
       "zone_classification": 3,
       "report_scores": 14,
@@ -1857,12 +639,5 @@
     "commit_default_branch": "",
     "commit_message_template": "desloppify: {status} {count} issue(s) \u2014 {summary}",
     "trust_plugins": false
-  },
-  "plan": {
-    "active": true,
-    "focus": null,
-    "total_ordered": 6,
-    "total_skipped": 260,
-    "plan_overrides_narrative": true
   }
 }

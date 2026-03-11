@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { AvatarImage as AvatarImagePrimitive } from 'reka-ui'
 import { cn } from '@/lib/utils'
+import { normalizeRenderableAvatarURL } from './avatar-url'
 import { hasFailedAvatarURL, markFailedAvatarURL } from './failed-avatar-urls'
 
 const props = defineProps<{
@@ -10,7 +11,7 @@ const props = defineProps<{
   class?: string
 }>()
 
-const normalizedSrc = computed(() => String(props.src ?? '').trim())
+const normalizedSrc = computed(() => normalizeRenderableAvatarURL(props.src))
 const hasLoadError = ref(false)
 
 watch(
@@ -27,6 +28,17 @@ function handleImageError() {
   markFailedAvatarURL(src)
   hasLoadError.value = true
 }
+
+function handleLoadingStatusChange(status: 'idle' | 'loading' | 'loaded' | 'error') {
+  if (status === 'error') {
+    handleImageError()
+    return
+  }
+
+  if (status === 'loaded') {
+    hasLoadError.value = false
+  }
+}
 </script>
 
 <template>
@@ -35,6 +47,6 @@ function handleImageError() {
     :src="normalizedSrc"
     :alt="alt || ''"
     :class="cn('aspect-square h-full w-full', props.class)"
-    @error="handleImageError"
+    @loading-status-change="handleLoadingStatusChange"
   />
 </template>
