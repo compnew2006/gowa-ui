@@ -70,14 +70,9 @@ func shouldAllowSelfAssignedRestrictedInstanceListBypass(
 func applyRestrictedInstanceVisibilityFilter(
 	query *gorm.DB,
 	restrictedInstanceIDs []uuid.UUID,
-	userID uuid.UUID,
-	allowSelfAssignedBypass bool,
 ) *gorm.DB {
 	if query == nil || len(restrictedInstanceIDs) == 0 {
 		return query
-	}
-	if allowSelfAssignedBypass {
-		return query.Where("(instance_id IN ? OR assigned_user_id = ?)", restrictedInstanceIDs, userID)
 	}
 	return query.Where("instance_id IN ?", restrictedInstanceIDs)
 }

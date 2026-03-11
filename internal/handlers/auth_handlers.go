@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/middleware"
@@ -332,6 +333,9 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 	}
 	newRefreshToken, err := a.generateRefreshToken(&user)
 	if err != nil {
+		if errors.Is(err, errRefreshTokenStorageUnavailable) {
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Refresh token storage is unavailable", nil, "")
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 	}
 

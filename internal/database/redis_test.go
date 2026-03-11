@@ -30,17 +30,7 @@ func TestNewRedis_Success(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
-	cfg := &config.RedisConfig{
-		Host:     "localhost",
-		Port:     6379,
-		Password: "",
-		DB:       0,
-	}
-
-	// Override port to use miniredis
-	_, portStr, _ := net.SplitHostPort(mr.Addr())
-	port, _ := strconv.Atoi(portStr)
-	cfg.Port = port
+	cfg := getMockRedisConfig(mr)
 	client, err := NewRedis(cfg)
 
 	require.NoError(t, err)
@@ -65,12 +55,8 @@ func TestNewRedis_WithPassword(t *testing.T) {
 	// Set a password
 	mr.RequireAuth("testpassword")
 
-	cfg := &config.RedisConfig{
-		Host:     "localhost",
-		Port:     6379,
-		Password: "testpassword",
-		DB:       0,
-	}
+	cfg := getMockRedisConfig(mr)
+	cfg.Password = "testpassword"
 
 	client, err := NewRedis(cfg)
 
@@ -88,16 +74,8 @@ func TestNewRedis_WithDatabase(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
-	cfg := &config.RedisConfig{
-		Host:     "localhost",
-		Port:     6379,
-		Password: "",
-		DB:       2, // Use database 2
-	}
-
-	_, portStr, _ := net.SplitHostPort(mr.Addr())
-	port, _ := strconv.Atoi(portStr)
-	cfg.Port = port
+	cfg := getMockRedisConfig(mr)
+	cfg.DB = 2 // Use database 2
 
 	client, err := NewRedis(cfg)
 
@@ -159,12 +137,8 @@ func TestNewRedis_InvalidPort(t *testing.T) {
 			mr := miniredis.RunT(t)
 			defer mr.Close()
 
-			cfg := &config.RedisConfig{
-				Host:     "localhost",
-				Port:     tt.port,
-				Password: "",
-				DB:       0,
-			}
+			cfg := getMockRedisConfig(mr)
+			cfg.Port = tt.port
 
 			// Adjust for miniredis port
 			if tt.port == 99999 {
@@ -200,16 +174,8 @@ func TestNewRedis_ClientConfiguration(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
-	cfg := &config.RedisConfig{
-		Host:     "localhost",
-		Port:     6379,
-		Password: "",
-		DB:       5,
-	}
-
-	_, portStr, _ := net.SplitHostPort(mr.Addr())
-	port, _ := strconv.Atoi(portStr)
-	cfg.Port = port
+	cfg := getMockRedisConfig(mr)
+	cfg.DB = 5
 
 	client, err := NewRedis(cfg)
 
@@ -238,12 +204,7 @@ func TestNewRedis_ContextTimeout(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
-	cfg := &config.RedisConfig{
-		Host:     "localhost",
-		Port:     6379,
-		Password: "",
-		DB:       0,
-	}
+	cfg := getMockRedisConfig(mr)
 
 	client, err := NewRedis(cfg)
 
@@ -301,12 +262,7 @@ func TestNewRedis_ClientPools(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
-	cfg := &config.RedisConfig{
-		Host:     "localhost",
-		Port:     6379,
-		Password: "",
-		DB:       0,
-	}
+	cfg := getMockRedisConfig(mr)
 
 	client, err := NewRedis(cfg)
 	require.NoError(t, err)
@@ -335,12 +291,7 @@ func TestNewRedis_Ping(t *testing.T) {
 	mr := miniredis.RunT(t)
 	defer mr.Close()
 
-	cfg := &config.RedisConfig{
-		Host:     "localhost",
-		Port:     6379,
-		Password: "",
-		DB:       0,
-	}
+	cfg := getMockRedisConfig(mr)
 
 	client, err := NewRedis(cfg)
 
@@ -384,12 +335,8 @@ func TestNewRedis_HostPortParsing(t *testing.T) {
 		mr := miniredis.RunT(t)
 		defer mr.Close()
 
-		cfg := &config.RedisConfig{
-			Host:     "127.0.0.1",
-			Port:     6379,
-			Password: "",
-			DB:       0,
-		}
+		cfg := getMockRedisConfig(mr)
+		cfg.Host = "127.0.0.1"
 
 		client, err := NewRedis(cfg)
 
@@ -410,12 +357,7 @@ func TestNewRedis_HostPortParsing(t *testing.T) {
 		mr := miniredis.RunT(t)
 		defer mr.Close()
 
-		cfg := &config.RedisConfig{
-			Host:     "localhost",
-			Port:     6379,
-			Password: "",
-			DB:       0,
-		}
+		cfg := getMockRedisConfig(mr)
 
 		client, err := NewRedis(cfg)
 

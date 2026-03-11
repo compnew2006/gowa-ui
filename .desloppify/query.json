@@ -1,9 +1,1940 @@
 {
-  "command": "status",
-  "overall_score": 72.2,
-  "objective_score": 85.6,
-  "strict_score": 71.4,
-  "verified_strict_score": 85.4,
+  "command": "scan",
+  "overall_score": 72.1,
+  "objective_score": 85.2,
+  "strict_score": 71.2,
+  "verified_strict_score": 85.0,
+  "prev_overall_score": 72.2,
+  "prev_objective_score": 85.6,
+  "prev_strict_score": 71.4,
+  "prev_verified_strict_score": 85.4,
+  "profile": "full",
+  "noise_budget": 10,
+  "noise_global_budget": 0,
+  "hidden_by_detector": {
+    "test_coverage": 77,
+    "structural": 69,
+    "unused": 64,
+    "review": 52,
+    "boilerplate_duplication": 27,
+    "signature": 5,
+    "dupes": 2
+  },
+  "hidden_total": 296,
+  "diff": {
+    "new": 0,
+    "auto_resolved": 0,
+    "reopened": 37,
+    "total_current": 1399,
+    "suspect_detectors": [
+      "review"
+    ],
+    "chronic_reopeners": [
+      {
+        "id": "test_coverage::internal/queue/redis.go::untested_critical",
+        "detector": "test_coverage",
+        "file": "internal/queue/redis.go",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (465 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 465,
+          "importer_count": 0,
+          "loc_weight": 21.563858652847824,
+          "complexity_score": 20
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::internal/handlers/canned_response_media.go::untested_module",
+        "detector": "test_coverage",
+        "file": "internal/handlers/canned_response_media.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (265 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 265,
+          "importer_count": 0,
+          "loc_weight": 16.278820596099706
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::internal/handlers/auth_utils.go::untested_module",
+        "detector": "test_coverage",
+        "file": "internal/handlers/auth_utils.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (177 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 177,
+          "importer_count": 0,
+          "loc_weight": 13.30413469565007
+        },
+        "status": "open",
+        "note": "Reopened (\u00d73) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 3,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::internal/handlers/cache.go::untested_critical",
+        "detector": "test_coverage",
+        "file": "internal/handlers/cache.go",
+        "tier": 2,
+        "confidence": "high",
+        "summary": "Untested critical module (823 LOC, 0 importers) \u2014 high blast radius",
+        "detail": {
+          "kind": "untested_critical",
+          "loc": 823,
+          "importer_count": 0,
+          "loc_weight": 28.687976575562104,
+          "complexity_score": 94
+        },
+        "status": "open",
+        "note": "Reopened (\u00d73) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 3,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::pkg/whatsapp/flow.go::untested_module",
+        "detector": "test_coverage",
+        "file": "pkg/whatsapp/flow.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (357 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 357,
+          "importer_count": 0,
+          "loc_weight": 18.894443627691185
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::internal/models/chatbot.go::untested_module",
+        "detector": "test_coverage",
+        "file": "internal/models/chatbot.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (312 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 312,
+          "importer_count": 0,
+          "loc_weight": 17.663521732655695
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::internal/handlers/stubs.go::untested_module",
+        "detector": "test_coverage",
+        "file": "internal/handlers/stubs.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (115 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 115,
+          "importer_count": 0,
+          "loc_weight": 10.723805294763608
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::internal/handlers/chat_assignment_reset_settings.go::untested_module",
+        "detector": "test_coverage",
+        "file": "internal/handlers/chat_assignment_reset_settings.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (203 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 203,
+          "importer_count": 0,
+          "loc_weight": 14.247806848775006
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::pkg/whatsmeow/metrics.go::untested_module",
+        "detector": "test_coverage",
+        "file": "pkg/whatsmeow/metrics.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (139 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 139,
+          "importer_count": 0,
+          "loc_weight": 11.789826122551595
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::internal/handlers/app.go::untested_module",
+        "detector": "test_coverage",
+        "file": "internal/handlers/app.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (228 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 228,
+          "importer_count": 0,
+          "loc_weight": 15.0996688705415
+        },
+        "status": "open",
+        "note": "Reopened (\u00d74) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 4,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::internal/handlers/activity_service.go::untested_module",
+        "detector": "test_coverage",
+        "file": "internal/handlers/activity_service.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (350 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 350,
+          "importer_count": 0,
+          "loc_weight": 18.708286933869708
+        },
+        "status": "open",
+        "note": "Reopened (\u00d75) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 5,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "test_coverage::internal/handlers/business_profile.go::untested_module",
+        "detector": "test_coverage",
+        "file": "internal/handlers/business_profile.go",
+        "tier": 3,
+        "confidence": "high",
+        "summary": "Untested module (166 LOC, 0 importers)",
+        "detail": {
+          "kind": "untested_module",
+          "loc": 166,
+          "importer_count": 0,
+          "loc_weight": 12.884098726725126
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T12:10:56+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/agent_analytics.go::0611627aeb225504",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/agent_analytics.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 8 files (window 7 lines): internal/handlers/agent_analytics.go:190, internal/handlers/apikeys.go:52, internal/handlers/conversation_notes.go:30, internal/handlers/organization.go:677, +4 more",
+        "detail": {
+          "distinct_files": 8,
+          "window_size": 7,
+          "locations": [
+            {
+              "file": "internal/handlers/agent_analytics.go",
+              "line": 190
+            },
+            {
+              "file": "internal/handlers/apikeys.go",
+              "line": 52
+            },
+            {
+              "file": "internal/handlers/conversation_notes.go",
+              "line": 30
+            },
+            {
+              "file": "internal/handlers/organization.go",
+              "line": 677
+            },
+            {
+              "file": "internal/handlers/tags.go",
+              "line": 27
+            },
+            {
+              "file": "internal/handlers/teams.go",
+              "line": 140
+            },
+            {
+              "file": "internal/handlers/users.go",
+              "line": 108
+            },
+            {
+              "file": "internal/handlers/webhooks.go",
+              "line": 120
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, userID, err := a.getOrgAndUserID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/accounts.go::4f72bed80d157da6",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/accounts.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 8 files (window 10 lines): internal/handlers/accounts.go:57, internal/handlers/auth_handlers.go:94, internal/handlers/business_profile.go:11, internal/handlers/custom_actions.go:69, +4 more",
+        "detail": {
+          "distinct_files": 8,
+          "window_size": 10,
+          "locations": [
+            {
+              "file": "internal/handlers/accounts.go",
+              "line": 57
+            },
+            {
+              "file": "internal/handlers/auth_handlers.go",
+              "line": 94
+            },
+            {
+              "file": "internal/handlers/business_profile.go",
+              "line": 11
+            },
+            {
+              "file": "internal/handlers/custom_actions.go",
+              "line": 69
+            },
+            {
+              "file": "internal/handlers/sso_handlers.go",
+              "line": 291
+            },
+            {
+              "file": "internal/handlers/statuses.go",
+              "line": 69
+            },
+            {
+              "file": "internal/handlers/users.go",
+              "line": 195
+            },
+            {
+              "file": "internal/handlers/webhooks.go",
+              "line": 120
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, userID, err := a.getOrgAndUserID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/agent_analytics.go::70bca47dd637fe51",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/agent_analytics.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 4 files (window 7 lines): internal/handlers/agent_analytics.go:250, internal/handlers/contacts_management.go:195, internal/handlers/contacts_messaging.go:740, internal/handlers/custom_actions.go:279",
+        "detail": {
+          "distinct_files": 4,
+          "window_size": 7,
+          "locations": [
+            {
+              "file": "internal/handlers/agent_analytics.go",
+              "line": 250
+            },
+            {
+              "file": "internal/handlers/contacts_management.go",
+              "line": 195
+            },
+            {
+              "file": "internal/handlers/contacts_messaging.go",
+              "line": 740
+            },
+            {
+              "file": "internal/handlers/custom_actions.go",
+              "line": 279
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, userID, err := a.getOrgAndUserID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/analytics_instance_filter.go::0378cff1f16f4c09",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/analytics_instance_filter.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 3 files (window 7 lines): internal/handlers/analytics_instance_filter.go:24, internal/handlers/contact_filters.go:143, internal/handlers/user_send_restrictions.go:53",
+        "detail": {
+          "distinct_files": 3,
+          "window_size": 7,
+          "locations": [
+            {
+              "file": "internal/handlers/analytics_instance_filter.go",
+              "line": 24
+            },
+            {
+              "file": "internal/handlers/contact_filters.go",
+              "line": 143
+            },
+            {
+              "file": "internal/handlers/user_send_restrictions.go",
+              "line": 53
+            }
+          ],
+          "sample": [
+            ")",
+            "\t}",
+            "",
+            "\tvar instance models.WhatsAppInstance"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/canned_responses.go::75528ee5972bee43",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/canned_responses.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 3 files (window 7 lines): internal/handlers/canned_responses.go:154, internal/handlers/catalog.go:147, internal/handlers/templates.go:164",
+        "detail": {
+          "distinct_files": 3,
+          "window_size": 7,
+          "locations": [
+            {
+              "file": "internal/handlers/canned_responses.go",
+              "line": 154
+            },
+            {
+              "file": "internal/handlers/catalog.go",
+              "line": 147
+            },
+            {
+              "file": "internal/handlers/templates.go",
+              "line": 164
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, err := a.getOrgID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/instances.go::01e480fec54064d9",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/instances.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 9 lines): internal/handlers/instances.go:180, internal/handlers/notifications.go:41",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 9,
+          "locations": [
+            {
+              "file": "internal/handlers/instances.go",
+              "line": 180
+            },
+            {
+              "file": "internal/handlers/notifications.go",
+              "line": 41
+            }
+          ],
+          "sample": [
+            "(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")",
+            "\t}"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/contacts_management.go::0566676a93499bb3",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/contacts_management.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 8 lines): internal/handlers/contacts_management.go:565, internal/handlers/meta_analytics.go:44",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 8,
+          "locations": [
+            {
+              "file": "internal/handlers/contacts_management.go",
+              "line": 565
+            },
+            {
+              "file": "internal/handlers/meta_analytics.go",
+              "line": 44
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, userID, err := a.getOrgAndUserID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/campaign_policy.go::09292801a444277c",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/campaign_policy.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 19 lines): internal/handlers/campaign_policy.go:88, internal/handlers/instance_auto_campaign_worker.go:221",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 19,
+          "locations": [
+            {
+              "file": "internal/handlers/campaign_policy.go",
+              "line": 88
+            },
+            {
+              "file": "internal/handlers/instance_auto_campaign_worker.go",
+              "line": 221
+            }
+          ],
+          "sample": [
+            "return err",
+            "\t}",
+            "",
+            "\tif instance.Status != models.InstanceStatusConnected {"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/campaign_policy.go::0be01ad2d9a280b1",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/campaign_policy.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 6 lines): internal/handlers/campaign_policy.go:78, internal/worker/send_policy.go:85",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 6,
+          "locations": [
+            {
+              "file": "internal/handlers/campaign_policy.go",
+              "line": 78
+            },
+            {
+              "file": "internal/worker/send_policy.go",
+              "line": 85
+            }
+          ],
+          "sample": [
+            ".DB.",
+            "\t\tSelect(\"id\", \"organization_id\", \"status\", \"send_blocked_until\", \"send_block_reason\").",
+            "\t\tWhere(\"id = ? AND organization_id = ?\", instanceID, orgID).",
+            "\t\tFirst(&instance).Error; err != nil {"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/catalog.go::1bed76277b33a897",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/catalog.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 7 lines): internal/handlers/catalog.go:400, internal/handlers/templates.go:164",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 7,
+          "locations": [
+            {
+              "file": "internal/handlers/catalog.go",
+              "line": 400
+            },
+            {
+              "file": "internal/handlers/templates.go",
+              "line": 164
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, err := a.getOrgID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/canned_response_send.go::294edbca619b9d4c",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/canned_response_send.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 10 lines): internal/handlers/canned_response_send.go:54, internal/handlers/contacts_messaging.go:759",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 10,
+          "locations": [
+            {
+              "file": "internal/handlers/canned_response_send.go",
+              "line": 54
+            },
+            {
+              "file": "internal/handlers/contacts_messaging.go",
+              "line": 759
+            }
+          ],
+          "sample": [
+            "var contact models.Contact",
+            "\tcontactQuery := a.DB.Where(\"id = ? AND organization_id = ?\", contactID, orgID)",
+            "\tif a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {",
+            "\t\tcontactQuery = applyAgentVisibleChatAccessFilter(contactQuery, userID)"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/group_message_helpers.go::309a009aa49eb5af",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/group_message_helpers.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 16 lines): internal/handlers/group_message_helpers.go:92, pkg/whatsmeow/inbound_contact.go:224",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 16,
+          "locations": [
+            {
+              "file": "internal/handlers/group_message_helpers.go",
+              "line": 92
+            },
+            {
+              "file": "pkg/whatsmeow/inbound_contact.go",
+              "line": 224
+            }
+          ],
+          "sample": [
+            "(metadata models.JSONB, key string) string {",
+            "\tif metadata == nil {",
+            "\t\treturn \"\"",
+            "\t}"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/roles.go::30f566c6bcea885c",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/roles.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 7 lines): internal/handlers/roles.go:95, internal/handlers/templates.go:164",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 7,
+          "locations": [
+            {
+              "file": "internal/handlers/roles.go",
+              "line": 95
+            },
+            {
+              "file": "internal/handlers/templates.go",
+              "line": 164
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, err := a.getOrgID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/contacts_management.go::3a08546139f1a1cf",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/contacts_management.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 11 lines): internal/handlers/contacts_management.go:397, internal/handlers/contacts_messaging.go:60",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 11,
+          "locations": [
+            {
+              "file": "internal/handlers/contacts_management.go",
+              "line": 397
+            },
+            {
+              "file": "internal/handlers/contacts_messaging.go",
+              "line": 60
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, userID, err := a.getOrgAndUserID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/contacts_messaging.go::44b8e597a960ee94",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/contacts_messaging.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 18 lines): internal/handlers/contacts_messaging.go:547, internal/handlers/media.go:174",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 18,
+          "locations": [
+            {
+              "file": "internal/handlers/contacts_messaging.go",
+              "line": 547
+            },
+            {
+              "file": "internal/handlers/media.go",
+              "line": 174
+            }
+          ],
+          "sample": [
+            "var subdir string",
+            "\tswitch {",
+            "\tcase strings.HasPrefix(mimeType, \"image/\"):",
+            "\t\tsubdir = \"images\""
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/auth_handlers.go::4eac840e5ccf552d",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/auth_handlers.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 14 lines): internal/handlers/auth_handlers.go:393, internal/handlers/users.go:656",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 14,
+          "locations": [
+            {
+              "file": "internal/handlers/auth_handlers.go",
+              "line": 393
+            },
+            {
+              "file": "internal/handlers/users.go",
+              "line": 656
+            }
+          ],
+          "sample": [
+            "permissions := make([]models.Permission, 0, len(cachedPerms))",
+            "\t\t\t\tfor _, p := range cachedPerms {",
+            "\t\t\t\t\tparts := splitPermission(p)",
+            "\t\t\t\t\tif len(parts) == 2 {"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/agent_analytics.go::6bd6351271e8b7df",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/agent_analytics.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 16 lines): internal/handlers/agent_analytics.go:85, internal/handlers/analytics.go:44",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 16,
+          "locations": [
+            {
+              "file": "internal/handlers/agent_analytics.go",
+              "line": 85
+            },
+            {
+              "file": "internal/handlers/analytics.go",
+              "line": 44
+            }
+          ],
+          "sample": [
+            ")",
+            "\tvar periodStart, periodEnd time.Time",
+            "",
+            "\tif fromStr != \"\" && toStr != \"\" {"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/chat_assignment_reset_worker.go::6cb1572043f9851d",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/chat_assignment_reset_worker.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 14 lines): internal/handlers/chat_assignment_reset_worker.go:40, internal/handlers/instance_auto_campaign_worker.go:38",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 14,
+          "locations": [
+            {
+              "file": "internal/handlers/chat_assignment_reset_worker.go",
+              "line": 40
+            },
+            {
+              "file": "internal/handlers/instance_auto_campaign_worker.go",
+              "line": 38
+            }
+          ],
+          "sample": [
+            ") Start(ctx context.Context) {",
+            "\tw.mu.Lock()",
+            "\tw.ticker = time.NewTicker(w.interval)",
+            "\tticker := w.ticker"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/activity_service.go::72d41a1aa9c29fcb",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/activity_service.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 13 lines): internal/handlers/activity_service.go:76, internal/middleware/ratelimit.go:88",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 13,
+          "locations": [
+            {
+              "file": "internal/handlers/activity_service.go",
+              "line": 76
+            },
+            {
+              "file": "internal/middleware/ratelimit.go",
+              "line": 88
+            }
+          ],
+          "sample": [
+            "if xff := string(r.RequestCtx.Request.Header.Peek(\"X-Forwarded-For\")); xff != \"\" {",
+            "\t\t\tparts := strings.SplitN(xff, \",\", 2)",
+            "\t\t\tip := strings.TrimSpace(parts[0])",
+            "\t\t\tif ip != \"\" {"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::pkg/whatsmeow/instance_auto_reject_settings.go::84551bbb0e67e320",
+        "detector": "boilerplate_duplication",
+        "file": "pkg/whatsmeow/instance_auto_reject_settings.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 19 lines): pkg/whatsmeow/instance_auto_reject_settings.go:470, pkg/whatsmeow/instance_settings.go:60",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 19,
+          "locations": [
+            {
+              "file": "pkg/whatsmeow/instance_auto_reject_settings.go",
+              "line": 470
+            },
+            {
+              "file": "pkg/whatsmeow/instance_settings.go",
+              "line": 60
+            }
+          ],
+          "sample": [
+            "switch value := raw.(type) {",
+            "\tcase bool:",
+            "\t\treturn value",
+            "\tcase string:"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/statuses.go::8e6d51159314011b",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/statuses.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 21 lines): internal/handlers/statuses.go:624, pkg/whatsmeow/reply_context.go:196",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 21,
+          "locations": [
+            {
+              "file": "internal/handlers/statuses.go",
+              "line": 624
+            },
+            {
+              "file": "pkg/whatsmeow/reply_context.go",
+              "line": 196
+            }
+          ],
+          "sample": [
+            "(status models.WhatsAppStatus) string {",
+            "\tmediaURL := strings.TrimSpace(status.MediaURL)",
+            "\tif mediaURL == \"\" {",
+            "\t\treturn \"\""
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/organization.go::93c17376608e875b",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/organization.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 14 lines): internal/handlers/organization.go:765, internal/handlers/users.go:255",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 14,
+          "locations": [
+            {
+              "file": "internal/handlers/organization.go",
+              "line": 765
+            },
+            {
+              "file": "internal/handlers/users.go",
+              "line": 255
+            }
+          ],
+          "sample": [
+            ")",
+            "\t}",
+            "",
+            "\t// Determine role"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/contacts_messaging.go::976c22c80beb178b",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/contacts_messaging.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 13 lines): internal/handlers/contacts_messaging.go:371, internal/handlers/import_export.go:358",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 13,
+          "locations": [
+            {
+              "file": "internal/handlers/contacts_messaging.go",
+              "line": 371
+            },
+            {
+              "file": "internal/handlers/import_export.go",
+              "line": 358
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, userID, err := a.getOrgAndUserID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/worker/campaign_delay.go::9f1b21753548ad97",
+        "detector": "boilerplate_duplication",
+        "file": "internal/worker/campaign_delay.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 15 lines): internal/worker/campaign_delay.go:149, pkg/whatsmeow/typing_indicator.go:168",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 15,
+          "locations": [
+            {
+              "file": "internal/worker/campaign_delay.go",
+              "line": 149
+            },
+            {
+              "file": "pkg/whatsmeow/typing_indicator.go",
+              "line": 168
+            }
+          ],
+          "sample": [
+            "(ctx context.Context, duration time.Duration) error {",
+            "\tif duration <= 0 {",
+            "\t\treturn nil",
+            "\t}"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/canned_response_send.go::a1d4fed00942fb89",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/canned_response_send.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 39 lines): internal/handlers/canned_response_send.go:59, internal/handlers/contacts_messaging.go:82",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 39,
+          "locations": [
+            {
+              "file": "internal/handlers/canned_response_send.go",
+              "line": 59
+            },
+            {
+              "file": "internal/handlers/contacts_messaging.go",
+              "line": 82
+            }
+          ],
+          "sample": [
+            ".First(&contact).Error; err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusNotFound, \"Contact not found\", nil, \"\")",
+            "\t}",
+            ""
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/auth_handlers.go::a9f452e0ecb969ac",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/auth_handlers.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 9 lines): internal/handlers/auth_handlers.go:367, internal/handlers/users.go:687",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 9,
+          "locations": [
+            {
+              "file": "internal/handlers/auth_handlers.go",
+              "line": 367
+            },
+            {
+              "file": "internal/handlers/users.go",
+              "line": 687
+            }
+          ],
+          "sample": [
+            ", nil, \"\")",
+            "\t}",
+            "",
+            "\tvar user models.User"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/activity_logs.go::b23ddb87fb80d261",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/activity_logs.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 11 lines): internal/handlers/activity_logs.go:22, internal/handlers/chat_lifecycle.go:145",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 11,
+          "locations": [
+            {
+              "file": "internal/handlers/activity_logs.go",
+              "line": 22
+            },
+            {
+              "file": "internal/handlers/chat_lifecycle.go",
+              "line": 145
+            }
+          ],
+          "sample": [
+            "(userID, orgID uuid.UUID) bool {",
+            "\tvar user models.User",
+            "\tif err := a.DB.Select(\"is_super_admin\").Where(\"id = ?\", userID).First(&user).Error; err == nil && user.IsSuperAdmin {",
+            "\t\treturn true"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/analytics_instance_filter.go::b48acc8aaeec5b8f",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/analytics_instance_filter.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 9 lines): internal/handlers/analytics_instance_filter.go:12, internal/handlers/user_send_restrictions.go:45",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 9,
+          "locations": [
+            {
+              "file": "internal/handlers/analytics_instance_filter.go",
+              "line": 12
+            },
+            {
+              "file": "internal/handlers/user_send_restrictions.go",
+              "line": 45
+            }
+          ],
+          "sample": [
+            "(orgID uuid.UUID, raw string) (*uuid.UUID, error) {",
+            "\ttrimmed := strings.TrimSpace(raw)",
+            "\tif trimmed == \"\" {",
+            "\t\treturn nil, nil"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/message_template_placeholders.go::b87acbbe27e6dd8a",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/message_template_placeholders.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 16 lines): internal/handlers/message_template_placeholders.go:85, pkg/whatsmeow/auto_reject_message_template.go:48",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 16,
+          "locations": [
+            {
+              "file": "internal/handlers/message_template_placeholders.go",
+              "line": 85
+            },
+            {
+              "file": "pkg/whatsmeow/auto_reject_message_template.go",
+              "line": 48
+            }
+          ],
+          "sample": [
+            ") string {",
+            "\treturn strings.NewReplacer(",
+            "\t\t\"{{customer_name}}\", data.CustomerName,",
+            "\t\t\"{{chat_id}}\", data.ChatID,"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::pkg/whatsapp/client.go::bcf85fcbc1e6a2b6",
+        "detector": "boilerplate_duplication",
+        "file": "pkg/whatsapp/client.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 14 lines): pkg/whatsapp/client.go:353, pkg/whatsapp/message.go:38",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 14,
+          "locations": [
+            {
+              "file": "pkg/whatsapp/client.go",
+              "line": 353
+            },
+            {
+              "file": "pkg/whatsapp/message.go",
+              "line": 38
+            }
+          ],
+          "sample": [
+            ", err)",
+            "\t}",
+            "",
+            "\tvar resp MetaAPIResponse"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/instance_pairing.go::c269a118427932d7",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/instance_pairing.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 10 lines): internal/handlers/instance_pairing.go:10, pkg/whatsmeow/pairing.go:141",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 10,
+          "locations": [
+            {
+              "file": "internal/handlers/instance_pairing.go",
+              "line": 10
+            },
+            {
+              "file": "pkg/whatsmeow/pairing.go",
+              "line": 141
+            }
+          ],
+          "sample": [
+            "(phone string) string {",
+            "\tvar b strings.Builder",
+            "\tb.Grow(len(phone))",
+            "\tfor _, r := range phone {"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/organization.go::d15cff447ebe689a",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/organization.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 7 lines): internal/handlers/organization.go:867, internal/handlers/users.go:261",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 7,
+          "locations": [
+            {
+              "file": "internal/handlers/organization.go",
+              "line": 867
+            },
+            {
+              "file": "internal/handlers/users.go",
+              "line": 261
+            }
+          ],
+          "sample": [
+            "// Validate role exists and belongs to org",
+            "\tvar role models.CustomRole",
+            "\tif err := a.DB.Where(\"id = ? AND organization_id = ?\", req.RoleID, orgID).First(&role).Error; err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusBadRequest, \"Invalid role\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/worker/worker.go::d35466a4e7fe7fe7",
+        "detector": "boilerplate_duplication",
+        "file": "internal/worker/worker.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 7 lines): internal/worker/worker.go:332, pkg/whatsmeow/inbound_media_recovery.go:43",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 7,
+          "locations": [
+            {
+              "file": "internal/worker/worker.go",
+              "line": 332
+            },
+            {
+              "file": "pkg/whatsmeow/inbound_media_recovery.go",
+              "line": 43
+            }
+          ],
+          "sample": [
+            ").",
+            "\t\tWhere(\"id = ? AND organization_id = ?\", job.MessageID, job.OrganizationID).",
+            "\t\tFirst(&message).Error; err != nil {",
+            "\t\tif errors.Is(err, gorm.ErrRecordNotFound) {"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/roles.go::e9123d6a09492ab7",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/roles.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 10 lines): internal/handlers/roles.go:42, internal/handlers/teams.go:51",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 10,
+          "locations": [
+            {
+              "file": "internal/handlers/roles.go",
+              "line": 42
+            },
+            {
+              "file": "internal/handlers/teams.go",
+              "line": 51
+            }
+          ],
+          "sample": [
+            "(r *fastglue.Request) error {",
+            "\torgID, userID, err := a.getOrgAndUserID(r)",
+            "\tif err != nil {",
+            "\t\treturn r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\")"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::pkg/whatsmeow/inbound_media_recovery.go::ea9be5a11464c5b7",
+        "detector": "boilerplate_duplication",
+        "file": "pkg/whatsmeow/inbound_media_recovery.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 10 lines): pkg/whatsmeow/inbound_media_recovery.go:278, pkg/whatsmeow/message_persist.go:407",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 10,
+          "locations": [
+            {
+              "file": "pkg/whatsmeow/inbound_media_recovery.go",
+              "line": 278
+            },
+            {
+              "file": "pkg/whatsmeow/message_persist.go",
+              "line": 407
+            }
+          ],
+          "sample": [
+            "}",
+            "",
+            "\tif err := cm.db.WithContext(ctx).",
+            "\t\tModel(&models.Message{})."
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/contacts_management.go::ecb8128b86bfa27c",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/contacts_management.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 13 lines): internal/handlers/contacts_management.go:405, internal/handlers/contacts_messaging.go:74",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 13,
+          "locations": [
+            {
+              "file": "internal/handlers/contacts_management.go",
+              "line": 405
+            },
+            {
+              "file": "internal/handlers/contacts_messaging.go",
+              "line": 74
+            }
+          ],
+          "sample": [
+            "}",
+            "",
+            "\t// Agent-role users keep chat-scoped visibility even though they carry contacts:read.",
+            "\tvar contact models.Contact"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "boilerplate_duplication::internal/handlers/websocket.go::f5ae96d93d7266d2",
+        "detector": "boilerplate_duplication",
+        "file": "internal/handlers/websocket.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Boilerplate block repeated across 2 files (window 6 lines): internal/handlers/websocket.go:120, internal/middleware/middleware.go:305",
+        "detail": {
+          "distinct_files": 2,
+          "window_size": 6,
+          "locations": [
+            {
+              "file": "internal/handlers/websocket.go",
+              "line": 120
+            },
+            {
+              "file": "internal/middleware/middleware.go",
+              "line": 305
+            }
+          ],
+          "sample": [
+            "JWTClaims{}, func(token *jwt.Token) (interface{}, error) {",
+            "\t\tsigningMethod, ok := token.Method.(*jwt.SigningMethodHMAC)",
+            "\t\tif !ok || signingMethod.Alg() != jwt.SigningMethodHS256.Alg() {",
+            "\t\t\treturn nil, fmt.Errorf(\"unexpected JWT signing method: %s\", token.Method.Alg())"
+          ]
+        },
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was auto_resolved)",
+        "first_seen": "2026-03-10T12:11:11+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "production",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "unused::internal/handlers/agent_analytics_test.go::unused_import::7",
+        "detector": "unused",
+        "file": "internal/handlers/agent_analytics_test.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Unused import: com/compnew2006/whatomate/internal/handlers",
+        "detail": {},
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T13:34:41+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "test",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      },
+      {
+        "id": "unused::internal/handlers/agent_analytics_test.go::unused_import::8",
+        "detector": "unused",
+        "file": "internal/handlers/agent_analytics_test.go",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Unused import: com/compnew2006/whatomate/internal/models",
+        "detail": {},
+        "status": "open",
+        "note": "Reopened (\u00d72) \u2014 reappeared in scan (was fixed)",
+        "first_seen": "2026-03-10T13:34:41+00:00",
+        "last_seen": "2026-03-11T09:35:15+00:00",
+        "resolved_at": null,
+        "reopen_count": 2,
+        "lang": "go",
+        "zone": "test",
+        "suppressed": false,
+        "suppressed_at": null,
+        "suppression_pattern": null
+      }
+    ],
+    "skipped_other_lang": 0,
+    "resolved_out_of_scope": 0,
+    "ignored": 0,
+    "ignore_patterns": 0,
+    "raw_issues": 1399,
+    "suppressed_pct": 0.0
+  },
+  "stats": {
+    "total": 1885,
+    "auto_resolved": 422,
+    "false_positive": 0,
+    "fixed": 2,
+    "open": 374,
+    "wontfix": 1087,
+    "by_tier": {
+      "1": {
+        "auto_resolved": 17,
+        "false_positive": 0,
+        "fixed": 1,
+        "open": 30,
+        "wontfix": 0
+      },
+      "2": {
+        "auto_resolved": 8,
+        "false_positive": 0,
+        "fixed": 0,
+        "open": 55,
+        "wontfix": 2
+      },
+      "3": {
+        "auto_resolved": 217,
+        "false_positive": 0,
+        "fixed": 0,
+        "open": 288,
+        "wontfix": 1067
+      },
+      "4": {
+        "auto_resolved": 180,
+        "false_positive": 0,
+        "fixed": 1,
+        "open": 1,
+        "wontfix": 18
+      }
+    }
+  },
+  "open_scope": {
+    "in_scope": 374,
+    "out_of_scope": 0,
+    "global": 374
+  },
+  "warnings": [
+    "37 issues reopened \u2014 was a previous fix reverted?",
+    "\u27f3 51 chronic reopeners \u2014 run `desloppify show --chronic` to see them.",
+    "Coverage reduced (golangci_lint): golangci-lint tooling unavailable (parser_error) Repercussion: Detector results may be under-reported for this scan. Fix: Install/fix the tool command and rerun scan."
+  ],
   "dimension_scores": {
     "Code quality": {
       "score": 84.4,
@@ -60,18 +1991,24 @@
       }
     },
     "Duplication": {
-      "score": 99.3,
-      "strict": 99.3,
-      "verified_strict_score": 99.3,
-      "checks": 1417,
-      "failing": 12,
+      "score": 97.5,
+      "strict": 97.5,
+      "verified_strict_score": 97.5,
+      "checks": 1474,
+      "failing": 49,
       "tier": 3,
       "detectors": {
         "dupes": {
-          "potential": 1417,
-          "pass_rate": 0.9925194071983063,
+          "potential": 1418,
+          "pass_rate": 0.9925246826516221,
           "failing": 12,
           "weighted_failures": 10.600000000000001
+        },
+        "boilerplate_duplication": {
+          "potential": 56,
+          "pass_rate": 0.5375000000000003,
+          "failing": 37,
+          "weighted_failures": 25.899999999999984
         }
       }
     },
@@ -79,15 +2016,15 @@
       "score": 58.6,
       "strict": 49.1,
       "verified_strict_score": 58.6,
-      "checks": 2872,
+      "checks": 2875,
       "failing": 87,
       "tier": 4,
       "detectors": {
         "test_coverage": {
-          "potential": 2693,
-          "pass_rate": 0.558981094165957,
+          "potential": 2696,
+          "pass_rate": 0.5590160127777641,
           "failing": 87,
-          "weighted_failures": 1187.6639134110778
+          "weighted_failures": 1188.8928295511478
         },
         "subjective_review": {
           "potential": 179,
@@ -518,562 +2455,11 @@
       }
     }
   },
-  "scorecard_dimensions": [
-    {
-      "name": "File health",
-      "score": 85.8,
-      "strict": 85.8,
-      "checks": 182,
-      "failing": 37,
-      "tier": 3,
-      "subjective": false
-    },
-    {
-      "name": "AI generated debt",
-      "score": 68.0,
-      "strict": 68.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "ai_generated_debt"
-      ]
-    },
-    {
-      "name": "API coherence",
-      "score": 72.0,
-      "strict": 72.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "api_surface_coherence"
-      ]
-    },
-    {
-      "name": "Abstraction fit",
-      "score": 54.0,
-      "strict": 54.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "abstraction_fitness"
-      ]
-    },
-    {
-      "name": "Auth consistency",
-      "score": 68.0,
-      "strict": 68.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "authorization_consistency"
-      ]
-    },
-    {
-      "name": "Code quality",
-      "score": 84.4,
-      "strict": 84.4,
-      "checks": 27,
-      "failing": 6,
-      "tier": 3,
-      "subjective": false
-    },
-    {
-      "name": "Convention drift",
-      "score": 68.0,
-      "strict": 68.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "convention_outlier"
-      ]
-    },
-    {
-      "name": "Cross-module arch",
-      "score": 72.0,
-      "strict": 72.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "cross_module_architecture"
-      ]
-    },
-    {
-      "name": "Dep health",
-      "score": 85.0,
-      "strict": 85.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "dependency_health"
-      ]
-    },
-    {
-      "name": "Design coherence",
-      "score": 55.0,
-      "strict": 55.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "design_coherence"
-      ]
-    },
-    {
-      "name": "Duplication",
-      "score": 99.3,
-      "strict": 99.3,
-      "checks": 1417,
-      "failing": 12,
-      "tier": 3,
-      "subjective": false
-    },
-    {
-      "name": "Elegance",
-      "score": 63.7,
-      "strict": 63.7,
-      "checks": 30,
-      "failing": 7,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "high_level_elegance",
-        "low_level_elegance",
-        "mid_level_elegance"
-      ]
-    },
-    {
-      "name": "Error consistency",
-      "score": 58.0,
-      "strict": 58.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "error_consistency"
-      ]
-    },
-    {
-      "name": "Init coupling",
-      "score": 95.0,
-      "strict": 95.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "initialization_coupling"
-      ]
-    },
-    {
-      "name": "Naming quality",
-      "score": 72.0,
-      "strict": 72.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "naming_quality"
-      ]
-    },
-    {
-      "name": "Security",
-      "score": 100.0,
-      "strict": 98.9,
-      "checks": 182,
-      "failing": 0,
-      "tier": 4,
-      "subjective": false
-    },
-    {
-      "name": "Stale migration",
-      "score": 85.0,
-      "strict": 85.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "incomplete_migration"
-      ]
-    },
-    {
-      "name": "Structure nav",
-      "score": 62.0,
-      "strict": 62.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "package_organization"
-      ]
-    },
-    {
-      "name": "Test health",
-      "score": 58.6,
-      "strict": 49.1,
-      "checks": 2872,
-      "failing": 87,
-      "tier": 4,
-      "subjective": false
-    },
-    {
-      "name": "Test strategy",
-      "score": 45.0,
-      "strict": 45.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "test_strategy"
-      ]
-    }
-  ],
-  "subjective_measures": [
-    {
-      "name": "AI generated debt",
-      "score": 68.0,
-      "strict": 68.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "ai_generated_debt"
-      ]
-    },
-    {
-      "name": "API coherence",
-      "score": 72.0,
-      "strict": 72.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "api_surface_coherence"
-      ]
-    },
-    {
-      "name": "Abstraction fit",
-      "score": 54.0,
-      "strict": 54.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "abstraction_fitness"
-      ]
-    },
-    {
-      "name": "Auth consistency",
-      "score": 68.0,
-      "strict": 68.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "authorization_consistency"
-      ]
-    },
-    {
-      "name": "Convention drift",
-      "score": 68.0,
-      "strict": 68.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "convention_outlier"
-      ]
-    },
-    {
-      "name": "Cross-module arch",
-      "score": 72.0,
-      "strict": 72.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "cross_module_architecture"
-      ]
-    },
-    {
-      "name": "Dep health",
-      "score": 85.0,
-      "strict": 85.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "dependency_health"
-      ]
-    },
-    {
-      "name": "Design coherence",
-      "score": 55.0,
-      "strict": 55.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "design_coherence"
-      ]
-    },
-    {
-      "name": "Elegance",
-      "score": 63.7,
-      "strict": 63.7,
-      "checks": 30,
-      "failing": 7,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "high_level_elegance",
-        "low_level_elegance",
-        "mid_level_elegance"
-      ]
-    },
-    {
-      "name": "Error consistency",
-      "score": 58.0,
-      "strict": 58.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "error_consistency"
-      ]
-    },
-    {
-      "name": "Init coupling",
-      "score": 95.0,
-      "strict": 95.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "initialization_coupling"
-      ]
-    },
-    {
-      "name": "Naming quality",
-      "score": 72.0,
-      "strict": 72.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "naming_quality"
-      ]
-    },
-    {
-      "name": "Stale migration",
-      "score": 85.0,
-      "strict": 85.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "incomplete_migration"
-      ]
-    },
-    {
-      "name": "Structure nav",
-      "score": 62.0,
-      "strict": 62.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "package_organization"
-      ]
-    },
-    {
-      "name": "Test strategy",
-      "score": 45.0,
-      "strict": 45.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "subjective": true,
-      "placeholder": false,
-      "cli_keys": [
-        "test_strategy"
-      ]
-    }
-  ],
-  "stats": {
-    "total": 1885,
-    "auto_resolved": 459,
-    "false_positive": 0,
-    "fixed": 2,
-    "open": 337,
-    "wontfix": 1087,
-    "by_tier": {
-      "1": {
-        "auto_resolved": 17,
-        "false_positive": 0,
-        "fixed": 1,
-        "open": 30,
-        "wontfix": 0
-      },
-      "2": {
-        "auto_resolved": 8,
-        "false_positive": 0,
-        "fixed": 0,
-        "open": 55,
-        "wontfix": 2
-      },
-      "3": {
-        "auto_resolved": 254,
-        "false_positive": 0,
-        "fixed": 0,
-        "open": 251,
-        "wontfix": 1067
-      },
-      "4": {
-        "auto_resolved": 180,
-        "false_positive": 0,
-        "fixed": 1,
-        "open": 1,
-        "wontfix": 18
-      }
-    }
-  },
-  "scan_count": 14,
-  "last_scan": "2026-03-11T08:46:59+00:00",
-  "by_tier": {
-    "1": {
-      "auto_resolved": 17,
-      "false_positive": 0,
-      "fixed": 1,
-      "open": 30,
-      "wontfix": 0
-    },
-    "2": {
-      "auto_resolved": 8,
-      "false_positive": 0,
-      "fixed": 0,
-      "open": 55,
-      "wontfix": 2
-    },
-    "3": {
-      "auto_resolved": 254,
-      "false_positive": 0,
-      "fixed": 0,
-      "open": 251,
-      "wontfix": 1067
-    },
-    "4": {
-      "auto_resolved": 180,
-      "false_positive": 0,
-      "fixed": 1,
-      "open": 1,
-      "wontfix": 18
-    }
-  },
-  "ignores": [],
-  "suppression": {
-    "last_ignored": 0,
-    "last_raw_issues": 1362,
-    "last_suppressed_pct": 0.0,
-    "last_ignore_patterns": 0,
-    "recent_scans": 5,
-    "recent_ignored": 0,
-    "recent_raw_issues": 6945,
-    "recent_suppressed_pct": 0.0
-  },
-  "potentials": {
-    "go": {
-      "structural": 182,
-      "flat_dirs": 22,
-      "responsibility_cohesion": 5,
-      "unused_imports": 1141,
-      "signature": 15,
-      "test_coverage": 2693,
-      "security": 182,
-      "subjective_review": 179,
-      "boilerplate_duplication": 0,
-      "dupes": 1417,
-      "stale_wontfix": 1087
-    }
-  },
-  "codebase_metrics": {
-    "go": {
-      "total_files": 317,
-      "total_loc": 110691,
-      "total_directories": 18
-    }
-  },
-  "open_scope": {
-    "in_scope": 337,
-    "out_of_scope": 0,
-    "global": 337
-  },
   "score_breakdown": {
-    "overall_score": 72.2,
+    "overall_score": 72.1,
     "mechanical_fraction": 0.4,
     "subjective_fraction": 0.6,
-    "mechanical_avg": 85.60123329907503,
+    "mechanical_avg": 85.23124357656732,
     "subjective_avg": 63.31707317073171,
     "entries": [
       {
@@ -1118,21 +2504,21 @@
       {
         "name": "Duplication",
         "pool": "mechanical",
-        "score": 99.3,
-        "checks": 1417.0,
+        "score": 97.5,
+        "checks": 1474.0,
         "sample_factor": 1.0,
         "configured_weight": 1.0,
         "effective_weight": 1.0,
         "pool_share": 0.20554984583761562,
         "overall_per_point": 0.08221993833504626,
-        "overall_contribution": 8.164439876670093,
-        "overall_drag": 0.05755395683453261
+        "overall_contribution": 8.01644398766701,
+        "overall_drag": 0.20554984583761565
       },
       {
         "name": "Test health",
         "pool": "mechanical",
         "score": 58.6,
-        "checks": 2872.0,
+        "checks": 2875.0,
         "sample_factor": 1.0,
         "configured_weight": 1.0,
         "effective_weight": 1.0,
@@ -1403,10 +2789,95 @@
       }
     ]
   },
-  "next_command": "desloppify next",
+  "subjective_integrity": {
+    "status": "warn",
+    "target_score": 95.0,
+    "matched_count": 1,
+    "matched_dimensions": [
+      "initialization_coupling"
+    ],
+    "reset_dimensions": []
+  },
+  "score_confidence": {
+    "status": "reduced",
+    "confidence": 0.0,
+    "detectors": [
+      {
+        "detector": "golangci_lint",
+        "status": "reduced",
+        "confidence": 0.0,
+        "summary": "golangci-lint tooling unavailable (parser_error)",
+        "impact": "Detector results may be under-reported for this scan.",
+        "remediation": "Install/fix the tool command and rerun scan.",
+        "tool": "golangci-lint",
+        "reason": "parser_error"
+      }
+    ],
+    "dimensions": []
+  },
+  "potentials": {
+    "go": {
+      "structural": 182,
+      "flat_dirs": 22,
+      "responsibility_cohesion": 5,
+      "unused_imports": 1141,
+      "signature": 15,
+      "test_coverage": 2696,
+      "security": 182,
+      "subjective_review": 179,
+      "boilerplate_duplication": 56,
+      "dupes": 1418,
+      "stale_wontfix": 1087
+    }
+  },
+  "scan_coverage": {
+    "go": {
+      "status": "reduced",
+      "confidence": 0.0,
+      "detectors": {
+        "golangci_lint": {
+          "detector": "golangci_lint",
+          "status": "reduced",
+          "confidence": 0.0,
+          "summary": "golangci-lint tooling unavailable (parser_error)",
+          "impact": "Detector results may be under-reported for this scan.",
+          "remediation": "Install/fix the tool command and rerun scan.",
+          "tool": "golangci-lint",
+          "reason": "parser_error"
+        },
+        "security": {
+          "detector": "security",
+          "status": "full",
+          "confidence": 1.0,
+          "summary": "Security coverage complete for enabled detectors.",
+          "impact": "",
+          "remediation": "",
+          "tool": "",
+          "reason": ""
+        }
+      },
+      "warnings": [
+        {
+          "detector": "golangci_lint",
+          "status": "reduced",
+          "confidence": 0.0,
+          "summary": "golangci-lint tooling unavailable (parser_error)",
+          "impact": "Detector results may be under-reported for this scan.",
+          "remediation": "Install/fix the tool command and rerun scan.",
+          "tool": "golangci-lint",
+          "reason": "parser_error"
+        }
+      ],
+      "updated_at": "2026-03-11T09:35:15+00:00"
+    }
+  },
+  "zone_distribution": {
+    "production": 182,
+    "test": 135
+  },
   "narrative": {
     "phase": "stagnation",
-    "headline": "Score plateaued at 71.4 for 5 scans. Test strategy (45.0%) is where the breakthrough is. 1087 wontfix items may also be worth revisiting. (62 review issues \u2014 run `desloppify show review --status open`)",
+    "headline": "Score plateaued at 71.2 for 5 scans. Test strategy (45.0%) is where the breakthrough is. 1087 wontfix items may also be worth revisiting. (62 review issues \u2014 run `desloppify show review --status open`)",
     "dimensions": {
       "lowest_dimensions": [
         {
@@ -1658,13 +3129,24 @@
       },
       {
         "type": "refactor",
+        "detector": "boilerplate_duplication",
+        "count": 37,
+        "description": "37 boilerplate_duplication issues \u2014 extract shared boilerplate into reusable helpers or base classes",
+        "command": "desloppify show boilerplate_duplication --status open",
+        "impact": 0.0,
+        "dimension": "Duplication",
+        "priority": 7,
+        "lane": "refactor_0"
+      },
+      {
+        "type": "refactor",
         "detector": "review",
         "count": 62,
         "description": "62 review issues need investigation \u2014 run `desloppify show review --status open` to see them",
         "command": "desloppify show review --status open",
         "impact": 0.0,
         "dimension": "Unknown",
-        "priority": 7,
+        "priority": 8,
         "lane": "refactor_1"
       },
       {
@@ -1675,7 +3157,7 @@
         "command": "desloppify next",
         "impact": 0.0,
         "dimension": "Code quality",
-        "priority": 8,
+        "priority": 9,
         "clusters": [
           "auto/unused"
         ],
@@ -1686,22 +3168,18 @@
         "type": "manual_fix",
         "detector": "stale_exclude",
         "count": 1,
-        "description": "1 stale_exclude issues in 1 cluster(s) \u2014 run `desloppify next`",
-        "command": "desloppify next",
+        "description": "1 stale_exclude issues \u2014 remove stale exclusion or verify it's still needed",
+        "command": "desloppify show stale_exclude --status open",
         "impact": 0.0,
         "dimension": "Code quality",
-        "priority": 9,
-        "clusters": [
-          "auto/stale_exclude"
-        ],
-        "cluster_count": 1,
+        "priority": 10,
         "lane": "refactor_2"
       }
     ],
     "strategy": {
       "fixer_leverage": {
         "auto_fixable_count": 0,
-        "total_count": 461,
+        "total_count": 498,
         "coverage": 0.0,
         "impact_ratio": 0.0,
         "recommendation": "none"
@@ -1722,16 +3200,17 @@
             3,
             5,
             6,
-            8
+            7,
+            9
           ],
-          "file_count": 97,
+          "file_count": 111,
           "total_impact": 0.0,
           "automation": "manual",
           "run_first": false
         },
         "refactor_1": {
           "actions": [
-            7
+            8
           ],
           "file_count": 1,
           "total_impact": 0.0,
@@ -1740,7 +3219,7 @@
         },
         "refactor_2": {
           "actions": [
-            9
+            10
           ],
           "file_count": 1,
           "total_impact": 0.0,
@@ -1780,7 +3259,7 @@
       }
     },
     "debt": {
-      "overall_gap": 0.5,
+      "overall_gap": 0.4,
       "wontfix_count": 1087,
       "worst_dimension": "Test health",
       "worst_gap": 9.5,
@@ -1800,32 +3279,34 @@
       {
         "type": "wontfix_gap",
         "severity": "high",
-        "message": "Strict/lenient gap is 0.5 pts with 1087 wontfix issues"
+        "message": "Strict/lenient gap is 0.4 pts with 1087 wontfix issues"
       }
     ],
     "strict_target": {
       "target": 95.0,
-      "current": 71.4,
-      "gap": 23.6,
+      "current": 71.2,
+      "gap": 23.8,
       "state": "below",
       "warning": null
     },
-    "reminders": [],
+    "reminders": [
+      {
+        "type": "report_scores",
+        "message": "ALWAYS share ALL scores with the user: overall, objective, and strict, plus every dimension score (lenient + strict), including subjective dimensions. The goal is to maximize strict scores.",
+        "command": null,
+        "no_decay": true,
+        "priority": 3,
+        "severity": "low"
+      }
+    ],
     "reminder_history": {
       "zone_classification": 3,
-      "report_scores": 12,
+      "report_scores": 13,
       "feedback_nudge": 3,
       "stagnant_nudge": 24,
       "review_issues_pending": 3,
       "wontfix_growing": 2
     }
-  },
-  "plan": {
-    "active": true,
-    "focus": null,
-    "total_ordered": 25,
-    "total_skipped": 245,
-    "plan_overrides_narrative": true
   },
   "config": {
     "target_strict_score": 95,
@@ -1903,5 +3384,12 @@
     "commit_default_branch": "",
     "commit_message_template": "desloppify: {status} {count} issue(s) \u2014 {summary}",
     "trust_plugins": false
+  },
+  "plan": {
+    "active": true,
+    "focus": null,
+    "total_ordered": 20,
+    "total_skipped": 245,
+    "plan_overrides_narrative": true
   }
 }

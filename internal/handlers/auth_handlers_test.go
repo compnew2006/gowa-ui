@@ -112,6 +112,25 @@ func TestLogin_Failure_InactiveUser(t *testing.T) {
 	testutil.AssertErrorResponse(t, req, fasthttp.StatusUnauthorized, "Account is disabled")
 }
 
+func TestLogin_Failure_RefreshTokenStorageUnavailable(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	email := testutil.UniqueEmail("login-no-refresh-storage")
+	password := "validpassword123"
+	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword(password))
+	app.Redis = nil
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"email":    email,
+		"password": password,
+	})
+
+	err := app.Login(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusInternalServerError, "Failed to generate token")
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_refresh"))
+}
+
 func TestLogin_Failure_InvalidRequestBody(t *testing.T) {
 	app := newTestApp(t)
 
@@ -774,6 +793,22 @@ func TestRefreshToken_Failure_MalformedToken(t *testing.T) {
 	err := app.RefreshToken(req)
 	require.NoError(t, err)
 	testutil.AssertErrorResponse(t, req, fasthttp.StatusUnauthorized, "Invalid refresh token")
+}
+
+func TestRefreshToken_Failure_StorageUnavailable(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	refreshToken := testutil.GenerateTestRefreshToken(t, user, testutil.TestJWTSecret, 7*24*time.Hour)
+	app.Redis = nil
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"refresh_token": refreshToken,
+	})
+
+	err := app.RefreshToken(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusInternalServerError, "Refresh token storage is unavailable")
 }
 
 func TestRefreshToken_TokenRotation(t *testing.T) {

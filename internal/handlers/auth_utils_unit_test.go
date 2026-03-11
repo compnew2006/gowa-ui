@@ -5,10 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,49 +61,49 @@ func TestGenerateSlug_ValidNames(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		input        string
+		name        string
+		input       string
 		prefixCheck string // Check that slug starts with this prefix
 	}{
 		{
-			name:         "simple lowercase",
-			input:        "myteam",
-			prefixCheck:  "myteam-",
+			name:        "simple lowercase",
+			input:       "myteam",
+			prefixCheck: "myteam-",
 		},
 		{
-			name:         "with uppercase",
-			input:        "MyTeam",
-			prefixCheck:  "myteam-",
+			name:        "with uppercase",
+			input:       "MyTeam",
+			prefixCheck: "myteam-",
 		},
 		{
-			name:         "with spaces",
-			input:        "My Team",
-			prefixCheck:  "my-team-",
+			name:        "with spaces",
+			input:       "My Team",
+			prefixCheck: "my-team-",
 		},
 		{
-			name:         "with special chars",
-			input:        "Team@#$%Name",
-			prefixCheck:  "teamname-",
+			name:        "with special chars",
+			input:       "Team@#$%Name",
+			prefixCheck: "teamname-",
 		},
 		{
-			name:         "with numbers",
-			input:        "Team123",
-			prefixCheck:  "team123-",
+			name:        "with numbers",
+			input:       "Team123",
+			prefixCheck: "team123-",
 		},
 		{
-			name:         "mixed case and numbers",
-			input:        "My Team 2024",
-			prefixCheck:  "my-team-2024-",
+			name:        "mixed case and numbers",
+			input:       "My Team 2024",
+			prefixCheck: "my-team-2024-",
 		},
 		{
-			name:         "hyphens preserved",
-			input:        "my-team-name",
-			prefixCheck:  "my-team-name-",
+			name:        "hyphens preserved",
+			input:       "my-team-name",
+			prefixCheck: "my-team-name-",
 		},
 		{
-			name:         "empty string",
-			input:        "",
-			prefixCheck:  "-",
+			name:        "empty string",
+			input:       "",
+			prefixCheck: "-",
 		},
 	}
 
@@ -145,9 +147,9 @@ func TestGenerateSlug_ConversionPreserved(t *testing.T) {
 
 	// Test specific character conversions
 	tests := []struct {
-		name     string
-		input    string
-		contains []string // Substrings that should be in the result (before UUID)
+		name        string
+		input       string
+		contains    []string // Substrings that should be in the result (before UUID)
 		notContains []string // Substrings that should NOT be in the result
 	}{
 		{
@@ -236,8 +238,8 @@ func TestGenerateAccessToken_NilConfig(t *testing.T) {
 	}
 
 	user := &models.User{
-		BaseModel:    models.BaseModel{ID: uuid.New()},
-		Email:        "test@example.com",
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		Email:          "test@example.com",
 		OrganizationID: uuid.New(),
 	}
 
@@ -262,8 +264,8 @@ func TestGenerateAccessToken_CustomExpiry(t *testing.T) {
 	}
 
 	user := &models.User{
-		BaseModel:    models.BaseModel{ID: uuid.New()},
-		Email:        "test@example.com",
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		Email:          "test@example.com",
 		OrganizationID: uuid.New(),
 	}
 
@@ -279,16 +281,21 @@ func TestGenerateAccessToken_CustomExpiry(t *testing.T) {
 
 // TestGenerateRefreshToken_Success tests generateRefreshToken with valid setup
 func TestGenerateRefreshToken_Success(t *testing.T) {
-	t.Skip("Skipping: Requires TEST_DATABASE_URL for Redis")
+	t.Parallel()
+
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+	redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer func() { _ = redisClient.Close() }()
 
 	app := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret:           "test-secret-key-for-jwt-signing",
+				Secret:            "test-secret-key-for-jwt-signing",
 				RefreshExpiryDays: 7,
 			},
 		},
-		Redis: nil, // Would need actual Redis
+		Redis: redisClient,
 		Log:   createTestLogger(),
 	}
 
@@ -300,9 +307,72 @@ func TestGenerateRefreshToken_Success(t *testing.T) {
 
 	token, err := app.GenerateRefreshToken(user)
 
-	// This requires Redis to be set up properly
 	assert.NoError(t, err, "generateRefreshToken should succeed with valid setup")
 	assert.NotEmpty(t, token, "Token should not be empty")
+	keys := mr.Keys()
+	require.Len(t, keys, 1, "refresh token JTI should be stored in Redis")
+	assert.True(t, strings.HasPrefix(keys[0], "refresh:"), "stored Redis key should use refresh prefix")
+	storedUserID, getErr := mr.Get(keys[0])
+	require.NoError(t, getErr)
+	assert.Equal(t, user.ID.String(), storedUserID, "stored token mapping should point to the user ID")
+}
+
+func TestGenerateRefreshToken_NilRedis(t *testing.T) {
+	t.Parallel()
+
+	app := &handlers.App{
+		Config: &config.Config{
+			JWT: config.JWTConfig{
+				Secret:            "test-secret-key-for-jwt-signing",
+				RefreshExpiryDays: 7,
+			},
+		},
+		Redis: nil,
+		Log:   createTestLogger(),
+	}
+
+	user := &models.User{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		Email:          "test@example.com",
+		OrganizationID: uuid.New(),
+	}
+
+	token, err := app.GenerateRefreshToken(user)
+	assert.Error(t, err, "generateRefreshToken should fail when refresh-token storage is unavailable")
+	assert.ErrorContains(t, err, "refresh token storage is unavailable")
+	assert.Empty(t, token, "Token should be empty on storage failure")
+}
+
+func TestGenerateRefreshToken_RedisWriteFailure(t *testing.T) {
+	t.Parallel()
+
+	mr := miniredis.RunT(t)
+	addr := mr.Addr()
+	mr.Close()
+	redisClient := redis.NewClient(&redis.Options{Addr: addr})
+	defer func() { _ = redisClient.Close() }()
+
+	app := &handlers.App{
+		Config: &config.Config{
+			JWT: config.JWTConfig{
+				Secret:            "test-secret-key-for-jwt-signing",
+				RefreshExpiryDays: 7,
+			},
+		},
+		Redis: redisClient,
+		Log:   createTestLogger(),
+	}
+
+	user := &models.User{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		Email:          "test@example.com",
+		OrganizationID: uuid.New(),
+	}
+
+	token, err := app.GenerateRefreshToken(user)
+	assert.Error(t, err, "generateRefreshToken should fail when Redis write fails")
+	assert.ErrorContains(t, err, "refresh token storage is unavailable")
+	assert.Empty(t, token, "Token should be empty on storage write failure")
 }
 
 // TestGenerateRefreshToken_NilConfig tests generateRefreshToken with nil config

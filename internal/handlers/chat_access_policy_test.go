@@ -192,13 +192,13 @@ func TestApplyRestrictedInstanceVisibilityFilter_NilQuery(t *testing.T) {
 	t.Parallel()
 
 	instanceIDs := []uuid.UUID{uuid.New()}
-	result := applyRestrictedInstanceVisibilityFilter(nil, instanceIDs, uuid.New(), false)
+	result := applyRestrictedInstanceVisibilityFilter(nil, instanceIDs)
 	assert.Nil(t, result)
 }
 
 func TestApplyRestrictedInstanceVisibilityFilter_EmptyRestrictedInstances(t *testing.T) {
 	t.Parallel()
 
-	result := applyRestrictedInstanceVisibilityFilter(nil, nil, uuid.New(), true)
+	result := applyRestrictedInstanceVisibilityFilter(nil, nil)
 	assert.Nil(t, result)
 }
