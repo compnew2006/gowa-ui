@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -192,4 +193,39 @@ func validateExportColumns(requested, allowed []string) (validated []string, err
 		validated = append(validated, col)
 	}
 	return validated, nil
+}
+
+// validateRequiredColumns validates that all required columns exist in the provided column index.
+//
+// This is a pure validation function extracted from ImportData to improve testability.
+// It performs case-insensitive matching and handles underscore/space variations (e.g.,
+// "phone_number" matches "phone number" and vice versa).
+//
+// Parameters:
+//   - colIndex: Map of column names (lowercase or mapped) to their CSV indices
+//   - required: List of required column names that must be present
+//
+// Returns:
+//   - error: Non-nil if any required column is missing, with descriptive error message
+//
+// Error returns:
+//   - error: Contains message like "Required column 'phone_number' not found in CSV"
+func validateRequiredColumns(colIndex map[string]int, required []string) error {
+	for _, reqCol := range required {
+		found := false
+		for col := range colIndex {
+			// Case-insensitive match with underscore/space normalization (both directions)
+			// Example: "phone_number" matches "phone number" and vice versa
+			if strings.EqualFold(col, reqCol) ||
+				strings.EqualFold(col, strings.ReplaceAll(reqCol, "_", " ")) ||
+				strings.EqualFold(col, strings.ReplaceAll(reqCol, " ", "_")) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("Required column '%s' not found in CSV", reqCol)
+		}
+	}
+	return nil
 }

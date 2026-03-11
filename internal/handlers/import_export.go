@@ -440,17 +440,8 @@ func (a *App) ImportData(r *fastglue.Request) error {
 	}
 
 	// Validate required columns exist
-	for _, reqCol := range config.RequiredColumns {
-		found := false
-		for col := range colIndex {
-			if strings.EqualFold(col, reqCol) || strings.EqualFold(col, strings.ReplaceAll(reqCol, "_", " ")) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, fmt.Sprintf("Required column '%s' not found in CSV", reqCol), nil, "")
-		}
+	if err := validateRequiredColumns(colIndex, config.RequiredColumns); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 
 	// Normalize column index keys

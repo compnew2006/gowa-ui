@@ -596,3 +596,209 @@ func TestValidateExportColumns_TableDriven(t *testing.T) {
 		})
 	}
 }
+
+// --- validateRequiredColumns ---
+
+func TestValidateRequiredColumns_AllRequiredPresent(t *testing.T) {
+	t.Parallel()
+
+	colIndex := map[string]int{
+		"name":    0,
+		"email":   1,
+		"phone":   2,
+	}
+	required := []string{"name", "email"}
+
+	err := validateRequiredColumns(colIndex, required)
+
+	assert.NoError(t, err, "Should not error when all required columns present")
+}
+
+func TestValidateRequiredColumns_MissingRequiredColumn(t *testing.T) {
+	t.Parallel()
+
+	colIndex := map[string]int{
+		"name":  0,
+		"phone": 1,
+	}
+	required := []string{"name", "email"}
+
+	err := validateRequiredColumns(colIndex, required)
+
+	assert.Error(t, err, "Should error when required column missing")
+	assert.Contains(t, err.Error(), "email", "Error should mention missing column")
+	assert.Contains(t, err.Error(), "not found in CSV", "Error should be descriptive")
+}
+
+func TestValidateRequiredColumns_EmptyRequiredList(t *testing.T) {
+	t.Parallel()
+
+	colIndex := map[string]int{
+		"name": 0,
+	}
+	required := []string{}
+
+	err := validateRequiredColumns(colIndex, required)
+
+	assert.NoError(t, err, "Empty required list should always pass")
+}
+
+func TestValidateRequiredColumns_CaseInsensitiveMatch(t *testing.T) {
+	t.Parallel()
+
+	colIndex := map[string]int{
+		"Name":  0,
+		"EMAIL": 1,
+		"Phone": 2,
+	}
+	required := []string{"name", "email", "phone"}
+
+	err := validateRequiredColumns(colIndex, required)
+
+	assert.NoError(t, err, "Should match columns case-insensitively")
+}
+
+func TestValidateRequiredColumns_UnderscoreSpaceVariation(t *testing.T) {
+	t.Parallel()
+
+	// CSV has spaces instead of underscores
+	colIndex := map[string]int{
+		"phone number": 0,
+		"email":        1,
+	}
+	required := []string{"phone_number", "email"}
+
+	err := validateRequiredColumns(colIndex, required)
+
+	assert.NoError(t, err, "Should match underscore to space variation")
+}
+
+func TestValidateRequiredColumns_SpaceToUnderscoreVariation(t *testing.T) {
+	t.Parallel()
+
+	// CSV has underscores instead of spaces
+	colIndex := map[string]int{
+		"phone_number": 0,
+		"email":        1,
+	}
+	required := []string{"phone number", "email"}
+
+	err := validateRequiredColumns(colIndex, required)
+
+	assert.NoError(t, err, "Should match space to underscore variation")
+}
+
+func TestValidateRequiredColumns_MultipleMissingColumns(t *testing.T) {
+	t.Parallel()
+
+	colIndex := map[string]int{
+		"name": 0,
+	}
+	required := []string{"name", "email", "phone"}
+
+	err := validateRequiredColumns(colIndex, required)
+
+	assert.Error(t, err, "Should error when multiple columns missing")
+	assert.Contains(t, err.Error(), "email", "Should report first missing column")
+}
+
+func TestValidateRequiredColumns_TableDriven(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		colIndex  map[string]int
+		required  []string
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "all required columns present",
+			colIndex: map[string]int{
+				"name":  0,
+				"email": 1,
+				"phone": 2,
+			},
+			required:  []string{"name", "email"},
+			wantErr:   false,
+		},
+		{
+			name: "missing required column",
+			colIndex: map[string]int{
+				"name":  0,
+				"phone": 1,
+			},
+			required:  []string{"name", "email"},
+			wantErr:   true,
+			errSubstr: "email",
+		},
+		{
+			name: "case insensitive match",
+			colIndex: map[string]int{
+				"NAME":  0,
+				"Email": 1,
+			},
+			required:  []string{"name", "email"},
+			wantErr:   false,
+		},
+		{
+			name: "underscore space variation",
+			colIndex: map[string]int{
+				"phone number": 0,
+			},
+			required:  []string{"phone_number"},
+			wantErr:   false,
+		},
+		{
+			name: "space underscore variation",
+			colIndex: map[string]int{
+				"phone_number": 0,
+			},
+			required:  []string{"phone number"},
+			wantErr:   false,
+		},
+		{
+			name: "empty required list",
+			colIndex: map[string]int{
+				"name": 0,
+			},
+			required:  []string{},
+			wantErr:   false,
+		},
+		{
+			name:     "empty col index with required columns",
+			colIndex: map[string]int{},
+			required: []string{"name"},
+			wantErr:  true,
+			errSubstr: "name",
+		},
+		{
+			name: "all variations present",
+			colIndex: map[string]int{
+				"Name":        0,
+				"email":       1,
+				"Phone Number": 2,
+			},
+			required: []string{"name", "email", "phone_number"},
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateRequiredColumns(tt.colIndex, tt.required)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errSubstr != "" {
+					assert.Contains(t, err.Error(), tt.errSubstr)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
