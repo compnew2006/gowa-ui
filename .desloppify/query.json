@@ -2,20 +2,20 @@
   "command": "next",
   "items": [
     {
-      "id": "subjective::ai_generated_debt",
+      "id": "subjective::api_surface_coherence",
       "kind": "subjective_dimension",
       "confidence": "medium",
       "detector": "subjective_assessment",
       "file": ".",
-      "summary": "Subjective dimension below target: AI generated debt (68.0%)",
+      "summary": "Subjective dimension below target: API coherence (72.0%)",
       "detail": {
-        "dimension_name": "AI generated debt",
-        "dimension": "ai_generated_debt",
-        "failing": 5,
-        "strict_score": 68.0,
-        "open_review_issues": 5,
+        "dimension_name": "API coherence",
+        "dimension": "api_surface_coherence",
+        "failing": 2,
+        "strict_score": 72.0,
+        "open_review_issues": 2,
         "cli_keys": [
-          "ai_generated_debt"
+          "api_surface_coherence"
         ]
       },
       "status": "open",
@@ -622,7 +622,7 @@
         "item_count": 4
       }
     ],
-    "total_ordered": 26,
+    "total_ordered": 25,
     "total_skipped": 245,
     "plan_overrides_narrative": true
   },
