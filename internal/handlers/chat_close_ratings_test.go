@@ -381,3 +381,144 @@ func TestReadChatCloseRatingSettings(t *testing.T) {
 	assert.Equal(t, "Instance English", settingsOverride.Templates["en"])
 	assert.Equal(t, "Instance Spanish", settingsOverride.Templates["es"])
 }
+
+func TestApplyChatCloseRatingSettingsToResult_AppliesAllSettings(t *testing.T) {
+	t.Parallel()
+
+	result := chatCloseRatingSettings{
+		Enabled:               true,
+		WindowDays:            defaultChatCloseRatingWindowDays,
+		Templates:             cloneDefaultChatCloseRatingTemplates(),
+		FollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
+	}
+
+	settings := models.JSONB{
+		"chat_close_rating_enabled":                 false,
+		"chat_close_rating_window_days":             7,
+		"chat_close_rating_followup_window_minutes": 15,
+		"chat_close_rating_templates": map[string]interface{}{
+			"en": "Custom English",
+			"fr": "Custom French",
+		},
+	}
+
+	applyChatCloseRatingSettingsToResult(&result, settings)
+
+	assert.False(t, result.Enabled, "should apply enabled flag")
+	assert.Equal(t, 7, result.WindowDays, "should apply window days")
+	assert.Equal(t, 15, result.FollowupWindowMinutes, "should apply followup window")
+	assert.Equal(t, "Custom English", result.Templates["en"], "should apply English template")
+	assert.Equal(t, "Custom French", result.Templates["fr"], "should apply French template")
+}
+
+func TestApplyChatCloseRatingSettingsToResult_PartialOverride(t *testing.T) {
+	t.Parallel()
+
+	result := chatCloseRatingSettings{
+		Enabled:               true,
+		WindowDays:            5,
+		Templates:             cloneDefaultChatCloseRatingTemplates(),
+		FollowupWindowMinutes: 10,
+	}
+
+	// Only override enabled and templates
+	settings := models.JSONB{
+		"chat_close_rating_enabled": false,
+		"chat_close_rating_templates": map[string]interface{}{
+			"en": "Override English",
+		},
+	}
+
+	applyChatCloseRatingSettingsToResult(&result, settings)
+
+	assert.False(t, result.Enabled, "should override enabled")
+	assert.Equal(t, 5, result.WindowDays, "should preserve existing window days")
+	assert.Equal(t, 10, result.FollowupWindowMinutes, "should preserve existing followup window")
+	assert.Equal(t, "Override English", result.Templates["en"], "should override English template")
+}
+
+func TestApplyChatCloseRatingSettingsToResult_HandlesNumericTypes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		rawValue  any
+		expectInt int
+	}{
+		{name: "int value", rawValue: 7, expectInt: 7},
+		{name: "float64 value", rawValue: 14.0, expectInt: 14},
+		{name: "int32 value", rawValue: int32(21), expectInt: 21},
+		{name: "int64 value", rawValue: int64(28), expectInt: 28},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := chatCloseRatingSettings{
+				WindowDays: defaultChatCloseRatingWindowDays,
+			}
+
+			settings := models.JSONB{
+				"chat_close_rating_window_days": tc.rawValue,
+			}
+
+			applyChatCloseRatingSettingsToResult(&result, settings)
+
+			assert.Equal(t, tc.expectInt, result.WindowDays)
+		})
+	}
+}
+
+func TestApplyChatCloseRatingSettingsToResult_AppliesDefaultsForInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	result := chatCloseRatingSettings{
+		Enabled:               true,
+		WindowDays:            5,
+		FollowupWindowMinutes: 10,
+		Templates:             cloneDefaultChatCloseRatingTemplates(),
+	}
+
+	// Settings with invalid types and values
+	settings := models.JSONB{
+		"chat_close_rating_enabled":                 "not a bool", // wrong type
+		"chat_close_rating_window_days":             -1,          // invalid value (negative)
+		"chat_close_rating_followup_window_minutes": "invalid",   // wrong type
+		"chat_close_rating_templates":               "not a map",  // wrong type
+	}
+
+	applyChatCloseRatingSettingsToResult(&result, settings)
+
+	// Invalid numeric values should be replaced with defaults
+	assert.True(t, result.Enabled, "should preserve enabled on invalid type")
+	assert.Equal(t, defaultChatCloseRatingWindowDays, result.WindowDays, "should apply default window days for invalid value")
+	assert.Equal(t, defaultChatCloseRatingFollowupWindowMinutes, result.FollowupWindowMinutes, "should apply default followup window for invalid type")
+	// Templates should remain unchanged when invalid type provided
+	assert.NotEmpty(t, result.Templates, "should preserve templates on invalid type")
+}
+
+func TestApplyChatCloseRatingSettingsToResult_MergesTemplates(t *testing.T) {
+	t.Parallel()
+
+	// Start with default templates
+	result := chatCloseRatingSettings{
+		Templates: cloneDefaultChatCloseRatingTemplates(),
+	}
+
+	// Apply partial template override
+	settings := models.JSONB{
+		"chat_close_rating_templates": map[string]interface{}{
+			"en": "Custom English",
+			"de": "Custom German",
+		},
+	}
+
+	applyChatCloseRatingSettingsToResult(&result, settings)
+
+	// Should override en and de, preserve other defaults
+	assert.Equal(t, "Custom English", result.Templates["en"], "should override English")
+	assert.Equal(t, "Custom German", result.Templates["de"], "should add German")
+	assert.NotEqual(t, defaultChatCloseRatingTemplates["en"], result.Templates["en"], "English should not be default")
+}
