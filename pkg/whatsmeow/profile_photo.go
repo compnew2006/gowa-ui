@@ -90,13 +90,7 @@ func (cm *ConnectionManager) refreshContactAvatar(ctx context.Context, instanceI
 	}
 
 	metadata := cloneProfileMetadata(contact.Metadata)
-	if metadata == nil {
-		metadata = models.JSONB{}
-	}
-	metadata[avatarSyncedAtMetadataKey] = time.Now().UTC().Format(time.RFC3339)
-	if avatarURL != "" {
-		metadata[avatarURLMetadataKey] = avatarURL
-	}
+	metadata = buildAvatarMetadataForPersistence(metadata, avatarURL, time.Now().UTC())
 
 	if err := cm.db.WithContext(ctx).
 		Model(&models.Contact{}).
@@ -106,7 +100,7 @@ func (cm *ConnectionManager) refreshContactAvatar(ctx context.Context, instanceI
 		return
 	}
 
-	if cm.hub != nil && avatarURL != "" && avatarURL != previousAvatarURL {
+	if cm.hub != nil && avatarURL != previousAvatarURL {
 		cm.hub.BroadcastToOrg(contact.OrganizationID, websocket.WSMessage{
 			Type: websocket.TypeContactUpdate,
 			Payload: map[string]any{
@@ -154,6 +148,22 @@ func cloneProfileMetadata(metadata models.JSONB) models.JSONB {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func buildAvatarMetadataForPersistence(metadata models.JSONB, avatarURL string, syncedAt time.Time) models.JSONB {
+	if metadata == nil {
+		metadata = models.JSONB{}
+	}
+
+	metadata[avatarSyncedAtMetadataKey] = syncedAt.UTC().Format(time.RFC3339)
+	trimmedURL := strings.TrimSpace(avatarURL)
+	if trimmedURL == "" {
+		delete(metadata, avatarURLMetadataKey)
+		return metadata
+	}
+
+	metadata[avatarURLMetadataKey] = trimmedURL
+	return metadata
 }
 
 func normalizeProfilePhotoUser(raw string) string {

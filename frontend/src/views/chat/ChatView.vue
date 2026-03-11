@@ -588,6 +588,7 @@ const chatMediaViewerType = ref<ChatMediaViewerType>("image");
 const chatMediaViewerTitle = ref("");
 const isProfilePhotoDialogOpen = ref(false);
 const profilePhotoContact = ref<Contact | null>(null);
+const profilePhotoImageFailed = ref(false);
 const mediaCaption = ref("");
 const isUploadingMedia = ref(false);
 const isPreparingBatchPrint = ref(false);
@@ -2013,6 +2014,7 @@ async function deleteSidebarEntry(entry: SidebarContactEntry) {
 function openProfilePhotoDialog(contact: Contact | null) {
   if (!contact) return;
   profilePhotoContact.value = contact;
+  profilePhotoImageFailed.value = false;
   isProfilePhotoDialogOpen.value = true;
 }
 
@@ -2020,7 +2022,12 @@ function handleProfilePhotoDialogOpenChange(open: boolean) {
   isProfilePhotoDialogOpen.value = open;
   if (!open) {
     profilePhotoContact.value = null;
+    profilePhotoImageFailed.value = false;
   }
+}
+
+function handleProfilePhotoImageError() {
+  profilePhotoImageFailed.value = true;
 }
 
 async function handleContactDeleted(contactId: string) {
@@ -5870,7 +5877,7 @@ async function sendMediaMessage() {
         </DialogHeader>
         <div class="flex items-center justify-center py-2">
           <img
-            v-if="profilePhotoContact?.avatar_url"
+            v-if="profilePhotoContact?.avatar_url && !profilePhotoImageFailed"
             :src="profilePhotoContact.avatar_url"
             :alt="
               profilePhotoContact?.name ||
@@ -5878,6 +5885,7 @@ async function sendMediaMessage() {
               $t('resources.ProfilePhoto')
             "
             class="max-h-[70vh] max-w-full rounded-lg object-contain"
+            @error="handleProfilePhotoImageError"
           />
           <div
             v-else
