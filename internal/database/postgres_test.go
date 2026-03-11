@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -34,22 +35,42 @@ func TestNewPostgres_Success(t *testing.T) {
 		ConnMaxLifetime: 300,
 	}
 
-	// This test requires a real database connection or mock
-	// For unit tests, we'll test the DSN construction logic
-	t.Run("valid DSN construction", func(t *testing.T) {
-		t.Parallel()
+	sqlDB, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
 
-		// Test DSN construction
-		expectedDSN := "postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable"
-		actualDSN := constructDSN(cfg)
-		assert.Equal(t, expectedDSN, actualDSN)
+	gormDB, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB,
+	}), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
 	})
-}
+	require.NoError(t, err)
 
-// constructDSN is a helper to test DSN construction logic
-func constructDSN(cfg *config.DatabaseConfig) string {
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name, cfg.SSLMode)
+	var capturedDSN string
+	var capturedLevel logger.LogLevel
+
+	db, err := newPostgresWithConnector(cfg, true, func(dsn string, logLevel logger.LogLevel) (*gorm.DB, error) {
+		capturedDSN = dsn
+		capturedLevel = logLevel
+		return gormDB, nil
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, db)
+	assert.Equal(t, fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		cfg.User,
+		cfg.Password,
+		cfg.Host,
+		cfg.Port,
+		cfg.Name,
+		cfg.SSLMode,
+	), capturedDSN)
+	assert.Equal(t, logger.Info, capturedLevel)
+
+	pool, err := db.DB()
+	require.NoError(t, err)
+	assert.Equal(t, cfg.MaxOpenConns, pool.Stats().MaxOpenConnections)
 }
 
 // TestNewPostgres_InvalidConfig tests connection with invalid configuration
@@ -59,8 +80,13 @@ func TestNewPostgres_InvalidConfig(t *testing.T) {
 	tests := []struct {
 		name    string
 		cfg     *config.DatabaseConfig
-		wantErr bool
+		wantErr string
 	}{
+		{
+			name:    "nil config",
+			cfg:     nil,
+			wantErr: "database config is nil",
+		},
 		{
 			name: "empty host",
 			cfg: &config.DatabaseConfig{
@@ -74,7 +100,7 @@ func TestNewPostgres_InvalidConfig(t *testing.T) {
 				MaxIdleConns:    5,
 				ConnMaxLifetime: 300,
 			},
-			wantErr: true,
+			wantErr: "database host is required",
 		},
 		{
 			name: "invalid port",
@@ -89,21 +115,40 @@ func TestNewPostgres_InvalidConfig(t *testing.T) {
 				MaxIdleConns:    5,
 				ConnMaxLifetime: 300,
 			},
-			wantErr: true,
+			wantErr: "database port must be between 1 and 65535",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			// NewPostgres will attempt to connect, which should fail
-			// We're testing error handling here
 			_, err := NewPostgres(tt.cfg, false)
-			if tt.wantErr {
-				assert.Error(t, err)
-			}
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tt.wantErr)
 		})
 	}
+}
+
+func TestNewPostgres_ConnectorFailure(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.DatabaseConfig{
+		Host:            "db",
+		Port:            5432,
+		User:            "testuser",
+		Password:        "testpass",
+		Name:            "testdb",
+		SSLMode:         "disable",
+		MaxOpenConns:    25,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: 300,
+	}
+
+	_, err := newPostgresWithConnector(cfg, false, func(_ string, _ logger.LogLevel) (*gorm.DB, error) {
+		return nil, errors.New("dial error")
+	})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "failed to connect to database")
 }
 
 // TestGetMigrationModels tests that all expected models are included
@@ -117,17 +162,17 @@ func TestGetMigrationModels(t *testing.T) {
 
 	// Test that core models are present
 	coreModels := map[string]bool{
-		"Organization":       false,
-		"User":               false,
-		"Permission":         false,
-		"CustomRole":         false,
-		"Contact":            false,
-		"Message":            false,
-		"WhatsAppAccount":    false,
-		"WhatsAppInstance":   false,
-		"Team":               false,
-		"TeamMember":         false,
-		"ChatbotSettings":    false,
+		"Organization":        false,
+		"User":                false,
+		"Permission":          false,
+		"CustomRole":          false,
+		"Contact":             false,
+		"Message":             false,
+		"WhatsAppAccount":     false,
+		"WhatsAppInstance":    false,
+		"Team":                false,
+		"TeamMember":          false,
+		"ChatbotSettings":     false,
 		"BulkMessageCampaign": false,
 	}
 
@@ -152,25 +197,24 @@ func TestGetMigrationModels(t *testing.T) {
 func TestAutoMigrate(t *testing.T) {
 	t.Parallel()
 
-	// Create a mock database using SQLite in-memory for testing
-	// This is a simplified test - in production you'd use a test PostgreSQL container
-	db, err := gorm.Open(postgres.Open("host=localhost port=5432 user=test dbname=test sslmode=disable"), &gorm.Config{
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB,
+	}), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
+	require.NoError(t, err)
 
-	// If we can't connect to PostgreSQL, skip this test
-	if err != nil {
-		t.Skip("Skipping test: PostgreSQL not available")
-	}
+	mock.ExpectQuery("information_schema.tables").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-	// Test pre-migration fixes
-	t.Run("apply pre-migration fixes", func(t *testing.T) {
-		t.Parallel()
-
-		err := applyPreMigrationFixes(db)
-		// Should not error even if tables don't exist
-		assert.NoError(t, err, "Pre-migration fixes should not error")
-	})
+	err = applyPreMigrationFixes(db)
+	// Should not error even if tables don't exist
+	assert.NoError(t, err, "Pre-migration fixes should not error")
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // TestRunMigrationWithProgress tests migration with progress display
@@ -226,10 +270,10 @@ func TestRepeatChar(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		char   string
-		n      int
-		want   string
+		name string
+		char string
+		n    int
+		want string
 	}{
 		{
 			name: "single character multiple times",
@@ -436,9 +480,9 @@ func TestGetIndexes(t *testing.T) {
 
 	// Test that critical indexes are present
 	criticalIndexes := map[string]string{
-		"idx_messages_contact_created":           "CREATE INDEX IF NOT EXISTS idx_messages_contact_created",
-		"idx_contacts_org_phone_instance":        "CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_phone_instance",
-		"idx_whatsapp_instances_j_id":           "CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_instances_j_id",
+		"idx_messages_contact_created":                  "CREATE INDEX IF NOT EXISTS idx_messages_contact_created",
+		"idx_contacts_org_phone_instance":               "CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_phone_instance",
+		"idx_whatsapp_instances_j_id":                   "CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_instances_j_id",
 		"idx_bulk_recipients_campaign_phone_normalized": "CREATE UNIQUE INDEX IF NOT EXISTS idx_bulk_recipients_campaign_phone_normalized",
 	}
 
@@ -592,10 +636,10 @@ func TestConnectionPoolConfiguration(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		cfg            *config.DatabaseConfig
-		expectedMax    int
-		expectedIdle   int
+		name             string
+		cfg              *config.DatabaseConfig
+		expectedMax      int
+		expectedIdle     int
 		expectedLifetime time.Duration
 	}{
 		{

@@ -18,8 +18,32 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// NewPostgres creates a new PostgreSQL connection
-func NewPostgres(cfg *config.DatabaseConfig, debug bool) (*gorm.DB, error) {
+type postgresConnector func(dsn string, logLevel logger.LogLevel) (*gorm.DB, error)
+
+func defaultPostgresConnector(dsn string, logLevel logger.LogLevel) (*gorm.DB, error) {
+	return gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logLevel),
+	})
+}
+
+func validateDatabaseConfig(cfg *config.DatabaseConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("database config is nil")
+	}
+	if strings.TrimSpace(cfg.Host) == "" {
+		return fmt.Errorf("database host is required")
+	}
+	if cfg.Port <= 0 || cfg.Port > 65535 {
+		return fmt.Errorf("database port must be between 1 and 65535")
+	}
+	return nil
+}
+
+func buildPostgresDSN(cfg *config.DatabaseConfig) (string, error) {
+	if err := validateDatabaseConfig(cfg); err != nil {
+		return "", err
+	}
+
 	u := url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(cfg.User, cfg.Password),
@@ -27,16 +51,29 @@ func NewPostgres(cfg *config.DatabaseConfig, debug bool) (*gorm.DB, error) {
 		Path:     "/" + cfg.Name,
 		RawQuery: "sslmode=" + cfg.SSLMode,
 	}
-	dsn := u.String()
+	return u.String(), nil
+}
+
+// NewPostgres creates a new PostgreSQL connection
+func NewPostgres(cfg *config.DatabaseConfig, debug bool) (*gorm.DB, error) {
+	return newPostgresWithConnector(cfg, debug, defaultPostgresConnector)
+}
+
+func newPostgresWithConnector(cfg *config.DatabaseConfig, debug bool, connector postgresConnector) (*gorm.DB, error) {
+	dsn, err := buildPostgresDSN(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if connector == nil {
+		connector = defaultPostgresConnector
+	}
 
 	logLevel := logger.Silent
 	if debug {
 		logLevel = logger.Info
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logLevel),
-	})
+	db, err := connector(dsn, logLevel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}

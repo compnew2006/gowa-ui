@@ -80,3 +80,10 @@ uploads/
 
 # Test results
 test-results/
+
+# CocoIndex runtime/index artifacts
+.cocoindex_code/
+
+# Developer-local Claude settings
+.claude/settings.local.json
+.claude/*.local.json

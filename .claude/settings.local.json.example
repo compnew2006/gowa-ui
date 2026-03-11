@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(<project-safe-command>)",
+      "Read(<project-path>/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"Tool: $CLAUDE_TOOL_NAME completed\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"Claude Code finished at $(date '+%Y-%m-%d %H:%M:%S')\""
+          }
+        ]
+      }
+    ]
+  }
+}
