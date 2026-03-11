@@ -89,17 +89,51 @@ All tests follow these best practices:
 5. **Clear Naming** - Test names describe what is being tested
 6. **Comprehensive Coverage** - Tests happy paths, error cases, and edge cases
 
+### 7. `internal/handlers/widgets_helpers_test.go`
+- **Source:** `widgets.go` (1,403 LOC)
+- **Functions Tested:** 5
+  - `widgetGetString` - Safely extracts string from interface{} map
+  - `contains` - Checks if string slice contains item
+  - `formatLabel` - Formats label by replacing underscores and capitalizing
+  - `resolveDataSourceTable` - Maps data source to table and date field
+  - `buildFilterSQL` - Builds SQL filter conditions with sanitization
+- **Test Cases:** 66
+
+### 8. `internal/handlers/users_helpers_test.go`
+- **Source:** `users.go` (936 LOC)
+- **Functions Tested:** 3
+  - `normalizeNotificationSound` - Normalizes notification sound names
+  - `splitPermission` - Splits permission string on colon
+  - `userToResponse` - Converts User to UserResponse DTO
+- **Test Cases:** 38
+
+## Test Coverage Summary
+
+| Test File | Source LOC | Functions | Test Cases |
+|-----------|-----------|-----------|------------|
+| contacts_helpers_test.go | 1,272 | 6 | 54 |
+| flows_helpers_test.go | 1,083 | 3 | 31 |
+| send_restriction_policy_helpers_test.go | 921 | 11 | 140+ |
+| import_export_helpers_test.go | 803 | 2 | 25 |
+| campaigns_helpers_test.go | 1,409 | 5 | 62 |
+| messages_helpers_test.go | 1,049 | 4 | 54 |
+| widgets_helpers_test.go | 1,403 | 5 | 66 |
+| users_helpers_test.go | 936 | 3 | 38 |
+| **Total** | **8,876** | **39** | **470+** |
+
 ## Commit History
 
 - `9ceeb87` - Initial batch: contacts, flows, send_restriction_policy helpers
 - `9ad11c4` - Fixed import_export helper test expectations
 - `60b1019` - Added campaigns.go helper tests
 - `48c11ff` - Added messages.go helper tests
+- `b17584f` - Added widgets.go helper tests
+- `2f52e7f` - Added users.go helper tests
 
 ## Impact
 
 - **Improved Testability:** Extracted pure functions are now easily testable
-- **Better Coverage:** 312+ test cases covering edge cases and error conditions
+- **Better Coverage:** 470+ test cases covering edge cases and error conditions
 - **Code Quality:** Tests serve as documentation and prevent regressions
 - **Maintainability:** Pure functions are easier to understand and modify
 
@@ -115,9 +149,8 @@ Continue test-strategy improvements by:
 
 Top candidates for future test-strategy work:
 - `chatbot_processor.go` (2,912 LOC)
-- `widgets.go` (1,403 LOC)
 - `chatbot.go` (1,360 LOC)
 - `chat_close_ratings.go` (1,233 LOC)
-- `messages.go` (1,049 LOC)
 - `contacts_management.go` (959 LOC)
-- `users.go` (936 LOC)
+- `custom_actions.go` (686 LOC)
+- `instances.go` (668 LOC)
