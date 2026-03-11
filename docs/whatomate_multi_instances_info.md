@@ -218,6 +218,35 @@ Updated: 2026-02-26 23:36:13 UTC
   - `https://ofuqalmadenah.com` -> `200`
   - `https://holol-wenjaz.ofuqalmadenah.com` -> `200`
   - `https://alarkan-almthalia.ofuqalmadenah.com` -> `200`
+
+## Deployment Update
+
+Updated: 2026-03-09 06:49:10 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src`
+- Source revision on deploy: `506a787` (working tree had local uncommitted changes)
+- Native build command on VPS: `cd /opt/whatomate-src && GOTOOLCHAIN=go1.25.7+auto make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260309_064910.bak`
+- Installed binary SHA256: `57d6c12141abaed291898bf01e47ca69c17c5e2684097c5535deec120ca4c56a`
+- Note: the local cross-compiled Linux binary was not used because it crashed on this VPS with `SIGSEGV`; the final deployment was built natively on the server and verified healthy.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Listener ports active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
   - `https://matbaat-ruya.ofuqalmadenah.com` -> `200`
 
 ### Note
@@ -671,3 +700,180 @@ Updated: 2026-03-03 15:51:30 UTC
   - Media files are **not** deleted by default.
 - Safety guard added in script:
   - If file deletion is enabled in future, script checks `messages.media_url` references first and keeps referenced files.
+
+## Deployment Update
+
+Updated: 2026-03-04 23:53:40 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src` (via `rsync`; excluded caches, `uploads/`, and local build artifacts)
+- Source revision on deploy: `506a787` (local working tree had uncommitted changes)
+- Build command: `make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260304_235338.bak`
+- Installed binary SHA256: `26edbaa0e95ac568ed3ae330d669571adb962cae0adccdc04286e5746dab3513`
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state: `whatomate@holol-wenjaz` active
+- Listener ports expected active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`
+
+### Note
+
+- This deployment includes the latest WebSocket `fastHTTPUpgrader` fixes that explicitly echo the `whm.v1` Subprotocol to resolve real-time message connection drops.
+
+## Deployment Update
+
+Updated: 2026-03-09 04:34:54 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src` (via `rsync`; excluded `.git`, node modules, local build/test artifacts, local env files, `config.toml`, and `uploads/`)
+- Source revision on deploy: `506a787` (local working tree had uncommitted changes)
+- Build host: local macOS workspace
+- Build reason: VPS Go version is `1.22.2` while the repo currently requires `go 1.25.7`, so the production Linux binary was built locally and uploaded
+- Build command: `GOOS=linux GOARCH=amd64 make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260309_043047.bak`
+- Installed binary SHA256: `d63df8c5318a95a484fe2c151e1ded0a834c4a6df6c32547207f820ee3e531d2`
+- Installed binary version output: `Whatomate 506a787-dirty (built 2026-03-09_04:29:44)`
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- Listener ports active:
+  - `127.0.0.1:18123`
+  - `127.0.0.1:18124`
+  - `127.0.0.1:18125`
+  - `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+
+### Note
+
+- Immediately after restart, short-lived `502` responses appeared for the base service and the first tenant during startup; both recovered to `200` once the processes finished binding and initialization.
+
+## Deployment Update
+
+Updated: 2026-03-09 07:04:18 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src`
+- Source revision on deploy: `506a787` (working tree had local uncommitted changes)
+- Native build command on VPS: `cd /opt/whatomate-src && GOTOOLCHAIN=go1.25.7+auto make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260309_070335.bak`
+- Installed binary SHA256: `ab4484d4f2e53f4c2c6a846af59e277afaeb5226984f96c27335dc01d6c5b95d`
+- Installed binary version output: `Whatomate dev (built 2026-03-09_07:03:18)`
+- Deployment purpose: fix assigned chats for agents where the `Assigned` counter increased after reassignment but the chat stayed hidden in the sidebar because of the implicit frontend instance filter.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Initial status right after restart: all services `active`, URLs returned temporary `502` during startup warmup
+- Final listener ports active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`
+- Final HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+
+## Deployment Update
+
+Updated: 2026-03-09 07:12:04 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src`
+- Source revision on deploy: `506a787` (working tree had local uncommitted changes)
+- Native build command on VPS: `cd /opt/whatomate-src && GOTOOLCHAIN=go1.25.7+auto make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260309_071137.bak`
+- Installed binary SHA256: `06dc0dc299068f23b50a7150e487f2c213f18011832b37c4b0ddfef0b0e505fa`
+- Installed binary version output: `Whatomate dev (built 2026-03-09_07:11:25)`
+- Deployment purpose: replace `Unknown Instance` in the chat sidebar for self-assigned chats on restricted instances by using a safe fallback label from the chat payload when the instance is not available in `instancesStore`.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state: all four services `active`
+- Listener ports active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+
+## Deployment Update
+
+Updated: 2026-03-09 07:24:58 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src` (via `rsync`; excluded caches, `node_modules/`, generated `dist/`, and local security/report artifacts)
+- Source revision on deploy: `506a787` (working tree had local uncommitted changes)
+- Native build command on VPS: `cd /opt/whatomate-src && GOTOOLCHAIN=go1.25.7+auto make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260309_072333.bak`
+- Installed binary SHA256: `6de468c6859100477bee7b5f04af37a8ffc4418e8b4380df0a85a35bba8d2566`
+- Installed binary version output: `Whatomate dev (built 2026-03-09_07:24:14)`
+- Deployment purpose: deploy the current local project state to production, including the latest workspace changes.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- Listener ports active:
+  - `127.0.0.1:18123`
+  - `127.0.0.1:18124`
+  - `127.0.0.1:18125`
+  - `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+
+### Note
+
+- Frontend production build completed successfully on the VPS. Vite emitted the existing warning about `<script src=\"./theme-init.js\">` in `index.html`, but the final build and all runtime checks completed successfully.

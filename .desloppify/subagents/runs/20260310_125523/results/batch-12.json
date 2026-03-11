@@ -1,0 +1,56 @@
+{
+  "batch": "package_organization",
+  "batch_index": 12,
+  "assessments": {"package_organization": 55.0},
+  "dimension_notes": {
+    "package_organization": {
+      "evidence": [
+        "internal/handlers contains 50+ files in a flat directory, mixing auth, messaging, analytics, and infrastructure concerns.",
+        "A critical boundary violation exists where pkg/whatsmeow/instance_settings.go imports internal/models, effectively making the 'reusable' pkg dependent on the private internal implementation.",
+        "internal/models is also becoming a flat dumping ground for all domain entities without sub-grouping.",
+        "There is no clear directory-level distinction between 'base' infrastructure handlers and 'domain' feature handlers."
+      ],
+      "impact_scope": "codebase",
+      "fix_scope": "architectural_change",
+      "confidence": "high"
+    }
+  },
+  "dimension_judgment": {
+    "package_organization": {
+      "strengths": [
+        "Clean top-level structure (cmd, internal, pkg, storage).",
+        "Clear and logical domain-based subpackages within the pkg/ directory."
+      ],
+      "issue_character": "Massive flat directory overload in internal/handlers and critical boundary leaks undermine the overall organization.",
+      "score_rationale": "Score 55.0 because the project layout is starting to buckle under the weight of its own success. The 'internal/handlers' folder is severely overloaded and serves as a catch-all for too many disparate features. The layer violation between pkg and internal is an architectural red flag that prevents true module reuse."
+    }
+  },
+  "issues": [
+    {
+      "dimension": "package_organization",
+      "identifier": "package::handlers_flat_overload",
+      "summary": "internal/handlers is a flat directory with 50+ files",
+      "related_files": ["internal/handlers/"],
+      "evidence": ["More than 50 .go files are in one directory, making navigation and ownership tracking difficult."],
+      "suggestion": "Split internal/handlers into purposeful subdirectories: internal/handlers/auth, internal/handlers/messaging, internal/handlers/workflow, internal/handlers/analytics.",
+      "confidence": "high",
+      "impact_scope": "module",
+      "fix_scope": "multi_file_refactor"
+    },
+    {
+      "dimension": "package_organization",
+      "identifier": "package::pkg_to_internal_leak",
+      "summary": "Reusable pkg components depend on private internal models",
+      "related_files": ["pkg/whatsmeow/instance_settings.go"],
+      "evidence": ["pkg/whatsmeow/instance_settings.go imports github.com/compnew2006/whatomate/internal/models."],
+      "suggestion": "Move the required models to a common/models package or define interfaces in pkg that internal/models implements.",
+      "confidence": "high",
+      "impact_scope": "subsystem",
+      "fix_scope": "architectural_change"
+    }
+  ],
+  "retrospective": {
+    "root_causes": ["Tendency to keep all handlers in one place for easy discovery, which eventually led to unmanageable scale."],
+    "likely_symptoms": ["Merge conflicts on directory level, difficulty explaining ownership, accidental tight coupling between unrelated features."]
+  }
+}

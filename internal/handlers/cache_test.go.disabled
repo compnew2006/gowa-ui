@@ -1,0 +1,1208 @@
+package handlers_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/compnew2006/whatomate/internal/config"
+	"github.com/compnew2006/whatomate/internal/crypto"
+	"github.com/compnew2006/whatomate/internal/handlers"
+	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestApp_getChatbotSettingsCached_CacheHit tests retrieving settings from cache
+func TestApp_getChatbotSettingsCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create and encrypt settings
+	encryptedKey, err := crypto.Encrypt("test-api-key", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+
+	settings := &models.ChatbotSettings{
+		OrganizationID:  org.ID,
+		WhatsAppAccount: whatsAppAccount,
+		IsEnabled:       true,
+		DefaultResponse: "Hello!",
+		AI: models.AIConfig{
+			Enabled: true,
+			APIKey:  encryptedKey,
+			Model:   "gpt-4",
+		},
+	}
+	require.NoError(t, app.DB.Create(settings).Error)
+
+	// Manually cache the settings
+	cacheKey := "chatbot:settings:" + org.ID.String() + ":" + whatsAppAccount
+	cacheData := chatbotSettingsCache{
+		ChatbotSettings: *settings,
+		AIAPIKey:        encryptedKey,
+	}
+	data, err := json.Marshal(cacheData)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetChatbotSettingsCached(org.ID, whatsAppAccount)
+	require.NoError(t, err)
+	assert.Equal(t, settings.ID, result.ID)
+	assert.Equal(t, settings.DefaultResponse, result.DefaultResponse)
+	assert.True(t, result.AI.Enabled)
+	assert.Equal(t, "gpt-4", result.AI.Model)
+	assert.Equal(t, "test-api-key", result.AI.APIKey) // Decrypted
+}
+
+// TestApp_getChatbotSettingsCached_CacheMiss tests retrieving settings from database on cache miss
+func TestApp_getChatbotSettingsCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create settings in database
+	encryptedKey, err := crypto.Encrypt("test-api-key", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+
+	settings := &models.ChatbotSettings{
+		OrganizationID:  org.ID,
+		WhatsAppAccount: whatsAppAccount,
+		IsEnabled:       true,
+		DefaultResponse: "Hello from DB!",
+		AI: models.AIConfig{
+			Enabled: true,
+			APIKey:  encryptedKey,
+			Model:   "gpt-4",
+		},
+	}
+	require.NoError(t, app.DB.Create(settings).Error)
+
+	// Retrieve (should fetch from DB and cache)
+	result, err := app.GetChatbotSettingsCached(org.ID, whatsAppAccount)
+	require.NoError(t, err)
+	assert.Equal(t, settings.DefaultResponse, result.DefaultResponse)
+	assert.Equal(t, "test-api-key", result.AI.APIKey) // Decrypted
+
+	// Verify it was cached
+	cacheKey := "chatbot:settings:" + org.ID.String() + ":" + whatsAppAccount
+	cached, err := app.Redis.Get(context.Background(), cacheKey).Result()
+	require.NoError(t, err)
+	assert.NotEmpty(t, cached)
+}
+
+// TestApp_getChatbotSettingsCached_PrefersAccountSpecific tests that account-specific settings are preferred
+func TestApp_getChatbotSettingsCached_PrefersAccountSpecific(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create global settings
+	globalSettings := &models.ChatbotSettings{
+		OrganizationID:  org.ID,
+		WhatsAppAccount: "", // Global
+		IsEnabled:       true,
+		DefaultResponse: "Global response",
+	}
+	require.NoError(t, app.DB.Create(globalSettings).Error)
+
+	// Create account-specific settings
+	accountSettings := &models.ChatbotSettings{
+		OrganizationID:  org.ID,
+		WhatsAppAccount: whatsAppAccount,
+		IsEnabled:       true,
+		DefaultResponse: "Account-specific response",
+	}
+	require.NoError(t, app.DB.Create(accountSettings).Error)
+
+	// Should return account-specific settings
+	result, err := app.GetChatbotSettingsCached(org.ID, whatsAppAccount)
+	require.NoError(t, err)
+	assert.Equal(t, "Account-specific response", result.DefaultResponse)
+}
+
+// TestApp_getChatbotSettingsCached_DecryptionError tests error handling when decryption fails
+func TestApp_getChatbotSettingsCached_DecryptionError(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create settings with invalid encrypted key
+	settings := &models.ChatbotSettings{
+		OrganizationID:  org.ID,
+		WhatsAppAccount: whatsAppAccount,
+		AI: models.AIConfig{
+			APIKey: "invalid-encrypted-key",
+		},
+	}
+	require.NoError(t, app.DB.Create(settings).Error)
+
+	// Should return error
+	_, err := app.GetChatbotSettingsCached(org.ID, whatsAppAccount)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decrypt")
+}
+
+// TestApp_getChatbotSettingsCached_NotFound tests error when settings not found
+func TestApp_getChatbotSettingsCached_NotFound(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	_, err := app.GetChatbotSettingsCached(org.ID, "nonexistent")
+	assert.Error(t, err)
+	assert.Equal(t, errors.New("record not found"), err)
+}
+
+// TestApp_getChatbotFlowsCached_CacheHit tests retrieving flows from cache
+func TestApp_getChatbotFlowsCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create flows
+	flow1 := testutil.CreateTestChatbotFlow(t, app.DB, org.ID, "test-account")
+	flow2 := testutil.CreateTestChatbotFlow(t, app.DB, org.ID, "test-account")
+
+	flows := []models.ChatbotFlow{*flow1, *flow2}
+
+	// Manually cache the flows
+	cacheKey := "chatbot:flows:" + org.ID.String()
+	data, err := json.Marshal(flows)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetChatbotFlowsCached(org.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+// TestApp_getChatbotFlowsCached_CacheMiss tests retrieving flows from database
+func TestApp_getChatbotFlowsCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create flows with steps
+	flow1 := testutil.CreateTestChatbotFlow(t, app.DB, org.ID, "test-account")
+	step1 := &models.ChatbotFlowStep{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		FlowID:    flow1.ID,
+		StepOrder: 1,
+		Message:   "Step 1",
+	}
+	require.NoError(t, app.DB.Create(step1).Error)
+
+	// Retrieve from DB
+	result, err := app.GetChatbotFlowsCached(org.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Len(t, result[0].Steps, 1)
+	assert.Equal(t, "Step 1", result[0].Steps[0].Message)
+}
+
+// TestApp_getChatbotFlowsCached_OnlyEnabled tests that only enabled flows are returned
+func TestApp_getChatbotFlowsCached_OnlyEnabled(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create enabled flow
+	enabledFlow := testutil.CreateTestChatbotFlow(t, app.DB, org.ID, "test-account")
+
+	// Create disabled flow
+	disabledFlow := &models.ChatbotFlow{
+		OrganizationID:  org.ID,
+		WhatsAppAccount: "test-account",
+		Name:            "Disabled Flow",
+		IsEnabled:       false,
+	}
+	require.NoError(t, app.DB.Create(disabledFlow).Error)
+
+	// Should only return enabled flow
+	result, err := app.GetChatbotFlowsCached(org.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Equal(t, enabledFlow.ID, result[0].ID)
+}
+
+// TestApp_getChatbotFlowByIDCached_Success tests retrieving a specific flow by ID
+func TestApp_getChatbotFlowByIDCached_Success(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	flow1 := testutil.CreateTestChatbotFlow(t, app.DB, org.ID, "test-account")
+	flow2 := testutil.CreateTestChatbotFlow(t, app.DB, org.ID, "test-account")
+
+	// Retrieve first flow
+	result, err := app.GetChatbotFlowByIDCached(org.ID, flow1.ID)
+	require.NoError(t, err)
+	assert.Equal(t, flow1.ID, result.ID)
+	assert.Equal(t, flow1.Name, result.Name)
+
+	// Retrieve second flow
+	result, err = app.GetChatbotFlowByIDCached(org.ID, flow2.ID)
+	require.NoError(t, err)
+	assert.Equal(t, flow2.ID, result.ID)
+}
+
+// TestApp_getChatbotFlowByIDCached_NotFound tests error when flow not found
+func TestApp_getChatbotFlowByIDCached_NotFound(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	_, err := app.GetChatbotFlowByIDCached(org.ID, uuid.New())
+	assert.Error(t, err)
+	assert.Equal(t, errors.New("record not found"), err)
+}
+
+// TestApp_getKeywordRulesCached_CacheHit tests retrieving keyword rules from cache
+func TestApp_getKeywordRulesCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create rules
+	rule1 := testutil.CreateTestKeywordRule(t, app.DB, org.ID, whatsAppAccount)
+	rule2 := testutil.CreateTestKeywordRule(t, app.DB, org.ID, whatsAppAccount)
+
+	rules := []models.KeywordRule{*rule1, *rule2}
+
+	// Manually cache
+	cacheKey := "chatbot:keywords:" + org.ID.String() + ":" + whatsAppAccount
+	data, err := json.Marshal(rules)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetKeywordRulesCached(org.ID, whatsAppAccount)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+// TestApp_getKeywordRulesCached_CacheMiss tests retrieving rules from database
+func TestApp_getKeywordRulesCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create account-specific and global rules
+	accountRule := testutil.CreateTestKeywordRule(t, app.DB, org.ID, whatsAppAccount)
+	globalRule := testutil.CreateTestKeywordRule(t, app.DB, org.ID, "") // Global
+
+	// Retrieve from DB
+	result, err := app.GetKeywordRulesCached(org.ID, whatsAppAccount)
+	require.NoError(t, err)
+	assert.Len(t, result, 2) // Both rules
+
+	// Account-specific rules should come first
+	assert.Equal(t, accountRule.ID, result[0].ID)
+	assert.Equal(t, globalRule.ID, result[1].ID)
+}
+
+// TestApp_getKeywordRulesCached_OnlyEnabled tests that only enabled rules are returned
+func TestApp_getKeywordRulesCached_OnlyEnabled(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create enabled rule
+	enabledRule := testutil.CreateTestKeywordRule(t, app.DB, org.ID, whatsAppAccount)
+
+	// Create disabled rule
+	disabledRule := &models.KeywordRule{
+		OrganizationID:  org.ID,
+		WhatsAppAccount: whatsAppAccount,
+		Name:            "Disabled Rule",
+		IsEnabled:       false,
+		Keywords:        models.StringArray{"disabled"},
+		MatchType:       models.MatchTypeContains,
+		ResponseType:    models.ResponseTypeText,
+		ResponseContent: models.JSONB{"message": "disabled"},
+	}
+	require.NoError(t, app.DB.Create(disabledRule).Error)
+
+	// Should only return enabled rule
+	result, err := app.GetKeywordRulesCached(org.ID, whatsAppAccount)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Equal(t, enabledRule.ID, result[0].ID)
+}
+
+// TestApp_getWhatsAppAccountCached_CacheHit tests retrieving WhatsApp account from cache
+func TestApp_getWhatsAppAccountCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create account with encrypted secrets
+	encryptedToken, err := crypto.Encrypt("test-token", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+	encryptedSecret, err := crypto.Encrypt("test-secret", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+
+	account := &models.WhatsAppAccount{
+		OrganizationID: org.ID,
+		Name:           "test-account",
+		PhoneID:        "phone123",
+		BusinessID:     "business123",
+		AccessToken:    encryptedToken,
+		AppSecret:      encryptedSecret,
+	}
+	require.NoError(t, app.DB.Create(account).Error)
+
+	// Manually cache
+	cacheKey := "whatsapp:account:phone123"
+	cacheData := whatsAppAccountCache{
+		WhatsAppAccount: *account,
+		AccessToken:     encryptedToken,
+		AppSecret:       encryptedSecret,
+	}
+	data, err := json.Marshal(cacheData)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetWhatsAppAccountCached("phone123")
+	require.NoError(t, err)
+	assert.Equal(t, account.ID, result.ID)
+	assert.Equal(t, "test-token", result.AccessToken) // Decrypted
+	assert.Equal(t, "test-secret", result.AppSecret) // Decrypted
+}
+
+// TestApp_getWhatsAppAccountCached_CacheMiss tests retrieving account from database
+func TestApp_getWhatsAppAccountCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create account
+	encryptedToken, err := crypto.Encrypt("test-token", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+
+	account := &models.WhatsAppAccount{
+		OrganizationID: org.ID,
+		Name:           "test-account",
+		PhoneID:        "phone123",
+		BusinessID:     "business123",
+		AccessToken:    encryptedToken,
+	}
+	require.NoError(t, app.DB.Create(account).Error)
+
+	// Retrieve from DB
+	result, err := app.GetWhatsAppAccountCached("phone123")
+	require.NoError(t, err)
+	assert.Equal(t, account.ID, result.ID)
+	assert.Equal(t, "test-token", result.AccessToken) // Decrypted
+}
+
+// TestApp_getWhatsAppAccountCached_NoRedis tests behavior when Redis is nil
+func TestApp_getWhatsAppAccountCached_NoRedis(t *testing.T) {
+	t.Parallel()
+
+	db := testutil.SetupTestDB(t)
+	log := testutil.NopLogger()
+	cfg := &config.Config{
+		App: config.AppConfig{
+			EncryptionKey: "test-encryption-key",
+		},
+	}
+
+	app := &handlers.App{
+		Config: cfg,
+		DB:     db,
+		Log:    log,
+		Redis:  nil, // No Redis
+	}
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create account
+	encryptedToken, err := crypto.Encrypt("test-token", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+
+	account := &models.WhatsAppAccount{
+		OrganizationID: org.ID,
+		Name:           "test-account",
+		PhoneID:        "phone123",
+		BusinessID:     "business123",
+		AccessToken:    encryptedToken,
+	}
+	require.NoError(t, app.DB.Create(account).Error)
+
+	// Should still work without Redis
+	result, err := app.GetWhatsAppAccountCached("phone123")
+	require.NoError(t, err)
+	assert.Equal(t, account.ID, result.ID)
+	assert.Equal(t, "test-token", result.AccessToken)
+}
+
+// TestApp_getWhatsAppAccountCached_NotFound tests error when account not found
+func TestApp_getWhatsAppAccountCached_NotFound(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+
+	_, err := app.GetWhatsAppAccountCached("nonexistent")
+	assert.Error(t, err)
+}
+
+// TestApp_getWebhooksCached_CacheHit tests retrieving webhooks from cache
+func TestApp_getWebhooksCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create webhooks
+	webhook1 := testutil.CreateTestWebhook(t, app.DB, org.ID)
+	webhook2 := testutil.CreateTestWebhook(t, app.DB, org.ID)
+
+	webhooks := []models.Webhook{*webhook1, *webhook2}
+
+	// Manually cache
+	cacheKey := "webhooks:" + org.ID.String()
+	data, err := json.Marshal(webhooks)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetWebhooksCached(org.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+// TestApp_getWebhooksCached_CacheMiss tests retrieving webhooks from database
+func TestApp_getWebhooksCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create webhooks
+	webhook1 := testutil.CreateTestWebhook(t, app.DB, org.ID)
+	webhook2 := testutil.CreateTestWebhook(t, app.DB, org.ID)
+
+	// Retrieve from DB
+	result, err := app.GetWebhooksCached(org.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+// TestApp_getWebhooksCached_OnlyActive tests that only active webhooks are returned
+func TestApp_getWebhooksCached_OnlyActive(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create active webhook
+	activeWebhook := testutil.CreateTestWebhook(t, app.DB, org.ID)
+
+	// Create inactive webhook
+	inactiveWebhook := &models.Webhook{
+		OrganizationID: org.ID,
+		Name:           "Inactive Webhook",
+		URL:            "https://example.com/inactive",
+		Events:         models.StringArray{"test.event"},
+		IsActive:       false,
+	}
+	require.NoError(t, app.DB.Create(inactiveWebhook).Error)
+
+	// Should only return active webhook
+	result, err := app.GetWebhooksCached(org.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Equal(t, activeWebhook.ID, result[0].ID)
+}
+
+// TestApp_getSLAEnabledSettingsCached_CacheHit tests retrieving SLA settings from cache
+func TestApp_getSLAEnabledSettingsCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create SLA-enabled settings
+	settings1 := testutil.CreateTestChatbotSettings(t, app.DB, org.ID, "account1")
+	settings1.SLAEnabled = true
+	require.NoError(t, app.DB.Save(settings1).Error)
+
+	settings2 := testutil.CreateTestChatbotSettings(t, app.DB, org.ID, "account2")
+	settings2.SLAEnabled = true
+	require.NoError(t, app.DB.Save(settings2).Error)
+
+	settingsList := []models.ChatbotSettings{*settings1, *settings2}
+
+	// Manually cache
+	cacheKey := "chatbot:sla_enabled_settings"
+	data, err := json.Marshal(settingsList)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetSLAEnabledSettingsCached()
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+// TestApp_getSLAEnabledSettingsCached_CacheMiss tests retrieving SLA settings from database
+func TestApp_getSLAEnabledSettingsCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create SLA-enabled settings
+	settings1 := testutil.CreateTestChatbotSettings(t, app.DB, org.ID, "account1")
+	settings1.SLAEnabled = true
+	require.NoError(t, app.DB.Save(settings1).Error)
+
+	// Create non-SLA settings
+	settings2 := testutil.CreateTestChatbotSettings(t, app.DB, org.ID, "account2")
+	settings2.SLAEnabled = false
+	require.NoError(t, app.DB.Save(settings2).Error)
+
+	// Retrieve from DB
+	result, err := app.GetSLAEnabledSettingsCached()
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.True(t, result[0].SLAEnabled)
+}
+
+// TestApp_getAIContextsCached_CacheHit tests retrieving AI contexts from cache
+func TestApp_getAIContextsCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create contexts
+	context1 := testutil.CreateTestAIContext(t, app.DB, org.ID, whatsAppAccount)
+	context2 := testutil.CreateTestAIContext(t, app.DB, org.ID, whatsAppAccount)
+
+	contexts := []models.AIContext{*context1, *context2}
+
+	// Manually cache
+	cacheKey := "chatbot:ai_contexts:" + org.ID.String() + ":" + whatsAppAccount
+	data, err := json.Marshal(contexts)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetAIContextsCached(org.ID, whatsAppAccount)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+// TestApp_getAIContextsCached_CacheMiss tests retrieving contexts from database
+func TestApp_getAIContextsCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create account-specific and global contexts
+	accountContext := testutil.CreateTestAIContext(t, app.DB, org.ID, whatsAppAccount)
+	globalContext := testutil.CreateTestAIContext(t, app.DB, org.ID, "") // Global
+
+	// Retrieve from DB
+	result, err := app.GetAIContextsCached(org.ID, whatsAppAccount)
+	require.NoError(t, err)
+	assert.Len(t, result, 2) // Both contexts
+
+	// Account-specific should come first
+	assert.Equal(t, accountContext.ID, result[0].ID)
+	assert.Equal(t, globalContext.ID, result[1].ID)
+}
+
+// TestApp_getAIContextsCached_OnlyEnabled tests that only enabled contexts are returned
+func TestApp_getAIContextsCached_OnlyEnabled(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	whatsAppAccount := "test-account"
+
+	// Create enabled context
+	enabledContext := testutil.CreateTestAIContext(t, app.DB, org.ID, whatsAppAccount)
+
+	// Create disabled context
+	disabledContext := &models.AIContext{
+		OrganizationID:  org.ID,
+		WhatsAppAccount: whatsAppAccount,
+		Name:            "Disabled Context",
+		IsEnabled:       false,
+		ContextType:     models.ContextTypeStatic,
+		StaticContent:   "disabled content",
+	}
+	require.NoError(t, app.DB.Create(disabledContext).Error)
+
+	// Should only return enabled context
+	result, err := app.GetAIContextsCached(org.ID, whatsAppAccount)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Equal(t, enabledContext.ID, result[0].ID)
+}
+
+// TestApp_getUserPermissionsCached_CacheHit tests retrieving user permissions from cache
+func TestApp_getUserPermissionsCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create user with role
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "test-role", []string{"users:read", "users:write"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+
+	perms := &UserPermissions{
+		RoleID:       role.ID,
+		RoleName:     role.Name,
+		IsSystem:     role.IsSystem,
+		IsSuperAdmin: false,
+		Permissions:  []string{"users:read", "users:write"},
+	}
+
+	// Manually cache
+	cacheKey := "permissions:user:" + user.ID.String()
+	data, err := json.Marshal(perms)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetUserPermissionsCached(user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, role.ID, result.RoleID)
+	assert.Len(t, result.Permissions, 2)
+}
+
+// TestApp_getUserPermissionsCached_CacheMiss tests retrieving permissions from database
+func TestApp_getUserPermissionsCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create user with role
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "test-role", []string{"users:read", "users:write"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+
+	// Retrieve from DB
+	result, err := app.GetUserPermissionsCached(user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, role.ID, result.RoleID)
+	assert.Len(t, result.Permissions, 2)
+}
+
+// TestApp_getUserPermissionsCached_WithOrgID tests retrieving permissions with org ID
+func TestApp_getUserPermissionsCached_WithOrgID(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org1 := testutil.CreateTestOrganization(t, app.DB)
+	org2 := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create roles for each org
+	role1 := testutil.CreateTestRoleWithKeys(t, app.DB, org1.ID, "role1", []string{"users:read"})
+	role2 := testutil.CreateTestRoleWithKeys(t, app.DB, org2.ID, "role2", []string{"users:write"})
+
+	// Create user
+	user := testutil.CreateTestUser(t, app.DB, org1.ID, testutil.WithRoleID(&role1.ID))
+
+	// Add user to org2 with different role
+	userOrg := &models.UserOrganization{
+		UserID:         user.ID,
+		OrganizationID: org2.ID,
+		RoleID:         &role2.ID,
+	}
+	require.NoError(t, app.DB.Create(userOrg).Error)
+
+	// Get permissions for org1 (default role)
+	result1, err := app.GetUserPermissionsCached(user.ID, org1.ID)
+	require.NoError(t, err)
+	assert.Equal(t, role1.ID, result1.RoleID)
+
+	// Get permissions for org2 (org-specific role)
+	result2, err := app.GetUserPermissionsCached(user.ID, org2.ID)
+	require.NoError(t, err)
+	assert.Equal(t, role2.ID, result2.RoleID)
+}
+
+// TestApp_getUserPermissionsCached_SuperAdmin tests super admin permissions
+func TestApp_getUserPermissionsCached_SuperAdmin(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create super admin
+	user := &models.User{
+		OrganizationID: org.ID,
+		Email:          "superadmin@example.com",
+		FullName:       "Super Admin",
+		PasswordHash:   "hash",
+		IsSuperAdmin:   true,
+	}
+	require.NoError(t, app.DB.Create(user).Error)
+
+	// Retrieve permissions
+	result, err := app.GetUserPermissionsCached(user.ID)
+	require.NoError(t, err)
+	assert.True(t, result.IsSuperAdmin)
+}
+
+// TestApp_GetRolePermissionsCached_CacheHit tests retrieving role permissions from cache
+func TestApp_GetRolePermissionsCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "test-role", []string{"users:read", "users:write"})
+
+	perms := []string{"users:read", "users:write"}
+
+	// Manually cache
+	cacheKey := "permissions:role:" + role.ID.String()
+	data, err := json.Marshal(perms)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetRolePermissionsCached(role.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+// TestApp_GetRolePermissionsCached_CacheMiss tests retrieving role permissions from database
+func TestApp_GetRolePermissionsCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "test-role", []string{"users:read", "users:write"})
+
+	// Retrieve from DB
+	result, err := app.GetRolePermissionsCached(role.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+// TestApp_getTagsCached_CacheHit tests retrieving tags from cache
+func TestApp_getTagsCached_CacheHit(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create tags
+	tag1 := testutil.CreateTestTag(t, app.DB, org.ID, "tag1")
+	tag2 := testutil.CreateTestTag(t, app.DB, org.ID, "tag2")
+
+	tags := []models.Tag{*tag1, *tag2}
+
+	// Manually cache
+	cacheKey := "tags:" + org.ID.String()
+	data, err := json.Marshal(tags)
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey, data, 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Retrieve from cache
+	result, err := app.GetTagsCached(org.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+// TestApp_getTagsCached_CacheMiss tests retrieving tags from database
+func TestApp_getTagsCached_CacheMiss(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create tags
+	tag1 := testutil.CreateTestTag(t, app.DB, org.ID, "zebra")
+	tag2 := testutil.CreateTestTag(t, app.DB, org.ID, "apple")
+
+	// Retrieve from DB (should be ordered by name)
+	result, err := app.GetTagsCached(org.ID)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+	assert.Equal(t, "apple", result[0].Name) // Alphabetically first
+	assert.Equal(t, "zebra", result[1].Name)
+}
+
+// TestApp_InvalidateChatbotSettingsCache tests invalidating settings cache
+func TestApp_InvalidateChatbotSettingsCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create cache entries
+	cacheKey1 := "chatbot:settings:" + org.ID.String() + ":account1"
+	cacheKey2 := "chatbot:settings:" + org.ID.String() + ":account2"
+
+	err := app.Redis.Set(context.Background(), cacheKey1, "data1", 6*time.Hour).Err()
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey2, "data2", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateChatbotSettingsCache(org.ID)
+
+	// Verify keys are deleted
+	_, err = app.Redis.Get(context.Background(), cacheKey1).Result()
+	assert.Equal(t, redis.Nil, err)
+
+	_, err = app.Redis.Get(context.Background(), cacheKey2).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_InvalidateChatbotFlowsCache tests invalidating flows cache
+func TestApp_InvalidateChatbotFlowsCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create cache entry
+	cacheKey := "chatbot:flows:" + org.ID.String()
+	err := app.Redis.Set(context.Background(), cacheKey, "data", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateChatbotFlowsCache(org.ID)
+
+	// Verify key is deleted
+	_, err = app.Redis.Get(context.Background(), cacheKey).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_InvalidateKeywordRulesCache tests invalidating keyword rules cache
+func TestApp_InvalidateKeywordRulesCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create cache entries
+	cacheKey1 := "chatbot:keywords:" + org.ID.String() + ":account1"
+	cacheKey2 := "chatbot:keywords:" + org.ID.String() + ":account2"
+
+	err := app.Redis.Set(context.Background(), cacheKey1, "data1", 6*time.Hour).Err()
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey2, "data2", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateKeywordRulesCache(org.ID)
+
+	// Verify keys are deleted
+	_, err = app.Redis.Get(context.Background(), cacheKey1).Result()
+	assert.Equal(t, redis.Nil, err)
+
+	_, err = app.Redis.Get(context.Background(), cacheKey2).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_InvalidateWhatsAppAccountCache tests invalidating WhatsApp account cache
+func TestApp_InvalidateWhatsAppAccountCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+
+	// Create cache entry
+	cacheKey := "whatsapp:account:phone123"
+	err := app.Redis.Set(context.Background(), cacheKey, "data", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateWhatsAppAccountCache("phone123")
+
+	// Verify key is deleted
+	_, err = app.Redis.Get(context.Background(), cacheKey).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_InvalidateWebhooksCache tests invalidating webhooks cache
+func TestApp_InvalidateWebhooksCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create cache entry
+	cacheKey := "webhooks:" + org.ID.String()
+	err := app.Redis.Set(context.Background(), cacheKey, "data", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateWebhooksCache(org.ID)
+
+	// Verify key is deleted
+	_, err = app.Redis.Get(context.Background(), cacheKey).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_InvalidateSLASettingsCache tests invalidating SLA settings cache
+func TestApp_InvalidateSLASettingsCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+
+	// Create cache entry
+	cacheKey := "chatbot:sla_enabled_settings"
+	err := app.Redis.Set(context.Background(), cacheKey, "data", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateSLASettingsCache()
+
+	// Verify key is deleted
+	_, err = app.Redis.Get(context.Background(), cacheKey).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_InvalidateAIContextsCache tests invalidating AI contexts cache
+func TestApp_InvalidateAIContextsCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create cache entries
+	cacheKey1 := "chatbot:ai_contexts:" + org.ID.String() + ":account1"
+	cacheKey2 := "chatbot:ai_contexts:" + org.ID.String() + ":account2"
+
+	err := app.Redis.Set(context.Background(), cacheKey1, "data1", 6*time.Hour).Err()
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKey2, "data2", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateAIContextsCache(org.ID)
+
+	// Verify keys are deleted
+	_, err = app.Redis.Get(context.Background(), cacheKey1).Result()
+	assert.Equal(t, redis.Nil, err)
+
+	_, err = app.Redis.Get(context.Background(), cacheKey2).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_InvalidateUserPermissionsCache tests invalidating user permissions cache
+func TestApp_InvalidateUserPermissionsCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID)
+
+	// Create cache entries (base and org-specific)
+	cacheKeyBase := "permissions:user:" + user.ID.String()
+	cacheKeyOrg := "permissions:user:" + user.ID.String() + ":" + org.ID.String()
+
+	err := app.Redis.Set(context.Background(), cacheKeyBase, "data1", 6*time.Hour).Err()
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), cacheKeyOrg, "data2", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateUserPermissionsCache(user.ID)
+
+	// Verify keys are deleted
+	_, err = app.Redis.Get(context.Background(), cacheKeyBase).Result()
+	assert.Equal(t, redis.Nil, err)
+
+	_, err = app.Redis.Get(context.Background(), cacheKeyOrg).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_InvalidateRolePermissionsCache tests invalidating role permissions cache
+func TestApp_InvalidateRolePermissionsCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "test-role", []string{"users:read"})
+	user1 := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	user2 := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+
+	// Create cache entries
+	roleCacheKey := "permissions:role:" + role.ID.String()
+	user1CacheKey := "permissions:user:" + user1.ID.String()
+	user2CacheKey := "permissions:user:" + user2.ID.String()
+
+	err := app.Redis.Set(context.Background(), roleCacheKey, "role-data", 6*time.Hour).Err()
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), user1CacheKey, "user1-data", 6*time.Hour).Err()
+	require.NoError(t, err)
+	err = app.Redis.Set(context.Background(), user2CacheKey, "user2-data", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateRolePermissionsCache(role.ID)
+
+	// Verify all keys are deleted
+	_, err = app.Redis.Get(context.Background(), roleCacheKey).Result()
+	assert.Equal(t, redis.Nil, err)
+
+	_, err = app.Redis.Get(context.Background(), user1CacheKey).Result()
+	assert.Equal(t, redis.Nil, err)
+
+	_, err = app.Redis.Get(context.Background(), user2CacheKey).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_InvalidateTagsCache tests invalidating tags cache
+func TestApp_InvalidateTagsCache(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create cache entry
+	cacheKey := "tags:" + org.ID.String()
+	err := app.Redis.Set(context.Background(), cacheKey, "data", 6*time.Hour).Err()
+	require.NoError(t, err)
+
+	// Invalidate
+	app.InvalidateTagsCache(org.ID)
+
+	// Verify key is deleted
+	_, err = app.Redis.Get(context.Background(), cacheKey).Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+// TestApp_HasPermission_Success tests permission check
+func TestApp_HasPermission_Success(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "test-role", []string{"users:read", "users:write"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+
+	// Test existing permission
+	hasPermission := app.HasPermission(user.ID, "users", "read", org.ID)
+	assert.True(t, hasPermission)
+
+	// Test non-existing permission
+	hasPermission = app.HasPermission(user.ID, "users", "delete", org.ID)
+	assert.False(t, hasPermission)
+}
+
+// TestApp_HasPermission_SuperAdmin tests super admin has all permissions
+func TestApp_HasPermission_SuperAdmin(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	user := &models.User{
+		OrganizationID: org.ID,
+		Email:          "superadmin@example.com",
+		FullName:       "Super Admin",
+		PasswordHash:   "hash",
+		IsSuperAdmin:   true,
+	}
+	require.NoError(t, app.DB.Create(user).Error)
+
+	// Super admin should have all permissions
+	hasPermission := app.HasPermission(user.ID, "any", "action", org.ID)
+	assert.True(t, hasPermission)
+}
+
+// TestApp_HasAnyPermission_Success tests checking any of multiple permissions
+func TestApp_HasAnyPermission_Success(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "test-role", []string{"users:read", "users:write"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+
+	// Test with one matching permission
+	hasAny := app.HasAnyPermission(user.ID, "users:read", "users:delete")
+	assert.True(t, hasAny)
+
+	// Test with no matching permissions
+	hasAny = app.HasAnyPermission(user.ID, "users:delete", "teams:delete")
+	assert.False(t, hasAny)
+}
+
+// TestApp_IsSuperAdmin tests checking if user is super admin
+func TestApp_IsSuperAdmin(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create super admin
+	superAdmin := &models.User{
+		OrganizationID: org.ID,
+		Email:          "superadmin@example.com",
+		FullName:       "Super Admin",
+		PasswordHash:   "hash",
+		IsSuperAdmin:   true,
+	}
+	require.NoError(t, app.DB.Create(superAdmin).Error)
+
+	// Create regular user
+	regularUser := testutil.CreateTestUser(t, app.DB, org.ID)
+
+	// Test super admin
+	assert.True(t, app.IsSuperAdmin(superAdmin.ID))
+
+	// Test regular user
+	assert.False(t, app.IsSuperAdmin(regularUser.ID))
+}

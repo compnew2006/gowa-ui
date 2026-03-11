@@ -1,0 +1,2346 @@
+package handlers_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/textproto"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/compnew2006/whatomate/internal/config"
+	"github.com/compnew2006/whatomate/internal/handlers"
+	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/queue"
+	"github.com/compnew2006/whatomate/internal/websocket"
+	"github.com/compnew2006/whatomate/pkg/whatsapp"
+	whatsmeowpkg "github.com/compnew2006/whatomate/pkg/whatsmeow"
+	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
+	"github.com/zerodha/fastglue"
+	waTypes "go.mau.fi/whatsmeow/types"
+)
+
+// TestSendMessage_Success tests successful text message sending
+func TestSendMessage_Success(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Update contact to be open and assigned
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Hello, World!",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.NotEqual(t, uuid.Nil, resp.ID)
+	assert.Equal(t, contact.ID, resp.ContactID)
+	assert.Equal(t, "text", resp.MessageType)
+	assert.Equal(t, "Hello, World!", resp.Content["body"])
+	assert.Equal(t, models.MessageStatusSent, resp.Status)
+}
+
+// TestSendMessage_InteractiveButton tests sending interactive button messages
+func TestSendMessage_InteractiveButton(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "interactive",
+		"interactive": map[string]interface{}{
+			"type":  "button",
+			"body":  "Choose an option:",
+			"buttons": []map[string]string{
+				{"id": "btn1", "title": "Option 1"},
+				{"id": "btn2", "title": "Option 2"},
+			},
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, "interactive", resp.MessageType)
+	assert.NotNil(t, resp.InteractiveData)
+}
+
+// TestSendMessage_ReplyTo tests sending a reply to an existing message
+func TestSendMessage_ReplyTo(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Create original message to reply to
+	originalMsg := &models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      contact.ID,
+		Direction:      models.DirectionIncoming,
+		MessageType:    models.MessageTypeText,
+		Content:        "Original message",
+		Status:         models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(originalMsg).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type":                "text",
+		"reply_to_message_id": originalMsg.ID.String(),
+		"content": map[string]string{
+			"body": "Reply message",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.True(t, resp.IsReply)
+	assert.NotNil(t, resp.ReplyToMessageID)
+	assert.Equal(t, originalMsg.ID.String(), *resp.ReplyToMessageID)
+	assert.NotNil(t, resp.ReplyToMessage)
+	assert.Equal(t, "Original message", resp.ReplyToMessage.Content["body"])
+}
+
+// TestSendMessage_ClosedChatRejected tests that messages to closed chats are rejected
+func TestSendMessage_ClosedChatRejected(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Set contact status to closed
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Update("status", models.ChatStatusClosed).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "This should fail",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusConflict, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusConflict, "Closed chats are read-only")
+}
+
+// TestSendMessage_UnassignedChatRejected tests that unassigned chats are rejected
+func TestSendMessage_UnassignedChatRejected(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Keep contact unassigned (no assigned_user_id)
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Update("status", models.ChatStatusOpen).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "This should fail",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusForbidden, "unassigned")
+}
+
+// TestSendMessage_InvalidRequest tests invalid request handling
+func TestSendMessage_InvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		requestBody    interface{}
+		expectedStatus int
+		expectedError  string
+	}{
+		{
+			name:           "invalid JSON",
+			requestBody:    "invalid json",
+			expectedStatus: fasthttp.StatusBadRequest,
+			expectedError:  "Invalid request body",
+		},
+		{
+			name:           "missing content",
+			requestBody:    map[string]interface{}{"type": "text"},
+			expectedStatus: fasthttp.StatusOK, // Empty body is allowed
+		},
+		{
+			name: "missing type",
+			requestBody: map[string]interface{}{
+				"content": map[string]string{"body": "test"},
+			},
+			expectedStatus: fasthttp.StatusOK, // Default type will be used
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockServer := newMockWhatsAppServer()
+			defer mockServer.close()
+
+			app := newMsgTestApp(t, mockServer)
+			org := testutil.CreateTestOrganization(t, app.DB)
+			adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+			user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+			account := createTestAccount(t, app, org.ID)
+			contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+			require.NoError(t, app.DB.Model(&models.Contact{}).
+				Where("id = ?", contact.ID).
+				Updates(map[string]any{
+					"assigned_user_id": user.ID,
+					"status":           models.ChatStatusOpen,
+				}).Error)
+
+			var req *fastglue.Request
+			if str, ok := tt.requestBody.(string); ok {
+				req = testutil.NewRequest(t)
+				req.RequestCtx.Request.SetBody([]byte(str))
+			} else {
+				req = testutil.NewJSONRequest(t, tt.requestBody)
+			}
+
+			testutil.SetAuthContext(req, org.ID, user.ID)
+			testutil.SetPathParam(req, "id", contact.ID.String())
+
+			err := app.SendMessage(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, testutil.GetResponseStatusCode(req))
+
+			if tt.expectedError != "" {
+				testutil.AssertErrorResponse(t, req, tt.expectedStatus, tt.expectedError)
+			}
+		})
+	}
+}
+
+// TestSendMessage_ContactNotFound tests handling of non-existent contacts
+func TestSendMessage_ContactNotFound(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Test",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", uuid.New().String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusNotFound, "Contact not found")
+}
+
+// TestSendMessage_AgentScope tests agent-specific access restrictions
+func TestSendMessage_AgentScope(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgAppWithRoleRestrictions(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	agentRole := createExactAgentRole(t, app, org.ID)
+	agent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+	account := createTestAccount(t, app, org.ID)
+
+	// Create a contact assigned to this agent
+	assignedContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", assignedContact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": agent.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Create a contact not assigned to this agent
+	unassignedContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", unassignedContact.ID).
+		Update("status", models.ChatStatusOpen).Error)
+
+	t.Run("agent can send to assigned contact", func(t *testing.T) {
+		req := testutil.NewJSONRequest(t, map[string]interface{}{
+			"type": "text",
+			"content": map[string]string{
+				"body": "Hello",
+			},
+		})
+		testutil.SetAuthContext(req, org.ID, agent.ID)
+		testutil.SetPathParam(req, "id", assignedContact.ID.String())
+
+		err := app.SendMessage(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	})
+
+	t.Run("agent cannot send to unassigned contact", func(t *testing.T) {
+		req := testutil.NewJSONRequest(t, map[string]interface{}{
+			"type": "text",
+			"content": map[string]string{
+				"body": "Hello",
+			},
+		})
+		testutil.SetAuthContext(req, org.ID, agent.ID)
+		testutil.SetPathParam(req, "id", unassignedContact.ID.String())
+
+		err := app.SendMessage(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+	})
+}
+
+// TestSendMediaMessage_Image tests sending image media
+func TestSendMediaMessage_Image(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Create test image data (small JPEG)
+	imageData := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46}
+	for i := 0; i < 1000; i++ {
+		imageData = append(imageData, 0x00)
+	}
+
+	req := createMediaRequest(t, org.ID, user.ID, contact.ID, "test.jpg", "image/jpeg", imageData, "Test caption")
+	err := app.SendMediaMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, "image", resp.MessageType)
+	assert.Equal(t, "image/jpeg", resp.MediaMimeType)
+	assert.Equal(t, "test.jpg", resp.MediaFilename)
+	assert.Equal(t, "Test caption", resp.Content["caption"])
+}
+
+// TestSendMediaMessage_Document tests sending document media
+func TestSendMediaMessage_Document(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Create test PDF data
+	pdfData := []byte("%PDF-1.4")
+	for i := 0; i < 1000; i++ {
+		pdfData = append(pdfData, 0x00)
+	}
+
+	req := createMediaRequest(t, org.ID, user.ID, contact.ID, "test.pdf", "application/pdf", pdfData, "")
+	err := app.SendMediaMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, "document", resp.MessageType)
+	assert.Equal(t, "application/pdf", resp.MediaMimeType)
+	assert.Equal(t, "test.pdf", resp.MediaFilename)
+}
+
+// TestSendMediaMessage_Audio tests sending audio media
+func TestSendMediaMessage_Audio(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Create test MP3 data
+	mp3Data := []byte("ID3")
+	for i := 0; i < 1000; i++ {
+		mp3Data = append(mp3Data, 0x00)
+	}
+
+	req := createMediaRequest(t, org.ID, user.ID, contact.ID, "test.mp3", "audio/mpeg", mp3Data, "")
+	err := app.SendMediaMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, "audio", resp.MessageType)
+	assert.Equal(t, "audio/mpeg", resp.MediaMimeType)
+}
+
+// TestSendMediaMessage_Video tests sending video media
+func TestSendMediaMessage_Video(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Create test MP4 data
+	mp4Data := []byte{0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d}
+	for i := 0; i < 1000; i++ {
+		mp4Data = append(mp4Data, 0x00)
+	}
+
+	req := createMediaRequest(t, org.ID, user.ID, contact.ID, "test.mp4", "video/mp4", mp4Data, "")
+	err := app.SendMediaMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, "video", resp.MessageType)
+	assert.Equal(t, "video/mp4", resp.MediaMimeType)
+}
+
+// TestSendMediaMessage_MissingFile tests missing file handling
+func TestSendMediaMessage_MissingFile(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Create multipart request without file
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("contact_id", contact.ID.String()))
+	require.NoError(t, writer.Close())
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPost)
+	req.RequestCtx.Request.Header.SetContentType(writer.FormDataContentType())
+	req.RequestCtx.Request.SetBody(body.Bytes())
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.SendMediaMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "file is required")
+}
+
+// TestSendMediaMessage_InvalidContactID tests invalid contact ID handling
+func TestSendMediaMessage_InvalidContactID(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	// Create multipart request with invalid contact ID
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("contact_id", "invalid-uuid"))
+	require.NoError(t, writer.Close())
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPost)
+	req.RequestCtx.Request.Header.SetContentType(writer.FormDataContentType())
+	req.RequestCtx.Request.SetBody(body.Bytes())
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.SendMediaMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "Invalid contact ID")
+}
+
+// TestSendReaction_Add tests adding a reaction to a message
+func TestSendReaction_Add(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	message := &models.Message{
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     org.ID,
+		ContactID:          contact.ID,
+		WhatsAppMessageID:  "wamid.test123",
+		WhatsAppAccount:    account.Name,
+		Direction:          models.DirectionIncoming,
+		MessageType:        models.MessageTypeText,
+		Content:            "Test message",
+		Status:             models.MessageStatusReceived,
+		Metadata:           models.JSONB{},
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"emoji": "👍",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.SendReaction(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, message.ID.String(), resp["message_id"])
+
+	reactions := resp["reactions"].([]interface{})
+	assert.Len(t, reactions, 1)
+	reaction := reactions[0].(map[string]interface{})
+	assert.Equal(t, "👍", reaction["emoji"])
+	assert.Equal(t, user.ID.String(), reaction["from_user"])
+}
+
+// TestSendReaction_Remove tests removing a reaction from a message
+func TestSendReaction_Remove(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Create message with existing reaction
+	metadata := models.JSONB{
+		"reactions": []interface{}{
+			map[string]interface{}{
+				"emoji":    "👍",
+				"from_user": user.ID.String(),
+			},
+		},
+	}
+
+	message := &models.Message{
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     org.ID,
+		ContactID:          contact.ID,
+		WhatsAppMessageID:  "wamid.test123",
+		WhatsAppAccount:    account.Name,
+		Direction:          models.DirectionIncoming,
+		MessageType:        models.MessageTypeText,
+		Content:            "Test message",
+		Status:             models.MessageStatusReceived,
+		Metadata:           metadata,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"emoji": "", // Empty string removes reaction
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.SendReaction(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	reactions := resp["reactions"].([]interface{})
+	assert.Len(t, reactions, 0)
+}
+
+// TestSendReaction_Replace tests replacing a reaction with another
+func TestSendReaction_Replace(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Create message with existing reaction
+	metadata := models.JSONB{
+		"reactions": []interface{}{
+			map[string]interface{}{
+				"emoji":    "👍",
+				"from_user": user.ID.String(),
+			},
+		},
+	}
+
+	message := &models.Message{
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     org.ID,
+		ContactID:          contact.ID,
+		WhatsAppMessageID:  "wamid.test123",
+		WhatsAppAccount:    account.Name,
+		Direction:          models.DirectionIncoming,
+		MessageType:        models.MessageTypeText,
+		Content:            "Test message",
+		Status:             models.MessageStatusReceived,
+		Metadata:           metadata,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"emoji": "❤️",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.SendReaction(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	reactions := resp["reactions"].([]interface{})
+	assert.Len(t, reactions, 1)
+	reaction := reactions[0].(map[string]interface{})
+	assert.Equal(t, "❤️", reaction["emoji"])
+}
+
+// TestSendReaction_MessageNotFound tests reaction on non-existent message
+func TestSendReaction_MessageNotFound(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"emoji": "👍",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", uuid.New().String())
+
+	err := app.SendReaction(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusNotFound, "Message not found")
+}
+
+// TestRevokeMessage_Success tests successful message revocation
+func TestRevokeMessage_Success(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	instance := createTestInstance(t, app, org.ID, "Test Instance")
+
+	message := &models.Message{
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     org.ID,
+		ContactID:          contact.ID,
+		InstanceID:         &instance.ID,
+		WhatsAppMessageID:  "wamid.test123",
+		Direction:          models.DirectionOutgoing,
+		MessageType:        models.MessageTypeText,
+		Content:            "Test message to revoke",
+		Status:             models.MessageStatusSent,
+		SentByUserID:       &user.ID,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPost)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.RevokeMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// Verify message was updated in database
+	var updatedMsg models.Message
+	require.NoError(t, app.DB.Where("id = ?", message.ID).First(&updatedMsg).Error)
+	assert.Contains(t, updatedMsg.Content, "This message was deleted")
+	assert.True(t, updatedMsg.Metadata["revoked"].(bool))
+	assert.NotEmpty(t, updatedMsg.Metadata["revoked_at"])
+}
+
+// TestRevokeMessage_OnlyOutgoing tests that only outgoing messages can be revoked
+func TestRevokeMessage_OnlyOutgoing(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	message := &models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      contact.ID,
+		Direction:      models.DirectionIncoming, // Incoming message
+		MessageType:    models.MessageTypeText,
+		Content:        "Test message",
+		Status:         models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPost)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.RevokeMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "Only outgoing messages can be revoked")
+}
+
+// TestRevokeMessage_NoWhatsAppID tests revocation without WhatsApp message ID
+func TestRevokeMessage_NoWhatsAppID(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	instance := createTestInstance(t, app, org.ID, "Test Instance")
+
+	message := &models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      contact.ID,
+		InstanceID:     &instance.ID,
+		// No WhatsAppMessageID
+		Direction:   models.DirectionOutgoing,
+		MessageType: models.MessageTypeText,
+		Content:     "Test message",
+		Status:      models.MessageStatusSent,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPost)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.RevokeMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "does not have a WhatsApp ID")
+}
+
+// TestRevokeMessage_NoPermission tests revocation without delete permission
+func TestRevokeMessage_NoPermission(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	// Create role without delete permission
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "limited", []string{"chat:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	instance := createTestInstance(t, app, org.ID, "Test Instance")
+
+	message := &models.Message{
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     org.ID,
+		ContactID:          contact.ID,
+		InstanceID:         &instance.ID,
+		WhatsAppMessageID:  "wamid.test123",
+		Direction:          models.DirectionOutgoing,
+		MessageType:        models.MessageTypeText,
+		Content:            "Test message",
+		Status:             models.MessageStatusSent,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPost)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.RevokeMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusForbidden, "do not have permission to revoke")
+}
+
+// TestSendTypingPresence_Composing tests sending composing state
+func TestSendTypingPresence_Composing(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgAppWithWhatsmeow(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	instance := createTestInstance(t, app, org.ID, "Test Instance")
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Update("instance_id", instance.ID).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"state": "composing",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendTypingPresence(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	// Status depends on whatsmeow manager availability, but should not error
+	assert.Contains(t, resp["status"], []string{"ok", "skipped", "ignored"})
+}
+
+// TestSendTypingPresence_Paused tests sending paused state
+func TestSendTypingPresence_Paused(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgAppWithWhatsmeow(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	instance := createTestInstance(t, app, org.ID, "Test Instance")
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Update("instance_id", instance.ID).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"state": "paused",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendTypingPresence(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+}
+
+// TestSendTypingPresence_Default tests sending typing presence with empty state (defaults to composing)
+func TestSendTypingPresence_Default(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgAppWithWhatsmeow(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	instance := createTestInstance(t, app, org.ID, "Test Instance")
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Update("instance_id", instance.ID).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]string{})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendTypingPresence(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+}
+
+// TestSendTypingPresence_InvalidState tests invalid typing state
+func TestSendTypingPresence_InvalidState(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgAppWithWhatsmeow(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"state": "invalid",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendTypingPresence(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "state must be one of")
+}
+
+// TestSendTypingPresence_GroupChatSkipped tests that group chats are skipped
+func TestSendTypingPresence_GroupChatSkipped(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgAppWithWhatsmeow(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Set as group chat
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Update("phone_number", "1203630123456@g.us").Error)
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"state": "composing",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendTypingPresence(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, "skipped", resp["status"])
+}
+
+// TestResolveWhatsAppAccount_Named tests resolving a named WhatsApp account
+func TestResolveWhatsAppAccount_Named(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+
+	resolved, err := app.resolveWhatsAppAccount(org.ID, account.Name)
+	require.NoError(t, err)
+	assert.Equal(t, account.ID, resolved.ID)
+	assert.Equal(t, account.Name, resolved.Name)
+}
+
+// TestResolveWhatsAppAccount_Default tests resolving default WhatsApp account
+func TestResolveWhatsAppAccount_Default(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+
+	// Set as default
+	require.NoError(t, app.DB.Model(account).Update("is_default_outgoing", true).Error)
+
+	resolved, err := app.resolveWhatsAppAccount(org.ID, "")
+	require.NoError(t, err)
+	assert.Equal(t, account.ID, resolved.ID)
+}
+
+// TestResolveWhatsAppAccount_Fallback tests falling back to any account
+func TestResolveWhatsAppAccount_Fallback(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+
+	// Don't set as default, should fallback to any account
+	resolved, err := app.resolveWhatsAppAccount(org.ID, "")
+	require.NoError(t, err)
+	assert.Equal(t, account.ID, resolved.ID)
+}
+
+// TestResolveWhatsAppAccount_NotFound tests account not found error
+func TestResolveWhatsAppAccount_NotFound(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	_, err := app.resolveWhatsAppAccount(org.ID, "non-existent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+// TestResolveWhatsAppAccount_NoAccounts tests error when no accounts configured
+func TestResolveWhatsAppAccount_NoAccounts(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	_, err := app.resolveWhatsAppAccount(org.ID, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no WhatsApp account configured")
+}
+
+// TestTruncateString tests string truncation helper via message sending
+func TestTruncateString(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Send a very long message - the system should handle it
+	longMessage := strings.Repeat("Test message ", 1000)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": longMessage,
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.NotEmpty(t, resp.Content["body"])
+}
+
+// Helper functions
+
+// createMediaRequest creates a multipart request for media upload
+func createMediaRequest(t *testing.T, orgID, userID, contactID uuid.UUID, filename, mimeType string, fileData []byte, caption string) *fastglue.Request {
+	t.Helper()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	require.NoError(t, writer.WriteField("contact_id", contactID.String()))
+	if caption != "" {
+		require.NoError(t, writer.WriteField("caption", caption))
+	}
+
+	partHeader := make(textproto.MIMEHeader)
+	partHeader.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
+	partHeader.Set("Content-Type", mimeType)
+
+	part, err := writer.CreatePart(partHeader)
+	require.NoError(t, err)
+	_, err = part.Write(fileData)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPost)
+	req.RequestCtx.Request.Header.SetContentType(writer.FormDataContentType())
+	req.RequestCtx.Request.SetBody(body.Bytes())
+	testutil.SetAuthContext(req, orgID, userID)
+
+	return req
+}
+
+// newMsgAppWithWhatsmeow creates an app with whatsmeow provider for testing
+func newMsgAppWithWhatsmeow(t *testing.T, mockServer *mockWhatsAppServer) *handlers.App {
+	t.Helper()
+
+	app := newMsgTestApp(t, mockServer)
+	app.Config.WhatsApp.Provider = "whatsmeow"
+
+	// Add a mock WhatsmeowManager
+	app.WhatsmeowManager = &mockWhatsmeowManager{}
+
+	return app
+}
+
+// newMsgAppWithRoleRestrictions creates an app with role-based restrictions
+func newMsgAppWithRoleRestrictions(t *testing.T, mockServer *mockWhatsAppServer) *handlers.App {
+	t.Helper()
+
+	app := newMsgTestApp(t, mockServer)
+	return app
+}
+
+// mockWhatsmeowManager is a mock implementation of WhatsmeowManager
+type mockWhatsmeowManager struct {
+	sendTypingPresenceFunc func(ctx context.Context, instanceID uuid.UUID, phone string, state waTypes.ChatPresence) error
+}
+
+func (m *mockWhatsmeowManager) SendTypingPresence(ctx context.Context, instanceID uuid.UUID, phone string, state waTypes.ChatPresence) error {
+	if m.sendTypingPresenceFunc != nil {
+		return m.sendTypingPresenceFunc(ctx, instanceID, phone, state)
+	}
+	return nil
+}
+
+// TestSendMessage_WhatsmeowProvider tests message sending with whatsmeow provider
+func TestSendMessage_WhatsmeowProvider(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	app.Config.WhatsApp.Provider = "whatsmeow"
+	app.MessageProvider = &stubMessageProvider{}
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	instance := createTestInstance(t, app, org.ID, "Test Instance")
+	require.NoError(t, app.DB.Model(instance).Updates(map[string]any{
+		"status":       models.InstanceStatusConnected,
+		"phone_number": "201001",
+	}).Error)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID)
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"instance_id":      instance.ID,
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Test via whatsmeow",
+		},
+		"instance_id": instance.ID.String(),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+}
+
+// TestSendMessage_InstanceSelection tests instance selection for whatsmeow
+func TestSendMessage_InstanceSelection(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	app.Config.WhatsApp.Provider = "whatsmeow"
+	app.MessageProvider = &stubMessageProvider{}
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	instance1 := createTestInstance(t, app, org.ID, "Instance 1")
+	instance2 := createTestInstance(t, app, org.ID, "Instance 2")
+	require.NoError(t, app.DB.Model(instance1).Updates(map[string]any{
+		"status":       models.InstanceStatusConnected,
+		"phone_number": "201001",
+	}).Error)
+	require.NoError(t, app.DB.Model(instance2).Updates(map[string]any{
+		"status":       models.InstanceStatusConnected,
+		"phone_number": "201002",
+	}).Error)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID)
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"instance_id":      instance2.ID,
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	t.Run("uses contact instance by default", func(t *testing.T) {
+		req := testutil.NewJSONRequest(t, map[string]interface{}{
+			"type": "text",
+			"content": map[string]string{
+				"body": "Test",
+			},
+		})
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+
+		err := app.SendMessage(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	})
+
+	t.Run("overrides instance when specified", func(t *testing.T) {
+		req := testutil.NewJSONRequest(t, map[string]interface{}{
+			"type":        "text",
+			"content":     map[string]string{"body": "Test"},
+			"instance_id": instance1.ID.String(),
+		})
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+
+		err := app.SendMessage(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	})
+}
+
+// TestErrorHandling_WhatsAppProviderUnavailable tests handling when WhatsApp provider is unavailable
+func TestErrorHandling_WhatsAppProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	app.MessageProvider = &erroringMessageProvider{}
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Test",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusInternalServerError, testutil.GetResponseStatusCode(req))
+
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusInternalServerError, "Failed to send message")
+}
+
+// erroringMessageProvider is a mock provider that always returns errors
+type erroringMessageProvider struct{}
+
+func (m *erroringMessageProvider) SendText(ctx context.Context, accountID, to, body string) (string, error) {
+	return "", errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) SendImage(ctx context.Context, accountID, to, mediaID, caption string) (string, error) {
+	return "", errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) SendDocument(ctx context.Context, accountID, to, mediaID, caption string) (string, error) {
+	return "", errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) SendVideo(ctx context.Context, accountID, to, mediaID, caption string) (string, error) {
+	return "", errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) SendAudio(ctx context.Context, accountID, to, mediaID string) (string, error) {
+	return "", errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) MarkRead(ctx context.Context, accountID, messageID string) error {
+	return errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) SendReaction(ctx context.Context, accountID, messageID, emoji string) error {
+	return errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) RevokeMessage(ctx context.Context, accountID, messageID string) error {
+	return errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) GetMediaURL(ctx context.Context, accountID, mediaID string) (string, error) {
+	return "", errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) DownloadMedia(ctx context.Context, accountID, mediaID string) ([]byte, error) {
+	return nil, errors.New("provider unavailable")
+}
+
+func (m *erroringMessageProvider) UploadMedia(ctx context.Context, accountID, mediaURL string, data []byte) (string, error) {
+	return "", errors.New("provider unavailable")
+}
+
+// TestSendMessage_Persistence tests that messages are properly persisted
+func TestSendMessage_Persistence(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Persistent message",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	// Verify message exists in database
+	var msg models.Message
+	require.NoError(t, app.DB.Where("id = ?", resp.ID).First(&msg).Error)
+	assert.Equal(t, "Persistent message", msg.Content)
+	assert.Equal(t, models.MessageTypeText, msg.MessageType)
+	assert.Equal(t, models.DirectionOutgoing, msg.Direction)
+	assert.Equal(t, models.MessageStatusSent, msg.Status)
+	assert.Equal(t, user.ID, *msg.SentByUserID)
+}
+
+// TestSafeUploadFileExtension tests file extension safety via media upload
+func TestSafeUploadFileExtension_ViaUpload(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Test with various filename formats
+	testCases := []struct {
+		name     string
+		filename string
+		data     []byte
+		mimeType string
+	}{
+		{
+			name:     "simple PDF",
+			filename: "document.pdf",
+			data:     []byte("%PDF-1.4"),
+			mimeType: "application/pdf",
+		},
+		{
+			name:     "file with spaces",
+			filename: "my document.pdf",
+			data:     []byte("%PDF-1.4"),
+			mimeType: "application/pdf",
+		},
+		{
+			name:     "image with jpg extension",
+			filename: "photo.jpg",
+			data:     []byte{0xff, 0xd8, 0xff, 0xe0},
+			mimeType: "image/jpeg",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := createMediaRequest(t, org.ID, user.ID, contact.ID, tc.filename, tc.mimeType, tc.data, "")
+			err := app.SendMediaMessage(req)
+			require.NoError(t, err)
+			assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+		})
+	}
+}
+
+// TestSendMessage_InteractiveList tests sending interactive list messages
+func TestSendMessage_InteractiveList(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "interactive",
+		"interactive": map[string]interface{}{
+			"type": "list",
+			"body": "Select an option",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, "interactive", resp.MessageType)
+}
+
+// TestSendMessage_InteractiveCTAUrl tests sending CTA URL messages
+func TestSendMessage_InteractiveCTAUrl(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "interactive",
+		"interactive": map[string]interface{}{
+			"type":         "cta_url",
+			"body":         "Visit our website",
+			"button_text":  "Open",
+			"url":          "https://example.com",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+}
+
+// TestSendMessage_WhatsAppAccountOverride tests overriding WhatsApp account
+func TestSendMessage_WhatsAppAccountOverride(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	// Create two accounts
+	account1 := createTestAccount(t, app, org.ID)
+	account2 := createTestAccount(t, app, org.ID)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account1.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type":              "text",
+		"whatsapp_account":  account2.Name,
+		"content": map[string]string{
+			"body": "Test with account override",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, account2.Name, resp.WhatsAppAccount)
+}
+
+// TestSendMediaMessage_SaveLocally tests local media saving functionality
+func TestSendMediaMessage_SaveLocally(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Test image
+	imageData := []byte{0xff, 0xd8, 0xff, 0xe0}
+	for i := 0; i < 1000; i++ {
+		imageData = append(imageData, 0x00)
+	}
+
+	req := createMediaRequest(t, org.ID, user.ID, contact.ID, "test.jpg", "image/jpeg", imageData, "")
+	err := app.SendMediaMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	// Verify media URL was set (local path)
+	assert.NotEmpty(t, resp.MediaURL)
+	assert.Contains(t, resp.MediaURL, "images/")
+}
+
+// TestSendMessage_ConversationUpdate tests that conversation is updated on message send
+func TestSendMessage_ConversationUpdate(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Conversation update test",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	// Verify conversation ID is set
+	assert.NotEqual(t, uuid.Nil, resp.ConversationID)
+
+	// Verify conversation exists in database
+	var conversation models.Conversation
+	err = app.DB.Where("id = ?", resp.ConversationID).First(&conversation).Error
+	require.NoError(t, err)
+	assert.Equal(t, contact.ID, conversation.ContactID)
+}
+
+// TestSendReaction_MultipleUsers tests reactions from multiple users
+func TestSendReaction_MultipleUsers(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user1 := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	user2 := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	metadata := models.JSONB{
+		"reactions": []interface{}{
+			map[string]interface{}{
+				"emoji":    "👍",
+				"from_user": user1.ID.String(),
+			},
+		},
+	}
+
+	message := &models.Message{
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     org.ID,
+		ContactID:          contact.ID,
+		WhatsAppMessageID:  "wamid.test123",
+		WhatsAppAccount:    account.Name,
+		Direction:          models.DirectionIncoming,
+		MessageType:        models.MessageTypeText,
+		Content:            "Test message",
+		Status:             models.MessageStatusReceived,
+		Metadata:           metadata,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	// User 2 adds reaction
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"emoji": "❤️",
+	})
+	testutil.SetAuthContext(req, org.ID, user2.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.SendReaction(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	reactions := resp["reactions"].([]interface{})
+	assert.Len(t, reactions, 2)
+}
+
+// TestRevokeMessage_UpdatesContactPreview tests that revoking updates contact preview
+func TestRevokeMessage_UpdatesContactPreview(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	instance := createTestInstance(t, app, org.ID, "Test Instance")
+
+	// Set last_message_at to be old so update will apply
+	oldTime := time.Now().Add(-1 * time.Hour)
+
+	message := &models.Message{
+		BaseModel:          models.BaseModel{ID: uuid.New(), CreatedAt: oldTime},
+		OrganizationID:     org.ID,
+		ContactID:          contact.ID,
+		InstanceID:         &instance.ID,
+		WhatsAppMessageID:  "wamid.test123",
+		Direction:          models.DirectionOutgoing,
+		MessageType:        models.MessageTypeText,
+		Content:            "Test message to revoke",
+		Status:             models.MessageStatusSent,
+		SentByUserID:       &user.ID,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	// Set initial preview
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Update("last_message_preview", "Original message").Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPost)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.RevokeMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// Verify contact preview was updated
+	var updatedContact models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&updatedContact).Error)
+	assert.Contains(t, updatedContact.LastMessagePreview, "deleted")
+}
+
+// TestSendMessage_AsyncDelivery tests async message delivery
+func TestSendMessage_AsyncDelivery(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Async message",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// Message should be in database
+	var messages []models.Message
+	require.NoError(t, app.DB.Where("contact_id = ?", contact.ID).Find(&messages).Error)
+	assert.Greater(t, len(messages), 0)
+}
+
+// TestSendMediaMessage_AllTypes tests all supported media types
+func TestSendMediaMessage_AllTypes(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	mediaTypes := []struct {
+		name          string
+		filename      string
+		mimeType      string
+		data          []byte
+		expectedType  string
+	}{
+		{
+			name:         "JPEG image",
+			filename:     "test.jpg",
+			mimeType:     "image/jpeg",
+			data:         []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46},
+			expectedType: "image",
+		},
+		{
+			name:         "PNG image",
+			filename:     "test.png",
+			mimeType:     "image/png",
+			data:         []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a},
+			expectedType: "image",
+		},
+		{
+			name:         "PDF document",
+			filename:     "test.pdf",
+			mimeType:     "application/pdf",
+			data:         []byte("%PDF-1.4"),
+			expectedType: "document",
+		},
+		{
+			name:         "MP4 video",
+			filename:     "test.mp4",
+			mimeType:     "video/mp4",
+			data:         []byte{0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70},
+			expectedType: "video",
+		},
+		{
+			name:         "MP3 audio",
+			filename:     "test.mp3",
+			mimeType:     "audio/mpeg",
+			data:         []byte("ID3"),
+			expectedType: "audio",
+		},
+	}
+
+	for _, mt := range mediaTypes {
+		t.Run(mt.name, func(t *testing.T) {
+			// Extend data to be valid
+			testData := make([]byte, len(mt.data)+100)
+			copy(testData, mt.data)
+
+			req := createMediaRequest(t, org.ID, user.ID, contact.ID, mt.filename, mt.mimeType, testData, "")
+			err := app.SendMediaMessage(req)
+			require.NoError(t, err)
+			assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+			var resp handlers.MessageResponse
+			require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+			assert.Equal(t, mt.expectedType, resp.MessageType)
+		})
+	}
+}
+
+// TestSendTypingPresence_BestEffort tests that typing presence is best-effort
+func TestSendTypingPresence_BestEffort(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	// Don't set WhatsmeowManager - should return "ignored"
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"state": "composing",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendTypingPresence(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, "ignored", resp["status"])
+}
+
+// TestSendReaction_WebSocketBroadcast tests that reactions are broadcast via WebSocket
+func TestSendReaction_WebSocketBroadcast(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Add mock WebSocket hub
+	mockHub := &mockWebSocketHub{}
+	app.WSHub = mockHub
+
+	message := &models.Message{
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     org.ID,
+		ContactID:          contact.ID,
+		WhatsAppMessageID:  "wamid.test123",
+		WhatsAppAccount:    account.Name,
+		Direction:          models.DirectionIncoming,
+		MessageType:        models.MessageTypeText,
+		Content:            "Test message",
+		Status:             models.MessageStatusReceived,
+		Metadata:           models.JSONB{},
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"emoji": "👍",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.SendReaction(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// Verify WebSocket was called
+	assert.True(t, mockHub.broadcastToOrgCalled)
+	assert.Equal(t, org.ID, mockHub.lastOrgID)
+	assert.Equal(t, "reaction_update", mockHub.lastMessage.Type)
+}
+
+// TestRevokeMessage_WebSocketBroadcast tests that message revocation is broadcast via WebSocket
+func TestRevokeMessage_WebSocketBroadcast(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Add mock WebSocket hub
+	mockHub := &mockWebSocketHub{}
+	app.WSHub = mockHub
+
+	instance := createTestInstance(t, app, org.ID, "Test Instance")
+
+	message := &models.Message{
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     org.ID,
+		ContactID:          contact.ID,
+		InstanceID:         &instance.ID,
+		WhatsAppMessageID:  "wamid.test123",
+		Direction:          models.DirectionOutgoing,
+		MessageType:        models.MessageTypeText,
+		Content:            "Test message to revoke",
+		Status:             models.MessageStatusSent,
+		SentByUserID:       &user.ID,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPost)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.RevokeMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// Verify WebSocket was called (via broadcastNewMessage)
+	assert.True(t, mockHub.broadcastToOrgCalled)
+}
+
+// TestSendMessage_WithConversation tests message sending with conversation context
+func TestSendMessage_WithConversation(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	// Create existing conversation
+	conversation := &models.Conversation{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      contact.ID,
+		Status:         models.ConversationStatusOpen,
+	}
+	require.NoError(t, app.DB.Create(conversation).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Message with conversation",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	// Should use existing conversation
+	assert.Equal(t, conversation.ID, resp.ConversationID)
+}
+
+// TestSendMessage_NewConversation tests that new conversation is created if needed
+func TestSendMessage_NewConversation(t *testing.T) {
+	t.Parallel()
+
+	mockServer := newMockWhatsAppServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	require.NoError(t, app.DB.Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(map[string]any{
+			"assigned_user_id": user.ID,
+			"status":           models.ChatStatusOpen,
+		}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"type": "text",
+		"content": map[string]string{
+			"body": "Message creating new conversation",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.SendMessage(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp handlers.MessageResponse
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	// New conversation should be created
+	assert.NotEqual(t, uuid.Nil, resp.ConversationID)
+
+	var conversation models.Conversation
+	require.NoError(t, app.DB.Where("id = ?", resp.ConversationID).First(&conversation).Error)
+	assert.Equal(t, contact.ID, conversation.ContactID)
+}
+
+// TestSendMessage_ErrorPaths tests various error paths
+func TestSendMessage_ErrorPaths(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		setupContact   func(*testing.T, *handlers.App, *models.Contact)
+		expectedStatus int
+		expectedError  string
+	}{
+		{
+			name: "closed chat",
+			setupContact: func(t *testing.T, app *handlers.App, contact *models.Contact) {
+				t.Helper()
+				require.NoError(t, app.DB.Model(contact).Update("status", models.ChatStatusClosed).Error)
+			},
+			expectedStatus: fasthttp.StatusConflict,
+			expectedError:  "Closed chats are read-only",
+		},
+		{
+			name: "unassigned chat",
+			setupContact: func(t *testing.T, app *handlers.App, contact *models.Contact) {
+				t.Helper()
+				require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+					"assigned_user_id": nil,
+					"status":           models.ChatStatusOpen,
+				}).Error)
+			},
+			expectedStatus: fasthttp.StatusForbidden,
+			expectedError:  "unassigned",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockServer := newMockWhatsAppServer()
+			defer mockServer.close()
+
+			app := newMsgTestApp(t, mockServer)
+			org := testutil.CreateTestOrganization(t, app.DB)
+			adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+			user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+			account := createTestAccount(t, app, org.ID)
+			contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+			// Set initial state
+			require.NoError(t, app.DB.Model(&models.Contact{}).
+				Where("id = ?", contact.ID).
+				Updates(map[string]any{
+					"assigned_user_id": user.ID,
+					"status":           models.ChatStatusOpen,
+				}).Error)
+
+			// Apply test-specific setup
+			tt.setupContact(t, app, contact)
+
+			req := testutil.NewJSONRequest(t, map[string]interface{}{
+				"type": "text",
+				"content": map[string]string{
+					"body": "Test",
+				},
+			})
+			testutil.SetAuthContext(req, org.ID, user.ID)
+			testutil.SetPathParam(req, "id", contact.ID.String())
+
+			err := app.SendMessage(req)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, testutil.GetResponseStatusCode(req))
+
+			if tt.expectedError != "" {
+				testutil.AssertErrorResponse(t, req, tt.expectedStatus, tt.expectedError)
+			}
+		})
+	}
+}

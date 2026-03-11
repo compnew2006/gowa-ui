@@ -150,6 +150,104 @@ func TestApp_SendMessage_StrictRestrictionsAutoAuthorizeFromIncomingHistory(t *t
 	assert.True(t, strings.Contains(string(authorizedJSON), "15551234567"), string(authorizedJSON))
 }
 
+func TestApp_SendMessage_AssignedChatBypassesWhatsmeowInstanceRestrictions(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	app.Config.WhatsApp.Provider = "whatsmeow"
+	app.MessageProvider = &stubMessageProvider{}
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "restricted-agent", []string{"contacts:read", "chat:write"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	otherAgent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+
+	instanceAllowed := createTestInstance(t, app, org.ID, "Allowed Instance")
+	instanceRestricted := createTestInstance(t, app, org.ID, "Restricted Instance")
+	require.NoError(t, app.DB.Model(instanceAllowed).Updates(map[string]any{
+		"status":       models.InstanceStatusConnected,
+		"phone_number": "201001",
+	}).Error)
+	require.NoError(t, app.DB.Model(instanceRestricted).Updates(map[string]any{
+		"status":       models.InstanceStatusConnected,
+		"phone_number": "201002",
+	}).Error)
+
+	selfAssignedContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15556667777"))
+	otherAssignedContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15556668888"))
+	require.NoError(t, app.DB.Model(selfAssignedContact).Updates(map[string]any{
+		"instance_id":      instanceRestricted.ID,
+		"assigned_user_id": user.ID,
+		"status":           models.ChatStatusOpen,
+	}).Error)
+	require.NoError(t, app.DB.Model(otherAssignedContact).Updates(map[string]any{
+		"instance_id":      instanceRestricted.ID,
+		"assigned_user_id": otherAgent.ID,
+		"status":           models.ChatStatusOpen,
+	}).Error)
+
+	enableRestrictedInstanceVisibilityWithStrictAndEnabled(t, app, org.ID, user.ID, instanceAllowed.ID, true, true)
+
+	var persistedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&persistedOrg).Error)
+	if persistedOrg.Settings == nil {
+		persistedOrg.Settings = models.JSONB{}
+	}
+	persistedOrg.Settings["outbound_mode"] = "inbound_only"
+	persistedOrg.Settings["strict_rollout_mode"] = "enforce"
+	require.NoError(t, app.DB.Model(&persistedOrg).Update("settings", persistedOrg.Settings).Error)
+
+	require.NoError(t, app.DB.Create(&models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      selfAssignedContact.ID,
+		Direction:      models.DirectionIncoming,
+		MessageType:    models.MessageTypeText,
+		Content:        "incoming seed self",
+		Status:         models.MessageStatusReceived,
+	}).Error)
+	require.NoError(t, app.DB.Create(&models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		ContactID:      otherAssignedContact.ID,
+		Direction:      models.DirectionIncoming,
+		MessageType:    models.MessageTypeText,
+		Content:        "incoming seed other",
+		Status:         models.MessageStatusReceived,
+	}).Error)
+
+	t.Run("self assigned chat can send outside allowed instances", func(t *testing.T) {
+		req := testutil.NewJSONRequest(t, map[string]interface{}{
+			"type": "text",
+			"content": map[string]string{
+				"body": "Allowed self assigned send",
+			},
+		})
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", selfAssignedContact.ID.String())
+
+		err := app.SendMessage(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	})
+
+	t.Run("other assigned chat remains blocked by instance restriction", func(t *testing.T) {
+		req := testutil.NewJSONRequest(t, map[string]interface{}{
+			"type": "text",
+			"content": map[string]string{
+				"body": "Blocked other assigned send",
+			},
+		})
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", otherAssignedContact.ID.String())
+
+		err := app.SendMessage(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+		assert.Contains(t, string(testutil.GetResponseBody(req)), "POLICY_NO_INSTANCE")
+	})
+}
+
 func TestApp_SendOutgoingMessage_SystemBlockedWithoutInboundHistory(t *testing.T) {
 	t.Parallel()
 

@@ -1,0 +1,7 @@
+[leaky_jsonb_settings] GENUINE — `internal/handlers/organization.go` reads/writes `org.Settings` (models.JSONB map) directly via type assertions and helper functions (e.g., `org.Settings["mask_phone_numbers"]`, `parseOrganizationStringSetting`), and `internal/handlers/send_restriction_policy.go` also reads/writes JSONB settings directly. Settings parsing/writing is spread across handlers rather than encapsulated.
+
+[monster_handler_monoliths] GENUINE — handler files are very large: `internal/handlers/chatbot_processor.go` ~2912 LOC, `internal/handlers/agent_transfers.go` ~1465 LOC, `internal/handlers/campaigns.go` ~1409 LOC, `internal/handlers/widgets.go` ~1403 LOC (via `wc -l`). This supports monolithic handler claim.
+
+[fat_handlers_missing_service_layer] GENUINE — handlers do DB queries, permission logic, and response shaping inline. Example: `ListAgentTransfers` in `internal/handlers/agent_transfers.go` builds joins, pagination, permission filtering, and response mapping in one method (roughly lines 70–200+), with no intermediate service layer.
+
+[monolithic_app_struct] GENUINE — `internal/handlers/app.go` defines `type App struct` with many dependencies (DB, Redis, WhatsApp/Whatsmeow, websocket hub, queue, HTTP client, provider, etc.), and most handler logic across the package is attached to `*App` receivers (e.g., `GetOrganizationSettings`, `ListAgentTransfers`). This is a monolithic app struct pattern.

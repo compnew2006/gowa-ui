@@ -20,6 +20,10 @@ func (a *App) parseAnalyticsInstanceID(orgID uuid.UUID, raw string) (*uuid.UUID,
 		return nil, errors.New("instance_id must be a valid UUID")
 	}
 
+	if a == nil || a.DB == nil {
+		return nil, errors.New("instance lookup is unavailable")
+	}
+
 	var instance models.WhatsAppInstance
 	if err := a.DB.Where("id = ? AND organization_id = ?", instanceID, orgID).First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

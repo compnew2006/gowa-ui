@@ -1,0 +1,56 @@
+{
+  "batch": "ai_generated_debt",
+  "batch_index": 10,
+  "assessments": {"ai_generated_debt": 75.0},
+  "dimension_notes": {
+    "ai_generated_debt": {
+      "evidence": [
+        "UploadProfilePicture in pkg/whatsapp/profile_extras.go has exact duplicated comment blocks (Lines 7-8 and 9-10), a classic sign of unreviewed LLM output.",
+        "Handlers in internal/handlers/flows.go use strictly restating comments (e.g., '// ListFlows returns all flows') that add no insight beyond the function name.",
+        "Repetitive boilerplate for organization/instance resolution across handlers suggests a 'copypasta' pattern often exacerbated by AI assistance without refactoring into shared helpers.",
+        "Diagnostic log entries in handlers sometimes echo parameters without clear value, typical of defensive AI logging."
+      ],
+      "impact_scope": "local",
+      "fix_scope": "single_edit",
+      "confidence": "high"
+    }
+  },
+  "dimension_judgment": {
+    "ai_generated_debt": {
+      "strengths": [
+        "Domain-heavy logic (like Meta Flow sanitization) is deeply specialized and correctly implemented.",
+        "Interface structures are clean and avoid the 'bag of everything' pattern common in over-engineered AI code."
+      ],
+      "issue_character": "Low-impact but highly visible AI artifacts (comment duplication, restating documentation) are present in the codebase.",
+      "score_rationale": "Score 75.0 because while the core logic is robust and domain-aware, the presence of identical duplicated comment blocks in profile_extras.go confirms that some code was committed without a thorough manual review of AI output. The restating comments across handlers further contribute to high-frequency, low-value documentation debt."
+    }
+  },
+  "issues": [
+    {
+      "dimension": "ai_generated_debt",
+      "identifier": "ai::duplicated_comment_blocks",
+      "summary": "Identical comment blocks duplicated in pkg/whatsapp/profile_extras.go",
+      "related_files": ["pkg/whatsapp/profile_extras.go"],
+      "evidence": ["Lines 7-10 contain the same two sentences twice."],
+      "suggestion": "Remove the duplicated comment block and ensure manual review of AI-generated documentation.",
+      "confidence": "high",
+      "impact_scope": "local",
+      "fix_scope": "single_edit"
+    },
+    {
+      "dimension": "ai_generated_debt",
+      "identifier": "ai::restating_documentation",
+      "summary": "Trivial, restating comments add noise to handler files",
+      "related_files": ["internal/handlers/flows.go"],
+      "evidence": ["// GetFlow returns a single flow by ID' followed by 'func (a *App) GetFlow'."],
+      "suggestion": "Replace restating comments with documentation that explains non-obvious behavior, side effects, or business rules, or remove them entirely for trivial methods.",
+      "confidence": "medium",
+      "impact_scope": "module",
+      "fix_scope": "multi_file_refactor"
+    }
+  ],
+  "retrospective": {
+    "root_causes": ["High-velocity development using AI assistance without a consistent 'remove boilerplate' pass during code review."],
+    "likely_symptoms": ["Invisible decay of documentation quality, developer blindness to trivial comments."]
+  }
+}

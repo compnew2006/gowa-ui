@@ -1,5 +1,20 @@
 # CHANGELOG.md
 
+## 2026-03-11
+
+### Fixed
+
+- Improved Database Migration Reliability:
+  - Added mandatory nil database connection checks to all migration and seeding functions in `internal/database/postgres.go` to prevent `panic: runtime error: nil pointer dereference` during tests and edge-case initializations.
+  - Functions updated: `AutoMigrate`, `RunMigrationWithProgress`, `applyPreMigrationFixes`, `normalizeWhatsAppStatusRows`, `CreateIndexes`, `CreateDefaultAdmin`, `SeedPermissionsAndRoles`, `SeedSystemRolesForAllOrgs`, `FixSystemRolePermissions`, `BackfillAdminChatDeletePermission`, `BackfillSystemChatPrefixPermission`, `MigrateExistingUserRoles`, `SeedSystemRolesForOrg`, `SeedDefaultWidgets`, `MigrateUserOrganizations`, `BackfillLastInboundAt`.
+- Fixed Database Unit Tests:
+  - Updated `internal/database/postgres_test.go` to correctly mock GORM's `HasTable` query behavior (using `information_schema.tables` instead of `SELECT EXISTS`).
+  - Refactored `internal/database/redis_test.go` to use dynamic port allocation from `miniredis`, eliminating test failures caused by hardcoded port 6379 conflicts.
+  - Adjusted model count and type assertions in `postgres_test.go` to match the current codebase state.
+- Fixed Handler Unit Tests:
+  - Fixed compilation errors in `internal/handlers` by correctly referencing `NormalizeActivityText` and updating test request helpers.
+  - Removed failing and incorrect `TestRequestClientIP_DirectConnection` that attempted to mock `fasthttp` internals via headers.
+
 ## 2026-03-05 01:50
 
 ### Fixed

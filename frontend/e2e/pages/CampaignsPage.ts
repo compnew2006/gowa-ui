@@ -51,7 +51,7 @@ export class CampaignsPage extends BasePage {
 
   getAddRecipientsButton(card?: Locator): Locator {
     const container = card || this.page
-    return container.locator('button').filter({ has: this.page.locator('.lucide-user-plus') }).first()
+    return container.locator('button[title="Add Recipients"]').first()
   }
 
   getStartButton(card?: Locator): Locator {

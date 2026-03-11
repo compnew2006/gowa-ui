@@ -53,6 +53,10 @@ func (a *App) generateAccessToken(user *models.User) (string, time.Time, error) 
 }
 
 func (a *App) generateRefreshToken(user *models.User) (string, error) {
+	if a == nil || a.Config == nil {
+		return "", fmt.Errorf("app or config is nil")
+	}
+
 	jti := uuid.New().String()
 	expiry := time.Duration(a.Config.JWT.RefreshExpiryDays) * 24 * time.Hour
 
@@ -84,14 +88,20 @@ func (a *App) generateRefreshToken(user *models.User) (string, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := a.Redis.Set(ctx, refreshTokenKey(jti), user.ID.String(), expiry).Err(); err != nil {
-		a.Log.Error("Failed to store refresh token in Redis", "error", err)
+	if a.Redis != nil {
+		if err := a.Redis.Set(ctx, refreshTokenKey(jti), user.ID.String(), expiry).Err(); err != nil {
+			a.Log.Error("Failed to store refresh token in Redis", "error", err)
+		}
 	}
 
 	return signed, nil
 }
 
 func (a *App) generateRegisterInviteToken(orgID uuid.UUID, ttl time.Duration) (string, time.Time, error) {
+	if a == nil || a.Config == nil {
+		return "", time.Time{}, fmt.Errorf("app or config is nil")
+	}
+
 	expiresAt := time.Now().Add(ttl)
 	claims := RegisterInviteClaims{
 		OrganizationID: orgID,
@@ -119,6 +129,10 @@ func (a *App) generateRegisterInviteToken(orgID uuid.UUID, ttl time.Duration) (s
 }
 
 func (a *App) validateRegisterInviteToken(tokenString string) (uuid.UUID, error) {
+	if a == nil || a.Config == nil {
+		return uuid.Nil, fmt.Errorf("app or config is nil")
+	}
+
 	token, err := jwt.ParseWithClaims(tokenString, &RegisterInviteClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return a.jwtSecretBytes()
 	})

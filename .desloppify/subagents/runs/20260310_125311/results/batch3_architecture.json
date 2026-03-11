@@ -1,0 +1,208 @@
+{
+  "session": {"id": "batch3_architecture", "token": "review"},
+  "assessments": {
+    "cross_module_architecture": 72,
+    "initialization_coupling": 95,
+    "convention_outlier": 68,
+    "dependency_health": 85,
+    "package_organization": 62
+  },
+  "findings": [
+    {
+      "dimension": "cross_module_architecture",
+      "identifier": "handlers_package_bloat",
+      "summary": "handlers package contains 145 files (50% of entire codebase), creating a hub module with excessive blast radius",
+      "related_files": ["internal/handlers/*"],
+      "evidence": [
+        "internal/handlers contains 145 Go files out of 286 total files (50% of codebase)",
+        "handlers package mixes concerns: HTTP handlers, business logic, workers, policies, processors, and domain services",
+        "Large files like chatbot_processor.go (92KB), contacts.go (45KB), campaigns.go (47KB) indicate domain logic embedded in handlers",
+        "No clear separation between HTTP layer and business logic - handlers directly manipulate models, database, and external services"
+      ],
+      "suggestion": "Split handlers into focused packages: handlers/ (HTTP only), services/ (business logic), policies/ (authorization), workers/ (background jobs). Extract domain models from handlers to reduce coupling.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "cross_module_architecture",
+      "identifier": "circular_dependency_internal_models",
+      "summary": "handlers directly import and manipulate internal/models without service layer, creating tight coupling",
+      "related_files": ["internal/handlers/*.go", "internal/models/*.go"],
+      "evidence": [
+        "Every handler file imports internal/models directly",
+        "Handlers contain complex business logic that should be in a service layer (e.g., chat_close_ratings.go has 36KB of rating logic)",
+        "No repository pattern or data access layer - handlers use GORM directly on models",
+        "Models package is imported by 145+ handler files, creating a large blast radius for model changes"
+      ],
+      "suggestion": "Introduce a repository/service layer between handlers and models. Create domain-specific packages (e.g., internal/rating, internal/campaign) that encapsulate business logic and data access.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "cross_module_architecture",
+      "identifier": "pkg_whatsapp_duplication",
+      "summary": "Two WhatsApp packages (pkg/whatsapp and pkg/whatsmeow) with overlapping responsibilities and unclear boundaries",
+      "related_files": ["pkg/whatsapp/*.go", "pkg/whatsmeow/*.go"],
+      "evidence": [
+        "pkg/whatsapp has 17 files, pkg/whatsmeow has 67 files - significant size disparity suggests whatsmeow contains domain logic",
+        "Both packages implement MessageProvider interface via adapters (whatsapp/adapter.go, whatsmeow/adapter.go)",
+        "whatsmeow package contains 67 files with domain logic, connection management, and business rules - not just a thin wrapper",
+        "pkg/provider interface is the abstraction boundary, but implementation details leak into both packages"
+      ],
+      "suggestion": "Consider consolidating WhatsApp provider logic under a single package with clear internal structure. Move domain-specific whatsmeow logic to internal/whatsmeow if it's not a reusable library.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "initialization_coupling",
+      "identifier": "no_init_functions",
+      "summary": "No init() functions found - all initialization is explicit and controlled",
+      "related_files": ["internal/*", "pkg/*"],
+      "evidence": [
+        "grep for 'func init()' across entire codebase returned zero results",
+        "All initialization happens explicitly in cmd/whatomate/main.go through function calls",
+        "Database connections (postgres.go, redis.go) use explicit factory functions (NewPostgres, NewRedis)",
+        "Dependencies are injected via App struct constructor in main.go - no global singletons"
+      ],
+      "suggestion": "Continue current pattern. The explicit initialization approach is excellent for testability and avoiding boot-order dependencies.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "initialization_coupling",
+      "identifier": "module_level_constants",
+      "summary": "Package-level constants and compiled regexes are safe and appropriate",
+      "related_files": ["internal/handlers/*.go"],
+      "evidence": [
+        "Found module-level vars like defaultChatCloseRatingTemplates, localizedRatingDigitReplacer, safeFilenameRe",
+        "These are immutable constants compiled at import time - no side effects",
+        "No dynamic computation or I/O at module level",
+        "All module-level vars are constants, maps, or regex compilations - safe patterns"
+      ],
+      "suggestion": "Current patterns are acceptable. Document the immutability contract for package-level variables to prevent future misuse.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "convention_outlier",
+      "identifier": "inconsistent_file_organization",
+      "summary": "handlers package mixes domains without subdirectories, making navigation difficult",
+      "related_files": ["internal/handlers/*.go"],
+      "evidence": [
+        "145 files in single handlers directory - no subdirectories despite clear domain boundaries",
+        "Files span multiple domains: accounts, campaigns, chatbot, contacts, organizations, SSO, webhooks, analytics, widgets",
+        "No grouping by domain (e.g., handlers/chatbot/*.go, handlers/campaigns/*.go) despite clear domain boundaries",
+        "Related files are scattered: chatbot.go, chatbot_processor.go, chatbot_test.go, chatbot_expression_benchmark_test.go are separate files"
+      ],
+      "suggestion": "Organize handlers by domain: handlers/accounts/, handlers/campaigns/, handlers/chatbot/, handlers/contacts/. This improves discoverability without adding abstraction layers.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "convention_outlier",
+      "identifier": "mixed_naming_patterns",
+      "summary": "Inconsistent naming between package directories and file purposes",
+      "related_files": ["internal/handlers/*.go"],
+      "evidence": [
+        "Some files are entity-focused (contacts.go, accounts.go, organizations.go)",
+        "Some files are action-focused (chat_lifecycle.go, send_restriction_policy.go, instance_auto_campaign_worker.go)",
+        "Some files are component-focused (activity_middleware.go, template_engine.go, custom_action_runtime.go)",
+        "No clear convention for when to use which naming pattern"
+      ],
+      "suggestion": "Establish naming convention: entity files for CRUD (contacts.go), feature files for cross-cutting concerns (chat_policy.go), worker files for background jobs (campaign_worker.go). Document this in CONTRIBUTE.md.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "convention_outlier",
+      "identifier": "inconsistent_request_response_patterns",
+      "summary": "Request/Response struct definitions scattered across handler files instead of centralized types package",
+      "related_files": ["internal/handlers/*.go"],
+      "evidence": [
+        "Each handler file defines its own Request/Response types (e.g., AccountRequest, CampaignRequest, ContactRequest)",
+        "No shared types package for common DTOs",
+        "Duplicate patterns across files: every handler has similar Request/Response/Filter structs",
+        "Types are not reused across related handlers (e.g., CampaignRequest in campaigns.go but similar types in other files)"
+      ],
+      "suggestion": "Create internal/types or internal/dto package for shared request/response structures. Keep handler-specific types in handlers, but extract common patterns.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "dependency_health",
+      "identifier": "appropriate_external_deps",
+      "summary": "External dependencies are minimal and appropriate for the domain",
+      "related_files": ["go.mod"],
+      "evidence": [
+        "26 direct dependencies in go.mod - reasonable for a production application",
+        "No duplicate functionality (e.g., single HTTP client library, single JWT library)",
+        "All dependencies are actively maintained: go-redis/v9, gorm.io/gorm, fasthttp, whatsmeow",
+        "No heavy dependencies pulled in for light use - each dep serves a clear purpose"
+      ],
+      "suggestion": "Current dependency management is healthy. Consider periodic audits to remove unused dependencies.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "dependency_health",
+      "identifier": "whatsmeow_pinning",
+      "summary": "whatsmeow dependency pinned to specific commit - good for stability but may miss updates",
+      "related_files": ["go.mod", "go.sum"],
+      "evidence": [
+        "go.mau.fi/whatsmeow v0.0.0-20260216124546-34b971e686b6 is pinned to a specific commit",
+        "This is appropriate for a library under active development",
+        "Pinned version prevents breaking changes from affecting production",
+        "However, may miss bug fixes and security updates if not regularly updated"
+      ],
+      "suggestion": "Document the update process for whatsmeow dependency. Consider automated dependency scanning to alert on new versions.",
+      "confidence": "low"
+    },
+    {
+      "dimension": "package_organization",
+      "identifier": "flat_handlers_structure",
+      "summary": "handlers package is flat with 145 files, violating the 'flat directory overload' anti-pattern",
+      "related_files": ["internal/handlers/*.go"],
+      "evidence": [
+        "145 files in single directory exceeds 10-file guideline by 14x",
+        "Mixed concerns: HTTP handlers, business logic, background workers, policies, utilities",
+        "Files range from 600 bytes to 92KB (chatbot_processor.go)",
+        "No domain-based subdirectories despite clear domain boundaries (chatbot, campaigns, contacts, accounts, etc.)"
+      ],
+      "suggestion": "Reorganize handlers into domain-based subdirectories: handlers/accounts/, handlers/campaigns/, handlers/chatbot/, handlers/contacts/, handlers/analytics/. Keep HTTP handlers in these dirs, move business logic to services/.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "package_organization",
+      "identifier": "ambiguous_package_boundaries",
+      "summary": "pkg/whatsmeow contains 67 files with domain logic, blurring library vs application boundary",
+      "related_files": ["pkg/whatsmeow/*.go"],
+      "evidence": [
+        "pkg/whatsmeow has 67 files - more than any internal package except handlers",
+        "Contains connection management, business logic, adapters, and domain-specific features",
+        "pkg/ is intended for reusable libraries, but whatsmeow contains application-specific WhatsApp integration logic",
+        "internal/ is for application-private code, but reusable WhatsApp logic lives in pkg/"
+      ],
+      "suggestion": "Move whatsmeow application-specific logic to internal/whatsmeow/. Keep only generic whatsmeow wrappers in pkg/ if they're reusable across projects.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "package_organization",
+      "identifier": "internal_subpackage_balance",
+      "summary": "Good balance in internal/ packages, but models package is under-structured",
+      "related_files": ["internal/models/*.go"],
+      "evidence": [
+        "internal/models has 16 files covering all domain models - reasonable size",
+        "But models mix concerns: ORM entities, enums, constants, and validation rules",
+        "No separation between domain models and database entities (all use GORM annotations)",
+        "Models package is imported everywhere, but contains no business logic encapsulation"
+      ],
+      "suggestion": "Consider splitting models into: models/ (ORM entities), types/ (domain types), enums/ (constants). This would make dependencies clearer and reduce unnecessary imports.",
+      "confidence": "low"
+    },
+    {
+      "dimension": "package_organization",
+      "identifier": "missing_internal_abstractions",
+      "summary": "No internal service or repository layer - handlers directly access models and external services",
+      "related_files": ["internal/handlers/*.go", "internal/models/*.go"],
+      "evidence": [
+        "Handlers directly use GORM on models (no repository pattern)",
+        "Business logic embedded in handlers instead of service layer",
+        "No internal/services or internal/domain package despite clear business domains",
+        "Cross-cutting concerns (rating logic, campaign logic, chatbot logic) scattered across handler files"
+      ],
+      "suggestion": "Introduce internal/services/ package with domain services (e.g., services/campaign, services/rating, services/chatbot). Handlers become thin HTTP adapters that delegate to services.",
+      "confidence": "medium"
+    }
+  ]
+}

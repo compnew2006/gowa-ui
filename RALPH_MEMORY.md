@@ -54,3 +54,17 @@
 - **The Reality:** According to the WebSocket RFC, if the client sends a list of subprotocols, the server MUST explicitly select and return one in the HTTP 101 Switching Protocols response (e.g., `Sec-WebSocket-Protocol: whm.v1`). If it doesn't, strict clients (browsers, Playwright) instantly terminate the connection.
 - **The Fix:** Explicitly set `up.Subprotocols = []string{"whm.v1"}` in the `fastHTTPUpgrader` configuration right before calling `Upgrade()`.
 - **The Law:** Always echo the negotiated `Sec-WebSocket-Protocol` during the WS handshake if the client requests one, otherwise the client will inevitably sever the connection.
+
+## [2026-03-11] Issue: Nil pointer dereference in database migrations
+
+- **The Trap:** Assuming the `*gorm.DB` connection passed to migration and seeding functions is always initialized and non-nil.
+- **The Reality:** Unit tests often pass nil ORM instances or simulate edge cases where the database connection fails early, leading to immediate panics during `AutoMigrate` or `RunMigrationWithProgress`.
+- **The Fix:** Added explicit `if db == nil { return fmt.Errorf("database connection is nil") }` checks to all major database lifecycle functions in `postgres.go`.
+- **The Law:** Never assume a shared dependency like a database handle is non-nil in lifecycle or migration logic; always guard against initialization failures.
+
+## [2026-03-11] Issue: Flaky Redis tests due to hardcoded port conflicts
+
+- **The Trap:** Hardcoding `Addr: "localhost:6379"` in Redis client tests, assuming the port is always available and points to the `miniredis` mock.
+- **The Reality:** Parallel test execution or existing local Redis instances cause connection collisions, leading to "address already in use" or tests accidentally connecting to a real local database instead of the mock.
+- **The Fix:** Created a `getMockRedisConfig` helper that dynamically retrieves the random port assigned by `miniredis.Run()` and injects it into the client configuration.
+- **The Law:** Always use dynamic port allocation for mock services in unit tests to ensure isolation and prevent environmental cross-contamination.

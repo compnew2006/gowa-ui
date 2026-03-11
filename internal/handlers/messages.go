@@ -346,7 +346,7 @@ func (a *App) resolveAgentMessagePrefixName(userID uuid.UUID) string {
 		return ""
 	}
 
-	name := strings.TrimSpace(a.resolveActivityActorName(userID))
+	name := strings.TrimSpace(a.ResolveActivityActorName(userID))
 	if name == "" {
 		return ""
 	}
@@ -423,9 +423,11 @@ func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, m
 		instanceID = instance.ID.String()
 		// Update message with the resolved instance
 		instID := instance.ID
-		Msg_instanceID := &instID
-		a.DB.Model(&models.Message{}).Where("id = ?", msg.ID).Update("instance_id", Msg_instanceID)
-		msg.InstanceID = Msg_instanceID
+		msgInstanceID := &instID
+		if err := a.DB.Model(&models.Message{}).Where("id = ?", msg.ID).Update("instance_id", msgInstanceID).Error; err != nil {
+			a.Log.Warn("failed to persist resolved instance ID for provider send", "message_id", msg.ID, "error", err)
+		}
+		msg.InstanceID = msgInstanceID
 	}
 
 	to := req.Contact.PhoneNumber
@@ -444,32 +446,19 @@ func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, m
 		return a.MessageProvider.SendText(ctx, instanceID, to, req.Content)
 
 	case models.MessageTypeImage:
-		// For whatsmeow, we pass the media URL (local path); the adapter handles download + upload
-		mediaRef := req.MediaURL
-		if mediaRef == "" {
-			mediaRef = req.MediaID
-		}
+		mediaRef := resolveProviderMediaRef(req)
 		return a.MessageProvider.SendImage(ctx, instanceID, to, mediaRef, req.Caption)
 
 	case models.MessageTypeVideo:
-		mediaRef := req.MediaURL
-		if mediaRef == "" {
-			mediaRef = req.MediaID
-		}
+		mediaRef := resolveProviderMediaRef(req)
 		return a.MessageProvider.SendVideo(ctx, instanceID, to, mediaRef, req.Caption)
 
 	case models.MessageTypeAudio:
-		mediaRef := req.MediaURL
-		if mediaRef == "" {
-			mediaRef = req.MediaID
-		}
+		mediaRef := resolveProviderMediaRef(req)
 		return a.MessageProvider.SendAudio(ctx, instanceID, to, mediaRef)
 
 	case models.MessageTypeDocument:
-		mediaRef := req.MediaURL
-		if mediaRef == "" {
-			mediaRef = req.MediaID
-		}
+		mediaRef := resolveProviderMediaRef(req)
 		return a.MessageProvider.SendDocument(ctx, instanceID, to, mediaRef, req.MediaFilename)
 
 	case models.MessageTypeInteractive:
@@ -494,6 +483,15 @@ func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, m
 	default:
 		return "", fmt.Errorf("unsupported message type for whatsmeow: %s", req.Type)
 	}
+}
+
+// resolveProviderMediaRef standardizes how provider sends resolve media input.
+// MediaURL (e.g. signed/local URL) takes precedence; fallback is existing MediaID.
+func resolveProviderMediaRef(req OutgoingMessageRequest) string {
+	if req.MediaURL != "" {
+		return req.MediaURL
+	}
+	return req.MediaID
 }
 
 func (a *App) resolveDirectRecipientFromConversation(ctx context.Context, contact *models.Contact) string {

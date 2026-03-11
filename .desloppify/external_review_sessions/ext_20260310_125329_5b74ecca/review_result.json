@@ -1,0 +1,1107 @@
+{
+  "session": {
+    "id": "ext_20260310_125329_5b74ecca",
+    "token": "221fd2cd0cd536eadb4f748d7353005b"
+  },
+  "assessments": {
+    "naming_quality": 72,
+    "logic_clarity": 68,
+    "type_safety": 65,
+    "contract_coherence": 70,
+    "error_consistency": 58,
+    "high_level_elegance": 62,
+    "mid_level_elegance": 58,
+    "low_level_elegance": 71,
+    "abstraction_fitness": 54,
+    "ai_generated_debt": 68,
+    "cross_module_architecture": 72,
+    "initialization_coupling": 95,
+    "convention_outlier": 68,
+    "dependency_health": 85,
+    "package_organization": 62,
+    "api_surface_coherence": 72,
+    "authorization_consistency": 68,
+    "design_coherence": 55,
+    "incomplete_migration": 85,
+    "test_strategy": 45
+  },
+  "dimension_notes": {},
+  "issues": [
+    {
+      "dimension": "naming_quality",
+      "identifier": "naming_001_generic_helper_functions",
+      "summary": "Generic helper function names that don't communicate intent",
+      "related_files": [
+        "internal/handlers/helpers.go",
+        "internal/handlers/contacts.go"
+      ],
+      "evidence": [
+        "parsePathUUID, parsePagination, parseDateParam - generic names that don't indicate domain context",
+        "cloneJSONB, stringifyInstanceID - utility functions without clear domain purpose",
+        "messageMetadataBool, isPlaceholderMessageBody - names are descriptive but inconsistent with other helpers"
+      ],
+      "suggestion": "Rename helpers to indicate their domain context (e.g., parseUUIDFromPath, parsePaginationParams, parseDateQueryParam). Group related helpers by domain (contact helpers, message helpers, etc.)",
+      "confidence": "high"
+    },
+    {
+      "dimension": "naming_quality",
+      "identifier": "naming_002_inconsistent_naming_patterns",
+      "summary": "Inconsistent naming between resolve/load/get prefixes",
+      "related_files": [
+        "internal/handlers/cache.go",
+        "internal/handlers/contacts.go",
+        "internal/handlers/chat_close_ratings.go"
+      ],
+      "evidence": [
+        "getChatbotSettingsCached vs resolveTemplateAgentName vs loadChatCloseRatingSettings",
+        "Mixed use of get, load, resolve, find prefixes without clear distinction",
+        "getChatbotFlowsCached, getChatbotFlowByIDCached - 'Cached' suffix only on some functions"
+      ],
+      "suggestion": "Establish naming convention: 'get' for simple retrieval, 'load' for database queries, 'resolve' for computed/derived values, 'find' for searches. Add 'Cached' suffix consistently to all cached accessors",
+      "confidence": "high"
+    },
+    {
+      "dimension": "naming_quality",
+      "identifier": "naming_003_abbreviations_without_convention",
+      "summary": "Inconsistent abbreviations (org, ctx, req, resp)",
+      "related_files": [
+        "internal/handlers/accounts.go",
+        "internal/handlers/chat_close_ratings.go"
+      ],
+      "evidence": [
+        "orgID, userID, ctx, req, resp used inconsistently",
+        "Some functions use full 'organization', others use 'org'",
+        "msg vs message inconsistency (SendOutgoingMessage vs msgReq)"
+      ],
+      "suggestion": "Establish standard abbreviations: org (organization), ctx (context), req (request), resp (response). Use consistently or document exceptions. Prefer full names in public APIs",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "logic_clarity",
+      "identifier": "logic_001_dead_code_after_return",
+      "summary": "Dead code paths after unconditional returns",
+      "related_files": [
+        "internal/handlers/agent_analytics.go"
+      ],
+      "evidence": [
+        "Lines 220-223: parseDateRange error handling falls back to default but the error is ignored",
+        "Lines 269-274: Duplicate fallback logic in GetAgentComparison - same pattern as GetAgentDetails",
+        "Error result from parseDateRange stored but never used before falling back to default"
+      ],
+      "suggestion": "Either return the error to the caller or remove the error path entirely. If fallback is intentional, add explanatory comment. Consider extracting date parsing logic to avoid duplication",
+      "confidence": "high"
+    },
+    {
+      "dimension": "logic_clarity",
+      "identifier": "logic_002_redundant_null_checks",
+      "summary": "Redundant nil checks on values that cannot be nil",
+      "related_files": [
+        "internal/handlers/message_template_placeholders.go",
+        "internal/handlers/contacts.go"
+      ],
+      "evidence": [
+        "Line 134: resolveTemplateAgentName checks 'a == nil || a.DB == nil' - but this is called on method receiver 'a' which cannot be nil in normal Go usage",
+        "Line 145: resolveTemplateOrganizationName has similar redundant 'a == nil' checks",
+        "Line 228: scheduleContactAvatarRefresh checks 'a == nil' unnecessarily"
+      ],
+      "suggestion": "Remove nil checks on method receivers. If defensive programming is needed, use assertions or document preconditions. Consider making these free functions if nil checks are truly needed",
+      "confidence": "high"
+    },
+    {
+      "dimension": "logic_clarity",
+      "identifier": "logic_003_complex_nested_conditionals",
+      "summary": "Deeply nested conditional logic that's hard to follow",
+      "related_files": [
+        "internal/handlers/chat_close_ratings.go"
+      ],
+      "evidence": [
+        "Lines 238-276: readChatCloseRatingFollowupState has 4 levels of nested type switches and conditionals",
+        "Lines 650-685: parseInboundRatingValue has complex rune-by-rune parsing with nested loops and conditionals",
+        "Lines 901-936: extractFollowupCommentsForRatingMessage deeply nested type assertions"
+      ],
+      "suggestion": "Extract nested logic into separate functions with clear names. Use early returns to reduce nesting. Consider strategy pattern for type handling",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "logic_clarity",
+      "identifier": "logic_004_duplicate_code_blocks",
+      "summary": "Identical or very similar code in multiple branches",
+      "related_files": [
+        "internal/handlers/statuses.go"
+      ],
+      "evidence": [
+        "Lines 546-550: IsSelf check logic duplicated with slight variations",
+        "Lines 518-538: parseStatusFont has duplicate error handling patterns",
+        "Multiple places have identical error logging patterns"
+      ],
+      "suggestion": "Extract common logic to helper functions. Create shared error handling helpers. Use table-driven approaches for repetitive validation",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "type_safety",
+      "identifier": "type_001_jsonb_type_assertions_without_checks",
+      "summary": "Type assertions on JSONB values without checking ok return",
+      "related_files": [
+        "internal/handlers/chat_close_ratings.go",
+        "internal/handlers/contacts.go"
+      ],
+      "evidence": [
+        "Line 281: status.Metadata[\"from_me\"].(bool) - only checks ok, ignores false case",
+        "Lines 423-437: Multiple type assertions on JSONB with inconsistent ok checking",
+        "Line 132: messageMetadataBool does check ok but many other places don't follow this pattern"
+      ],
+      "suggestion": "Always check both return values from type assertions. Create helper functions for common JSONB access patterns. Consider using a typesafe wrapper for JSONB",
+      "confidence": "high"
+    },
+    {
+      "dimension": "type_safety",
+      "identifier": "type_002_any_type_overuse",
+      "summary": "Excessive use of 'any' type loses type safety",
+      "related_files": [
+        "internal/handlers/contacts.go",
+        "internal/handlers/statuses.go"
+      ],
+      "evidence": [
+        "Line 31: Metadata any in ContactResponse - could be structured type",
+        "Line 59: Content any in MessageResponse - loses content type information",
+        "chat_close_ratings.go: Entries []any in chatCloseRatingFollowupState"
+      ],
+      "suggestion": "Define specific types for metadata (e.g., type-safe structs with JSON tags). Use union types or interfaces for Content instead of any. Document the expected structure when any is necessary",
+      "confidence": "high"
+    },
+    {
+      "dimension": "type_safety",
+      "identifier": "type_003_string_uuid_conversions",
+      "summary": "Inconsistent UUID handling between string and uuid.UUID types",
+      "related_files": [
+        "internal/handlers/contacts.go",
+        "internal/handlers/helpers.go"
+      ],
+      "evidence": [
+        "stringifyInstanceID converts uuid.UUID to *string but many places need manual string() conversion",
+        "InstanceID *string in ContactResponse but should be *uuid.UUID or consistently string",
+        "parsePathUUID returns uuid.UUID but many callers immediately call .String()"
+      ],
+      "suggestion": "Standardize on uuid.UUID in internal code, convert to string only at API boundaries. Use consistent pointer vs value semantics (prefer value for UUID)",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "type_safety",
+      "identifier": "type_004_untyped_error_returns",
+      "summary": "Functions return error without specifying expected error types",
+      "related_files": [
+        "internal/handlers/media.go",
+        "internal/handlers/cache.go"
+      ],
+      "evidence": [
+        "DownloadAndSaveMedia returns error but doesn't document what errors it can return",
+        "getChatbotSettingsCached returns error but callers don't distinguish between cache miss, db error, or decrypt error",
+        "No custom error types for common failure modes"
+      ],
+      "suggestion": "Define custom error types for expected failure modes. Use error wrapping with fmt.Errorf. Document in comments what errors can be returned",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "contract_coherence",
+      "identifier": "contract_001_function_does_more_than_name_indicates",
+      "summary": "Functions perform side effects not indicated by name",
+      "related_files": [
+        "internal/handlers/cache.go",
+        "internal/handlers/chat_close_ratings.go"
+      ],
+      "evidence": [
+        "getChatbotSettingsCached: 'get' suggests pure read but it decrypts keys and mutates the settings object",
+        "resolveTemplateAgentName: 'resolve' suggests pure function but may update cache",
+        "handleManualChatCloseRatingPrompt: sends messages, creates DB records - too much for 'handle'"
+      ],
+      "suggestion": "Rename functions to reflect all side effects (e.g., getAndDecryptChatbotSettings, sendAndStoreCloseRatingPrompt). Split functions if they do multiple unrelated things",
+      "confidence": "high"
+    },
+    {
+      "dimension": "contract_coherence",
+      "identifier": "contract_002_return_type_mismatch_with_docstring",
+      "summary": "Functions don't clearly document what they return on error",
+      "related_files": [
+        "internal/handlers/helpers.go"
+      ],
+      "evidence": [
+        "findByIDAndOrg: returns error but also sends HTTP response - unclear contract",
+        "parsePathUUID: sends error envelope before returning - caller must return nil but this isn't documented",
+        "parsePagination: no error case but silently clamps values - unclear if this is intentional"
+      ],
+      "suggestion": "Separate validation from response sending. Use sentinel error pattern consistently. Document behavior when input is invalid (clamp vs error vs default)",
+      "confidence": "high"
+    },
+    {
+      "dimension": "contract_coherence",
+      "identifier": "contract_003_inconsistent_error_handling",
+      "summary": "Functions in same module have different error handling contracts",
+      "related_files": [
+        "internal/handlers/auth_handlers.go",
+        "internal/handlers/accounts.go"
+      ],
+      "evidence": [
+        "Some functions return error and send response (Login), others only send response (CreateAccount)",
+        "Inconsistent use of errEnvelopeSent pattern - some check for it, others don't",
+        "Mixed use of returning nil vs returning error after sending response"
+      ],
+      "suggestion": "Establish standard error handling contract: either always return error OR always send response and return nil. Don't mix patterns in same module",
+      "confidence": "high"
+    },
+    {
+      "dimension": "contract_coherence",
+      "identifier": "contract_004_optional_parameters_inconsistent",
+      "summary": "Functions handle nil pointer parameters inconsistently",
+      "related_files": [
+        "internal/handlers/contacts.go",
+        "internal/handlers/chat_close_ratings.go"
+      ],
+      "evidence": [
+        "Some functions treat nil instanceID as 'filter all', others as error",
+        "resolveTemplateAgentName checks for nil contact but other template functions don't",
+        "Inconsistent nil handling for *uuid.UUID parameters across codebase"
+      ],
+      "suggestion": "Document nil parameter handling in function comments. Use consistent pattern (nil = unfiltered, nil = error, or nil = use default). Consider using functional options pattern for multiple optional params",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "error_consistency",
+      "identifier": "error_001_mixed_error_strategies",
+      "summary": "Inconsistent error handling across modules",
+      "related_files": [
+        "internal/handlers/cache.go",
+        "internal/handlers/media.go",
+        "internal/handlers/helpers.go"
+      ],
+      "evidence": [
+        "Some functions return errors (cache.go), others send HTTP responses (helpers.go), some log and continue",
+        "errEnvelopeSent pattern used in some places but not others",
+        "Media functions wrap errors with fmt.Errorf but cache functions return raw errors"
+      ],
+      "suggestion": "Choose one error strategy per layer (handlers send responses, services return errors). Use consistent error wrapping. Document error handling strategy for each layer",
+      "confidence": "high"
+    },
+    {
+      "dimension": "error_consistency",
+      "identifier": "error_002_error_context_lost",
+      "summary": "Errors caught and re-thrown without wrapping original context",
+      "related_files": [
+        "internal/handlers/cache.go",
+        "internal/handlers/chat_close_ratings.go"
+      ],
+      "evidence": [
+        "Line 104: decryptChatbotAIKey wraps error but original crypto error context is in message",
+        "Line 579: resolveClosePromptAccount returns generic error when multiple things can fail",
+        "Many places: errors from DB queries returned directly without adding context about what was being queried"
+      ],
+      "suggestion": "Always wrap errors with context using fmt.Errorf or errors.Wrap. Include what operation failed, not just that it failed. Use structured logging with original error",
+      "confidence": "high"
+    },
+    {
+      "dimension": "error_consistency",
+      "identifier": "error_003_silent_error_swallowing",
+      "summary": "Errors logged but not propagated or recovered from",
+      "related_files": [
+        "internal/handlers/statuses.go",
+        "internal/handlers/contacts.go"
+      ],
+      "evidence": [
+        "Line 301: Failed to update status seen timestamp - logged but operation continues",
+        "Line 276: Failed to persist resolved channel name - logged but function continues",
+        "Line 447: cache unmarshal errors ignored and treated as cache miss"
+      ],
+      "suggestion": "Either propagate the error or explicitly document why it's safe to ignore. For cache, consider corrupted data eviction. For DB updates, consider retry or user notification",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "error_consistency",
+      "identifier": "error_004_inconsistent_error_types",
+      "summary": "Mix of string errors, sentinel errors, and custom error types",
+      "related_files": [
+        "internal/handlers/helpers.go",
+        "internal/handlers/auth_handlers.go"
+      ],
+      "evidence": [
+        "errEnvelopeSent is sentinel error but only used in helpers",
+        "String literals used for errors throughout (\"Invalid credentials\", \"Failed to...\")",
+        "crypto.ErrMissingEncryptionKey is custom error type but other crypto errors are strings",
+        "No custom error types for domain-specific failures (auth, validation, etc.)"
+      ],
+      "suggestion": "Define custom error types for domain errors. Use sentinel errors for control flow (validation failures). Use string errors only for user-facing messages. Document error type hierarchy",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "error_consistency",
+      "identifier": "error_005_missing_io_error_handling",
+      "summary": "I/O operations without proper error handling",
+      "related_files": [
+        "internal/handlers/media.go",
+        "internal/handlers/statuses.go"
+      ],
+      "evidence": [
+        "Line 193: os.WriteFile error wrapped but doesn't handle disk full or permission errors",
+        "Line 29: os.MkdirAll error returned but caller doesn't check for specific failures",
+        "Line 480: io.ReadAll error handling doesn't distinguish between timeout vs EOF"
+      ],
+      "suggestion": "Check for specific I/O error types (os.ErrPermission, os.ErrExist). Handle disk space errors explicitly. Add context about what file/path was being accessed",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "high_level_elegance",
+      "identifier": "handlers_package_bloat",
+      "summary": "handlers package contains 147 files with unclear domain boundaries",
+      "related_files": [
+        "internal/handlers/"
+      ],
+      "evidence": [
+        "The handlers directory contains 147 files including massive files like widgets.go (1403 LOC), contacts.go (1278 LOC), chat_close_ratings.go (1249 LOC), chatbot.go (1360 LOC), and messages.go (1051 LOC)",
+        "Files mix concerns: contacts_management.go combines assignment, visibility, and system message generation",
+        "No clear subdomain organization - all HTTP handlers flattened into single package despite covering contacts, campaigns, chatbot, analytics, media, webhooks, SSO, etc."
+      ],
+      "suggestion": "Split handlers into domain subpackages: handlers/contacts, handlers/campaigns, handlers/chatbot, handlers/analytics, handlers/instances, handlers/organizations. Each subpackage should have clear ownership boundaries.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "high_level_elegance",
+      "identifier": "monolithic_handler_files",
+      "summary": "Multiple handler files exceed 1000 LOC indicating poor decomposition",
+      "related_files": [
+        "internal/handlers/widgets.go",
+        "internal/handlers/contacts.go",
+        "internal/handlers/chat_close_ratings.go",
+        "internal/handlers/chatbot.go",
+        "internal/handlers/messages.go",
+        "internal/handlers/flows.go"
+      ],
+      "evidence": [
+        "widgets.go: 1403 LOC, complexity score 158",
+        "contacts.go: 1278 LOC, complexity score 177",
+        "chat_close_ratings.go: 1249 LOC, complexity score 170",
+        "chatbot.go: 1360 LOC, complexity score 141",
+        "messages.go: 1051 LOC, complexity score 145",
+        "flows.go: 1083 LOC, complexity score 142"
+      ],
+      "suggestion": "Break down monolithic files into focused single-responsibility modules. Extract validation, persistence, and business logic into separate packages. Apply Command/Query pattern to reduce handler complexity.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "mid_level_elegance",
+      "identifier": "provider_abstraction_leak",
+      "summary": "MessageProvider interface creates unnecessary translation layers",
+      "related_files": [
+        "pkg/provider/interface.go",
+        "pkg/whatsapp/adapter.go",
+        "pkg/whatsmeow/adapter.go",
+        "internal/handlers/messages.go"
+      ],
+      "evidence": [
+        "MessageProvider interface defines 10+ methods (SendText, SendImage, SendDocument, SendVideo, SendAudio, MarkRead, SendReaction, RevokeMessage, GetMediaURL, DownloadMedia, UploadMedia)",
+        "Both MetaAdapter and WhatsmeowAdapter implement identical interface with only 2 implementations - interface doesn't pay for itself",
+        "Handlers must check provider type: 'if !a.isWhatsmeowProvider() || a.WhatsmeowManager == nil' in statuses.go line 126",
+        "Direct provider bypassing exists - handlers access WhatsApp client directly instead of using abstraction"
+      ],
+      "suggestion": "Consider removing MessageProvider abstraction or merge implementations into a single unified client. The two-provider pattern (Meta vs Whatsmeow) creates more complexity than it solves.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "mid_level_elegance",
+      "identifier": "app_god_object",
+      "summary": "App struct accumulates too many responsibilities and dependencies",
+      "related_files": [
+        "internal/handlers/app.go"
+      ],
+      "evidence": [
+        "App struct holds 13+ dependencies: Config, DB, Redis, Log, WhatsApp, WhatsmeowStore, WhatsmeowManager, WSHub, Queue, CampaignSubCancel, HTTPClient, MessageProvider, WhatsmeowQueue",
+        "All handlers are methods on App - no separation between HTTP layer and business logic",
+        "getOrgID method contains complex business logic (super-admin override, membership checking) that should be in a domain service",
+        "App methods mix concerns: authorization, persistence, WebSocket broadcasting, webhook dispatch, SLA tracking"
+      ],
+      "suggestion": "Extract domain services from App into separate packages (orgservice, authservice, contactservice). Handlers should be thin wrappers that delegate to services. App should only hold infrastructure dependencies.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "mid_level_elegance",
+      "identifier": "authorization_pattern_inconsistency",
+      "summary": "Permission checking scattered and inconsistent across handlers",
+      "related_files": [
+        "internal/handlers/contacts_management.go",
+        "internal/handlers/accounts.go",
+        "internal/handlers/canned_responses.go"
+      ],
+      "evidence": [
+        "Some handlers use: 'if !a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)'",
+        "Others use: 'if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil'",
+        "authorizeChatbotRequest returns (uuid.UUID, bool) pattern different from other authorization",
+        "No centralized authorization middleware - each handler implements checks independently"
+      ],
+      "suggestion": "Implement consistent authorization middleware or helper. Choose one pattern (error return vs bool) and apply uniformly. Consider RBAC middleware that sets context before handlers.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "low_level_elegance",
+      "identifier": "restating_comments",
+      "summary": "Comments that merely restate the code without adding insight",
+      "related_files": [
+        "internal/handlers/messages.go",
+        "internal/handlers/helpers.go",
+        "internal/handlers/contacts_management.go"
+      ],
+      "evidence": [
+        "// SendText sends a text message - from adapter_send.go line 15",
+        "// SendImage sends an image message - from adapter_send.go line 70",
+        "// SendDocument sends a document message - from interface.go line 14",
+        "// parsePathUUID extracts a UUID from a path parameter - from helpers.go line 18",
+        "// endOfDay returns the last nanosecond of the given day - from helpers.go line 81",
+        "These comments add no information beyond what the function name already states"
+      ],
+      "suggestion": "Remove restating comments. Keep comments that explain WHY not WHAT. For public APIs, document edge cases, preconditions, and invariants instead of repeating names.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "low_level_elegance",
+      "identifier": "message_send_options_pattern",
+      "summary": "Well-designed options pattern for message sending configuration",
+      "related_files": [
+        "internal/handlers/messages.go"
+      ],
+      "evidence": [
+        "MessageSendOptions struct cleanly configures message behavior (BroadcastWebSocket, DispatchWebhook, TrackSLA, ActorType, Async)",
+        "DefaultSendOptions(), ChatbotSendOptions(), APISendOptions(), SLASendOptions() provide clear named configurations",
+        "resolvedActorType() method encapsulates actor type determination logic",
+        "Options pattern avoids function parameter explosion while remaining type-safe"
+      ],
+      "suggestion": "Consider applying this options pattern to other complex operations (contact queries, campaign operations). The current design is solid.",
+      "confidence": "low"
+    },
+    {
+      "dimension": "abstraction_fitness",
+      "identifier": "pass_through_adapters",
+      "summary": "MessageProvider adapters are thin wrappers with minimal value-add",
+      "related_files": [
+        "pkg/whatsapp/adapter.go",
+        "pkg/whatsmeow/adapter.go",
+        "pkg/provider/interface.go"
+      ],
+      "evidence": [
+        "MetaAdapter.SendText: resolve account, then client.SendTextMessage - pure delegation",
+        "WhatsmeowAdapter.SendText: getClient, parseJID, simulateTypingIndicator, client.SendMessage - minimal logic",
+        "Both adapters implement identical 12-method interface with only 2 implementations",
+        "Interface doesn't provide leverage - no polymorphic behavior in practice",
+        "Handlers check provider type explicitly: 'if !a.isWhatsmeowProvider()' pattern throughout codebase"
+      ],
+      "suggestion": "Remove MessageProvider abstraction. Consolidate into a single client type or use configuration-based branching. The interface adds indirection without enabling true polymorphism.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "abstraction_fitness",
+      "identifier": "duplicate_setting_parsing",
+      "summary": "Chat close rating settings parsing duplicated across organization and instance",
+      "related_files": [
+        "internal/handlers/chat_close_ratings.go"
+      ],
+      "evidence": [
+        "readChatCloseRatingSettings function has identical logic blocks for orgSettings (lines 102-125) and instanceSettings (lines 127-149)",
+        "Same pattern repeated: check rawEnabled, parse to bool; check rawWindow, parse with parseChatCloseRatingWindowDays; check rawTemplates, parse with parseChatCloseRatingTemplates",
+        "20+ lines of duplicated type assertion and parsing logic",
+        "No extraction of common settings merge logic"
+      ],
+      "suggestion": "Extract settings parsing into a helper function that takes a settings map and applies overrides to a base struct. Use functional options pattern for settings composition.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "abstraction_fitness",
+      "identifier": "jsonb_type_safety",
+      "summary": "JSONB type used throughout without type safety or validation",
+      "related_files": [
+        "internal/models/models.go",
+        "internal/handlers/chat_close_ratings.go",
+        "internal/handlers/messages.go"
+      ],
+      "evidence": [
+        "models.JSONB used for settings, metadata, context_messages throughout",
+        "Type assertions scattered: 'if rawEnabled, ok := orgSettings[organizationSettingChatCloseRatingEnabled]; ok'",
+        "No compile-time guarantees of setting structure",
+        "Settings keys defined as string constants (organizationSettingChatCloseRatingEnabled) but no centralized schema",
+        "parseChatCloseRatingWindowDays, parseChatCloseRatingTemplates functions indicate runtime parsing issues"
+      ],
+      "suggestion": "Define typed structs for settings with JSON marshaling. Use code generation or schema definition to ensure type safety. Consider protobuf or JSON Schema for validation.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "abstraction_fitness",
+      "identifier": "connection_manager_complexity",
+      "summary": "ConnectionManager accumulates responsibilities without clear boundaries",
+      "related_files": [
+        "pkg/whatsmeow/manager.go"
+      ],
+      "evidence": [
+        "ConnectionManager has 13 fields: db, store, clients, clientsMu, metrics, avatarSync, activeCallsMu, activeCallIDs, logger, cfg, hub, connectFn, qrCodes, typingIndicator, mediaStoragePath, inboundMediaQueue",
+        "Mixes concerns: client lifecycle, metrics collection, avatar synchronization, call tracking, QR code caching, typing indicators, media queue",
+        "No clear separation between protocol management and business features",
+        "SetInboundMediaQueue method suggests dependency injection after construction"
+      ],
+      "suggestion": "Split into focused components: ClientPool (connection management), MetricsCollector (metrics), AvatarSyncer (avatars), CallManager (calls), QRCodeCache (caching). Use composition to assemble features.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "ai_generated_debt",
+      "identifier": "boilerplate_error_handling",
+      "summary": "Identical error handling patterns copied across handlers",
+      "related_files": [
+        "internal/handlers/accounts.go",
+        "internal/handlers/canned_responses.go",
+        "internal/handlers/contacts.go"
+      ],
+      "evidence": [
+        "Pattern repeated 20+ times: 'orgID, userID, err := a.getOrgAndUserID(r); if err != nil { return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, \"Unauthorized\", nil, \"\") }'",
+        "Pattern repeated 15+ times: 'if err := a.requirePermission(r, userID, models.Resource*, models.Action*); err != nil { return nil }'",
+        "Pattern repeated 30+ times: 'contactID, err := parsePathUUID(r, \"id\", \"contact\"); if err != nil { return nil }'",
+        "Review packet flags this as 'boilerplate_duplication' in multiple handler files"
+      ],
+      "suggestion": "Create middleware for common authorization patterns. Use method decorators for resource-level authorization. Extract handler setup into template/generic functions.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "ai_generated_debt",
+      "identifier": "duplicate_struct_definitions",
+      "summary": "Request/Response struct pairs duplicated with minor variations",
+      "related_files": [
+        "internal/handlers/accounts.go",
+        "internal/handlers/canned_responses.go",
+        "internal/handlers/widgets.go",
+        "internal/handlers/chatbot.go"
+      ],
+      "evidence": [
+        "AccountRequest (14 fields) and AccountResponse (16 fields) - similar structure with validation differences",
+        "CannedResponseRequest (7 fields) and CannedResponseResponse (10 fields)",
+        "WidgetRequest (20+ fields) and WidgetResponse (25+ fields) with overlapping field definitions",
+        "ChatbotSettingsResponse with 25+ fields mapping directly to database model",
+        "Pattern of defining Request struct, then Response struct with mostly identical fields plus timestamps/IDs"
+      ],
+      "suggestion": "Use code generation or struct embedding to reduce duplication. Consider using same struct with JSON tags for both request/response where validation allows.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "ai_generated_debt",
+      "identifier": "unnecessary_nil_checks",
+      "summary": "Defensive nil checks on non-nil values throughout codebase",
+      "related_files": [
+        "internal/handlers/contacts_management.go",
+        "pkg/whatsmeow/manager.go",
+        "internal/handlers/chat_close_ratings.go"
+      ],
+      "evidence": [
+        "appendClaimedChatSystemMessage: 'if a == nil || contact == nil { return }' - method on *App receiver, a should never be nil",
+        "ConnectionManager.SetInboundMediaQueue: 'if cm == nil { return }' - method on *ConnectionManager receiver",
+        "Pattern of checking receiver for nil suggests defensive overengineering",
+        "Go doesn't have nil receivers unless called incorrectly - these checks hide bugs"
+      ],
+      "suggestion": "Remove nil receiver checks. If called with nil, let it panic - that's a bug to fix. Add nil checks only for interface/pointer parameters that can legitimately be nil.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "ai_generated_debt",
+      "identifier": "generic_function_names",
+      "summary": "Helper functions use generic names instead of domain terminology",
+      "related_files": [
+        "internal/handlers/helpers.go"
+      ],
+      "evidence": [
+        "parsePagination, parsePaginationWithDefaults - what kind of pagination?",
+        "parseDateParam - what date? for what purpose?",
+        "findByIDAndOrg - generic query, should be domain-specific",
+        "endOfDay - time utility in handlers package instead of timeutil",
+        "Pattern suggests LLM-generated 'helper' functions without domain context"
+      ],
+      "suggestion": "Move generic utilities to appropriate packages (timeutil, dbutil, httputil). Rename functions to reflect domain context (parseMessageListPagination, parseAnalyticsDateRange).",
+      "confidence": "low"
+    },
+    {
+      "dimension": "ai_generated_debt",
+      "identifier": "commented_out_code_patterns",
+      "summary": "Struct definitions with extensive field comments but no behavioral documentation",
+      "related_files": [
+        "internal/handlers/chatbot.go",
+        "internal/handlers/widgets.go",
+        "internal/handlers/messages.go"
+      ],
+      "evidence": [
+        "ChatbotSettingsResponse has 25+ fields with per-field comments but no explanation of how settings interact",
+        "OutgoingMessageRequest has 20+ fields with comments like 'Required', 'Optional when provider is whatsmeow' - no workflow documentation",
+        "WidgetRequest has 20+ configuration fields with minimal context on valid combinations",
+        "Pattern of structure documentation without behavioral documentation suggests AI-generated boilerplate"
+      ],
+      "suggestion": "Add package-level documentation explaining workflows and field interactions. Group related fields into sub-structs. Add validation documentation with examples.",
+      "confidence": "low"
+    },
+    {
+      "dimension": "cross_module_architecture",
+      "identifier": "handlers_package_bloat",
+      "summary": "handlers package contains 145 files (50% of entire codebase), creating a hub module with excessive blast radius",
+      "related_files": [
+        "internal/handlers/*"
+      ],
+      "evidence": [
+        "internal/handlers contains 145 Go files out of 286 total files (50% of codebase)",
+        "handlers package mixes concerns: HTTP handlers, business logic, workers, policies, processors, and domain services",
+        "Large files like chatbot_processor.go (92KB), contacts.go (45KB), campaigns.go (47KB) indicate domain logic embedded in handlers",
+        "No clear separation between HTTP layer and business logic - handlers directly manipulate models, database, and external services"
+      ],
+      "suggestion": "Split handlers into focused packages: handlers/ (HTTP only), services/ (business logic), policies/ (authorization), workers/ (background jobs). Extract domain models from handlers to reduce coupling.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "cross_module_architecture",
+      "identifier": "circular_dependency_internal_models",
+      "summary": "handlers directly import and manipulate internal/models without service layer, creating tight coupling",
+      "related_files": [
+        "internal/handlers/*.go",
+        "internal/models/*.go"
+      ],
+      "evidence": [
+        "Every handler file imports internal/models directly",
+        "Handlers contain complex business logic that should be in a service layer (e.g., chat_close_ratings.go has 36KB of rating logic)",
+        "No repository pattern or data access layer - handlers use GORM directly on models",
+        "Models package is imported by 145+ handler files, creating a large blast radius for model changes"
+      ],
+      "suggestion": "Introduce a repository/service layer between handlers and models. Create domain-specific packages (e.g., internal/rating, internal/campaign) that encapsulate business logic and data access.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "cross_module_architecture",
+      "identifier": "pkg_whatsapp_duplication",
+      "summary": "Two WhatsApp packages (pkg/whatsapp and pkg/whatsmeow) with overlapping responsibilities and unclear boundaries",
+      "related_files": [
+        "pkg/whatsapp/*.go",
+        "pkg/whatsmeow/*.go"
+      ],
+      "evidence": [
+        "pkg/whatsapp has 17 files, pkg/whatsmeow has 67 files - significant size disparity suggests whatsmeow contains domain logic",
+        "Both packages implement MessageProvider interface via adapters (whatsapp/adapter.go, whatsmeow/adapter.go)",
+        "whatsmeow package contains 67 files with domain logic, connection management, and business rules - not just a thin wrapper",
+        "pkg/provider interface is the abstraction boundary, but implementation details leak into both packages"
+      ],
+      "suggestion": "Consider consolidating WhatsApp provider logic under a single package with clear internal structure. Move domain-specific whatsmeow logic to internal/whatsmeow if it's not a reusable library.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "initialization_coupling",
+      "identifier": "no_init_functions",
+      "summary": "No init() functions found - all initialization is explicit and controlled",
+      "related_files": [
+        "internal/*",
+        "pkg/*"
+      ],
+      "evidence": [
+        "grep for 'func init()' across entire codebase returned zero results",
+        "All initialization happens explicitly in cmd/whatomate/main.go through function calls",
+        "Database connections (postgres.go, redis.go) use explicit factory functions (NewPostgres, NewRedis)",
+        "Dependencies are injected via App struct constructor in main.go - no global singletons"
+      ],
+      "suggestion": "Continue current pattern. The explicit initialization approach is excellent for testability and avoiding boot-order dependencies.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "initialization_coupling",
+      "identifier": "module_level_constants",
+      "summary": "Package-level constants and compiled regexes are safe and appropriate",
+      "related_files": [
+        "internal/handlers/*.go"
+      ],
+      "evidence": [
+        "Found module-level vars like defaultChatCloseRatingTemplates, localizedRatingDigitReplacer, safeFilenameRe",
+        "These are immutable constants compiled at import time - no side effects",
+        "No dynamic computation or I/O at module level",
+        "All module-level vars are constants, maps, or regex compilations - safe patterns"
+      ],
+      "suggestion": "Current patterns are acceptable. Document the immutability contract for package-level variables to prevent future misuse.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "convention_outlier",
+      "identifier": "inconsistent_file_organization",
+      "summary": "handlers package mixes domains without subdirectories, making navigation difficult",
+      "related_files": [
+        "internal/handlers/*.go"
+      ],
+      "evidence": [
+        "145 files in single handlers directory - no subdirectories despite clear domain boundaries",
+        "Files span multiple domains: accounts, campaigns, chatbot, contacts, organizations, SSO, webhooks, analytics, widgets",
+        "No grouping by domain (e.g., handlers/chatbot/*.go, handlers/campaigns/*.go) despite clear domain boundaries",
+        "Related files are scattered: chatbot.go, chatbot_processor.go, chatbot_test.go, chatbot_expression_benchmark_test.go are separate files"
+      ],
+      "suggestion": "Organize handlers by domain: handlers/accounts/, handlers/campaigns/, handlers/chatbot/, handlers/contacts/. This improves discoverability without adding abstraction layers.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "convention_outlier",
+      "identifier": "mixed_naming_patterns",
+      "summary": "Inconsistent naming between package directories and file purposes",
+      "related_files": [
+        "internal/handlers/*.go"
+      ],
+      "evidence": [
+        "Some files are entity-focused (contacts.go, accounts.go, organizations.go)",
+        "Some files are action-focused (chat_lifecycle.go, send_restriction_policy.go, instance_auto_campaign_worker.go)",
+        "Some files are component-focused (activity_middleware.go, template_engine.go, custom_action_runtime.go)",
+        "No clear convention for when to use which naming pattern"
+      ],
+      "suggestion": "Establish naming convention: entity files for CRUD (contacts.go), feature files for cross-cutting concerns (chat_policy.go), worker files for background jobs (campaign_worker.go). Document this in CONTRIBUTE.md.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "convention_outlier",
+      "identifier": "inconsistent_request_response_patterns",
+      "summary": "Request/Response struct definitions scattered across handler files instead of centralized types package",
+      "related_files": [
+        "internal/handlers/*.go"
+      ],
+      "evidence": [
+        "Each handler file defines its own Request/Response types (e.g., AccountRequest, CampaignRequest, ContactRequest)",
+        "No shared types package for common DTOs",
+        "Duplicate patterns across files: every handler has similar Request/Response/Filter structs",
+        "Types are not reused across related handlers (e.g., CampaignRequest in campaigns.go but similar types in other files)"
+      ],
+      "suggestion": "Create internal/types or internal/dto package for shared request/response structures. Keep handler-specific types in handlers, but extract common patterns.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "dependency_health",
+      "identifier": "appropriate_external_deps",
+      "summary": "External dependencies are minimal and appropriate for the domain",
+      "related_files": [
+        "go.mod"
+      ],
+      "evidence": [
+        "26 direct dependencies in go.mod - reasonable for a production application",
+        "No duplicate functionality (e.g., single HTTP client library, single JWT library)",
+        "All dependencies are actively maintained: go-redis/v9, gorm.io/gorm, fasthttp, whatsmeow",
+        "No heavy dependencies pulled in for light use - each dep serves a clear purpose"
+      ],
+      "suggestion": "Current dependency management is healthy. Consider periodic audits to remove unused dependencies.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "dependency_health",
+      "identifier": "whatsmeow_pinning",
+      "summary": "whatsmeow dependency pinned to specific commit - good for stability but may miss updates",
+      "related_files": [
+        "go.mod",
+        "go.sum"
+      ],
+      "evidence": [
+        "go.mau.fi/whatsmeow v0.0.0-20260216124546-34b971e686b6 is pinned to a specific commit",
+        "This is appropriate for a library under active development",
+        "Pinned version prevents breaking changes from affecting production",
+        "However, may miss bug fixes and security updates if not regularly updated"
+      ],
+      "suggestion": "Document the update process for whatsmeow dependency. Consider automated dependency scanning to alert on new versions.",
+      "confidence": "low"
+    },
+    {
+      "dimension": "package_organization",
+      "identifier": "flat_handlers_structure",
+      "summary": "handlers package is flat with 145 files, violating the 'flat directory overload' anti-pattern",
+      "related_files": [
+        "internal/handlers/*.go"
+      ],
+      "evidence": [
+        "145 files in single directory exceeds 10-file guideline by 14x",
+        "Mixed concerns: HTTP handlers, business logic, background workers, policies, utilities",
+        "Files range from 600 bytes to 92KB (chatbot_processor.go)",
+        "No domain-based subdirectories despite clear domain boundaries (chatbot, campaigns, contacts, accounts, etc.)"
+      ],
+      "suggestion": "Reorganize handlers into domain-based subdirectories: handlers/accounts/, handlers/campaigns/, handlers/chatbot/, handlers/contacts/, handlers/analytics/. Keep HTTP handlers in these dirs, move business logic to services/.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "package_organization",
+      "identifier": "ambiguous_package_boundaries",
+      "summary": "pkg/whatsmeow contains 67 files with domain logic, blurring library vs application boundary",
+      "related_files": [
+        "pkg/whatsmeow/*.go"
+      ],
+      "evidence": [
+        "pkg/whatsmeow has 67 files - more than any internal package except handlers",
+        "Contains connection management, business logic, adapters, and domain-specific features",
+        "pkg/ is intended for reusable libraries, but whatsmeow contains application-specific WhatsApp integration logic",
+        "internal/ is for application-private code, but reusable WhatsApp logic lives in pkg/"
+      ],
+      "suggestion": "Move whatsmeow application-specific logic to internal/whatsmeow/. Keep only generic whatsmeow wrappers in pkg/ if they're reusable across projects.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "package_organization",
+      "identifier": "missing_internal_abstractions",
+      "summary": "No internal service or repository layer - handlers directly access models and external services",
+      "related_files": [
+        "internal/handlers/*.go",
+        "internal/models/*.go"
+      ],
+      "evidence": [
+        "Handlers directly use GORM on models (no repository pattern)",
+        "Business logic embedded in handlers instead of service layer",
+        "No internal/services or internal/domain package despite clear business domains",
+        "Cross-cutting concerns (rating logic, campaign logic, chatbot logic) scattered across handler files"
+      ],
+      "suggestion": "Introduce internal/services/ package with domain services (e.g., services/campaign, services/rating, services/chatbot). Handlers become thin HTTP adapters that delegate to services.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "api_surface_coherence",
+      "identifier": "inconsistent-param-ordering",
+      "summary": "Message sending functions have inconsistent parameter ordering across implementations",
+      "related_files": [
+        "internal/handlers/messages.go",
+        "pkg/whatsapp/adapter.go",
+        "pkg/whatsmeow/adapter_send.go"
+      ],
+      "evidence": [
+        "SendTemplateMessage in messages.go uses OutgoingMessageRequest struct with embedded Account/Contact",
+        "Provider interface SendText/SendImage use (ctx, instanceID, to, content) parameter order",
+        "RevokeMessage has 3 different signatures across 5 files according to scan evidence",
+        "SendReaction has 3 different signatures across 5 files according to scan evidence"
+      ],
+      "suggestion": "Standardize message sending API surface - either consolidate on provider.MessageProvider interface or create unified request/response types. The current mix of struct-based and positional parameters creates confusion.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "api_surface_coherence",
+      "identifier": "mixed-response-patterns",
+      "summary": "Inconsistent response envelope patterns across handlers",
+      "related_files": [
+        "internal/handlers/accounts.go",
+        "internal/handlers/chatbot.go",
+        "internal/handlers/contacts.go"
+      ],
+      "evidence": [
+        "Some handlers return r.SendEnvelope(map[string]interface{}{\"accounts\": response})",
+        "Others return r.SendEnvelope(map[string]any{\"flows\": response})",
+        "Inconsistent use of interface{} vs any for JSON payloads",
+        "Mixed error handling: some return nil after SendErrorEnvelope, others return the error"
+      ],
+      "suggestion": "Create consistent response helper functions or standardize on one pattern. The variation makes the API surface harder to learn and use consistently.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "authorization_consistency",
+      "identifier": "inconsistent-auth-checks",
+      "summary": "Only 35 of 145 handlers use getOrgAndUserID, only 16 use requirePermission",
+      "related_files": [
+        "internal/handlers/app.go",
+        "internal/handlers/accounts.go",
+        "internal/handlers/contacts.go",
+        "internal/handlers/chatbot.go"
+      ],
+      "evidence": [
+        "35 files use getOrgAndUserID pattern for auth extraction",
+        "Only 16 files use requirePermission for RBAC checks",
+        "516 total handler functions identified in codebase",
+        "Webhook handlers (WebhookVerify, WebhookHandler) skip auth checks (expected but undocumented)",
+        "Some handlers call HasPermission directly instead of using requirePermission helper"
+      ],
+      "suggestion": "Audit all 516 handler functions and categorize: 1) Public routes (health, webhooks), 2) Authenticated routes missing RBAC, 3) Routes with proper auth. Create middleware or decorator pattern to enforce consistent authorization.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "authorization_consistency",
+      "identifier": "missing-resource-level-auth",
+      "summary": "Contact assignment and chat access policies use manual permission checks",
+      "related_files": [
+        "internal/handlers/contacts_management.go",
+        "internal/handlers/chat_access_policy.go",
+        "internal/handlers/send_restriction_policy.go"
+      ],
+      "evidence": [
+        "AssignContact uses HasPermission check inline instead of requirePermission helper",
+        "canViewRestrictedChatWithoutClaim and canSendRestrictedChatWithoutClaim implement custom auth logic",
+        "send restriction policies implement their own authorization bypass logic (canBypassPendingChatRestriction)",
+        "No centralized policy enforcement point - scattered across multiple files"
+      ],
+      "suggestion": "Consolidate chat access and send restriction policies into a single authorization layer. Create a ChatAccessAuthorizer interface that consolidates all permission checks.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "design_coherence",
+      "identifier": "monster-functions",
+      "summary": "Multiple files exceed 1000 LOC with high complexity scores",
+      "related_files": [
+        "internal/handlers/chatbot_processor.go",
+        "internal/handlers/agent_transfers.go",
+        "internal/handlers/campaigns.go",
+        "internal/handlers/contacts.go"
+      ],
+      "evidence": [
+        "chatbot_processor.go: 2912 LOC, complexity score 545",
+        "agent_transfers.go: 1465 LOC, complexity score 204",
+        "campaigns.go: 1409 LOC, complexity score 159",
+        "contacts.go: 1278 LOC, complexity score 177",
+        "chat_close_ratings.go: 1249 LOC, complexity score 170"
+      ],
+      "suggestion": "Break down these mega-files into focused modules. For example, chatbot_processor.go could be split into: rule_engine.go, flow_executor.go, ai_context.go, session_manager.go. Aim for files under 500 LOC.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "design_coherence",
+      "identifier": "cache-module-fragmentation",
+      "summary": "cache.go has 31 disconnected function clusters - mixed responsibilities",
+      "related_files": [
+        "internal/handlers/cache.go"
+      ],
+      "evidence": [
+        "31 functions in cache.go with 18 disconnected clusters per scan evidence",
+        "Caches chatbot settings, flows, keyword rules, WhatsApp accounts, webhooks, SLA settings, AI contexts, permissions, tags",
+        "No clear abstraction or interface - all functions are methods on App",
+        "Mixes cache logic with decryption logic (decryptChatbotAIKey)",
+        "754 LOC, untested (0 importers per scan evidence)"
+      ],
+      "suggestion": "Extract a CacheManager interface with concrete implementation. Separate concerns: CacheManager (get/set/invalidate), CryptoHelper (decrypt/encrypt), and DomainCacheLayer (chatbot, permissions, etc.).",
+      "confidence": "high"
+    },
+    {
+      "dimension": "design_coherence",
+      "identifier": "contacts-messaging-responsibility-bleed",
+      "summary": "contacts_messaging.go has 7 disconnected function clusters (13 functions total)",
+      "related_files": [
+        "internal/handlers/contacts_messaging.go"
+      ],
+      "evidence": [
+        "7 disconnected function clusters per scan evidence",
+        "861 LOC, complexity score 90",
+        "Functions span: message sending, media handling, revoking, reactions, typing indicators",
+        "Untested (0 importers per scan evidence)"
+      ],
+      "suggestion": "Split into focused files: message_send.go, message_reactions.go, message_media.go, typing_indicators.go. Each should have a single clear responsibility.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "incomplete_migration",
+      "identifier": "deprecated-flow-status",
+      "summary": "Flow status uses deprecated marker but flows are still active",
+      "related_files": [
+        "internal/handlers/flows.go"
+      ],
+      "evidence": [
+        "Line 277: 'Deprecated flows cannot be updated'",
+        "Line 455-457: 'Only PUBLISHED flows can be deprecated'",
+        "Line 479: Status set to 'DEPRECATED'",
+        "No evidence of deprecated flows being removed from database or API",
+        "3 deprecated markers found in codebase per migration signals"
+      ],
+      "suggestion": "Either complete the migration by removing deprecated flows from queries/API, or remove the deprecated status if it's not being enforced. The current state is partial.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "incomplete_migration",
+      "identifier": "dual-provider-pattern",
+      "summary": "Provider abstraction exists but both Meta and Whatsmeow are actively used",
+      "related_files": [
+        "pkg/provider/interface.go",
+        "pkg/whatsapp/adapter.go",
+        "pkg/whatsmeow/adapter.go"
+      ],
+      "evidence": [
+        "MessageProvider interface defines 10 methods for abstraction",
+        "Both MetaAdapter and WhatsmeowAdapter implement the interface",
+        "No evidence one is being phased out - both appear actively maintained",
+        "Scan evidence shows consistent usage patterns across both implementations"
+      ],
+      "suggestion": "This is actually good design - the abstraction allows multi-provider support. However, document which provider should be used for new features or if both should be maintained indefinitely.",
+      "confidence": "low"
+    },
+    {
+      "dimension": "test_strategy",
+      "identifier": "critical-untested-modules",
+      "summary": "High-complexity modules have zero test coverage",
+      "related_files": [
+        "internal/handlers/cache.go",
+        "internal/handlers/contacts_management.go",
+        "internal/handlers/import_export.go",
+        "pkg/whatsmeow/message_persist.go",
+        "pkg/whatsmeow/incoming_media.go"
+      ],
+      "evidence": [
+        "cache.go: 31 functions, 754 LOC, untested per scan evidence",
+        "contacts_management.go: 18 functions, 959 LOC, untested per scan evidence",
+        "import_export.go: 7 functions, 813 LOC, untested per scan evidence",
+        "message_persist.go: 674 LOC, untested per scan evidence",
+        "88 test files exist but don't cover these critical modules",
+        "Test coverage: 57 handlers, 88 test files (~50% coverage at file level)"
+      ],
+      "suggestion": "Prioritize test coverage for these 5 modules immediately. They are critical paths (caching, messaging, data import) with zero coverage. Start with integration tests before unit tests.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "test_strategy",
+      "identifier": "test-production-coupling",
+      "summary": "Test files show evidence of implementation coupling",
+      "related_files": [
+        "internal/handlers/campaigns_test.go",
+        "internal/handlers/contacts_test.go",
+        "internal/handlers/chatbot_test.go"
+      ],
+      "evidence": [
+        "Tests import internal/handlers package directly",
+        "Tests likely depend on internal App structure and database setup",
+        "Multiple 1000+ line test files (campaigns_test.go: 1128 LOC, contacts_test.go: 1535 LOC)",
+        "Large test files suggest either: too many responsibilities in tested module, or brittle integration tests"
+      ],
+      "suggestion": "Extract test utilities into test/testutil package (already exists). Break large test files into focused test suites. Add interface boundaries to reduce coupling to App internals.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "test_strategy",
+      "identifier": "missing-integration-tests",
+      "summary": "No evidence of cross-module integration tests",
+      "related_files": [
+        "test/",
+        "internal/handlers/"
+      ],
+      "evidence": [
+        "Test files are co-located with source (handlers_test.go pattern)",
+        "Tests appear to be unit-level with database fixtures",
+        "No evidence of end-to-end workflow tests (e.g., campaign creation → execution → webhook handling)",
+        "Test fixtures in test/fixtures/models/factories.go (683 LOC) but unclear usage scope"
+      ],
+      "suggestion": "Add integration test suite that covers critical workflows: 1) User auth → Permission check → Resource access, 2) Campaign launch → Message queue → Delivery, 3) Webhook receipt → Message processing → WebSocket broadcast.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "design_coherence",
+      "identifier": "parameter-bag-anti-pattern",
+      "summary": "Multiple files use config bag passing instead of structured parameters",
+      "related_files": [
+        "internal/handlers/cache.go",
+        "internal/handlers/messages.go",
+        "pkg/whatsapp/client.go",
+        "pkg/whatsmeow/manager.go"
+      ],
+      "evidence": [
+        "Scan evidence shows 83 config bag mentions in cache.go",
+        "72 config bag mentions in messages.go",
+        "68 config bag mentions in pkg/whatsapp/client.go",
+        "OutgoingMessageRequest struct has 20+ fields mixing concerns (account, contact, template, media, reply context, flow data)",
+        "No clear abstraction boundaries - request struct does everything"
+      ],
+      "suggestion": "Refactor OutgoingMessageRequest into focused request types: TextMessageRequest, MediaMessageRequest, TemplateMessageRequest, FlowMessageRequest. Use interface or builder pattern instead of god-object.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "authorization_consistency",
+      "identifier": "super-admin-org-switch",
+      "summary": "Super admin org switching logic embedded in getOrgID",
+      "related_files": [
+        "internal/handlers/app.go"
+      ],
+      "evidence": [
+        "getOrgID contains 40+ lines of org switching logic",
+        "Checks X-Organization-ID header",
+        "Validates super admin status",
+        "Queries database to verify org membership",
+        "No separate authorization layer - business logic mixed with context extraction"
+      ],
+      "suggestion": "Extract org switching into authorizeOrgSwitch(orgID, userID, overrideOrgID) function. Add audit logging for org switches by super admins. The current inline logic is hard to test and audit.",
+      "confidence": "medium"
+    }
+  ]
+}

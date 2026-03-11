@@ -22,7 +22,7 @@ func (a *App) appendClaimedChatSystemMessage(contact *models.Contact, userID uui
 		return
 	}
 
-	claimerName := strings.TrimSpace(a.resolveActivityActorName(userID))
+	claimerName := strings.TrimSpace(a.ResolveActivityActorName(userID))
 	if claimerName == "" {
 		claimerName = "An agent"
 	}
@@ -39,7 +39,7 @@ func (a *App) appendClosedChatSystemMessage(contact *models.Contact, userID uuid
 		return
 	}
 
-	closerName := strings.TrimSpace(a.resolveActivityActorName(userID))
+	closerName := strings.TrimSpace(a.ResolveActivityActorName(userID))
 	if closerName == "" {
 		closerName = "An agent"
 	}
@@ -56,7 +56,7 @@ func (a *App) appendPublicChatSystemMessage(contact *models.Contact, userID uuid
 		return
 	}
 
-	actorName := strings.TrimSpace(a.resolveActivityActorName(userID))
+	actorName := strings.TrimSpace(a.ResolveActivityActorName(userID))
 	if actorName == "" {
 		actorName = "An agent"
 	}
@@ -100,11 +100,11 @@ func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUser
 		return
 	}
 
-	actorName := strings.TrimSpace(a.resolveActivityActorName(actorUserID))
+	actorName := strings.TrimSpace(a.ResolveActivityActorName(actorUserID))
 	if actorName == "" {
 		actorName = "An employee"
 	}
-	assigneeName := strings.TrimSpace(a.resolveActivityActorName(*assigneeUserID))
+	assigneeName := strings.TrimSpace(a.ResolveActivityActorName(*assigneeUserID))
 	if assigneeName == "" {
 		assigneeName = "an agent"
 	}
@@ -113,11 +113,11 @@ func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUser
 		contact,
 		fmt.Sprintf("System :%s has assigned this chat to %s", actorName, assigneeName),
 		models.JSONB{
-			"event_type":             "chat_assigned",
-			"assigned_by_user_id":    actorUserID.String(),
-			"assigned_by_user_name":  actorName,
-			"assigned_to_user_id":    assigneeUserID.String(),
-			"assigned_to_user_name":  assigneeName,
+			"event_type":            "chat_assigned",
+			"assigned_by_user_id":   actorUserID.String(),
+			"assigned_by_user_name": actorName,
+			"assigned_to_user_id":   assigneeUserID.String(),
+			"assigned_to_user_name": assigneeName,
 		},
 	)
 }
@@ -404,11 +404,11 @@ func (a *App) GetContactSessionData(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Verify contact belongs to org (users without full read permission can only access assigned contacts)
+	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.canReadAllContacts(userID, orgID) {
-		query = applyAssignedOrPublicContactAccessFilter(query, userID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")

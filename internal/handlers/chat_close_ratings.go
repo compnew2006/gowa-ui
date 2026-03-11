@@ -518,7 +518,7 @@ func (a *App) handleManualChatCloseRatingPrompt(orgID, closingUserID uuid.UUID, 
 
 	agentName := "Agent"
 	if agentUserID != nil {
-		if resolved := strings.TrimSpace(a.resolveActivityActorName(*agentUserID)); resolved != "" {
+		if resolved := strings.TrimSpace(a.ResolveActivityActorName(*agentUserID)); resolved != "" {
 			agentName = resolved
 		}
 	}

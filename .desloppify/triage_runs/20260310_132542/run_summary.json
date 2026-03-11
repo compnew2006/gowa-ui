@@ -1,0 +1,20 @@
+{
+  "created_at": "2026-03-10T13:28:53+00:00",
+  "run_stamp": "20260310_132542",
+  "runner": "codex",
+  "stages_requested": [
+    "observe",
+    "reflect",
+    "organize",
+    "enrich",
+    "sense-check"
+  ],
+  "stage_results": {
+    "observe": {
+      "status": "validation_failed",
+      "elapsed_seconds": 190,
+      "error": "Observe report cites only 0 issue(s) (need 5+). Reference specific issue hashes to prove you read them."
+    }
+  },
+  "run_dir": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/.desloppify/triage_runs/20260310_132542"
+}

@@ -20,6 +20,34 @@ import (
 
 type stubMessageProvider struct{}
 
+func createExactAgentRole(t *testing.T, app *handlers.App, orgID uuid.UUID) *models.CustomRole {
+	t.Helper()
+
+	allPermissions := testutil.GetOrCreateTestPermissions(t, app.DB)
+	allowedKeys := map[string]struct{}{
+		"chat:read":             {},
+		"chat:write":            {},
+		"chat:prefix":           {},
+		"contacts:read":         {},
+		"tags:read":             {},
+		"analytics.agents:read": {},
+		"transfers:read":        {},
+		"transfers:write":       {},
+		"transfers:pickup":      {},
+		"canned_responses:read": {},
+	}
+
+	rolePermissions := make([]models.Permission, 0, len(allowedKeys))
+	for _, permission := range allPermissions {
+		key := permission.Resource + ":" + permission.Action
+		if _, ok := allowedKeys[key]; ok {
+			rolePermissions = append(rolePermissions, permission)
+		}
+	}
+
+	return testutil.CreateTestRoleExact(t, app.DB, orgID, "agent", false, true, rolePermissions)
+}
+
 func (m *stubMessageProvider) SendText(context.Context, string, string, string) (string, error) {
 	return "wamid.stub." + uuid.NewString(), nil
 }
@@ -2877,6 +2905,134 @@ func TestApp_ListContacts_FilterByInstanceAndChatType(t *testing.T) {
 	})
 }
 
+func TestApp_ListContacts_DateBasisFilters(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	instanceA := createTestInstance(t, app, org.ID, "Instance A")
+	instanceB := createTestInstance(t, app, org.ID, "Instance B")
+
+	createdOnlyContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550001001"))
+	inboundInRangeContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550001002"))
+	duplicateInboundContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550001003"))
+	inboundOutsideRangeContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550001004"))
+	outboundOnlyContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550001005"))
+	otherInstanceInboundContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550001006"))
+
+	require.NoError(t, app.DB.Model(createdOnlyContact).Updates(map[string]any{
+		"instance_id": instanceA.ID,
+		"created_at":  time.Date(2026, time.February, 11, 9, 0, 0, 0, time.UTC),
+	}).Error)
+	require.NoError(t, app.DB.Model(inboundInRangeContact).Updates(map[string]any{
+		"instance_id": instanceA.ID,
+		"created_at":  time.Date(2026, time.January, 25, 9, 0, 0, 0, time.UTC),
+	}).Error)
+	require.NoError(t, app.DB.Model(duplicateInboundContact).Updates(map[string]any{
+		"instance_id": instanceA.ID,
+		"created_at":  time.Date(2026, time.January, 26, 9, 0, 0, 0, time.UTC),
+	}).Error)
+	require.NoError(t, app.DB.Model(inboundOutsideRangeContact).Updates(map[string]any{
+		"instance_id": instanceA.ID,
+		"created_at":  time.Date(2026, time.January, 27, 9, 0, 0, 0, time.UTC),
+	}).Error)
+	require.NoError(t, app.DB.Model(outboundOnlyContact).Updates(map[string]any{
+		"instance_id": instanceA.ID,
+		"created_at":  time.Date(2026, time.January, 28, 9, 0, 0, 0, time.UTC),
+	}).Error)
+	require.NoError(t, app.DB.Model(otherInstanceInboundContact).Updates(map[string]any{
+		"instance_id": instanceB.ID,
+		"created_at":  time.Date(2026, time.February, 11, 10, 0, 0, 0, time.UTC),
+	}).Error)
+
+	createMessage := func(contactID uuid.UUID, instanceID uuid.UUID, direction models.Direction, createdAt time.Time, content string) {
+		require.NoError(t, app.DB.Create(&models.Message{
+			BaseModel:      models.BaseModel{ID: uuid.New(), CreatedAt: createdAt, UpdatedAt: createdAt},
+			OrganizationID: org.ID,
+			InstanceID:     &instanceID,
+			ContactID:      contactID,
+			Direction:      direction,
+			MessageType:    models.MessageTypeText,
+			Content:        content,
+			Status:         models.MessageStatusDelivered,
+		}).Error)
+	}
+
+	createMessage(inboundInRangeContact.ID, instanceA.ID, models.DirectionIncoming, time.Date(2026, time.February, 10, 12, 0, 0, 0, time.UTC), "Inbound in range")
+	createMessage(duplicateInboundContact.ID, instanceA.ID, models.DirectionIncoming, time.Date(2026, time.February, 11, 9, 30, 0, 0, time.UTC), "First inbound")
+	createMessage(duplicateInboundContact.ID, instanceA.ID, models.DirectionIncoming, time.Date(2026, time.February, 12, 11, 45, 0, 0, time.UTC), "Second inbound")
+	createMessage(inboundOutsideRangeContact.ID, instanceA.ID, models.DirectionIncoming, time.Date(2026, time.January, 15, 8, 0, 0, 0, time.UTC), "Older inbound")
+	createMessage(outboundOnlyContact.ID, instanceA.ID, models.DirectionOutgoing, time.Date(2026, time.February, 11, 15, 0, 0, 0, time.UTC), "Outbound only")
+	createMessage(otherInstanceInboundContact.ID, instanceB.ID, models.DirectionIncoming, time.Date(2026, time.February, 11, 16, 0, 0, 0, time.UTC), "Other instance inbound")
+
+	listIDs := func(t *testing.T, req *fastglue.Request) []uuid.UUID {
+		t.Helper()
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+		ids := make([]uuid.UUID, 0, len(resp.Data.Contacts))
+		for _, contact := range resp.Data.Contacts {
+			ids = append(ids, contact.ID)
+		}
+		return ids
+	}
+
+	t.Run("date_basis=created keeps filtering by contact created_at", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetQueryParam(req, "instance_id", instanceA.ID.String())
+		testutil.SetQueryParam(req, "date_basis", "created")
+		testutil.SetQueryParam(req, "date_from", "2026-02-10")
+		testutil.SetQueryParam(req, "date_to", "2026-02-12")
+
+		ids := listIDs(t, req)
+		require.Len(t, ids, 1)
+		assert.Equal(t, createdOnlyContact.ID, ids[0])
+	})
+
+	t.Run("date_basis=incoming_any matches any inbound message in range on the selected instance", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetQueryParam(req, "instance_id", instanceA.ID.String())
+		testutil.SetQueryParam(req, "date_basis", "incoming_any")
+		testutil.SetQueryParam(req, "date_from", "2026-02-10")
+		testutil.SetQueryParam(req, "date_to", "2026-02-12")
+
+		ids := listIDs(t, req)
+		assert.ElementsMatch(t, []uuid.UUID{
+			inboundInRangeContact.ID,
+			duplicateInboundContact.ID,
+		}, ids)
+	})
+
+	t.Run("date_basis=incoming_any without dates returns contacts with any inbound history on the selected instance only once", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetQueryParam(req, "instance_id", instanceA.ID.String())
+		testutil.SetQueryParam(req, "date_basis", "incoming_any")
+
+		ids := listIDs(t, req)
+		assert.ElementsMatch(t, []uuid.UUID{
+			inboundInRangeContact.ID,
+			duplicateInboundContact.ID,
+			inboundOutsideRangeContact.ID,
+		}, ids)
+	})
+}
+
 func TestApp_ListContacts_RestrictedUserFiltersByAllowedInstanceEvenWhenOrgStrictDisabled(t *testing.T) {
 	t.Parallel()
 
@@ -2973,6 +3129,163 @@ func TestApp_ListContacts_RestrictedUserFiltersByAllowedInstanceWhenRestrictions
 	assert.Equal(t, int64(1), resp.Data.Total)
 	require.Len(t, resp.Data.Contacts, 1)
 	assert.Equal(t, contactA.ID, resp.Data.Contacts[0].ID)
+}
+
+func TestApp_ListContacts_AssignedToMeBypassesRestrictedInstanceVisibility(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	agentRole := createExactAgentRole(t, app, org.ID)
+	agentUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+	otherAgent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+
+	instanceA := createTestInstance(t, app, org.ID, "Allowed Instance")
+	instanceB := createTestInstance(t, app, org.ID, "Restricted Instance")
+
+	myAssignedChat := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550000301"))
+	otherAssignedChat := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550000302"))
+
+	require.NoError(t, app.DB.Model(myAssignedChat).Updates(map[string]any{
+		"instance_id":      instanceB.ID,
+		"assigned_user_id": agentUser.ID,
+		"status":           models.ChatStatusOpen,
+		"last_message_at":  time.Now().UTC(),
+	}).Error)
+	require.NoError(t, app.DB.Model(otherAssignedChat).Updates(map[string]any{
+		"instance_id":      instanceB.ID,
+		"assigned_user_id": otherAgent.ID,
+		"status":           models.ChatStatusOpen,
+		"last_message_at":  time.Now().UTC().Add(-1 * time.Minute),
+	}).Error)
+
+	enableRestrictedInstanceVisibilityWithStrict(t, app, org.ID, agentUser.ID, instanceA.ID, false)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, agentUser.ID)
+	testutil.SetQueryParam(req, "status", "open")
+	testutil.SetQueryParam(req, "assigned_to", "me")
+
+	err := app.ListContacts(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Contacts []handlers.ContactResponse `json:"contacts"`
+			Total    int64                      `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	require.Len(t, resp.Data.Contacts, 1)
+	assert.Equal(t, int64(1), resp.Data.Total)
+	assert.Equal(t, myAssignedChat.ID, resp.Data.Contacts[0].ID)
+
+	t.Run("open list does not expose other agents assigned chats", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, agentUser.ID)
+		testutil.SetQueryParam(req, "status", "open")
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var scopedResp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &scopedResp))
+		require.Len(t, scopedResp.Data.Contacts, 1)
+		assert.Equal(t, int64(1), scopedResp.Data.Total)
+		assert.Equal(t, myAssignedChat.ID, scopedResp.Data.Contacts[0].ID)
+	})
+}
+
+func TestApp_AssignedChatAccess_BypassesRestrictedInstanceVisibilityForAssignee(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	agentRole := createExactAgentRole(t, app, org.ID)
+	agentUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+	otherAgent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+
+	instanceA := createTestInstance(t, app, org.ID, "Allowed Instance")
+	instanceB := createTestInstance(t, app, org.ID, "Restricted Instance")
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15550000401"))
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"instance_id":      instanceB.ID,
+		"assigned_user_id": agentUser.ID,
+		"status":           models.ChatStatusOpen,
+	}).Error)
+
+	enableRestrictedInstanceVisibilityWithStrict(t, app, org.ID, agentUser.ID, instanceA.ID, false)
+	enableRestrictedInstanceVisibilityWithStrict(t, app, org.ID, otherAgent.ID, instanceA.ID, false)
+
+	message := &models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New(), CreatedAt: time.Now().UTC()},
+		OrganizationID: org.ID,
+		ContactID:      contact.ID,
+		Direction:      models.DirectionIncoming,
+		MessageType:    models.MessageTypeText,
+		Content:        "Assigned chat history",
+		Status:         models.MessageStatusDelivered,
+	}
+	require.NoError(t, app.DB.Create(message).Error)
+
+	t.Run("assignee can get contact", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, agentUser.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+
+		err := app.GetContact(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	})
+
+	t.Run("assignee can get messages", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, agentUser.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+		testutil.SetQueryParam(req, "limit", "50")
+
+		err := app.GetMessages(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Messages []handlers.MessageResponse `json:"messages"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		require.Len(t, resp.Data.Messages, 1)
+		assert.Equal(t, message.ID, resp.Data.Messages[0].ID)
+	})
+
+	t.Run("other agent cannot get contact", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, otherAgent.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+
+		err := app.GetContact(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+	})
+
+	t.Run("other agent cannot get messages", func(t *testing.T) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, otherAgent.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+		testutil.SetQueryParam(req, "limit", "50")
+
+		err := app.GetMessages(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+	})
 }
 
 func TestApp_ListContacts_FilterPrivateChats_WithGroupHistory(t *testing.T) {

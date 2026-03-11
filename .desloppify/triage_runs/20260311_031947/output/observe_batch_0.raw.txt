@@ -1,0 +1,77 @@
+- hash: review::.::holistic::ai_generated_debt::boilerplate_error_handling
+  verdict: genuine
+  verdict_reasoning: Error handling is highly repetitive across handlers (`return r.SendErrorEnvelope(...)` with near-identical branches), and helper normalization is only partially adopted (`decodeRequest`, `parsePathUUID`, `findByIDAndOrg` exist but are not used consistently). This looks like copy-paste growth rather than deliberate variation.
+  files_read: [internal/handlers/app.go, internal/handlers/webhooks.go, internal/handlers/flows.go, internal/handlers/chatbot.go, internal/handlers/helpers.go]
+  recommendation: Standardize on shared helpers for auth/validation/not-found/error response paths and migrate endpoints incrementally to one pattern.
+
+- hash: review::.::holistic::ai_generated_debt::commented_out_code_patterns
+  verdict: genuine
+  verdict_reasoning: I did not find much inline commented-out logic, but the repo contains multiple backup/disabled source artifacts (`*.bak`, `*.bak2`, `*.disabled`) in active trees, which is the same maintainability smell in practice.
+  files_read: [internal/handlers/contacts_messaging_test.go.disabled, internal/handlers/cache_test.go.disabled, internal/handlers/sso_handlers_test.go.bak, internal/handlers/sso_handlers_test.go.bak2, frontend/src/components/layout/AppLayout.vue.bak]
+  recommendation: Remove or relocate backup/disabled files to a dedicated archive folder or git history; keep active source tree clean.
+
+- hash: review::.::holistic::ai_generated_debt::duplicate_struct_definitions
+  verdict: genuine
+  verdict_reasoning: I confirmed duplicated domain structs across packages with overlapping names/shape, e.g. `chatCloseRatingSettings` and `chatCloseRatingFollowupState` in both handlers and whatsmeow packages; also webhook status/error structs exist in multiple places with similar fields.
+  files_read: [internal/handlers/chat_close_ratings.go, pkg/whatsmeow/chat_close_ratings.go, internal/handlers/webhook.go, pkg/whatsapp/types.go]
+  recommendation: Extract shared DTO/domain types to a common package where ownership is truly shared; keep only transport-specific variants local.
+
+- hash: review::.::holistic::ai_generated_debt::generic_function_names
+  verdict: exaggerated
+  verdict_reasoning: There are some generic names (`contains`, `processTemplate`, `getString`), but many helpers are specific and meaningful (`parsePathUUID`, `normalizeOutboundMode`, `computeHMACSignature`). The issue is partially real, not pervasive.
+  files_read: [internal/handlers/template_engine.go, internal/handlers/helpers.go, internal/handlers/widgets.go, internal/handlers/sso_utils.go]
+  recommendation: Rename only the ambiguous helpers in shared scopes; avoid broad renaming churn.
+
+- hash: review::.::holistic::ai_generated_debt::unnecessary_nil_checks
+  verdict: exaggerated
+  verdict_reasoning: Most nil checks I inspected are guarding optional pointers/maps/JSONB and are required for safety (request optional fields, context values, JSON payload branches). I did not find a strong cluster of clearly redundant nil checks.
+  files_read: [internal/handlers/chatbot.go, internal/handlers/app.go, internal/handlers/organization.go, pkg/whatsmeow/chat_close_ratings.go]
+  recommendation: Treat as targeted cleanup only after proving redundancy with tests/static analysis; don’t mass-remove nil guards.
+
+- hash: review::.::holistic::convention_outlier::inconsistent_file_organization
+  verdict: genuine
+  verdict_reasoning: Related concerns are split in confusing ways (`webhook.go` vs `webhooks.go`; flow logic across handler/client/model layers with mixed ownership), and `internal/handlers` is a very broad catch-all directory.
+  files_read: [internal/handlers/webhook.go, internal/handlers/webhooks.go, internal/handlers/flows.go, pkg/whatsapp/flow.go]
+  recommendation: Define module boundaries (inbound webhook ingest vs webhook management, flow orchestration vs provider client) and reorganize files accordingly.
+
+- hash: review::.::holistic::convention_outlier::inconsistent_request_response_patterns
+  verdict: genuine
+  verdict_reasoning: Request decode/response styles vary: some use `a.decodeRequest`, others direct `json.Unmarshal`; some return typed envelopes, others raw maps; permission/auth handling also differs by handler.
+  files_read: [internal/handlers/app.go, internal/handlers/webhooks.go, internal/handlers/chatbot.go, internal/handlers/flows.go]
+  recommendation: Adopt a single handler template (auth -> decode -> validate -> service -> response) and enforce via code review checklist.
+
+- hash: review::.::holistic::convention_outlier::mixed_naming_patterns
+  verdict: genuine
+  verdict_reasoning: Naming conventions are mixed across DB/JSON/domain layers beyond what external API compatibility alone requires (`WhatsApp`, `whats_app_*`, `WaID`, mixed acronyms/casing). Some is intentional, but inconsistency is visible to maintainers.
+  files_read: [internal/handlers/flows.go, internal/handlers/chatbot.go, internal/models/models.go, pkg/whatsapp/types.go]
+  recommendation: Document naming conventions per layer (Go identifiers, JSON tags, DB columns) and normalize internal names first.
+
+- hash: review::.::holistic::incomplete_migration::deprecated-flow-status
+  verdict: false-positive
+  verdict_reasoning: `DEPRECATED` flow status is actively implemented and enforced in current flow lifecycle (guard clauses, status transitions, API route, model comment). This looks like valid business state, not a stale migration artifact.
+  files_read: [internal/handlers/flows.go, internal/models/models.go, pkg/whatsapp/flow.go, pkg/whatsapp/flow_api_test.go]
+  recommendation: Keep as-is unless product requirements remove the state; if so, run explicit migration with enum/status cleanup.
+
+- hash: review::.::holistic::incomplete_migration::dual-provider-pattern
+  verdict: genuine
+  verdict_reasoning: The app clearly carries both Meta and Whatsmeow provider paths simultaneously (`WhatsApp`, `WhatsmeowManager`, `MessageProvider` abstraction, conditional routing in send path). That is dual-stack migration state.
+  files_read: [internal/handlers/app.go, internal/handlers/messages.go, pkg/provider/interface.go, pkg/whatsapp/adapter.go]
+  recommendation: Decide end-state architecture (single provider vs permanent pluggable providers) and remove transitional branching accordingly.
+
+- hash: review::.::holistic::naming_quality::naming_001_generic_helper_functions
+  verdict: exaggerated
+  verdict_reasoning: Some helper names are generic, but most are already descriptive and scoped. The issue exists in pockets, not as a systemic naming failure.
+  files_read: [internal/handlers/helpers.go, internal/handlers/template_engine.go, internal/handlers/widgets.go, internal/handlers/sso_utils.go]
+  recommendation: Rename only low-signal helpers in shared/util packages and leave stable, well-scoped names untouched.
+
+- hash: review::.::holistic::naming_quality::naming_002_inconsistent_naming_patterns
+  verdict: genuine
+  verdict_reasoning: I verified mixed patterns in closely related code paths (status/webhook/flow/account naming), with inconsistent acronym treatment and style drift between files/packages.
+  files_read: [internal/handlers/webhook.go, internal/handlers/webhooks.go, internal/handlers/flows.go, pkg/whatsapp/types.go]
+  recommendation: Create a naming style guide for acronyms and provider/domain terms, then refactor high-churn files first.
+
+- hash: review::.::holistic::naming_quality::naming_003_abbreviations_without_convention
+  verdict: exaggerated
+  verdict_reasoning: Abbreviations like `req`, `resp`, `ctx`, `orgID` are idiomatic Go and mostly readable. I did not find widespread opaque abbreviations causing major comprehension issues.
+  files_read: [internal/handlers/chatbot.go, internal/handlers/webhooks.go, internal/handlers/app.go, pkg/whatsapp/flow.go]
+  recommendation: Keep common Go idioms; only replace nonstandard abbreviations when they reduce clarity in specific hotspots.

@@ -10,6 +10,13 @@ import (
 	"gorm.io/gorm"
 )
 
+type contactDateBasis string
+
+const (
+	contactDateBasisCreated     contactDateBasis = "created"
+	contactDateBasisIncomingAny contactDateBasis = "incoming_any"
+)
+
 func normalizeContactStatus(contact *models.Contact) models.ChatStatus {
 	if contact == nil {
 		return models.ChatStatusPending
@@ -82,6 +89,59 @@ func parseAssignedToFilter(raw string, currentUserID uuid.UUID) (*uuid.UUID, boo
 	return &assignedUserID, true, nil
 }
 
+func parseContactDateBasis(raw string) (contactDateBasis, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return contactDateBasisCreated, nil
+	}
+
+	switch strings.ToLower(trimmed) {
+	case string(contactDateBasisCreated):
+		return contactDateBasisCreated, nil
+	case string(contactDateBasisIncomingAny):
+		return contactDateBasisIncomingAny, nil
+	default:
+		return "", fmt.Errorf("invalid date_basis filter")
+	}
+}
+
+func applyContactDateBasisFilter(
+	query *gorm.DB,
+	orgID uuid.UUID,
+	basis contactDateBasis,
+	dateFrom *time.Time,
+	dateTo *time.Time,
+	instanceID *uuid.UUID,
+) *gorm.DB {
+	switch basis {
+	case contactDateBasisIncomingAny:
+		subquery := query.Session(&gorm.Session{NewDB: true}).
+			Model(&models.Message{}).
+			Select("1").
+			Where("messages.organization_id = ?", orgID).
+			Where("messages.contact_id = contacts.id").
+			Where("messages.direction = ?", models.DirectionIncoming)
+		if instanceID != nil {
+			subquery = subquery.Where("messages.instance_id = ?", *instanceID)
+		}
+		if dateFrom != nil {
+			subquery = subquery.Where("messages.created_at >= ?", *dateFrom)
+		}
+		if dateTo != nil {
+			subquery = subquery.Where("messages.created_at <= ?", endOfDay(*dateTo))
+		}
+		return query.Where("EXISTS (?)", subquery)
+	default:
+		if dateFrom != nil {
+			query = query.Where("contacts.created_at >= ?", *dateFrom)
+		}
+		if dateTo != nil {
+			query = query.Where("contacts.created_at <= ?", endOfDay(*dateTo))
+		}
+		return query
+	}
+}
+
 func (a *App) canBypassPendingChatRestriction(userID, orgID uuid.UUID) bool {
 	var user models.User
 	if err := a.DB.Select("is_super_admin").Where("id = ?", userID).First(&user).Error; err == nil && user.IsSuperAdmin {
@@ -100,17 +160,35 @@ func (a *App) canReadAllContacts(userID, orgID uuid.UUID) bool {
 		a.canBypassPendingChatRestriction(userID, orgID)
 }
 
+func (a *App) shouldRestrictChatVisibilityToAgentScope(userID, orgID uuid.UUID) bool {
+	var user models.User
+	if err := a.DB.Select("is_super_admin").Where("id = ?", userID).First(&user).Error; err == nil && user.IsSuperAdmin {
+		return false
+	}
+
+	perms, err := a.getUserPermissionsCached(userID, orgID)
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(strings.TrimSpace(perms.RoleName), "agent")
+}
+
 func applyAssignedOrPublicContactAccessFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB {
 	return query.Where("(assigned_user_id = ? OR is_public = ?)", userID, true)
 }
 
-func applyAgentVisibleChatListFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB {
+func applyAgentVisibleChatAccessFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB {
 	return query.Where(
 		"(is_public = ? OR assigned_user_id = ? OR ((status IS NULL OR status = '' OR status = ?) AND assigned_user_id IS NULL))",
 		true,
 		userID,
 		models.ChatStatusPending,
 	)
+}
+
+func applyAgentVisibleChatListFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB {
+	return applyAgentVisibleChatAccessFilter(query, userID)
 }
 
 func (a *App) canAccessRestrictedChatWithoutClaim(contact models.Contact, userID, orgID uuid.UUID) bool {

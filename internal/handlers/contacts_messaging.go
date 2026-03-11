@@ -73,11 +73,11 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
 	}
 
-	// Get contact (users without full read permission can only message their assigned contacts)
+	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.canReadAllContacts(userID, orgID) {
-		query = applyAssignedOrPublicContactAccessFilter(query, userID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -240,8 +240,8 @@ func (a *App) SendTypingPresence(r *fastglue.Request) error {
 
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.canReadAllContacts(userID, orgID) {
-		query = applyAssignedOrPublicContactAccessFilter(query, userID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -438,11 +438,11 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		)
 	}
 
-	// Get contact (users without full read permission can only message their assigned contacts)
+	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.canReadAllContacts(userID, orgID) {
-		query = applyAssignedOrPublicContactAccessFilter(query, userID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -630,11 +630,11 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
 	}
 
-	// Get contact (users without full read permission can only react to messages in their assigned contacts)
+	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.canReadAllContacts(userID, orgID) {
-		query = applyAssignedOrPublicContactAccessFilter(query, userID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -758,8 +758,8 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 
 	var contact models.Contact
 	contactQuery := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.canReadAllContacts(userID, orgID) {
-		contactQuery = applyAssignedOrPublicContactAccessFilter(contactQuery, userID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		contactQuery = applyAgentVisibleChatAccessFilter(contactQuery, userID)
 	}
 	if err := contactQuery.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")

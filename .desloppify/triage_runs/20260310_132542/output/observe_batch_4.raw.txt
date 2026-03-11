@@ -1,0 +1,7 @@
+[63bc589d] GENUINE — `internal/handlers/chatbot_processor.go` `processIncomingMessageFull` coordinates webhook I/O, contact creation, DB/cache lookups (`getWhatsAppAccountCached`, `getChatbotSettingsCached`), transfer creation, and outbound messaging decisions; JSON parsing for flow responses happens inside `parseIncomingMessagePayload` (`json.Unmarshal` on `ResponseJSON` around lines ~239-246). This is substantial business orchestration inside the handlers package.
+
+[d6d5cbb5] EXAGGERATED — `internal/handlers/chat_close_ratings.go` has `readChatCloseRatingSettings` that merges org + instance settings with defaults, but the cited `internal/handlers/activity_logs.go` contains no settings-resolution logic at all. The “reimplemented in every handler” claim doesn’t hold for the referenced file.
+
+[878c040d] GENUINE — `internal/handlers/` contains 146 `.go` files (counted in the directory). This is a very flat, overloaded package with a large number of handlers in one folder.
+
+[23c63402] GENUINE — `pkg/whatsmeow/instance_settings.go` imports `github.com/compnew2006/whatomate/internal/models`, so `pkg` depends on `internal`, confirming a package boundary leak.

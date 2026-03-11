@@ -11,6 +11,7 @@ import {
 
 const props = withDefaults(defineProps<{
   instanceId?: string
+  fallbackLabel?: string
   direction?: 'incoming' | 'outgoing'
   displayMode?: InstanceTagDisplayMode
   placement?: 'message' | 'sidebar'
@@ -39,7 +40,13 @@ const colorPreset = computed(() => {
 
 const label = computed(() => {
   if (!props.instanceId) return ''
-  if (!instance.value) return 'Unknown Instance'
+  const fallbackLabel = typeof props.fallbackLabel === 'string'
+    ? props.fallbackLabel.trim()
+    : ''
+  if (!instance.value) {
+    if (fallbackLabel) return fallbackLabel
+    return `Instance ${props.instanceId.slice(0, 8)}`
+  }
   const resolvedDisplayMode = props.displayMode || resolveInstanceTagDisplayMode(instance.value, 'name')
   return getInstanceTagLabel(instance.value, resolvedDisplayMode)
 })

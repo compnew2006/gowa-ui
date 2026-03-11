@@ -1,0 +1,7 @@
+[24c8cc1b] FALSE POSITIVE — `pkg/whatsapp/profile_extras.go` only has a single doc comment for `UploadProfilePicture` plus two short inline notes; there is no duplicated comment block or repeated sentences.
+
+[e85df3fb] GENUINE — `internal/handlers/flows.go` has restating comments like `// GetFlow returns a single flow by ID` immediately above `func (a *App) GetFlow`, which adds no information beyond the signature.
+
+[2ba4dd2e] GENUINE — `internal/handlers/chatbot_processor.go` is 2912 LOC and `internal/handlers/chat_close_ratings.go` is 1249 LOC, with large clusters of related logic (chatbot flows, AI provider handling, session lifecycle; close rating state parsing) all kept in single files rather than decomposed modules, matching the “monolithic function clusters” claim.
+
+[2d7bf897] FALSE POSITIVE — `parseJSONInt`/`parseJSONTime` helpers exist in `internal/handlers/chat_close_ratings.go`, but `internal/handlers/statuses.go` does not define those helpers (no duplicate parsing/encoding helpers found there).

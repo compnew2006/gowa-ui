@@ -16,9 +16,9 @@ import (
 const (
 	organizationSettingChatCloseRatingEnabled               = "chat_close_rating_enabled"
 	organizationSettingChatCloseRatingFollowupWindowMinutes = "chat_close_rating_followup_window_minutes"
-	defaultChatCloseRatingFollowupWindowMinutes = 15
-	maxChatCloseRatingFollowupWindowMinutes     = 1440
-	chatCloseRatingFollowupMessageLimit         = 3
+	defaultChatCloseRatingFollowupWindowMinutes             = 15
+	maxChatCloseRatingFollowupWindowMinutes                 = 1440
+	chatCloseRatingFollowupMessageLimit                     = 3
 
 	chatCloseRatingFollowupContextKey  = "followup"
 	chatCloseRatingFollowupEntriesKey  = "entries"
