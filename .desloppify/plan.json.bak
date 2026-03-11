@@ -1,8 +1,9 @@
 {
   "version": 8,
   "created": "2026-03-10T12:11:12+00:00",
-  "updated": "2026-03-11T10:19:19+00:00",
+  "updated": "2026-03-11T11:04:58+00:00",
   "queue_order": [
+    "workflow::create-plan",
     "review::.::holistic::abstraction_fitness::pass_through_adapters",
     "flat_dirs::internal/handlers",
     "flat_dirs::pkg/whatsmeow",
@@ -830,16 +831,6 @@
       "review_after": null,
       "skipped_at_scan": 13
     },
-    "workflow::create-plan": {
-      "issue_id": "workflow::create-plan",
-      "kind": "temporary",
-      "reason": "Want to work on review issues directly",
-      "note": null,
-      "attestation": "I have actually reflected and I am not deferring this for lazy reasons.",
-      "created_at": "2026-03-11T09:04:12+00:00",
-      "review_after": null,
-      "skipped_at_scan": 14
-    },
     "test_coverage::internal/queue/redis.go::untested_critical": {
       "issue_id": "test_coverage::internal/queue/redis.go::untested_critical",
       "kind": "temporary",
@@ -1482,16 +1473,6 @@
     },
     "test_coverage::internal/worker/idempotency.go::untested_module": {
       "issue_id": "test_coverage::internal/worker/idempotency.go::untested_module",
-      "kind": "temporary",
-      "reason": "Already completed comprehensive test coverage in previous session, including activity_service.go",
-      "note": null,
-      "attestation": "I have actually reflected and I am not deferring this for lazy reasons.",
-      "created_at": "2026-03-11T09:04:26+00:00",
-      "review_after": null,
-      "skipped_at_scan": 14
-    },
-    "test_coverage::pkg/whatsmeow/profile_photo.go::untested_module": {
-      "issue_id": "test_coverage::pkg/whatsmeow/profile_photo.go::untested_module",
       "kind": "temporary",
       "reason": "Already completed comprehensive test coverage in previous session, including activity_service.go",
       "note": null,
@@ -2627,37 +2608,37 @@
       "issue_id": "structural::internal/handlers/chat_close_ratings.go",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/structural-chat_close_ratings.go",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "structural::pkg/whatsmeow/chat_close_ratings.go": {
       "issue_id": "structural::pkg/whatsmeow/chat_close_ratings.go",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/structural-chat_close_ratings.go",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "structural::pkg/whatsapp/webhook_test.go": {
       "issue_id": "structural::pkg/whatsapp/webhook_test.go",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/structural-webhook_test.go",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "structural::internal/handlers/webhook_test.go": {
       "issue_id": "structural::internal/handlers/webhook_test.go",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/structural-webhook_test.go",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "flat_dirs::internal/handlers": {
       "issue_id": "flat_dirs::internal/handlers",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/flat_dirs-overload",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "flat_dirs::pkg/whatsmeow": {
       "issue_id": "flat_dirs::pkg/whatsmeow",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/flat_dirs-overload",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/config/config.go::unused_import::6": {
       "issue_id": "unused::internal/config/config.go::unused_import::6",
@@ -9059,7 +9040,7 @@
       "issue_id": "test_coverage::internal/queue/redis.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/random.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/random.go::untested_module",
@@ -9077,19 +9058,19 @@
       "issue_id": "test_coverage::internal/handlers/canned_response_media.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/auth_utils.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/auth_utils.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/cache.go::untested_critical": {
       "issue_id": "test_coverage::internal/handlers/cache.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsapp/catalog.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsapp/catalog.go::untested_module",
@@ -9107,49 +9088,49 @@
       "issue_id": "test_coverage::pkg/whatsapp/flow.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/models/chatbot.go::untested_module": {
       "issue_id": "test_coverage::internal/models/chatbot.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/events.go::untested_critical": {
       "issue_id": "test_coverage::pkg/whatsmeow/events.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/stubs.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/stubs.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/message_persist.go::untested_critical": {
       "issue_id": "test_coverage::pkg/whatsmeow/message_persist.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/chat_assignment_reset_settings.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/chat_assignment_reset_settings.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/contacts_messaging.go::untested_critical": {
       "issue_id": "test_coverage::internal/handlers/contacts_messaging.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/metrics.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/metrics.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/agent_analytics.go::untested_critical": {
       "issue_id": "test_coverage::internal/handlers/agent_analytics.go::untested_critical",
@@ -9161,19 +9142,19 @@
       "issue_id": "test_coverage::internal/handlers/jwt_secret.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/events_campaign_pause.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/events_campaign_pause.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/events_call_auto_reject_render.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/events_call_auto_reject_render.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/auth_handlers.go::untested_critical": {
       "issue_id": "test_coverage::internal/handlers/auth_handlers.go::untested_critical",
@@ -9191,43 +9172,43 @@
       "issue_id": "test_coverage::internal/handlers/import_export.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/instance_status_events.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/instance_status_events.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/models/catalog.go::untested_module": {
       "issue_id": "test_coverage::internal/models/catalog.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/models/canned_responses.go::untested_module": {
       "issue_id": "test_coverage::internal/models/canned_responses.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/migration/migrate.go::untested_module": {
       "issue_id": "test_coverage::pkg/migration/migrate.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/middleware/ratelimit.go::untested_module": {
       "issue_id": "test_coverage::internal/middleware/ratelimit.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/queue/pubsub.go::untested_module": {
       "issue_id": "test_coverage::internal/queue/pubsub.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/auth_crypto.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/auth_crypto.go::untested_module",
@@ -9239,19 +9220,19 @@
       "issue_id": "test_coverage::pkg/whatsmeow/reply_context.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/models/bulk.go::untested_module": {
       "issue_id": "test_coverage::internal/models/bulk.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/cookies.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/cookies.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/config/default_admin_validation.go::untested_module": {
       "issue_id": "test_coverage::internal/config/default_admin_validation.go::untested_module",
@@ -9263,61 +9244,61 @@
       "issue_id": "test_coverage::internal/handlers/instance_auto_campaign_worker.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/models/roles.go::untested_module": {
       "issue_id": "test_coverage::internal/models/roles.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/websocket/client.go::untested_module": {
       "issue_id": "test_coverage::internal/websocket/client.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/instance_name_validation.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/instance_name_validation.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsapp/analytics.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsapp/analytics.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/migration_handler.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/migration_handler.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/adapter.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/adapter.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/contact_account_resolution.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/contact_account_resolution.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/app.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/app.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/password_policy.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/password_policy.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/campaign_policy.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/campaign_policy.go::untested_module",
@@ -9329,31 +9310,31 @@
       "issue_id": "test_coverage::internal/handlers/sso_utils.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/adapter_send.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/adapter_send.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/reason_codes.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/reason_codes.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/models/tags.go::untested_module": {
       "issue_id": "test_coverage::internal/models/tags.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/models/activity_log.go::untested_module": {
       "issue_id": "test_coverage::internal/models/activity_log.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/chat_cleanup.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/chat_cleanup.go::untested_module",
@@ -9365,7 +9346,7 @@
       "issue_id": "test_coverage::pkg/whatsapp/template.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/config_handler.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/config_handler.go::untested_module",
@@ -9377,67 +9358,67 @@
       "issue_id": "test_coverage::internal/models/whatsapp_status.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/adapter_inbound_media.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/adapter_inbound_media.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/activity_service.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/activity_service.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/websocket/hub.go::untested_module": {
       "issue_id": "test_coverage::internal/websocket/hub.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/inbound_media_recovery.go::untested_critical": {
       "issue_id": "test_coverage::pkg/whatsmeow/inbound_media_recovery.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/worker/send_policy.go::untested_module": {
       "issue_id": "test_coverage::internal/worker/send_policy.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/webhooks.go::untested_critical": {
       "issue_id": "test_coverage::internal/handlers/webhooks.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/contacts_management.go::untested_critical": {
       "issue_id": "test_coverage::internal/handlers/contacts_management.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsapp/profile_extras.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsapp/profile_extras.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/chat_system_messages.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/chat_system_messages.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/instance_settings.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/instance_settings.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/activity_middleware.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/activity_middleware.go::untested_module",
@@ -9449,109 +9430,109 @@
       "issue_id": "test_coverage::internal/handlers/whatsapp_client.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/meta_analytics.go::untested_critical": {
       "issue_id": "test_coverage::internal/handlers/meta_analytics.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/events_revoke.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/events_revoke.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/inbound_contact.go::untested_critical": {
       "issue_id": "test_coverage::pkg/whatsmeow/inbound_contact.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/provider_guard.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/provider_guard.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/provider/context.go::untested_module": {
       "issue_id": "test_coverage::pkg/provider/context.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/worker/campaign_template_placeholders.go::untested_module": {
       "issue_id": "test_coverage::internal/worker/campaign_template_placeholders.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/pairing.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/pairing.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/models/instance.go::untested_module": {
       "issue_id": "test_coverage::internal/models/instance.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/business_profile.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/business_profile.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/chat_lifecycle.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/chat_lifecycle.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/middleware/csrf.go::untested_module": {
       "issue_id": "test_coverage::internal/middleware/csrf.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/worker/idempotency.go::untested_module": {
       "issue_id": "test_coverage::internal/worker/idempotency.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/profile_photo.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/profile_photo.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/statuses.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/statuses.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/adapter_media_helpers.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/adapter_media_helpers.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/events_history_sync.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/events_history_sync.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/models/chat_closure_rating.go::untested_module": {
       "issue_id": "test_coverage::internal/models/chat_closure_rating.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/analytics_instance_filter.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/analytics_instance_filter.go::untested_module",
@@ -9575,25 +9556,25 @@
       "issue_id": "test_coverage::internal/handlers/canned_response_send.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/instance_auto_campaign_media.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/instance_auto_campaign_media.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/notifications.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/notifications.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/chat_lifecycle.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/chat_lifecycle.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/database/postgres.go::untested_critical": {
       "issue_id": "test_coverage::internal/database/postgres.go::untested_critical",
@@ -9605,19 +9586,19 @@
       "issue_id": "test_coverage::internal/handlers/custom_action_runtime.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/contact_filters.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/contact_filters.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/events_reaction.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/events_reaction.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/chat_access_policy.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/chat_access_policy.go::untested_module",
@@ -9629,43 +9610,43 @@
       "issue_id": "test_coverage::internal/models/chat_status.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/notifications.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/notifications.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsapp/adapter.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsapp/adapter.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/webhook_dispatch.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/webhook_dispatch.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/instance_selector.go::untested_module": {
       "issue_id": "test_coverage::internal/handlers/instance_selector.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/adapter_actions.go::untested_module": {
       "issue_id": "test_coverage::pkg/whatsmeow/adapter_actions.go::untested_module",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::pkg/whatsmeow/events_call.go::untested_critical": {
       "issue_id": "test_coverage::pkg/whatsmeow/events_call.go::untested_critical",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "security::internal/handlers/custom_action_runtime.go::security::hardcoded_secret_name::internal/handlers/custom_action_runtime.go::17": {
       "issue_id": "security::internal/handlers/custom_action_runtime.go::security::hardcoded_secret_name::internal/handlers/custom_action_runtime.go::17",
@@ -10763,73 +10744,73 @@
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::parseChatCloseRatingFollowupWindowMinutes::pkg/whatsmeow/chat_close_ratings.go::parseChatCloseRatingFollowupWindowMinutes",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/chat_close_ratings.go::readChatCloseRatingFollowupState::pkg/whatsmeow/chat_close_ratings.go::readChatCloseRatingFollowupState": {
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::readChatCloseRatingFollowupState::pkg/whatsmeow/chat_close_ratings.go::readChatCloseRatingFollowupState",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/chat_close_ratings.go::normalizeRatingComments::pkg/whatsmeow/chat_close_ratings.go::normalizeRatingComments": {
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::normalizeRatingComments::pkg/whatsmeow/chat_close_ratings.go::normalizeRatingComments",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/chat_close_ratings.go::appendChatCloseRatingFollowupEntry::pkg/whatsmeow/chat_close_ratings.go::appendChatCloseRatingFollowupEntry": {
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::appendChatCloseRatingFollowupEntry::pkg/whatsmeow/chat_close_ratings.go::appendChatCloseRatingFollowupEntry",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/chat_close_ratings.go::writeChatCloseRatingFollowupState::pkg/whatsmeow/chat_close_ratings.go::writeChatCloseRatingFollowupState": {
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::writeChatCloseRatingFollowupState::pkg/whatsmeow/chat_close_ratings.go::writeChatCloseRatingFollowupState",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/chat_close_ratings.go::parseJSONTime::pkg/whatsmeow/chat_close_ratings.go::parseJSONTime": {
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::parseJSONTime::pkg/whatsmeow/chat_close_ratings.go::parseJSONTime",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/chat_close_ratings.go::parseJSONInt::pkg/whatsmeow/chat_close_ratings.go::parseJSONInt": {
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::parseJSONInt::pkg/whatsmeow/chat_close_ratings.go::parseJSONInt",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/chat_close_ratings.go::normalizeInboundRatingText::pkg/whatsmeow/chat_close_ratings.go::normalizeInboundRatingText": {
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::normalizeInboundRatingText::pkg/whatsmeow/chat_close_ratings.go::normalizeInboundRatingText",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/chat_close_ratings.go::parseInboundRatingValue::pkg/whatsmeow/chat_close_ratings.go::parseInboundRatingValue": {
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::parseInboundRatingValue::pkg/whatsmeow/chat_close_ratings.go::parseInboundRatingValue",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/chat_close_ratings.go::mapSingleMessageForRatingContext::pkg/whatsmeow/chat_close_ratings.go::mapSingleMessageForRatingContext": {
       "issue_id": "dupes::internal/handlers/chat_close_ratings.go::mapSingleMessageForRatingContext::pkg/whatsmeow/chat_close_ratings.go::mapSingleMessageForRatingContext",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-exact",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/message_template_placeholders.go::renderMessageTemplate::pkg/whatsmeow/auto_reject_message_template.go::renderAutoRejectMessageTemplate": {
       "issue_id": "dupes::internal/handlers/message_template_placeholders.go::renderMessageTemplate::pkg/whatsmeow/auto_reject_message_template.go::renderAutoRejectMessageTemplate",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-near-duplicate",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "dupes::internal/handlers/statuses.go::resolveStatusMediaURL::pkg/whatsmeow/reply_context.go::resolveReplyStatusMediaURL": {
       "issue_id": "dupes::internal/handlers/statuses.go::resolveStatusMediaURL::pkg/whatsmeow/reply_context.go::resolveReplyStatusMediaURL",
       "created_at": "2026-03-10T12:11:12+00:00",
       "cluster": "auto/dupes-near-duplicate",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "stale_exclude::.codex::.codex": {
       "issue_id": "stale_exclude::.codex::.codex",
@@ -10930,26 +10911,26 @@
     "subjective::ai_generated_debt": {
       "issue_id": "subjective::ai_generated_debt",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::api_surface_coherence": {
       "issue_id": "subjective::api_surface_coherence",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::authorization_consistency": {
       "issue_id": "subjective::authorization_consistency",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::contract_coherence": {
       "issue_id": "subjective::contract_coherence",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::convention_outlier": {
       "issue_id": "subjective::convention_outlier",
@@ -10960,14 +10941,14 @@
     "subjective::cross_module_architecture": {
       "issue_id": "subjective::cross_module_architecture",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::dependency_health": {
       "issue_id": "subjective::dependency_health",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::design_coherence": {
       "issue_id": "subjective::design_coherence",
@@ -10978,20 +10959,20 @@
     "subjective::error_consistency": {
       "issue_id": "subjective::error_consistency",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::high_level_elegance": {
       "issue_id": "subjective::high_level_elegance",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::incomplete_migration": {
       "issue_id": "subjective::incomplete_migration",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::initialization_coupling": {
       "issue_id": "subjective::initialization_coupling",
@@ -11002,44 +10983,44 @@
     "subjective::logic_clarity": {
       "issue_id": "subjective::logic_clarity",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::low_level_elegance": {
       "issue_id": "subjective::low_level_elegance",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::mid_level_elegance": {
       "issue_id": "subjective::mid_level_elegance",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::naming_quality": {
       "issue_id": "subjective::naming_quality",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::package_organization": {
       "issue_id": "subjective::package_organization",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::test_strategy": {
       "issue_id": "subjective::test_strategy",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "subjective::type_safety": {
       "issue_id": "subjective::type_safety",
       "created_at": "2026-03-10T12:11:12+00:00",
-      "cluster": "auto/under-target-review",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/reply_preview_helpers_test.go::unused_import::6": {
       "issue_id": "unused::internal/handlers/reply_preview_helpers_test.go::unused_import::6",
@@ -11206,8 +11187,8 @@
     "unused::internal/database/postgres_test.go::unused_import::8": {
       "issue_id": "unused::internal/database/postgres_test.go::unused_import::8",
       "created_at": "2026-03-10T13:29:57+00:00",
-      "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/database/postgres_test.go::unused_import::9": {
       "issue_id": "unused::internal/database/postgres_test.go::unused_import::9",
@@ -11218,26 +11199,26 @@
     "unused::internal/database/postgres_test.go::unused_import::10": {
       "issue_id": "unused::internal/database/postgres_test.go::unused_import::10",
       "created_at": "2026-03-10T13:29:57+00:00",
-      "cluster": null,
-      "updated_at": "2026-03-10T14:04:29+00:00"
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/database/postgres_test.go::unused_import::11": {
       "issue_id": "unused::internal/database/postgres_test.go::unused_import::11",
       "created_at": "2026-03-10T13:29:57+00:00",
-      "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/database/postgres_test.go::unused_import::12": {
       "issue_id": "unused::internal/database/postgres_test.go::unused_import::12",
       "created_at": "2026-03-10T13:29:57+00:00",
-      "cluster": null,
-      "updated_at": "2026-03-10T15:55:50+00:00"
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/database/postgres_test.go::unused_import::13": {
       "issue_id": "unused::internal/database/postgres_test.go::unused_import::13",
       "created_at": "2026-03-10T13:29:57+00:00",
-      "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "cluster": null,
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/agent_analytics_test.go::unused_import::4": {
       "issue_id": "unused::internal/handlers/agent_analytics_test.go::unused_import::4",
@@ -12161,13 +12142,13 @@
       "issue_id": "unused::internal/handlers/agent_analytics_test.go::unused_import::7",
       "created_at": "2026-03-10T13:34:52+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/agent_analytics_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/agent_analytics_test.go::unused_import::8",
       "created_at": "2026-03-10T13:34:52+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_export_test.go::unused_import::4": {
       "issue_id": "unused::internal/handlers/cache_export_test.go::unused_import::4",
@@ -12328,8 +12309,8 @@
     "unused::internal/database/postgres_test.go::unused_import::19": {
       "issue_id": "unused::internal/database/postgres_test.go::unused_import::19",
       "created_at": "2026-03-10T14:04:29+00:00",
-      "cluster": null,
-      "updated_at": "2026-03-10T15:55:50+00:00"
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/database/redis_test.go::unused_import::8": {
       "issue_id": "unused::internal/database/redis_test.go::unused_import::8",
@@ -12359,13 +12340,13 @@
       "issue_id": "unused::internal/handlers/activity_middleware_test.go::unused_import::6",
       "created_at": "2026-03-10T14:04:29+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/activity_middleware_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/activity_middleware_test.go::unused_import::7",
       "created_at": "2026-03-10T14:04:29+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/activity_middleware_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/activity_middleware_test.go::unused_import::8",
@@ -12551,19 +12532,19 @@
       "issue_id": "test_coverage::internal/handlers/contacts.go::untested_critical",
       "created_at": "2026-03-10T14:04:29+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/send_restriction_policy.go::untested_critical": {
       "issue_id": "test_coverage::internal/handlers/send_restriction_policy.go::untested_critical",
       "created_at": "2026-03-10T14:04:29+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "test_coverage::internal/handlers/flows.go::untested_critical": {
       "issue_id": "test_coverage::internal/handlers/flows.go::untested_critical",
       "created_at": "2026-03-10T14:04:29+00:00",
       "cluster": "auto/test_coverage",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "stale_exclude::.backup_old_tests::.backup_old_tests": {
       "issue_id": "stale_exclude::.backup_old_tests::.backup_old_tests",
@@ -12623,7 +12604,7 @@
       "issue_id": "unused::internal/handlers/app_unit_test.go::unused_import::12",
       "created_at": "2026-03-10T15:55:50+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_export_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/cache_export_test.go::unused_import::8",
@@ -12665,145 +12646,145 @@
       "issue_id": "unused::internal/handlers/auth_crypto_unit_test.go::unused_import::6",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/auth_crypto_unit_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/auth_crypto_unit_test.go::unused_import::7",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/auth_utils_unit_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/auth_utils_unit_test.go::unused_import::8",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/auth_utils_unit_test.go::unused_import::9": {
       "issue_id": "unused::internal/handlers/auth_utils_unit_test.go::unused_import::9",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/auth_utils_unit_test.go::unused_import::10": {
       "issue_id": "unused::internal/handlers/auth_utils_unit_test.go::unused_import::10",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/auth_utils_unit_test.go::unused_import::11": {
       "issue_id": "unused::internal/handlers/auth_utils_unit_test.go::unused_import::11",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/auth_utils_unit_test.go::unused_import::12": {
       "issue_id": "unused::internal/handlers/auth_utils_unit_test.go::unused_import::12",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/auth_utils_unit_test.go::unused_import::13": {
       "issue_id": "unused::internal/handlers/auth_utils_unit_test.go::unused_import::13",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/business_profile_unit_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/business_profile_unit_test.go::unused_import::8",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/business_profile_unit_test.go::unused_import::9": {
       "issue_id": "unused::internal/handlers/business_profile_unit_test.go::unused_import::9",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/business_profile_unit_test.go::unused_import::10": {
       "issue_id": "unused::internal/handlers/business_profile_unit_test.go::unused_import::10",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/business_profile_unit_test.go::unused_import::11": {
       "issue_id": "unused::internal/handlers/business_profile_unit_test.go::unused_import::11",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/business_profile_unit_test.go::unused_import::12": {
       "issue_id": "unused::internal/handlers/business_profile_unit_test.go::unused_import::12",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/business_profile_unit_test.go::unused_import::13": {
       "issue_id": "unused::internal/handlers/business_profile_unit_test.go::unused_import::13",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::8",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::9": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::9",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::10": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::10",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::11": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::11",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::12": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::12",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::13": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::13",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::14": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::14",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::15": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::15",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::16": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::16",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/cache_unit_test.go::unused_import::17": {
       "issue_id": "unused::internal/handlers/cache_unit_test.go::unused_import::17",
       "created_at": "2026-03-10T17:09:35+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/campaign_policy_unit_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/campaign_policy_unit_test.go::unused_import::7",
@@ -12845,253 +12826,307 @@
       "issue_id": "unused::internal/handlers/analytics_instance_filter_test.go::unused_import::6",
       "created_at": "2026-03-10T17:12:28+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/analytics_instance_filter_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/analytics_instance_filter_test.go::unused_import::7",
       "created_at": "2026-03-10T17:12:28+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/auth_crypto_test.go::unused_import::6": {
       "issue_id": "unused::internal/handlers/auth_crypto_test.go::unused_import::6",
       "created_at": "2026-03-10T17:12:28+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/campaign_policy_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/campaign_policy_test.go::unused_import::7",
       "created_at": "2026-03-10T17:12:28+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/campaign_policy_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/campaign_policy_test.go::unused_import::8",
       "created_at": "2026-03-10T17:12:28+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/campaign_policy_test.go::unused_import::9": {
       "issue_id": "unused::internal/handlers/campaign_policy_test.go::unused_import::9",
       "created_at": "2026-03-10T17:12:28+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/chat_access_policy_test.go::unused_import::6": {
       "issue_id": "unused::internal/handlers/chat_access_policy_test.go::unused_import::6",
       "created_at": "2026-03-10T17:12:28+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/chat_access_policy_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/chat_access_policy_test.go::unused_import::7",
       "created_at": "2026-03-10T17:12:28+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/chat_access_policy_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/chat_access_policy_test.go::unused_import::8",
       "created_at": "2026-03-10T17:12:28+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/database/redis_test.go::unused_import::12": {
       "issue_id": "unused::internal/database/redis_test.go::unused_import::12",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/database/redis_test.go::unused_import::13": {
       "issue_id": "unused::internal/database/redis_test.go::unused_import::13",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/activity_service_unit_test.go::unused_import::13": {
       "issue_id": "unused::internal/handlers/activity_service_unit_test.go::unused_import::13",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/activity_service_unit_test.go::unused_import::14": {
       "issue_id": "unused::internal/handlers/activity_service_unit_test.go::unused_import::14",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/activity_service_unit_test.go::unused_import::15": {
       "issue_id": "unused::internal/handlers/activity_service_unit_test.go::unused_import::15",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/activity_service_unit_test.go::unused_import::16": {
       "issue_id": "unused::internal/handlers/activity_service_unit_test.go::unused_import::16",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::13": {
       "issue_id": "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::13",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::14": {
       "issue_id": "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::14",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::15": {
       "issue_id": "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::15",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::16": {
       "issue_id": "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::16",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::17": {
       "issue_id": "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::17",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::18": {
       "issue_id": "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::18",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::19": {
       "issue_id": "unused::internal/handlers/canned_response_media_unit_test.go::unused_import::19",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/chat_assignment_reset_settings_unit_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/chat_assignment_reset_settings_unit_test.go::unused_import::8",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/chat_assignment_reset_settings_unit_test.go::unused_import::9": {
       "issue_id": "unused::internal/handlers/chat_assignment_reset_settings_unit_test.go::unused_import::9",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/chat_assignment_reset_settings_unit_test.go::unused_import::10": {
       "issue_id": "unused::internal/handlers/chat_assignment_reset_settings_unit_test.go::unused_import::10",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/chat_cleanup_test.go::unused_import::6": {
       "issue_id": "unused::internal/handlers/chat_cleanup_test.go::unused_import::6",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/chat_cleanup_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/chat_cleanup_test.go::unused_import::7",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/closed_chat_filters_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/closed_chat_filters_test.go::unused_import::7",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/closed_chat_filters_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/closed_chat_filters_test.go::unused_import::8",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/closed_chat_filters_test.go::unused_import::9": {
       "issue_id": "unused::internal/handlers/closed_chat_filters_test.go::unused_import::9",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/config_handler_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/config_handler_test.go::unused_import::7",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/config_handler_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/config_handler_test.go::unused_import::8",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/config_handler_test.go::unused_import::9": {
       "issue_id": "unused::internal/handlers/config_handler_test.go::unused_import::9",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/config_handler_test.go::unused_import::10": {
       "issue_id": "unused::internal/handlers/config_handler_test.go::unused_import::10",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/config_handler_test.go::unused_import::11": {
       "issue_id": "unused::internal/handlers/config_handler_test.go::unused_import::11",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/stubs_unit_test.go::unused_import::6": {
       "issue_id": "unused::internal/handlers/stubs_unit_test.go::unused_import::6",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/stubs_unit_test.go::unused_import::7": {
       "issue_id": "unused::internal/handlers/stubs_unit_test.go::unused_import::7",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/stubs_unit_test.go::unused_import::8": {
       "issue_id": "unused::internal/handlers/stubs_unit_test.go::unused_import::8",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/stubs_unit_test.go::unused_import::9": {
       "issue_id": "unused::internal/handlers/stubs_unit_test.go::unused_import::9",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::internal/handlers/stubs_unit_test.go::unused_import::10": {
       "issue_id": "unused::internal/handlers/stubs_unit_test.go::unused_import::10",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::pkg/whatsmeow/metrics_unit_test.go::unused_import::7": {
       "issue_id": "unused::pkg/whatsmeow/metrics_unit_test.go::unused_import::7",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
     },
     "unused::pkg/whatsmeow/metrics_unit_test.go::unused_import::8": {
       "issue_id": "unused::pkg/whatsmeow/metrics_unit_test.go::unused_import::8",
       "created_at": "2026-03-11T09:35:15+00:00",
       "cluster": "auto/unused",
-      "updated_at": "2026-03-11T09:35:15+00:00"
+      "updated_at": "2026-03-11T11:04:11+00:00"
+    },
+    "unused::internal/handlers/auth_handlers.go::unused_import::14": {
+      "issue_id": "unused::internal/handlers/auth_handlers.go::unused_import::14",
+      "created_at": "2026-03-11T11:04:11+00:00",
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
+    },
+    "unused::internal/handlers/auth_utils.go::unused_import::12": {
+      "issue_id": "unused::internal/handlers/auth_utils.go::unused_import::12",
+      "created_at": "2026-03-11T11:04:11+00:00",
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
+    },
+    "unused::internal/handlers/auth_utils_unit_test.go::unused_import::14": {
+      "issue_id": "unused::internal/handlers/auth_utils_unit_test.go::unused_import::14",
+      "created_at": "2026-03-11T11:04:11+00:00",
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
+    },
+    "unused::internal/handlers/auth_utils_unit_test.go::unused_import::15": {
+      "issue_id": "unused::internal/handlers/auth_utils_unit_test.go::unused_import::15",
+      "created_at": "2026-03-11T11:04:11+00:00",
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
+    },
+    "unused::internal/handlers/helpers.go::unused_import::12": {
+      "issue_id": "unused::internal/handlers/helpers.go::unused_import::12",
+      "created_at": "2026-03-11T11:04:11+00:00",
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
+    },
+    "unused::internal/handlers/helpers.go::unused_import::13": {
+      "issue_id": "unused::internal/handlers/helpers.go::unused_import::13",
+      "created_at": "2026-03-11T11:04:11+00:00",
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
+    },
+    "unused::pkg/whatsmeow/profile_photo_test.go::unused_import::7": {
+      "issue_id": "unused::pkg/whatsmeow/profile_photo_test.go::unused_import::7",
+      "created_at": "2026-03-11T11:04:11+00:00",
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
+    },
+    "unused::pkg/whatsmeow/profile_photo_test.go::unused_import::8": {
+      "issue_id": "unused::pkg/whatsmeow/profile_photo_test.go::unused_import::8",
+      "created_at": "2026-03-11T11:04:11+00:00",
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
+    },
+    "unused::pkg/whatsmeow/profile_photo_test.go::unused_import::9": {
+      "issue_id": "unused::pkg/whatsmeow/profile_photo_test.go::unused_import::9",
+      "created_at": "2026-03-11T11:04:11+00:00",
+      "cluster": "auto/unused",
+      "updated_at": "2026-03-11T11:04:11+00:00"
     }
   },
   "clusters": {
@@ -13139,13 +13174,13 @@
     },
     "auto/unused": {
       "name": "auto/unused",
-      "description": "Remove 74 unused issues",
+      "description": "Remove 83 unused issues",
       "issue_ids": [
-        "unused::internal/database/postgres_test.go::unused_import::8",
-        "unused::internal/database/postgres_test.go::unused_import::11",
-        "unused::internal/database/postgres_test.go::unused_import::13",
+        "unused::internal/database/postgres_test.go::unused_import::10",
+        "unused::internal/database/postgres_test.go::unused_import::12",
         "unused::internal/handlers/agent_analytics_test.go::unused_import::7",
         "unused::internal/handlers/agent_analytics_test.go::unused_import::8",
+        "unused::internal/database/postgres_test.go::unused_import::19",
         "unused::internal/handlers/activity_middleware_test.go::unused_import::6",
         "unused::internal/handlers/activity_middleware_test.go::unused_import::7",
         "unused::internal/handlers/app_unit_test.go::unused_import::12",
@@ -13214,10 +13249,19 @@
         "unused::internal/handlers/stubs_unit_test.go::unused_import::9",
         "unused::internal/handlers/stubs_unit_test.go::unused_import::10",
         "unused::pkg/whatsmeow/metrics_unit_test.go::unused_import::7",
-        "unused::pkg/whatsmeow/metrics_unit_test.go::unused_import::8"
+        "unused::pkg/whatsmeow/metrics_unit_test.go::unused_import::8",
+        "unused::internal/handlers/auth_handlers.go::unused_import::14",
+        "unused::internal/handlers/auth_utils.go::unused_import::12",
+        "unused::internal/handlers/auth_utils_unit_test.go::unused_import::14",
+        "unused::internal/handlers/auth_utils_unit_test.go::unused_import::15",
+        "unused::internal/handlers/helpers.go::unused_import::12",
+        "unused::internal/handlers/helpers.go::unused_import::13",
+        "unused::pkg/whatsmeow/profile_photo_test.go::unused_import::7",
+        "unused::pkg/whatsmeow/profile_photo_test.go::unused_import::8",
+        "unused::pkg/whatsmeow/profile_photo_test.go::unused_import::9"
       ],
       "created_at": "2026-03-10T12:11:12+00:00",
-      "updated_at": "2026-03-11T09:35:15+00:00",
+      "updated_at": "2026-03-11T11:04:11+00:00",
       "auto": true,
       "cluster_key": "auto::unused",
       "action": "desloppify autofix unused-imports --dry-run",
@@ -13225,7 +13269,7 @@
     },
     "auto/test_coverage": {
       "name": "auto/test_coverage",
-      "description": "Fix 87 test coverage issues",
+      "description": "Fix 86 test coverage issues",
       "issue_ids": [
         "test_coverage::internal/queue/redis.go::untested_critical",
         "test_coverage::internal/handlers/canned_response_media.go::untested_module",
@@ -13292,7 +13336,6 @@
         "test_coverage::pkg/whatsmeow/chat_lifecycle.go::untested_module",
         "test_coverage::internal/middleware/csrf.go::untested_module",
         "test_coverage::internal/worker/idempotency.go::untested_module",
-        "test_coverage::pkg/whatsmeow/profile_photo.go::untested_module",
         "test_coverage::pkg/whatsmeow/statuses.go::untested_module",
         "test_coverage::pkg/whatsmeow/adapter_media_helpers.go::untested_module",
         "test_coverage::pkg/whatsmeow/events_history_sync.go::untested_module",
@@ -13316,7 +13359,7 @@
         "test_coverage::internal/handlers/flows.go::untested_critical"
       ],
       "created_at": "2026-03-10T12:11:12+00:00",
-      "updated_at": "2026-03-11T09:35:15+00:00",
+      "updated_at": "2026-03-11T11:04:11+00:00",
       "auto": true,
       "cluster_key": "detector::test_coverage",
       "action": "add tests for untested production modules \u2014 prioritize by import count",
@@ -13660,35 +13703,6 @@
           "done": true
         }
       ]
-    },
-    "auto/under-target-review": {
-      "name": "auto/under-target-review",
-      "description": "Consider re-reviewing 16 dimensions under target score",
-      "issue_ids": [
-        "subjective::ai_generated_debt",
-        "subjective::api_surface_coherence",
-        "subjective::authorization_consistency",
-        "subjective::contract_coherence",
-        "subjective::cross_module_architecture",
-        "subjective::dependency_health",
-        "subjective::error_consistency",
-        "subjective::high_level_elegance",
-        "subjective::incomplete_migration",
-        "subjective::logic_clarity",
-        "subjective::low_level_elegance",
-        "subjective::mid_level_elegance",
-        "subjective::naming_quality",
-        "subjective::package_organization",
-        "subjective::test_strategy",
-        "subjective::type_safety"
-      ],
-      "created_at": "2026-03-11T09:35:15+00:00",
-      "updated_at": "2026-03-11T09:35:15+00:00",
-      "auto": true,
-      "cluster_key": "subjective::under-target",
-      "action": "desloppify review --prepare --dimensions ai_generated_debt,api_surface_coherence,authorization_consistency,contract_coherence,cross_module_architecture,dependency_health,error_consistency,high_level_elegance,incomplete_migration,logic_clarity,low_level_elegance,mid_level_elegance,naming_quality,package_organization,test_strategy,type_safety",
-      "user_modified": false,
-      "optional": true
     }
   },
   "superseded": {
@@ -28955,6 +28969,16 @@
         "review::.::holistic::logic_clarity::logic_001_dead_code_after_return",
         "review::.::holistic::logic_clarity::logic_002_redundant_null_checks"
       ]
+    },
+    "test_coverage::pkg/whatsmeow/profile_photo.go::untested_module": {
+      "original_id": "test_coverage::pkg/whatsmeow/profile_photo.go::untested_module",
+      "original_detector": "test_coverage",
+      "original_file": "pkg/whatsmeow/profile_photo.go",
+      "original_summary": "Untested module (173 LOC, 0 importers)",
+      "status": "superseded",
+      "superseded_at": "2026-03-11T11:04:11+00:00",
+      "remapped_to": null,
+      "candidates": []
     }
   },
   "promoted_ids": [
@@ -28965,8 +28989,8 @@
   "plan_start_scores": {
     "strict": 71.2,
     "overall": 72.1,
-    "objective": 85.2,
-    "verified": 85.0
+    "objective": 85.3,
+    "verified": 85.1
   },
   "refresh_state": {},
   "execution_log": [
@@ -39450,6 +39474,86 @@
       "actor": "user",
       "note": "Resolved in Batch #1 (duplicate settings parsing refactored to helper function) and Batch #2 (documentation and test improvements). Vet error likely pre-existing or addressed separately.",
       "detail": {}
+    },
+    {
+      "timestamp": "2026-03-11T10:19:34+00:00",
+      "action": "sync_stale",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-03-11T10:19:34+00:00",
+      "action": "sync_communicate_score",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-03-11T10:19:34+00:00",
+      "action": "sync_create_plan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-03-11T11:04:11+00:00",
+      "action": "reconcile",
+      "issue_ids": [
+        "test_coverage::pkg/whatsmeow/profile_photo.go::untested_module"
+      ],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "superseded_count": 1,
+        "pruned_count": 0,
+        "resurfaced_count": 0,
+        "clusters_completed_count": 0
+      }
+    },
+    {
+      "timestamp": "2026-03-11T11:04:11+00:00",
+      "action": "auto_cluster",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-03-11T11:04:11+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-03-11T11:04:35+00:00",
+      "action": "done",
+      "issue_ids": [
+        "workflow::communicate-score"
+      ],
+      "cluster_name": null,
+      "actor": "user",
+      "note": "Score communicated",
+      "detail": {}
     }
   ],
   "epic_triage_meta": {
@@ -39646,7 +39750,8 @@
       },
       "strategy": "Execute objective queue with reliability-consistency first, then architecture-decomposition, then test-strategy-hardening; keep migration-clarify gated on product intent and treat healthy-monitor as monitor-only unless regressions appear.",
       "completion_mode": "manual_triage"
-    }
+    },
+    "triage_start_blocked": "objective_backlog_mid_cycle"
   },
   "commit_log": [
     {
@@ -39837,5 +39942,5 @@
     "review::.::holistic::abstraction_fitness::duplicate_setting_parsing"
   ],
   "commit_tracking_branch": null,
-  "scan_count_at_plan_start": 15
+  "scan_count_at_plan_start": 17
 }
