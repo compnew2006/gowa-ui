@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -23,11 +24,15 @@ func (w *Worker) acquireRecipientLock(ctx context.Context, recipientID uuid.UUID
 	}
 	key := recipientLockKey(recipientID)
 	// Try to acquire the lock using SET NX
-	acquired, err := w.Redis.SetNX(ctx, key, "1", recipientLockTTL).Result()
+	res, err := w.Redis.SetArgs(ctx, key, "1", redis.SetArgs{Mode: "NX", TTL: recipientLockTTL}).Result()
 	if err != nil {
+		if err == redis.Nil {
+			return false, nil // Not acquired
+		}
 		return false, fmt.Errorf("failed to acquire recipient lock: %w", err)
 	}
-	return acquired, nil
+	// "OK" response means acquired
+	return res == "OK", nil
 }
 
 func (w *Worker) releaseRecipientLock(ctx context.Context, recipientID uuid.UUID) {

@@ -169,13 +169,18 @@ func TestHandleMessage_PersistsGroupFromMeWithoutDeviceSentMetadata(t *testing.T
 	}
 	require.NoError(t, db.Create(&instance).Error)
 
-	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	cm := NewConnectionManager(db, nil, testutil.NopLogger(), &config.WhatsmeowConfig{}, nil, "./uploads")
+
+	// Avoid triggering GetProfilePictureInfo panic since client is mocked minimally
+	cm.disableAvatarSync = true
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
-	cm.clients[instance.ID] = &waClient.Client{
-		Store: &store.Device{ID: &myJID},
-	}
+
+	// Create minimal mock client
+	mockStore := &store.Device{ID: &myJID}
+	mockClient := waClient.NewClient(mockStore, nil)
+	cm.clients[instance.ID] = mockClient
 
 	groupJID, err := types.ParseJID("120363123456789012@g.us")
 	require.NoError(t, err)
