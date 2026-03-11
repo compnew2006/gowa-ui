@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -156,4 +157,39 @@ func parseDateRange(startStr, endStr string) (start, end time.Time, errMsg strin
 	}
 	end = endOfDay(end)
 	return start, end, ""
+}
+
+// validateExportColumns validates requested columns against allowed columns.
+// Returns error if any requested column is not in the allowed set.
+//
+// This is a pure validation function extracted from ExportData to improve
+// testability. It validates that all requested columns are present in the
+// allowed set, returning both the validated list and an error if validation fails.
+//
+// Parameters:
+//   - requested: List of column names to export
+//   - allowed: List of allowed column names from config
+//
+// Returns:
+//   - validated: List of validated columns (subset of requested, preserving order)
+//   - error: Non-nil if any column is not allowed, with descriptive error message
+//
+// Error returns:
+//   - error: Contains message like "column 'name' is not allowed for export"
+func validateExportColumns(requested, allowed []string) (validated []string, err error) {
+	// Build allowed set for O(1) lookup
+	allowedSet := make(map[string]bool, len(allowed))
+	for _, col := range allowed {
+		allowedSet[col] = true
+	}
+
+	// Validate each requested column
+	validated = make([]string, 0, len(requested))
+	for _, col := range requested {
+		if !allowedSet[col] {
+			return nil, fmt.Errorf("column '%s' is not allowed for export", col)
+		}
+		validated = append(validated, col)
+	}
+	return validated, nil
 }

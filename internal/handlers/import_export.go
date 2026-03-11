@@ -201,15 +201,14 @@ func (a *App) ExportData(r *fastglue.Request) error {
 	}
 
 	// Validate columns against allowed set
-	allowedSet := make(map[string]bool)
-	for _, col := range config.AllowedColumns {
-		allowedSet[col] = true
+	validatedCols, err := validateExportColumns(columns, config.AllowedColumns)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
-	requestedCols := make(map[string]bool, len(columns))
-	for _, col := range columns {
-		if !allowedSet[col] {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, fmt.Sprintf("Column '%s' is not allowed for export", col), nil, "")
-		}
+
+	// Build requested cols map for later use
+	requestedCols := make(map[string]bool, len(validatedCols))
+	for _, col := range validatedCols {
 		requestedCols[col] = true
 	}
 

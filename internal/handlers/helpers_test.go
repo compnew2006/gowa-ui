@@ -433,3 +433,166 @@ func TestParseDateRange_SameDay(t *testing.T) {
 	assert.Equal(t, 0, start.Hour())
 	assert.Equal(t, 23, end.Hour())
 }
+
+// --- validateExportColumns ---
+
+func TestValidateExportColumns_AllColumnsValid(t *testing.T) {
+	t.Parallel()
+
+	requested := []string{"name", "email", "phone"}
+	allowed := []string{"id", "name", "email", "phone", "created_at"}
+
+	validated, err := validateExportColumns(requested, allowed)
+
+	assert.NoError(t, err)
+	assert.Equal(t, requested, validated, "Should preserve order and return all requested columns")
+}
+
+func TestValidateExportColumns_InvalidColumn(t *testing.T) {
+	t.Parallel()
+
+	requested := []string{"name", "password", "email"}
+	allowed := []string{"id", "name", "email", "phone"}
+
+	validated, err := validateExportColumns(requested, allowed)
+
+	assert.Error(t, err)
+	assert.Nil(t, validated)
+	assert.Contains(t, err.Error(), "password", "Error should mention the invalid column")
+	assert.Contains(t, err.Error(), "not allowed for export", "Error should be descriptive")
+}
+
+func TestValidateExportColumns_EmptyRequested(t *testing.T) {
+	t.Parallel()
+
+	requested := []string{}
+	allowed := []string{"id", "name", "email"}
+
+	validated, err := validateExportColumns(requested, allowed)
+
+	assert.NoError(t, err)
+	assert.Empty(t, validated, "Empty request should return empty result")
+}
+
+func TestValidateExportColumns_DuplicateColumns(t *testing.T) {
+	t.Parallel()
+
+	requested := []string{"name", "name", "email"}
+	allowed := []string{"id", "name", "email"}
+
+	validated, err := validateExportColumns(requested, allowed)
+
+	assert.NoError(t, err)
+	// Should preserve duplicates as that's the caller's responsibility
+	assert.Equal(t, []string{"name", "name", "email"}, validated)
+}
+
+func TestValidateExportColumns_PartiallyValid(t *testing.T) {
+	t.Parallel()
+
+	requested := []string{"name", "invalid_column", "email"}
+	allowed := []string{"id", "name", "email", "phone"}
+
+	validated, err := validateExportColumns(requested, allowed)
+
+	assert.Error(t, err)
+	assert.Nil(t, validated)
+	assert.Contains(t, err.Error(), "invalid_column")
+}
+
+func TestValidateExportColumns_OrderPreserved(t *testing.T) {
+	t.Parallel()
+
+	requested := []string{"email", "name", "phone"}
+	allowed := []string{"id", "phone", "name", "email"}
+
+	validated, err := validateExportColumns(requested, allowed)
+
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"email", "name", "phone"}, validated, "Should preserve original order")
+}
+
+func TestValidateExportColumns_AllRequestedColumnsValid(t *testing.T) {
+	t.Parallel()
+
+	requested := []string{"id", "name", "email", "phone"}
+	allowed := []string{"id", "name", "email", "phone"}
+
+	validated, err := validateExportColumns(requested, allowed)
+
+	assert.NoError(t, err)
+	assert.Equal(t, requested, validated)
+}
+
+func TestValidateExportColumns_TableDriven(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		requested []string
+		allowed   []string
+		wantErr   bool
+		errMsg    string
+		want      []string
+	}{
+		{
+			name:      "all valid columns",
+			requested: []string{"name", "email"},
+			allowed:   []string{"id", "name", "email"},
+			wantErr:   false,
+			want:      []string{"name", "email"},
+		},
+		{
+			name:      "invalid column present",
+			requested: []string{"name", "password"},
+			allowed:   []string{"id", "name", "email"},
+			wantErr:   true,
+			errMsg:    "column 'password' is not allowed for export",
+		},
+		{
+			name:      "empty requested list",
+			requested: []string{},
+			allowed:   []string{"id", "name"},
+			wantErr:   false,
+			want:      []string{},
+		},
+		{
+			name:      "duplicates preserved",
+			requested: []string{"name", "name"},
+			allowed:   []string{"id", "name"},
+			wantErr:   false,
+			want:      []string{"name", "name"},
+		},
+		{
+			name:      "multiple invalid columns",
+			requested: []string{"invalid1", "name", "invalid2"},
+			allowed:   []string{"id", "name", "email"},
+			wantErr:   true,
+			errMsg:    "column 'invalid1' is not allowed for export",
+		},
+		{
+			name:      "case sensitive validation",
+			requested: []string{"Name"}, // uppercase
+			allowed:   []string{"id", "name"}, // lowercase
+			wantErr:   true,
+			errMsg:    "column 'Name' is not allowed for export",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			validated, err := validateExportColumns(tt.requested, tt.allowed)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+				assert.Nil(t, validated)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want, validated)
+			}
+		})
+	}
+}
