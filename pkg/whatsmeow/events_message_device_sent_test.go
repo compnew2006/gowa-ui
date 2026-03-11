@@ -40,13 +40,16 @@ func TestHandleMessage_PersistsDeviceSentFromMeAsOutgoing(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&instance).Error)
 
-	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	cm := NewConnectionManager(db, nil, testutil.NopLogger(), &config.WhatsmeowConfig{}, nil, "./uploads")
+	cm.disableAvatarSync = true
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
-	cm.clients[instance.ID] = &waClient.Client{
-		Store: &store.Device{ID: &myJID},
-	}
+
+	// Create minimal mock client
+	mockStore := &store.Device{ID: &myJID}
+	mockClient := waClient.NewClient(mockStore, nil)
+	cm.clients[instance.ID] = mockClient
 
 	chatJID, err := types.ParseJID("15550001234@s.whatsapp.net")
 	require.NoError(t, err)

@@ -6,7 +6,6 @@ import (
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	waClient "go.mau.fi/whatsmeow"
-	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"gorm.io/gorm"
@@ -298,6 +297,3 @@ func (cm *ConnectionManager) findOrCreateContact(
 	return &contact, nil
 }
 
-func (cm *ConnectionManager) extractMessageContent(ctx context.Context, client *waClient.Client, msg *waE2E.Message) (models.MessageType, string, string, string, string) {
-	return cm.extractMessageContentWithMedia(ctx, client, msg)
-}

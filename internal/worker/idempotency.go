@@ -22,6 +22,7 @@ func (w *Worker) acquireRecipientLock(ctx context.Context, recipientID uuid.UUID
 		return true, nil
 	}
 	key := recipientLockKey(recipientID)
+	// Try to acquire the lock using SET NX
 	acquired, err := w.Redis.SetNX(ctx, key, "1", recipientLockTTL).Result()
 	if err != nil {
 		return false, fmt.Errorf("failed to acquire recipient lock: %w", err)

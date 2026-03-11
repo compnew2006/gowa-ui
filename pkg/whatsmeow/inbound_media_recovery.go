@@ -68,7 +68,7 @@ func (cm *ConnectionManager) ProcessInboundMediaRecoveryJob(ctx context.Context,
 	maxAttempts, baseBackoff, maxBackoff := cm.inboundMediaAsyncRetrySettings()
 	var (
 		data            []byte
-		lastFailureText = strings.TrimSpace(job.LastError)
+		lastFailureText string
 	)
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
