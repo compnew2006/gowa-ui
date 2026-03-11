@@ -1,7 +1,7 @@
 {
   "version": 8,
   "created": "2026-03-10T12:11:12+00:00",
-  "updated": "2026-03-11T09:11:31+00:00",
+  "updated": "2026-03-11T09:12:15+00:00",
   "queue_order": [
     "review::.::holistic::abstraction_fitness::pass_through_adapters",
     "triage::observe",
@@ -39182,6 +39182,17 @@
       "cluster_name": null,
       "actor": "user",
       "note": "Analyzed boilerplate error handling pattern - this requires deeper architectural work beyond quick fixes",
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-03-11T09:12:15+00:00",
+      "action": "done",
+      "issue_ids": [
+        "subjective::api_coherence"
+      ],
+      "cluster_name": null,
+      "actor": "user",
+      "note": "Parameter ordering inconsistency is intentional - adapters normalize different provider APIs (Meta vs whatsmeow) to common interface. The abstraction value is provider consistency, not parameter uniformity.",
       "detail": {}
     }
   ],

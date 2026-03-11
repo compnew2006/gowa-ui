@@ -1,7 +1,7 @@
 {
   "version": 8,
   "created": "2026-03-10T12:11:12+00:00",
-  "updated": "2026-03-11T09:12:15+00:00",
+  "updated": "2026-03-11T09:22:00+00:00",
   "queue_order": [
     "review::.::holistic::abstraction_fitness::pass_through_adapters",
     "triage::observe",
@@ -39193,6 +39193,17 @@
       "cluster_name": null,
       "actor": "user",
       "note": "Parameter ordering inconsistency is intentional - adapters normalize different provider APIs (Meta vs whatsmeow) to common interface. The abstraction value is provider consistency, not parameter uniformity.",
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-03-11T09:22:00+00:00",
+      "action": "done",
+      "issue_ids": [
+        "review::.::holistic::abstraction_fitness::duplicate_setting_parsing"
+      ],
+      "cluster_name": null,
+      "actor": "user",
+      "note": "Extracted applyChatCloseRatingSettingsToResult helper function to eliminate 36 lines of duplicate code between organization and instance settings parsing. Code now follows DRY principle with identical behavior preserved.",
       "detail": {}
     }
   ],
