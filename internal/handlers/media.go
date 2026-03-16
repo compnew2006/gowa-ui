@@ -223,11 +223,13 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Users without contacts:read permission can only access media from their assigned contacts
-	// or from contacts with an active team transfer where the user is a team member.
-	if !a.canReadAllContacts(userID, orgID) {
+	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
+	// Active team transfers remain a fallback for the transfer workflow.
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		var contact models.Contact
-		if err := a.DB.Where("id = ? AND (assigned_user_id = ? OR is_public = ?)", message.ContactID, userID, true).First(&contact).Error; err != nil {
+		contactQuery := a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID)
+		contactQuery = applyAgentVisibleChatAccessFilter(contactQuery, userID)
+		if err := contactQuery.First(&contact).Error; err != nil {
 			// Not directly assigned — check team membership via active transfer
 			var transfer models.AgentTransfer
 			if err := a.DB.Where("contact_id = ? AND organization_id = ? AND status = ? AND team_id IS NOT NULL",

@@ -409,3 +409,122 @@ func GenerateTestRefreshToken(t *testing.T, user *models.User, secret string, ex
 	require.NoError(t, err)
 	return tokenString
 }
+
+// CreateTestChatbotSettings creates a test chatbot settings
+func CreateTestChatbotSettings(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppAccount string) *models.ChatbotSettings {
+	t.Helper()
+
+	settings := &models.ChatbotSettings{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		WhatsAppAccount: whatsAppAccount,
+		IsEnabled:       true,
+		DefaultResponse: "Default test response",
+		AI: models.AIConfig{
+			Enabled: false,
+		},
+		BusinessHours: models.BusinessHoursConfig{
+			Enabled: false,
+		},
+		AgentAssignment: models.AgentAssignmentConfig{
+			AllowQueuePickup: true,
+		},
+		SLA: models.SLAConfig{
+			Enabled: false,
+		},
+		ClientInactivity: models.ClientInactivityConfig{
+			ReminderEnabled: false,
+		},
+	}
+	require.NoError(t, db.Create(settings).Error)
+	return settings
+}
+
+// CreateTestChatbotFlow creates a test chatbot flow
+func CreateTestChatbotFlow(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppAccount string) *models.ChatbotFlow {
+	t.Helper()
+
+	flow := &models.ChatbotFlow{
+		BaseModel:        models.BaseModel{ID: uuid.New()},
+		OrganizationID:   orgID,
+		WhatsAppAccount:  whatsAppAccount,
+		Name:             "Test Flow " + uuid.New().String()[:8],
+		IsEnabled:        true,
+		Description:      "Test flow description",
+		InitialMessage:   "Hello from test flow!",
+		InitialMessageType: models.FlowStepTypeText,
+		CompletionMessage: "Flow completed",
+		TimeoutMessage:   "Flow timed out",
+	}
+	require.NoError(t, db.Create(flow).Error)
+	return flow
+}
+
+// CreateTestKeywordRule creates a test keyword rule
+func CreateTestKeywordRule(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppAccount string) *models.KeywordRule {
+	t.Helper()
+
+	uniqueID := uuid.New().String()[:8]
+	rule := &models.KeywordRule{
+		BaseModel:        models.BaseModel{ID: uuid.New()},
+		OrganizationID:   orgID,
+		WhatsAppAccount:  whatsAppAccount,
+		Name:             "Test Rule " + uniqueID,
+		IsEnabled:        true,
+		Priority:         10,
+		Keywords:         models.StringArray{"test" + uniqueID},
+		MatchType:        models.MatchTypeContains,
+		CaseSensitive:    false,
+		ResponseType:     models.ResponseTypeText,
+		ResponseContent:  models.JSONB{"message": "Test response"},
+	}
+	require.NoError(t, db.Create(rule).Error)
+	return rule
+}
+
+// CreateTestWebhook creates a test webhook
+func CreateTestWebhook(t *testing.T, db *gorm.DB, orgID uuid.UUID) *models.Webhook {
+	t.Helper()
+
+	webhook := &models.Webhook{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: orgID,
+		Name:           "Test Webhook " + uuid.New().String()[:8],
+		URL:            "https://example.com/webhook/" + uuid.New().String()[:8],
+		Events:         models.StringArray{"message.incoming"},
+		IsActive:       true,
+	}
+	require.NoError(t, db.Create(webhook).Error)
+	return webhook
+}
+
+// CreateTestAIContext creates a test AI context
+func CreateTestAIContext(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppAccount string) *models.AIContext {
+	t.Helper()
+
+	context := &models.AIContext{
+		BaseModel:        models.BaseModel{ID: uuid.New()},
+		OrganizationID:   orgID,
+		WhatsAppAccount:  whatsAppAccount,
+		Name:             "Test Context " + uuid.New().String()[:8],
+		IsEnabled:        true,
+		Priority:         10,
+		ContextType:      models.ContextTypeStatic,
+		StaticContent:    "Test static content",
+	}
+	require.NoError(t, db.Create(context).Error)
+	return context
+}
+
+// CreateTestTag creates a test tag
+func CreateTestTag(t *testing.T, db *gorm.DB, orgID uuid.UUID, name string) *models.Tag {
+	t.Helper()
+
+	tag := &models.Tag{
+		OrganizationID: orgID,
+		Name:           name,
+		Color:          "blue",
+	}
+	require.NoError(t, db.Create(tag).Error)
+	return tag
+}

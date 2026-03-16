@@ -2,6 +2,21 @@ import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from '../../helpers'
 import { CampaignsPage } from '../../pages'
 
+const MOCK_CONFIG = {
+  status: 'success',
+  data: {
+    whatsapp_provider: 'meta',
+    features: {
+      templates: true,
+      flows: true,
+      catalog: true,
+      business_profile: true,
+      campaigns: true,
+      meta_insights: true
+    }
+  }
+}
+
 const MOCK_ACCOUNTS = {
   data: {
     accounts: [
@@ -26,6 +41,14 @@ const MOCK_CAMPAIGNS = {
 
 function setupMockRoutes(page: import('@playwright/test').Page) {
   return Promise.all([
+    page.route('**/api/config*', async route => {
+      if (route.request().method() !== 'GET') { await route.continue(); return }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MOCK_CONFIG)
+      })
+    }),
     page.route('**/api/templates*', async route => {
       if (route.request().method() !== 'GET') { await route.continue(); return }
       const url = new URL(route.request().url())
@@ -117,6 +140,14 @@ test.describe('Campaign Create - Template Loading', () => {
 
   test('should pass account param in template API request', async ({ page }) => {
     let capturedAccountParam: string | null = null
+    await page.route('**/api/config*', async route => {
+      if (route.request().method() !== 'GET') { await route.continue(); return }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MOCK_CONFIG)
+      })
+    })
     await page.route('**/api/templates*', async route => {
       if (route.request().method() !== 'GET') { await route.continue(); return }
       const url = new URL(route.request().url())

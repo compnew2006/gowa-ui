@@ -135,7 +135,7 @@ func (a *App) resolveTemplateAgentName(ctx context.Context, contact *models.Cont
 		return defaultTemplateAgentName
 	}
 
-	if resolved := strings.TrimSpace(a.resolveActivityActorName(*contact.AssignedUserID)); resolved != "" {
+	if resolved := strings.TrimSpace(a.ResolveActivityActorName(*contact.AssignedUserID)); resolved != "" {
 		return resolved
 	}
 	return defaultTemplateAgentName

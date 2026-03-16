@@ -1,0 +1,71 @@
+- hash: review::.::holistic::api_surface_coherence::inconsistent-param-ordering
+  verdict: genuine
+  verdict_reasoning: I verified inconsistent parameter ordering for semantically similar IDs. Examples: `resolveUnclaimedChatAccess(orgID, userID)` vs `canViewRestrictedChatWithoutClaim(userID, orgID)` in the same policy area, and `scopeInstancesQueryToUserRestriction(query, orgID, userID)` vs `ScopeToOrg(query, userID, orgID)`. This increases call-site error risk.
+  files_read: [internal/handlers/chat_access_policy.go, internal/handlers/instances.go, internal/handlers/cache.go, internal/handlers/send_restriction_policy.go]
+  recommendation: Standardize argument order (for example always `userID, orgID` or always `orgID, userID`) and enforce it with lint/review rule.
+
+- hash: review::.::holistic::api_surface_coherence::mixed-response-patterns
+  verdict: genuine
+  verdict_reasoning: Handlers return mixed payload shapes: typed structs (`CookieAuthResponse`, `MessageResponse`, `roleToResponse(...)`) and ad-hoc maps (`map[string]any`, `map[string]interface{}`, `map[string]string`) for similar endpoint classes. This creates inconsistent client parsing expectations.
+  files_read: [internal/handlers/auth_handlers.go, internal/handlers/messages.go, internal/handlers/roles.go, internal/handlers/users.go, internal/handlers/webhook.go, internal/handlers/chatbot.go]
+  recommendation: Define consistent response DTOs per resource and reserve map-based envelopes for exceptional dynamic payloads only.
+
+- hash: review::.::holistic::contract_coherence::contract_001_function_does_more_than_name_indicates
+  verdict: genuine
+  verdict_reasoning: `authorizeChatbotRequest` sounds like a pure authorization check but it also writes HTTP error responses (`SendErrorEnvelope`) as a side effect. Similar side-effect behavior appears in helper contracts like `parsePathUUID`/`findByIDAndOrg` (they emit responses and return sentinel errors). Names do not fully communicate the HTTP-writing behavior.
+  files_read: [internal/handlers/chatbot.go, internal/handlers/helpers.go]
+  recommendation: Rename to explicitly indicate side effects (for example `authorizeChatbotRequestOrRespond`) or split into pure check + response writer.
+
+- hash: review::.::holistic::contract_coherence::contract_002_return_type_mismatch_with_docstring
+  verdict: false-positive
+  verdict_reasoning: I checked comments/docstrings in sampled hotspots and did not find a clear return-type mismatch claim that is actually wrong in code. The inspected functions’ documented return behavior aligned with signatures and observed behavior.
+  files_read: [internal/handlers/helpers.go, internal/handlers/media.go, internal/handlers/chatbot.go, internal/handlers/auth_handlers.go, pkg/whatsapp/adapter.go]
+  recommendation: Close this item unless a specific function/docstring mismatch is provided; current evidence does not support the claim.
+
+- hash: review::.::holistic::contract_coherence::contract_003_inconsistent_error_handling
+  verdict: genuine
+  verdict_reasoning: Error handling style is inconsistent across handlers: some paths return `nil` after helper-decoder/auth methods that already wrote envelopes, others return `r.SendErrorEnvelope(...)` directly, and helpers use sentinel `errEnvelopeSent`. Behavior can be correct but contract style is inconsistent and non-obvious.
+  files_read: [internal/handlers/helpers.go, internal/handlers/auth_handlers.go, internal/handlers/chatbot.go, internal/handlers/roles.go, internal/handlers/messages.go]
+  recommendation: Adopt one consistent error contract for handlers/helpers (for example “helpers return typed errors only, handlers always write response”).
+
+- hash: review::.::holistic::contract_coherence::contract_004_optional_parameters_inconsistent
+  verdict: genuine
+  verdict_reasoning: Optional parameter semantics vary by endpoint and are not uniform: `RefreshToken`/`Logout` accept token from cookie or JSON body; `SendMessage` accepts optional `instance_id` only in specific provider flows; create/update request structs mix pointer optionals and plain fields with different defaults. This is workable but contract-inconsistent.
+  files_read: [internal/handlers/auth_handlers.go, internal/handlers/messages.go, internal/handlers/chatbot.go, internal/handlers/webhooks.go]
+  recommendation: Document a consistent optional-field policy (source precedence, nullability, defaulting) and apply it across endpoints.
+
+- hash: review::.::holistic::dependency_health::appropriate_external_deps
+  verdict: false-positive
+  verdict_reasoning: Sampled dependency sets look aligned to system scope (Go API server + Vue frontend + MCP server). Core libraries used are expected for web/API/DB/WhatsApp/MCP functionality; no obviously inappropriate major dependency stood out in manifests.
+  files_read: [go.mod, frontend/package.json, mcp-server/package.json]
+  recommendation: Keep monitoring via vuln/license audits, but this specific “inappropriate deps” claim is not substantiated by current manifests.
+
+- hash: review::.::holistic::dependency_health::whatsmeow_pinning
+  verdict: exaggerated
+  verdict_reasoning: `go.mod` already pins `go.mau.fi/whatsmeow` to a pseudo-version with commit hash (`v0.0.0-20260216124546-34b971e686b6`), so it is pinned. If the concern is “pinning to non-tag commit may be unstable,” that is a policy concern, not unpinned dependency.
+  files_read: [go.mod]
+  recommendation: If policy requires tagged releases only, move to a stable semver tag; otherwise this finding should be downgraded.
+
+- hash: review::.::holistic::type_safety::type_001_jsonb_type_assertions_without_checks
+  verdict: exaggerated
+  verdict_reasoning: I found JSONB-related code generally using safe assertions (`v, ok := ...`) and switch-based parsing in key paths (chatbot settings parsing, reactions, follow-up state parsing). Some broad dynamic JSON use exists, but “without checks” is overstated for sampled production code.
+  files_read: [internal/handlers/chatbot.go, internal/handlers/contacts_messaging.go, pkg/whatsmeow/chat_close_ratings.go, pkg/whatsapp/template.go]
+  recommendation: Keep incrementally replacing dynamic JSON maps with typed structs, but do not treat this as a broad unchecked-assertion defect.
+
+- hash: review::.::holistic::type_safety::type_002_any_type_overuse
+  verdict: genuine
+  verdict_reasoning: There is heavy `any` usage in frontend/store/composable code (`as any`, `catch (err: any)`, `Record<string, any>`, and broad dynamic payload types), plus dynamic map usage in Go handler payloads. This is extensive and materially reduces static guarantees.
+  files_read: [frontend/src/views/settings/CampaignsView.vue, frontend/src/views/settings/TemplatesView.vue, frontend/src/stores/roles.ts, frontend/src/stores/teams.ts, frontend/src/lib/api-utils.ts, frontend/src/types/flow-preview.ts, internal/handlers/chatbot.go]
+  recommendation: Prioritize replacing `any` in API boundary types and error handling first, then tighten internal view-state types.
+
+- hash: review::.::holistic::type_safety::type_003_string_uuid_conversions
+  verdict: exaggerated
+  verdict_reasoning: UUID string conversions are frequent, but most boundaries correctly parse/validate with `uuid.Parse`/`parsePathUUID` before use. Converting UUIDs to strings for JSON/API output is expected. I did not find widespread unsafe conversion logic in the sampled paths.
+  files_read: [internal/handlers/helpers.go, internal/handlers/messages.go, internal/handlers/chatbot.go, pkg/whatsapp/adapter.go, pkg/whatsmeow/adapter_client.go]
+  recommendation: Keep strict parse-at-boundary pattern and add helper wrappers to reduce repetition, but this is not broadly a defect.
+
+- hash: review::.::holistic::type_safety::type_004_untyped_error_returns
+  verdict: over-engineering
+  verdict_reasoning: The codebase predominantly uses idiomatic Go `error` returns with wrapped context and HTTP envelope errors. Requiring fully typed/domain error classes everywhere would be a large style shift with limited practical gain for many endpoints.
+  files_read: [internal/handlers/helpers.go, internal/handlers/auth_handlers.go, internal/handlers/messages.go, pkg/whatsapp/client.go]
+  recommendation: Introduce typed errors only in high-value subsystems (auth, provider integration, policy enforcement), not as a blanket requirement.

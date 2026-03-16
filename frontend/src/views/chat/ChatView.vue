@@ -184,6 +184,9 @@ const isAdminUser = computed(
     authStore.user?.is_super_admin === true ||
     (authStore.userRole || "").toLowerCase() === "admin",
 );
+const isAgentUser = computed(
+  () => (authStore.userRole || "").toLowerCase() === "agent",
+);
 const canShowAddContact = computed(
   () => isAdminUser.value || authStore.hasPermission("contacts", "write"),
 );
@@ -418,41 +421,6 @@ function resolveInstanceToggleLabel(instanceID?: string): string {
   return "";
 }
 
-function resolveSidebarEntryInstanceLabels(
-  entry: SidebarContactEntry,
-): string[] {
-  const labels: string[] = [];
-  const seen = new Set<string>();
-
-  const appendLabel = (rawLabel?: string) => {
-    const label = (rawLabel || "").trim();
-    if (!label || seen.has(label)) return;
-    seen.add(label);
-    labels.push(label);
-  };
-
-  for (const sourceContact of entry.sourceContacts || []) {
-    const instanceID =
-      typeof sourceContact.instance_id === "string"
-        ? sourceContact.instance_id.trim()
-        : "";
-    if (!instanceID) continue;
-    appendLabel(resolveInstanceToggleLabel(instanceID) || instanceID);
-  }
-
-  for (const instanceID of entry.sourceInstanceIDs || []) {
-    appendLabel(resolveInstanceToggleLabel(instanceID) || instanceID);
-  }
-
-  if (labels.length === 0) {
-    for (const fallbackLabel of entry.sourceInstanceLabels || []) {
-      appendLabel(fallbackLabel);
-    }
-  }
-
-  return labels;
-}
-
 function resolveSidebarEntryInstanceIDs(entry: SidebarContactEntry): string[] {
   const instanceIDs: string[] = [];
   const seen = new Set<string>();
@@ -483,12 +451,6 @@ function resolveSidebarEntryInstanceIDs(entry: SidebarContactEntry): string[] {
   return instanceIDs;
 }
 
-function resolveSidebarEntryInstanceSummary(
-  entry: SidebarContactEntry,
-): string {
-  return resolveSidebarEntryInstanceLabels(entry).join(", ");
-}
-
 function getSidebarEntryInstanceCount(entry: SidebarContactEntry): number {
   return resolveSidebarEntryInstanceIDs(entry).length;
 }
@@ -501,6 +463,54 @@ function getSidebarEntryPrimaryInstanceID(
   entry: SidebarContactEntry,
 ): string | undefined {
   return resolveSidebarEntryInstanceIDs(entry)[0];
+}
+
+function resolveSidebarEntryInstanceLabel(
+  entry: SidebarContactEntry,
+  instanceID?: string,
+): string {
+  const normalizedInstanceID = (instanceID || "").trim();
+  if (!normalizedInstanceID) return "";
+
+  for (const sourceContact of entry.sourceContacts || []) {
+    const sourceInstanceID =
+      typeof sourceContact.instance_id === "string"
+        ? sourceContact.instance_id.trim()
+        : "";
+    if (sourceInstanceID !== normalizedInstanceID) {
+      continue;
+    }
+    const accountLabel =
+      typeof sourceContact.whatsapp_account === "string"
+        ? sourceContact.whatsapp_account.trim()
+        : "";
+    if (accountLabel) {
+      return accountLabel;
+    }
+  }
+
+  const displayInstanceID =
+    typeof entry.displayContact.instance_id === "string"
+      ? entry.displayContact.instance_id.trim()
+      : "";
+  if (displayInstanceID === normalizedInstanceID) {
+    const displayAccount =
+      typeof entry.displayContact.whatsapp_account === "string"
+        ? entry.displayContact.whatsapp_account.trim()
+        : "";
+    if (displayAccount) {
+      return displayAccount;
+    }
+  }
+
+  return "";
+}
+
+function getSidebarEntryPrimaryInstanceLabel(entry: SidebarContactEntry): string {
+  return resolveSidebarEntryInstanceLabel(
+    entry,
+    getSidebarEntryPrimaryInstanceID(entry),
+  );
 }
 
 function formatAccountToggleLabel(toggleKey: string): string {
@@ -813,6 +823,7 @@ async function hydrateContactsSidebarUntilScrollable() {
 async function refreshContactsSidebar() {
   await contactsStore.fetchChats({
     search: contactsStore.searchQuery || undefined,
+    assigned_to: isAgentUser.value ? "me" : undefined,
   });
   await hydrateContactsSidebarUntilScrollable();
 }
@@ -855,6 +866,10 @@ async function switchChatTab(tab: "pending" | "assigned") {
   if (contactsStore.activeChatTab === tab) return;
   contactsStore.setActiveChatTab(tab);
   await refreshContactsSidebar();
+}
+
+function resolveRouteChatTab(): "pending" | "assigned" {
+  return route.query.tab === "pending" ? "pending" : "assigned";
 }
 
 // Infinite scroll for messages (load older at top)
@@ -1373,10 +1388,10 @@ onMounted(async () => {
     authStore.restoreSession();
   }
 
-  contactsStore.setActiveChatTab(
-    route.query.tab === "assigned" ? "assigned" : "pending",
-  );
-  await contactsStore.fetchChats();
+  contactsStore.setActiveChatTab(resolveRouteChatTab());
+  await contactsStore.fetchChats({
+    assigned_to: isAgentUser.value ? "me" : undefined,
+  });
 
   // Fetch instances for sidebar instance tags
   instancesStore.fetchInstances();
@@ -1411,6 +1426,19 @@ onMounted(async () => {
     await selectContact(contactId.value, selectionSequence);
   }
 });
+
+watch(
+  () => route.query.tab,
+  async () => {
+    const nextTab = resolveRouteChatTab();
+    if (contactsStore.activeChatTab === nextTab) {
+      return;
+    }
+
+    contactsStore.setActiveChatTab(nextTab);
+    await refreshContactsSidebar();
+  },
+);
 
 onUnmounted(() => {
   const activeContact = contactsStore.currentContact;
@@ -3856,17 +3884,6 @@ async function sendMediaMessage() {
           <button
             class="rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
             :class="
-              contactsStore.activeChatTab === 'pending'
-                ? 'bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700'
-                : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-white'
-            "
-            @click="switchChatTab('pending')"
-          >
-            Pending ({{ contactsStore.pendingChats.length }})
-          </button>
-          <button
-            class="rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
-            :class="
               contactsStore.activeChatTab === 'assigned'
                 ? 'bg-emerald-500/20 text-emerald-300 light:bg-emerald-100 light:text-emerald-700'
                 : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-white'
@@ -3874,6 +3891,17 @@ async function sendMediaMessage() {
             @click="switchChatTab('assigned')"
           >
             Assigned ({{ contactsStore.assignedChats.length }})
+          </button>
+          <button
+            class="rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
+            :class="
+              contactsStore.activeChatTab === 'pending'
+                ? 'bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700'
+                : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-white'
+            "
+            @click="switchChatTab('pending')"
+          >
+            Pending ({{ contactsStore.pendingChats.length }})
           </button>
         </div>
       </div>
@@ -3964,14 +3992,22 @@ async function sendMediaMessage() {
                       "
                     >
                       <InstanceTag
-                        v-for="instanceID in resolveSidebarEntryInstanceIDs(entry)"
+                        v-for="instanceID in resolveSidebarEntryInstanceIDs(
+                          entry,
+                        )"
                         :key="`sidebar-instance-tag-${entry.key}-${instanceID}`"
+                        :fallback-label="
+                          resolveSidebarEntryInstanceLabel(entry, instanceID)
+                        "
                         :instance-id="instanceID"
                         placement="sidebar"
                       />
                     </div>
                     <InstanceTag
                       v-else-if="getSidebarEntryPrimaryInstanceID(entry)"
+                      :fallback-label="
+                        getSidebarEntryPrimaryInstanceLabel(entry)
+                      "
                       :instance-id="getSidebarEntryPrimaryInstanceID(entry)"
                       :class="[
                         isContactsSidebarCompact ? 'max-w-[92px]' : '',

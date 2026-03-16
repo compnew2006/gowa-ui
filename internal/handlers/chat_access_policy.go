@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 
+	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -42,4 +43,41 @@ func (a *App) canSendRestrictedChatWithoutClaim(userID, orgID uuid.UUID) bool {
 	}
 	_, allowSend := a.resolveUnclaimedChatAccess(orgID, userID)
 	return allowSend
+}
+
+func isContactAssignedToUser(contact *models.Contact, userID uuid.UUID) bool {
+	if contact == nil || contact.AssignedUserID == nil || userID == uuid.Nil {
+		return false
+	}
+	return *contact.AssignedUserID == userID
+}
+
+func shouldAllowSelfAssignedRestrictedInstanceListBypass(
+	statusFilter *models.ChatStatus,
+	hasAssignedToFilter bool,
+	assignedToUserID *uuid.UUID,
+	currentUserID uuid.UUID,
+) bool {
+	if statusFilter == nil || *statusFilter != models.ChatStatusOpen {
+		return false
+	}
+	if !hasAssignedToFilter || assignedToUserID == nil {
+		return false
+	}
+	return *assignedToUserID == currentUserID
+}
+
+func applyRestrictedInstanceVisibilityFilter(
+	query *gorm.DB,
+	restrictedInstanceIDs []uuid.UUID,
+	userID uuid.UUID,
+	allowSelfAssignedBypass bool,
+) *gorm.DB {
+	if query == nil || len(restrictedInstanceIDs) == 0 {
+		return query
+	}
+	if allowSelfAssignedBypass {
+		return query.Where("(instance_id IN ? OR assigned_user_id = ?)", restrictedInstanceIDs, userID)
+	}
+	return query.Where("instance_id IN ?", restrictedInstanceIDs)
 }

@@ -108,11 +108,11 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 	require.NoError(t, app.DB.Create(instance).Error)
 
 	req := testutil.NewJSONRequest(t, map[string]interface{}{
-		"enabled":              true,
-		"include_all_contacts": true,
-		"allowed_instance_ids": []string{instance.ID.String()},
-		"allowed_instance_id":  instance.ID.String(),
-		"prefix_agent_name":    false,
+		"enabled":                   true,
+		"include_all_contacts":      true,
+		"allowed_instance_ids":      []string{instance.ID.String()},
+		"allowed_instance_id":       instance.ID.String(),
+		"prefix_agent_name":         false,
 		"allow_unclaimed_chat_view": true,
 		"allow_unclaimed_chat_send": true,
 		"authorized_numbers": []string{

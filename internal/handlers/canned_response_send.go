@@ -50,11 +50,11 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Canned response is inactive", nil, "")
 	}
 
-	// Get contact (users without full read permission can only message their assigned contacts)
+	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
 	contactQuery := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !a.canReadAllContacts(userID, orgID) {
-		contactQuery = applyAssignedOrPublicContactAccessFilter(contactQuery, userID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		contactQuery = applyAgentVisibleChatAccessFilter(contactQuery, userID)
 	}
 	if err := contactQuery.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")

@@ -470,6 +470,9 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 	createdFromParam := string(r.RequestCtx.QueryArgs().Peek("created_from"))
 	createdToParam := string(r.RequestCtx.QueryArgs().Peek("created_to"))
+	dateBasisParam := string(r.RequestCtx.QueryArgs().Peek("date_basis"))
+	dateFromParam := string(r.RequestCtx.QueryArgs().Peek("date_from"))
+	dateToParam := string(r.RequestCtx.QueryArgs().Peek("date_to"))
 	tagsParam := string(r.RequestCtx.QueryArgs().Peek("tags"))
 	instanceIDParam := string(r.RequestCtx.QueryArgs().Peek("instance_id"))
 	chatTypesParam := string(r.RequestCtx.QueryArgs().Peek("chat_types"))
@@ -499,10 +502,13 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	if parseAssignedToErr != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, parseAssignedToErr.Error(), nil, "assigned_to")
 	}
+	dateBasis, parseDateBasisErr := parseContactDateBasis(dateBasisParam)
+	if parseDateBasisErr != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, parseDateBasisErr.Error(), nil, "date_basis")
+	}
 
-	hasContactsReadPermission := a.canReadAllContacts(userID, orgID)
-	// Users without contacts:read can still see pending queue + their assigned chats + public chats.
-	if !hasContactsReadPermission {
+	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		query = applyAgentVisibleChatListFilter(query, userID)
 	}
 
@@ -511,8 +517,24 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		a.Log.Error("Failed to resolve restricted instance for contact list", "error", err, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list contacts", nil, "")
 	}
-	if len(restrictedInstanceIDs) > 0 {
-		query = query.Where("instance_id IN ?", restrictedInstanceIDs)
+	allowSelfAssignedBypass := shouldAllowSelfAssignedRestrictedInstanceListBypass(
+		statusFilter,
+		hasAssignedToFilter,
+		assignedToUserID,
+		userID,
+	)
+	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs, userID, allowSelfAssignedBypass)
+
+	var explicitInstanceID *uuid.UUID
+	if instanceIDParam != "" {
+		instanceID, resolveErr := a.resolveContactInstanceID(orgID, instanceIDParam)
+		if resolveErr != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "instance_id")
+		}
+		if instanceID != nil {
+			explicitInstanceID = instanceID
+			query = query.Where("instance_id = ?", *instanceID)
+		}
 	}
 
 	if statusFilter != nil {
@@ -544,6 +566,31 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		query = query.Where("created_at <= ?", endOfDay(createdTo))
 	}
 
+	hasDateBasisFilters := strings.TrimSpace(dateBasisParam) != "" ||
+		strings.TrimSpace(dateFromParam) != "" ||
+		strings.TrimSpace(dateToParam) != ""
+	if hasDateBasisFilters {
+		var dateFrom *time.Time
+		if dateFromParam != "" {
+			parsedDateFrom, parseErr := time.Parse("2006-01-02", dateFromParam)
+			if parseErr != nil {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid date_from format. Use YYYY-MM-DD", nil, "date_from")
+			}
+			dateFrom = &parsedDateFrom
+		}
+
+		var dateTo *time.Time
+		if dateToParam != "" {
+			parsedDateTo, parseErr := time.Parse("2006-01-02", dateToParam)
+			if parseErr != nil {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid date_to format. Use YYYY-MM-DD", nil, "date_to")
+			}
+			dateTo = &parsedDateTo
+		}
+
+		query = applyContactDateBasisFilter(query, orgID, dateBasis, dateFrom, dateTo, explicitInstanceID)
+	}
+
 	if len(search) > 1000 {
 		search = search[:1000]
 	}
@@ -555,16 +602,6 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		searchPattern := "%" + search + "%"
 		// Use ILIKE for case-insensitive search on profile_name
 		query = query.Where("phone_number LIKE ? OR profile_name ILIKE ?", searchPattern, searchPattern)
-	}
-
-	if instanceIDParam != "" {
-		instanceID, resolveErr := a.resolveContactInstanceID(orgID, instanceIDParam)
-		if resolveErr != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "instance_id")
-		}
-		if instanceID != nil {
-			query = query.Where("instance_id = ?", *instanceID)
-		}
 	}
 
 	chatTypes, parseErr := parseContactChatTypes(chatTypesParam)
@@ -709,8 +746,8 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	})
 }
 
-// GetContact returns a single contact
-// Users without contacts:read permission can only access contacts assigned to them
+// GetContact returns a single contact.
+// Agent-role users stay scoped to visible chats (pending queue, public chats, and their own assignments).
 func (a *App) GetContact(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
@@ -724,18 +761,16 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	var contact models.Contact
 	query := a.DB.Preload("ClosedByUser").Preload("AssignedUser").Where("id = ? AND organization_id = ?", contactID, orgID)
 
-	// Users without contacts:read permission can only access their assigned contacts
-	if !a.canReadAllContacts(userID, orgID) {
-		query = applyAssignedOrPublicContactAccessFilter(query, userID)
+	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
 	restrictedInstanceIDs, restrictedErr := a.getRestrictedInstancesForUser(orgID, userID)
 	if restrictedErr != nil {
 		a.Log.Error("Failed to resolve restricted instance for contact read", "error", restrictedErr, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load contact", nil, "")
 	}
-	if len(restrictedInstanceIDs) > 0 {
-		query = query.Where("instance_id IN ?", restrictedInstanceIDs)
-	}
+	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs, userID, true)
 
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -827,9 +862,9 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	return r.SendEnvelope(response)
 }
 
-// GetMessages returns messages for a contact
-// Agents can only access messages for their assigned contacts
-// Supports cursor-based pagination with before_id for loading older messages
+// GetMessages returns messages for a contact.
+// Agent-role users stay scoped to visible chats (pending queue, public chats, and their own assignments).
+// Supports cursor-based pagination with before_id for loading older messages.
 func (a *App) GetMessages(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
@@ -841,21 +876,20 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	}
 
 	hasContactsReadPermission := a.canReadAllContacts(userID, orgID)
+	limitChatVisibilityToAgentScope := a.shouldRestrictChatVisibilityToAgentScope(userID, orgID)
 	restrictedInstanceIDs, restrictedErr := a.getRestrictedInstancesForUser(orgID, userID)
 	if restrictedErr != nil {
 		a.Log.Error("Failed to resolve restricted instance for messages", "error", restrictedErr, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load messages", nil, "")
 	}
 
-	// Verify contact belongs to org (and to user if no contacts:read permission)
+	// Verify contact belongs to org and stays inside the current user's chat scope.
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	if !hasContactsReadPermission {
-		query = applyAssignedOrPublicContactAccessFilter(query, userID)
+	if limitChatVisibilityToAgentScope {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
-	if len(restrictedInstanceIDs) > 0 {
-		query = query.Where("instance_id IN ?", restrictedInstanceIDs)
-	}
+	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs, userID, true)
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}

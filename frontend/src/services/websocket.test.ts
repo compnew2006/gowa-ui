@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { wsService } from './websocket'
 import { useContactsStore } from '@/stores/contacts'
+import { useAuthStore } from '@/stores/auth'
 
 vi.mock('@/stores/contacts', () => ({
   useContactsStore: vi.fn(),
@@ -93,5 +94,39 @@ describe('websocket message_media_updated', () => {
       message_type: 'document',
       direction: 'incoming',
     }))
+  })
+
+  it('fetches the newly assigned contact for the assignee when it is not in the local store', () => {
+    const patchContact = vi.fn()
+    const fetchContact = vi.fn()
+    vi.mocked(useContactsStore).mockReturnValue({
+      contacts: [],
+      patchContact,
+      fetchContact,
+      messages: [],
+    } as unknown as ReturnType<typeof useContactsStore>)
+    vi.mocked(useAuthStore).mockReturnValue({
+      user: {
+        id: 'agent-1',
+      },
+      userSettings: {},
+    } as unknown as ReturnType<typeof useAuthStore>)
+
+    ;(wsService as any).handleMessage(JSON.stringify({
+      type: 'contact_update',
+      payload: {
+        id: 'contact-99',
+        assigned_user_id: 'agent-1',
+        status: 'open',
+        notify_assignment: true,
+      },
+    }))
+
+    expect(patchContact).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'contact-99',
+      assigned_user_id: 'agent-1',
+      status: 'open',
+    }))
+    expect(fetchContact).toHaveBeenCalledWith('contact-99')
   })
 })

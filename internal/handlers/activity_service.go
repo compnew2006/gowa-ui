@@ -22,13 +22,18 @@ type ActivityListFilter struct {
 	EndDate   *time.Time
 }
 
-func (a *App) trustProxyEnabled() bool {
+// TrustProxyEnabled returns true if the app is configured to trust proxy headers
+func (a *App) TrustProxyEnabled() bool {
 	return a != nil && a.Config != nil && a.Config.RateLimit.TrustProxy
 }
 
-func (a *App) insertActivity(entry *models.ActivityLog) error {
+// InsertActivity inserts an activity log entry into the database
+func (a *App) InsertActivity(entry *models.ActivityLog) error {
 	if entry == nil {
 		return fmt.Errorf("activity entry is nil")
+	}
+	if a == nil || a.DB == nil {
+		return fmt.Errorf("app or database is nil")
 	}
 	if entry.Metadata == nil {
 		entry.Metadata = models.JSONB{}
@@ -36,28 +41,33 @@ func (a *App) insertActivity(entry *models.ActivityLog) error {
 	return a.DB.Create(entry).Error
 }
 
-func requestPath(r *fastglue.Request) string {
+// RequestPath extracts the request path from a fastglue.Request
+func RequestPath(r *fastglue.Request) string {
 	if r == nil || r.RequestCtx == nil {
 		return ""
 	}
 	return string(r.RequestCtx.Path())
 }
 
-func requestMethod(r *fastglue.Request) string {
+// RequestMethod extracts the HTTP method from a fastglue.Request
+func RequestMethod(r *fastglue.Request) string {
 	if r == nil || r.RequestCtx == nil {
 		return ""
 	}
 	return string(r.RequestCtx.Method())
 }
 
-func requestUserAgent(r *fastglue.Request) string {
+// RequestUserAgent extracts the User-Agent header from a fastglue.Request
+func RequestUserAgent(r *fastglue.Request) string {
 	if r == nil || r.RequestCtx == nil {
 		return ""
 	}
 	return string(r.RequestCtx.Request.Header.Peek("User-Agent"))
 }
 
-func requestClientIP(r *fastglue.Request, trustProxy bool) string {
+// RequestClientIP extracts the client IP address from a fastglue.Request,
+// respecting X-Forwarded-For and X-Real-IP headers when trustProxy is enabled
+func RequestClientIP(r *fastglue.Request, trustProxy bool) string {
 	if r == nil || r.RequestCtx == nil {
 		return ""
 	}
@@ -83,7 +93,8 @@ func requestClientIP(r *fastglue.Request, trustProxy bool) string {
 	return host
 }
 
-func normalizeActivityText(value string, limit int) string {
+// NormalizeActivityText cleans and truncates text for activity logging
+func NormalizeActivityText(value string, limit int) string {
 	cleaned := strings.TrimSpace(strings.Join(strings.Fields(value), " "))
 	if cleaned == "" {
 		return ""
@@ -94,8 +105,9 @@ func normalizeActivityText(value string, limit int) string {
 	return cleaned
 }
 
-func (a *App) resolveActivityActorName(userID uuid.UUID) string {
-	if userID == uuid.Nil {
+// ResolveActivityActorName resolves a user ID to a display name for activity logs
+func (a *App) ResolveActivityActorName(userID uuid.UUID) string {
+	if a == nil || a.DB == nil || userID == uuid.Nil {
 		return ""
 	}
 
@@ -110,10 +122,10 @@ func (a *App) resolveActivityActorName(userID uuid.UUID) string {
 		return ""
 	}
 
-	if name := normalizeActivityText(actor.FullName, 80); name != "" {
+	if name := NormalizeActivityText(actor.FullName, 80); name != "" {
 		return name
 	}
-	return normalizeActivityText(actor.Email, 120)
+	return NormalizeActivityText(actor.Email, 120)
 }
 
 // LogAuthSuccess records successful user authentication.
@@ -132,16 +144,16 @@ func (a *App) LogAuthSuccess(r *fastglue.Request, user *models.User) {
 		Action:         "login",
 		Status:         "success",
 		Source:         "auth",
-		Method:         requestMethod(r),
-		Path:           requestPath(r),
-		IPAddress:      requestClientIP(r, a.trustProxyEnabled()),
-		UserAgent:      requestUserAgent(r),
+		Method:         RequestMethod(r),
+		Path:           RequestPath(r),
+		IPAddress:      RequestClientIP(r, a.TrustProxyEnabled()),
+		UserAgent:      RequestUserAgent(r),
 		Metadata: models.JSONB{
 			"email": user.Email,
 		},
 	}
 
-	if err := a.insertActivity(entry); err != nil {
+	if err := a.InsertActivity(entry); err != nil {
 		a.Log.Error("Failed to log auth success", "error", err, "user_id", user.ID)
 	}
 }
@@ -156,17 +168,17 @@ func (a *App) LogAuthFailure(r *fastglue.Request, email string, userID, orgID *u
 		Action:         "login",
 		Status:         "failure",
 		Source:         "auth",
-		Method:         requestMethod(r),
-		Path:           requestPath(r),
-		IPAddress:      requestClientIP(r, a.trustProxyEnabled()),
-		UserAgent:      requestUserAgent(r),
+		Method:         RequestMethod(r),
+		Path:           RequestPath(r),
+		IPAddress:      RequestClientIP(r, a.TrustProxyEnabled()),
+		UserAgent:      RequestUserAgent(r),
 		Metadata: models.JSONB{
 			"email":  email,
 			"reason": reason,
 		},
 	}
 
-	if err := a.insertActivity(entry); err != nil {
+	if err := a.InsertActivity(entry); err != nil {
 		a.Log.Error("Failed to log auth failure", "error", err, "email", email)
 	}
 }
@@ -181,13 +193,13 @@ func (a *App) LogLogout(r *fastglue.Request, userID, orgID *uuid.UUID) {
 		Action:         "logout",
 		Status:         "success",
 		Source:         "auth",
-		Method:         requestMethod(r),
-		Path:           requestPath(r),
-		IPAddress:      requestClientIP(r, a.trustProxyEnabled()),
-		UserAgent:      requestUserAgent(r),
+		Method:         RequestMethod(r),
+		Path:           RequestPath(r),
+		IPAddress:      RequestClientIP(r, a.TrustProxyEnabled()),
+		UserAgent:      RequestUserAgent(r),
 	}
 
-	if err := a.insertActivity(entry); err != nil {
+	if err := a.InsertActivity(entry); err != nil {
 		a.Log.Error("Failed to log logout event", "error", err)
 	}
 }
@@ -201,16 +213,16 @@ func (a *App) LogConversationResponse(
 	metadata := models.JSONB{
 		"message_type": messageType,
 	}
-	if content := normalizeActivityText(messageContent, 240); content != "" {
+	if content := NormalizeActivityText(messageContent, 240); content != "" {
 		metadata["message_content"] = content
 	}
-	if name := normalizeActivityText(chatName, 120); name != "" {
+	if name := NormalizeActivityText(chatName, 120); name != "" {
 		metadata["chat_name"] = name
 	}
-	if phone := normalizeActivityText(chatPhone, 80); phone != "" {
+	if phone := NormalizeActivityText(chatPhone, 80); phone != "" {
 		metadata["chat_phone"] = phone
 	}
-	if actor := a.resolveActivityActorName(userID); actor != "" {
+	if actor := a.ResolveActivityActorName(userID); actor != "" {
 		metadata["actor_name"] = actor
 	}
 
@@ -227,7 +239,7 @@ func (a *App) LogConversationResponse(
 		Metadata:       metadata,
 	}
 
-	if err := a.insertActivity(entry); err != nil {
+	if err := a.InsertActivity(entry); err != nil {
 		a.Log.Error("Failed to log conversation response", "error", err, "message_id", messageID)
 	}
 }
@@ -247,16 +259,16 @@ func (a *App) LogSystemInteraction(r *fastglue.Request, userID, orgID uuid.UUID,
 		Action:         "api_request",
 		Status:         status,
 		Source:         "system",
-		Method:         requestMethod(r),
-		Path:           requestPath(r),
-		IPAddress:      requestClientIP(r, a.trustProxyEnabled()),
-		UserAgent:      requestUserAgent(r),
+		Method:         RequestMethod(r),
+		Path:           RequestPath(r),
+		IPAddress:      RequestClientIP(r, a.TrustProxyEnabled()),
+		UserAgent:      RequestUserAgent(r),
 		Metadata: models.JSONB{
 			"http_status": statusCode,
 		},
 	}
 
-	if err := a.insertActivity(entry); err != nil {
+	if err := a.InsertActivity(entry); err != nil {
 		a.Log.Error("Failed to log system interaction", "error", err, "user_id", userID)
 	}
 }
@@ -279,14 +291,14 @@ func (a *App) LogCustomEvent(
 		Source:         "custom",
 		ContactID:      contactID,
 		MessageID:      messageID,
-		Method:         requestMethod(r),
-		Path:           requestPath(r),
-		IPAddress:      requestClientIP(r, a.trustProxyEnabled()),
-		UserAgent:      requestUserAgent(r),
+		Method:         RequestMethod(r),
+		Path:           RequestPath(r),
+		IPAddress:      RequestClientIP(r, a.TrustProxyEnabled()),
+		UserAgent:      RequestUserAgent(r),
 		Metadata:       metadata,
 	}
 
-	if err := a.insertActivity(entry); err != nil {
+	if err := a.InsertActivity(entry); err != nil {
 		return nil, err
 	}
 

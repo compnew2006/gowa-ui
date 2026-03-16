@@ -95,61 +95,45 @@ func readChatCloseRatingSettings(orgSettings models.JSONB, instanceSettings mode
 		FollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
 	}
 
-	if orgSettings == nil && instanceSettings == nil {
-		return result
-	}
-
+	// Apply organization settings first (as defaults)
 	if orgSettings != nil {
-		if rawEnabled, ok := orgSettings[organizationSettingChatCloseRatingEnabled]; ok {
-			if enabled, ok := rawEnabled.(bool); ok {
-				result.Enabled = enabled
-			}
-		}
-
-		if rawWindow, ok := orgSettings[organizationSettingChatCloseRatingWindowDays]; ok {
-			if parsed := parseChatCloseRatingWindowDays(rawWindow); parsed > 0 {
-				result.WindowDays = parsed
-			}
-		}
-
-		if rawTemplates, ok := orgSettings[organizationSettingChatCloseRatingTemplates]; ok {
-			for lang, template := range parseChatCloseRatingTemplates(rawTemplates) {
-				result.Templates[lang] = template
-			}
-		}
-		if rawFollowupWindow, ok := orgSettings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
-			if parsed := parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
-				result.FollowupWindowMinutes = parsed
-			}
-		}
+		applyChatCloseRatingSettingsToResult(&result, orgSettings)
 	}
 
+	// Override with instance settings (instance-level takes precedence)
 	if instanceSettings != nil {
-		if rawEnabled, ok := instanceSettings[organizationSettingChatCloseRatingEnabled]; ok {
-			if enabled, ok := rawEnabled.(bool); ok {
-				result.Enabled = enabled
-			}
-		}
-
-		if rawWindow, ok := instanceSettings[organizationSettingChatCloseRatingWindowDays]; ok {
-			if parsed := parseChatCloseRatingWindowDays(rawWindow); parsed > 0 {
-				result.WindowDays = parsed
-			}
-		}
-
-		if rawTemplates, ok := instanceSettings[organizationSettingChatCloseRatingTemplates]; ok {
-			for lang, template := range parseChatCloseRatingTemplates(rawTemplates) {
-				result.Templates[lang] = template
-			}
-		}
-		if rawFollowupWindow, ok := instanceSettings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
-			if parsed := parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
-				result.FollowupWindowMinutes = parsed
-			}
-		}
+		applyChatCloseRatingSettingsToResult(&result, instanceSettings)
 	}
 
 	return result
+}
+
+// applyChatCloseRatingSettingsToResult applies settings from a JSONB object to the result struct.
+// This helper function eliminates duplication between org and instance settings parsing.
+func applyChatCloseRatingSettingsToResult(result *chatCloseRatingSettings, settings models.JSONB) {
+	if rawEnabled, ok := settings[organizationSettingChatCloseRatingEnabled]; ok {
+		if enabled, ok := rawEnabled.(bool); ok {
+			result.Enabled = enabled
+		}
+	}
+
+	if rawWindow, ok := settings[organizationSettingChatCloseRatingWindowDays]; ok {
+		if parsed := parseChatCloseRatingWindowDays(rawWindow); parsed > 0 {
+			result.WindowDays = parsed
+		}
+	}
+
+	if rawTemplates, ok := settings[organizationSettingChatCloseRatingTemplates]; ok {
+		for lang, template := range parseChatCloseRatingTemplates(rawTemplates) {
+			result.Templates[lang] = template
+		}
+	}
+
+	if rawFollowupWindow, ok := settings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
+		if parsed := parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
+			result.FollowupWindowMinutes = parsed
+		}
+	}
 }
 
 func parseChatCloseRatingWindowDays(raw any) int {
@@ -518,7 +502,7 @@ func (a *App) handleManualChatCloseRatingPrompt(orgID, closingUserID uuid.UUID, 
 
 	agentName := "Agent"
 	if agentUserID != nil {
-		if resolved := strings.TrimSpace(a.resolveActivityActorName(*agentUserID)); resolved != "" {
+		if resolved := strings.TrimSpace(a.ResolveActivityActorName(*agentUserID)); resolved != "" {
 			agentName = resolved
 		}
 	}

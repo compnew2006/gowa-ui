@@ -122,6 +122,9 @@ func GetMigrationModels() []MigrationModel {
 
 // AutoMigrate runs auto migration for all models (silent mode)
 func AutoMigrate(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	if err := applyPreMigrationFixes(db); err != nil {
 		return err
 	}
@@ -137,6 +140,9 @@ func AutoMigrate(db *gorm.DB) error {
 
 // RunMigrationWithProgress runs migrations with a progress bar display
 func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	// Silence GORM logging during migration
 	silentDB := db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})
 
@@ -240,6 +246,9 @@ func repeatChar(char string, n int) string {
 }
 
 func applyPreMigrationFixes(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	if err := normalizeWhatsAppStatusRows(db); err != nil {
 		return fmt.Errorf("failed to normalize whatsapp statuses: %w", err)
 	}
@@ -247,6 +256,9 @@ func applyPreMigrationFixes(db *gorm.DB) error {
 }
 
 func normalizeWhatsAppStatusRows(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	if !db.Migrator().HasTable(&models.WhatsAppStatus{}) {
 		return nil
 	}
@@ -345,6 +357,9 @@ func normalizeWhatsAppStatusRows(db *gorm.DB) error {
 }
 
 func hasTableColumn(db *gorm.DB, tableName, columnName string) (bool, error) {
+	if db == nil {
+		return false, fmt.Errorf("database connection is nil")
+	}
 	var exists bool
 	if err := db.Raw(`
 		SELECT EXISTS (
@@ -465,6 +480,9 @@ func getIndexes() []string {
 
 // CreateIndexes creates additional indexes not handled by GORM tags
 func CreateIndexes(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	for _, idx := range getIndexes() {
 		if err := db.Exec(idx).Error; err != nil {
 			return fmt.Errorf("failed to create index: %w", err)
@@ -476,6 +494,9 @@ func CreateIndexes(db *gorm.DB) error {
 // CreateDefaultAdmin creates a default admin user if no users exist
 // This should only be called once during initial setup
 func CreateDefaultAdmin(db *gorm.DB, cfg *config.DefaultAdminConfig) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	if cfg == nil {
 		return nil
 	}
@@ -567,6 +588,9 @@ func CreateDefaultAdmin(db *gorm.DB, cfg *config.DefaultAdminConfig) error {
 
 // MigrateUserOrganizations backfills user_organizations from existing users
 func MigrateUserOrganizations(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	return db.Exec(`
 		INSERT INTO user_organizations (id, user_id, organization_id, role_id, is_default, created_at, updated_at)
 		SELECT gen_random_uuid(), u.id, u.organization_id, u.role_id, true, NOW(), NOW()
@@ -579,6 +603,9 @@ func MigrateUserOrganizations(db *gorm.DB) error {
 // BackfillLastInboundAt sets last_inbound_at for existing contacts from their
 // most recent incoming message. Only updates contacts where the field is NULL.
 func BackfillLastInboundAt(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	return db.Exec(`
 		UPDATE contacts c
 		SET last_inbound_at = sub.max_created
@@ -594,6 +621,9 @@ func BackfillLastInboundAt(db *gorm.DB) error {
 
 // SeedPermissionsAndRoles seeds the default permissions and system roles
 func SeedPermissionsAndRoles(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	// Get all default permissions
 	defaultPerms := models.DefaultPermissions()
 
@@ -615,6 +645,9 @@ func SeedPermissionsAndRoles(db *gorm.DB) error {
 // SeedSystemRolesForAllOrgs creates system roles for all existing organizations
 // This is idempotent - it skips organizations that already have system roles
 func SeedSystemRolesForAllOrgs(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	var orgs []models.Organization
 	if err := db.Find(&orgs).Error; err != nil {
 		return fmt.Errorf("failed to fetch organizations: %w", err)
@@ -653,6 +686,9 @@ func SeedSystemRolesForAllOrgs(db *gorm.DB) error {
 
 // FixSystemRolePermissions links permissions to existing system roles that have no permissions
 func FixSystemRolePermissions(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	// Get all permissions from database
 	var permissions []models.Permission
 	if err := db.Find(&permissions).Error; err != nil {
@@ -714,6 +750,9 @@ func FixSystemRolePermissions(db *gorm.DB) error {
 // BackfillAdminChatDeletePermission ensures existing system admin roles include chat:delete.
 // This is idempotent and does not change manager/agent roles.
 func BackfillAdminChatDeletePermission(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	var permission models.Permission
 	if err := db.Where("resource = ? AND action = ?", models.ResourceChat, models.ActionDelete).
 		First(&permission).Error; err != nil {
@@ -752,6 +791,9 @@ func BackfillAdminChatDeletePermission(db *gorm.DB) error {
 // include chat:prefix so outgoing message prefix behavior remains available by default.
 // This is idempotent and only affects system roles.
 func BackfillSystemChatPrefixPermission(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	var permission models.Permission
 	if err := db.Where("resource = ? AND action = ?", models.ResourceChat, models.ActionPrefix).
 		First(&permission).Error; err != nil {
@@ -790,6 +832,9 @@ func BackfillSystemChatPrefixPermission(db *gorm.DB) error {
 // MigrateExistingUserRoles migrates users from the old role column to the new role_id
 // This is safe to run on fresh installs - it will simply do nothing if the column doesn't exist
 func MigrateExistingUserRoles(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	// Check if the old 'role' column exists in the users table
 	var columnExists bool
 	err := db.Raw(`
@@ -865,6 +910,9 @@ func MigrateExistingUserRoles(db *gorm.DB) error {
 
 // SeedSystemRolesForOrg creates system roles for an organization
 func SeedSystemRolesForOrg(db *gorm.DB, orgID uuid.UUID) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	// Check if system roles exist for this org
 	var roleCount int64
 	if err := db.Model(&models.CustomRole{}).Where("organization_id = ? AND is_system = ?", orgID, true).Count(&roleCount).Error; err != nil {
@@ -929,6 +977,9 @@ func SeedSystemRolesForOrg(db *gorm.DB, orgID uuid.UUID) error {
 
 // SeedDefaultWidgets creates default dashboard widgets for all organizations
 func SeedDefaultWidgets(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	// Find the super admin user (admin@admin.com)
 	var superAdmin models.User
 	if err := db.Where("email = ?", "admin@admin.com").First(&superAdmin).Error; err != nil {

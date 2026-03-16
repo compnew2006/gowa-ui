@@ -1,5 +1,20 @@
-import { test, expect } from '@playwright/test'
-import { loginAsAdmin, loginAsAgent, loginAsManager } from '../../helpers'
+import { test, expect, Page } from '@playwright/test'
+import {
+  loginAsAdmin,
+  loginAsAgent,
+  loginAsManager,
+  ApiHelper,
+  generateUniqueEmail,
+  generateUniqueName
+} from '../../helpers'
+
+async function loginWithCredentials(page: Page, email: string, password: string) {
+  await page.goto('/login')
+  await page.locator('input[name="email"], input[type="email"]').fill(email)
+  await page.locator('input[name="password"], input[type="password"]').fill(password)
+  await page.locator('button[type="submit"]').click()
+  await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10000 })
+}
 
 test.describe('Agent Analytics', () => {
   test.beforeEach(async ({ page }) => {
@@ -108,6 +123,54 @@ test.describe('Agent Analytics - Agent Role', () => {
 test.describe('Agent Analytics - Manager Role', () => {
   test('should show instance filter for manager users', async ({ page }) => {
     await loginAsManager(page)
+    await page.goto('/analytics/agents')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByTestId('agent-analytics-instance-filter')).toBeVisible()
+  })
+})
+
+test.describe('Agent Analytics - Custom Analytics Role', () => {
+  const roleName = generateUniqueName('E2E Agent Analytics')
+  const userEmail = generateUniqueEmail('e2e-agent-analytics')
+  const userPassword = 'Password123!'
+
+  let api: ApiHelper
+  let roleId = ''
+  let userId = ''
+
+  test.beforeAll(async ({ request }) => {
+    api = new ApiHelper(request)
+    await api.loginAsAdmin()
+
+    const permissions = await api.findPermissionKeys([
+      { resource: 'analytics.agents', action: 'read' },
+      { resource: 'analytics', action: 'read' }
+    ])
+
+    const role = await api.createRole({
+      name: roleName,
+      description: 'E2E test role with full agent analytics access',
+      permissions
+    })
+    roleId = role.id
+
+    const user = await api.createUser({
+      email: userEmail,
+      password: userPassword,
+      full_name: 'E2E Agent Analytics User',
+      role_id: roleId
+    })
+    userId = user.id
+  })
+
+  test.afterAll(async () => {
+    if (userId) await api.deleteUser(userId).catch(() => {})
+    if (roleId) await api.deleteRole(roleId).catch(() => {})
+  })
+
+  test('should show instance filter for users with analytics read permission', async ({ page }) => {
+    await loginWithCredentials(page, userEmail, userPassword)
     await page.goto('/analytics/agents')
     await page.waitForLoadState('networkidle')
 

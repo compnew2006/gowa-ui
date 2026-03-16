@@ -380,7 +380,7 @@ export const useContactsStore = defineStore("contacts", () => {
   const pendingChats = ref<Contact[]>([]);
   const assignedChats = ref<Contact[]>([]);
   const closedChats = ref<Contact[]>([]);
-  const activeChatTab = ref<ChatBucketTab>("pending");
+  const activeChatTab = ref<ChatBucketTab>("assigned");
   const currentContact = ref<Contact | null>(null);
   const messages = ref<Message[]>([]);
   const isLoading = ref(false);
@@ -404,6 +404,9 @@ export const useContactsStore = defineStore("contacts", () => {
   const pendingChatsTotal = ref(0);
   const assignedChatsTotal = ref(0);
   const isLoadingMoreContacts = ref(false);
+  const assignedChatsAssignedToFilter = ref<"me" | string | undefined>(
+    undefined,
+  );
   const restrictedAllowedInstanceIDs = computed(() =>
     extractAllowedInstanceIDsFromUserSettings(authStore.user?.settings),
   );
@@ -416,11 +419,74 @@ export const useContactsStore = defineStore("contacts", () => {
       ? restrictedAllowedInstanceIDs.value[0]
       : "";
   });
+  const isAgentRole = computed(() => {
+    if (authStore.user?.is_super_admin === true) return false;
+    return (authStore.userRole || "").trim().toLowerCase() === "agent";
+  });
+  const currentUserID = computed(() => authStore.user?.id || "");
   // const isAdminOrSuperAdmin = computed(() => {
   //   if (authStore.user?.is_super_admin === true) return true;
   //   const role = sessionStore.user?.role?.name?.toLowerCase() === "admin";
   //   return (authStore.userRole || "").toLowerCase() === "admin";
   // });
+  function resolveListInstanceFilter(options?: {
+    allowImplicitRestrictedDefault?: boolean;
+  }): string | undefined {
+    const selected = selectedInstanceId.value.trim();
+    if (selected !== "") {
+      return selected;
+    }
+    if (options?.allowImplicitRestrictedDefault === false) {
+      return undefined;
+    }
+    return effectiveInstanceFilterID.value || undefined;
+  }
+
+  function buildListParams(options?: {
+    allowImplicitRestrictedDefault?: boolean;
+  }) {
+    return {
+      tags:
+        selectedTags.value.length > 0
+          ? selectedTags.value.join(",")
+          : undefined,
+      instance_id: resolveListInstanceFilter(options),
+      chat_types:
+        selectedChatTypes.value.length > 0
+          ? selectedChatTypes.value.join(",")
+          : undefined,
+    };
+  }
+
+  function isVisibleAssignedChatForCurrentUser(contact: Contact) {
+    if (contact.status !== "open" || !contact.assigned_user_id) {
+      return false;
+    }
+    if (!isAgentRole.value) {
+      return true;
+    }
+    return (
+      contact.is_public === true ||
+      contact.assigned_user_id === currentUserID.value
+    );
+  }
+
+  function shouldBypassImplicitRestrictedInstanceFilter(contact: Contact) {
+    if (selectedInstanceId.value.trim() !== "") {
+      return false;
+    }
+    if (activeChatTab.value !== "assigned") {
+      return false;
+    }
+    if (assignedChatsAssignedToFilter.value !== "me") {
+      return false;
+    }
+    return (
+      typeof contact.assigned_user_id === "string" &&
+      contact.assigned_user_id === currentUserID.value
+    );
+  }
+
   const hasMoreContacts = computed(() => {
     const activeCount =
       activeChatTab.value === "assigned"
@@ -433,8 +499,8 @@ export const useContactsStore = defineStore("contacts", () => {
     pendingChats.value = contacts.value.filter(
       (c) => c.status === "pending" && !c.assigned_user_id,
     );
-    assignedChats.value = contacts.value.filter(
-      (c) => c.status === "open" && !!c.assigned_user_id,
+    assignedChats.value = contacts.value.filter((c) =>
+      isVisibleAssignedChatForCurrentUser(c),
     );
   }
 
@@ -520,14 +586,16 @@ export const useContactsStore = defineStore("contacts", () => {
   }
 
   function matchesActiveFilters(contact: Contact): boolean {
+    const explicitInstanceFilterID = selectedInstanceId.value.trim();
     if (
-      effectiveInstanceFilterID.value &&
-      contact.instance_id !== effectiveInstanceFilterID.value
+      explicitInstanceFilterID &&
+      contact.instance_id !== explicitInstanceFilterID
     ) {
       return false;
     }
     if (
-      !effectiveInstanceFilterID.value &&
+      !explicitInstanceFilterID &&
+      !shouldBypassImplicitRestrictedInstanceFilter(contact) &&
       restrictedAllowedInstanceIDs.value.length > 0
     ) {
       const instanceID =
@@ -620,20 +688,6 @@ export const useContactsStore = defineStore("contacts", () => {
       tab === "assigned" ? assignedChatsTotal.value : pendingChatsTotal.value;
   }
 
-  function buildListParams() {
-    return {
-      tags:
-        selectedTags.value.length > 0
-          ? selectedTags.value.join(",")
-          : undefined,
-      instance_id: effectiveInstanceFilterID.value || undefined,
-      chat_types:
-        selectedChatTypes.value.length > 0
-          ? selectedChatTypes.value.join(",")
-          : undefined,
-    };
-  }
-
   async function fetchContacts(params?: {
     search?: string;
     page?: number;
@@ -665,9 +719,14 @@ export const useContactsStore = defineStore("contacts", () => {
     }
   }
 
-  async function fetchChats(params?: { search?: string; limit?: number }) {
+  async function fetchChats(params?: {
+    search?: string;
+    limit?: number;
+    assigned_to?: "me" | string;
+  }) {
     isLoading.value = true;
     try {
+      assignedChatsAssignedToFilter.value = params?.assigned_to;
       const trimmedSearch =
         typeof params?.search === "string" ? params.search.trim() : "";
       const includeClosedInSearch = trimmedSearch !== "";
@@ -675,8 +734,16 @@ export const useContactsStore = defineStore("contacts", () => {
         params?.limit ?? contactsLimit.value,
         500,
       );
-      const listParams = {
+      const pendingListParams = {
         ...buildListParams(),
+        search: trimmedSearch || undefined,
+        page: 1,
+        limit: params?.limit ?? contactsLimit.value,
+      };
+      const assignedListParams = {
+        ...buildListParams({
+          allowImplicitRestrictedDefault: params?.assigned_to !== "me",
+        }),
         search: trimmedSearch || undefined,
         page: 1,
         limit: params?.limit ?? contactsLimit.value,
@@ -685,16 +752,17 @@ export const useContactsStore = defineStore("contacts", () => {
       const [pendingResponse, assignedResponse, closedResponse] =
         await Promise.all([
           chatsService.list({
-            ...listParams,
+            ...pendingListParams,
             status: "pending",
           }),
           chatsService.list({
-            ...listParams,
+            ...assignedListParams,
             status: "open",
+            assigned_to: params?.assigned_to,
           }),
           includeClosedInSearch
             ? chatsService.list({
-                ...listParams,
+                ...pendingListParams,
                 limit: closedSearchLimit,
                 status: "closed",
               })
@@ -780,8 +848,11 @@ export const useContactsStore = defineStore("contacts", () => {
   }) {
     isLoading.value = true;
     try {
+      assignedChatsAssignedToFilter.value = params?.assigned_to;
       const response = await chatsService.list({
-        ...buildListParams(),
+        ...buildListParams({
+          allowImplicitRestrictedDefault: params?.assigned_to !== "me",
+        }),
         search: params?.search,
         page: 1,
         limit: params?.limit ?? contactsLimit.value,
@@ -812,11 +883,21 @@ export const useContactsStore = defineStore("contacts", () => {
     try {
       const nextPage = contactsPage.value + 1;
       const response = await chatsService.list({
-        ...buildListParams(),
+        ...buildListParams({
+          allowImplicitRestrictedDefault:
+            !(
+              activeChatTab.value === "assigned" &&
+              assignedChatsAssignedToFilter.value === "me"
+            ),
+        }),
         search: searchQuery.value || undefined,
         page: nextPage,
         limit: contactsLimit.value,
         status: activeChatTab.value === "assigned" ? "open" : "pending",
+        assigned_to:
+          activeChatTab.value === "assigned"
+            ? assignedChatsAssignedToFilter.value
+            : undefined,
       });
       const data = response.data.data || response.data;
       const newContacts = normalizeContacts(data.contacts || []);
@@ -863,11 +944,11 @@ export const useContactsStore = defineStore("contacts", () => {
     closed_by?: string;
     closed_from?: string;
     closed_to?: string;
+    instance_id?: string;
   }) {
     isLoading.value = true;
     try {
       const response = await chatsService.list({
-        ...buildListParams(),
         search: params?.search,
         page: params?.page ?? 1,
         limit: params?.limit ?? contactsLimit.value,
@@ -875,6 +956,7 @@ export const useContactsStore = defineStore("contacts", () => {
         closed_by: params?.closed_by,
         closed_from: params?.closed_from,
         closed_to: params?.closed_to,
+        instance_id: params?.instance_id,
       });
       const data = response.data.data || response.data;
       const nextClosed = normalizeContacts(data.contacts || []);
@@ -1030,9 +1112,11 @@ export const useContactsStore = defineStore("contacts", () => {
   ) {
     try {
       const contact = contacts.value.find((item) => item.id === contactId);
-      const resolvedInstanceID = typeof explicitInstanceID === "string" && explicitInstanceID.trim() !== ""
-        ? explicitInstanceID.trim()
-        : contact?.instance_id;
+      const resolvedInstanceID =
+        typeof explicitInstanceID === "string" &&
+        explicitInstanceID.trim() !== ""
+          ? explicitInstanceID.trim()
+          : contact?.instance_id;
       const response = await messagesService.send(contactId, {
         type,
         content,

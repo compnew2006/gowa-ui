@@ -1,0 +1,268 @@
+{
+  "session": {"id": "batch4_systems", "token": "review"},
+  "assessments": {
+    "api_surface_coherence": 72,
+    "authorization_consistency": 68,
+    "design_coherence": 55,
+    "incomplete_migration": 85,
+    "test_strategy": 45
+  },
+  "findings": [
+    {
+      "dimension": "api_surface_coherence",
+      "identifier": "inconsistent-param-ordering",
+      "summary": "Message sending functions have inconsistent parameter ordering across implementations",
+      "related_files": [
+        "internal/handlers/messages.go",
+        "pkg/whatsapp/adapter.go",
+        "pkg/whatsmeow/adapter_send.go"
+      ],
+      "evidence": [
+        "SendTemplateMessage in messages.go uses OutgoingMessageRequest struct with embedded Account/Contact",
+        "Provider interface SendText/SendImage use (ctx, instanceID, to, content) parameter order",
+        "RevokeMessage has 3 different signatures across 5 files according to scan evidence",
+        "SendReaction has 3 different signatures across 5 files according to scan evidence"
+      ],
+      "suggestion": "Standardize message sending API surface - either consolidate on provider.MessageProvider interface or create unified request/response types. The current mix of struct-based and positional parameters creates confusion.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "api_surface_coherence",
+      "identifier": "mixed-response-patterns",
+      "summary": "Inconsistent response envelope patterns across handlers",
+      "related_files": [
+        "internal/handlers/accounts.go",
+        "internal/handlers/chatbot.go",
+        "internal/handlers/contacts.go"
+      ],
+      "evidence": [
+        "Some handlers return r.SendEnvelope(map[string]interface{}{\"accounts\": response})",
+        "Others return r.SendEnvelope(map[string]any{\"flows\": response})",
+        "Inconsistent use of interface{} vs any for JSON payloads",
+        "Mixed error handling: some return nil after SendErrorEnvelope, others return the error"
+      ],
+      "suggestion": "Create consistent response helper functions or standardize on one pattern. The variation makes the API surface harder to learn and use consistently.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "authorization_consistency",
+      "identifier": "inconsistent-auth-checks",
+      "summary": "Only 35 of 145 handlers use getOrgAndUserID, only 16 use requirePermission",
+      "related_files": [
+        "internal/handlers/app.go",
+        "internal/handlers/accounts.go",
+        "internal/handlers/contacts.go",
+        "internal/handlers/chatbot.go"
+      ],
+      "evidence": [
+        "35 files use getOrgAndUserID pattern for auth extraction",
+        "Only 16 files use requirePermission for RBAC checks",
+        "516 total handler functions identified in codebase",
+        "Webhook handlers (WebhookVerify, WebhookHandler) skip auth checks (expected but undocumented)",
+        "Some handlers call HasPermission directly instead of using requirePermission helper"
+      ],
+      "suggestion": "Audit all 516 handler functions and categorize: 1) Public routes (health, webhooks), 2) Authenticated routes missing RBAC, 3) Routes with proper auth. Create middleware or decorator pattern to enforce consistent authorization.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "authorization_consistency",
+      "identifier": "missing-resource-level-auth",
+      "summary": "Contact assignment and chat access policies use manual permission checks",
+      "related_files": [
+        "internal/handlers/contacts_management.go",
+        "internal/handlers/chat_access_policy.go",
+        "internal/handlers/send_restriction_policy.go"
+      ],
+      "evidence": [
+        "AssignContact uses HasPermission check inline instead of requirePermission helper",
+        "canViewRestrictedChatWithoutClaim and canSendRestrictedChatWithoutClaim implement custom auth logic",
+        "send restriction policies implement their own authorization bypass logic (canBypassPendingChatRestriction)",
+        "No centralized policy enforcement point - scattered across multiple files"
+      ],
+      "suggestion": "Consolidate chat access and send restriction policies into a single authorization layer. Create a ChatAccessAuthorizer interface that consolidates all permission checks.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "design_coherence",
+      "identifier": "monster-functions",
+      "summary": "Multiple files exceed 1000 LOC with high complexity scores",
+      "related_files": [
+        "internal/handlers/chatbot_processor.go",
+        "internal/handlers/agent_transfers.go",
+        "internal/handlers/campaigns.go",
+        "internal/handlers/contacts.go"
+      ],
+      "evidence": [
+        "chatbot_processor.go: 2912 LOC, complexity score 545",
+        "agent_transfers.go: 1465 LOC, complexity score 204",
+        "campaigns.go: 1409 LOC, complexity score 159",
+        "contacts.go: 1278 LOC, complexity score 177",
+        "chat_close_ratings.go: 1249 LOC, complexity score 170"
+      ],
+      "suggestion": "Break down these mega-files into focused modules. For example, chatbot_processor.go could be split into: rule_engine.go, flow_executor.go, ai_context.go, session_manager.go. Aim for files under 500 LOC.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "design_coherence",
+      "identifier": "cache-module-fragmentation",
+      "summary": "cache.go has 31 disconnected function clusters - mixed responsibilities",
+      "related_files": [
+        "internal/handlers/cache.go"
+      ],
+      "evidence": [
+        "31 functions in cache.go with 18 disconnected clusters per scan evidence",
+        "Caches chatbot settings, flows, keyword rules, WhatsApp accounts, webhooks, SLA settings, AI contexts, permissions, tags",
+        "No clear abstraction or interface - all functions are methods on App",
+        "Mixes cache logic with decryption logic (decryptChatbotAIKey)",
+        "754 LOC, untested (0 importers per scan evidence)"
+      ],
+      "suggestion": "Extract a CacheManager interface with concrete implementation. Separate concerns: CacheManager (get/set/invalidate), CryptoHelper (decrypt/encrypt), and DomainCacheLayer (chatbot, permissions, etc.).",
+      "confidence": "high"
+    },
+    {
+      "dimension": "design_coherence",
+      "identifier": "contacts-messaging-responsibility-bleed",
+      "summary": "contacts_messaging.go has 7 disconnected function clusters (13 functions total)",
+      "related_files": [
+        "internal/handlers/contacts_messaging.go"
+      ],
+      "evidence": [
+        "7 disconnected function clusters per scan evidence",
+        "861 LOC, complexity score 90",
+        "Functions span: message sending, media handling, revoking, reactions, typing indicators",
+        "Untested (0 importers per scan evidence)"
+      ],
+      "suggestion": "Split into focused files: message_send.go, message_reactions.go, message_media.go, typing_indicators.go. Each should have a single clear responsibility.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "incomplete_migration",
+      "identifier": "deprecated-flow-status",
+      "summary": "Flow status uses deprecated marker but flows are still active",
+      "related_files": [
+        "internal/handlers/flows.go"
+      ],
+      "evidence": [
+        "Line 277: 'Deprecated flows cannot be updated'",
+        "Line 455-457: 'Only PUBLISHED flows can be deprecated'",
+        "Line 479: Status set to 'DEPRECATED'",
+        "No evidence of deprecated flows being removed from database or API",
+        "3 deprecated markers found in codebase per migration signals"
+      ],
+      "suggestion": "Either complete the migration by removing deprecated flows from queries/API, or remove the deprecated status if it's not being enforced. The current state is partial.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "incomplete_migration",
+      "identifier": "dual-provider-pattern",
+      "summary": "Provider abstraction exists but both Meta and Whatsmeow are actively used",
+      "related_files": [
+        "pkg/provider/interface.go",
+        "pkg/whatsapp/adapter.go",
+        "pkg/whatsmeow/adapter.go"
+      ],
+      "evidence": [
+        "MessageProvider interface defines 10 methods for abstraction",
+        "Both MetaAdapter and WhatsmeowAdapter implement the interface",
+        "No evidence one is being phased out - both appear actively maintained",
+        "Scan evidence shows consistent usage patterns across both implementations"
+      ],
+      "suggestion": "This is actually good design - the abstraction allows multi-provider support. However, document which provider should be used for new features or if both should be maintained indefinitely.",
+      "confidence": "low"
+    },
+    {
+      "dimension": "test_strategy",
+      "identifier": "critical-untested-modules",
+      "summary": "High-complexity modules have zero test coverage",
+      "related_files": [
+        "internal/handlers/cache.go",
+        "internal/handlers/contacts_management.go",
+        "internal/handlers/import_export.go",
+        "pkg/whatsmeow/message_persist.go",
+        "pkg/whatsmeow/incoming_media.go"
+      ],
+      "evidence": [
+        "cache.go: 31 functions, 754 LOC, untested per scan evidence",
+        "contacts_management.go: 18 functions, 959 LOC, untested per scan evidence",
+        "import_export.go: 7 functions, 813 LOC, untested per scan evidence",
+        "message_persist.go: 674 LOC, untested per scan evidence",
+        "88 test files exist but don't cover these critical modules",
+        "Test coverage: 57 handlers, 88 test files (~50% coverage at file level)"
+      ],
+      "suggestion": "Prioritize test coverage for these 5 modules immediately. They are critical paths (caching, messaging, data import) with zero coverage. Start with integration tests before unit tests.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "test_strategy",
+      "identifier": "test-production-coupling",
+      "summary": "Test files show evidence of implementation coupling",
+      "related_files": [
+        "internal/handlers/campaigns_test.go",
+        "internal/handlers/contacts_test.go",
+        "internal/handlers/chatbot_test.go"
+      ],
+      "evidence": [
+        "Tests import internal/handlers package directly",
+        "Tests likely depend on internal App structure and database setup",
+        "Multiple 1000+ line test files (campaigns_test.go: 1128 LOC, contacts_test.go: 1535 LOC)",
+        "Large test files suggest either: too many responsibilities in tested module, or brittle integration tests"
+      ],
+      "suggestion": "Extract test utilities into test/testutil package (already exists). Break large test files into focused test suites. Add interface boundaries to reduce coupling to App internals.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "test_strategy",
+      "identifier": "missing-integration-tests",
+      "summary": "No evidence of cross-module integration tests",
+      "related_files": [
+        "test/",
+        "internal/handlers/"
+      ],
+      "evidence": [
+        "Test files are co-located with source (handlers_test.go pattern)",
+        "Tests appear to be unit-level with database fixtures",
+        "No evidence of end-to-end workflow tests (e.g., campaign creation → execution → webhook handling)",
+        "Test fixtures in test/fixtures/models/factories.go (683 LOC) but unclear usage scope"
+      ],
+      "suggestion": "Add integration test suite that covers critical workflows: 1) User auth → Permission check → Resource access, 2) Campaign launch → Message queue → Delivery, 3) Webhook receipt → Message processing → WebSocket broadcast.",
+      "confidence": "high"
+    },
+    {
+      "dimension": "design_coherence",
+      "identifier": "parameter-bag-anti-pattern",
+      "summary": "Multiple files use config bag passing instead of structured parameters",
+      "related_files": [
+        "internal/handlers/cache.go",
+        "internal/handlers/messages.go",
+        "pkg/whatsapp/client.go",
+        "pkg/whatsmeow/manager.go"
+      ],
+      "evidence": [
+        "Scan evidence shows 83 config bag mentions in cache.go",
+        "72 config bag mentions in messages.go",
+        "68 config bag mentions in pkg/whatsapp/client.go",
+        "OutgoingMessageRequest struct has 20+ fields mixing concerns (account, contact, template, media, reply context, flow data)",
+        "No clear abstraction boundaries - request struct does everything"
+      ],
+      "suggestion": "Refactor OutgoingMessageRequest into focused request types: TextMessageRequest, MediaMessageRequest, TemplateMessageRequest, FlowMessageRequest. Use interface or builder pattern instead of god-object.",
+      "confidence": "medium"
+    },
+    {
+      "dimension": "authorization_consistency",
+      "identifier": "super-admin-org-switch",
+      "summary": "Super admin org switching logic embedded in getOrgID",
+      "related_files": [
+        "internal/handlers/app.go"
+      ],
+      "evidence": [
+        "getOrgID contains 40+ lines of org switching logic",
+        "Checks X-Organization-ID header",
+        "Validates super admin status",
+        "Queries database to verify org membership",
+        "No separate authorization layer - business logic mixed with context extraction"
+      ],
+      "suggestion": "Extract org switching into authorizeOrgSwitch(orgID, userID, overrideOrgID) function. Add audit logging for org switches by super admins. The current inline logic is hard to test and audit.",
+      "confidence": "medium"
+    }
+  ]
+}

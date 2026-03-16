@@ -567,6 +567,10 @@ class WebSocketService {
     const authStore = useAuthStore()
     const currentUserId = authStore.user?.id
     if (!currentUserId || payload.assigned_user_id !== currentUserId) return
+    const hasContactInStore = store.contacts.some(contact => contact.id === id)
+    if (!hasContactInStore) {
+      void store.fetchContact(id)
+    }
 
     const contactName = typeof payload.profile_name === 'string' && payload.profile_name.trim() !== ''
       ? payload.profile_name

@@ -1,0 +1,77 @@
+- hash: circular_dependency_internal_models
+  verdict: false-positive
+  verdict_reasoning: I verified `internal/models` does not import `internal/handlers` or `pkg/*`; model files only import stdlib plus external libs (`uuid`, `gorm`). I also checked cross-imports: `internal/handlers` and `pkg/whatsapp` import `internal/models`, but there is no reverse edge from models back to them, so no circular dependency is present in source structure.
+  files_read: [internal/models/models.go, internal/models/activity_log.go, internal/models/instance.go, internal/models/roles.go, internal/models/constants.go, internal/handlers/app.go, pkg/whatsapp/adapter.go]
+  recommendation: Close this finding; keep `internal/models` dependency-direction rule documented to prevent future cycles.
+
+- hash: handlers_package_bloat
+  verdict: genuine
+  verdict_reasoning: `internal/handlers` is a single flat package with very high file count (162 `.go` files in one directory/package). `setupRoutes` in `cmd/whatomate/main.go` wires a very large surface area spanning many domains (auth, users, campaigns, chatbot, analytics, webhooks, widgets, etc.), confirming a bloated handler boundary.
+  files_read: [cmd/whatomate/main.go, internal/handlers/app.go]
+  recommendation: Split handlers into subpackages by domain (for example `handlers/auth`, `handlers/chat`, `handlers/campaigns`) and keep a thin routing composition layer.
+
+- hash: pkg_whatsapp_duplication
+  verdict: exaggerated
+  verdict_reasoning: There is overlap in method names (`SendText`, `SendImage`, etc.) between `pkg/whatsapp` and `pkg/whatsmeow`, but this is largely intentional adapter/interface parity via `provider.MessageProvider`. Implementations are backend-specific (Meta HTTP API vs whatsmeow protocol), not direct copy-paste duplication of logic.
+  files_read: [pkg/provider/interface.go, pkg/whatsapp/adapter.go, pkg/whatsapp/client.go, pkg/whatsapp/message.go, pkg/whatsmeow/adapter.go, pkg/whatsmeow/adapter_send.go]
+  recommendation: Keep shared interface; optionally extract tiny shared validation helpers only where true duplicate logic appears.
+
+- hash: error_001_mixed_error_strategies
+  verdict: genuine
+  verdict_reasoning: Error handling is mixed across the same layer: some handlers return `r.SendErrorEnvelope(...)`, others use sentinel `errEnvelopeSent` after helper-side response writes (`parsePathUUID`, `findByIDAndOrg`, `requirePermission`, `decodeRequest`), and callers then branch on that sentinel. This creates inconsistent control flow patterns in handler code.
+  files_read: [internal/handlers/helpers.go, internal/handlers/app.go, internal/handlers/statuses.go, internal/handlers/messages.go]
+  recommendation: Standardize one handler error pattern (prefer explicit return of response errors; avoid sentinel-driven flow where possible).
+
+- hash: error_002_error_context_lost
+  verdict: genuine
+  verdict_reasoning: I found concrete places where underlying error detail is dropped, e.g. `resolveWhatsAppAccountByID` returns `fmt.Errorf("failed to decrypt account secrets")` without wrapping the original error; similar opaque errors exist in message/media flows (“failed to read/upload ...” without cause propagation). This loses debugging context.
+  files_read: [internal/handlers/contacts_messaging.go, internal/handlers/statuses.go, internal/handlers/canned_response_media.go]
+  recommendation: Wrap underlying causes with `%w` for internal propagation and map to sanitized API errors at the boundary.
+
+- hash: error_003_silent_error_swallowing
+  verdict: genuine
+  verdict_reasoning: There are real silent drops, not just one-offs: several `_ =` assignments ignore DB/network/IO errors (for example in identity merge and action execution paths), and multiple deferred closes ignore close errors. Some are intentional, but several affect persistence operations where failures should at least be logged.
+  files_read: [pkg/whatsmeow/events_identity.go, internal/handlers/custom_actions.go, internal/handlers/helpers.go, internal/handlers/statuses.go]
+  recommendation: Replace silent ignores on state-changing operations with explicit logging and rationale; keep ignore-only where failure is provably non-critical.
+
+- hash: error_004_inconsistent_error_types
+  verdict: genuine
+  verdict_reasoning: The codebase mixes sentinel errors (`errEnvelopeSent`), plain `errors.New`, `fmt.Errorf` wrapped/unwrapped, and direct HTTP envelope returns as effective “error types.” That inconsistency is visible even within `internal/handlers` and leads to uneven caller behavior.
+  files_read: [internal/handlers/helpers.go, internal/handlers/app.go, internal/handlers/contacts_messaging.go, internal/handlers/statuses.go]
+  recommendation: Define a small, consistent handler error contract (typed/internal errors + single response-mapping path).
+
+- hash: error_005_missing_io_error_handling
+  verdict: exaggerated
+  verdict_reasoning: Core I/O paths generally do check and return errors (DB queries, HTTP calls, file reads/writes). The bigger problem is selective swallowing (`_ =`) and context loss rather than broadly missing checks. So the issue exists in spots, but the “missing IO handling” framing is overstated.
+  files_read: [internal/handlers/statuses.go, internal/handlers/custom_actions.go, pkg/whatsapp/client.go, internal/database/postgres.go]
+  recommendation: Re-scope this finding to targeted ignored-I/O sites instead of broad missing-handling claim.
+
+- hash: module_level_constants
+  verdict: exaggerated
+  verdict_reasoning: Module-level constants/vars are present, but mostly conventional and low risk (configuration constants, enums, sentinel error, version/build metadata). I did not find problematic heavy initialization hidden in package globals in the sampled core files.
+  files_read: [cmd/whatomate/main.go, internal/handlers/helpers.go, internal/handlers/messages.go, pkg/whatsapp/client.go, pkg/whatsmeow/instance_auto_campaign_settings.go]
+  recommendation: Keep constants at module scope; only refactor mutable global state if it appears.
+
+- hash: no_init_functions
+  verdict: over-engineering
+  verdict_reasoning: There are effectively no `func init()` blocks in the checked code, which is typically a positive in Go (explicit startup in `main` is clearer/testable). Treating absence of `init` functions as a defect is backwards for this codebase.
+  files_read: [cmd/whatomate/main.go, internal/handlers/app.go, internal/config/config.go]
+  recommendation: Close this finding; continue favoring explicit initialization flow from `main`.
+
+- hash: ambiguous_package_boundaries
+  verdict: genuine
+  verdict_reasoning: Boundaries are blurred between HTTP handling, domain orchestration, provider integration, and persistence concerns inside the same `internal/handlers` package and route composition. Cross-domain responsibilities are concentrated rather than isolated by package boundaries.
+  files_read: [cmd/whatomate/main.go, internal/handlers/app.go, internal/handlers/messages.go, internal/handlers/contacts_messaging.go]
+  recommendation: Introduce clearer package boundaries (transport vs service vs provider integration) and keep handlers thin.
+
+- hash: flat_handlers_structure
+  verdict: genuine
+  verdict_reasoning: Verified directly: `internal/handlers` is flat (no domain subdirs for production handlers) with 162 `.go` files in one package, which increases navigation and coupling overhead.
+  files_read: [internal/handlers/app.go, cmd/whatomate/main.go]
+  recommendation: Restructure into domain-oriented subpackages and keep compatibility wrappers for incremental migration.
+
+- hash: missing_internal_abstractions
+  verdict: exaggerated
+  verdict_reasoning: Some abstractions already exist (notably `provider.MessageProvider`, shared helper utilities, typed config/models). The real issue is uneven abstraction depth, not total absence. So “missing abstractions” is partially true but overstated.
+  files_read: [pkg/provider/interface.go, pkg/whatsapp/adapter.go, pkg/whatsmeow/adapter.go, internal/handlers/helpers.go, internal/handlers/messages.go]
+  recommendation: Add abstractions selectively around highest-churn flows (message sending, account resolution, permission/error mapping) rather than broad abstraction expansion.

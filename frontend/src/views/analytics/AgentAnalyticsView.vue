@@ -115,15 +115,13 @@ const router = useRouter()
 const authStore = useAuthStore()
 const usersStore = useUsersStore()
 const instancesStore = useInstancesStore()
-const isAdminOrManager = computed(() => {
-  const roleName = (authStore.user?.role?.name || authStore.userRole || '').toLowerCase().trim()
-  return authStore.user?.is_super_admin === true || roleName === 'admin' || roleName === 'manager'
-})
+const canViewOrganizationAnalytics = computed(() => authStore.hasPermission('analytics', 'read'))
+const canUseAgentFilter = computed(() => canViewOrganizationAnalytics.value && authStore.hasPermission('users', 'read'))
 
 const analytics = ref<AgentAnalyticsResponse | null>(null)
 const isLoading = ref(true)
 
-// Agent filter for admins/managers
+// Agent filter for users who can review org-wide analytics
 interface Agent {
   id: string
   full_name: string
@@ -369,7 +367,7 @@ const formatMinutes = (mins: number): string => {
 }
 
 const fetchAgents = async () => {
-  if (!isAdminOrManager.value) return
+  if (!canUseAgentFilter.value) return
   try {
     await usersStore.fetchUsers()
     agents.value = usersStore.users
@@ -384,16 +382,16 @@ const fetchAnalytics = async () => {
   try {
     const { from, to } = getDateRange.value
     const params: { from: string; to: string; agent_id?: string; instance_id?: string; min_rating?: number; max_rating?: number } = { from, to }
-    if (isAdminOrManager.value && selectedAgentId.value !== 'all') {
+    if (canViewOrganizationAnalytics.value && selectedAgentId.value !== 'all') {
       params.agent_id = selectedAgentId.value
     }
-    if (isAdminOrManager.value && selectedInstanceId.value !== 'all') {
+    if (canViewOrganizationAnalytics.value && selectedInstanceId.value !== 'all') {
       params.instance_id = selectedInstanceId.value
     }
-    if (isAdminOrManager.value && minRating.value !== 'all') {
+    if (canViewOrganizationAnalytics.value && minRating.value !== 'all') {
       params.min_rating = Number(minRating.value)
     }
-    if (isAdminOrManager.value && maxRating.value !== 'all') {
+    if (canViewOrganizationAnalytics.value && maxRating.value !== 'all') {
       params.max_rating = Number(maxRating.value)
     }
     const response = await agentAnalyticsService.getSummary(params)
@@ -408,7 +406,7 @@ const fetchAnalytics = async () => {
 }
 
 const exportRatings = async () => {
-  if (!isAdminOrManager.value) return
+  if (!canViewOrganizationAnalytics.value) return
 
   isExporting.value = true
   try {
@@ -480,7 +478,9 @@ watch([minRating, maxRating], ([nextMin, nextMax]) => {
 
 onMounted(() => {
   fetchAgents()
-  instancesStore.fetchInstances()
+  if (canViewOrganizationAnalytics.value) {
+    instancesStore.fetchInstances()
+  }
   fetchAnalytics()
 })
 
@@ -610,7 +610,7 @@ const comparisonChartOptions = {
 
 // Stats to display based on role (reserved for future use)
 const _displayStats = computed(() => {
-  if (isAdminOrManager.value) {
+  if (canViewOrganizationAnalytics.value) {
     return analytics.value?.summary
   }
   return analytics.value?.my_stats
@@ -622,13 +622,13 @@ void _displayStats.value // Suppress unused warning
   <div class="flex flex-col h-full">
     <PageHeader
       :title="$t('agentAnalytics.title')"
-      :description="isAdminOrManager ? $t('agentAnalytics.subtitle') : $t('agentAnalytics.myMetrics')"
+      :description="canViewOrganizationAnalytics ? $t('agentAnalytics.subtitle') : $t('agentAnalytics.myMetrics')"
       :icon="BarChart3"
       icon-gradient="bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20"
     >
       <template #actions>
-        <!-- Agent Filter (Admin/Manager only) -->
-        <div v-if="isAdminOrManager" class="flex items-center gap-2 mr-4">
+        <!-- Agent Filter -->
+        <div v-if="canUseAgentFilter" class="flex items-center gap-2 mr-4">
           <Popover v-model:open="agentComboboxOpen">
             <PopoverTrigger as-child>
               <Button variant="outline" role="combobox" :aria-expanded="agentComboboxOpen" class="w-[200px] justify-between">
@@ -665,7 +665,7 @@ void _displayStats.value // Suppress unused warning
           </Popover>
         </div>
 
-        <div v-if="isAdminOrManager" class="flex items-center gap-2 mr-4">
+        <div v-if="canViewOrganizationAnalytics" class="flex items-center gap-2 mr-4">
           <Select v-model="selectedInstanceId">
             <SelectTrigger class="w-[220px]" data-testid="agent-analytics-instance-filter">
               <SelectValue :placeholder="$t('chat.instance')">
@@ -724,7 +724,7 @@ void _displayStats.value // Suppress unused warning
           </Popover>
         </div>
 
-        <div v-if="isAdminOrManager" class="flex items-center gap-2">
+        <div v-if="canViewOrganizationAnalytics" class="flex items-center gap-2">
           <Select v-model="minRating">
             <SelectTrigger class="w-[120px]">
               <SelectValue :placeholder="$t('agentAnalytics.minRating')" />
@@ -839,7 +839,7 @@ void _displayStats.value // Suppress unused warning
             </div>
 
             <!-- Messages Sent (for specific agent) or Queue Time (for all agents) -->
-            <div v-if="isAdminOrManager && selectedAgentId === 'all'" class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+            <div v-if="canViewOrganizationAnalytics && selectedAgentId === 'all'" class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
               <div class="flex flex-row items-center justify-between space-y-0 pb-2">
                 <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('agentAnalytics.avgQueueTime') }}</span>
                 <div class="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
@@ -956,8 +956,8 @@ void _displayStats.value // Suppress unused warning
           </Card>
         </div>
 
-        <!-- Agent Comparison (Admin/Manager only, when viewing all agents) -->
-        <template v-if="isAdminOrManager && selectedAgentId === 'all'">
+        <!-- Agent Comparison -->
+        <template v-if="canViewOrganizationAnalytics && selectedAgentId === 'all'">
           <Card>
             <CardHeader>
               <CardTitle>{{ $t('agentAnalytics.agentComparison') }}</CardTitle>
@@ -981,7 +981,7 @@ void _displayStats.value // Suppress unused warning
           </Card>
         </template>
 
-        <template v-if="isAdminOrManager">
+        <template v-if="canViewOrganizationAnalytics">
           <Card>
             <CardHeader>
               <CardTitle>{{ $t('agentAnalytics.ratingsTableTitle') }}</CardTitle>

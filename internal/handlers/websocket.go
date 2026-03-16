@@ -56,6 +56,7 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
 
 	// Upgrade to WebSocket only after successful handshake authentication.
 	up := a.wsUpgrader()
+	up.Subprotocols = []string{"whm.v1"}
 	err = up.Upgrade(r.RequestCtx, func(conn *websocket.Conn) {
 		// Create unauthenticated client — auth happens via first message
 		client := ws.NewUnauthenticatedClient(a.WSHub, conn, a.validateWSTokenFn())

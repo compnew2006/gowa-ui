@@ -64,24 +64,24 @@ type organizationStrictPolicySettings struct {
 }
 
 type sendRestrictionsSettings struct {
-	Enabled            bool
-	IncludeAllContacts bool
-	AuthorizedNumbers  []string
-	AllowedInstanceID  *uuid.UUID
-	AllowedInstanceIDs []uuid.UUID
-	PrefixAgentName    bool
+	Enabled                bool
+	IncludeAllContacts     bool
+	AuthorizedNumbers      []string
+	AllowedInstanceID      *uuid.UUID
+	AllowedInstanceIDs     []uuid.UUID
+	PrefixAgentName        bool
 	AllowUnclaimedChatView bool
 	AllowUnclaimedChatSend bool
 }
 
 func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSettings {
 	cfg := sendRestrictionsSettings{
-		Enabled:            false,
-		IncludeAllContacts: false,
-		AuthorizedNumbers:  []string{},
-		AllowedInstanceID:  nil,
-		AllowedInstanceIDs: []uuid.UUID{},
-		PrefixAgentName:    true,
+		Enabled:                false,
+		IncludeAllContacts:     false,
+		AuthorizedNumbers:      []string{},
+		AllowedInstanceID:      nil,
+		AllowedInstanceIDs:     []uuid.UUID{},
+		PrefixAgentName:        true,
 		AllowUnclaimedChatView: false,
 		AllowUnclaimedChatSend: false,
 	}
@@ -146,11 +146,11 @@ func writeSendRestrictionsSettings(settings models.JSONB, cfg sendRestrictionsSe
 		allowedInstanceIDs = []uuid.UUID{*cfg.AllowedInstanceID}
 	}
 	restrictions := models.JSONB{
-		"enabled":              cfg.Enabled,
-		"include_all_contacts": cfg.IncludeAllContacts,
-		"authorized_numbers":   normalizeRestrictedNumbers(cfg.AuthorizedNumbers),
-		"allowed_instance_ids": stringifyUUIDs(allowedInstanceIDs),
-		"prefix_agent_name":    cfg.PrefixAgentName,
+		"enabled":                   cfg.Enabled,
+		"include_all_contacts":      cfg.IncludeAllContacts,
+		"authorized_numbers":        normalizeRestrictedNumbers(cfg.AuthorizedNumbers),
+		"allowed_instance_ids":      stringifyUUIDs(allowedInstanceIDs),
+		"prefix_agent_name":         cfg.PrefixAgentName,
 		"allow_unclaimed_chat_view": cfg.AllowUnclaimedChatView,
 		"allow_unclaimed_chat_send": cfg.AllowUnclaimedChatSend,
 	}
@@ -786,36 +786,40 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 	}
 	if a.isWhatsmeowProvider() && isUserSend {
 		allowedInstanceIDs := allowedInstanceIDsForRestrictions(cfg)
+		allowAssignedInstanceBypass := isContactAssignedToUser(req.Contact, *opts.SentByUserID)
 		if len(allowedInstanceIDs) == 0 {
-			reason := "restricted user does not have an allowed instance configured"
-			a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
-			if !shouldEnforce {
-				return nil
+			if !allowAssignedInstanceBypass {
+				reason := "restricted user does not have an allowed instance configured"
+				a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
+				if !shouldEnforce {
+					return nil
+				}
+				return &restrictedSendViolationError{
+					message:    "Message blocked by strict sending restrictions. Your user must be assigned to a WhatsApp instance.",
+					reasonCode: ReasonCodePolicyNoInstance,
+				}
 			}
-			return &restrictedSendViolationError{
-				message:    "Message blocked by strict sending restrictions. Your user must be assigned to a WhatsApp instance.",
-				reasonCode: ReasonCodePolicyNoInstance,
-			}
-		}
-
-		outgoingInstanceID := resolveOutgoingInstanceID(req)
-		if outgoingInstanceID == nil || !containsRestrictedUUID(allowedInstanceIDs, *outgoingInstanceID) {
-			requestedInstance := ""
-			if outgoingInstanceID != nil {
-				requestedInstance = outgoingInstanceID.String()
-			}
-			reason := fmt.Sprintf("instance mismatch (allowed=%s, requested=%s)", strings.Join(stringifyUUIDs(allowedInstanceIDs), ","), requestedInstance)
-			a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
-			if !shouldEnforce {
-				return nil
-			}
-			return &restrictedSendViolationError{
-				message:    "Message blocked by strict sending restrictions. You can only send and receive chats on your assigned WhatsApp instances.",
-				reasonCode: ReasonCodePolicyNoInstance,
+		} else {
+			outgoingInstanceID := resolveOutgoingInstanceID(req)
+			if outgoingInstanceID == nil || !containsRestrictedUUID(allowedInstanceIDs, *outgoingInstanceID) {
+				if !allowAssignedInstanceBypass {
+					requestedInstance := ""
+					if outgoingInstanceID != nil {
+						requestedInstance = outgoingInstanceID.String()
+					}
+					reason := fmt.Sprintf("instance mismatch (allowed=%s, requested=%s)", strings.Join(stringifyUUIDs(allowedInstanceIDs), ","), requestedInstance)
+					a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
+					if !shouldEnforce {
+						return nil
+					}
+					return &restrictedSendViolationError{
+						message:    "Message blocked by strict sending restrictions. You can only send and receive chats on your assigned WhatsApp instances.",
+						reasonCode: ReasonCodePolicyNoInstance,
+					}
+				}
 			}
 		}
 	}
-
 	targetNumber := normalizeRestrictedPhoneNumber(targetPhone)
 	if targetNumber == "" {
 		reason := "contact phone number could not be normalized"
@@ -878,8 +882,8 @@ func (a *App) logRestrictedSendBlocked(
 
 	metadata := models.JSONB{
 		"message_type": messageType,
-		"target_phone": normalizeActivityText(targetPhone, 80),
-		"reason":       normalizeActivityText(reason, 220),
+		"target_phone": NormalizeActivityText(targetPhone, 80),
+		"reason":       NormalizeActivityText(reason, 220),
 	}
 	if code := strings.TrimSpace(reasonCode); code != "" {
 		metadata["reason_code"] = code
@@ -903,15 +907,15 @@ func (a *App) logRestrictedSendBlocked(
 	if contact != nil {
 		contactID := contact.ID
 		entry.ContactID = &contactID
-		if name := normalizeActivityText(contact.ProfileName, 120); name != "" {
+		if name := NormalizeActivityText(contact.ProfileName, 120); name != "" {
 			entry.Metadata["contact_name"] = name
 		}
-		if phone := normalizeActivityText(contact.PhoneNumber, 80); phone != "" {
+		if phone := NormalizeActivityText(contact.PhoneNumber, 80); phone != "" {
 			entry.Metadata["contact_phone"] = phone
 		}
 	}
 
-	if err := a.insertActivity(entry); err != nil {
+	if err := a.InsertActivity(entry); err != nil {
 		a.Log.Error("Failed to log restricted send block", "error", err, "org_id", orgID, "user_id", userID)
 	}
 }
