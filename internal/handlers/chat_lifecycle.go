@@ -180,9 +180,11 @@ func applyAssignedOrPublicContactAccessFilter(query *gorm.DB, userID uuid.UUID) 
 
 func applyAgentVisibleChatAccessFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB {
 	return query.Where(
-		"(is_public = ? OR assigned_user_id = ? OR ((status IS NULL OR status = '' OR status = ?) AND assigned_user_id IS NULL))",
+		"(is_public = ? OR assigned_user_id = ? OR EXISTS (SELECT 1 FROM contact_collaborators cc WHERE cc.contact_id = contacts.id AND cc.user_id = ? AND cc.status IN ? AND cc.deleted_at IS NULL) OR ((status IS NULL OR status = '' OR status = ?) AND assigned_user_id IS NULL))",
 		true,
 		userID,
+		userID,
+		collaboratorAccessStatuses(),
 		models.ChatStatusPending,
 	)
 }
@@ -195,11 +197,17 @@ func (a *App) canAccessRestrictedChatWithoutClaim(contact models.Contact, userID
 	if contact.IsPublic {
 		return true
 	}
+	if a.isContactCollaborator(orgID, contact.ID, userID) {
+		return true
+	}
 	return a.canViewRestrictedChatWithoutClaim(userID, orgID)
 }
 
 func (a *App) canSendRestrictedChatWithoutClaimForContact(contact models.Contact, userID, orgID uuid.UUID) bool {
 	if contact.IsPublic {
+		return true
+	}
+	if a.isContactCollaborator(orgID, contact.ID, userID) {
 		return true
 	}
 	return a.canSendRestrictedChatWithoutClaim(userID, orgID)

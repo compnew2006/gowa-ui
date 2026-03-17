@@ -232,6 +232,16 @@ export const contactsService = {
   updateTags: (id: string, tags: string[]) =>
     api.put(`/contacts/${id}/tags`, { tags }),
   getSessionData: (id: string) => api.get(`/contacts/${id}/session-data`),
+  listCollaborators: (id: string) =>
+    api.get(`/contacts/${id}/collaborators`),
+  inviteCollaborator: (id: string, data: { user_id: string; role?: string }) =>
+    api.post(`/contacts/${id}/collaborators`, data),
+  acceptCollaborator: (id: string, userId: string) =>
+    api.put(`/contacts/${id}/collaborators/${userId}/accept`, {}),
+  declineCollaborator: (id: string, userId: string) =>
+    api.put(`/contacts/${id}/collaborators/${userId}/decline`, {}),
+  removeCollaborator: (id: string, userId: string) =>
+    api.delete(`/contacts/${id}/collaborators/${userId}`),
 };
 
 export const chatsService = {

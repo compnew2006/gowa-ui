@@ -35,6 +35,7 @@ type ContactResponse struct {
 	AssignedUserID     *uuid.UUID `json:"assigned_user_id,omitempty"`
 	AssignedUserName   string     `json:"assigned_user_name,omitempty"`
 	IsPublic           bool       `json:"is_public"`
+	IsCollaborator     bool       `json:"is_collaborator,omitempty"`
 	ClosedAt           *time.Time `json:"closed_at,omitempty"`
 	ClosedByUserID     *uuid.UUID `json:"closed_by_user_id,omitempty"`
 	ClosedByName       string     `json:"closed_by_name,omitempty"`
@@ -541,7 +542,15 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		if assignedToUserID == nil {
 			query = query.Where("assigned_user_id IS NULL")
 		} else {
-			query = query.Where("assigned_user_id = ?", *assignedToUserID)
+			if *assignedToUserID == userID {
+				query = query.Where("(assigned_user_id = ? OR EXISTS (SELECT 1 FROM contact_collaborators cc WHERE cc.contact_id = contacts.id AND cc.user_id = ? AND cc.status IN ? AND cc.deleted_at IS NULL))",
+					*assignedToUserID,
+					userID,
+					collaboratorAccessStatuses(),
+				)
+			} else {
+				query = query.Where("assigned_user_id = ?", *assignedToUserID)
+			}
 		}
 	}
 
@@ -642,6 +651,10 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 
 	// Check if phone masking is enabled
 	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
+	collaboratorContactIDs, collabErr := a.listCollaboratorContactIDs(orgID, userID)
+	if collabErr != nil {
+		a.Log.Error("Failed to load collaborator contacts", "error", collabErr, "org_id", orgID, "user_id", userID)
+	}
 
 	// Convert to response format
 	response := make([]ContactResponse, len(contacts))
@@ -702,6 +715,10 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			}
 		}
 		serviceWindowOpen := c.LastInboundAt != nil && time.Since(*c.LastInboundAt) < 24*time.Hour
+		isCollaborator := false
+		if _, ok := collaboratorContactIDs[c.ID]; ok {
+			isCollaborator = true
+		}
 
 		response[i] = ContactResponse{
 			ID:                 c.ID,
@@ -721,6 +738,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			AssignedUserID:     c.AssignedUserID,
 			AssignedUserName:   strings.TrimSpace(userFullName(c.AssignedUser)),
 			IsPublic:           c.IsPublic,
+			IsCollaborator:     isCollaborator,
 			ClosedAt:           closedAt,
 			ClosedByUserID:     closedByUserID,
 			ClosedByName:       strings.TrimSpace(userFullName(c.ClosedByUser)),
@@ -824,6 +842,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 		}
 	}
 	serviceWindowOpen := contact.LastInboundAt != nil && time.Since(*contact.LastInboundAt) < 24*time.Hour
+	isCollaborator := a.isContactCollaborator(orgID, contact.ID, userID)
 
 	response := ContactResponse{
 		ID:                 contact.ID,
@@ -843,6 +862,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 		AssignedUserID:     contact.AssignedUserID,
 		AssignedUserName:   strings.TrimSpace(userFullName(contact.AssignedUser)),
 		IsPublic:           contact.IsPublic,
+		IsCollaborator:     isCollaborator,
 		ClosedAt:           closedAt,
 		ClosedByUserID:     closedByUserID,
 		ClosedByName:       strings.TrimSpace(userFullName(contact.ClosedByUser)),
@@ -888,6 +908,10 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 	normalizeContactStatus(&contact)
+	isCollaborator := a.isContactCollaborator(orgID, contact.ID, userID)
+	if isCollaborator {
+		hasContactsReadPermission = true
+	}
 	if isChatRestrictedForMessageRead(contact) && !a.canAccessRestrictedChatWithoutClaim(contact, userID, orgID) {
 		return r.SendErrorEnvelope(
 			fasthttp.StatusForbidden,

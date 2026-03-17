@@ -112,6 +112,7 @@ func runMigrations(db *gorm.DB) error {
 		&models.ChatbotSessionMessage{},
 		&models.AIContext{},
 		&models.AgentTransfer{},
+		&models.ContactCollaborator{},
 		// Bulk message models
 		&models.BulkMessageCampaign{},
 		&models.BulkMessageRecipient{},
@@ -135,6 +136,7 @@ func cleanupTables(db *gorm.DB) {
 		// Dashboard tables
 		"widgets",
 		"activity_logs",
+		"contact_collaborators",
 		// Catalog tables
 		"catalog_products",
 		"catalogs",

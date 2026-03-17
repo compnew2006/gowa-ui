@@ -35,6 +35,10 @@ const (
 	TypeConversationNoteUpdated = "conversation_note_updated"
 	TypeConversationNoteDeleted = "conversation_note_deleted"
 
+	// Collaboration types
+	TypeChatCollaboratorInvite = "chat_collaborator_invite"
+	TypeChatCollaboratorUpdate = "chat_collaborator_update"
+
 	// Instance types
 	TypeInstanceQRCode          = "instance_qr_code"
 	TypeInstanceConnected       = "instance_connected"

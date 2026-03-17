@@ -1042,6 +1042,7 @@ const currentUserUnclaimedAccess = computed(() => {
 const isCurrentChatPendingUnassigned = computed(() => {
   if (!contactsStore.currentContact) return false;
   if (contactsStore.currentContact.is_public === true) return false;
+  if (contactsStore.currentContact.is_collaborator === true) return false;
   return (
     contactsStore.currentContact.status === "pending" ||
     !contactsStore.currentContact.assigned_user_id
@@ -1467,6 +1468,25 @@ const filteredAssignableUsers = computed(() => {
   );
 });
 
+function handleCollaboratorInvite(payload: any) {
+  const contactId = typeof payload?.contact_id === "string" ? payload.contact_id : "";
+  if (!contactId) return;
+  toast.info(t("chat.collaboratorInviteToastTitle"), {
+    description: t("chat.collaboratorInviteToastDesc"),
+  });
+  contactsStore.fetchContact(contactId).catch(() => {});
+  void refreshContactsSidebar();
+}
+
+function handleCollaboratorUpdate(payload: any) {
+  const contactId = typeof payload?.contact_id === "string" ? payload.contact_id : "";
+  if (!contactId) return;
+  if (contactsStore.currentContact?.id === contactId) {
+    contactsStore.fetchContact(contactId).catch(() => {});
+  }
+  void refreshContactsSidebar();
+}
+
 // Fetch contacts on mount (WebSocket is connected in AppLayout)
 onMounted(async () => {
   refreshChatSidebarViewModePreference();
@@ -1510,6 +1530,9 @@ onMounted(async () => {
     tagsStore.fetchTags().catch(() => {});
   }
 
+  wsService.subscribe("chat_collaborator_invite", handleCollaboratorInvite);
+  wsService.subscribe("chat_collaborator_update", handleCollaboratorUpdate);
+
   if (contactId.value) {
     const selectionSequence = ++contactSelectionSequence;
     await selectContact(contactId.value, selectionSequence);
@@ -1530,6 +1553,8 @@ watch(
 );
 
 onUnmounted(() => {
+  wsService.unsubscribe("chat_collaborator_invite", handleCollaboratorInvite);
+  wsService.unsubscribe("chat_collaborator_update", handleCollaboratorUpdate);
   const activeContact = contactsStore.currentContact;
   stopTypingForContact(activeContact, { force: true });
   resetTypingPresenceState();

@@ -1,15 +1,23 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog'
 import {
   Popover,
   PopoverContent,
@@ -23,15 +31,17 @@ import {
   CommandItem,
   CommandList
 } from '@/components/ui/command'
-import { X, ChevronDown, Phone, User, Plus, Check, Tags, Loader2, Trash2 } from 'lucide-vue-next'
+import { X, ChevronDown, Phone, User, Plus, Check, Tags, Loader2, Trash2, UserPlus, Search } from 'lucide-vue-next'
 import { TagBadge } from '@/components/ui/tag-badge'
 import MetadataSection from '@/components/chat/MetadataSection.vue'
 import { getInitials, getAvatarGradient, formatLabel } from '@/lib/utils'
 import { getTagColorClass } from '@/lib/constants'
 import { useTagsStore } from '@/stores/tags'
 import { useAuthStore } from '@/stores/auth'
+import { useUsersStore } from '@/stores/users'
 import { localeDirectionManager } from '@/i18n/locale-direction'
 import { contactsService, type Tag } from '@/services/api'
+import { wsService } from '@/services/websocket'
 import { toast } from 'vue-sonner'
 import type { Contact } from '@/stores/contacts'
 
@@ -78,12 +88,33 @@ const emit = defineEmits<{
 
 const tagsStore = useTagsStore()
 const authStore = useAuthStore()
-const { locale } = useI18n()
+const usersStore = useUsersStore()
+const { locale, t } = useI18n()
 const isRTL = computed(() => localeDirectionManager.isRTL(String(locale.value)))
 
 const collapsedSections = ref<Record<string, boolean>>({})
 const tagSelectorOpen = ref(false)
 const isUpdatingTags = ref(false)
+
+interface ContactCollaborator {
+  id: string
+  contact_id: string
+  user_id: string
+  user_name?: string
+  role: string
+  status: string
+  invited_by_user_id: string
+  invited_by_name?: string
+  invited_at: string
+  accepted_at?: string | null
+}
+
+const collaborators = ref<ContactCollaborator[]>([])
+const isLoadingCollaborators = ref(false)
+const isInviteDialogOpen = ref(false)
+const inviteSearchQuery = ref('')
+const isInvitingCollaborator = ref(false)
+const collaboratorActionId = ref<string | null>(null)
 
 // Resizable panel state
 const MIN_WIDTH = 280
@@ -94,7 +125,18 @@ const isResizing = ref(false)
 // Check if user can edit tags
 const canEditTags = computed(() => authStore.hasPermission('contacts', 'write'))
 const canDeleteChats = computed(() => authStore.hasPermission('contacts', 'delete'))
+const canInviteCollaborators = computed(() => authStore.hasPermission('chat.collaborators', 'write'))
+const currentUserId = computed(() => authStore.user?.id || '')
 const isDeletingChat = ref(false)
+
+const handleCollaboratorUpdate = (payload: any) => {
+  if (!payload?.contact_id || payload.contact_id !== props.contact.id) return
+  void fetchCollaborators()
+}
+const handleCollaboratorInvite = (payload: any) => {
+  if (!payload?.contact_id || payload.contact_id !== props.contact.id) return
+  void fetchCollaborators()
+}
 
 // Fetch tags on mount
 onMounted(async () => {
@@ -105,6 +147,16 @@ onMounted(async () => {
       // Silently fail - tags just won't be available
     }
   }
+
+  await fetchCollaborators()
+
+  wsService.subscribe('chat_collaborator_update', handleCollaboratorUpdate)
+  wsService.subscribe('chat_collaborator_invite', handleCollaboratorInvite)
+})
+
+onUnmounted(() => {
+  wsService.unsubscribe('chat_collaborator_update', handleCollaboratorUpdate)
+  wsService.unsubscribe('chat_collaborator_invite', handleCollaboratorInvite)
 })
 
 function startResize(e: MouseEvent) {
@@ -140,6 +192,16 @@ watch(() => props.sessionData, (newData) => {
     }
   }
 }, { immediate: true })
+
+watch(() => props.contact.id, () => {
+  void fetchCollaborators()
+})
+
+watch(isInviteDialogOpen, (open) => {
+  if (!open) return
+  if (usersStore.users.length > 0) return
+  usersStore.fetchUsers().catch(() => {})
+})
 
 function toggleSection(sectionId: string) {
   collapsedSections.value[sectionId] = !collapsedSections.value[sectionId]
@@ -208,6 +270,41 @@ function getTagDetails(tagName: string): Tag | undefined {
   return tagsStore.getTagByName(tagName)
 }
 
+function normalizeAllowedInstanceIDs(values: unknown): string[] {
+  if (!Array.isArray(values)) return []
+  return Array.from(
+    new Set(
+      values
+        .map(value => (typeof value === 'string' ? value.trim() : ''))
+        .filter(Boolean)
+    )
+  )
+}
+
+function getAllowedInstanceIDsForUser(user: { settings?: unknown }): string[] {
+  const settings = user?.settings
+  if (!settings || typeof settings !== 'object') return []
+  const sendRestrictions = (settings as Record<string, unknown>).send_restrictions
+  if (!sendRestrictions || typeof sendRestrictions !== 'object') return []
+
+  const raw = sendRestrictions as Record<string, unknown>
+  const fromArray = normalizeAllowedInstanceIDs(raw.allowed_instance_ids)
+  if (fromArray.length > 0) {
+    return fromArray
+  }
+  const legacy = typeof raw.allowed_instance_id === 'string'
+    ? raw.allowed_instance_id.trim()
+    : ''
+  return legacy ? [legacy] : []
+}
+
+function canUserSeeContactInstance(user: { settings?: unknown }, instanceId?: string): boolean {
+  if (!instanceId) return true
+  const allowedInstanceIDs = getAllowedInstanceIDsForUser(user)
+  if (allowedInstanceIDs.length === 0) return true
+  return allowedInstanceIDs.includes(instanceId)
+}
+
 // Check if a tag is selected
 function isTagSelected(tagName: string): boolean {
   return contactTags.value.includes(tagName)
@@ -251,6 +348,100 @@ async function updateContactTags(tags: string[]) {
   }
 }
 
+const inviteCandidates = computed(() => {
+  const instanceId = typeof props.contact.instance_id === 'string'
+    ? props.contact.instance_id.trim()
+    : ''
+  const query = inviteSearchQuery.value.trim().toLowerCase()
+
+  return usersStore.users
+    .filter(user => user.is_active !== false)
+    .filter(user => user.id !== currentUserId.value)
+    .filter(user => canUserSeeContactInstance(user, instanceId || undefined))
+    .filter(user => {
+      const existing = collaborators.value.find(c => c.user_id === user.id)
+      if (!existing) return true
+      return existing.status === 'declined'
+    })
+    .filter(user => {
+      if (!query) return true
+      const name = (user.full_name || '').toLowerCase()
+      const email = (user.email || '').toLowerCase()
+      return name.includes(query) || email.includes(query)
+    })
+})
+
+async function fetchCollaborators() {
+  if (!props.contact?.id) return
+  isLoadingCollaborators.value = true
+  try {
+    const response = await contactsService.listCollaborators(props.contact.id)
+    const data = response.data.data || response.data
+    collaborators.value = Array.isArray(data.collaborators) ? data.collaborators : []
+  } catch (e: any) {
+    collaborators.value = []
+  } finally {
+    isLoadingCollaborators.value = false
+  }
+}
+
+async function inviteCollaborator(userId: string) {
+  if (!props.contact?.id || isInvitingCollaborator.value) return
+  isInvitingCollaborator.value = true
+  try {
+    await contactsService.inviteCollaborator(props.contact.id, { user_id: userId })
+    toast.success(t('chat.collaboratorInvitedSuccess'))
+    inviteSearchQuery.value = ''
+    await fetchCollaborators()
+  } catch (e: any) {
+    toast.error(e.response?.data?.message || t('chat.collaboratorInviteFailed'))
+  } finally {
+    isInvitingCollaborator.value = false
+  }
+}
+
+async function acceptInvite(collab: ContactCollaborator) {
+  if (!props.contact?.id || collaboratorActionId.value) return
+  collaboratorActionId.value = collab.user_id
+  try {
+    await contactsService.acceptCollaborator(props.contact.id, collab.user_id)
+    toast.success(t('chat.collaboratorAccepted'))
+    await fetchCollaborators()
+  } catch (e: any) {
+    toast.error(e.response?.data?.message || t('chat.collaboratorAcceptFailed'))
+  } finally {
+    collaboratorActionId.value = null
+  }
+}
+
+async function declineInvite(collab: ContactCollaborator) {
+  if (!props.contact?.id || collaboratorActionId.value) return
+  collaboratorActionId.value = collab.user_id
+  try {
+    await contactsService.declineCollaborator(props.contact.id, collab.user_id)
+    toast.success(t('chat.collaboratorDeclined'))
+    await fetchCollaborators()
+  } catch (e: any) {
+    toast.error(e.response?.data?.message || t('chat.collaboratorDeclineFailed'))
+  } finally {
+    collaboratorActionId.value = null
+  }
+}
+
+async function removeCollaborator(collab: ContactCollaborator) {
+  if (!props.contact?.id || collaboratorActionId.value) return
+  collaboratorActionId.value = collab.user_id
+  try {
+    await contactsService.removeCollaborator(props.contact.id, collab.user_id)
+    toast.success(t('chat.collaboratorRemoved'))
+    await fetchCollaborators()
+  } catch (e: any) {
+    toast.error(e.response?.data?.message || t('chat.collaboratorRemoveFailed'))
+  } finally {
+    collaboratorActionId.value = null
+  }
+}
+
 async function deleteChat() {
   if (isDeletingChat.value || !canDeleteChats.value) return
 
@@ -285,7 +476,7 @@ async function deleteChat() {
 
     <!-- Header -->
     <div class="h-12 px-3 border-b flex items-center justify-between">
-      <h3 class="font-medium text-sm">Contact Info</h3>
+      <h3 class="font-medium text-sm">{{ $t('chat.contactInfo') }}</h3>
       <div class="flex items-center gap-1">
         <Button
           v-if="canDeleteChats"
@@ -388,6 +579,88 @@ async function deleteChat() {
             </template>
             <span v-else class="text-sm text-muted-foreground">No tags</span>
             <Loader2 v-if="isUpdatingTags" class="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        </div>
+
+        <!-- Collaborators Section -->
+        <div class="pb-4 border-b">
+          <div class="flex items-center justify-between py-2">
+            <h5 class="text-sm font-medium flex items-center gap-2">
+              <UserPlus class="h-4 w-4 text-muted-foreground" />
+              {{ $t('chat.collaborators') }}
+            </h5>
+            <Button
+              v-if="canInviteCollaborators"
+              variant="ghost"
+              size="sm"
+              class="h-7 px-2"
+              @click="isInviteDialogOpen = true"
+            >
+              <Plus class="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          <div v-if="isLoadingCollaborators" class="text-sm text-muted-foreground">
+            {{ $t('chat.collaboratorLoading') }}
+          </div>
+          <div v-else class="space-y-2">
+            <div
+              v-for="collab in collaborators"
+              :key="collab.id"
+              class="flex items-start justify-between gap-2 rounded-md border border-border/60 p-2"
+            >
+              <div class="min-w-0">
+                <p class="text-sm font-medium truncate">
+                  {{ collab.user_name || collab.user_id }}
+                </p>
+                <p class="text-xs text-muted-foreground">
+                  {{ collab.role }} · {{ collab.status }}
+                </p>
+              </div>
+              <div class="flex items-center gap-1">
+                <Button
+                  v-if="collab.status === 'invited' && collab.user_id === currentUserId"
+                  variant="outline"
+                  size="sm"
+                  :disabled="collaboratorActionId === collab.user_id"
+                  @click="acceptInvite(collab)"
+                >
+                  {{ $t('chat.collaboratorAccept') }}
+                </Button>
+                <Button
+                  v-if="collab.status === 'invited' && collab.user_id === currentUserId"
+                  variant="ghost"
+                  size="sm"
+                  :disabled="collaboratorActionId === collab.user_id"
+                  @click="declineInvite(collab)"
+                >
+                  {{ $t('chat.collaboratorDecline') }}
+                </Button>
+                <Button
+                  v-if="collab.status === 'declined' && canInviteCollaborators"
+                  variant="outline"
+                  size="sm"
+                  :disabled="collaboratorActionId === collab.user_id"
+                  @click="inviteCollaborator(collab.user_id)"
+                >
+                  {{ $t('chat.collaboratorReinvite') }}
+                </Button>
+                <Button
+                  v-if="canInviteCollaborators || collab.user_id === currentUserId"
+                  variant="ghost"
+                  size="icon"
+                  class="h-7 w-7"
+                  :disabled="collaboratorActionId === collab.user_id"
+                  @click="removeCollaborator(collab)"
+                >
+                  <Trash2 class="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            <p v-if="collaborators.length === 0" class="text-sm text-muted-foreground">
+              {{ $t('chat.collaboratorNone') }}
+            </p>
           </div>
         </div>
 
@@ -512,5 +785,48 @@ async function deleteChat() {
         </template>
       </div>
     </ScrollArea>
+
+    <!-- Invite Collaborator Dialog -->
+    <Dialog v-model:open="isInviteDialogOpen">
+      <DialogContent class="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{{ $t('chat.collaboratorInvite') }}</DialogTitle>
+          <DialogDescription>
+            {{ $t('chat.collaboratorInviteDesc') }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-3">
+          <div class="relative">
+            <Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              v-model="inviteSearchQuery"
+              :placeholder="$t('chat.collaboratorSearchPlaceholder')"
+              class="pl-9 h-9"
+            />
+          </div>
+          <ScrollArea class="max-h-[280px]">
+            <div class="space-y-1">
+              <Button
+                v-for="user in inviteCandidates"
+                :key="user.id"
+                variant="ghost"
+                class="w-full justify-start"
+                :disabled="isInvitingCollaborator"
+                @click="inviteCollaborator(user.id)"
+              >
+                <User class="mr-2 h-4 w-4" />
+                <span>{{ user.full_name || user.email }}</span>
+              </Button>
+              <p
+                v-if="inviteCandidates.length === 0"
+                class="text-sm text-muted-foreground text-center py-4"
+              >
+                {{ $t('chat.collaboratorNoEligible') }}
+              </p>
+            </div>
+          </ScrollArea>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

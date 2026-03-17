@@ -1019,3 +1019,52 @@ Updated: 2026-03-12 13:55:17 UTC
 
 - The first tenant HTTP checks returned temporary `502` responses while the tenant services were still finishing startup and migrations; once their listeners bound to `127.0.0.1:18124-18126`, all tenant login pages returned `200`.
 - The clean source-only sync avoided re-uploading the local `uploads/` directory and other large local artifacts that are not required for production builds.
+
+## Deployment Update
+
+Updated: 2026-03-17 03:28:38 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src`
+- Source sync method: `rsync` (with `--delete`; excluded `.git`, `node_modules/`, `frontend/dist/`, `uploads/`, `config.toml`, and local build/test artifacts)
+- Source revision on deploy: `1870edb` (working tree clean)
+- Native build command on VPS: `cd /opt/whatomate-src && VERSION=1870edb GOTOOLCHAIN=go1.25.7+auto make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260317_032750.bak`
+- Installed binary SHA256: `fe13b8b49fc5f5918b6d03584afbe2e39fb12e535ba30cc8085bee82bbce3bda`
+- Installed binary version output: `Whatomate 1870edb (built 2026-03-17_03:27:26)`
+- Deployment purpose: deploy the current local project state to production.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- Listener ports active:
+  - `127.0.0.1:18123`
+  - `127.0.0.1:18124`
+  - `127.0.0.1:18125`
+  - `127.0.0.1:18126`
+- Process IDs:
+  - whatomate: PID 3152955
+  - holol-wenjaz: PID 3152967
+  - alarkan-almthalia: PID 3152960
+  - matbaat-ruya: PID 3152948
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+
+### Note
+
+- Vite emitted the existing warning about `<script src="./theme-init.js">` lacking `type="module"`; the build and embed steps still completed successfully.

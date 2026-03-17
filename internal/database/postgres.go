@@ -154,6 +154,7 @@ func GetMigrationModels() []MigrationModel {
 		// Conversation Notes
 		{"ConversationNote", &models.ConversationNote{}},
 		{"ActivityLog", &models.ActivityLog{}},
+		{"ContactCollaborator", &models.ContactCollaborator{}},
 	}
 }
 
@@ -508,6 +509,10 @@ func getIndexes() []string {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_org_unique ON user_organizations(user_id, organization_id) WHERE deleted_at IS NULL`,
 		// Conversation notes
 		`CREATE INDEX IF NOT EXISTS idx_conversation_notes_contact ON conversation_notes(organization_id, contact_id, created_at DESC)`,
+		// Contact collaborators
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_contact_collaborators_unique ON contact_collaborators(contact_id, user_id) WHERE deleted_at IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_contact_collaborators_user_status ON contact_collaborators(user_id, status) WHERE deleted_at IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_contact_collaborators_contact_status ON contact_collaborators(contact_id, status) WHERE deleted_at IS NULL`,
 		// Chat closure ratings
 		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_org_closed ON chat_closure_ratings(organization_id, closed_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_contact_state ON chat_closure_ratings(contact_id, state, closed_at DESC)`,

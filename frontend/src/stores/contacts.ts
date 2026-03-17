@@ -26,6 +26,7 @@ export interface Contact {
   assigned_user_id?: string;
   assigned_user_name?: string;
   is_public?: boolean;
+  is_collaborator?: boolean;
   closed_at?: string;
   closed_by_user_id?: string;
   closed_by_name?: string;
@@ -119,6 +120,7 @@ function normalizeContact(contact: Contact): Contact {
   return {
     ...contact,
     is_public: contact.is_public === true,
+    is_collaborator: contact.is_collaborator === true,
     status: normalizeChatStatus(contact.status, contact.assigned_user_id),
   };
 }
@@ -459,6 +461,12 @@ export const useContactsStore = defineStore("contacts", () => {
   }
 
   function isVisibleAssignedChatForCurrentUser(contact: Contact) {
+    if (contact.status === "closed") {
+      return false;
+    }
+    if (contact.is_collaborator) {
+      return true;
+    }
     if (contact.status !== "open" || !contact.assigned_user_id) {
       return false;
     }
@@ -497,7 +505,10 @@ export const useContactsStore = defineStore("contacts", () => {
 
   function rebuildChatBucketsFromContacts() {
     pendingChats.value = contacts.value.filter(
-      (c) => c.status === "pending" && !c.assigned_user_id,
+      (c) =>
+        c.status === "pending" &&
+        !c.assigned_user_id &&
+        c.is_collaborator !== true,
     );
     assignedChats.value = contacts.value.filter((c) =>
       isVisibleAssignedChatForCurrentUser(c),

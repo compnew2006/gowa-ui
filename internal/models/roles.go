@@ -61,6 +61,7 @@ const (
 	ResourceChatbotAI       = "chatbot.ai"
 	ResourceChat            = "chat"
 	ResourceChatAssign      = "chat.assign"
+	ResourceChatCollaborators = "chat.collaborators"
 	ResourceContacts        = "contacts"
 	ResourceTags            = "tags"
 	ResourceAnalytics       = "analytics"
@@ -155,6 +156,8 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceChat, Action: ActionPrefix, Description: "Prefix outgoing messages with agent name"},
 		{Resource: ResourceChat, Action: ActionDelete, Description: "Delete/revoke chat messages"},
 		{Resource: ResourceChatAssign, Action: ActionWrite, Description: "Assign conversations to agents"},
+		{Resource: ResourceChatCollaborators, Action: ActionRead, Description: "View chat collaborators"},
+		{Resource: ResourceChatCollaborators, Action: ActionWrite, Description: "Invite and manage chat collaborators"},
 
 		// Contacts
 		{Resource: ResourceContacts, Action: ActionRead, Description: "View contacts"},
@@ -235,6 +238,7 @@ func SystemRolePermissions() map[string][]string {
 		"chatbot.ai:read", "chatbot.ai:write",
 		// Chat
 		"chat:read", "chat:write", "chat:prefix", "chat.assign:write",
+		"chat.collaborators:read", "chat.collaborators:write",
 		// Contacts
 		"contacts:read", "contacts:write", "contacts:delete", "contacts:import", "contacts:export",
 		// Tags
@@ -256,6 +260,7 @@ func SystemRolePermissions() map[string][]string {
 	agentPermissions := []string{
 		// Chat
 		"chat:read", "chat:write", "chat:prefix",
+		"chat.collaborators:read", "chat.collaborators:write",
 		// Contacts (read only)
 		"contacts:read",
 		// Tags (read only - agents can see tags on contacts)

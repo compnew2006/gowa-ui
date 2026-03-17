@@ -173,6 +173,8 @@ const WS_TYPE_PERMISSIONS_UPDATED = 'permissions_updated'
 const WS_TYPE_CONVERSATION_NOTE_CREATED = 'conversation_note_created'
 const WS_TYPE_CONVERSATION_NOTE_UPDATED = 'conversation_note_updated'
 const WS_TYPE_CONVERSATION_NOTE_DELETED = 'conversation_note_deleted'
+const WS_TYPE_CHAT_COLLABORATOR_INVITE = 'chat_collaborator_invite'
+const WS_TYPE_CHAT_COLLABORATOR_UPDATE = 'chat_collaborator_update'
 
 interface WSMessage {
   type: string

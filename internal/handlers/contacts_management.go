@@ -254,7 +254,7 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 	if status != models.ChatStatusPending && contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
 		_ = a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
 		a.appendClaimedChatSystemMessage(&contact, userID)
-		return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+		return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 	}
 
 	if err := a.DB.Model(&contact).Updates(chatAssignmentUpdates(&userID)).Error; err != nil {
@@ -269,7 +269,7 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 	a.appendClaimedChatSystemMessage(&contact, userID)
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 
-	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+	return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 }
 
 // CloseChat marks a chat as closed.
@@ -298,7 +298,7 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 	status := normalizeContactStatus(&contact)
 	if status == models.ChatStatusClosed {
 		_ = a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
-		return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+		return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 	}
 
 	if contact.AssignedUserID != nil && *contact.AssignedUserID != userID && !a.canBypassPendingChatRestriction(userID, orgID) {
@@ -318,7 +318,7 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 	a.handleManualChatCloseRatingPrompt(orgID, userID, &contact)
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 
-	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+	return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 }
 
 // ReopenChat reopens a closed chat and moves it back to pending unassigned queue.
@@ -358,7 +358,7 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 	}
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 
-	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+	return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 }
 
 type SetChatPublicRequest struct {
@@ -395,7 +395,7 @@ func (a *App) SetChatPublic(r *fastglue.Request) error {
 
 	if contact.IsPublic == req.IsPublic {
 		_ = a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
-		return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+		return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 	}
 
 	if err := a.DB.Model(&contact).Update("is_public", req.IsPublic).Error; err != nil {
@@ -410,7 +410,7 @@ func (a *App) SetChatPublic(r *fastglue.Request) error {
 	a.appendPublicChatSystemMessage(&contact, userID, req.IsPublic)
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 
-	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+	return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 }
 
 // ContactSessionDataResponse represents the session data for a contact's info panel
@@ -663,7 +663,7 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 			}
 			// Reload contact
 			a.DB.First(&existingContact, existingContact.ID)
-			return r.SendEnvelope(a.buildContactResponse(&existingContact, orgID))
+			return r.SendEnvelope(a.buildContactResponse(&existingContact, orgID, userID))
 		}
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists", nil, "")
 	}
@@ -696,7 +696,7 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create contact", nil, "")
 	}
 
-	return r.SendEnvelope(a.buildContactResponse(&contact, orgID))
+	return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 }
 
 // UpdateContactRequest represents the request body for updating a contact
@@ -800,7 +800,7 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 		a.broadcastContactLifecycleUpdate(orgID, contact, notifyAssignee)
 	}
 
-	return r.SendEnvelope(a.buildContactResponse(contact, orgID))
+	return r.SendEnvelope(a.buildContactResponse(contact, orgID, userID))
 }
 
 // DeleteContact soft-deletes a contact while preserving conversation history.
@@ -837,7 +837,7 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 }
 
 // buildContactResponse creates a ContactResponse from a Contact model
-func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) ContactResponse {
+func (a *App) buildContactResponse(contact *models.Contact, orgID, userID uuid.UUID) ContactResponse {
 	status := normalizeContactStatus(contact)
 	conversationContext := a.resolveContactConversationContext(orgID, *contact)
 	a.repairDirectContactPhoneFromConversation(contact, conversationContext.ConversationID)
@@ -891,6 +891,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) Con
 	}
 	serviceWindowOpen := contact.LastInboundAt != nil && time.Since(*contact.LastInboundAt) < 24*time.Hour
 	assignedUserName := a.resolveAssignedUserName(contact, orgID)
+	isCollaborator := a.isContactCollaborator(orgID, contact.ID, userID)
 
 	return ContactResponse{
 		ID:                 contact.ID,
@@ -910,6 +911,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) Con
 		AssignedUserID:     contact.AssignedUserID,
 		AssignedUserName:   assignedUserName,
 		IsPublic:           contact.IsPublic,
+		IsCollaborator:     isCollaborator,
 		ClosedAt:           closedAt,
 		ClosedByUserID:     closedByUserID,
 		ClosedByName:       strings.TrimSpace(userFullName(contact.ClosedByUser)),
