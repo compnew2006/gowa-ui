@@ -1,127 +1,138 @@
-import { useContactsStore } from '@/stores/contacts'
-import { useTransfersStore } from '@/stores/transfers'
-import { useAuthStore } from '@/stores/auth'
-import { useNotesStore } from '@/stores/notes'
-import { contactsService } from '@/services/api'
-import { maybeAutoDownloadIncomingMedia } from '@/lib/incoming_media_autodownload'
-import { toast } from 'vue-sonner'
-import router from '@/router'
+import { useContactsStore } from "@/stores/contacts";
+import { useTransfersStore } from "@/stores/transfers";
+import { useAuthStore } from "@/stores/auth";
+import { useNotesStore } from "@/stores/notes";
+import { contactsService } from "@/services/api";
+import { maybeAutoDownloadIncomingMedia } from "@/lib/incoming_media_autodownload";
+import { toast } from "vue-sonner";
+import router from "@/router";
 
 // Notification sound
-let notificationSound: HTMLAudioElement | null = null
-let notificationSoundPending = false
-let interactionListenerAttached = false
-let notificationSourceIndex = 0
-let activeNotificationSound: NotificationSoundKey | null = null
+let notificationSound: HTMLAudioElement | null = null;
+let notificationSoundPending = false;
+let interactionListenerAttached = false;
+let notificationSourceIndex = 0;
+let activeNotificationSound: NotificationSoundKey | null = null;
 
-type NotificationSoundKey = 'notification1' | 'notification2' | 'notification'
-const DEFAULT_NOTIFICATION_SOUND: NotificationSoundKey = 'notification1'
+type NotificationSoundKey = "notification1" | "notification2" | "notification";
+const DEFAULT_NOTIFICATION_SOUND: NotificationSoundKey = "notification1";
 
-const rawBasePath = typeof window !== 'undefined'
-  ? ((window as any).__BASE_PATH__ ?? import.meta.env.BASE_URL ?? '/')
-  : (import.meta.env.BASE_URL ?? '/')
-const normalizedBasePath = String(rawBasePath).replace(/\/$/, '')
+const rawBasePath =
+  typeof window !== "undefined"
+    ? ((window as any).__BASE_PATH__ ?? import.meta.env.BASE_URL ?? "/")
+    : (import.meta.env.BASE_URL ?? "/");
+const normalizedBasePath = String(rawBasePath).replace(/\/$/, "");
 
 function normalizeNotificationSound(value: unknown): NotificationSoundKey {
-  if (value === 'notification2') return 'notification2'
-  if (value === 'notification') return 'notification'
-  return DEFAULT_NOTIFICATION_SOUND
+  if (value === "notification2") return "notification2";
+  if (value === "notification") return "notification";
+  return DEFAULT_NOTIFICATION_SOUND;
 }
 
 function getSelectedNotificationSound(): NotificationSoundKey {
   try {
-    const authStore = useAuthStore()
-    return normalizeNotificationSound(authStore.userSettings.notification_sound)
+    const authStore = useAuthStore();
+    return normalizeNotificationSound(
+      authStore.userSettings.notification_sound,
+    );
   } catch {
-    return DEFAULT_NOTIFICATION_SOUND
+    return DEFAULT_NOTIFICATION_SOUND;
   }
 }
 
 function buildNotificationSources(sound: NotificationSoundKey): string[] {
   const preferredSources = [
     normalizedBasePath ? `${normalizedBasePath}/${sound}.mp3` : `/${sound}.mp3`,
-    `/${sound}.mp3`
-  ]
+    `/${sound}.mp3`,
+  ];
   const legacyFallbackSources = [
-    normalizedBasePath ? `${normalizedBasePath}/notification.mp3` : '/notification.mp3',
-    '/notification.mp3'
-  ]
+    normalizedBasePath
+      ? `${normalizedBasePath}/notification.mp3`
+      : "/notification.mp3",
+    "/notification.mp3",
+  ];
 
-  return [...new Set([...preferredSources, ...legacyFallbackSources])]
+  return [...new Set([...preferredSources, ...legacyFallbackSources])];
 }
 
 function cleanupNotificationInteractionListeners() {
-  if (typeof window === 'undefined') return
-  if (!interactionListenerAttached) return
-  window.removeEventListener('pointerdown', retryPendingNotificationSound)
-  window.removeEventListener('keydown', retryPendingNotificationSound)
-  window.removeEventListener('touchstart', retryPendingNotificationSound)
-  interactionListenerAttached = false
+  if (typeof window === "undefined") return;
+  if (!interactionListenerAttached) return;
+  window.removeEventListener("pointerdown", retryPendingNotificationSound);
+  window.removeEventListener("keydown", retryPendingNotificationSound);
+  window.removeEventListener("touchstart", retryPendingNotificationSound);
+  interactionListenerAttached = false;
 }
 
 function addNotificationInteractionListeners() {
-  if (typeof window === 'undefined') return
-  if (interactionListenerAttached) return
-  window.addEventListener('pointerdown', retryPendingNotificationSound)
-  window.addEventListener('keydown', retryPendingNotificationSound)
-  window.addEventListener('touchstart', retryPendingNotificationSound)
-  interactionListenerAttached = true
+  if (typeof window === "undefined") return;
+  if (interactionListenerAttached) return;
+  window.addEventListener("pointerdown", retryPendingNotificationSound);
+  window.addEventListener("keydown", retryPendingNotificationSound);
+  window.addEventListener("touchstart", retryPendingNotificationSound);
+  interactionListenerAttached = true;
 }
 
 function ensureNotificationSound(): HTMLAudioElement {
-  const selectedSound = getSelectedNotificationSound()
-  const notificationSources = buildNotificationSources(selectedSound)
+  const selectedSound = getSelectedNotificationSound();
+  const notificationSources = buildNotificationSources(selectedSound);
 
   if (!notificationSound || activeNotificationSound !== selectedSound) {
-    notificationSourceIndex = 0
-    activeNotificationSound = selectedSound
-    notificationSound = new Audio(notificationSources[notificationSourceIndex])
-    notificationSound.volume = 0.5
-    notificationSound.preload = 'auto'
-    notificationSound.addEventListener('error', () => {
+    notificationSourceIndex = 0;
+    activeNotificationSound = selectedSound;
+    notificationSound = new Audio(notificationSources[notificationSourceIndex]);
+    notificationSound.volume = 0.5;
+    notificationSound.preload = "auto";
+    notificationSound.addEventListener("error", () => {
       if (notificationSourceIndex < notificationSources.length - 1) {
-        notificationSourceIndex += 1
-        notificationSound!.src = notificationSources[notificationSourceIndex]
-        notificationSound!.load()
+        notificationSourceIndex += 1;
+        notificationSound!.src = notificationSources[notificationSourceIndex];
+        notificationSound!.load();
       }
-    })
+    });
   }
-  return notificationSound
+  return notificationSound;
 }
 
 function retryPendingNotificationSound() {
   if (!notificationSoundPending) {
-    cleanupNotificationInteractionListeners()
-    return
+    cleanupNotificationInteractionListeners();
+    return;
   }
 
-  const audio = ensureNotificationSound()
-  audio.currentTime = 0
-  audio.play().then(() => {
-    notificationSoundPending = false
-    cleanupNotificationInteractionListeners()
-  }).catch(() => {
-    // Keep listeners active and retry on next user interaction.
-  })
+  const audio = ensureNotificationSound();
+  audio.currentTime = 0;
+  audio
+    .play()
+    .then(() => {
+      notificationSoundPending = false;
+      cleanupNotificationInteractionListeners();
+    })
+    .catch(() => {
+      // Keep listeners active and retry on next user interaction.
+    });
 }
 
 function playNotificationSound() {
-  const audio = ensureNotificationSound()
-  audio.currentTime = 0
-  audio.play().then(() => {
-    notificationSoundPending = false
-    cleanupNotificationInteractionListeners()
-  }).catch(() => {
-    // Browser may block autoplay until user interacts. Retry after interaction.
-    notificationSoundPending = true
-    addNotificationInteractionListeners()
-  })
+  const audio = ensureNotificationSound();
+  audio.currentTime = 0;
+  audio
+    .play()
+    .then(() => {
+      notificationSoundPending = false;
+      cleanupNotificationInteractionListeners();
+    })
+    .catch(() => {
+      // Browser may block autoplay until user interacts. Retry after interaction.
+      notificationSoundPending = true;
+      addNotificationInteractionListeners();
+    });
 }
 
 function openConversationFromNotification(contactId: string) {
-  const contactsStore = useContactsStore()
-  void contactsStore.markConversationAsRead(contactId)
-  router.push(`/chat/${contactId}`)
+  const contactsStore = useContactsStore();
+  void contactsStore.markConversationAsRead(contactId);
+  router.push(`/chat/${contactId}`);
 }
 
 // Show toast notification with click handler
@@ -130,77 +141,75 @@ function showNotification(title: string, body: string, contactId: string) {
     description: body,
     duration: 5000,
     action: {
-      label: 'View',
+      label: "View",
       onClick: () => {
-        openConversationFromNotification(contactId)
+        openConversationFromNotification(contactId);
       },
       actionButtonStyle: {
-        background: 'transparent',
-        border: '1px solid #e5e7eb',
-        color: '#3b82f6',
-        fontWeight: '500'
-      }
-    }
-  })
+        background: "transparent",
+        border: "1px solid #e5e7eb",
+        color: "#3b82f6",
+        fontWeight: "500",
+      },
+    },
+  });
 }
 
 // WebSocket message types
-const WS_TYPE_AUTH = 'auth'
-const WS_TYPE_NEW_MESSAGE = 'new_message'
-const WS_TYPE_MESSAGE_MEDIA_UPDATED = 'message_media_updated'
-const WS_TYPE_STATUS_UPDATE = 'status_update'
-const WS_TYPE_CONTACT_UPDATE = 'contact_update'
-const WS_TYPE_SET_CONTACT = 'set_contact'
-const WS_TYPE_PING = 'ping'
-const WS_TYPE_PONG = 'pong'
+const WS_TYPE_AUTH = "auth";
+const WS_TYPE_NEW_MESSAGE = "new_message";
+const WS_TYPE_MESSAGE_MEDIA_UPDATED = "message_media_updated";
+const WS_TYPE_STATUS_UPDATE = "status_update";
+const WS_TYPE_CONTACT_UPDATE = "contact_update";
+const WS_TYPE_SET_CONTACT = "set_contact";
+const WS_TYPE_PING = "ping";
+const WS_TYPE_PONG = "pong";
 
 // Reaction types
-const WS_TYPE_REACTION_UPDATE = 'reaction_update'
+const WS_TYPE_REACTION_UPDATE = "reaction_update";
 
 // Agent transfer types
-const WS_TYPE_AGENT_TRANSFER = 'agent_transfer'
-const WS_TYPE_AGENT_TRANSFER_RESUME = 'agent_transfer_resume'
-const WS_TYPE_AGENT_TRANSFER_ASSIGN = 'agent_transfer_assign'
-const WS_TYPE_TRANSFER_ESCALATION = 'transfer_escalation'
+const WS_TYPE_AGENT_TRANSFER = "agent_transfer";
+const WS_TYPE_AGENT_TRANSFER_RESUME = "agent_transfer_resume";
+const WS_TYPE_AGENT_TRANSFER_ASSIGN = "agent_transfer_assign";
+const WS_TYPE_TRANSFER_ESCALATION = "transfer_escalation";
 
 // Campaign types
-const WS_TYPE_CAMPAIGN_STATS_UPDATE = 'campaign_stats_update'
+const WS_TYPE_CAMPAIGN_STATS_UPDATE = "campaign_stats_update";
 
 // Permission types
-const WS_TYPE_PERMISSIONS_UPDATED = 'permissions_updated'
+const WS_TYPE_PERMISSIONS_UPDATED = "permissions_updated";
 
 // Conversation note types
-const WS_TYPE_CONVERSATION_NOTE_CREATED = 'conversation_note_created'
-const WS_TYPE_CONVERSATION_NOTE_UPDATED = 'conversation_note_updated'
-const WS_TYPE_CONVERSATION_NOTE_DELETED = 'conversation_note_deleted'
-const WS_TYPE_CHAT_COLLABORATOR_INVITE = 'chat_collaborator_invite'
-const WS_TYPE_CHAT_COLLABORATOR_UPDATE = 'chat_collaborator_update'
+const WS_TYPE_CONVERSATION_NOTE_CREATED = "conversation_note_created";
+const WS_TYPE_CONVERSATION_NOTE_UPDATED = "conversation_note_updated";
+const WS_TYPE_CONVERSATION_NOTE_DELETED = "conversation_note_deleted";
 
 interface WSMessage {
-  type: string
-  payload: any
+  type: string;
+  payload: any;
 }
 
 class WebSocketService {
-  private ws: WebSocket | null = null
-  private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
-  private reconnectDelay = 1000
-  private pingInterval: number | null = null
-  private isConnected = false
-  private hasConnectedBefore = false
-  private campaignStatsCallbacks: ((payload: any) => void)[] = []
-  private getTokenFn: (() => Promise<string | null>) | null = null
-  private eventSubscribers: Record<string, Array<(payload: any) => void>> = {}
+  private ws: WebSocket | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 1000;
+  private pingInterval: number | null = null;
+  private isConnected = false;
+  private hasConnectedBefore = false;
+  private campaignStatsCallbacks: ((payload: any) => void)[] = [];
+  private getTokenFn: (() => Promise<string | null>) | null = null;
+  private eventSubscribers: Record<string, Array<(payload: any) => void>> = {};
 
   private async shouldNotifyIncomingMessageForUser(options: {
-    contactId: string
-    currentUserId: string
-    userRole?: string
-    isSuperAdmin?: boolean
-    payloadAssignedUserId?: string
-    payloadStatus?: string
-    localAssignedUserId?: string
+    contactId: string;
+    currentUserId: string;
+    userRole?: string;
+    isSuperAdmin?: boolean;
+    payloadAssignedUserId?: string;
+    payloadStatus?: string;
+    localAssignedUserId?: string;
   }): Promise<boolean> {
     const {
       contactId,
@@ -209,215 +218,234 @@ class WebSocketService {
       isSuperAdmin,
       payloadAssignedUserId,
       payloadStatus,
-      localAssignedUserId
-    } = options
+      localAssignedUserId,
+    } = options;
 
-    if (!contactId || !currentUserId) return false
+    if (!contactId || !currentUserId) return false;
 
-    const normalizedRole = typeof userRole === 'string'
-      ? userRole.trim().toLowerCase()
-      : ''
-    if (isSuperAdmin === true || normalizedRole === 'admin' || normalizedRole === 'manager') {
-      return true
+    const normalizedRole =
+      typeof userRole === "string" ? userRole.trim().toLowerCase() : "";
+    if (
+      isSuperAdmin === true ||
+      normalizedRole === "admin" ||
+      normalizedRole === "manager"
+    ) {
+      return true;
     }
 
     const normalizedPayloadAssignedUserId =
-      typeof payloadAssignedUserId === 'string' && payloadAssignedUserId.trim() !== ''
+      typeof payloadAssignedUserId === "string" &&
+      payloadAssignedUserId.trim() !== ""
         ? payloadAssignedUserId.trim()
-        : undefined
+        : undefined;
     const normalizedLocalAssignedUserId =
-      typeof localAssignedUserId === 'string' && localAssignedUserId.trim() !== ''
+      typeof localAssignedUserId === "string" &&
+      localAssignedUserId.trim() !== ""
         ? localAssignedUserId.trim()
-        : undefined
-    const normalizedPayloadStatus = typeof payloadStatus === 'string'
-      ? payloadStatus.trim().toLowerCase()
-      : ''
+        : undefined;
+    const normalizedPayloadStatus =
+      typeof payloadStatus === "string"
+        ? payloadStatus.trim().toLowerCase()
+        : "";
 
     if (normalizedPayloadAssignedUserId !== undefined) {
-      if (normalizedPayloadAssignedUserId !== currentUserId) return false
-      return normalizedPayloadStatus !== 'pending'
+      if (normalizedPayloadAssignedUserId !== currentUserId) return false;
+      return normalizedPayloadStatus !== "pending";
     }
 
     if (normalizedLocalAssignedUserId !== undefined) {
-      if (normalizedLocalAssignedUserId !== currentUserId) return false
-      if (normalizedPayloadStatus !== 'pending') return true
+      if (normalizedLocalAssignedUserId !== currentUserId) return false;
+      if (normalizedPayloadStatus !== "pending") return true;
     }
 
     try {
-      const response = await contactsService.get(contactId)
-      const contact = response.data?.data || response.data
+      const response = await contactsService.get(contactId);
+      const contact = response.data?.data || response.data;
       const latestAssignedUserId =
-        typeof contact?.assigned_user_id === 'string' && contact.assigned_user_id.trim() !== ''
+        typeof contact?.assigned_user_id === "string" &&
+        contact.assigned_user_id.trim() !== ""
           ? contact.assigned_user_id.trim()
-          : undefined
-      const latestStatus = typeof contact?.status === 'string'
-        ? contact.status.trim().toLowerCase()
-        : ''
+          : undefined;
+      const latestStatus =
+        typeof contact?.status === "string"
+          ? contact.status.trim().toLowerCase()
+          : "";
 
-      return latestAssignedUserId === currentUserId && latestStatus !== 'pending'
+      return (
+        latestAssignedUserId === currentUserId && latestStatus !== "pending"
+      );
     } catch {
       // Fall back to local assignment snapshot if API check fails.
-      return normalizedLocalAssignedUserId === currentUserId && normalizedPayloadStatus !== 'pending'
+      return (
+        normalizedLocalAssignedUserId === currentUserId &&
+        normalizedPayloadStatus !== "pending"
+      );
     }
   }
 
   async connect(getToken?: () => Promise<string | null>) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      return
+      return;
     }
 
     // Store the token function for reconnects
     if (getToken) {
-      this.getTokenFn = getToken
+      this.getTokenFn = getToken;
     }
 
     // Get a fresh short-lived WS token
-    const token = this.getTokenFn ? await this.getTokenFn() : null
+    const token = this.getTokenFn ? await this.getTokenFn() : null;
     if (!token) {
-      return
+      return;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.host
-    const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-    const url = `${protocol}//${host}${basePath}/ws`
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    const basePath = ((window as any).__BASE_PATH__ ?? "").replace(/\/$/, "");
+    const url = `${protocol}//${host}${basePath}/ws`;
 
     try {
-      this.ws = new WebSocket(url, ['whm.v1', `auth.${token}`])
+      this.ws = new WebSocket(url, ["whm.v1", `auth.${token}`]);
 
       this.ws.onopen = () => {
         // Keep message auth for backward compatibility with existing WS flow.
-        this.send({ type: WS_TYPE_AUTH, payload: { token } })
+        this.send({ type: WS_TYPE_AUTH, payload: { token } });
 
-        const isReconnection = this.hasConnectedBefore
-        this.isConnected = true
-        this.hasConnectedBefore = true
-        this.reconnectAttempts = 0
-        this.startPing()
+        const isReconnection = this.hasConnectedBefore;
+        this.isConnected = true;
+        this.hasConnectedBefore = true;
+        this.reconnectAttempts = 0;
+        this.startPing();
 
         // Force refresh data after reconnection to sync any missed updates
         if (isReconnection) {
-          this.refreshStaleData()
+          this.refreshStaleData();
         }
-      }
+      };
 
       this.ws.onmessage = (event) => {
-        this.handleMessage(event.data)
-      }
+        this.handleMessage(event.data);
+      };
 
       this.ws.onclose = () => {
-        this.isConnected = false
-        this.stopPing()
-        this.handleReconnect()
-      }
+        this.isConnected = false;
+        this.stopPing();
+        this.handleReconnect();
+      };
 
       this.ws.onerror = () => {
         // Error handled by onclose
-      }
+      };
     } catch {
-      this.handleReconnect()
+      this.handleReconnect();
     }
   }
 
   disconnect() {
-    this.stopPing()
+    this.stopPing();
     if (this.ws) {
-      this.ws.close()
-      this.ws = null
+      this.ws.close();
+      this.ws = null;
     }
-    this.isConnected = false
-    this.reconnectAttempts = this.maxReconnectAttempts // Prevent reconnect
+    this.isConnected = false;
+    this.reconnectAttempts = this.maxReconnectAttempts; // Prevent reconnect
   }
 
   private handleMessage(data: string) {
     try {
-      const message: WSMessage = JSON.parse(data)
-      const store = useContactsStore()
-      this.emit(message.type, message.payload)
+      const message: WSMessage = JSON.parse(data);
+      const store = useContactsStore();
+      this.emit(message.type, message.payload);
 
       switch (message.type) {
         case WS_TYPE_NEW_MESSAGE:
-          void this.handleNewMessage(store, message.payload)
-          break
+          void this.handleNewMessage(store, message.payload);
+          break;
         case WS_TYPE_MESSAGE_MEDIA_UPDATED:
-          this.handleMessageMediaUpdated(store, message.payload)
-          break
+          this.handleMessageMediaUpdated(store, message.payload);
+          break;
         case WS_TYPE_STATUS_UPDATE:
-          this.handleStatusUpdate(store, message.payload)
-          break
+          this.handleStatusUpdate(store, message.payload);
+          break;
         case WS_TYPE_CONTACT_UPDATE:
-          this.handleContactUpdate(store, message.payload)
-          break
+          this.handleContactUpdate(store, message.payload);
+          break;
         case WS_TYPE_AGENT_TRANSFER:
-          this.handleAgentTransfer(message.payload)
-          break
+          this.handleAgentTransfer(message.payload);
+          break;
         case WS_TYPE_AGENT_TRANSFER_RESUME:
-          this.handleAgentTransferResume(message.payload)
-          break
+          this.handleAgentTransferResume(message.payload);
+          break;
         case WS_TYPE_AGENT_TRANSFER_ASSIGN:
-          this.handleAgentTransferAssign(message.payload)
-          break
+          this.handleAgentTransferAssign(message.payload);
+          break;
         case WS_TYPE_TRANSFER_ESCALATION:
-          this.handleTransferEscalation(message.payload)
-          break
+          this.handleTransferEscalation(message.payload);
+          break;
         case WS_TYPE_REACTION_UPDATE:
-          this.handleReactionUpdate(store, message.payload)
-          break
+          this.handleReactionUpdate(store, message.payload);
+          break;
         case WS_TYPE_PONG:
           // Pong received, connection is alive
-          break
+          break;
         case WS_TYPE_CAMPAIGN_STATS_UPDATE:
-          this.handleCampaignStatsUpdate(message.payload)
-          break
+          this.handleCampaignStatsUpdate(message.payload);
+          break;
         case WS_TYPE_PERMISSIONS_UPDATED:
-          this.handlePermissionsUpdated()
-          break
+          this.handlePermissionsUpdated();
+          break;
         case WS_TYPE_CONVERSATION_NOTE_CREATED:
-          useNotesStore().addNote(message.payload)
-          break
+          useNotesStore().addNote(message.payload);
+          break;
         case WS_TYPE_CONVERSATION_NOTE_UPDATED:
-          useNotesStore().onNoteUpdated(message.payload)
-          break
+          useNotesStore().onNoteUpdated(message.payload);
+          break;
         case WS_TYPE_CONVERSATION_NOTE_DELETED:
-          useNotesStore().onNoteDeleted(message.payload.id)
-          break
+          useNotesStore().onNoteDeleted(message.payload.id);
+          break;
         default:
           // Unknown message type, ignore
-          break
+          break;
       }
     } catch {
       // Failed to parse message, ignore
     }
   }
 
-  private async handleNewMessage(store: ReturnType<typeof useContactsStore>, payload: any) {
+  private async handleNewMessage(
+    store: ReturnType<typeof useContactsStore>,
+    payload: any,
+  ) {
     // Check if this message is for the current contact
-    const currentContact = store.currentContact
-    const currentConversationId = typeof currentContact?.conversation_id === 'string'
-      ? currentContact.conversation_id
-      : ''
-    const currentInstanceId = typeof currentContact?.instance_id === 'string'
-      ? currentContact.instance_id
-      : ''
-    const payloadInstanceId = typeof payload.instance_id === 'string'
-      ? payload.instance_id
-      : ''
+    const currentContact = store.currentContact;
+    const currentConversationId =
+      typeof currentContact?.conversation_id === "string"
+        ? currentContact.conversation_id
+        : "";
+    const currentInstanceId =
+      typeof currentContact?.instance_id === "string"
+        ? currentContact.instance_id
+        : "";
+    const payloadInstanceId =
+      typeof payload.instance_id === "string" ? payload.instance_id : "";
 
-    const isViewingGroupConversation = !!currentContact && (
+    const isViewingGroupConversation =
+      !!currentContact &&
       currentContact.is_group_chat === true &&
-      currentConversationId !== '' &&
+      currentConversationId !== "" &&
       payload.conversation_id === currentConversationId &&
-      (currentInstanceId === '' || payloadInstanceId === '' || payloadInstanceId === currentInstanceId)
-    )
+      (currentInstanceId === "" ||
+        payloadInstanceId === "" ||
+        payloadInstanceId === currentInstanceId);
 
-    const isViewingThisContact = !!currentContact && (
-      payload.contact_id === currentContact.id ||
-      isViewingGroupConversation
-    )
-    const contactId = typeof payload.contact_id === 'string' ? payload.contact_id : ''
+    const isViewingThisContact =
+      !!currentContact &&
+      (payload.contact_id === currentContact.id || isViewingGroupConversation);
+    const contactId =
+      typeof payload.contact_id === "string" ? payload.contact_id : "";
     const knownContact = contactId
-      ? store.contacts.find(contact => contact.id === contactId)
-      : undefined
+      ? store.contacts.find((contact) => contact.id === contactId)
+      : undefined;
 
     const incomingMessage = {
       id: payload.id,
@@ -443,47 +471,54 @@ class WebSocketService {
       metadata: payload.metadata,
       reactions: payload.reactions,
       created_at: payload.created_at,
-      updated_at: payload.updated_at
-    }
+      updated_at: payload.updated_at,
+    };
 
     const isNewMessage = store.addMessage(incomingMessage, {
-      appendToActiveThread: isViewingThisContact
-    })
+      appendToActiveThread: isViewingThisContact,
+    });
 
     if (isNewMessage) {
-      maybeAutoDownloadIncomingMedia(payload)
+      maybeAutoDownloadIncomingMedia(payload);
     }
 
-    const hasContactStatus = typeof payload.contact_status === 'string'
-    const hasAssignedUserField = typeof payload.assigned_user_id === 'string'
-    const normalizedAssignedUserId = hasAssignedUserField && payload.assigned_user_id.trim() !== ''
-      ? payload.assigned_user_id
-      : undefined
-    const knownAssignedUserId = typeof knownContact?.assigned_user_id === 'string' && knownContact.assigned_user_id.trim() !== ''
-      ? knownContact.assigned_user_id
-      : undefined
+    const hasContactStatus = typeof payload.contact_status === "string";
+    const hasAssignedUserField = typeof payload.assigned_user_id === "string";
+    const normalizedAssignedUserId =
+      hasAssignedUserField && payload.assigned_user_id.trim() !== ""
+        ? payload.assigned_user_id
+        : undefined;
+    const knownAssignedUserId =
+      typeof knownContact?.assigned_user_id === "string" &&
+      knownContact.assigned_user_id.trim() !== ""
+        ? knownContact.assigned_user_id
+        : undefined;
     const normalizedContactStatus = hasContactStatus
       ? payload.contact_status.trim().toLowerCase()
-      : undefined
-    if (typeof payload.contact_id === 'string' && (hasContactStatus || hasAssignedUserField)) {
+      : undefined;
+    if (
+      typeof payload.contact_id === "string" &&
+      (hasContactStatus || hasAssignedUserField)
+    ) {
       store.patchContact({
         id: payload.contact_id,
         status: hasContactStatus ? payload.contact_status : undefined,
         assigned_user_id: normalizedAssignedUserId,
-        assigned_user_name: typeof payload.assigned_user_name === 'string'
-          ? payload.assigned_user_name
-          : undefined
-      })
+        assigned_user_name:
+          typeof payload.assigned_user_name === "string"
+            ? payload.assigned_user_name
+            : undefined,
+      });
     }
 
     // Notifications are for newly-added incoming messages only.
-    if (isNewMessage && payload.direction === 'incoming') {
-      const authStore = useAuthStore()
-      const currentUserId = authStore.user?.id
-      const settings = authStore.userSettings
+    if (isNewMessage && payload.direction === "incoming") {
+      const authStore = useAuthStore();
+      const currentUserId = authStore.user?.id;
+      const settings = authStore.userSettings;
 
       // Check if new message alerts are enabled (default to true if not set)
-      const alertsEnabled = settings.new_message_alerts !== false
+      const alertsEnabled = settings.new_message_alerts !== false;
 
       const shouldNotifyCurrentUser = currentUserId
         ? await this.shouldNotifyIncomingMessageForUser({
@@ -493,25 +528,27 @@ class WebSocketService {
             isSuperAdmin: authStore.user?.is_super_admin,
             payloadAssignedUserId: normalizedAssignedUserId,
             payloadStatus: normalizedContactStatus,
-            localAssignedUserId: knownAssignedUserId
+            localAssignedUserId: knownAssignedUserId,
           })
-        : false
+        : false;
 
       if (alertsEnabled && shouldNotifyCurrentUser) {
-        const senderName = payload.profile_name || 'Unknown'
-        const messagePreview = typeof payload.content === 'string'
-          ? payload.content
-          : (payload.content?.body || 'New message')
-        const preview = messagePreview.length > 50
-          ? messagePreview.substring(0, 50) + '...'
-          : messagePreview
-        const contactId = payload.contact_id
+        const senderName = payload.profile_name || "Unknown";
+        const messagePreview =
+          typeof payload.content === "string"
+            ? payload.content
+            : payload.content?.body || "New message";
+        const preview =
+          messagePreview.length > 50
+            ? messagePreview.substring(0, 50) + "..."
+            : messagePreview;
+        const contactId = payload.contact_id;
 
         // Always play sound for eligible incoming notifications.
-        playNotificationSound()
+        playNotificationSound();
         // Keep toast popups suppressed while actively viewing this chat.
         if (!isViewingThisContact) {
-          showNotification(senderName, preview, contactId)
+          showNotification(senderName, preview, contactId);
         }
       }
     }
@@ -519,91 +556,127 @@ class WebSocketService {
     // Avoid full list refetch on every message; it can evict already-loaded rows when pagination is active.
     // If this message belongs to a contact not present in the store, fetch just that contact.
     if (contactId && !knownContact) {
-      void store.fetchContact(contactId)
+      void store.fetchContact(contactId);
     }
   }
 
-  private handleStatusUpdate(store: ReturnType<typeof useContactsStore>, payload: any) {
-    store.updateMessageStatus(payload.message_id, payload.status, payload.error_message)
+  private handleStatusUpdate(
+    store: ReturnType<typeof useContactsStore>,
+    payload: any,
+  ) {
+    store.updateMessageStatus(
+      payload.message_id,
+      payload.status,
+      payload.error_message,
+    );
   }
 
-  private handleMessageMediaUpdated(store: ReturnType<typeof useContactsStore>, payload: any) {
-    const messageID = typeof payload?.id === 'string' ? payload.id : ''
-    if (!messageID) return
+  private handleMessageMediaUpdated(
+    store: ReturnType<typeof useContactsStore>,
+    payload: any,
+  ) {
+    const messageID = typeof payload?.id === "string" ? payload.id : "";
+    if (!messageID) return;
 
-    const existing = store.messages.find(message => message.id === messageID)
-    const contactID = typeof payload?.contact_id === 'string'
-      ? payload.contact_id
-      : existing?.contact_id
-    if (!contactID) return
+    const existing = store.messages.find((message) => message.id === messageID);
+    const contactID =
+      typeof payload?.contact_id === "string"
+        ? payload.contact_id
+        : existing?.contact_id;
+    if (!contactID) return;
 
     store.patchMessage({
       id: messageID,
       contact_id: contactID,
-      direction: existing?.direction ?? 'incoming',
-      message_type: existing?.message_type ?? 'document',
-      content: payload?.content ?? existing?.content ?? { body: '' },
-      status: existing?.status ?? 'received',
-      created_at: typeof payload?.created_at === 'string'
-        ? payload.created_at
-        : (existing?.created_at ?? new Date().toISOString()),
-      updated_at: typeof payload?.updated_at === 'string'
-        ? payload.updated_at
-        : new Date().toISOString(),
-      media_url: typeof payload?.media_url === 'string' ? payload.media_url : existing?.media_url,
-      media_mime_type: typeof payload?.media_mime_type === 'string' ? payload.media_mime_type : existing?.media_mime_type,
-      media_filename: typeof payload?.media_filename === 'string' ? payload.media_filename : existing?.media_filename,
+      direction: existing?.direction ?? "incoming",
+      message_type: existing?.message_type ?? "document",
+      content: payload?.content ?? existing?.content ?? { body: "" },
+      status: existing?.status ?? "received",
+      created_at:
+        typeof payload?.created_at === "string"
+          ? payload.created_at
+          : (existing?.created_at ?? new Date().toISOString()),
+      updated_at:
+        typeof payload?.updated_at === "string"
+          ? payload.updated_at
+          : new Date().toISOString(),
+      media_url:
+        typeof payload?.media_url === "string"
+          ? payload.media_url
+          : existing?.media_url,
+      media_mime_type:
+        typeof payload?.media_mime_type === "string"
+          ? payload.media_mime_type
+          : existing?.media_mime_type,
+      media_filename:
+        typeof payload?.media_filename === "string"
+          ? payload.media_filename
+          : existing?.media_filename,
       metadata: payload?.metadata ?? existing?.metadata,
-      error_message: typeof payload?.error_message === 'string' ? payload.error_message : existing?.error_message,
-    })
+      error_message:
+        typeof payload?.error_message === "string"
+          ? payload.error_message
+          : existing?.error_message,
+    });
   }
 
-  private handleContactUpdate(store: ReturnType<typeof useContactsStore>, payload: any) {
-    const id = typeof payload?.id === 'string' ? payload.id : ''
-    if (!id) return
-    store.patchContact(payload)
+  private handleContactUpdate(
+    store: ReturnType<typeof useContactsStore>,
+    payload: any,
+  ) {
+    const id = typeof payload?.id === "string" ? payload.id : "";
+    if (!id) return;
+    store.patchContact(payload);
 
-    const shouldNotifyAssignment = payload?.notify_assignment === true
-    if (!shouldNotifyAssignment) return
+    const shouldNotifyAssignment = payload?.notify_assignment === true;
+    if (!shouldNotifyAssignment) return;
 
-    const authStore = useAuthStore()
-    const currentUserId = authStore.user?.id
-    if (!currentUserId || payload.assigned_user_id !== currentUserId) return
-    const hasContactInStore = store.contacts.some(contact => contact.id === id)
+    const authStore = useAuthStore();
+    const currentUserId = authStore.user?.id;
+    if (!currentUserId || payload.assigned_user_id !== currentUserId) return;
+    const hasContactInStore = store.contacts.some(
+      (contact) => contact.id === id,
+    );
     if (!hasContactInStore) {
-      void store.fetchContact(id)
+      void store.fetchContact(id);
     }
 
-    const contactName = typeof payload.profile_name === 'string' && payload.profile_name.trim() !== ''
-      ? payload.profile_name
-      : 'A chat'
+    const contactName =
+      typeof payload.profile_name === "string" &&
+      payload.profile_name.trim() !== ""
+        ? payload.profile_name
+        : "A chat";
 
-    playNotificationSound()
-    toast.info('Chat Assigned', {
+    playNotificationSound();
+    toast.info("Chat Assigned", {
       description: `${contactName} has been assigned to you`,
       duration: 5000,
       action: {
-        label: 'View',
-        onClick: () => router.push({
-          name: 'chat-conversation',
-          params: { contactId: id },
-          query: { tab: 'assigned' }
-        })
-      }
-    })
+        label: "View",
+        onClick: () =>
+          router.push({
+            name: "chat-conversation",
+            params: { contactId: id },
+            query: { tab: "assigned" },
+          }),
+      },
+    });
   }
 
-  private handleReactionUpdate(store: ReturnType<typeof useContactsStore>, payload: any) {
+  private handleReactionUpdate(
+    store: ReturnType<typeof useContactsStore>,
+    payload: any,
+  ) {
     // Update the message reactions if we're viewing the contact
-    const currentContact = store.currentContact
+    const currentContact = store.currentContact;
     if (currentContact && payload.contact_id === currentContact.id) {
-      store.updateMessageReactions(payload.message_id, payload.reactions)
+      store.updateMessageReactions(payload.message_id, payload.reactions);
     }
   }
 
   private handleAgentTransfer(payload: any) {
-    const transfersStore = useTransfersStore()
-    const authStore = useAuthStore()
+    const transfersStore = useTransfersStore();
+    const authStore = useAuthStore();
 
     // Add transfer to store with default SLA values
     transfersStore.addTransfer({
@@ -613,245 +686,252 @@ class WebSocketService {
       phone_number: payload.phone_number,
       whatsapp_account: payload.whatsapp_account,
       status: payload.status,
-      source: payload.source || 'manual',
+      source: payload.source || "manual",
       agent_id: payload.agent_id,
       team_id: payload.team_id,
       notes: payload.notes,
       transferred_at: payload.transferred_at,
       // Default SLA values - will be updated on next fetch
       sla_breached: false,
-      escalation_level: 0
-    })
+      escalation_level: 0,
+    });
 
     // Refresh to get complete data including SLA fields
-    transfersStore.fetchTransfers({ status: 'active' })
+    transfersStore.fetchTransfers({ status: "active" });
 
     // Show toast notification for admin/manager or assigned agent
-    const userRole = authStore.user?.role?.name
-    const currentUserId = authStore.user?.id
-    const isAssignedToMe = payload.agent_id === currentUserId
+    const userRole = authStore.user?.role?.name;
+    const currentUserId = authStore.user?.id;
+    const isAssignedToMe = payload.agent_id === currentUserId;
 
-    if (userRole === 'admin' || userRole === 'manager' || isAssignedToMe) {
-      const contactName = payload.contact_name || payload.phone_number
-      toast.info('New Transfer', {
-        description: `${contactName} has been transferred to ${isAssignedToMe ? 'you' : 'agent queue'}`,
+    if (userRole === "admin" || userRole === "manager" || isAssignedToMe) {
+      const contactName = payload.contact_name || payload.phone_number;
+      toast.info("New Transfer", {
+        description: `${contactName} has been transferred to ${isAssignedToMe ? "you" : "agent queue"}`,
         duration: 5000,
         action: {
-          label: 'View',
-          onClick: () => router.push('/chatbot/transfers')
-        }
-      })
+          label: "View",
+          onClick: () => router.push("/chatbot/transfers"),
+        },
+      });
     }
   }
 
   private handleAgentTransferResume(payload: any) {
-    const transfersStore = useTransfersStore()
+    const transfersStore = useTransfersStore();
 
     const updated = transfersStore.updateTransfer(payload.id, {
       status: payload.status,
       resumed_at: payload.resumed_at,
-      resumed_by: payload.resumed_by
-    })
+      resumed_by: payload.resumed_by,
+    });
 
     // If transfer wasn't found in store, refresh to get latest data
     if (!updated) {
-      transfersStore.fetchTransfers()
+      transfersStore.fetchTransfers();
     }
   }
 
   private handleAgentTransferAssign(payload: any) {
-    const transfersStore = useTransfersStore()
-    const authStore = useAuthStore()
+    const transfersStore = useTransfersStore();
+    const authStore = useAuthStore();
 
     // Try to update existing transfer
     transfersStore.updateTransfer(payload.id, {
       agent_id: payload.agent_id,
-      team_id: payload.team_id
-    })
+      team_id: payload.team_id,
+    });
 
     // Always refresh to ensure UI is in sync (queue counts, etc.)
-    transfersStore.fetchTransfers()
+    transfersStore.fetchTransfers();
 
     // Notify if assigned to current user
-    const currentUserId = authStore.user?.id
+    const currentUserId = authStore.user?.id;
     if (payload.agent_id === currentUserId) {
-      toast.info('Transfer Assigned', {
-        description: 'A transfer has been assigned to you',
+      toast.info("Transfer Assigned", {
+        description: "A transfer has been assigned to you",
         duration: 5000,
         action: {
-          label: 'View',
-          onClick: () => router.push('/chatbot/transfers')
-        }
-      })
+          label: "View",
+          onClick: () => router.push("/chatbot/transfers"),
+        },
+      });
     }
   }
 
   private handleTransferEscalation(payload: any) {
-    const authStore = useAuthStore()
-    const currentUserId = authStore.user?.id
+    const authStore = useAuthStore();
+    const currentUserId = authStore.user?.id;
 
     // Check if current user should be notified
-    const notifyIds: string[] = payload.escalation_notify_ids || []
-    const shouldNotify = notifyIds.includes(currentUserId || '')
+    const notifyIds: string[] = payload.escalation_notify_ids || [];
+    const shouldNotify = notifyIds.includes(currentUserId || "");
 
     // Also notify admins/managers
-    const userRole = authStore.user?.role?.name
-    const isAdminOrManager = userRole === 'admin' || userRole === 'manager'
+    const userRole = authStore.user?.role?.name;
+    const isAdminOrManager = userRole === "admin" || userRole === "manager";
 
     if (shouldNotify || isAdminOrManager) {
-      const levelName = payload.level_name === 'critical' ? 'Critical' : 'Warning'
-      const contactName = payload.contact_name || payload.phone_number
+      const levelName =
+        payload.level_name === "critical" ? "Critical" : "Warning";
+      const contactName = payload.contact_name || payload.phone_number;
 
       // Play notification sound
-      playNotificationSound()
+      playNotificationSound();
 
       // Show urgent toast
       toast.warning(`SLA Escalation: ${levelName}`, {
         description: `${contactName} has been waiting since ${new Date(payload.waiting_since).toLocaleTimeString()}`,
         duration: 10000,
         action: {
-          label: 'View',
-          onClick: () => router.push('/chatbot/transfers')
-        }
-      })
+          label: "View",
+          onClick: () => router.push("/chatbot/transfers"),
+        },
+      });
     }
   }
 
   private handleCampaignStatsUpdate(payload: any) {
     // Notify all registered callbacks
-    this.campaignStatsCallbacks.forEach(callback => callback(payload))
+    this.campaignStatsCallbacks.forEach((callback) => callback(payload));
   }
 
   private async handlePermissionsUpdated() {
-    const authStore = useAuthStore()
+    const authStore = useAuthStore();
 
     // Refresh user data from server
-    const success = await authStore.refreshUserData()
+    const success = await authStore.refreshUserData();
 
     if (success) {
-      toast.info('Permissions Updated', {
-        description: 'Your permissions have been updated. The page will refresh.',
-        duration: 3000
-      })
+      toast.info("Permissions Updated", {
+        description:
+          "Your permissions have been updated. The page will refresh.",
+        duration: 3000,
+      });
 
       // Reload the page after a short delay to apply new permissions
       setTimeout(() => {
-        window.location.reload()
-      }, 1500)
+        window.location.reload();
+      }, 1500);
     }
   }
 
   onCampaignStatsUpdate(callback: (payload: any) => void) {
-    this.campaignStatsCallbacks.push(callback)
+    this.campaignStatsCallbacks.push(callback);
     // Return unsubscribe function
     return () => {
-      const index = this.campaignStatsCallbacks.indexOf(callback)
+      const index = this.campaignStatsCallbacks.indexOf(callback);
       if (index > -1) {
-        this.campaignStatsCallbacks.splice(index, 1)
+        this.campaignStatsCallbacks.splice(index, 1);
       }
-    }
+    };
   }
 
   subscribe(eventType: string, callback: (payload: any) => void) {
     if (!this.eventSubscribers[eventType]) {
-      this.eventSubscribers[eventType] = []
+      this.eventSubscribers[eventType] = [];
     }
-    this.eventSubscribers[eventType].push(callback)
+    this.eventSubscribers[eventType].push(callback);
   }
 
   unsubscribe(eventType: string, callback: (payload: any) => void) {
-    const callbacks = this.eventSubscribers[eventType]
+    const callbacks = this.eventSubscribers[eventType];
     if (!callbacks) {
-      return
+      return;
     }
-    this.eventSubscribers[eventType] = callbacks.filter(cb => cb !== callback)
+    this.eventSubscribers[eventType] = callbacks.filter(
+      (cb) => cb !== callback,
+    );
   }
 
   // Test-only helper to trigger websocket subscribers from E2E.
   emitForTest(eventType: string, payload: any) {
-    this.emit(eventType, payload)
+    this.emit(eventType, payload);
   }
 
   private emit(eventType: string, payload: any) {
-    const callbacks = this.eventSubscribers[eventType]
+    const callbacks = this.eventSubscribers[eventType];
     if (!callbacks || callbacks.length === 0) {
-      return
+      return;
     }
-    callbacks.forEach(callback => callback(payload))
+    callbacks.forEach((callback) => callback(payload));
   }
 
   private handleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      return
+      return;
     }
 
-    this.reconnectAttempts++
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
     setTimeout(() => {
-      this.connect()
-    }, delay)
+      this.connect();
+    }, delay);
   }
 
   setCurrentContact(contactId: string | null) {
     this.send({
       type: WS_TYPE_SET_CONTACT,
-      payload: { contact_id: contactId || '' }
-    })
+      payload: { contact_id: contactId || "" },
+    });
   }
 
   private send(message: WSMessage) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message))
+      this.ws.send(JSON.stringify(message));
     }
   }
 
   private startPing() {
-    this.stopPing()
+    this.stopPing();
     this.pingInterval = window.setInterval(() => {
-      this.send({ type: WS_TYPE_PING, payload: {} })
-    }, 30000) // Ping every 30 seconds
+      this.send({ type: WS_TYPE_PING, payload: {} });
+    }, 30000); // Ping every 30 seconds
   }
 
   private stopPing() {
     if (this.pingInterval) {
-      clearInterval(this.pingInterval)
-      this.pingInterval = null
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
     }
   }
 
   private refreshStaleData() {
     // Refresh contacts list
-    const contactsStore = useContactsStore()
-    contactsStore.fetchContacts()
+    const contactsStore = useContactsStore();
+    contactsStore.fetchContacts();
 
     // Refresh transfers
-    const transfersStore = useTransfersStore()
-    transfersStore.fetchTransfers()
+    const transfersStore = useTransfersStore();
+    transfersStore.fetchTransfers();
 
     // Show subtle notification
-    toast.info('Connection restored', {
-      description: 'Data has been refreshed',
-      duration: 3000
-    })
+    toast.info("Connection restored", {
+      description: "Data has been refreshed",
+      duration: 3000,
+    });
   }
 
   getIsConnected() {
-    return this.isConnected
+    return this.isConnected;
   }
 }
 
 // Export singleton instance
-export const wsService = new WebSocketService()
+export const wsService = new WebSocketService();
 
 declare global {
   interface Window {
-    __WHM_WS_TEST_EMIT__?: (eventType: string, payload: any) => void
+    __WHM_WS_TEST_EMIT__?: (eventType: string, payload: any) => void;
   }
 }
 
-if (typeof window !== 'undefined' && (import.meta.env.DEV || import.meta.env.MODE === 'test')) {
+if (
+  typeof window !== "undefined" &&
+  (import.meta.env.DEV || import.meta.env.MODE === "test")
+) {
   window.__WHM_WS_TEST_EMIT__ = (eventType: string, payload: any) => {
-    wsService.emitForTest(eventType, payload)
-  }
+    wsService.emitForTest(eventType, payload);
+  };
 }

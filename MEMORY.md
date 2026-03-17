@@ -1,5 +1,22 @@
 # MEMORY.md
 
+## 2026-03-17 20:27
+
+### Work Summary
+- Hardened the collaborator invite API to reject inactive users and reject duplicate invites for already invited or accepted collaborators.
+- Added targeted backend regression tests for collaborator invite eligibility, instance restriction enforcement, declined re-invite, and self-removal flows.
+- Added assignment permission regression tests plus a shared frontend instance-access utility with unit coverage.
+- Added ACP M4 milestone tracking for chat collaboration and assignment permissions and marked current task state accurately.
+
+### Architectural Decisions
+- Preserved the current policy that invited collaborators may still see chats immediately; only invite eligibility and state-corruption gaps were fixed.
+- Replaced duplicated frontend instance-filter helpers with a shared utility so chat, collaborator, and transfer assignment flows use the same rule implementation.
+- Kept assignment permission implementation tracking separate from regression coverage so existing production behavior could be marked complete without hiding remaining tests.
+
+### Current Project State
+- Handler package compiles: `go test ./internal/handlers -run '^$'`.
+- New collaborator handler tests are present but DB-backed execution was skipped locally because `TEST_DATABASE_URL` and `TEST_REDIS_URL` are not configured.
+
 ## 2026-03-17 00:00
 
 ### Work Summary

@@ -15,16 +15,16 @@ import (
 var errCollaboratorForbidden = errors.New("contact collaborator forbidden")
 
 type contactCollaboratorRow struct {
-	ID             uuid.UUID                `gorm:"column:id"`
-	ContactID      uuid.UUID                `gorm:"column:contact_id"`
-	UserID         uuid.UUID                `gorm:"column:user_id"`
-	UserName       *string                  `gorm:"column:user_name"`
-	Role           models.CollaboratorRole  `gorm:"column:role"`
-	Status         models.CollaboratorStatus `gorm:"column:status"`
-	InvitedByUserID uuid.UUID               `gorm:"column:invited_by_user_id"`
-	InvitedByName  *string                  `gorm:"column:invited_by_name"`
-	CreatedAt      time.Time                `gorm:"column:created_at"`
-	AcceptedAt     *time.Time               `gorm:"column:accepted_at"`
+	ID              uuid.UUID                 `gorm:"column:id"`
+	ContactID       uuid.UUID                 `gorm:"column:contact_id"`
+	UserID          uuid.UUID                 `gorm:"column:user_id"`
+	UserName        *string                   `gorm:"column:user_name"`
+	Role            models.CollaboratorRole   `gorm:"column:role"`
+	Status          models.CollaboratorStatus `gorm:"column:status"`
+	InvitedByUserID uuid.UUID                 `gorm:"column:invited_by_user_id"`
+	InvitedByName   *string                   `gorm:"column:invited_by_name"`
+	CreatedAt       time.Time                 `gorm:"column:created_at"`
+	AcceptedAt      *time.Time                `gorm:"column:accepted_at"`
 }
 
 type ContactCollaboratorResponse struct {
@@ -183,6 +183,9 @@ func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
 	if err := a.DB.Where("id = ? AND organization_id = ?", inviteUserID, orgID).First(&invitee).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User not found", nil, "")
 	}
+	if !invitee.IsActive {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User is inactive", nil, "user_id")
+	}
 
 	role := models.CollaboratorRoleAssistant
 	if req.Role != "" {
@@ -217,12 +220,19 @@ func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to invite collaborator", nil, "")
 		}
 	} else {
+		switch collaborator.Status {
+		case models.CollaboratorStatusInvited:
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Collaborator already invited", nil, "")
+		case models.CollaboratorStatusAccepted:
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Collaborator already accepted", nil, "")
+		}
+
 		updates := map[string]any{
-			"role":              role,
-			"status":            models.CollaboratorStatusInvited,
+			"role":               role,
+			"status":             models.CollaboratorStatusInvited,
 			"invited_by_user_id": userID,
-			"accepted_at":       nil,
-			"declined_at":       nil,
+			"accepted_at":        nil,
+			"declined_at":        nil,
 		}
 		if err := a.DB.Model(&collaborator).Updates(updates).Error; err != nil {
 			a.Log.Error("Failed to update collaborator invite", "error", err, "contact_id", contactID, "user_id", inviteUserID)

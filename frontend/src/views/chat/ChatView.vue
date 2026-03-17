@@ -35,6 +35,7 @@ import {
 import { useTagsStore } from "@/stores/tags";
 import { TagBadge } from "@/components/ui/tag-badge";
 import { getTagColorClass } from "@/lib/constants";
+import { canUserAccessInstance } from "@/lib/instance-access";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -509,7 +510,9 @@ function resolveSidebarEntryInstanceLabel(
   return "";
 }
 
-function getSidebarEntryPrimaryInstanceLabel(entry: SidebarContactEntry): string {
+function getSidebarEntryPrimaryInstanceLabel(
+  entry: SidebarContactEntry,
+): string {
   return resolveSidebarEntryInstanceLabel(
     entry,
     getSidebarEntryPrimaryInstanceID(entry),
@@ -603,7 +606,9 @@ const activeProfilePhotoURL = computed(() =>
 );
 const mediaCaption = ref("");
 const isUploadingMedia = ref(false);
-const mediaUploadProgress = ref<{ current: number; total: number } | null>(null);
+const mediaUploadProgress = ref<{ current: number; total: number } | null>(
+  null,
+);
 const isPreparingBatchPrint = ref(false);
 const isBatchPrintSelectionMode = ref(false);
 const selectedBatchPrintMessageIds = ref<string[]>([]);
@@ -1220,54 +1225,12 @@ const canReadCustomActions = computed(() => {
   return authStore.hasPermission("custom_actions", "read");
 });
 
-function normalizeAllowedInstanceIDs(values: unknown): string[] {
-  if (!Array.isArray(values)) return [];
-  return Array.from(
-    new Set(
-      values
-        .map((value) => (typeof value === "string" ? value.trim() : ""))
-        .filter(Boolean),
-    ),
-  );
-}
-
-function getAllowedInstanceIDsForUser(user: { settings?: unknown }): string[] {
-  const settings = user?.settings;
-  if (!settings || typeof settings !== "object") return [];
-
-  const sendRestrictions = (settings as Record<string, unknown>)
-    .send_restrictions;
-  if (!sendRestrictions || typeof sendRestrictions !== "object") return [];
-
-  const raw = sendRestrictions as Record<string, unknown>;
-  const fromArray = normalizeAllowedInstanceIDs(raw.allowed_instance_ids);
-  if (fromArray.length > 0) {
-    return fromArray;
-  }
-
-  const legacy =
-    typeof raw.allowed_instance_id === "string"
-      ? raw.allowed_instance_id.trim()
-      : "";
-  return legacy ? [legacy] : [];
-}
-
-function canUserSeeContactInstance(
-  user: { settings?: unknown },
-  instanceId?: string,
-): boolean {
-  if (!instanceId) return true;
-  const allowedInstanceIDs = getAllowedInstanceIDsForUser(user);
-  if (allowedInstanceIDs.length === 0) return true;
-  return allowedInstanceIDs.includes(instanceId);
-}
-
 // Get list of users for assignment
 const assignableUsers = computed(() => {
   const instanceId = contactsStore.currentContact?.instance_id?.trim();
   return usersStore.users
     .filter((u) => u.is_active !== false)
-    .filter((u) => canUserSeeContactInstance(u, instanceId));
+    .filter((u) => canUserAccessInstance(u, instanceId));
 });
 
 function getAssignedAgentName(contact: Contact): string {
@@ -1469,7 +1432,8 @@ const filteredAssignableUsers = computed(() => {
 });
 
 function handleCollaboratorInvite(payload: any) {
-  const contactId = typeof payload?.contact_id === "string" ? payload.contact_id : "";
+  const contactId =
+    typeof payload?.contact_id === "string" ? payload.contact_id : "";
   if (!contactId) return;
   toast.info(t("chat.collaboratorInviteToastTitle"), {
     description: t("chat.collaboratorInviteToastDesc"),
@@ -1479,7 +1443,8 @@ function handleCollaboratorInvite(payload: any) {
 }
 
 function handleCollaboratorUpdate(payload: any) {
-  const contactId = typeof payload?.contact_id === "string" ? payload.contact_id : "";
+  const contactId =
+    typeof payload?.contact_id === "string" ? payload.contact_id : "";
   if (!contactId) return;
   if (contactsStore.currentContact?.id === contactId) {
     contactsStore.fetchContact(contactId).catch(() => {});
@@ -3642,7 +3607,10 @@ function getMediaSizeErrorKey(category: WhatsAppMediaCategory) {
   return "chat.fileTooLargeDocumentDesc";
 }
 
-function buildPendingMediaUpload(file: File, index: number): PendingMediaUpload {
+function buildPendingMediaUpload(
+  file: File,
+  index: number,
+): PendingMediaUpload {
   const category = resolveWhatsAppMediaCategoryForFile(file);
   const shouldPreview = category === "image" || category === "video";
 
@@ -3760,7 +3728,10 @@ function closeMediaDialog() {
 
 async function sendMediaMessage() {
   if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) return;
-  if (selectedMediaUploads.value.length === 0 || !contactsStore.currentContact) {
+  if (
+    selectedMediaUploads.value.length === 0 ||
+    !contactsStore.currentContact
+  ) {
     return;
   }
 
@@ -5181,7 +5152,8 @@ async function sendMediaMessage() {
                     <span
                       v-else-if="getMessageContent(message)"
                       class="whitespace-pre-wrap break-words"
-                      ><LinkifiedMessageText :text="getMessageContent(message)" />
+                      ><LinkifiedMessageText
+                        :text="getMessageContent(message)" />
                       <span class="chat-bubble-time"
                         ><span>{{ formatMessageTime(message.created_at) }}</span
                         ><component
@@ -6033,7 +6005,9 @@ async function sendMediaMessage() {
                 <Paperclip class="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p class="font-medium text-sm">{{ activeMediaUpload.file.name }}</p>
+                <p class="font-medium text-sm">
+                  {{ activeMediaUpload.file.name }}
+                </p>
                 <p class="text-xs text-muted-foreground">
                   {{ $t("chat.audioFile") }}
                 </p>

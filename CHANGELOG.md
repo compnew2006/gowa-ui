@@ -6,6 +6,10 @@
 
 - Fixed chat assignment permissions to honor `chat.assign:write` (and `contacts:write`) and enforce assignee instance access on contact and transfer assignment.
 - Filtered assignment lists to only show agents allowed to access the contact or transfer WhatsApp account, and exposed `instance_id` in transfer responses for client-side filtering.
+- Hardened chat collaborator invites so inactive users are rejected and already invited or accepted collaborators cannot be downgraded back to `invited` via direct API calls.
+- Added targeted backend regression coverage for collaborator invite eligibility, instance restrictions, declined re-invite flows, and self-removal.
+- Added assignment permission regression coverage for contact assignment fallback/denial paths, transfer instance restrictions, and `instance_id` transfer serialization.
+- Centralized frontend instance-access filtering into a shared utility with unit coverage for chat, collaborator, and transfer assignment flows.
 
 ## 2026-03-12
 

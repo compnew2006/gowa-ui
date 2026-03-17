@@ -3,7 +3,7 @@ project:
   version: 1.0.0
   started: 2026-02-16
   status: in_progress
-  current_milestone: M3
+  current_milestone: M4
   description: |
     Modern, open-source WhatsApp Business Platform supporting both Meta Cloud API and Whatsmeow.
 
@@ -44,6 +44,16 @@ milestones:
     notes: |
       Initializing ACP context and synchronizing project knowledge. Mapped Whatsmeow specs to current ACP state.
 
+  - id: M4
+    name: Chat Collaboration & Assignment Permissions
+    status: completed
+    progress: 100
+    estimated_weeks: 1
+    tasks_completed: 3
+    tasks_total: 3
+    notes: |
+      Collaboration invite hardening, assignment permission validation, and shared instance-aware filtering coverage are now implemented. Full DB-backed execution still depends on external test environment variables.
+
 tasks:
   milestone_3:
     - id: task-1
@@ -64,21 +74,60 @@ tasks:
       notes: |
         Mapped existing Whatsmeow specs in specs/001-whatsmeow-integration/ and confirmed 100% completion in M1 tracking.
 
+  milestone_4:
+    - id: task-3
+      name: Align Collaboration Authorization With Spec
+      status: completed
+      file: agent/tasks/task-3-align-collaboration-authorization.md
+      estimated_hours: 2
+      completed_date: 2026-03-17
+      notes: |
+        Hardened collaborator invite handling to reject inactive users and preserve already invited or accepted collaborator state.
+
+    - id: task-4
+      name: Harden Assignment Permissions and Instance Filtering
+      status: completed
+      file: agent/tasks/task-4-harden-assignment-permissions.md
+      estimated_hours: 2
+      completed_date: 2026-03-17
+      notes: |
+        Verified existing contact and transfer assignment logic already matches the instance-aware assignment design; remaining gaps are test-focused.
+
+    - id: task-5
+      name: Define Regression Coverage and Docs Verification
+      status: completed
+      file: agent/tasks/task-5-collaboration-regression-coverage.md
+      estimated_hours: 1
+      completed_date: 2026-03-17
+      notes: |
+        Added backend collaborator and assignment regression tests plus shared frontend instance-access utility coverage.
+
 documentation:
   design_documents: 1
-  milestone_documents: 0
+  milestone_documents: 4
   pattern_documents: 0
-  task_documents: 2
-  last_updated: 2026-02-20
+  task_documents: 5
+  last_updated: 2026-03-17
 
 progress:
   planning: 100
-  implementation: 90
-  testing: 80
+  implementation: 95
+  testing: 90
   documentation: 100
-  overall: 85
+  overall: 95
 
 recent_work:
+  - date: 2026-03-17
+    description: |
+      Completed the M4 collaboration and assignment hardening slice with backend fixes, new regression coverage, and a shared frontend instance-access filter utility.
+    items:
+      - ✅ Reject inactive users from collaborator invites
+      - ✅ Reject duplicate invite attempts for already invited or accepted collaborators
+      - ✅ Added backend regression tests for collaborator invite/remove and assignment permission flows
+      - ✅ Added shared frontend instance-access utility and unit coverage for instance-aware filtering
+      - ✅ Added M4 milestone and task tracking for collaboration and assignment permissions
+      - ⚠️ Full DB-backed handler execution still requires TEST_DATABASE_URL and TEST_REDIS_URL
+
   - date: 2026-02-20
     description: |
       Initializing ACP context, mapping historical milestone artifacts, and synchronizing documentation.
@@ -93,9 +142,9 @@ recent_work:
       - 📋 Identifying next milestone to implement
 
 next_steps:
-  - Create new milestone for the next upcoming features
-  - Identify tasks for the next features and prioritize them
-  - Define objective and goals for the next phase of development
+  - Run the new DB-backed handler tests in an environment with TEST_DATABASE_URL and TEST_REDIS_URL
+  - Add broader component-level UI coverage if future collaboration flows become more complex
+  - Keep ACP progress aligned with any follow-up collaboration permission changes
 
 notes:
   - Project has extensive existing specs in specs/ directory.
