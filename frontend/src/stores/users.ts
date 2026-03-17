@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { usersService } from '@/services/api'
+import type { UserSettings } from '@/stores/auth'
 
 export interface UserRole {
   id: string
@@ -19,6 +20,7 @@ export interface User {
   is_super_admin?: boolean
   is_member?: boolean
   organization_id: string
+  settings?: UserSettings
   created_at: string
   updated_at: string
 }

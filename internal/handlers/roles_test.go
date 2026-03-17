@@ -13,6 +13,31 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+func stringPtr(value string) *string {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func stringSlicePtr(values []string) *[]string {
+	return &values
+}
+
+func createRolesUserWithPermissions(t *testing.T, app *handlers.App, orgID uuid.UUID, permissionKeys ...string) *models.User {
+	t.Helper()
+
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, orgID, "roles-user", permissionKeys)
+	return testutil.CreateTestUser(
+		t,
+		app.DB,
+		orgID,
+		testutil.WithEmail(testutil.UniqueEmail("roles-user")),
+		testutil.WithRoleID(&role.ID),
+	)
+}
+
 func TestApp_ListRoles_Success(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
@@ -23,11 +48,10 @@ func TestApp_ListRoles_Success(t *testing.T) {
 	agentRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Agent", false, true, permissions[:3])
 
 	// Create a user to make the request
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("list-roles")), testutil.WithRoleID(&adminRole.ID))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:read")
 
 	req := testutil.NewGETRequest(t)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 
 	err := app.ListRoles(req)
 	require.NoError(t, err)
@@ -58,11 +82,10 @@ func TestApp_GetRole_Success(t *testing.T) {
 	permissions := testutil.GetOrCreateTestPermissions(t, app.DB)
 
 	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Test Role", false, false, permissions[:2])
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-role")), testutil.WithRoleID(&role.ID))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:read")
 
 	req := testutil.NewGETRequest(t)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 	req.RequestCtx.SetUserValue("id", role.ID.String())
 
 	err := app.GetRole(req)
@@ -85,11 +108,10 @@ func TestApp_GetRole_Success(t *testing.T) {
 func TestApp_GetRole_NotFound(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-role-404")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:read")
 
 	req := testutil.NewGETRequest(t)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 	req.RequestCtx.SetUserValue("id", uuid.New().String())
 
 	err := app.GetRole(req)
@@ -101,9 +123,9 @@ func TestApp_CreateRole_Success(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 	permissions := testutil.GetOrCreateTestPermissions(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-role")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
 
-	reqBody := handlers.RoleRequest{
+	reqBody := handlers.CreateRoleRequest{
 		Name:        "New Role",
 		Description: "A new custom role",
 		IsDefault:   false,
@@ -111,8 +133,7 @@ func TestApp_CreateRole_Success(t *testing.T) {
 	}
 
 	req := testutil.NewJSONRequest(t, reqBody)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 
 	err := app.CreateRole(req)
 	require.NoError(t, err)
@@ -146,17 +167,16 @@ func TestApp_CreateRole_DuplicateName(t *testing.T) {
 	_ = testutil.GetOrCreateTestPermissions(t, app.DB)
 
 	testutil.CreateTestRoleExact(t, app.DB, org.ID, "Existing Role", false, false, nil)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-dup-role")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
 
-	reqBody := handlers.RoleRequest{
+	reqBody := handlers.CreateRoleRequest{
 		Name:        "Existing Role",
 		Description: "Trying to create duplicate",
 		Permissions: []string{},
 	}
 
 	req := testutil.NewJSONRequest(t, reqBody)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 
 	err := app.CreateRole(req)
 	require.NoError(t, err)
@@ -166,17 +186,16 @@ func TestApp_CreateRole_DuplicateName(t *testing.T) {
 func TestApp_CreateRole_MissingName(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-no-name")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
 
-	reqBody := handlers.RoleRequest{
+	reqBody := handlers.CreateRoleRequest{
 		Name:        "",
 		Description: "Role without name",
 		Permissions: []string{},
 	}
 
 	req := testutil.NewJSONRequest(t, reqBody)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 
 	err := app.CreateRole(req)
 	require.NoError(t, err)
@@ -190,9 +209,9 @@ func TestApp_CreateRole_WithDefaultFlag(t *testing.T) {
 
 	// Create an existing default role
 	existingDefault := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Old Default", false, true, nil)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-default")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
 
-	reqBody := handlers.RoleRequest{
+	reqBody := handlers.CreateRoleRequest{
 		Name:        "New Default Role",
 		Description: "This will be the new default",
 		IsDefault:   true,
@@ -200,8 +219,7 @@ func TestApp_CreateRole_WithDefaultFlag(t *testing.T) {
 	}
 
 	req := testutil.NewJSONRequest(t, reqBody)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 
 	err := app.CreateRole(req)
 	require.NoError(t, err)
@@ -219,17 +237,16 @@ func TestApp_UpdateRole_Success(t *testing.T) {
 	permissions := testutil.GetOrCreateTestPermissions(t, app.DB)
 
 	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Editable Role", false, false, permissions[:1])
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-role")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
 
-	reqBody := handlers.RoleRequest{
-		Name:        "Updated Role Name",
-		Description: "Updated description",
-		Permissions: []string{"users:read", "users:write", "contacts:read"},
+	reqBody := handlers.UpdateRoleRequest{
+		Name:        stringPtr("Updated Role Name"),
+		Description: stringPtr("Updated description"),
+		Permissions: stringSlicePtr([]string{"users:read", "users:write", "contacts:read"}),
 	}
 
 	req := testutil.NewJSONRequest(t, reqBody)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 	req.RequestCtx.SetUserValue("id", role.ID.String())
 
 	err := app.UpdateRole(req)
@@ -248,24 +265,49 @@ func TestApp_UpdateRole_Success(t *testing.T) {
 	assert.Len(t, resp.Data.Permissions, 3)
 }
 
-func TestApp_UpdateRole_SystemRoleOnlyDescription(t *testing.T) {
+func TestApp_UpdateRole_SystemRoleRejectedWithoutSuperAdmin(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 	permissions := testutil.GetOrCreateTestPermissions(t, app.DB)
 
 	// Create a system role
 	systemRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "System Admin", true, false, permissions)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-sys-role")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
 
-	reqBody := handlers.RoleRequest{
-		Name:        "Changed Name",         // Should be ignored for system roles
-		Description: "Updated description",  // Only this should be updated
-		Permissions: []string{"users:read"}, // Should be ignored for system roles
+	reqBody := handlers.UpdateRoleRequest{
+		Description: stringPtr("Updated description"),
 	}
 
 	req := testutil.NewJSONRequest(t, reqBody)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	req.RequestCtx.SetUserValue("id", systemRole.ID.String())
+
+	err := app.UpdateRole(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_UpdateRole_SystemRoleSuperAdminCanEditDescriptionAndPermissions(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	permissions := testutil.GetOrCreateTestPermissions(t, app.DB)
+
+	systemRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "System Admin", true, false, permissions[:2])
+	user := testutil.CreateTestUser(
+		t,
+		app.DB,
+		org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("update-sys-role")),
+		testutil.WithSuperAdmin(),
+	)
+
+	reqBody := handlers.UpdateRoleRequest{
+		Description: stringPtr("Updated description"),
+		Permissions: stringSlicePtr([]string{"users:read"}),
+	}
+
+	req := testutil.NewJSONRequest(t, reqBody)
+	testutil.SetFullAuthContext(req, org.ID, user.ID, user.RoleID, true)
 	req.RequestCtx.SetUserValue("id", systemRole.ID.String())
 
 	err := app.UpdateRole(req)
@@ -279,25 +321,22 @@ func TestApp_UpdateRole_SystemRoleOnlyDescription(t *testing.T) {
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 
-	// Name should not change for system roles
 	assert.Equal(t, "System Admin", resp.Data.Name)
 	assert.Equal(t, "Updated description", resp.Data.Description)
-	// Permissions should remain the same
-	assert.Len(t, resp.Data.Permissions, len(permissions))
+	assert.Equal(t, []string{"users:read"}, resp.Data.Permissions)
 }
 
 func TestApp_UpdateRole_NotFound(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-404")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
 
-	reqBody := handlers.RoleRequest{
-		Name: "Updated Name",
+	reqBody := handlers.UpdateRoleRequest{
+		Name: stringPtr("Updated Name"),
 	}
 
 	req := testutil.NewJSONRequest(t, reqBody)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 	req.RequestCtx.SetUserValue("id", uuid.New().String())
 
 	err := app.UpdateRole(req)
@@ -310,12 +349,11 @@ func TestApp_DeleteRole_Success(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 
 	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Deletable Role", false, false, nil)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-role")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:delete")
 
 	req := testutil.NewGETRequest(t)
 	req.RequestCtx.Request.Header.SetMethod("DELETE")
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 	req.RequestCtx.SetUserValue("id", role.ID.String())
 
 	err := app.DeleteRole(req)
@@ -333,12 +371,11 @@ func TestApp_DeleteRole_SystemRole(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 
 	systemRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "System Role", true, false, nil)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-sys")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:delete")
 
 	req := testutil.NewGETRequest(t)
 	req.RequestCtx.Request.Header.SetMethod("DELETE")
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 	req.RequestCtx.SetUserValue("id", systemRole.ID.String())
 
 	err := app.DeleteRole(req)
@@ -357,12 +394,11 @@ func TestApp_DeleteRole_WithAssignedUsers(t *testing.T) {
 	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Role With Users", false, false, nil)
 	// Create a user with this role
 	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("assigned-user")), testutil.WithRoleID(&role.ID))
-	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-used-role")))
+	adminUser := createRolesUserWithPermissions(t, app, org.ID, "roles:delete")
 
 	req := testutil.NewGETRequest(t)
 	req.RequestCtx.Request.Header.SetMethod("DELETE")
-	req.RequestCtx.SetUserValue("user_id", adminUser.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, adminUser.ID)
 	req.RequestCtx.SetUserValue("id", role.ID.String())
 
 	err := app.DeleteRole(req)
@@ -374,11 +410,10 @@ func TestApp_ListPermissions_Success(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 	permissions := testutil.GetOrCreateTestPermissions(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("list-perms")))
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:read")
 
 	req := testutil.NewGETRequest(t)
-	req.RequestCtx.SetUserValue("user_id", user.ID)
-	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	testutil.SetAuthContext(req, org.ID, user.ID)
 
 	err := app.ListPermissions(req)
 	require.NoError(t, err)
@@ -402,4 +437,128 @@ func TestApp_ListPermissions_Success(t *testing.T) {
 		assert.NotEmpty(t, perm.Action)
 		assert.Equal(t, perm.Resource+":"+perm.Action, perm.Key)
 	}
+}
+
+func TestApp_ListRoles_ForbiddenWithoutReadPermission(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("list-no-read")))
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListRoles(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_CreateRole_ForbiddenWithoutWritePermission(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:read")
+
+	req := testutil.NewJSONRequest(t, handlers.CreateRoleRequest{
+		Name:        "Blocked Role",
+		Description: "Should not be created",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.CreateRole(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_DeleteRole_ForbiddenWithoutDeletePermission(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Protected Role", false, false, nil)
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:read", "roles:write")
+
+	req := testutil.NewGETRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("DELETE")
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	req.RequestCtx.SetUserValue("id", role.ID.String())
+
+	err := app.DeleteRole(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_ListPermissions_ForbiddenWithoutReadPermission(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("perms-no-read")))
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListPermissions(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_UpdateRole_ClearPermissionsWithExplicitEmptySlice(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	permissions := testutil.GetOrCreateTestPermissions(t, app.DB)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Clearable Role", false, false, permissions[:2])
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
+
+	req := testutil.NewJSONRequest(t, handlers.UpdateRoleRequest{
+		Permissions: stringSlicePtr([]string{}),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	req.RequestCtx.SetUserValue("id", role.ID.String())
+
+	err := app.UpdateRole(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var updated models.CustomRole
+	require.NoError(t, app.DB.First(&updated, "id = ?", role.ID).Error)
+	require.NoError(t, app.DB.Model(&updated).Association("Permissions").Find(&updated.Permissions))
+	assert.Empty(t, updated.Permissions)
+}
+
+func TestApp_UpdateRole_ExplicitFalseUnsetsDefault(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Default Role", false, true, nil)
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
+
+	req := testutil.NewJSONRequest(t, handlers.UpdateRoleRequest{
+		IsDefault: boolPtr(false),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	req.RequestCtx.SetUserValue("id", role.ID.String())
+
+	err := app.UpdateRole(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var updated models.CustomRole
+	require.NoError(t, app.DB.First(&updated, "id = ?", role.ID).Error)
+	assert.False(t, updated.IsDefault)
+}
+
+func TestApp_UpdateRole_OmittedDefaultKeepsExistingValue(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Stable Default Role", false, true, nil)
+	user := createRolesUserWithPermissions(t, app, org.ID, "roles:write")
+
+	req := testutil.NewJSONRequest(t, handlers.UpdateRoleRequest{
+		Description: stringPtr("Still default"),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	req.RequestCtx.SetUserValue("id", role.ID.String())
+
+	err := app.UpdateRole(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var updated models.CustomRole
+	require.NoError(t, app.DB.First(&updated, "id = ?", role.ID).Error)
+	assert.True(t, updated.IsDefault)
+	assert.Equal(t, "Still default", updated.Description)
 }

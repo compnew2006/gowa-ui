@@ -877,3 +877,145 @@ Updated: 2026-03-09 07:24:58 UTC
 ### Note
 
 - Frontend production build completed successfully on the VPS. Vite emitted the existing warning about `<script src=\"./theme-init.js\">` in `index.html`, but the final build and all runtime checks completed successfully.
+
+## Deployment Update
+
+Updated: 2026-03-11 12:47:45 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src` (via tar archive; missing cmd/whatomate directory补)
+- Source revision on deploy: Current working tree (uncommitted changes from test-strategy improvements)
+- Native build command on VPS: `cd /opt/whatomate-src && CGO_ENABLED=0 go build -ldflags '-s -w' -o whatomate-new ./cmd/whatomate`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260311_124745.bak`
+- Installed binary SHA256: `a7055dadac86cbe762805552c5b703e10348adbe78d1a56ab507ce83de09c2dc`
+- Binary size: 46MB (with embedded frontend)
+- Deployment notes:
+  - Initial deployment attempt failed because tar archive was missing cmd/whatomate directory
+  - Transferred cmd directory separately and rebuilt binary natively on VPS
+  - Frontend properly embedded into binary (6.5MB of assets)
+  - Previous binary (1.8MB) was missing embedded frontend and exited immediately
+
+### Services Restarted
+
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state: all three services `active`
+- Listener ports active:
+  - `127.0.0.1:18124` (holol-wenjaz)
+  - `127.0.0.1:18125` (alarkan-almthalia)
+  - `127.0.0.1:18126` (matbaat-ruya)
+- Process IDs:
+  - holol-wenjaz: PID 3038998
+  - alarkan-almthalia: PID 3038999
+  - matbaat-ruya: PID 3039000
+- Log verification: All services show "Server listening" messages
+
+### Note
+
+- Deployment completed after fixing missing cmd/whatomate directory issue
+- Frontend embedding now working correctly with proper 46MB binary size
+- All tenant services operational with embedded frontend assets
+
+## Deployment Update
+
+Updated: 2026-03-12 11:56:35 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src` (incremental tar sync of the current changed workspace files into the existing source tree)
+- Source revision on deploy: `b70cecd` (working tree had local uncommitted changes)
+- Native build command on VPS: `cd /opt/whatomate-src/frontend && npm install && cd /opt/whatomate-src && VERSION=b70cecd-dirty GOTOOLCHAIN=go1.25.7+auto make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260312_115332.bak`
+- Installed binary SHA256: `d077226cb4bf9f5a4bc19ff1acdc934b4e40fba78eec095a612d8b074b8588d5`
+- Installed binary version output: `Whatomate b70cecd-dirty (built 2026-03-12_11:51:57)`
+- Deployment purpose: deploy the current local project state and remove the nginx-side upload block that returned `413 Request Entity Too Large` for a 2.1 MB media upload on `https://ofuqalmadenah.com/api/messages/media`.
+- Edge configuration change:
+  - Added `client_max_body_size 110M;` to:
+    - `/etc/nginx/sites-available/ofuqalmadenah`
+    - `/etc/nginx/sites-available/whatomate-holol-wenjaz.conf`
+    - `/etc/nginx/sites-available/whatomate-alarkan-almthalia.conf`
+    - `/etc/nginx/sites-available/whatomate-matbaat-ruya.conf`
+  - Validated with `nginx -t` and reloaded nginx successfully.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- Listener ports active:
+  - `127.0.0.1:18123`
+  - `127.0.0.1:18124`
+  - `127.0.0.1:18125`
+  - `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+- Upload ingress verification:
+  - A 2.2 MB multipart POST to `https://ofuqalmadenah.com/api/messages/media` now returns `401 Missing authorization` JSON instead of nginx `413`, confirming the request reaches Whatomate.
+
+### Note
+
+- The old full-tree rsync path from macOS stalled; the successful deployment used an incremental tar sync of the changed workspace files into `/opt/whatomate-src`.
+- The frontend build completed successfully on the VPS. Vite emitted the existing warning about `<script src="./theme-init.js">` in `index.html`, but the build, binary install, nginx reload, and service restarts all completed successfully.
+
+## Deployment Update
+
+Updated: 2026-03-12 13:55:17 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src`
+- Source sync method: source-only tar stream from `git ls-files --cached --modified --others --exclude-standard`, mirrored on the VPS into `/opt/whatomate-src`
+- Source revision on deploy: `b70cecd` (working tree had local uncommitted changes)
+- Native build command on VPS: `cd /opt/whatomate-src && GOTOOLCHAIN=go1.25.7+auto make build-prod`
+- Version-stamp rebuild on VPS: `cd /opt/whatomate-src && VERSION=b70cecd-dirty CGO_ENABLED=0 go build -ldflags "...main.Version=b70cecd-dirty..." -o whatomate ./cmd/whatomate`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260312_135323.bak`
+- Installed binary SHA256: `ca9c67d86a0f2c188a400a2d6eedfea6f88f132333c0f30344ee6f6d851bf64f`
+- Installed binary version output: `Whatomate b70cecd-dirty (built 2026-03-12_13:53:43)`
+- Deployment purpose: publish the current local project state, including the new multi-file attachment send flow in chat and the related frontend/docs updates.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- Listener ports active:
+  - `127.0.0.1:18123`
+  - `127.0.0.1:18124`
+  - `127.0.0.1:18125`
+  - `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+
+### Note
+
+- The first tenant HTTP checks returned temporary `502` responses while the tenant services were still finishing startup and migrations; once their listeners bound to `127.0.0.1:18124-18126`, all tenant login pages returned `200`.
+- The clean source-only sync avoided re-uploading the local `uploads/` directory and other large local artifacts that are not required for production builds.

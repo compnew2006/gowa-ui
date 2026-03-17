@@ -77,6 +77,30 @@ func (a *App) appendPublicChatSystemMessage(contact *models.Contact, userID uuid
 	})
 }
 
+func (a *App) canAssignContacts(userID, orgID uuid.UUID) bool {
+	if a == nil {
+		return false
+	}
+	return a.HasPermission(userID, models.ResourceChatAssign, models.ActionWrite, orgID) ||
+		a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
+}
+
+func (a *App) canUserSeeContactInstance(orgID, userID uuid.UUID, contact *models.Contact) (bool, error) {
+	if a == nil || contact == nil || contact.InstanceID == nil || *contact.InstanceID == uuid.Nil {
+		return true, nil
+	}
+
+	allowedInstanceIDs, err := a.getRestrictedInstancesForUser(orgID, userID)
+	if err != nil {
+		return false, err
+	}
+	if len(allowedInstanceIDs) == 0 {
+		return true, nil
+	}
+
+	return containsRestrictedUUID(allowedInstanceIDs, *contact.InstanceID), nil
+}
+
 func (a *App) canEmitChatAssignmentSystemMessage(userID, orgID uuid.UUID) bool {
 	if a == nil {
 		return false
@@ -84,12 +108,7 @@ func (a *App) canEmitChatAssignmentSystemMessage(userID, orgID uuid.UUID) bool {
 	if a.canBypassPendingChatRestriction(userID, orgID) {
 		return true
 	}
-	perms, err := a.getUserPermissionsCached(userID, orgID)
-	if err != nil {
-		return false
-	}
-	roleName := strings.TrimSpace(strings.ToLower(perms.RoleName))
-	return roleName == "admin" || roleName == "manager"
+	return a.canAssignContacts(userID, orgID)
 }
 
 func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUserID uuid.UUID, assigneeUserID *uuid.UUID) {
@@ -123,15 +142,15 @@ func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUser
 }
 
 // AssignContact assigns a contact to a user (agent)
-// Only users with write permission can assign contacts
+// Only users with assignment permission can assign contacts
 func (a *App) AssignContact(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
-	// Only users with write permission can assign contacts
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) {
+	// Only users with assignment permission can assign contacts
+	if !a.canAssignContacts(userID, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to assign contacts", nil, "")
 	}
 
@@ -149,6 +168,17 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
 	if err != nil {
 		return nil
+	}
+
+	if req.UserID != nil && *req.UserID != uuid.Nil {
+		allowed, err := a.canUserSeeContactInstance(orgID, *req.UserID, contact)
+		if err != nil {
+			a.Log.Error("Failed to validate assignee instance access", "error", err, "user_id", req.UserID, "contact_id", contact.ID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate assignee access", nil, "")
+		}
+		if !allowed {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Assignee does not have access to this WhatsApp account", nil, "")
+		}
 	}
 
 	// If assigning to a user, verify they exist in the same org

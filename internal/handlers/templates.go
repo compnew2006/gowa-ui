@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/compnew2006/whatomate/internal/models"
@@ -47,11 +48,18 @@ type TemplateResponse struct {
 	UpdatedAt       string        `json:"updated_at"`
 }
 
+func (a *App) requireTemplatePermission(r *fastglue.Request, userID uuid.UUID, action string) error {
+	return a.requirePermission(r, userID, models.ResourceTemplates, action)
+}
+
 // ListTemplates returns all templates for the organization
 func (a *App) ListTemplates(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireTemplatePermission(r, userID, models.ActionRead); err != nil {
+		return nil
 	}
 
 	pg := parsePagination(r)
@@ -102,9 +110,12 @@ func (a *App) ListTemplates(r *fastglue.Request) error {
 
 // CreateTemplate creates a new message template
 func (a *App) CreateTemplate(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireTemplatePermission(r, userID, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	var req TemplateRequest
@@ -162,9 +173,12 @@ func (a *App) CreateTemplate(r *fastglue.Request) error {
 
 // GetTemplate returns a single template
 func (a *App) GetTemplate(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireTemplatePermission(r, userID, models.ActionRead); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "template")
@@ -182,9 +196,12 @@ func (a *App) GetTemplate(r *fastglue.Request) error {
 
 // UpdateTemplate updates a message template
 func (a *App) UpdateTemplate(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireTemplatePermission(r, userID, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "template")
@@ -242,9 +259,12 @@ func (a *App) UpdateTemplate(r *fastglue.Request) error {
 
 // DeleteTemplate deletes a message template
 func (a *App) DeleteTemplate(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireTemplatePermission(r, userID, models.ActionDelete); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "template")
@@ -275,9 +295,12 @@ func (a *App) DeleteTemplate(r *fastglue.Request) error {
 
 // SubmitTemplate submits a template to Meta for approval
 func (a *App) SubmitTemplate(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireTemplatePermission(r, userID, models.ActionSync); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "template")
@@ -356,9 +379,12 @@ func (a *App) submitTemplateToMeta(account *models.WhatsAppAccount, template *mo
 
 // SyncTemplates syncs templates from Meta API
 func (a *App) SyncTemplates(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireTemplatePermission(r, userID, models.ActionSync); err != nil {
+		return nil
 	}
 
 	// Get account name from query or body
@@ -525,9 +551,12 @@ func convertFromJSONBArray(arr models.JSONBArray) []interface{} {
 // UploadTemplateMedia uploads a media file for use as template header sample
 // Returns a file handle that can be used in template creation
 func (a *App) UploadTemplateMedia(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireTemplatePermission(r, userID, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	// Get account name from form or query
@@ -562,29 +591,53 @@ func (a *App) UploadTemplateMedia(r *fastglue.Request) error {
 	}
 	defer func() { _ = file.Close() }()
 
-	// Read file data
-	fileData := make([]byte, fileHeader.Size)
-	if _, err := file.Read(fileData); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read file data", nil, "")
+	if fileHeader.Size > whatsappDocumentMaxBytes {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 100MB", nil, "")
 	}
 
-	// Determine mime type from Content-Type header or filename
-	mimeType := fileHeader.Header.Get("Content-Type")
-	if mimeType == "" || mimeType == "application/octet-stream" {
-		// Try to infer from filename
-		filename := fileHeader.Filename
-		switch {
-		case strings.HasSuffix(strings.ToLower(filename), ".jpg") || strings.HasSuffix(strings.ToLower(filename), ".jpeg"):
-			mimeType = "image/jpeg"
-		case strings.HasSuffix(strings.ToLower(filename), ".png"):
-			mimeType = "image/png"
-		case strings.HasSuffix(strings.ToLower(filename), ".mp4"):
-			mimeType = "video/mp4"
-		case strings.HasSuffix(strings.ToLower(filename), ".pdf"):
-			mimeType = "application/pdf"
-		default:
-			mimeType = "application/octet-stream"
-		}
+	fileData, err := io.ReadAll(io.LimitReader(file, whatsappDocumentMaxBytes+1))
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read file data", nil, "")
+	}
+	if len(fileData) == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File is empty", nil, "")
+	}
+	if int64(len(fileData)) > whatsappDocumentMaxBytes {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 100MB", nil, "")
+	}
+
+	mimeType := normalizeWhatsAppMediaMIME(resolveWhatsAppMediaMIME(
+		fileHeader.Header.Get("Content-Type"),
+		fileHeader.Filename,
+		fileData,
+	))
+	allowedMIME := map[string]struct{}{
+		"application/pdf": {},
+		"application/vnd.openxmlformats-officedocument.presentationml.presentation": {},
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         {},
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   {},
+		"audio/aac":  {},
+		"audio/mpeg": {},
+		"audio/mp4":  {},
+		"audio/ogg":  {},
+		"image/jpeg": {},
+		"image/png":  {},
+		"image/webp": {},
+		"video/3gpp": {},
+		"video/mp4":  {},
+	}
+	if _, ok := allowedMIME[mimeType]; !ok {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Unsupported file type: "+mimeType, nil, "")
+	}
+
+	messageType := deriveWhatsAppMediaMessageType(mimeType)
+	if int64(len(fileData)) > whatsappMediaMaxSizeBytes(messageType) {
+		return r.SendErrorEnvelope(
+			fasthttp.StatusBadRequest,
+			fmt.Sprintf("File too large. Maximum size is %dMB", whatsappMediaMaxSizeMB(messageType)),
+			nil,
+			"",
+		)
 	}
 
 	// Create whatsapp account with AppID

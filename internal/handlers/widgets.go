@@ -128,6 +128,101 @@ var widgetDataSources = map[string][]string{
 	"sessions":  {"status"},
 }
 
+var widgetDataSourceFilterFields = map[string][]string{
+	"messages":  {"status", "direction", "message_type", "whatsapp_account"},
+	"contacts":  {"whatsapp_account", "is_read"},
+	"campaigns": {"status"},
+	"transfers": {"status", "source"},
+	"sessions":  {"status"},
+}
+
+var widgetDataSourceGroupFields = map[string][]string{
+	"messages":  {"status", "direction", "message_type", "whatsapp_account"},
+	"contacts":  {"whatsapp_account", "is_read"},
+	"campaigns": {"status", "message_status"},
+	"transfers": {"status", "source"},
+	"sessions":  {"status"},
+}
+
+var widgetFilterColumns = map[string]map[string]string{
+	"messages": {
+		"status":           "status",
+		"direction":        "direction",
+		"message_type":     "message_type",
+		"whatsapp_account": "whats_app_account",
+	},
+	"contacts": {
+		"whatsapp_account": "whats_app_account",
+		"is_read":          "is_read",
+	},
+	"campaigns": {
+		"status": "status",
+	},
+	"transfers": {
+		"status": "status",
+		"source": "source",
+	},
+	"sessions": {
+		"status": "status",
+	},
+}
+
+var widgetTableFilterColumns = map[string]map[string]string{
+	"messages": {
+		"status":           "m.status",
+		"direction":        "m.direction",
+		"message_type":     "m.message_type",
+		"whatsapp_account": "m.whats_app_account",
+	},
+	"contacts": {
+		"whatsapp_account": "whats_app_account",
+		"is_read":          "is_read",
+	},
+	"campaigns": {
+		"status": "status",
+	},
+	"transfers": {
+		"status": "t.status",
+		"source": "t.source",
+	},
+	"sessions": {
+		"status": "s.status",
+	},
+}
+
+var widgetGroupByColumns = map[string]map[string]string{
+	"messages": {
+		"status":           "status",
+		"direction":        "direction",
+		"message_type":     "message_type",
+		"whatsapp_account": "whats_app_account",
+	},
+	"contacts": {
+		"whatsapp_account": "whats_app_account",
+		"is_read":          "is_read",
+	},
+	"campaigns": {
+		"status": "status",
+	},
+	"transfers": {
+		"status": "status",
+		"source": "source",
+	},
+	"sessions": {
+		"status": "status",
+	},
+}
+
+var widgetFilterOperators = map[string]struct{}{
+	"equals":     {},
+	"not_equals": {},
+	"contains":   {},
+	"gt":         {},
+	"lt":         {},
+	"gte":        {},
+	"lte":        {},
+}
+
 // Allowed aggregate fields by data source and metric.
 // Keep this strict to prevent SQL expression injection.
 var widgetAggregateFields = map[string]map[string][]string{
@@ -224,6 +319,11 @@ func (a *App) CreateWidget(r *fastglue.Request) error {
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
 	}
+	req.DataSource = strings.TrimSpace(req.DataSource)
+	req.Metric = strings.TrimSpace(req.Metric)
+	req.Field = strings.TrimSpace(req.Field)
+	req.GroupByField = strings.TrimSpace(req.GroupByField)
+	req.Filters = normalizeWidgetFilters(req.Filters)
 
 	// Validate required fields
 	if req.Name == "" {
@@ -261,9 +361,11 @@ func (a *App) CreateWidget(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid metric", nil, "")
 		}
 	}
-	req.Field = strings.TrimSpace(req.Field)
 	if err := validateWidgetMetricField(req.DataSource, req.Metric, req.Field); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "field")
+	}
+	if err := validateWidgetFilters(req.DataSource, req.Filters); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "filters")
 	}
 
 	// Get max display order
@@ -300,9 +402,8 @@ func (a *App) CreateWidget(r *fastglue.Request) error {
 
 	// Validate group_by_field if provided (only for non-static types)
 	if req.GroupByField != "" && !staticDisplayTypes[displayType] {
-		fields := widgetDataSources[req.DataSource]
-		if !contains(fields, req.GroupByField) {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid group by field for this data source", nil, "")
+		if err := validateWidgetGroupByField(req.DataSource, req.GroupByField); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "group_by_field")
 		}
 	}
 
@@ -402,6 +503,11 @@ func (a *App) UpdateWidget(r *fastglue.Request) error {
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
 	}
+	req.DataSource = strings.TrimSpace(req.DataSource)
+	req.Metric = strings.TrimSpace(req.Metric)
+	req.Field = strings.TrimSpace(req.Field)
+	req.GroupByField = strings.TrimSpace(req.GroupByField)
+	req.Filters = normalizeWidgetFilters(req.Filters)
 
 	// Update fields
 	if req.Name != "" {
@@ -423,7 +529,18 @@ func (a *App) UpdateWidget(r *fastglue.Request) error {
 		widget.Metric = req.Metric
 	}
 	if req.Field != "" {
-		widget.Field = strings.TrimSpace(req.Field)
+		widget.Field = req.Field
+	}
+	resolvedDataSource := widget.DataSource
+	if req.DataSource != "" {
+		resolvedDataSource = req.DataSource
+	}
+	resolvedFilters := widgetFiltersToInputs(widget.Filters)
+	if req.Filters != nil {
+		resolvedFilters = req.Filters
+	}
+	if err := validateWidgetFilters(resolvedDataSource, resolvedFilters); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "filters")
 	}
 	metricOrFieldChanged := req.DataSource != "" || req.Metric != "" || req.Field != ""
 	if metricOrFieldChanged {
@@ -454,16 +571,8 @@ func (a *App) UpdateWidget(r *fastglue.Request) error {
 	if req.ChartType != "" {
 		widget.ChartType = req.ChartType
 	}
-	// Always update group_by_field (empty string clears it)
-	if req.GroupByField != "" {
-		ds := widget.DataSource
-		if req.DataSource != "" {
-			ds = req.DataSource
-		}
-		fields := widgetDataSources[ds]
-		if !contains(fields, req.GroupByField) {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid group by field for this data source", nil, "")
-		}
+	if err := validateWidgetGroupByField(resolvedDataSource, req.GroupByField); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "group_by_field")
 	}
 	widget.GroupByField = req.GroupByField
 	if req.ShowChange != nil {
@@ -544,6 +653,9 @@ func (a *App) SaveWidgetLayout(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionWrite, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to edit widgets", nil, "")
+	}
 
 	var req struct {
 		Layout []struct {
@@ -591,12 +703,22 @@ func (a *App) SaveWidgetLayout(r *fastglue.Request) error {
 
 // GetWidgetDataSources returns available data sources and their filterable fields
 func (a *App) GetWidgetDataSources(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
+	}
+
 	sources := make([]map[string]interface{}, 0)
 	for source, fields := range widgetDataSources {
 		sources = append(sources, map[string]interface{}{
-			"name":   source,
-			"label":  formatLabel(source),
-			"fields": fields,
+			"name":          source,
+			"label":         formatLabel(source),
+			"fields":        fields,
+			"filter_fields": widgetDataSourceFilterFields[source],
+			"group_fields":  widgetDataSourceGroupFields[source],
 		})
 	}
 
@@ -619,18 +741,6 @@ func (a *App) GetWidgetDataSources(r *fastglue.Request) error {
 // Helper functions
 
 func widgetToResponse(w models.Widget, currentUserID uuid.UUID) WidgetResponse {
-	// Parse filters from JSONBArray
-	filters := make([]FilterInput, 0)
-	for _, f := range w.Filters {
-		if filterMap, ok := f.(map[string]interface{}); ok {
-			filters = append(filters, FilterInput{
-				Field:    widgetGetString(filterMap, "field"),
-				Operator: widgetGetString(filterMap, "operator"),
-				Value:    widgetGetString(filterMap, "value"),
-			})
-		}
-	}
-
 	config := map[string]interface{}(w.Config)
 	if config == nil {
 		config = map[string]interface{}{}
@@ -643,7 +753,7 @@ func widgetToResponse(w models.Widget, currentUserID uuid.UUID) WidgetResponse {
 		DataSource:   w.DataSource,
 		Metric:       w.Metric,
 		Field:        w.Field,
-		Filters:      filters,
+		Filters:      widgetFiltersToInputs(w.Filters),
 		DisplayType:  w.DisplayType,
 		ChartType:    w.ChartType,
 		GroupByField: w.GroupByField,
@@ -690,11 +800,78 @@ func formatLabel(s string) string {
 	return s
 }
 
+func widgetFiltersToInputs(filters models.JSONBArray) []FilterInput {
+	result := make([]FilterInput, 0, len(filters))
+	for _, f := range filters {
+		if filterMap, ok := f.(map[string]interface{}); ok {
+			result = append(result, FilterInput{
+				Field:    strings.TrimSpace(widgetGetString(filterMap, "field")),
+				Operator: strings.TrimSpace(widgetGetString(filterMap, "operator")),
+				Value:    widgetGetString(filterMap, "value"),
+			})
+		}
+	}
+	return result
+}
+
+func normalizeWidgetFilters(filters []FilterInput) []FilterInput {
+	normalized := make([]FilterInput, len(filters))
+	for i, f := range filters {
+		normalized[i] = FilterInput{
+			Field:    strings.TrimSpace(f.Field),
+			Operator: strings.TrimSpace(f.Operator),
+			Value:    f.Value,
+		}
+	}
+	return normalized
+}
+
+func validateWidgetFilters(dataSource string, filters []FilterInput) error {
+	allowedFields, ok := widgetFilterColumns[dataSource]
+	if !ok {
+		if len(filters) == 0 {
+			return nil
+		}
+		return fmt.Errorf("invalid data source")
+	}
+
+	for _, filter := range filters {
+		if !validFieldRegex.MatchString(filter.Field) {
+			return fmt.Errorf("invalid filter field for this data source")
+		}
+		if _, ok := allowedFields[filter.Field]; !ok {
+			return fmt.Errorf("invalid filter field for this data source")
+		}
+		if _, ok := widgetFilterOperators[filter.Operator]; !ok {
+			return fmt.Errorf("invalid filter operator")
+		}
+	}
+
+	return nil
+}
+
+func validateWidgetGroupByField(dataSource, field string) error {
+	field = strings.TrimSpace(field)
+	if field == "" {
+		return nil
+	}
+	if !validFieldRegex.MatchString(field) {
+		return fmt.Errorf("invalid group by field for this data source")
+	}
+	if !contains(widgetDataSourceGroupFields[dataSource], field) {
+		return fmt.Errorf("invalid group by field for this data source")
+	}
+	return nil
+}
+
 // GetWidgetData executes the widget query and returns the data
 func (a *App) GetWidgetData(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
 	}
 
 	id, err := parsePathUUID(r, "id", "widget")
@@ -731,6 +908,9 @@ func (a *App) GetAllWidgetsData(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
 	}
 
 	// Parse date range from query params
@@ -796,16 +976,16 @@ func (a *App) executeWidgetQuery(orgID uuid.UUID, widget models.Widget, fromStr,
 		return response, nil
 	}
 
-	// Parse filters
-	filters := make([]FilterInput, 0)
-	for _, f := range widget.Filters {
-		if filterMap, ok := f.(map[string]interface{}); ok {
-			filters = append(filters, FilterInput{
-				Field:    widgetGetString(filterMap, "field"),
-				Operator: widgetGetString(filterMap, "operator"),
-				Value:    widgetGetString(filterMap, "value"),
-			})
-		}
+	if err := validateWidgetMetricField(widget.DataSource, widget.Metric, widget.Field); err != nil {
+		return response, err
+	}
+
+	filters := widgetFiltersToInputs(widget.Filters)
+	if err := validateWidgetFilters(widget.DataSource, filters); err != nil {
+		return response, err
+	}
+	if err := validateWidgetGroupByField(widget.DataSource, widget.GroupByField); err != nil {
+		return response, err
 	}
 
 	// Handle table display type
@@ -872,9 +1052,9 @@ func (a *App) executeWidgetQuery(orgID uuid.UUID, widget models.Widget, fromStr,
 func (a *App) queryMessages(orgID uuid.UUID, metric, field string, filters []FilterInput, start, end time.Time) float64 {
 	query := a.DB.Model(&models.Message{}).Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, start, end)
 
-	// Apply filters
-	for _, f := range filters {
-		query = applyFilter(query, f)
+	query, err := applyFilters(query, "messages", filters)
+	if err != nil {
+		return 0
 	}
 
 	var result float64
@@ -924,8 +1104,9 @@ func (a *App) queryContacts(orgID uuid.UUID, _ string, filters []FilterInput, st
 	// Filter by last_message_at to get "active" contacts with recent activity
 	query := a.DB.Model(&models.Contact{}).Where("organization_id = ? AND last_message_at >= ? AND last_message_at <= ?", orgID, start, end)
 
-	for _, f := range filters {
-		query = applyFilter(query, f)
+	query, err := applyFilters(query, "contacts", filters)
+	if err != nil {
+		return 0
 	}
 
 	var count int64
@@ -936,8 +1117,9 @@ func (a *App) queryContacts(orgID uuid.UUID, _ string, filters []FilterInput, st
 func (a *App) queryCampaigns(orgID uuid.UUID, _ string, filters []FilterInput, start, end time.Time) float64 {
 	query := a.DB.Model(&models.BulkMessageCampaign{}).Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, start, end)
 
-	for _, f := range filters {
-		query = applyFilter(query, f)
+	query, err := applyFilters(query, "campaigns", filters)
+	if err != nil {
+		return 0
 	}
 
 	var count int64
@@ -948,8 +1130,9 @@ func (a *App) queryCampaigns(orgID uuid.UUID, _ string, filters []FilterInput, s
 func (a *App) queryTransfers(orgID uuid.UUID, metric, field string, filters []FilterInput, start, end time.Time) float64 {
 	query := a.DB.Model(&models.AgentTransfer{}).Where("organization_id = ? AND transferred_at >= ? AND transferred_at <= ?", orgID, start, end)
 
-	for _, f := range filters {
-		query = applyFilter(query, f)
+	query, err := applyFilters(query, "transfers", filters)
+	if err != nil {
+		return 0
 	}
 
 	var result float64
@@ -973,8 +1156,9 @@ func (a *App) queryTransfers(orgID uuid.UUID, metric, field string, filters []Fi
 func (a *App) querySessions(orgID uuid.UUID, _ string, filters []FilterInput, start, end time.Time) float64 {
 	query := a.DB.Model(&models.ChatbotSession{}).Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, start, end)
 
-	for _, f := range filters {
-		query = applyFilter(query, f)
+	query, err := applyFilters(query, "sessions", filters)
+	if err != nil {
+		return 0
 	}
 
 	var count int64
@@ -998,7 +1182,11 @@ func (a *App) getChartData(orgID uuid.UUID, widget models.Widget, filters []Filt
 	`, dateField, tableName, dateField, dateField)
 
 	args := []interface{}{orgID, start, end}
-	query, args = appendFilterSQL(query, args, filters)
+	query, args, err := appendFilterSQL(query, args, widgetFilterColumns[widget.DataSource], filters)
+	if err != nil {
+		a.Log.Error("Failed to append widget chart filters", "error", err, "data_source", widget.DataSource)
+		return chartData
+	}
 
 	query += fmt.Sprintf(" GROUP BY DATE_TRUNC('day', %s) ORDER BY date ASC", dateField)
 
@@ -1039,13 +1227,16 @@ func resolveDataSourceTable(dataSource string) (tableName, dateField string, ok 
 }
 
 // appendFilterSQL appends filter conditions to a raw SQL query string and args slice
-func appendFilterSQL(query string, args []interface{}, filters []FilterInput) (string, []interface{}) {
+func appendFilterSQL(query string, args []interface{}, columns map[string]string, filters []FilterInput) (string, []interface{}, error) {
 	for _, f := range filters {
-		condition, value := buildFilterSQL(f)
+		condition, value, err := buildFilterSQL(columns, f)
+		if err != nil {
+			return "", nil, err
+		}
 		query += " AND " + condition
 		args = append(args, value)
 	}
-	return query, args
+	return query, args, nil
 }
 
 // getGroupedData returns aggregated counts grouped by a field (for bar/pie charts)
@@ -1062,14 +1253,8 @@ func (a *App) getGroupedData(orgID uuid.UUID, widget models.Widget, filters []Fi
 		return dataPoints
 	}
 
-	// Validate GroupByField against whitelist to prevent SQL injection
-	allowedGroupByFields := map[string]bool{
-		"status": true, "message_status": true, "direction": true,
-		"message_type": true, "assigned_user_id": true, "channel": true,
-		"is_active": true, "priority": true, "category": true,
-		"type": true, "action_type": true, "provider": true,
-	}
-	if !allowedGroupByFields[widget.GroupByField] {
+	groupColumn := widgetGroupByColumns[widget.DataSource][widget.GroupByField]
+	if groupColumn == "" {
 		a.Log.Error("Invalid GroupByField", "field", widget.GroupByField)
 		return dataPoints
 	}
@@ -1078,12 +1263,16 @@ func (a *App) getGroupedData(orgID uuid.UUID, widget models.Widget, filters []Fi
 		SELECT %s as label, COUNT(*) as value
 		FROM %s
 		WHERE organization_id = ? AND %s >= ? AND %s <= ?
-	`, widget.GroupByField, tableName, dateField, dateField)
+	`, groupColumn, tableName, dateField, dateField)
 
 	args := []interface{}{orgID, start, end}
-	query, args = appendFilterSQL(query, args, filters)
+	query, args, err := appendFilterSQL(query, args, widgetFilterColumns[widget.DataSource], filters)
+	if err != nil {
+		a.Log.Error("Failed to append widget grouped filters", "error", err, "data_source", widget.DataSource)
+		return dataPoints
+	}
 
-	query += fmt.Sprintf(" GROUP BY %s ORDER BY value DESC", widget.GroupByField)
+	query += fmt.Sprintf(" GROUP BY %s ORDER BY value DESC", groupColumn)
 
 	type GroupedCount struct {
 		Label string
@@ -1120,7 +1309,11 @@ func (a *App) getCampaignMessageStatusData(orgID uuid.UUID, filters []FilterInpu
 	`
 
 	args := []interface{}{orgID, start, end}
-	query, args = appendFilterSQL(query, args, filters)
+	query, args, err := appendFilterSQL(query, args, widgetFilterColumns["campaigns"], filters)
+	if err != nil {
+		a.Log.Error("Failed to append campaign grouped filters", "error", err)
+		return nil
+	}
 
 	type CampaignCounts struct {
 		Sent      int64
@@ -1156,17 +1349,26 @@ func (a *App) getGroupedTimeSeriesData(orgID uuid.UUID, widget models.Widget, fi
 	if !ok {
 		return result
 	}
+	groupColumn := widgetGroupByColumns[widget.DataSource][widget.GroupByField]
+	if groupColumn == "" {
+		a.Log.Error("Invalid grouped time-series field", "field", widget.GroupByField)
+		return result
+	}
 
 	query := fmt.Sprintf(`
 		SELECT DATE_TRUNC('day', %s) as date, %s as group_value, COUNT(*) as count
 		FROM %s
 		WHERE organization_id = ? AND %s >= ? AND %s <= ?
-	`, dateField, widget.GroupByField, tableName, dateField, dateField)
+	`, dateField, groupColumn, tableName, dateField, dateField)
 
 	args := []interface{}{orgID, start, end}
-	query, args = appendFilterSQL(query, args, filters)
+	query, args, err := appendFilterSQL(query, args, widgetFilterColumns[widget.DataSource], filters)
+	if err != nil {
+		a.Log.Error("Failed to append grouped time-series filters", "error", err, "data_source", widget.DataSource)
+		return result
+	}
 
-	query += fmt.Sprintf(" GROUP BY DATE_TRUNC('day', %s), %s ORDER BY date ASC", dateField, widget.GroupByField)
+	query += fmt.Sprintf(" GROUP BY DATE_TRUNC('day', %s), %s ORDER BY date ASC", dateField, groupColumn)
 
 	type GroupedRow struct {
 		Date       time.Time
@@ -1248,7 +1450,11 @@ func (a *App) getCampaignMessageStatusTimeSeries(orgID uuid.UUID, filters []Filt
 	`
 
 	args := []interface{}{orgID, start, end}
-	query, args = appendFilterSQL(query, args, filters)
+	query, args, err := appendFilterSQL(query, args, widgetFilterColumns["campaigns"], filters)
+	if err != nil {
+		a.Log.Error("Failed to append campaign time-series filters", "error", err)
+		return result
+	}
 
 	query += " GROUP BY DATE_TRUNC('day', created_at) ORDER BY date ASC"
 
@@ -1288,38 +1494,58 @@ func (a *App) getCampaignMessageStatusTimeSeries(orgID uuid.UUID, filters []Filt
 	return result
 }
 
-func applyFilter(query *gorm.DB, filter FilterInput) *gorm.DB {
-	condition, value := buildFilterSQL(filter)
-	return query.Where(condition, value)
+func applyFilters(query *gorm.DB, dataSource string, filters []FilterInput) (*gorm.DB, error) {
+	for _, filter := range filters {
+		var err error
+		query, err = applyFilter(query, dataSource, filter)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return query, nil
+}
+
+func applyFilter(query *gorm.DB, dataSource string, filter FilterInput) (*gorm.DB, error) {
+	condition, value, err := buildFilterSQL(widgetFilterColumns[dataSource], filter)
+	if err != nil {
+		return nil, err
+	}
+	return query.Where(condition, value), nil
 }
 
 var validFieldRegex = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
-func buildFilterSQL(filter FilterInput) (string, interface{}) {
-	field := filter.Field
+func buildFilterSQL(columns map[string]string, filter FilterInput) (string, interface{}, error) {
+	field := strings.TrimSpace(filter.Field)
 	if !validFieldRegex.MatchString(field) {
-		// Fallback to a safe string to prevent injection while keeping query valid syntactically
-		field = "invalid_field_name"
+		return "", nil, fmt.Errorf("invalid filter field")
+	}
+	column, ok := columns[field]
+	if !ok {
+		return "", nil, fmt.Errorf("invalid filter field")
+	}
+	if _, ok := widgetFilterOperators[filter.Operator]; !ok {
+		return "", nil, fmt.Errorf("invalid filter operator")
 	}
 	value := filter.Value
 
 	switch filter.Operator {
 	case "equals":
-		return fmt.Sprintf("%s = ?", field), value
+		return fmt.Sprintf("%s = ?", column), value, nil
 	case "not_equals":
-		return fmt.Sprintf("%s != ?", field), value
+		return fmt.Sprintf("%s != ?", column), value, nil
 	case "contains":
-		return fmt.Sprintf("%s ILIKE ?", field), "%" + value + "%"
+		return fmt.Sprintf("%s ILIKE ?", column), "%" + value + "%", nil
 	case "gt":
-		return fmt.Sprintf("%s > ?", field), value
+		return fmt.Sprintf("%s > ?", column), value, nil
 	case "lt":
-		return fmt.Sprintf("%s < ?", field), value
+		return fmt.Sprintf("%s < ?", column), value, nil
 	case "gte":
-		return fmt.Sprintf("%s >= ?", field), value
+		return fmt.Sprintf("%s >= ?", column), value, nil
 	case "lte":
-		return fmt.Sprintf("%s <= ?", field), value
+		return fmt.Sprintf("%s <= ?", column), value, nil
 	default:
-		return fmt.Sprintf("%s = ?", field), value
+		return "", nil, fmt.Errorf("invalid filter operator")
 	}
 }
 
@@ -1372,7 +1598,11 @@ func (a *App) getTableRows(orgID uuid.UUID, widget models.Widget, filters []Filt
 
 	query := sql.base
 	args := []interface{}{orgID, periodStart, periodEnd}
-	query, args = appendFilterSQL(query, args, filters)
+	query, args, err := appendFilterSQL(query, args, widgetTableFilterColumns[widget.DataSource], filters)
+	if err != nil {
+		a.Log.Error("Failed to append widget table filters", "error", err, "data_source", widget.DataSource)
+		return nil
+	}
 	query += sql.orderBy
 
 	type row struct {

@@ -67,6 +67,7 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, 10, cfg.RateLimit.RegisterMaxAttempts)
 	assert.Equal(t, 30, cfg.RateLimit.RefreshMaxAttempts)
 	assert.Equal(t, 10, cfg.RateLimit.SSOMaxAttempts)
+	assert.Equal(t, 300, cfg.RateLimit.WebhookMaxAttempts)
 	assert.Equal(t, 60, cfg.RateLimit.WindowSeconds)
 	assert.Equal(t, 5, cfg.RateLimit.OutboundPerUserPS)
 	assert.Equal(t, 15, cfg.RateLimit.OutboundPerIPPS)

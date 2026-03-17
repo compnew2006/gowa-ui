@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/compnew2006/whatomate/internal/middleware"
+	"github.com/compnew2006/whatomate/internal/models"
 	ws "github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/fasthttp/websocket"
 	"github.com/golang-jwt/jwt/v5"
@@ -60,6 +61,7 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
 	err = up.Upgrade(r.RequestCtx, func(conn *websocket.Conn) {
 		// Create unauthenticated client — auth happens via first message
 		client := ws.NewUnauthenticatedClient(a.WSHub, conn, a.validateWSTokenFn())
+		client.SetContactAccessFn(a.canSubscribeToContactUpdates)
 
 		// Start pumps in goroutines
 		// Client self-registers with hub after successful auth message
@@ -114,6 +116,40 @@ func wsTokenFromProtocols(protocolHeader string) string {
 // and returns user ID and organization ID.
 func (a *App) validateWSTokenFn() ws.AuthenticateFn {
 	return a.validateWSToken
+}
+
+func (a *App) canSubscribeToContactUpdates(userID, orgID, contactID uuid.UUID) bool {
+	if userID == uuid.Nil || orgID == uuid.Nil || contactID == uuid.Nil {
+		return false
+	}
+
+	var contact models.Contact
+	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
+	}
+
+	restrictedInstanceIDs, err := a.getRestrictedInstancesForUser(orgID, userID)
+	if err != nil {
+		a.Log.Warn("Failed to resolve restricted instances for websocket contact subscription",
+			"error", err,
+			"org_id", orgID,
+			"user_id", userID,
+			"contact_id", contactID)
+		return false
+	}
+
+	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	if err := query.First(&contact).Error; err != nil {
+		return false
+	}
+
+	normalizeContactStatus(&contact)
+	if isChatRestrictedForMessageRead(contact) && !a.canAccessRestrictedChatWithoutClaim(contact, userID, orgID) {
+		return false
+	}
+
+	return true
 }
 
 func (a *App) validateWSToken(tokenString string) (uuid.UUID, uuid.UUID, error) {

@@ -63,6 +63,27 @@ func TestDownloadMediaFromURL_RejectsTraversal(t *testing.T) {
 	}
 }
 
+func TestDownloadMediaFromURL_RejectsSymlinkEscape(t *testing.T) {
+	adapter, storage := newAdapterWithStorage(t)
+
+	target := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(target, []byte("outside"), 0644); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	linkPath := filepath.Join(storage, "documents", "escape.txt")
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	if err := os.Symlink(target, linkPath); err != nil {
+		t.Fatalf("symlink failed: %v", err)
+	}
+
+	if _, _, err := adapter.downloadMediaFromURL(filepath.Join("documents", "escape.txt")); err == nil {
+		t.Fatal("expected symlink escape to be rejected")
+	}
+}
+
 func TestDownloadMediaFromURL_RejectsPrivateHTTPHost(t *testing.T) {
 	adapter, _ := newAdapterWithStorage(t)
 

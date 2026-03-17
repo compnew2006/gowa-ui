@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { PageHeader } from '@/components/shared'
 import { chatbotService, type Team } from '@/services/api'
 import { useTransfersStore, type AgentTransfer, getSLAStatus } from '@/stores/transfers'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, type UserSettings } from '@/stores/auth'
 import { useUsersStore } from '@/stores/users'
 import { useTeamsStore } from '@/stores/teams'
 import { toast } from 'vue-sonner'
@@ -39,13 +39,46 @@ const assignDialogOpen = ref(false)
 const transferToAssign = ref<AgentTransfer | null>(null)
 const selectedAgentId = ref<string>('')
 const selectedTeamId = ref<string>('')
-const agents = ref<{ id: string; full_name: string }[]>([])
+type AssignableAgent = { id: string; full_name: string; settings?: UserSettings }
+const agents = ref<AssignableAgent[]>([])
 const teams = ref<Team[]>([])
 const selectedTeamFilter = ref<string>('all')
 
-const userRole = computed(() => authStore.user?.role?.name)
-const isAdminOrManager = computed(() => userRole.value === 'admin' || userRole.value === 'manager')
+const isAdminOrManager = computed(() => authStore.hasPermission('transfers', 'write'))
 const currentUserId = computed(() => authStore.user?.id)
+
+function normalizeAllowedInstanceIDs(values: unknown): string[] {
+  if (!Array.isArray(values)) return []
+  return Array.from(new Set(values
+    .map((value) => typeof value === 'string' ? value.trim() : '')
+    .filter(Boolean)))
+}
+
+function getAllowedInstanceIDsFromSettings(settings: unknown): string[] {
+  if (!settings || typeof settings !== 'object') return []
+  const sendRestrictions = (settings as Record<string, unknown>).send_restrictions
+  if (!sendRestrictions || typeof sendRestrictions !== 'object') return []
+  const raw = sendRestrictions as Record<string, unknown>
+  const fromArray = normalizeAllowedInstanceIDs(raw.allowed_instance_ids)
+  if (fromArray.length > 0) {
+    return fromArray
+  }
+  const legacy = typeof raw.allowed_instance_id === 'string' ? raw.allowed_instance_id.trim() : ''
+  return legacy ? [legacy] : []
+}
+
+function canAgentHandleTransfer(agent: AssignableAgent, transfer: AgentTransfer | null): boolean {
+  const instanceId = typeof transfer?.instance_id === 'string' ? transfer.instance_id.trim() : ''
+  if (!instanceId) return true
+  const allowedInstanceIDs = getAllowedInstanceIDsFromSettings(agent.settings)
+  if (allowedInstanceIDs.length === 0) return true
+  return allowedInstanceIDs.includes(instanceId)
+}
+
+const assignableAgents = computed(() => {
+  const transfer = transferToAssign.value
+  return agents.value.filter(agent => canAgentHandleTransfer(agent, transfer))
+})
 
 const myTransfers = computed(() =>
   transfersStore.transfers.filter(t =>
@@ -122,7 +155,7 @@ async function fetchAgents() {
     await usersStore.fetchUsers()
     agents.value = usersStore.users
       .filter((u) => u.is_active !== false)
-      .map((u) => ({ id: u.id, full_name: u.full_name }))
+      .map((u) => ({ id: u.id, full_name: u.full_name, settings: u.settings }))
   } catch {
     toast.error(t('agentTransfers.failedLoadAgents'))
   }
@@ -746,7 +779,7 @@ function formatTimeRemaining(deadline: string | undefined): string {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="unassigned">{{ $t('agentTransfers.unassignedInQueue') }}</SelectItem>
-                <SelectItem v-for="agent in agents" :key="agent.id" :value="agent.id">
+                <SelectItem v-for="agent in assignableAgents" :key="agent.id" :value="agent.id">
                   {{ agent.full_name }}
                 </SelectItem>
               </SelectContent>

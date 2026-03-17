@@ -1,5 +1,18 @@
 # MEMORY.md
 
+## 2026-03-17 00:00
+
+### Work Summary
+- Fixed chat assignment authorization to honor `chat.assign:write` and enforce assignee instance access.
+- Filtered assignment lists by allowed instance IDs and surfaced transfer `instance_id` for UI filtering.
+- Added a design spec for assign-to-agent permissions and instance visibility.
+
+### Architectural Decisions
+- Reused send restriction instance allowlist for assignment visibility checks to keep access enforcement consistent across chat and transfers.
+
+### Current Project State
+- Backend handlers tests (targeted) pass: `go test ./internal/handlers -run AssignAgentTransfer -count=1`.
+
 ## 2026-03-04 01:47
 
 ### Work Summary

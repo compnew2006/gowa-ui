@@ -27,6 +27,15 @@ func createTestInstance(t *testing.T, app *handlers.App, orgID uuid.UUID, name s
 	return instance
 }
 
+func createInstanceManagerUser(t *testing.T, app *handlers.App, orgID uuid.UUID, roleName string) *models.User {
+	t.Helper()
+	return createUserWithPermissionKeys(t, app, orgID, roleName, []string{
+		"accounts:read",
+		"accounts:write",
+		"accounts:delete",
+	})
+}
+
 func enableRestrictedInstanceVisibility(
 	t *testing.T,
 	app *handlers.App,
@@ -132,7 +141,7 @@ func TestApp_CreateInstance_DuplicateNameConflict(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createInstanceManagerUser(t, app, org.ID, "instance-manager-create")
 
 	createTestInstance(t, app, org.ID, "Support Line")
 
@@ -155,7 +164,7 @@ func TestApp_UpdateInstance_DuplicateNameConflict(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createInstanceManagerUser(t, app, org.ID, "instance-manager-update")
 
 	createTestInstance(t, app, org.ID, "Sales")
 	second := createTestInstance(t, app, org.ID, "Support")
@@ -180,7 +189,7 @@ func TestApp_ListInstances_RestrictedUserOnlySeesAllowedInstance(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createInstanceManagerUser(t, app, org.ID, "instance-manager-list-one")
 
 	allowed := createTestInstance(t, app, org.ID, "Allowed")
 	_ = createTestInstance(t, app, org.ID, "Hidden")
@@ -206,7 +215,7 @@ func TestApp_ListInstances_RestrictedUserSeesMultipleAllowedInstances(t *testing
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createInstanceManagerUser(t, app, org.ID, "instance-manager-list-many")
 
 	allowedA := createTestInstance(t, app, org.ID, "Allowed A")
 	allowedB := createTestInstance(t, app, org.ID, "Allowed B")
@@ -238,7 +247,7 @@ func TestApp_GetInstance_RestrictedUserCannotAccessOtherInstance(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createInstanceManagerUser(t, app, org.ID, "instance-manager-get")
 
 	allowed := createTestInstance(t, app, org.ID, "Allowed")
 	other := createTestInstance(t, app, org.ID, "Other")

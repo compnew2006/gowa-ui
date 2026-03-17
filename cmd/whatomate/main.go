@@ -651,7 +651,14 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Webhook routes (public - for Meta)
 	g.GET("/api/webhook", app.WebhookVerify)
-	g.POST("/api/webhook", app.WebhookHandler)
+	if cfg.RateLimit.Enabled {
+		window := time.Duration(cfg.RateLimit.WindowSeconds) * time.Second
+		g.POST("/api/webhook", withRateLimit(app.WebhookHandler, middleware.RateLimitOpts{
+			Redis: rdb, Log: lo, Max: cfg.RateLimit.WebhookMaxAttempts, Window: window, KeyPrefix: "webhook", TrustProxy: cfg.RateLimit.TrustProxy,
+		}))
+	} else {
+		g.POST("/api/webhook", app.WebhookHandler)
+	}
 
 	// WebSocket route (auth via message-based flow after upgrade)
 	g.GET("/ws", app.WebSocketHandler)

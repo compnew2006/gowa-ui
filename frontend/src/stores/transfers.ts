@@ -8,6 +8,7 @@ export interface AgentTransfer {
   contact_name: string
   phone_number: string
   whatsapp_account: string
+  instance_id?: string
   status: 'active' | 'resumed' | 'expired'
   source: 'manual' | 'flow' | 'keyword'
   agent_id?: string

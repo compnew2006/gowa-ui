@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"io"
+
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/valyala/fasthttp"
@@ -129,18 +131,35 @@ func (a *App) UpdateProfilePicture(r *fastglue.Request) error {
 		}
 	}()
 
-	fileSize := fileHeader.Size
-	fileContent := make([]byte, fileSize)
-	_, err = file.Read(fileContent)
+	if fileHeader.Size > whatsappImageMaxBytes {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 5MB", nil, "")
+	}
+
+	fileContent, err := io.ReadAll(io.LimitReader(file, whatsappImageMaxBytes+1))
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read file", nil, "")
+	}
+	if len(fileContent) == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File is empty", nil, "")
+	}
+	if int64(len(fileContent)) > whatsappImageMaxBytes {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 5MB", nil, "")
+	}
+
+	mimeType := normalizeWhatsAppMediaMIME(resolveWhatsAppMediaMIME(
+		fileHeader.Header.Get("Content-Type"),
+		fileHeader.Filename,
+		fileContent,
+	))
+	if _, ok := whatsappImageMIMEs[mimeType]; !ok {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Unsupported file type", nil, "")
 	}
 
 	ctx := r.RequestCtx
 	waAccount := a.toWhatsAppAccount(account)
 
 	// Upload to Meta to get handle
-	handle, err := a.WhatsApp.UploadProfilePicture(ctx, waAccount, fileContent, fileHeader.Header.Get("Content-Type"))
+	handle, err := a.WhatsApp.UploadProfilePicture(ctx, waAccount, fileContent, mimeType)
 	if err != nil {
 		a.Log.Error("Failed to upload profile picture", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to upload profile picture", nil, "")

@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"archive/zip"
+	"bytes"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -37,6 +39,11 @@ var (
 		"audio/mp4":  {},
 		"audio/ogg":  {},
 	}
+	whatsappOOXMLMIMEs = map[string]struct{}{
+		"application/vnd.openxmlformats-officedocument.presentationml.presentation": {},
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         {},
+		"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   {},
+	}
 )
 
 func normalizeWhatsAppMediaMIME(raw string) string {
@@ -66,6 +73,42 @@ func mimeTypeFromFilenameExtension(filename string) string {
 	return normalizeWhatsAppMediaMIME(mime.TypeByExtension(ext))
 }
 
+func inferWhatsAppOOXMLMIME(fileData []byte) string {
+	reader, err := zip.NewReader(bytes.NewReader(fileData), int64(len(fileData)))
+	if err != nil {
+		return ""
+	}
+
+	var hasContentTypes, hasWord, hasSpreadsheet, hasPresentation bool
+	for _, file := range reader.File {
+		name := strings.ToLower(file.Name)
+		switch {
+		case name == "[content_types].xml":
+			hasContentTypes = true
+		case strings.HasPrefix(name, "word/"):
+			hasWord = true
+		case strings.HasPrefix(name, "xl/"):
+			hasSpreadsheet = true
+		case strings.HasPrefix(name, "ppt/"):
+			hasPresentation = true
+		}
+	}
+
+	if !hasContentTypes {
+		return ""
+	}
+	switch {
+	case hasWord:
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case hasSpreadsheet:
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case hasPresentation:
+		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	default:
+		return ""
+	}
+}
+
 func resolveWhatsAppMediaMIME(partContentType, filename string, fileData []byte) string {
 	detectedMIME := ""
 	if len(fileData) > 0 {
@@ -74,6 +117,11 @@ func resolveWhatsAppMediaMIME(partContentType, filename string, fileData []byte)
 			sniffBytes = sniffBytes[:512]
 		}
 		detectedMIME = normalizeWhatsAppMediaMIME(http.DetectContentType(sniffBytes))
+	}
+	if detectedMIME == "application/zip" {
+		if archiveMIME := inferWhatsAppOOXMLMIME(fileData); archiveMIME != "" {
+			return archiveMIME
+		}
 	}
 	if detectedMIME != "" && detectedMIME != applicationOctetStreamMIME {
 		return detectedMIME

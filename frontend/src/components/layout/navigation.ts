@@ -21,106 +21,226 @@ import {
   Tags,
   Smartphone,
   ClipboardList,
-  Archive
-} from 'lucide-vue-next'
-import type { Component } from 'vue'
+  Archive,
+} from "lucide-vue-next";
+import type { Component } from "vue";
 
 export interface NavItem {
-  name: string
-  path: string
-  icon: Component
-  permission?: string
-  adminOnly?: boolean
-  managerOrAdminOnly?: boolean
-  childPermissions?: string[]
-  children?: NavItem[]
+  name: string;
+  path: string;
+  icon: Component;
+  permission?: string;
+  adminOnly?: boolean;
+  managerOrAdminOnly?: boolean;
+  childPermissions?: string[];
+  children?: NavItem[];
 }
 
 export const navigationItems: NavItem[] = [
   {
-    name: 'nav.dashboard',
-    path: '/',
+    name: "nav.dashboard",
+    path: "/",
     icon: LayoutDashboard,
-    permission: 'analytics'
+    permission: "analytics",
   },
   {
-    name: 'nav.chat',
-    path: '/chat',
+    name: "nav.chat",
+    path: "/chat",
     icon: MessageSquare,
-    permission: 'chat'
+    permission: "chat",
   },
   {
-    name: 'nav.chatbot',
-    path: '/chatbot',
+    name: "nav.chatbot",
+    path: "/chatbot",
     icon: Bot,
-    permission: 'settings.chatbot',
-    childPermissions: ['settings.chatbot', 'chatbot.keywords', 'flows.chatbot', 'chatbot.ai'],
+    permission: "settings.chatbot",
+    childPermissions: [
+      "settings.chatbot",
+      "chatbot.keywords",
+      "flows.chatbot",
+      "chatbot.ai",
+    ],
     children: [
-      { name: 'nav.overview', path: '/chatbot', icon: Bot, permission: 'settings.chatbot' },
-      { name: 'nav.keywords', path: '/chatbot/keywords', icon: Key, permission: 'chatbot.keywords' },
-      { name: 'nav.flows', path: '/chatbot/flows', icon: Workflow, permission: 'flows.chatbot' },
-      { name: 'nav.aiContexts', path: '/chatbot/ai', icon: Sparkles, permission: 'chatbot.ai' }
-    ]
+      {
+        name: "nav.overview",
+        path: "/chatbot",
+        icon: Bot,
+        permission: "settings.chatbot",
+      },
+      {
+        name: "nav.keywords",
+        path: "/chatbot/keywords",
+        icon: Key,
+        permission: "chatbot.keywords",
+      },
+      {
+        name: "nav.flows",
+        path: "/chatbot/flows",
+        icon: Workflow,
+        permission: "flows.chatbot",
+      },
+      {
+        name: "nav.aiContexts",
+        path: "/chatbot/ai",
+        icon: Sparkles,
+        permission: "chatbot.ai",
+      },
+    ],
   },
   {
-    name: 'nav.transfers',
-    path: '/chatbot/transfers',
+    name: "nav.transfers",
+    path: "/chatbot/transfers",
     icon: UserX,
-    permission: 'transfers'
+    permission: "transfers",
   },
   {
-    name: 'nav.agentAnalytics',
-    path: '/analytics/agents',
+    name: "nav.agentAnalytics",
+    path: "/analytics/agents",
     icon: BarChart3,
-    permission: 'analytics.agents'
+    permission: "analytics.agents",
   },
   {
-    name: 'nav.metaInsights',
-    path: '/analytics/meta-insights',
+    name: "nav.metaInsights",
+    path: "/analytics/meta-insights",
     icon: LineChart,
-    permission: 'analytics'
+    permission: "analytics",
   },
   {
-    name: 'nav.templates',
-    path: '/templates',
+    name: "nav.templates",
+    path: "/templates",
     icon: FileText,
-    permission: 'templates'
+    permission: "templates",
   },
   {
-    name: 'nav.flows',
-    path: '/flows',
+    name: "nav.flows",
+    path: "/flows",
     icon: Workflow,
-    permission: 'flows.whatsapp'
+    permission: "flows.whatsapp",
   },
   {
-    name: 'nav.campaigns',
-    path: '/campaigns',
+    name: "nav.campaigns",
+    path: "/campaigns",
     icon: Megaphone,
-    permission: 'campaigns'
+    permission: "campaigns",
   },
   {
-    name: 'nav.settings',
-    path: '/settings',
+    name: "nav.settings",
+    path: "/settings",
     icon: Settings,
-    permission: 'settings.general',
-    childPermissions: ['settings.general', 'settings.chatbot', 'instances', 'accounts', 'contacts', 'chat', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso'],
+    permission: "settings.general",
+    childPermissions: [
+      "settings.general",
+      "settings.chatbot",
+      "accounts",
+      "contacts",
+      "chat",
+      "canned_responses",
+      "tags",
+      "teams",
+      "users",
+      "roles",
+      "api_keys",
+      "webhooks",
+      "custom_actions",
+      "settings.sso",
+    ],
     children: [
-      { name: 'nav.general', path: '/settings', icon: Settings, permission: 'settings.general' },
-      { name: 'nav.chatbot', path: '/settings/chatbot', icon: Bot, permission: 'settings.chatbot' },
-      { name: 'WhatsApp', path: '/settings/instances', icon: Smartphone, permission: 'instances' },
-      { name: 'nav.accounts', path: '/settings/accounts', icon: Users, permission: 'accounts' },
-      { name: 'nav.contacts', path: '/settings/contacts', icon: Contact, permission: 'contacts' },
-      { name: 'nav.closedChats', path: '/settings/closed-chats', icon: Archive, permission: 'chat' },
-      { name: 'nav.cannedResponses', path: '/settings/canned-responses', icon: MessageSquareText, permission: 'canned_responses' },
-      { name: 'nav.tags', path: '/settings/tags', icon: Tags, permission: 'tags' },
-      { name: 'nav.teams', path: '/settings/teams', icon: Users, permission: 'teams' },
-      { name: 'nav.users', path: '/settings/users', icon: Users, permission: 'users' },
-      { name: 'nav.activityLogs', path: '/settings/activity-logs', icon: ClipboardList, managerOrAdminOnly: true },
-      { name: 'nav.roles', path: '/settings/roles', icon: Shield, permission: 'roles' },
-      { name: 'nav.apiKeys', path: '/settings/api-keys', icon: Key, permission: 'api_keys' },
-      { name: 'nav.webhooks', path: '/settings/webhooks', icon: Webhook, permission: 'webhooks' },
-      { name: 'nav.customActions', path: '/settings/custom-actions', icon: Zap, permission: 'custom_actions' },
-      { name: 'nav.sso', path: '/settings/sso', icon: ShieldCheck, permission: 'settings.sso' }
-    ]
-  }
-]
+      {
+        name: "nav.general",
+        path: "/settings",
+        icon: Settings,
+        permission: "settings.general",
+      },
+      {
+        name: "nav.chatbot",
+        path: "/settings/chatbot",
+        icon: Bot,
+        permission: "settings.chatbot",
+      },
+      {
+        name: "WhatsApp",
+        path: "/settings/instances",
+        icon: Smartphone,
+        permission: "accounts",
+      },
+      {
+        name: "nav.accounts",
+        path: "/settings/accounts",
+        icon: Users,
+        permission: "accounts",
+      },
+      {
+        name: "nav.contacts",
+        path: "/settings/contacts",
+        icon: Contact,
+        permission: "contacts",
+      },
+      {
+        name: "nav.closedChats",
+        path: "/settings/closed-chats",
+        icon: Archive,
+        permission: "chat",
+      },
+      {
+        name: "nav.cannedResponses",
+        path: "/settings/canned-responses",
+        icon: MessageSquareText,
+        permission: "canned_responses",
+      },
+      {
+        name: "nav.tags",
+        path: "/settings/tags",
+        icon: Tags,
+        permission: "tags",
+      },
+      {
+        name: "nav.teams",
+        path: "/settings/teams",
+        icon: Users,
+        permission: "teams",
+      },
+      {
+        name: "nav.users",
+        path: "/settings/users",
+        icon: Users,
+        permission: "users",
+      },
+      {
+        name: "nav.activityLogs",
+        path: "/settings/activity-logs",
+        icon: ClipboardList,
+        managerOrAdminOnly: true,
+      },
+      {
+        name: "nav.roles",
+        path: "/settings/roles",
+        icon: Shield,
+        permission: "roles",
+      },
+      {
+        name: "nav.apiKeys",
+        path: "/settings/api-keys",
+        icon: Key,
+        permission: "api_keys",
+      },
+      {
+        name: "nav.webhooks",
+        path: "/settings/webhooks",
+        icon: Webhook,
+        permission: "webhooks",
+      },
+      {
+        name: "nav.customActions",
+        path: "/settings/custom-actions",
+        icon: Zap,
+        permission: "custom_actions",
+      },
+      {
+        name: "nav.sso",
+        path: "/settings/sso",
+        icon: ShieldCheck,
+        permission: "settings.sso",
+      },
+    ],
+  },
+];

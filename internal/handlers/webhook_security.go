@@ -7,6 +7,26 @@ import (
 )
 
 const maxWebhookEventsPerRequest = 500
+const maxWebhookBodyBytes = 5 * 1024 * 1024
+
+type webhookSecretCandidate struct {
+	businessID     string
+	phoneNumberIDs []string
+}
+
+type webhookSignaturePayload struct {
+	Object string `json:"object"`
+	Entry  []struct {
+		ID      string `json:"id"`
+		Changes []struct {
+			Value struct {
+				Metadata struct {
+					PhoneNumberID string `json:"phone_number_id"`
+				} `json:"metadata"`
+			} `json:"value"`
+		} `json:"changes"`
+	} `json:"entry"`
+}
 
 func (a *App) validateWebhookRequest(body, signature []byte, payload *WebhookPayload) error {
 	if len(signature) == 0 {
@@ -31,11 +51,40 @@ func (a *App) validateWebhookRequest(body, signature []byte, payload *WebhookPay
 }
 
 func (a *App) collectWebhookAppSecrets(payload *WebhookPayload) ([]string, error) {
+	if payload == nil {
+		return nil, fmt.Errorf("payload is nil")
+	}
+	return a.collectWebhookAppSecretsForCandidates(webhookSecretCandidatesFromPayload(payload))
+}
+
+func (a *App) validateWebhookSignaturePayload(body, signature []byte, payload *webhookSignaturePayload) error {
+	if len(signature) == 0 {
+		return fmt.Errorf("missing X-Hub-Signature-256 header")
+	}
+	if payload == nil {
+		return fmt.Errorf("payload is nil")
+	}
+
+	secrets, err := a.collectWebhookAppSecretsForCandidates(webhookSecretCandidatesFromSignaturePayload(payload))
+	if err != nil {
+		return err
+	}
+
+	for _, secret := range secrets {
+		if verifyWebhookSignature(body, signature, []byte(secret)) {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("invalid webhook signature")
+}
+
+func (a *App) collectWebhookAppSecretsForCandidates(candidates []webhookSecretCandidate) ([]string, error) {
 	unique := make(map[string]struct{})
 
-	for _, entry := range payload.Entry {
-		if entry.ID != "" {
-			secretsByBusiness, err := a.lookupAppSecretsByBusinessID(entry.ID)
+	for _, candidate := range candidates {
+		if candidate.businessID != "" {
+			secretsByBusiness, err := a.lookupAppSecretsByBusinessID(candidate.businessID)
 			if err == nil {
 				for _, secret := range secretsByBusiness {
 					unique[secret] = struct{}{}
@@ -43,8 +92,7 @@ func (a *App) collectWebhookAppSecrets(payload *WebhookPayload) ([]string, error
 			}
 		}
 
-		for _, change := range entry.Changes {
-			phoneNumberID := change.Value.Metadata.PhoneNumberID
+		for _, phoneNumberID := range candidate.phoneNumberIDs {
 			if phoneNumberID == "" {
 				continue
 			}
@@ -67,6 +115,36 @@ func (a *App) collectWebhookAppSecrets(payload *WebhookPayload) ([]string, error
 	}
 
 	return secrets, nil
+}
+
+func webhookSecretCandidatesFromPayload(payload *WebhookPayload) []webhookSecretCandidate {
+	candidates := make([]webhookSecretCandidate, 0, len(payload.Entry))
+	for _, entry := range payload.Entry {
+		candidate := webhookSecretCandidate{
+			businessID:     entry.ID,
+			phoneNumberIDs: make([]string, 0, len(entry.Changes)),
+		}
+		for _, change := range entry.Changes {
+			candidate.phoneNumberIDs = append(candidate.phoneNumberIDs, change.Value.Metadata.PhoneNumberID)
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates
+}
+
+func webhookSecretCandidatesFromSignaturePayload(payload *webhookSignaturePayload) []webhookSecretCandidate {
+	candidates := make([]webhookSecretCandidate, 0, len(payload.Entry))
+	for _, entry := range payload.Entry {
+		candidate := webhookSecretCandidate{
+			businessID:     entry.ID,
+			phoneNumberIDs: make([]string, 0, len(entry.Changes)),
+		}
+		for _, change := range entry.Changes {
+			candidate.phoneNumberIDs = append(candidate.phoneNumberIDs, change.Value.Metadata.PhoneNumberID)
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates
 }
 
 func (a *App) lookupAppSecretByPhoneID(phoneID string) (string, error) {

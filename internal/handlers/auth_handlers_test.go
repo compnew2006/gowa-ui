@@ -748,6 +748,25 @@ func TestRefreshToken_Failure_RevokedToken(t *testing.T) {
 	testutil.AssertErrorResponse(t, req, fasthttp.StatusUnauthorized, "Refresh token has been revoked")
 }
 
+func TestRefreshToken_Failure_UserNoLongerInTokenOrganization(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	refreshToken := testutil.GenerateTestRefreshToken(t, user, testutil.TestJWTSecret, 7*24*time.Hour)
+	seedRefreshTokenState(t, app, refreshToken, user.ID)
+
+	require.NoError(t, app.DB.Where("user_id = ? AND organization_id = ?", user.ID, org.ID).
+		Delete(&models.UserOrganization{}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"refresh_token": refreshToken,
+	})
+
+	err := app.RefreshToken(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusUnauthorized, "Invalid refresh token")
+}
+
 func TestRefreshToken_Failure_UserNotFound(t *testing.T) {
 	app := newTestApp(t)
 	fakeUser := &models.User{

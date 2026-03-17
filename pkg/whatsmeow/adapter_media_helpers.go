@@ -47,6 +47,13 @@ func (a *WhatsmeowAdapter) downloadHTTPMedia(u string) ([]byte, string, error) {
 
 	client := &http.Client{
 		Timeout: 20 * time.Second,
+		Transport: &http.Transport{
+			Proxy:                 nil,
+			DialContext:           restrictedOutboundDialContext,
+			ResponseHeaderTimeout: 10 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: time.Second,
+		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 4 {
 				return fmt.Errorf("too many redirects")
@@ -74,6 +81,9 @@ func (a *WhatsmeowAdapter) downloadHTTPMedia(u string) ([]byte, string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("failed to download media, status code: %d", resp.StatusCode)
+	}
+	if resp.ContentLength > maxRemoteMediaSizeBytes {
+		return nil, "", fmt.Errorf("remote media exceeds max size of %d bytes", maxRemoteMediaSizeBytes)
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxRemoteMediaSizeBytes+1))
@@ -107,26 +117,68 @@ func validateOutboundMediaURL(raw string) (*url.URL, error) {
 	if parsed.Hostname() == "" {
 		return nil, fmt.Errorf("media URL must include a valid host")
 	}
+	if parsed.User != nil {
+		return nil, fmt.Errorf("media URL must not include embedded credentials")
+	}
 
-	hostname := parsed.Hostname()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := resolveOutboundHostIPs(ctx, parsed.Hostname()); err != nil {
+		return nil, err
+	}
+	return parsed, nil
+}
+
+func restrictedOutboundDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, fmt.Errorf("invalid media host: %w", err)
+	}
+
+	ips, err := resolveOutboundHostIPs(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	var lastErr error
+	for _, ip := range ips {
+		conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+		if dialErr == nil {
+			return conn, nil
+		}
+		lastErr = dialErr
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("failed to resolve media host")
+}
+
+func resolveOutboundHostIPs(ctx context.Context, hostname string) ([]net.IP, error) {
 	if ip := net.ParseIP(hostname); ip != nil {
 		if isBlockedOutboundIP(ip) {
 			return nil, fmt.Errorf("media URL host is not allowed")
 		}
-		return parsed, nil
+		return []net.IP{ip}, nil
 	}
 
-	ips, err := net.LookupIP(hostname)
-	if err != nil || len(ips) == 0 {
+	ipAddrs, err := net.DefaultResolver.LookupIPAddr(ctx, hostname)
+	if err != nil || len(ipAddrs) == 0 {
 		return nil, fmt.Errorf("failed to resolve media URL host")
 	}
-	for _, ip := range ips {
-		if isBlockedOutboundIP(ip) {
+
+	ips := make([]net.IP, 0, len(ipAddrs))
+	for _, ipAddr := range ipAddrs {
+		if isBlockedOutboundIP(ipAddr.IP) {
 			return nil, fmt.Errorf("media URL host is not allowed")
 		}
+		ips = append(ips, ipAddr.IP)
 	}
-
-	return parsed, nil
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("failed to resolve media URL host")
+	}
+	return ips, nil
 }
 
 func isBlockedOutboundIP(ip net.IP) bool {
@@ -161,23 +213,35 @@ func (a *WhatsmeowAdapter) readLocalMedia(pathRef string) ([]byte, string, error
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to resolve media storage path: %w", err)
 	}
-	fullPath := filepath.Join(baseAbs, cleanRef)
+	resolvedBase := baseAbs
+	if realBase, err := filepath.EvalSymlinks(baseAbs); err == nil {
+		resolvedBase = realBase
+	}
+	fullPath := filepath.Join(resolvedBase, cleanRef)
 	fullAbs, err := filepath.Abs(fullPath)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to resolve media path: %w", err)
 	}
-	relPath, err := filepath.Rel(baseAbs, fullAbs)
+	relPath, err := filepath.Rel(resolvedBase, fullAbs)
 	if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
 		return nil, "", fmt.Errorf("invalid local media path")
 	}
+	resolvedPath, err := filepath.EvalSymlinks(fullAbs)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to resolve local media file: %w", err)
+	}
+	resolvedRelPath, err := filepath.Rel(resolvedBase, resolvedPath)
+	if err != nil || resolvedRelPath == ".." || strings.HasPrefix(resolvedRelPath, ".."+string(os.PathSeparator)) {
+		return nil, "", fmt.Errorf("invalid local media path")
+	}
 
-	// #nosec G304 -- fullAbs is constrained to media storage root via Abs+Rel validation above.
-	data, err := os.ReadFile(fullAbs)
+	// #nosec G304 -- resolvedPath is constrained to media storage root via Abs+Rel+EvalSymlinks validation above.
+	data, err := os.ReadFile(resolvedPath)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read local media file: %w", err)
 	}
 
-	mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(fullAbs)))
+	mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(resolvedPath)))
 	if mimeType == "" {
 		mimeType = http.DetectContentType(data)
 	}

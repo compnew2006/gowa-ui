@@ -1,7 +1,7 @@
 import type { AxiosResponse } from 'axios'
 import { describe, expect, it } from 'vitest'
 
-import { unwrapResponse } from './api-utils'
+import { getErrorMessage, unwrapResponse } from './api-utils'
 
 function makeResponse(data: unknown): AxiosResponse {
   return {
@@ -44,5 +44,31 @@ describe('unwrapResponse', () => {
     const response = makeResponse({ data: undefined, meta: { total: 1 } })
 
     expect(unwrapResponse<undefined>(response)).toBeUndefined()
+  })
+})
+
+describe('getErrorMessage', () => {
+  it('returns a helpful proxy limit message for 413 upload failures', () => {
+    const error = {
+      isAxiosError: true,
+      response: {
+        status: 413,
+        data: '<html><title>413 Request Entity Too Large</title></html>'
+      }
+    }
+
+    expect(getErrorMessage(error)).toContain('client_max_body_size')
+  })
+
+  it('extracts a human-readable title from HTML error pages', () => {
+    const error = {
+      isAxiosError: true,
+      response: {
+        status: 502,
+        data: '<html><head><title>Bad Gateway</title></head></html>'
+      }
+    }
+
+    expect(getErrorMessage(error)).toBe('Bad Gateway')
   })
 })

@@ -113,6 +113,7 @@ import {
   downloadMessageMedia,
   resolveMediaFilename,
 } from "@/lib/media-actions";
+import { getErrorMessage } from "@/lib/api-utils";
 import {
   getCachedMediaBlob,
   prefetchMediaBlob,
@@ -146,6 +147,7 @@ import TemplatePicker from "@/components/chat/TemplatePicker.vue";
 import ContactInfoPanel from "@/components/chat/ContactInfoPanel.vue";
 import ConversationNotes from "@/components/chat/ConversationNotes.vue";
 import InstanceTag from "@/components/chat/InstanceTag.vue";
+import LinkifiedMessageText from "@/components/chat/LinkifiedMessageText.vue";
 import MediaGroupBar from "@/components/chat/MediaGroupBar.vue";
 import StatusStoriesBar from "@/components/chat/status/StatusStoriesBar.vue";
 import { useInstancesStore } from "@/stores/instances";
@@ -576,11 +578,17 @@ function resolveOutboundWhatsAppAccount(
   return accountName || undefined;
 }
 
+interface PendingMediaUpload {
+  id: string;
+  file: File;
+  category: WhatsAppMediaCategory;
+  previewUrl: string | null;
+}
+
 // File upload state
 const fileInputRef = ref<HTMLInputElement | null>(null);
-const selectedFile = ref<File | null>(null);
-const selectedFileCategory = ref<WhatsAppMediaCategory | null>(null);
-const filePreviewUrl = ref<string | null>(null);
+const selectedMediaUploads = ref<PendingMediaUpload[]>([]);
+const activeMediaPreviewID = ref<string | null>(null);
 const isMediaDialogOpen = ref(false);
 type ChatMediaViewerType = "image" | "video" | "audio" | "document";
 const isChatMediaViewerOpen = ref(false);
@@ -595,9 +603,46 @@ const activeProfilePhotoURL = computed(() =>
 );
 const mediaCaption = ref("");
 const isUploadingMedia = ref(false);
+const mediaUploadProgress = ref<{ current: number; total: number } | null>(null);
 const isPreparingBatchPrint = ref(false);
 const isBatchPrintSelectionMode = ref(false);
 const selectedBatchPrintMessageIds = ref<string[]>([]);
+const selectedMediaCount = computed(() => selectedMediaUploads.value.length);
+const activeMediaUpload = computed<PendingMediaUpload | null>(() => {
+  if (activeMediaPreviewID.value) {
+    const matchedUpload = selectedMediaUploads.value.find(
+      (upload) => upload.id === activeMediaPreviewID.value,
+    );
+    if (matchedUpload) {
+      return matchedUpload;
+    }
+  }
+
+  return selectedMediaUploads.value[0] ?? null;
+});
+const canApplyMediaCaption = computed(
+  () =>
+    selectedMediaCount.value === 1 &&
+    activeMediaUpload.value?.category !== "audio",
+);
+const mediaDialogDescription = computed(() => {
+  if (selectedMediaCount.value === 0) {
+    return "";
+  }
+  if (selectedMediaCount.value === 1) {
+    return activeMediaUpload.value?.file.name ?? "";
+  }
+  return t("chat.mediaFilesSelected", { count: selectedMediaCount.value });
+});
+const mediaSendButtonLabel = computed(() =>
+  selectedMediaCount.value > 1 ? t("chat.sendFiles") : t("chat.send"),
+);
+const mediaUploadingLabel = computed(() => {
+  if (selectedMediaCount.value > 1 && mediaUploadProgress.value) {
+    return t("chat.mediaSendingProgress", mediaUploadProgress.value);
+  }
+  return `${t("chat.sending")}...`;
+});
 
 // Cache for media blob URLs (message_id -> blob URL)
 const mediaBlobUrls = ref<Record<string, string>>({});
@@ -1162,27 +1207,66 @@ function isSystemEventMessage(message: Message): boolean {
   );
 }
 
-// Check if current user can assign contacts (admin or manager only)
+// Check if current user can assign contacts (permission-based)
 const canAssignContacts = computed(() => {
-  // Try store first, then fallback to localStorage
-  let role = authStore.userRole;
-  if (!role || role === "agent") {
-    try {
-      const storedUser = localStorage.getItem("user");
-      if (storedUser) {
-        const user = JSON.parse(storedUser);
-        role = user.role?.name || user.role; // Support both old and new format
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return role === "admin" || role === "manager";
+  return (
+    authStore.hasPermission("chat.assign", "write") ||
+    authStore.hasPermission("contacts", "write")
+  );
 });
+
+const canReadCustomActions = computed(() => {
+  return authStore.hasPermission("custom_actions", "read");
+});
+
+function normalizeAllowedInstanceIDs(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return Array.from(
+    new Set(
+      values
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter(Boolean),
+    ),
+  );
+}
+
+function getAllowedInstanceIDsForUser(user: { settings?: unknown }): string[] {
+  const settings = user?.settings;
+  if (!settings || typeof settings !== "object") return [];
+
+  const sendRestrictions = (settings as Record<string, unknown>)
+    .send_restrictions;
+  if (!sendRestrictions || typeof sendRestrictions !== "object") return [];
+
+  const raw = sendRestrictions as Record<string, unknown>;
+  const fromArray = normalizeAllowedInstanceIDs(raw.allowed_instance_ids);
+  if (fromArray.length > 0) {
+    return fromArray;
+  }
+
+  const legacy =
+    typeof raw.allowed_instance_id === "string"
+      ? raw.allowed_instance_id.trim()
+      : "";
+  return legacy ? [legacy] : [];
+}
+
+function canUserSeeContactInstance(
+  user: { settings?: unknown },
+  instanceId?: string,
+): boolean {
+  if (!instanceId) return true;
+  const allowedInstanceIDs = getAllowedInstanceIDsForUser(user);
+  if (allowedInstanceIDs.length === 0) return true;
+  return allowedInstanceIDs.includes(instanceId);
+}
 
 // Get list of users for assignment
 const assignableUsers = computed(() => {
-  return usersStore.users.filter((u) => u.is_active);
+  const instanceId = contactsStore.currentContact?.instance_id?.trim();
+  return usersStore.users
+    .filter((u) => u.is_active !== false)
+    .filter((u) => canUserSeeContactInstance(u, instanceId));
 });
 
 function getAssignedAgentName(contact: Contact): string {
@@ -1416,8 +1500,8 @@ onMounted(async () => {
     });
   }
 
-  // Fetch custom actions for admins/managers
-  if (canAssignContacts.value) {
+  // Fetch custom actions when permitted
+  if (canReadCustomActions.value) {
     fetchCustomActions();
   }
 
@@ -3520,126 +3604,234 @@ function openBatchPrintPicker() {
   void mergeSelectedMessageBubblesAndPrint();
 }
 
-function handleFileSelect(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
+function getMediaSizeErrorKey(category: WhatsAppMediaCategory) {
+  if (category === "image") {
+    return "chat.fileTooLargeImageDesc";
+  }
+  if (category === "video") {
+    return "chat.fileTooLargeVideoDesc";
+  }
+  if (category === "audio") {
+    return "chat.fileTooLargeAudioDesc";
+  }
+  return "chat.fileTooLargeDocumentDesc";
+}
 
-  const validation = validateWhatsAppMediaFile(file);
-  if (!validation.isValid) {
-    let sizeErrorKey = "chat.fileTooLargeDocumentDesc";
-    if (validation.category === "image") {
-      sizeErrorKey = "chat.fileTooLargeImageDesc";
-    } else if (validation.category === "video") {
-      sizeErrorKey = "chat.fileTooLargeVideoDesc";
-    } else if (validation.category === "audio") {
-      sizeErrorKey = "chat.fileTooLargeAudioDesc";
-    }
+function buildPendingMediaUpload(file: File, index: number): PendingMediaUpload {
+  const category = resolveWhatsAppMediaCategoryForFile(file);
+  const shouldPreview = category === "image" || category === "video";
 
-    toast.error(t("chat.fileTooLarge"), {
-      description: t(sizeErrorKey),
-    });
-    input.value = "";
+  return {
+    id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+    file,
+    category,
+    previewUrl: shouldPreview ? URL.createObjectURL(file) : null,
+  };
+}
+
+function revokePendingMediaUpload(upload: PendingMediaUpload) {
+  if (upload.previewUrl) {
+    URL.revokeObjectURL(upload.previewUrl);
+  }
+}
+
+function formatMediaUploadSize(sizeBytes: number) {
+  const kilobyte = 1024;
+  const megabyte = kilobyte * 1024;
+  if (sizeBytes >= megabyte) {
+    return `${(sizeBytes / megabyte).toFixed(1)} MB`;
+  }
+  if (sizeBytes >= kilobyte) {
+    return `${(sizeBytes / kilobyte).toFixed(1)} KB`;
+  }
+  return `${sizeBytes} B`;
+}
+
+function setActiveMediaPreview(uploadID: string) {
+  activeMediaPreviewID.value = uploadID;
+}
+
+function removeSelectedMediaUpload(uploadID: string) {
+  const removedUpload = selectedMediaUploads.value.find(
+    (upload) => upload.id === uploadID,
+  );
+  if (!removedUpload) return;
+
+  revokePendingMediaUpload(removedUpload);
+
+  const remainingUploads = selectedMediaUploads.value.filter(
+    (upload) => upload.id !== uploadID,
+  );
+  selectedMediaUploads.value = remainingUploads;
+
+  if (remainingUploads.length === 0) {
+    closeMediaDialog();
     return;
   }
 
-  selectedFile.value = file;
-  selectedFileCategory.value = resolveWhatsAppMediaCategoryForFile(file);
-  mediaCaption.value = "";
-
-  // Create preview URL for images and videos
-  if (
-    selectedFileCategory.value === "image" ||
-    selectedFileCategory.value === "video"
-  ) {
-    filePreviewUrl.value = URL.createObjectURL(file);
-  } else {
-    filePreviewUrl.value = null;
+  if (activeMediaPreviewID.value === uploadID) {
+    activeMediaPreviewID.value = remainingUploads[0].id;
   }
 
-  isMediaDialogOpen.value = true;
+  if (remainingUploads.length > 1) {
+    mediaCaption.value = "";
+  }
+}
 
-  // Reset input so same file can be selected again
+function handleMediaDialogOpenChange(open: boolean) {
+  if (open) {
+    isMediaDialogOpen.value = true;
+    return;
+  }
+
+  if (isUploadingMedia.value) {
+    isMediaDialogOpen.value = true;
+    return;
+  }
+
+  closeMediaDialog();
+}
+
+function handleFileSelect(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  if (files.length === 0) return;
+
+  const acceptedUploads: PendingMediaUpload[] = [];
+
+  files.forEach((file, index) => {
+    const validation = validateWhatsAppMediaFile(file);
+    if (!validation.isValid) {
+      toast.error(t("chat.fileTooLarge"), {
+        description: `${file.name}: ${t(getMediaSizeErrorKey(validation.category))}`,
+      });
+      return;
+    }
+
+    acceptedUploads.push(buildPendingMediaUpload(file, index));
+  });
+
   input.value = "";
+
+  if (acceptedUploads.length === 0) {
+    return;
+  }
+
+  selectedMediaUploads.value.forEach(revokePendingMediaUpload);
+  selectedMediaUploads.value = acceptedUploads;
+  activeMediaPreviewID.value = acceptedUploads[0]?.id ?? null;
+  mediaCaption.value = "";
+  isMediaDialogOpen.value = true;
 }
 
 function closeMediaDialog() {
-  isMediaDialogOpen.value = false;
-  if (filePreviewUrl.value) {
-    URL.revokeObjectURL(filePreviewUrl.value);
-    filePreviewUrl.value = null;
-  }
-  selectedFile.value = null;
-  selectedFileCategory.value = null;
+  selectedMediaUploads.value.forEach(revokePendingMediaUpload);
+  selectedMediaUploads.value = [];
+  activeMediaPreviewID.value = null;
+  mediaUploadProgress.value = null;
   mediaCaption.value = "";
+  isMediaDialogOpen.value = false;
 }
 
 async function sendMediaMessage() {
   if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) return;
-  if (!selectedFile.value || !contactsStore.currentContact) return;
+  if (selectedMediaUploads.value.length === 0 || !contactsStore.currentContact) {
+    return;
+  }
+
+  const uploads = [...selectedMediaUploads.value];
+  const outboundInstanceID = resolveOutboundInstanceID(
+    contactsStore.currentContact,
+  );
+  const accountFilter = resolveOutboundWhatsAppAccount(
+    contactsStore.currentContact,
+  );
+  const shouldApplyCaption =
+    uploads.length === 1 && uploads[0].category !== "audio";
+  const caption = shouldApplyCaption ? mediaCaption.value : "";
+  const sentMessages: Message[] = [];
+  const successfulUploadIDs = new Set<string>();
+  let firstError: unknown = null;
 
   isUploadingMedia.value = true;
   try {
-    const formData = new FormData();
-    formData.append("file", selectedFile.value);
-    formData.append("contact_id", contactsStore.currentContact.id);
-    const mediaType =
-      selectedFileCategory.value ||
-      resolveWhatsAppMediaCategoryForFile(selectedFile.value);
-    formData.append("type", mediaType);
-    if (mediaCaption.value.trim()) {
-      formData.append("caption", mediaCaption.value.trim());
-    }
-    const outboundInstanceID = resolveOutboundInstanceID(
-      contactsStore.currentContact,
-    );
-    const accountFilter = resolveOutboundWhatsAppAccount(
-      contactsStore.currentContact,
-    );
-    if (outboundInstanceID) {
-      formData.append("instance_id", outboundInstanceID);
-    }
-    if (accountFilter) {
-      formData.append("whatsapp_account", accountFilter);
-    }
+    for (const [index, upload] of uploads.entries()) {
+      mediaUploadProgress.value = {
+        current: index + 1,
+        total: uploads.length,
+      };
 
-    // Read CSRF token for mutating request
-    const csrfMatch = document.cookie.match(/(?:^|; )whm_csrf=([^;]*)/);
-    const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : "";
-
-    const basePath = ((window as any).__BASE_PATH__ ?? "").replace(/\/$/, "");
-    const response = await fetch(`${basePath}/api/messages/media`, {
-      method: "POST",
-      credentials: "include",
-      headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {},
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || "Failed to send media");
-    }
-
-    const result = await response.json();
-
-    // Add the message to the store (addMessage has duplicate checking for WebSocket)
-    if (result.data) {
-      contactsStore.addMessage(result.data);
-      scrollToBottom();
-      // Load media for the new message
-      await nextTick();
-      if (result.data.media_url) {
-        loadMediaForMessage(result.data);
+      try {
+        const response = await messagesService.sendMedia({
+          contactId: contactsStore.currentContact.id,
+          file: upload.file,
+          type: upload.category,
+          caption,
+          instance_id: outboundInstanceID,
+          whatsapp_account: accountFilter,
+        });
+        const result = response.data.data || response.data;
+        successfulUploadIDs.add(upload.id);
+        if (result) {
+          sentMessages.push(result);
+        }
+      } catch (error) {
+        if (!firstError) {
+          firstError = error;
+        }
       }
     }
 
-    toast.success(t("chat.mediaSent"));
-    closeMediaDialog();
+    sentMessages.forEach((message) => contactsStore.addMessage(message));
+
+    if (sentMessages.length > 0) {
+      scrollToBottom();
+      await nextTick();
+      sentMessages.forEach((message) => {
+        if (message.media_url) {
+          loadMediaForMessage(message);
+        }
+      });
+    }
+
+    if (successfulUploadIDs.size === uploads.length) {
+      toast.success(
+        uploads.length > 1
+          ? t("chat.mediaBatchSent", { count: uploads.length })
+          : t("chat.mediaSent"),
+      );
+      closeMediaDialog();
+      return;
+    }
+
+    if (successfulUploadIDs.size === 0) {
+      throw firstError;
+    }
+
+    const failedUploads = uploads.filter(
+      (upload) => !successfulUploadIDs.has(upload.id),
+    );
+
+    uploads
+      .filter((upload) => successfulUploadIDs.has(upload.id))
+      .forEach(revokePendingMediaUpload);
+
+    selectedMediaUploads.value = failedUploads;
+    activeMediaPreviewID.value = failedUploads[0]?.id ?? null;
+    mediaCaption.value = "";
+
+    toast.warning(t("chat.mediaBatchPartialFailed"), {
+      description: t("chat.mediaBatchPartialFailedDesc", {
+        sent: successfulUploadIDs.size,
+        failed: failedUploads.length,
+      }),
+    });
   } catch (error: any) {
     toast.error(t("chat.mediaFailed"), {
-      description: error.message || t("chat.mediaFailedDesc"),
+      description: getErrorMessage(error, t("chat.mediaFailedDesc")),
     });
   } finally {
+    mediaUploadProgress.value = null;
     isUploadingMedia.value = false;
   }
 }
@@ -4950,9 +5142,10 @@ async function sendMediaMessage() {
                       v-if="message.message_type === 'button_reply'"
                       class="button-reply-bubble"
                     >
-                      <span class="whitespace-pre-wrap break-words">{{
-                        getMessageContent(message)
-                      }}</span>
+                      <span class="whitespace-pre-wrap break-words"
+                        ><LinkifiedMessageText
+                          :text="getMessageContent(message)"
+                      /></span>
                       <span class="chat-bubble-time"
                         ><span>{{
                           formatMessageTime(message.created_at)
@@ -4963,8 +5156,8 @@ async function sendMediaMessage() {
                     <span
                       v-else-if="getMessageContent(message)"
                       class="whitespace-pre-wrap break-words"
-                      >{{ getMessageContent(message)
-                      }}<span class="chat-bubble-time"
+                      ><LinkifiedMessageText :text="getMessageContent(message)" />
+                      <span class="chat-bubble-time"
                         ><span>{{ formatMessageTime(message.created_at) }}</span
                         ><component
                           v-if="
@@ -5502,6 +5695,7 @@ async function sendMediaMessage() {
               ref="fileInputRef"
               type="file"
               accept="*/*"
+              multiple
               class="hidden"
               @change="handleFileSelect"
             />
@@ -5586,9 +5780,9 @@ async function sendMediaMessage() {
               class="chat-bubble chat-bubble-outgoing ml-auto"
               style="max-width: 100%"
             >
-              <span class="whitespace-pre-wrap break-words text-sm">{{
-                templatePreview
-              }}</span>
+              <span class="whitespace-pre-wrap break-words text-sm"
+                ><LinkifiedMessageText :text="templatePreview"
+              /></span>
               <div
                 v-if="selectedTemplate?.buttons?.length"
                 class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
@@ -5765,40 +5959,46 @@ async function sendMediaMessage() {
     </Dialog>
 
     <!-- Media Preview Dialog -->
-    <Dialog v-model:open="isMediaDialogOpen">
+    <Dialog
+      v-model:open="isMediaDialogOpen"
+      @update:open="handleMediaDialogOpenChange"
+    >
       <DialogContent class="max-w-md">
         <DialogHeader>
           <DialogTitle>{{ $t("chat.sendMedia") }}</DialogTitle>
           <DialogDescription>
-            {{ selectedFile?.name }}
+            {{ mediaDialogDescription }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-4">
-          <!-- Image preview -->
           <div
-            v-if="selectedFileCategory === 'image' && filePreviewUrl"
+            v-if="
+              activeMediaUpload?.category === 'image' &&
+              activeMediaUpload.previewUrl
+            "
             class="flex justify-center"
           >
             <img
-              :src="filePreviewUrl"
-              :alt="selectedFile?.name || ''"
+              :src="activeMediaUpload.previewUrl"
+              :alt="activeMediaUpload.file.name"
               class="max-w-full max-h-[300px] rounded-lg object-contain"
             />
           </div>
-          <!-- Video preview -->
           <div
-            v-else-if="selectedFileCategory === 'video' && filePreviewUrl"
+            v-else-if="
+              activeMediaUpload?.category === 'video' &&
+              activeMediaUpload.previewUrl
+            "
             class="flex justify-center"
           >
             <video
-              :src="filePreviewUrl"
+              :src="activeMediaUpload.previewUrl"
               controls
               class="max-w-full max-h-[300px] rounded-lg"
             />
           </div>
-          <!-- Audio preview -->
           <div
-            v-else-if="selectedFileCategory === 'audio'"
+            v-else-if="activeMediaUpload?.category === 'audio'"
             class="flex justify-center"
           >
             <div class="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
@@ -5808,15 +6008,14 @@ async function sendMediaMessage() {
                 <Paperclip class="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p class="font-medium text-sm">{{ selectedFile?.name }}</p>
+                <p class="font-medium text-sm">{{ activeMediaUpload.file.name }}</p>
                 <p class="text-xs text-muted-foreground">
                   {{ $t("chat.audioFile") }}
                 </p>
               </div>
             </div>
           </div>
-          <!-- Document preview -->
-          <div v-else-if="selectedFile" class="flex justify-center">
+          <div v-else-if="activeMediaUpload" class="flex justify-center">
             <div class="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
               <div
                 class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"
@@ -5825,17 +6024,81 @@ async function sendMediaMessage() {
               </div>
               <div>
                 <p class="font-medium text-sm truncate max-w-[200px]">
-                  {{ selectedFile.name }}
+                  {{ activeMediaUpload.file.name }}
                 </p>
                 <p class="text-xs text-muted-foreground">
-                  {{ (selectedFile.size / 1024).toFixed(1) }} KB
+                  {{ formatMediaUploadSize(activeMediaUpload.file.size) }}
                 </p>
               </div>
             </div>
           </div>
 
-          <!-- Caption input (not for audio) -->
-          <div v-if="selectedFile && selectedFileCategory !== 'audio'">
+          <div v-if="selectedMediaCount > 1" class="space-y-2">
+            <ScrollArea class="max-h-[220px] pr-3">
+              <div class="space-y-2">
+                <div
+                  v-for="upload in selectedMediaUploads"
+                  :key="upload.id"
+                  class="flex items-center gap-2"
+                >
+                  <button
+                    type="button"
+                    class="flex flex-1 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors"
+                    :class="
+                      activeMediaUpload?.id === upload.id
+                        ? 'border-emerald-500/60 bg-emerald-500/10'
+                        : 'border-border bg-muted/30 hover:bg-muted/60'
+                    "
+                    :disabled="isUploadingMedia"
+                    @click="setActiveMediaPreview(upload.id)"
+                  >
+                    <div
+                      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10"
+                    >
+                      <ImageIcon
+                        v-if="upload.category === 'image'"
+                        class="h-5 w-5 text-primary"
+                      />
+                      <Play
+                        v-else-if="upload.category === 'video'"
+                        class="h-5 w-5 text-primary"
+                      />
+                      <Paperclip
+                        v-else-if="upload.category === 'audio'"
+                        class="h-5 w-5 text-primary"
+                      />
+                      <FileText v-else class="h-5 w-5 text-primary" />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-sm font-medium">
+                        {{ upload.file.name }}
+                      </p>
+                      <p class="text-xs text-muted-foreground">
+                        {{ $t(`chat.${upload.category}`) }} ·
+                        {{ formatMediaUploadSize(upload.file.size) }}
+                      </p>
+                    </div>
+                  </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    class="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    :disabled="isUploadingMedia"
+                    :aria-label="`${$t('common.remove')} ${upload.file.name}`"
+                    @click="removeSelectedMediaUpload(upload.id)"
+                  >
+                    <X class="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </ScrollArea>
+            <p class="text-sm text-muted-foreground">
+              {{ $t("chat.mediaBatchCaptionHint") }}
+            </p>
+          </div>
+
+          <div v-else-if="canApplyMediaCaption">
             <Textarea
               v-model="mediaCaption"
               :placeholder="$t('chat.mediaCaption') + '...'"
@@ -5844,19 +6107,23 @@ async function sendMediaMessage() {
             />
           </div>
 
-          <!-- Actions -->
           <div class="flex justify-end gap-2">
             <Button
+              type="button"
               variant="outline"
               @click="closeMediaDialog"
               :disabled="isUploadingMedia"
             >
               {{ $t("common.cancel") }}
             </Button>
-            <Button @click="sendMediaMessage" :disabled="isUploadingMedia">
+            <Button
+              type="button"
+              @click="sendMediaMessage"
+              :disabled="isUploadingMedia || selectedMediaCount === 0"
+            >
               <Send v-if="!isUploadingMedia" class="mr-2 h-4 w-4" />
-              <span v-if="isUploadingMedia">{{ $t("chat.sending") }}...</span>
-              <span v-else>{{ $t("chat.send") }}</span>
+              <span v-if="isUploadingMedia">{{ mediaUploadingLabel }}</span>
+              <span v-else>{{ mediaSendButtonLabel }}</span>
             </Button>
           </div>
         </div>

@@ -9,6 +9,10 @@ import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
 The Messages API allows you to send various types of WhatsApp messages including text, media, templates, and interactive messages.
 
+<Aside type="tip">
+  In the Whatomate chat workspace, internet links found in text message bodies, button replies, and text captions are rendered as clickable links for agents. Email addresses remain plain text.
+</Aside>
+
 ## Get Messages
 
 Retrieve messages for a specific contact.
@@ -52,6 +56,10 @@ GET /api/contacts/{id}/messages
   }
 }
 ```
+
+### Chat UI Rendering Note
+
+If your text content contains internet links such as `https://example.com/docs`, `www.example.com`, or bare domains like `portal.example.com/help`, the chat workspace renders them as clickable links in the message bubble.
 
 ## Send Text Message
 
@@ -183,16 +191,18 @@ Send an image, video, document, or audio message.
 POST /api/messages/media
 ```
 
-### Request Body
+### Request Format
 
-```json
-{
-  "contact_id": "uuid",
-  "type": "image",
-  "media_url": "https://example.com/image.jpg",
-  "caption": "Check out this product!"
-}
-```
+Use `multipart/form-data`.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `contact_id` | string | Yes | Target contact UUID |
+| `file` | binary | Yes | Media file to upload |
+| `type` | string | No | Optional client hint. The server derives the final type from MIME sniffing and filename. |
+| `caption` | string | No | Optional media caption |
+| `instance_id` | string | No | Outbound instance override for multi-instance deployments |
+| `whatsapp_account` | string | No | Explicit WhatsApp account override |
 
 ### Supported Media Types
 
@@ -202,6 +212,21 @@ POST /api/messages/media
 | `video` | MP4, 3GPP | 16 MB |
 | `audio` | AAC, MP3, OGG | 16 MB |
 | `document` | PDF, DOC, XLS, PPT | 100 MB |
+
+### cURL Example
+
+```bash
+curl -X POST "http://your-server:8080/api/messages/media" \
+  -H "X-API-Key: <API_KEY>" \
+  -F "contact_id=<CONTACT_UUID>" \
+  -F "file=@/absolute/path/to/invoice.pdf" \
+  -F "caption=Invoice copy" \
+  -F "instance_id=<INSTANCE_UUID>"
+```
+
+<Aside type="tip">
+  The chat workspace supports selecting multiple attachments in one dialog. Behind the scenes it sends one `POST /api/messages/media` request per selected file so the public API contract stays backward-compatible for existing integrations.
+</Aside>
 
 ### Response
 

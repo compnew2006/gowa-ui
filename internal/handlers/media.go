@@ -209,6 +209,9 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requirePermission(r, userID, models.ResourceChat, models.ActionRead); err != nil {
+		return nil
+	}
 
 	// Get the message ID from URL parameter
 	messageIDStr := r.RequestCtx.UserValue("message_id").(string)
@@ -259,8 +262,19 @@ func (a *App) serveLocalMediaFile(r *fastglue.Request, relativePath, mimeHint st
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Storage configuration error", nil, "")
 	}
-	fullPath, err := filepath.Abs(filepath.Join(baseDir, filePath))
-	if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
+	resolvedBaseDir := baseDir
+	if realBaseDir, err := filepath.EvalSymlinks(baseDir); err == nil {
+		resolvedBaseDir = realBaseDir
+	}
+	fullPath, err := filepath.Abs(filepath.Join(resolvedBaseDir, filePath))
+	if err != nil || !strings.HasPrefix(fullPath, resolvedBaseDir+string(os.PathSeparator)) {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid file path", nil, "")
+	}
+	resolvedPath, err := filepath.EvalSymlinks(fullPath)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "File not found", nil, "")
+	}
+	if !strings.HasPrefix(resolvedPath, resolvedBaseDir+string(os.PathSeparator)) {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid file path", nil, "")
 	}
 
@@ -275,9 +289,9 @@ func (a *App) serveLocalMediaFile(r *fastglue.Request, relativePath, mimeHint st
 
 	// Read file
 	// #nosec G304 -- fullPath is sanitized and enforced under baseDir with symlink rejection.
-	data, err := os.ReadFile(fullPath)
+	data, err := os.ReadFile(resolvedPath)
 	if err != nil {
-		a.Log.Error("Failed to read media file", "path", fullPath, "error", err)
+		a.Log.Error("Failed to read media file", "path", resolvedPath, "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read file", nil, "")
 	}
 

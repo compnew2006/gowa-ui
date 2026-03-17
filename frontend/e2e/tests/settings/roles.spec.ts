@@ -1,322 +1,463 @@
-import { test, expect } from '@playwright/test'
-import { TablePage, DialogPage } from '../../pages'
-import { loginAsAdmin } from '../../helpers'
+import { test, expect, Browser, BrowserContext, Page } from "@playwright/test";
+import { TablePage, DialogPage } from "../../pages";
+import { loginAsAdmin } from "../../helpers";
 
-test.describe('Roles Management', () => {
-  let tablePage: TablePage
-  let dialogPage: DialogPage
+const SUPER_ADMIN_EMAIL = "admin@admin.com";
+const SUPER_ADMIN_PASSWORD = "admin";
 
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page)
-    await page.goto('/settings/roles')
-    await page.waitForLoadState('networkidle')
+async function loginAsSuperAdmin(
+  page: Parameters<typeof loginAsAdmin>[0],
+): Promise<boolean> {
+  await page.goto("/login");
+  await page
+    .locator('input[name="email"], input[type="email"]')
+    .fill(SUPER_ADMIN_EMAIL);
+  await page
+    .locator('input[name="password"], input[type="password"]')
+    .fill(SUPER_ADMIN_PASSWORD);
+  await page.locator('button[type="submit"]').click();
+  await page
+    .waitForURL((url) => !url.pathname.includes("/login"), { timeout: 5000 })
+    .catch(() => {});
 
-    tablePage = new TablePage(page)
-    dialogPage = new DialogPage(page)
-  })
+  return !page.url().includes("/login");
+}
 
-  test('should display roles list', async () => {
+async function createLoggedInSession(
+  browser: Browser,
+  login: (page: Page) => Promise<unknown>,
+): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await login(page);
+  return { context, page };
+}
+
+test.describe("Roles Management", () => {
+  test.describe.configure({ mode: "serial" });
+
+  let context: BrowserContext;
+  let page: Page;
+  let tablePage: TablePage;
+  let dialogPage: DialogPage;
+
+  test.beforeAll(async ({ browser }) => {
+    ({ context, page } = await createLoggedInSession(browser, loginAsAdmin));
+  });
+
+  test.afterAll(async () => {
+    await context?.close().catch(() => {});
+  });
+
+  test.beforeEach(async () => {
+    await page.goto("/settings/roles");
+    await page.waitForLoadState("networkidle");
+
+    tablePage = new TablePage(page);
+    dialogPage = new DialogPage(page);
+  });
+
+  test("should display roles list", async () => {
     // Should show table with roles
-    await expect(tablePage.tableBody).toBeVisible()
+    await expect(tablePage.tableBody).toBeVisible();
     // System roles (admin, manager, agent) should exist
-    const rowCount = await tablePage.getRowCount()
-    expect(rowCount).toBeGreaterThan(0)
-  })
+    const rowCount = await tablePage.getRowCount();
+    expect(rowCount).toBeGreaterThan(0);
+  });
 
-  test('should show system roles with badges', async ({ page }) => {
+  test("should show system roles with badges", async () => {
     // System roles should have a "System" badge
-    await expect(page.locator('text=System').first()).toBeVisible()
-  })
+    await expect(page.locator("text=System").first()).toBeVisible();
+  });
 
-  test('should search roles', async ({ page }) => {
-    await tablePage.search('admin')
-    await page.waitForTimeout(500)
-    await tablePage.expectRowExists('admin')
-  })
+  test("should search roles", async () => {
+    await tablePage.search("admin");
+    await page.waitForTimeout(500);
+    await tablePage.expectRowExists("admin");
+  });
 
-  test('should open create role dialog', async () => {
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
-    await expect(dialogPage.dialog).toBeVisible()
+  test("should open create role dialog", async () => {
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
+    await expect(dialogPage.dialog).toBeVisible();
     // Should show permissions section (label inside dialog)
-    await expect(dialogPage.dialog.locator('label').filter({ hasText: 'Permissions' })).toBeVisible()
-  })
+    await expect(
+      dialogPage.dialog.locator("label").filter({ hasText: "Permissions" }),
+    ).toBeVisible();
+  });
 
-  test('should create a new custom role', async () => {
-    const roleName = `Test Role ${Date.now()}`
+  test("should create a new custom role", async () => {
+    const roleName = `Test Role ${Date.now()}`;
 
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
 
-    await dialogPage.fillField('Name', roleName)
-    await dialogPage.fillField('Description', 'A custom test role for E2E testing')
+    await dialogPage.fillField("Name", roleName);
+    await dialogPage.fillField(
+      "Description",
+      "A custom test role for E2E testing",
+    );
 
     // Select some permissions - click a checkbox in the permissions accordion
-    const permissionCheckbox = dialogPage.dialog.locator('button[role="checkbox"]').first()
+    const permissionCheckbox = dialogPage.dialog
+      .locator('button[role="checkbox"]')
+      .first();
     if (await permissionCheckbox.isVisible()) {
-      await permissionCheckbox.click()
+      await permissionCheckbox.click();
     }
 
-    await dialogPage.submit()
-    await dialogPage.waitForClose()
+    await dialogPage.submit();
+    await dialogPage.waitForClose();
 
     // Verify role appears in list
-    await tablePage.search(roleName)
-    await tablePage.expectRowExists(roleName)
-  })
+    await tablePage.search(roleName);
+    await tablePage.expectRowExists(roleName);
+  });
 
-  test('should require role name', async ({ page }) => {
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
+  test("should require role name", async () => {
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
 
     // Try to submit without name
-    await dialogPage.fillField('Description', 'Role without name')
-    await dialogPage.submit()
+    await dialogPage.fillField("Description", "Role without name");
+    await dialogPage.submit();
 
     // Should show error and stay open
-    await expect(page.locator('text=Name is required').or(page.locator('text=required'))).toBeVisible()
-  })
+    await expect(
+      page.locator("text=Name is required").or(page.locator("text=required")),
+    ).toBeVisible();
+  });
 
-  test('should view system role permissions (read-only)', async () => {
+  test("should view system role permissions (read-only)", async () => {
     // Find and click edit on a system role
-    await tablePage.search('admin')
-    await tablePage.editRow('admin')
-    await dialogPage.waitForOpen()
+    await tablePage.search("admin");
+    await tablePage.editRow("admin");
+    await dialogPage.waitForOpen();
 
     // Dialog title should indicate view mode for system roles
-    const dialogTitle = dialogPage.dialog.getByRole('heading')
-    await expect(dialogTitle.filter({ hasText: 'View Role' })).toBeVisible()
+    const dialogTitle = dialogPage.dialog.getByRole("heading");
+    await expect(dialogTitle.filter({ hasText: "View Role" })).toBeVisible();
 
     // Should show message about system roles being read-only
-    await expect(dialogPage.dialog.locator('text=System roles cannot be modified')).toBeVisible()
+    await expect(
+      dialogPage.dialog.locator("text=System roles cannot be modified"),
+    ).toBeVisible();
 
     // Close the view dialog (uses "Close" button, not "Cancel")
-    await dialogPage.dialog.getByRole('button', { name: 'Close' }).first().click()
-    await dialogPage.waitForClose()
-  })
+    await dialogPage.dialog
+      .getByRole("button", { name: "Close" })
+      .first()
+      .click();
+    await dialogPage.waitForClose();
+  });
 
-  test('should edit custom role', async () => {
+  test("should edit custom role", async () => {
     // First create a role to edit
-    const originalName = `Edit Role ${Date.now()}`
+    const originalName = `Edit Role ${Date.now()}`;
 
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
-    await dialogPage.fillField('Name', originalName)
-    await dialogPage.fillField('Description', 'Original description')
-    await dialogPage.submit()
-    await dialogPage.waitForClose()
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
+    await dialogPage.fillField("Name", originalName);
+    await dialogPage.fillField("Description", "Original description");
+    await dialogPage.submit();
+    await dialogPage.waitForClose();
 
     // Now edit the role
-    await tablePage.search(originalName)
-    await tablePage.editRow(originalName)
-    await dialogPage.waitForOpen()
+    await tablePage.search(originalName);
+    await tablePage.editRow(originalName);
+    await dialogPage.waitForOpen();
 
-    const updatedName = `Updated Role ${Date.now()}`
-    await dialogPage.fillField('Name', updatedName)
-    await dialogPage.fillField('Description', 'Updated description')
-    await dialogPage.submit()
-    await dialogPage.waitForClose()
+    const updatedName = `Updated Role ${Date.now()}`;
+    await dialogPage.fillField("Name", updatedName);
+    await dialogPage.fillField("Description", "Updated description");
+    await dialogPage.submit();
+    await dialogPage.waitForClose();
 
     // Verify update
-    await tablePage.search(updatedName)
-    await tablePage.expectRowExists(updatedName)
-  })
+    await tablePage.search(updatedName);
+    await tablePage.expectRowExists(updatedName);
+  });
 
-  test('should delete custom role', async () => {
+  test("should delete custom role", async () => {
     // First create a role to delete
-    const roleName = `Delete Role ${Date.now()}`
+    const roleName = `Delete Role ${Date.now()}`;
 
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
-    await dialogPage.fillField('Name', roleName)
-    await dialogPage.submit()
-    await dialogPage.waitForClose()
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
+    await dialogPage.fillField("Name", roleName);
+    await dialogPage.submit();
+    await dialogPage.waitForClose();
 
     // Search and delete
-    await tablePage.search(roleName)
-    await tablePage.expectRowExists(roleName)
-    await tablePage.deleteRow(roleName)
+    await tablePage.search(roleName);
+    await tablePage.expectRowExists(roleName);
+    await tablePage.deleteRow(roleName);
 
     // Verify deletion
-    await tablePage.clearSearch()
-    await tablePage.search(roleName)
-    await tablePage.expectRowNotExists(roleName)
-  })
+    await tablePage.clearSearch();
+    await tablePage.search(roleName);
+    await tablePage.expectRowNotExists(roleName);
+  });
 
-  test('should not allow deleting system roles', async ({ page }) => {
+  test("should not allow deleting system roles", async () => {
     // System roles should not have a delete button
-    await tablePage.search('admin')
+    await tablePage.search("admin");
 
     // The delete button should be hidden or disabled for system roles
-    const deleteButton = page.locator(`tr:has-text("admin") button:has-text("Delete")`)
-    await expect(deleteButton).not.toBeVisible().catch(async () => {
-      // If visible, it should be disabled
-      await expect(deleteButton).toBeDisabled()
-    })
-  })
+    const deleteButton = page.locator(
+      `tr:has-text("admin") button:has-text("Delete")`,
+    );
+    await expect(deleteButton)
+      .not.toBeVisible()
+      .catch(async () => {
+        // If visible, it should be disabled
+        await expect(deleteButton).toBeDisabled();
+      });
+  });
 
-  test('should show delete confirmation when deleting custom role', async ({ page }) => {
+  test("should show delete confirmation when deleting custom role", async () => {
     // Create a role to delete
-    const roleName = `Role To Delete ${Date.now()}`
+    const roleName = `Role To Delete ${Date.now()}`;
 
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
-    await dialogPage.fillField('Name', roleName)
-    await dialogPage.submit()
-    await dialogPage.waitForClose()
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
+    await dialogPage.fillField("Name", roleName);
+    await dialogPage.submit();
+    await dialogPage.waitForClose();
 
     // Search for the role
-    await tablePage.search(roleName)
-    await tablePage.expectRowExists(roleName)
+    await tablePage.search(roleName);
+    await tablePage.expectRowExists(roleName);
 
     // Click delete and verify confirmation dialog appears
-    const deleteButton = page.locator(`tr:has-text("${roleName}") button:has(svg.text-destructive)`)
-    await deleteButton.click()
+    const deleteButton = page.locator(
+      `tr:has-text("${roleName}") button:has(svg.text-destructive)`,
+    );
+    await deleteButton.click();
 
     // Should show confirmation dialog
-    const alertDialog = page.locator('[role="alertdialog"]')
-    await expect(alertDialog).toBeVisible()
-    await expect(alertDialog).toContainText('delete')
+    const alertDialog = page.locator('[role="alertdialog"]');
+    await expect(alertDialog).toBeVisible();
+    await expect(alertDialog).toContainText("delete");
 
     // Cancel to clean up
-    await alertDialog.getByRole('button', { name: 'Cancel' }).click()
-  })
+    await alertDialog.getByRole("button", { name: "Cancel" }).click();
+  });
 
-  test('should toggle default role flag', async ({ page }) => {
+  test("should toggle default role flag", async () => {
     // Create a role and set it as default
-    const roleName = `Default Role ${Date.now()}`
+    const roleName = `Default Role ${Date.now()}`;
 
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
-    await dialogPage.fillField('Name', roleName)
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
+    await dialogPage.fillField("Name", roleName);
 
     // Toggle the default switch
-    const defaultSwitch = page.locator('button[role="switch"]#is_default, [id="is_default"]')
-    await defaultSwitch.click()
+    const defaultSwitch = page.locator(
+      'button[role="switch"]#is_default, [id="is_default"]',
+    );
+    await defaultSwitch.click();
 
-    await dialogPage.submit()
-    await dialogPage.waitForClose()
+    await dialogPage.submit();
+    await dialogPage.waitForClose();
 
     // Verify the role shows default badge (the badge div, not the role name)
-    await tablePage.search(roleName)
-    const defaultBadge = page.locator(`tr:has-text("${roleName}") .rounded-full`).filter({ hasText: 'Default' })
-    await expect(defaultBadge).toBeVisible()
-  })
+    await tablePage.search(roleName);
+    const defaultBadge = page
+      .locator(`tr:has-text("${roleName}") .rounded-full`)
+      .filter({ hasText: "Default" });
+    await expect(defaultBadge).toBeVisible();
+  });
 
-  test('should cancel role creation', async () => {
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
+  test("should cancel role creation", async () => {
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
 
-    await dialogPage.fillField('Name', 'Cancelled Role')
-    await dialogPage.cancel()
+    await dialogPage.fillField("Name", "Cancelled Role");
+    await dialogPage.cancel();
 
-    await dialogPage.waitForClose()
+    await dialogPage.waitForClose();
     // Role should not be created
-    await tablePage.search('Cancelled Role')
-    await tablePage.expectRowNotExists('Cancelled Role')
-  })
+    await tablePage.search("Cancelled Role");
+    await tablePage.expectRowNotExists("Cancelled Role");
+  });
 
-  test('should display permission count in role list', async ({ page }) => {
+  test("should display permission count in role list", async () => {
     // Roles should show permission count
-    const permissionBadge = page.locator('tr td >> text=/\\d+/').first()
-    await expect(permissionBadge).toBeVisible()
-  })
+    const permissionBadge = page.locator("tr td >> text=/\\d+/").first();
+    await expect(permissionBadge).toBeVisible();
+  });
 
-  test('should navigate to roles from settings', async ({ page }) => {
+  test("should navigate to roles from settings", async () => {
     // Go to settings first
-    await page.goto('/settings')
-    await page.waitForLoadState('networkidle')
+    await page.goto("/settings");
+    await page.waitForLoadState("networkidle");
 
     // Click on Roles card/link
-    await page.locator('text=Roles').click()
+    await page.locator("text=Roles").click();
 
     // Should be on roles page
-    await expect(page).toHaveURL(/\/settings\/roles/)
-    await expect(page.locator('h1:has-text("Roles")')).toBeVisible()
-  })
-})
+    await expect(page).toHaveURL(/\/settings\/roles/);
+    await expect(page.locator('h1:has-text("Roles")')).toBeVisible();
+  });
+});
 
-test.describe('Roles - Table Sorting', () => {
-  let tablePage: TablePage
+test.describe("Roles Management - Super Admin", () => {
+  test.describe.configure({ mode: "serial" });
 
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page)
-    await page.goto('/settings/roles')
-    await page.waitForLoadState('networkidle')
-    tablePage = new TablePage(page)
-  })
+  let context: BrowserContext;
+  let page: Page;
+  let loggedIn = false;
 
-  test('should sort by role name', async () => {
-    await tablePage.clickColumnHeader('Role')
-    const direction = await tablePage.getSortDirection('Role')
-    expect(direction).not.toBeNull()
-  })
+  test.beforeAll(async ({ browser }) => {
+    ({ context, page } = await createLoggedInSession(
+      browser,
+      async (authPage) => {
+        loggedIn = await loginAsSuperAdmin(authPage);
+      },
+    ));
+  });
 
-  test('should sort by description', async () => {
-    await tablePage.clickColumnHeader('Description')
-    const direction = await tablePage.getSortDirection('Description')
-    expect(direction).not.toBeNull()
-  })
+  test.afterAll(async () => {
+    await context?.close().catch(() => {});
+  });
 
-  test('should sort by user count', async () => {
-    await tablePage.clickColumnHeader('Users')
-    const direction = await tablePage.getSortDirection('Users')
-    expect(direction).not.toBeNull()
-  })
+  test("should allow super admin to edit system role permissions", async () => {
+    if (!loggedIn) {
+      test.skip(true, "No super admin credentials available");
+      return;
+    }
 
-  test('should sort by created date', async () => {
-    await tablePage.clickColumnHeader('Created')
-    const direction = await tablePage.getSortDirection('Created')
-    expect(direction).not.toBeNull()
-  })
+    await page.goto("/settings/roles");
+    await page.waitForLoadState("networkidle");
 
-  test('should toggle sort direction', async () => {
-    await tablePage.clickColumnHeader('Role')
-    const firstDirection = await tablePage.getSortDirection('Role')
+    const tablePage = new TablePage(page);
+    const dialogPage = new DialogPage(page);
 
-    await tablePage.clickColumnHeader('Role')
-    const secondDirection = await tablePage.getSortDirection('Role')
+    await tablePage.search("admin");
+    await tablePage.editRow("admin");
+    await dialogPage.waitForOpen();
 
-    expect(firstDirection).not.toEqual(secondDirection)
-  })
-})
+    await expect(
+      dialogPage.dialog.getByRole("heading", { name: "Edit Role" }),
+    ).toBeVisible();
+    await expect(
+      dialogPage.dialog.locator(
+        "text=As a super admin, you can modify permissions for this system role.",
+      ),
+    ).toBeVisible();
+    await expect(dialogPage.dialog.getByLabel("Description")).toBeEnabled();
+    await expect(
+      dialogPage.dialog.getByRole("button", { name: "Update Role" }),
+    ).toBeVisible();
 
-test.describe('Roles - Permissions Selection', () => {
-  test('should display permission groups in accordion', async ({ page }) => {
-    await loginAsAdmin(page)
-    await page.goto('/settings/roles')
-    await page.waitForLoadState('networkidle')
+    await dialogPage.submit();
+    await dialogPage.waitForClose();
+  });
+});
 
-    const tablePage = new TablePage(page)
-    const dialogPage = new DialogPage(page)
+test.describe("Roles - Table Sorting", () => {
+  test.describe.configure({ mode: "serial" });
 
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
+  let context: BrowserContext;
+  let page: Page;
+  let tablePage: TablePage;
+
+  test.beforeAll(async ({ browser }) => {
+    ({ context, page } = await createLoggedInSession(browser, loginAsAdmin));
+  });
+
+  test.afterAll(async () => {
+    await context?.close().catch(() => {});
+  });
+
+  test.beforeEach(async () => {
+    await page.goto("/settings/roles");
+    await page.waitForLoadState("networkidle");
+    tablePage = new TablePage(page);
+  });
+
+  test("should sort by role name", async () => {
+    await tablePage.clickColumnHeader("Role");
+    const direction = await tablePage.getSortDirection("Role");
+    expect(direction).not.toBeNull();
+  });
+
+  test("should sort by description", async () => {
+    await tablePage.clickColumnHeader("Description");
+    const direction = await tablePage.getSortDirection("Description");
+    expect(direction).not.toBeNull();
+  });
+
+  test("should sort by user count", async () => {
+    await tablePage.clickColumnHeader("Users");
+    const direction = await tablePage.getSortDirection("Users");
+    expect(direction).not.toBeNull();
+  });
+
+  test("should sort by created date", async () => {
+    await tablePage.clickColumnHeader("Created");
+    const direction = await tablePage.getSortDirection("Created");
+    expect(direction).not.toBeNull();
+  });
+
+  test("should toggle sort direction", async () => {
+    await tablePage.clickColumnHeader("Role");
+    const firstDirection = await tablePage.getSortDirection("Role");
+
+    await tablePage.clickColumnHeader("Role");
+    const secondDirection = await tablePage.getSortDirection("Role");
+
+    expect(firstDirection).not.toEqual(secondDirection);
+  });
+});
+
+test.describe("Roles - Permissions Selection", () => {
+  test.describe.configure({ mode: "serial" });
+
+  let context: BrowserContext;
+  let page: Page;
+
+  test.beforeAll(async ({ browser }) => {
+    ({ context, page } = await createLoggedInSession(browser, loginAsAdmin));
+  });
+
+  test.afterAll(async () => {
+    await context?.close().catch(() => {});
+  });
+
+  test.beforeEach(async () => {
+    await page.goto("/settings/roles");
+    await page.waitForLoadState("networkidle");
+  });
+
+  test("should display permission groups in accordion", async () => {
+    const tablePage = new TablePage(page);
+    const dialogPage = new DialogPage(page);
+
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
 
     // Should show permission groups (Users, Contacts, Messages, etc.)
-    await expect(page.locator('text=Users').first()).toBeVisible()
-    await expect(page.locator('text=Contacts').first()).toBeVisible()
-  })
+    await expect(page.locator("text=Users").first()).toBeVisible();
+    await expect(page.locator("text=Contacts").first()).toBeVisible();
+  });
 
-  test('should select all permissions in a group', async ({ page }) => {
-    await loginAsAdmin(page)
-    await page.goto('/settings/roles')
-    await page.waitForLoadState('networkidle')
+  test("should select all permissions in a group", async () => {
+    const tablePage = new TablePage(page);
+    const dialogPage = new DialogPage(page);
 
-    const tablePage = new TablePage(page)
-    const dialogPage = new DialogPage(page)
-
-    await tablePage.clickAddButton()
-    await dialogPage.waitForOpen()
+    await tablePage.clickAddButton();
+    await dialogPage.waitForOpen();
 
     // Click the group checkbox to select all
-    const groupCheckbox = page.locator('[data-testid="group-users-checkbox"]').or(
-      page.locator('button[role="checkbox"]').first()
-    )
-    await groupCheckbox.click()
+    const groupCheckbox = page
+      .locator('[data-testid="group-users-checkbox"]')
+      .or(page.locator('button[role="checkbox"]').first());
+    await groupCheckbox.click();
 
     // Permission count should increase
-    const selectedCount = page.locator('text=/\\d+ selected/')
-    await expect(selectedCount).toBeVisible()
-  })
-})
+    const selectedCount = page.locator("text=/\\d+ selected/");
+    await expect(selectedCount).toBeVisible();
+  });
+});

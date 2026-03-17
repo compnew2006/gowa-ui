@@ -60,6 +60,39 @@ func TestValidateWebhookRequest(t *testing.T) {
 	})
 }
 
+func TestValidateWebhookSignaturePayload(t *testing.T) {
+	t.Parallel()
+
+	app := webhookTestApp(t)
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "wh-sec-org-signature",
+		Slug:      "wh-sec-org-signature-" + uuid.New().String()[:8],
+	}
+	require.NoError(t, app.DB.Create(&org).Error)
+
+	account := models.WhatsAppAccount{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "wh-sec-signature-account",
+		PhoneID:        "phone-signature-1",
+		BusinessID:     "business-signature-1",
+		AccessToken:    "token",
+		AppSecret:      "signature-secret-123",
+	}
+	require.NoError(t, app.DB.Create(&account).Error)
+
+	body := []byte(`{"object":"whatsapp_business_account","entry":[{"id":"business-signature-1","changes":[{"field":"messages","value":{"metadata":{"phone_number_id":"phone-signature-1"},"messages":[{"id":"wamid.1"}]}}]}]}`)
+	var payload webhookSignaturePayload
+	require.NoError(t, json.Unmarshal(body, &payload))
+
+	mac := hmac.New(sha256.New, []byte(account.AppSecret))
+	mac.Write(body)
+	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	require.NoError(t, app.validateWebhookSignaturePayload(body, []byte(signature), &payload))
+}
+
 func TestCollectWebhookAppSecrets_BusinessIDFallback(t *testing.T) {
 	t.Parallel()
 

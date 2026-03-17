@@ -3,10 +3,11 @@ title: Users
 description: User management API
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 <Aside type="caution">
-  User management endpoints require the `users:read`, `users:create`, `users:update`, or `users:delete` permissions respectively.
+  User management endpoints require the `users:read`, `users:write`, or
+  `users:delete` permissions respectively.
 </Aside>
 
 ## Overview
@@ -39,7 +40,7 @@ GET /api/me
       "name": "admin",
       "description": "Full access to all features"
     },
-    "permissions": ["users:read", "users:create", "contacts:read", "..."],
+    "permissions": ["users:read", "users:write", "contacts:read", "..."],
     "is_super_admin": false,
     "created_at": "2024-01-01T00:00:00Z"
   }
@@ -61,10 +62,10 @@ PUT /api/me/password
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `current_password` | string | Yes | Current password for verification |
-| `new_password` | string | Yes | New password (minimum 8 characters) |
+| Field              | Type   | Required | Description                         |
+| ------------------ | ------ | -------- | ----------------------------------- |
+| `current_password` | string | Yes      | Current password for verification   |
+| `new_password`     | string | Yes      | New password (minimum 8 characters) |
 
 #### Response
 
@@ -85,15 +86,13 @@ Retrieve all users in your organization.
 GET /api/users
 ```
 
-<Aside type="note">
-  Requires `users:read` permission.
-</Aside>
+<Aside type="note">Requires `users:read` permission.</Aside>
 
 ### Query Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `search` | string | Filter by name or email |
+| Parameter | Type   | Description             |
+| --------- | ------ | ----------------------- |
+| `search`  | string | Filter by name or email |
 
 ### Response
 
@@ -124,7 +123,8 @@ GET /api/users
 ```
 
 <Aside type="tip">
-  The `is_member` field is `true` for users who belong to another organization but have been added as members to the current organization.
+  The `is_member` field is `true` for users who belong to another organization
+  but have been added as members to the current organization.
 </Aside>
 
 ## Get User
@@ -166,9 +166,7 @@ Create a new user in your organization.
 POST /api/users
 ```
 
-<Aside type="note">
-  Requires `users:create` permission.
-</Aside>
+<Aside type="note">Requires `users:write` permission.</Aside>
 
 ### Request Body
 
@@ -181,12 +179,12 @@ POST /api/users
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `email` | string | Yes | Unique email address |
-| `password` | string | Yes | Minimum 8 characters |
-| `full_name` | string | Yes | Display name |
-| `role_id` | string | No | UUID of the role to assign. If not provided, uses the organization's default role |
+| Field       | Type   | Required | Description                                                                       |
+| ----------- | ------ | -------- | --------------------------------------------------------------------------------- |
+| `email`     | string | Yes      | Unique email address                                                              |
+| `password`  | string | Yes      | Minimum 8 characters                                                              |
+| `full_name` | string | Yes      | Display name                                                                      |
+| `role_id`   | string | No       | UUID of the role to assign. If not provided, uses the organization's default role |
 
 ### Response
 
@@ -217,9 +215,7 @@ Update user details or role.
 PUT /api/users/{id}
 ```
 
-<Aside type="note">
-  Requires `users:update` permission.
-</Aside>
+<Aside type="note">Requires `users:write` permission.</Aside>
 
 ### Request Body
 
@@ -231,20 +227,23 @@ PUT /api/users/{id}
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `email` | string | New email address |
-| `password` | string | New password (min 8 chars) |
-| `full_name` | string | Display name |
-| `role_id` | string | UUID of the role to assign |
-| `is_active` | boolean | Enable/disable user |
+| Field       | Type    | Description                |
+| ----------- | ------- | -------------------------- |
+| `email`     | string  | New email address          |
+| `password`  | string  | New password (min 8 chars) |
+| `full_name` | string  | Display name               |
+| `role_id`   | string  | UUID of the role to assign |
+| `is_active` | boolean | Enable/disable user        |
 
 <Aside type="caution">
   You cannot demote yourself or change your own role.
 </Aside>
 
 <Aside type="note">
-  For **cross-org members** (`is_member: true`), only `role_id` can be updated. The role is changed in the `user_organizations` table, not the user's account. Other fields like `email`, `password`, `full_name`, and `is_active` cannot be modified for members.
+  For **cross-org members** (`is_member: true`), only `role_id` can be updated.
+  The role is changed in the `user_organizations` table, not the user's account.
+  Other fields like `email`, `password`, `full_name`, and `is_active` cannot be
+  modified for members.
 </Aside>
 
 ## Delete User
@@ -255,15 +254,13 @@ Remove a user from the organization.
 DELETE /api/users/{id}
 ```
 
-<Aside type="note">
-  Requires `users:delete` permission.
-</Aside>
+<Aside type="note">Requires `users:delete` permission.</Aside>
 
 <Aside type="caution">
-  - You cannot delete yourself
-  - You cannot delete the last admin user
-  - Deleting a native user will remove their account and unassign all their contacts
-  - Deleting a **cross-org member** only removes them from the current organization — their account remains intact in their home organization
+  - You cannot delete yourself - You cannot delete the last admin user -
+  Deleting a native user will remove their account and unassign all their
+  contacts - Deleting a **cross-org member** only removes them from the current
+  organization — their account remains intact in their home organization
 </Aside>
 
 ### Response

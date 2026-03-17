@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/config"
+	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/test/testutil"
@@ -517,4 +520,63 @@ func TestUpdateMessageStatus_DeliveredBroadcastsViaWebSocket_NoErrorMessage(t *t
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for WebSocket broadcast")
 	}
+}
+
+func TestWebhookHandler_RejectsOversizedBody(t *testing.T) {
+	app := webhookTestApp(t)
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("POST")
+	req.RequestCtx.Request.SetBody(bytes.Repeat([]byte("a"), maxWebhookBodyBytes+1))
+
+	err := app.WebhookHandler(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, 413, "Webhook payload too large")
+}
+
+func TestWebhookHandler_AcceptsValidSignedPayload(t *testing.T) {
+	app := webhookTestApp(t)
+	app.Config = &config.Config{
+		App: config.AppConfig{
+			EncryptionKey: "test-encryption-key",
+		},
+	}
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "wh-handler-org",
+		Slug:      "wh-handler-org-" + uuid.New().String()[:8],
+	}
+	require.NoError(t, app.DB.Create(&org).Error)
+
+	encryptedSecret, err := appcrypto.Encrypt("handler-secret-123", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+
+	account := models.WhatsAppAccount{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "wh-handler-account",
+		PhoneID:        "phone-handler-1",
+		BusinessID:     "business-handler-1",
+		AccessToken:    "token",
+		AppSecret:      encryptedSecret,
+	}
+	require.NoError(t, app.DB.Create(&account).Error)
+
+	body := []byte(`{"object":"whatsapp_business_account","entry":[{"id":"business-handler-1","changes":[{"field":"messages","value":{"metadata":{"phone_number_id":"phone-handler-1"},"messages":[],"statuses":[]}}]}]}`)
+	signature := webhookSignature(body, "handler-secret-123")
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("POST")
+	req.RequestCtx.Request.Header.Set("X-Hub-Signature-256", signature)
+	req.RequestCtx.Request.SetBody(body)
+
+	err = app.WebhookHandler(req)
+	require.NoError(t, err)
+	assert.Equal(t, 200, req.RequestCtx.Response.StatusCode())
+}
+
+func webhookSignature(body []byte, secret string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }

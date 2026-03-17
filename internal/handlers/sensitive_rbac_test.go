@@ -97,6 +97,37 @@ func TestSensitiveRBAC_GetBusinessProfile_ForbiddenWithoutPermission(t *testing.
 	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 }
 
+func TestSensitiveRBAC_ListInstances_ForbiddenWithoutPermission(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "no-instance-access", []string{"chat:read"})
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListInstances(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
+func TestSensitiveRBAC_ServeMedia_ForbiddenWithoutPermission(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "no-media-access", []string{"contacts:read"})
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", uuid.NewString())
+
+	err := app.ServeMedia(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
 func TestSensitiveRBAC_ExecuteCustomAction_AllowsChatWritePermission(t *testing.T) {
 	t.Parallel()
 

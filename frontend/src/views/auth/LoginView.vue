@@ -17,6 +17,7 @@ const { t } = useI18n()
 interface SSOProvider {
   provider: string
   name: string
+  organization_slug?: string
 }
 
 const router = useRouter()
@@ -125,9 +126,14 @@ const handleLogin = async () => {
   }
 }
 
-const initiateSSO = (provider: string) => {
+const initiateSSO = (provider: string, organizationSlug?: string) => {
   const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-  window.location.href = `${basePath}/api/auth/sso/${provider}/init`
+  const params = new URLSearchParams()
+  if (organizationSlug) {
+    params.set('org', organizationSlug)
+  }
+  const query = params.toString()
+  window.location.href = `${basePath}/api/auth/sso/${provider}/init${query ? `?${query}` : ''}`
 }
 </script>
 
@@ -203,7 +209,7 @@ const initiateSSO = (provider: string) => {
           variant="outline"
           class="w-full justify-start gap-3 transition-colors bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50"
           :class="providerColors[provider.provider] || providerColors.custom"
-          @click="initiateSSO(provider.provider)"
+          @click="initiateSSO(provider.provider, provider.organization_slug)"
         >
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
             <path :d="providerIcons[provider.provider] || providerIcons.custom" />

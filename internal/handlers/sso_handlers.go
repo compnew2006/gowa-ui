@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,30 +18,43 @@ import (
 
 // GetPublicSSOProviders returns enabled SSO providers for login page (public, no auth)
 func (a *App) GetPublicSSOProviders(r *fastglue.Request) error {
-	// Get all enabled SSO providers (deduplicated by provider type)
+	// Get all enabled SSO providers.
 	var providers []models.SSOProvider
-	if err := a.DB.Where("is_enabled = ?", true).Find(&providers).Error; err != nil {
+	if err := a.DB.Preload("Organization").Where("is_enabled = ?", true).Find(&providers).Error; err != nil {
 		a.Log.Error("Failed to fetch SSO providers", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch providers", nil, "")
 	}
 
-	// Deduplicate by provider type (in case multiple orgs have same provider)
-	seen := make(map[string]bool)
+	providerCounts := make(map[string]int, len(providers))
+	for _, provider := range providers {
+		providerCounts[provider.Provider]++
+	}
+
 	result := make([]SSOProviderPublic, 0)
 	for _, p := range providers {
-		if seen[p.Provider] {
-			continue
-		}
-		seen[p.Provider] = true
 		name := providerDisplayNames[p.Provider]
 		if name == "" {
 			name = p.Provider
 		}
+		orgSlug := ""
+		if p.Organization != nil {
+			orgSlug = strings.TrimSpace(p.Organization.Slug)
+		}
+		if providerCounts[p.Provider] > 1 && p.Organization != nil && strings.TrimSpace(p.Organization.Name) != "" {
+			name = fmt.Sprintf("%s (%s)", name, strings.TrimSpace(p.Organization.Name))
+		}
 		result = append(result, SSOProviderPublic{
-			Provider: p.Provider,
-			Name:     name,
+			Provider:         p.Provider,
+			Name:             name,
+			OrganizationSlug: orgSlug,
 		})
 	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Provider == result[j].Provider {
+			return result[i].Name < result[j].Name
+		}
+		return result[i].Provider < result[j].Provider
+	})
 
 	return r.SendEnvelope(result)
 }
@@ -48,6 +62,7 @@ func (a *App) GetPublicSSOProviders(r *fastglue.Request) error {
 // InitSSO initiates OAuth flow for a provider
 func (a *App) InitSSO(r *fastglue.Request) error {
 	provider := r.RequestCtx.UserValue("provider").(string)
+	orgSlug := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("org")))
 
 	// Validate provider
 	if provider != "custom" {
@@ -56,10 +71,29 @@ func (a *App) InitSSO(r *fastglue.Request) error {
 		}
 	}
 
-	// Get first enabled SSO provider config for this provider type
 	var ssoConfig models.SSOProvider
-	if err := a.DB.Where("provider = ? AND is_enabled = ?", provider, true).First(&ssoConfig).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "SSO provider not configured or disabled", nil, "")
+	if orgSlug != "" {
+		var org models.Organization
+		if err := a.DB.Select("id").Where("slug = ?", orgSlug).First(&org).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "SSO provider not configured or disabled", nil, "")
+		}
+		if err := a.DB.Where("provider = ? AND is_enabled = ? AND organization_id = ?", provider, true, org.ID).First(&ssoConfig).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "SSO provider not configured or disabled", nil, "")
+		}
+	} else {
+		var configs []models.SSOProvider
+		if err := a.DB.Where("provider = ? AND is_enabled = ?", provider, true).Limit(2).Find(&configs).Error; err != nil {
+			a.Log.Error("Failed to fetch SSO provider", "error", err, "provider", provider)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO", nil, "")
+		}
+		switch len(configs) {
+		case 0:
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "SSO provider not configured or disabled", nil, "")
+		case 1:
+			ssoConfig = configs[0]
+		default:
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Organization selection is required for this SSO provider", nil, "org")
+		}
 	}
 
 	// Generate state token

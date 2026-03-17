@@ -3,7 +3,7 @@ title: Roles & Permissions
 description: Granular access control with customizable roles and permissions
 ---
 
-import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 Whatomate provides a flexible role-based access control (RBAC) system that allows you to define custom roles with granular permissions.
 
@@ -11,7 +11,7 @@ Whatomate provides a flexible role-based access control (RBAC) system that allow
 
 The permission system is built around:
 
-- **Permissions**: Fine-grained access controls for specific actions on resources (e.g., `users:create`, `contacts:read`)
+- **Permissions**: Fine-grained access controls for specific actions on resources (e.g., `users:write`, `contacts:read`)
 - **Roles**: Collections of permissions that can be assigned to users
 - **System Roles**: Pre-defined roles (Admin, Manager, Agent) that cannot be deleted
 
@@ -19,14 +19,16 @@ The permission system is built around:
 
 Three system roles are created automatically for each organization:
 
-| Role | Description |
-|------|-------------|
-| **Admin** | Full access to all features including user and role management |
+| Role        | Description                                                       |
+| ----------- | ----------------------------------------------------------------- |
+| **Admin**   | Full access to all features including user and role management    |
 | **Manager** | Full access except user/role management and organization settings |
-| **Agent** | Limited access - can only view/respond to assigned chats |
+| **Agent**   | Limited access - can only view/respond to assigned chats          |
 
 <Aside type="note">
-  System roles cannot be deleted, but their permissions can be viewed (read-only).
+  System roles cannot be deleted. Anyone with `roles:read` can inspect them, and
+  only super admins can edit a system role's description or permissions in
+  **Settings → Roles**.
 </Aside>
 
 ## Custom Roles
@@ -49,32 +51,46 @@ Create custom roles to match your organization's needs. For example:
 
 Permissions follow the format `resource:action`. Available actions are:
 
-| Action | Description |
-|--------|-------------|
-| `read` | View the resource |
-| `create` | Create new items |
-| `update` | Modify existing items |
-| `delete` | Remove items |
+| Action    | Description                              |
+| --------- | ---------------------------------------- |
+| `read`    | View the resource                        |
+| `write`   | Create and edit items                    |
+| `delete`  | Remove items                             |
+| `sync`    | Synchronize provider data                |
+| `execute` | Run actions such as campaigns            |
+| `import`  | Import records                           |
+| `export`  | Export records                           |
+| `pickup`  | Pick up queued work                      |
+| `assign`  | Assign resources                         |
+| `prefix`  | Prefix chat messages with the agent name |
 
 ### Available Resources
 
-| Resource | Description |
-|----------|-------------|
-| `users` | User management |
-| `roles` | Role management |
-| `teams` | Team management |
-| `contacts` | Contact management |
-| `messages` | Message sending/viewing |
-| `templates` | Message template management |
-| `campaigns` | Campaign management |
-| `flows` | Chatbot flow management |
-| `chatbot` | Chatbot settings |
-| `webhooks` | Webhook configuration |
-| `api_keys` | API key management |
-| `organizations` | Organization and member management |
-| `accounts` | WhatsApp account settings |
-| `settings` | Organization settings |
-| `analytics` | Analytics and reporting |
+| Resource                         | Description                            |
+| -------------------------------- | -------------------------------------- |
+| `users`                          | User management                        |
+| `roles`                          | Role management                        |
+| `teams`                          | Team management                        |
+| `settings.general`               | General settings                       |
+| `settings.chatbot`               | Chatbot settings                       |
+| `settings.sso`                   | SSO settings                           |
+| `accounts`                       | WhatsApp account and instance settings |
+| `contacts`                       | Contact management                     |
+| `chat`                           | Chat visibility and sending            |
+| `chat.assign`                    | Conversation assignment                |
+| `templates`                      | Message template management            |
+| `campaigns`                      | Campaign management                    |
+| `flows.whatsapp`                 | WhatsApp flow management               |
+| `flows.chatbot`                  | Chatbot flow management                |
+| `chatbot.keywords`               | Keyword rules                          |
+| `chatbot.ai`                     | AI context management                  |
+| `webhooks`                       | Webhook configuration                  |
+| `api_keys`                       | API key management                     |
+| `canned_responses`               | Quick replies                          |
+| `custom_actions`                 | Custom actions                         |
+| `transfers`                      | Transfer queue operations              |
+| `organizations`                  | Organization and member management     |
+| `analytics` / `analytics.agents` | Analytics and reporting                |
 
 ### Permission Matrix
 
@@ -83,16 +99,38 @@ When creating or editing a role, you'll see a permission matrix organized by res
 ```
 Users
   ☑ Read users
-  ☑ Create users
-  ☐ Update users
+  ☑ Write users
   ☐ Delete users
 
 Contacts
   ☑ Read contacts
-  ☑ Create contacts
-  ☑ Update contacts
+  ☑ Write contacts
   ☐ Delete contacts
 ```
+
+### Permission Matrix Labels in the UI
+
+The permission editor uses user-facing labels, not raw resource keys. The most important mappings are:
+
+| UI Label            | Backend Resource   | Controls access to                               |
+| ------------------- | ------------------ | ------------------------------------------------ |
+| `Roles`             | `roles`            | `/settings/roles`                                |
+| `WhatsApp Accounts` | `accounts`         | `/settings/instances` and `/settings/accounts`   |
+| `General Settings`  | `settings.general` | `/settings`                                      |
+| `Chatbot Settings`  | `settings.chatbot` | `/settings/chatbot` and the chatbot settings hub |
+| `SSO Settings`      | `settings.sso`     | `/settings/sso`                                  |
+| `Chat`              | `chat`             | Chat visibility and message actions              |
+| `Chat Assignment`   | `chat.assign`      | Assignment and pickup workflows in chat          |
+| `Agent Analytics`   | `analytics.agents` | `/analytics/agents`                              |
+| `API Keys`          | `api_keys`         | `/settings/api-keys`                             |
+| `Custom Actions`    | `custom_actions`   | `/settings/custom-actions`                       |
+| `WhatsApp Flows`    | `flows.whatsapp`   | `/flows`                                         |
+| `Chatbot Flows`     | `flows.chatbot`    | `/chatbot/flows`                                 |
+
+<Aside type="tip">
+  In the permission matrix, the **View** checkbox maps to `read`,
+  **Create/Edit** maps to `write`, and **Delete** maps to `delete`.
+</Aside>
 
 ## Assigning Roles to Users
 
@@ -102,7 +140,8 @@ Contacts
 4. Save changes
 
 <Aside type="tip">
-  Changes to permissions take effect immediately. Users will see updated menu items and access controls without needing to log out.
+  Changes to permissions take effect immediately. Users will see updated menu
+  items and access controls without needing to log out.
 </Aside>
 
 ## Multi-Organization Access
@@ -135,7 +174,9 @@ Super admins have additional privileges:
 - Can create new organizations
 
 <Aside type="caution">
-  The `X-Organization-ID` header for direct API access is only respected for super admin users. Regular multi-org users must use the `POST /api/auth/switch-org` endpoint.
+  The `X-Organization-ID` header for direct API access is only respected for
+  super admin users. Regular multi-org users must use the `POST
+  /api/auth/switch-org` endpoint.
 </Aside>
 
 ## UI Behavior
@@ -146,13 +187,31 @@ The frontend dynamically adapts based on user permissions:
 
 Menu items are shown/hidden based on permissions:
 
-- **Chat** - Requires `messages:read`
+- **Chat** - Requires `chat:read`
 - **Contacts** - Requires `contacts:read`
 - **Campaigns** - Requires `campaigns:read`
 - **Templates** - Requires `templates:read`
-- **Chatbot** - Requires `chatbot:read`
+- **Chatbot** - Requires `settings.chatbot:read` or a more specific chatbot/flow permission
 - **Analytics** - Requires `analytics:read`
-- **Settings** - Requires any settings-related permission
+- **Settings** - Requires any permitted settings child such as `settings.general:read`, `accounts:read`, or `roles:read`
+
+### Roles Screen Behavior
+
+- Accessing `/settings/roles` only requires `roles:read`
+- Creating or updating custom roles requires `roles:write`
+- Deleting custom roles requires `roles:delete`
+- System roles remain visible to users with `roles:read`
+- Only super admins can update a system role's description or permissions
+- System role names and default-role state are immutable
+
+## Troubleshooting
+
+If the backend accepts the new RBAC rules but the UI still behaves like the old version, rebuild the embedded frontend bundle before serving the app from `:8080`.
+
+```bash
+make build-prod
+./whatomate server -config config.toml
+```
 
 ### Page Access
 
@@ -160,7 +219,7 @@ If a user tries to access a page they don't have permission for, they are redire
 
 ### Action Buttons
 
-Create, edit, and delete buttons are shown only if the user has the corresponding permission. For example, the "Add User" button only appears if the user has `users:create` permission.
+Create, edit, and delete buttons are shown only if the user has the corresponding permission. For example, the "Add User" button only appears if the user has `users:write`, and role deletion remains gated behind `roles:delete`.
 
 ## API Authorization
 
@@ -170,7 +229,7 @@ All API endpoints check permissions before processing requests:
 # Returns 403 if user lacks users:read permission
 GET /api/users
 
-# Returns 403 if user lacks campaigns:create permission
+# Returns 403 if user lacks campaigns:write permission
 POST /api/campaigns
 ```
 
@@ -179,7 +238,7 @@ POST /api/campaigns
 ```json
 {
   "status": "error",
-  "message": "Permission denied: users:create"
+  "message": "Insufficient permissions"
 }
 ```
 

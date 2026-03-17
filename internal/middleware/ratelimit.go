@@ -81,19 +81,16 @@ func RateLimit(opts RateLimitOpts) fastglue.FastMiddleware {
 }
 
 // extractClientIP returns the client IP address from the request.
-// When trustProxy is true, it checks X-Forwarded-For and X-Real-IP headers first.
+// When trustProxy is true, it only honors forwarded headers from a trusted
+// proxy peer (loopback/private/link-local remote addresses).
 func extractClientIP(r *fastglue.Request, trustProxy bool) string {
-	if trustProxy {
+	if trustProxy && shouldTrustForwardedHeaders(r.RequestCtx.RemoteAddr()) {
 		// X-Forwarded-For may contain a chain: "client, proxy1, proxy2"
-		if xff := string(r.RequestCtx.Request.Header.Peek("X-Forwarded-For")); xff != "" {
-			parts := strings.SplitN(xff, ",", 2)
-			ip := strings.TrimSpace(parts[0])
-			if ip != "" {
-				return ip
-			}
+		if xff := parseForwardedIP(string(r.RequestCtx.Request.Header.Peek("X-Forwarded-For"))); xff != "" {
+			return xff
 		}
-		if realIP := string(r.RequestCtx.Request.Header.Peek("X-Real-IP")); realIP != "" {
-			return strings.TrimSpace(realIP)
+		if realIP := parseForwardedIP(string(r.RequestCtx.Request.Header.Peek("X-Real-IP"))); realIP != "" {
+			return realIP
 		}
 	}
 
@@ -104,4 +101,40 @@ func extractClientIP(r *fastglue.Request, trustProxy bool) string {
 		return addr
 	}
 	return host
+}
+
+func parseForwardedIP(raw string) string {
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		return ""
+	}
+
+	if strings.Contains(candidate, ",") {
+		candidate = strings.TrimSpace(strings.SplitN(candidate, ",", 2)[0])
+	}
+	candidate = strings.Trim(candidate, "[]")
+	if net.ParseIP(candidate) == nil {
+		return ""
+	}
+	return candidate
+}
+
+func shouldTrustForwardedHeaders(remoteAddr net.Addr) bool {
+	if remoteAddr == nil {
+		return false
+	}
+
+	host := strings.TrimSpace(remoteAddr.String())
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		host = parsedHost
+	}
+	host = strings.Trim(host, "[]")
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // Login authenticates a user and returns tokens
@@ -323,8 +324,12 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Account is disabled", nil, "")
 	}
 
-	if claims.OrganizationID != uuid.Nil {
-		user.OrganizationID = claims.OrganizationID
+	if err := a.applyRefreshTokenOrgContext(&user, claims.OrganizationID); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid refresh token", nil, "")
+	}
+	if err := a.populateUserRolePermissions(&user); err != nil {
+		a.Log.Error("Failed to hydrate role permissions during refresh", "error", err, "user_id", user.ID, "organization_id", user.OrganizationID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 	}
 
 	accessToken, accessTokenExpiresAt, err := a.generateAccessToken(&user)
@@ -348,6 +353,74 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 		ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
 		User:      user,
 	})
+}
+
+func (a *App) applyRefreshTokenOrgContext(user *models.User, tokenOrgID uuid.UUID) error {
+	if user == nil {
+		return errors.New("user is nil")
+	}
+
+	targetOrgID := tokenOrgID
+	if targetOrgID == uuid.Nil {
+		targetOrgID = user.OrganizationID
+	}
+	if targetOrgID == uuid.Nil {
+		return errors.New("missing organization")
+	}
+
+	if user.IsSuperAdmin {
+		var org models.Organization
+		if err := a.DB.Select("id").Where("id = ?", targetOrgID).First(&org).Error; err != nil {
+			return err
+		}
+		user.OrganizationID = targetOrgID
+		return nil
+	}
+
+	var membership models.UserOrganization
+	if err := a.DB.Where("user_id = ? AND organization_id = ?", user.ID, targetOrgID).First(&membership).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		return err
+	}
+
+	user.OrganizationID = targetOrgID
+	user.RoleID = membership.RoleID
+	return nil
+}
+
+func (a *App) populateUserRolePermissions(user *models.User) error {
+	if user == nil {
+		return errors.New("user is nil")
+	}
+	if user.RoleID == nil {
+		user.Role = nil
+		return nil
+	}
+
+	var role models.CustomRole
+	if err := a.DB.Where("id = ?", *user.RoleID).First(&role).Error; err != nil {
+		return err
+	}
+
+	cachedPerms, err := a.GetRolePermissionsCached(*user.RoleID)
+	if err == nil {
+		permissions := make([]models.Permission, 0, len(cachedPerms))
+		for _, p := range cachedPerms {
+			parts := splitPermission(p)
+			if len(parts) == 2 {
+				permissions = append(permissions, models.Permission{
+					Resource: parts[0],
+					Action:   parts[1],
+				})
+			}
+		}
+		role.Permissions = permissions
+	}
+
+	user.Role = &role
+	return nil
 }
 
 // SwitchOrg generates new tokens for a different organization the user belongs to

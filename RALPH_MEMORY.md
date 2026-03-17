@@ -1,3 +1,10 @@
+## 2026-03-17 00:00 Issue: Assignment permissions ignored chat.assign
+
+- The Trap: Assuming contact assignment was controlled by `contacts:write` and role names, so `chat.assign:write` changes in `/settings/roles` would work.
+- The Reality: The backend and frontend checked different permission keys, so role changes did not grant assignment; instance restrictions were also not enforced on assignments.
+- The Fix: Centralized assignment authorization on `chat.assign:write` (or `contacts:write` fallback) and enforced assignee instance access for contacts and transfers, with UI filtering on allowed instance IDs.
+- The Law: Align UI and server authorization checks to the same permission keys, and enforce access restrictions server-side even when the UI filters lists.
+
 ## [2026-03-01] Issue: Mask phone numbers in chat messages
 
 - **The Trap:** Focusing only on the REST API response (`buildMessagesResponse`) to apply data modifiers like phone number masking.

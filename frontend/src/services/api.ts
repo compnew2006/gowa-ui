@@ -112,11 +112,16 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
+        const csrfToken = getCookie("whm_csrf");
+
         // Browser sends whm_refresh cookie automatically via withCredentials
         await axios.post(
           `${API_BASE_URL}/auth/refresh`,
           {},
-          { withCredentials: true },
+          {
+            withCredentials: true,
+            headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {},
+          },
         );
 
         // Cookies are updated by the server response — retry the original request
@@ -419,6 +424,31 @@ export const messagesService = {
       account_name?: string;
     },
   ) => api.post("/messages/template", { contact_id: contactId, ...data }),
+  sendMedia: (data: {
+    contactId: string;
+    file: File;
+    type: string;
+    caption?: string;
+    instance_id?: string;
+    whatsapp_account?: string;
+  }) => {
+    const formData = new FormData();
+    formData.append("file", data.file);
+    formData.append("contact_id", data.contactId);
+    formData.append("type", data.type);
+    if (data.caption?.trim()) {
+      formData.append("caption", data.caption.trim());
+    }
+    if (data.instance_id?.trim()) {
+      formData.append("instance_id", data.instance_id.trim());
+    }
+    if (data.whatsapp_account?.trim()) {
+      formData.append("whatsapp_account", data.whatsapp_account.trim());
+    }
+    return api.post("/messages/media", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
   sendReaction: (contactId: string, messageId: string, emoji: string) =>
     api.post(`/contacts/${contactId}/messages/${messageId}/reaction`, {
       emoji,

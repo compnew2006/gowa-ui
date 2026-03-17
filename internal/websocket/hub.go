@@ -151,8 +151,9 @@ func (h *Hub) broadcastMessage(msg BroadcastMessage) {
 	for _, userClients := range orgClients {
 		// Iterate through all clients (tabs) for each user
 		for client := range userClients {
-			// If ContactID is specified, only send to clients viewing that contact
-			if msg.ContactID != uuid.Nil && client.currentContact != nil && *client.currentContact != msg.ContactID {
+			// If ContactID is specified, only send to clients explicitly subscribed
+			// to that contact.
+			if msg.ContactID != uuid.Nil && (client.currentContact == nil || *client.currentContact != msg.ContactID) {
 				continue
 			}
 

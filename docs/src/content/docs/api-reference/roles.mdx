@@ -3,10 +3,11 @@ title: Roles
 description: Role and permission management API
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 <Aside type="caution">
-  Role management endpoints require the `roles:read`, `roles:create`, `roles:update`, or `roles:delete` permissions respectively.
+  Role management endpoints require `roles:read`, `roles:write`, or
+  `roles:delete`. The permissions catalog endpoint also requires `roles:read`.
 </Aside>
 
 ## Overview
@@ -20,6 +21,8 @@ Get all available permissions in the system.
 ```bash
 GET /api/permissions
 ```
+
+<Aside type="note">Requires `roles:read` permission.</Aside>
 
 ### Response
 
@@ -37,8 +40,9 @@ GET /api/permissions
       {
         "id": "uuid",
         "resource": "users",
-        "action": "create",
-        "description": "Create users"
+        "action": "write",
+        "description": "Create and edit users",
+        "key": "users:write"
       }
     ]
   }
@@ -53,15 +57,13 @@ Get all roles in your organization.
 GET /api/roles
 ```
 
-<Aside type="note">
-  Requires `roles:read` permission.
-</Aside>
+<Aside type="note">Requires `roles:read` permission.</Aside>
 
 ### Query Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `search` | string | Filter by role name |
+| Parameter | Type   | Description         |
+| --------- | ------ | ------------------- |
+| `search`  | string | Filter by role name |
 
 ### Response
 
@@ -76,7 +78,13 @@ GET /api/roles
         "description": "Full access to all features",
         "is_system": true,
         "is_default": false,
-        "permission_count": 45,
+        "permissions": [
+          "users:read",
+          "users:write",
+          "roles:read",
+          "roles:write"
+        ],
+        "user_count": 3,
         "created_at": "2024-01-01T00:00:00Z",
         "updated_at": "2024-01-01T00:00:00Z"
       },
@@ -86,7 +94,8 @@ GET /api/roles
         "description": "Custom role with specific permissions",
         "is_system": false,
         "is_default": false,
-        "permission_count": 12,
+        "permissions": ["chat:read", "chat:write", "contacts:read"],
+        "user_count": 1,
         "created_at": "2024-01-01T00:00:00Z",
         "updated_at": "2024-01-01T00:00:00Z"
       }
@@ -115,19 +124,12 @@ GET /api/roles/{id}
     "is_system": false,
     "is_default": false,
     "permissions": [
-      {
-        "id": "uuid",
-        "resource": "contacts",
-        "action": "read",
-        "description": "View contacts"
-      },
-      {
-        "id": "uuid",
-        "resource": "contacts",
-        "action": "create",
-        "description": "Create contacts"
-      }
+      "contacts:read",
+      "contacts:write",
+      "chat:read",
+      "chat:write"
     ],
+    "user_count": 2,
     "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-01T00:00:00Z"
   }
@@ -142,9 +144,7 @@ Create a new custom role.
 POST /api/roles
 ```
 
-<Aside type="note">
-  Requires `roles:create` permission.
-</Aside>
+<Aside type="note">Requires `roles:write` permission.</Aside>
 
 ### Request Body
 
@@ -152,16 +152,16 @@ POST /api/roles
 {
   "name": "Support Agent",
   "description": "Can view and respond to chats",
-  "permissions": ["contacts:read", "messages:read", "messages:create"]
+  "permissions": ["contacts:read", "chat:read", "chat:write"]
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | Unique role name |
-| `description` | string | No | Role description |
-| `permissions` | array | Yes | Array of permission keys (e.g., `resource:action`) |
-| `is_default` | boolean | No | Set as default role for new users |
+| Field         | Type    | Required | Description                                        |
+| ------------- | ------- | -------- | -------------------------------------------------- |
+| `name`        | string  | Yes      | Unique role name                                   |
+| `description` | string  | No       | Role description                                   |
+| `permissions` | array   | Yes      | Array of permission keys (e.g., `resource:action`) |
+| `is_default`  | boolean | No       | Set as default role for new users                  |
 
 ### Response
 
@@ -174,14 +174,7 @@ POST /api/roles
     "description": "Can view and respond to chats",
     "is_system": false,
     "is_default": false,
-    "permissions": [
-      {
-        "id": "uuid",
-        "resource": "contacts",
-        "action": "read",
-        "description": "View contacts"
-      }
-    ],
+    "permissions": ["contacts:read", "chat:read", "chat:write"],
     "created_at": "2024-01-01T00:00:00Z"
   }
 }
@@ -195,13 +188,25 @@ Update an existing custom role.
 PUT /api/roles/{id}
 ```
 
-<Aside type="note">
-  Requires `roles:update` permission.
-</Aside>
+<Aside type="note">Requires `roles:write` permission.</Aside>
 
 <Aside type="caution">
-  System roles (admin, manager, agent) cannot be modified.
+  System roles can be viewed by anyone with `roles:read`, but only super admins
+  can update a system role's description or permissions. System role names and
+  default-role status remain immutable.
 </Aside>
+
+### System Role Update Example
+
+Use a minimal payload when updating a system role. Only `description` and
+`permissions` are accepted.
+
+```json
+{
+  "description": "Updated description for the admin role",
+  "permissions": ["users:read", "users:write", "roles:read", "roles:write"]
+}
+```
 
 ### Request Body
 
@@ -209,16 +214,28 @@ PUT /api/roles/{id}
 {
   "name": "Senior Support Agent",
   "description": "Can view, respond to chats, and access analytics",
-  "permissions": ["contacts:read", "messages:read", "messages:create", "analytics:read"]
+  "permissions": ["contacts:read", "chat:read", "chat:write", "analytics:read"],
+  "is_default": false
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Role name |
-| `description` | string | Role description |
-| `permissions` | array | Array of permission keys |
-| `is_default` | boolean | Set as default role for new users |
+| Field         | Type    | Description                                                                    |
+| ------------- | ------- | ------------------------------------------------------------------------------ |
+| `name`        | string  | Role name                                                                      |
+| `description` | string  | Role description                                                               |
+| `permissions` | array   | Array of permission keys. Send `[]` to clear all permissions on a custom role. |
+| `is_default`  | boolean | Set or unset the default role for new users                                    |
+
+<Aside type="note">
+  `PUT /api/roles/{id}` is partial. Omitted fields stay unchanged. `is_default:
+  false` explicitly removes the default flag.
+</Aside>
+
+<Aside type="caution">
+  Sending `name` or `is_default` for a system role returns `400 Bad Request`
+  with the message `System roles only support description and permissions
+  updates`.
+</Aside>
 
 ### Response
 
@@ -245,13 +262,11 @@ Delete a custom role.
 DELETE /api/roles/{id}
 ```
 
-<Aside type="note">
-  Requires `roles:delete` permission.
-</Aside>
+<Aside type="note">Requires `roles:delete` permission.</Aside>
 
 <Aside type="caution">
-  - System roles cannot be deleted
-  - Roles with assigned users cannot be deleted (reassign users first)
+  - System roles cannot be deleted - Roles with assigned users cannot be deleted
+  (reassign users first)
 </Aside>
 
 ### Response
@@ -267,73 +282,44 @@ DELETE /api/roles/{id}
 
 ## Permission Keys
 
-Permissions use the format `resource:action`. Here are all available permissions:
+Permissions use the format `resource:action`. These are the core action families in the current RBAC model:
 
-### User Management
-- `users:read` - View users
-- `users:create` - Create users
-- `users:update` - Update users
-- `users:delete` - Delete users
+| Action    | Meaning                                       |
+| --------- | --------------------------------------------- |
+| `read`    | View the resource                             |
+| `write`   | Create and edit the resource                  |
+| `delete`  | Remove the resource                           |
+| `sync`    | Synchronize with an external provider         |
+| `execute` | Run an action such as sending a campaign      |
+| `import`  | Import records                                |
+| `export`  | Export records                                |
+| `pickup`  | Pickup queue items such as transfers          |
+| `assign`  | Assign resources such as organization members |
+| `prefix`  | Enable agent-name prefixing in chat           |
 
-### Role Management
-- `roles:read` - View roles
-- `roles:create` - Create roles
-- `roles:update` - Update roles
-- `roles:delete` - Delete roles
+### Current Resources
 
-### Team Management
-- `teams:read` - View teams
-- `teams:create` - Create teams
-- `teams:update` - Update teams
-- `teams:delete` - Delete teams
+- `users`, `roles`, `teams`
+- `settings.general`, `settings.chatbot`, `settings.sso`
+- `accounts`, `templates`, `campaigns`
+- `flows.whatsapp`, `flows.chatbot`
+- `chatbot.keywords`, `chatbot.ai`
+- `chat`, `chat.assign`, `contacts`, `tags`
+- `analytics`, `analytics.agents`, `transfers`
+- `webhooks`, `api_keys`, `canned_responses`, `custom_actions`, `organizations`
 
-### Contacts
-- `contacts:read` - View contacts
-- `contacts:create` - Create contacts
-- `contacts:update` - Update contacts
-- `contacts:delete` - Delete contacts
+### UI Label Mapping
 
-### Messages
-- `messages:read` - View messages
-- `messages:create` - Send messages
+In the frontend permission matrix, these backend resources appear with the
+following labels:
 
-### Templates
-- `templates:read` - View templates
-- `templates:create` - Create templates
-- `templates:update` - Update templates
-- `templates:delete` - Delete templates
-
-### Campaigns
-- `campaigns:read` - View campaigns
-- `campaigns:create` - Create campaigns
-- `campaigns:update` - Update campaigns
-- `campaigns:delete` - Delete campaigns
-
-### Chatbot
-- `chatbot:read` - View chatbot settings
-- `chatbot:update` - Update chatbot settings
-- `flows:read` - View flows
-- `flows:create` - Create flows
-- `flows:update` - Update flows
-- `flows:delete` - Delete flows
-
-### Settings
-- `settings:read` - View organization settings
-- `settings:update` - Update organization settings
-- `accounts:read` - View WhatsApp accounts
-- `accounts:create` - Create WhatsApp accounts
-- `accounts:update` - Update WhatsApp accounts
-- `accounts:delete` - Delete WhatsApp accounts
-- `webhooks:read` - View webhooks
-- `webhooks:create` - Create webhooks
-- `webhooks:update` - Update webhooks
-- `webhooks:delete` - Delete webhooks
-- `api_keys:read` - View API keys
-- `api_keys:create` - Create API keys
-- `api_keys:delete` - Delete API keys
-
-### Analytics
-- `analytics:read` - View analytics
+| UI Label            | Backend Resource   |
+| ------------------- | ------------------ |
+| `Roles`             | `roles`            |
+| `WhatsApp Accounts` | `accounts`         |
+| `General Settings`  | `settings.general` |
+| `Chatbot Settings`  | `settings.chatbot` |
+| `SSO Settings`      | `settings.sso`     |
 
 ## See Also
 

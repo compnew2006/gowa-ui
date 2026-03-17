@@ -14,7 +14,8 @@ Modern, open-source WhatsApp Business Platform. Support for both **WhatsApp Clou
   Choose between **Meta's WhatsApp Cloud API** for official business integration or **Whatsmeow** (WhatsApp Web protocol) for QR-code based multi-instance support without API costs.
 
 - **Granular Roles & Permissions**
-  Customizable roles with fine-grained permissions. Create custom roles, assign specific permissions per resource (users, contacts, templates, etc.), and control access at the action level (read, create, update, delete). Super admins can manage multiple organizations.
+  Customizable roles with fine-grained permissions. Create custom roles, assign specific permissions per resource (users, contacts, templates, chat, settings, and more), and control access with `read`, `write`, `delete`, and specialized actions such as `sync`, `execute`, `import`, `export`, `pickup`, `assign`, and `prefix`. Super admins can manage multiple organizations.
+  In the permission matrix UI, `/settings/roles` appears under `Roles`, while `/settings/instances` uses the `WhatsApp Accounts` resource label.
 
 - **Real-time Chat**
   Live messaging with WebSocket support for instant communication, featuring instance tags for easy identification.

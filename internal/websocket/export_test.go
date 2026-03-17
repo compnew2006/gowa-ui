@@ -26,3 +26,8 @@ func ClientOrgID(c *Client) uuid.UUID {
 func ClientHandleAuthMessage(c *Client, data []byte) bool {
 	return c.handleAuthMessage(data)
 }
+
+// ClientSetCurrentContact sets the client's current contact for testing.
+func ClientSetCurrentContact(c *Client, contactID *uuid.UUID) {
+	c.currentContact = contactID
+}

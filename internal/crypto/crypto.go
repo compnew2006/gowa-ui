@@ -3,19 +3,24 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/sha256"
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/base64"
 	"errors"
 	"io"
 	"strings"
 )
 
-const prefix = "enc:"
+const (
+	legacyPrefix = "enc:"
+	prefix       = "enc2:"
+)
 
 var ErrMissingEncryptionKey = errors.New("encryption key is required")
 
 // Encrypt encrypts plaintext using AES-256-GCM and returns a base64-encoded
-// ciphertext prefixed with "enc:" for identification.
+// ciphertext prefixed with "enc2:" for identification.
 func Encrypt(plaintext, key string) (string, error) {
 	if plaintext == "" {
 		return plaintext, nil
@@ -44,7 +49,7 @@ func Encrypt(plaintext, key string) (string, error) {
 }
 
 // Decrypt decrypts a value previously encrypted with Encrypt.
-// If the value doesn't have the "enc:" prefix, it's returned as-is
+// If the value doesn't have a recognized encryption prefix, it's returned as-is
 // (supports reading legacy unencrypted data).
 func Decrypt(ciphertext, key string) (string, error) {
 	if ciphertext == "" {
@@ -52,19 +57,28 @@ func Decrypt(ciphertext, key string) (string, error) {
 	}
 
 	// Not encrypted — return as-is (legacy data)
-	if len(ciphertext) < len(prefix) || ciphertext[:len(prefix)] != prefix {
+	if !strings.HasPrefix(ciphertext, prefix) && !strings.HasPrefix(ciphertext, legacyPrefix) {
 		return ciphertext, nil
 	}
 	if strings.TrimSpace(key) == "" {
 		return "", ErrMissingEncryptionKey
 	}
 
-	data, err := base64.StdEncoding.DecodeString(ciphertext[len(prefix):])
+	keyBytes := deriveKey(key)
+	payload := ciphertext
+	if strings.HasPrefix(ciphertext, legacyPrefix) {
+		keyBytes = deriveLegacyKey(key)
+		payload = ciphertext[len(legacyPrefix):]
+	} else {
+		payload = ciphertext[len(prefix):]
+	}
+
+	data, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil {
 		return "", err
 	}
 
-	block, err := aes.NewCipher(deriveKey(key))
+	block, err := aes.NewCipher(keyBytes)
 	if err != nil {
 		return "", err
 	}
@@ -101,11 +115,35 @@ func DecryptFields(key string, fields ...*string) {
 
 // IsEncrypted checks if a value has the encryption prefix.
 func IsEncrypted(value string) bool {
-	return len(value) >= len(prefix) && value[:len(prefix)] == prefix
+	return strings.HasPrefix(value, prefix) || strings.HasPrefix(value, legacyPrefix)
 }
 
-// deriveKey pads or truncates the key to exactly 32 bytes for AES-256.
+// deriveKey normalizes operator-provided secrets into a stable 32-byte AES key.
+// It accepts raw 32-byte values encoded as hex/base64 and falls back to hashing
+// arbitrary passphrases for forward compatibility.
 func deriveKey(key string) []byte {
+	trimmed := strings.TrimSpace(key)
+	if trimmed == "" {
+		return make([]byte, 32)
+	}
+
+	if decoded, err := hex.DecodeString(trimmed); err == nil && len(decoded) == 32 {
+		return decoded
+	}
+	if decoded, err := base64.RawStdEncoding.DecodeString(trimmed); err == nil && len(decoded) == 32 {
+		return decoded
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(trimmed); err == nil && len(decoded) == 32 {
+		return decoded
+	}
+
+	sum := sha256.Sum256([]byte(trimmed))
+	return sum[:]
+}
+
+// deriveLegacyKey preserves decryption for existing enc: ciphertexts that used
+// naive truncation/padding of the configured secret.
+func deriveLegacyKey(key string) []byte {
 	k := make([]byte, 32)
 	copy(k, []byte(key))
 	return k

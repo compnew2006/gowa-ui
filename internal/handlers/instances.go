@@ -104,11 +104,26 @@ func (a *App) scopeInstancesQueryToUserRestriction(query *gorm.DB, orgID, userID
 	return query, nil
 }
 
+func (a *App) requireInstanceReadPermission(r *fastglue.Request, userID uuid.UUID) error {
+	return a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead)
+}
+
+func (a *App) requireInstanceWritePermission(r *fastglue.Request, userID uuid.UUID) error {
+	return a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite)
+}
+
+func (a *App) requireInstanceDeletePermission(r *fastglue.Request, userID uuid.UUID) error {
+	return a.requirePermission(r, userID, models.ResourceAccounts, models.ActionDelete)
+}
+
 // CreateInstance creates a new WhatsApp instance
 func (a *App) CreateInstance(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireInstanceWritePermission(r, userID); err != nil {
+		return nil
 	}
 
 	var req CreateInstanceRequest
@@ -158,6 +173,9 @@ func (a *App) ListInstances(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requireInstanceReadPermission(r, userID); err != nil {
+		return nil
+	}
 
 	query := a.DB.Where("organization_id = ?", orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
@@ -180,6 +198,9 @@ func (a *App) GetInstance(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireInstanceReadPermission(r, userID); err != nil {
+		return nil
 	}
 
 	idStr := r.RequestCtx.UserValue("id").(string)
@@ -212,6 +233,9 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireInstanceWritePermission(r, userID); err != nil {
+		return nil
 	}
 
 	idStr := r.RequestCtx.UserValue("id").(string)
@@ -288,6 +312,9 @@ func (a *App) DeleteInstance(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requireInstanceDeletePermission(r, userID); err != nil {
+		return nil
+	}
 
 	deleteChats, err := parseDeleteChatsQueryFlag(r)
 	if err != nil {
@@ -340,6 +367,9 @@ func (a *App) ConnectInstance(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireInstanceWritePermission(r, userID); err != nil {
+		return nil
 	}
 
 	idStr := r.RequestCtx.UserValue("id").(string)
@@ -394,6 +424,9 @@ func (a *App) DisconnectInstance(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requireInstanceWritePermission(r, userID); err != nil {
+		return nil
+	}
 
 	idStr := r.RequestCtx.UserValue("id").(string)
 	id, err := uuid.Parse(idStr)
@@ -437,6 +470,9 @@ func (a *App) ReconnectInstance(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireInstanceWritePermission(r, userID); err != nil {
+		return nil
 	}
 
 	idStr := r.RequestCtx.UserValue("id").(string)
@@ -495,6 +531,9 @@ func (a *App) GetInstanceQRCodeSnapshot(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requireInstanceReadPermission(r, userID); err != nil {
+		return nil
+	}
 
 	idStr := r.RequestCtx.UserValue("id").(string)
 	id, err := uuid.Parse(idStr)
@@ -546,6 +585,9 @@ func (a *App) PairPhoneInstance(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireInstanceWritePermission(r, userID); err != nil {
+		return nil
 	}
 
 	idStr := r.RequestCtx.UserValue("id").(string)
@@ -628,6 +670,9 @@ func (a *App) GetInstanceHealth(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireInstanceReadPermission(r, userID); err != nil {
+		return nil
 	}
 
 	idStr := r.RequestCtx.UserValue("id").(string)

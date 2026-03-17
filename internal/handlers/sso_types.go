@@ -48,8 +48,9 @@ type SSOState struct {
 
 // SSOProviderPublic represents public SSO provider info (no secrets)
 type SSOProviderPublic struct {
-	Provider string `json:"provider"`
-	Name     string `json:"name"`
+	Provider         string `json:"provider"`
+	Name             string `json:"name"`
+	OrganizationSlug string `json:"organization_slug,omitempty"`
 }
 
 // SSOProviderRequest represents SSO provider config from admin

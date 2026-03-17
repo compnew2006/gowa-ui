@@ -222,25 +222,34 @@ func TestHub_BroadcastToContact_SkipsClientsNotViewingContact(t *testing.T) {
 	hub.Register(c2)
 	waitForClientCount(t, hub, 2)
 
-	// Set contacts by sending set_contact messages through the hub broadcast
-	// Since we can't easily set currentContact via the public API without a
-	// real websocket connection, we use BroadcastToOrg for both first and
-	// then check BroadcastToContact behavior with clients that have nil
-	// currentContact.
-	//
-	// A client with nil currentContact receives BroadcastToContact messages
-	// (the code checks: if ContactID is set AND client.currentContact is not nil
-	// AND they don't match, skip).
-	_ = contactID
-	_ = otherContact
+	websocket.ClientSetCurrentContact(c1, &contactID)
+	websocket.ClientSetCurrentContact(c2, &otherContact)
 
-	// With nil currentContact, all org clients receive contact-targeted messages
 	msg := websocket.WSMessage{Type: websocket.TypeNewMessage, Payload: "contact msg"}
 	hub.BroadcastToContact(orgID, contactID, msg)
 
-	// Both should receive because neither has set a currentContact (nil passes filter)
 	assertReceivesMessage(t, c1, websocket.TypeNewMessage)
-	assertReceivesMessage(t, c2, websocket.TypeNewMessage)
+	assertNoMessage(t, c2)
+}
+
+func TestHub_BroadcastToContact_SkipsClientsWithoutActiveContact(t *testing.T) {
+	hub := newTestHub(t)
+	orgID := uuid.New()
+	contactID := uuid.New()
+
+	c1 := newTestClient(hub, uuid.New(), orgID)
+	c2 := newTestClient(hub, uuid.New(), orgID)
+	websocket.ClientSetCurrentContact(c1, &contactID)
+
+	hub.Register(c1)
+	hub.Register(c2)
+	waitForClientCount(t, hub, 2)
+
+	msg := websocket.WSMessage{Type: websocket.TypeNewMessage, Payload: "contact msg"}
+	hub.BroadcastToContact(orgID, contactID, msg)
+
+	assertReceivesMessage(t, c1, websocket.TypeNewMessage)
+	assertNoMessage(t, c2)
 }
 
 // --- BroadcastToOrg with nonexistent org ---

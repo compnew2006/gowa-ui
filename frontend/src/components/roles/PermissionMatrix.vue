@@ -1,150 +1,182 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { computed, ref, watch } from "vue";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
-  AccordionTrigger
-} from '@/components/ui/accordion'
-import type { PermissionGroup } from '@/stores/roles'
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import type { PermissionGroup } from "@/stores/roles";
 
 const props = defineProps<{
-  permissionGroups: PermissionGroup[]
-  selectedPermissions: string[]
-  disabled?: boolean
-}>()
+  permissionGroups: PermissionGroup[];
+  selectedPermissions: string[];
+  disabled?: boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: 'update:selectedPermissions', value: string[]): void
-}>()
+  (e: "update:selectedPermissions", value: string[]): void;
+}>();
 
 // Action labels for better display
 const actionLabels: Record<string, string> = {
-  read: 'View',
-  write: 'Create/Edit',
-  delete: 'Delete',
-  manage: 'Manage',
-  export: 'Export',
-  assign: 'Assign',
-  prefix: 'Prefix Agent Name'
-}
+  read: "View",
+  write: "Create/Edit",
+  delete: "Delete",
+  sync: "Sync",
+  execute: "Execute",
+  import: "Import",
+  export: "Export",
+  pickup: "Pick Up",
+  assign: "Assign",
+  prefix: "Prefix Agent Name",
+};
 
 function getActionLabel(action: string): string {
-  return actionLabels[action] || action.charAt(0).toUpperCase() + action.slice(1)
+  return (
+    actionLabels[action] || action.charAt(0).toUpperCase() + action.slice(1)
+  );
 }
 
 function isSelected(key: string): boolean {
-  return props.selectedPermissions.includes(key)
+  return props.selectedPermissions.includes(key);
 }
 
 function togglePermission(key: string) {
-  if (props.disabled) return
+  if (props.disabled) return;
 
   const newPermissions = isSelected(key)
-    ? props.selectedPermissions.filter(p => p !== key)
-    : [...props.selectedPermissions, key]
+    ? props.selectedPermissions.filter((p) => p !== key)
+    : [...props.selectedPermissions, key];
 
-  emit('update:selectedPermissions', newPermissions)
+  emit("update:selectedPermissions", newPermissions);
 }
 
 function toggleGroup(group: PermissionGroup) {
-  if (props.disabled) return
+  if (props.disabled) return;
 
-  const groupKeys = group.permissions.map(p => p.key)
-  const allSelected = groupKeys.every(key => props.selectedPermissions.includes(key))
+  const groupKeys = group.permissions.map((p) => p.key);
+  const allSelected = groupKeys.every((key) =>
+    props.selectedPermissions.includes(key),
+  );
 
-  let newPermissions: string[]
+  let newPermissions: string[];
   if (allSelected) {
     // Deselect all in group
-    newPermissions = props.selectedPermissions.filter(p => !groupKeys.includes(p))
+    newPermissions = props.selectedPermissions.filter(
+      (p) => !groupKeys.includes(p),
+    );
   } else {
     // Select all in group
-    const existing = new Set(props.selectedPermissions)
-    groupKeys.forEach(key => existing.add(key))
-    newPermissions = Array.from(existing)
+    const existing = new Set(props.selectedPermissions);
+    groupKeys.forEach((key) => existing.add(key));
+    newPermissions = Array.from(existing);
   }
 
-  emit('update:selectedPermissions', newPermissions)
+  emit("update:selectedPermissions", newPermissions);
 }
 
 function isGroupFullySelected(group: PermissionGroup): boolean {
-  return group.permissions.every(p => props.selectedPermissions.includes(p.key))
+  return group.permissions.every((p) =>
+    props.selectedPermissions.includes(p.key),
+  );
 }
 
 function isGroupPartiallySelected(group: PermissionGroup): boolean {
-  const selectedCount = group.permissions.filter(p =>
-    props.selectedPermissions.includes(p.key)
-  ).length
-  return selectedCount > 0 && selectedCount < group.permissions.length
+  const selectedCount = group.permissions.filter((p) =>
+    props.selectedPermissions.includes(p.key),
+  ).length;
+  return selectedCount > 0 && selectedCount < group.permissions.length;
 }
 
 function getSelectedCountForGroup(group: PermissionGroup): number {
-  return group.permissions.filter(p => props.selectedPermissions.includes(p.key)).length
+  return group.permissions.filter((p) =>
+    props.selectedPermissions.includes(p.key),
+  ).length;
 }
 
 // Use a reactive value for the accordion - only expand groups with selections
-const openGroups = ref<string[]>([])
+const openGroups = ref<string[]>([]);
 
 // Compute groups that have selected permissions
 const groupsWithSelections = computed(() => {
   return props.permissionGroups
-    .filter(g => g.permissions.some(p => props.selectedPermissions.includes(p.key)))
-    .map(g => g.resource)
-})
+    .filter((g) =>
+      g.permissions.some((p) => props.selectedPermissions.includes(p.key)),
+    )
+    .map((g) => g.resource);
+});
 
 // Sort groups: selected groups first, then alphabetically
 const sortedPermissionGroups = computed(() => {
   return [...props.permissionGroups].sort((a, b) => {
-    const aHasSelection = a.permissions.some(p => props.selectedPermissions.includes(p.key))
-    const bHasSelection = b.permissions.some(p => props.selectedPermissions.includes(p.key))
+    const aHasSelection = a.permissions.some((p) =>
+      props.selectedPermissions.includes(p.key),
+    );
+    const bHasSelection = b.permissions.some((p) =>
+      props.selectedPermissions.includes(p.key),
+    );
 
     // Groups with selections come first
-    if (aHasSelection && !bHasSelection) return -1
-    if (!aHasSelection && bHasSelection) return 1
+    if (aHasSelection && !bHasSelection) return -1;
+    if (!aHasSelection && bHasSelection) return 1;
 
     // Within same category, sort alphabetically
-    return a.label.localeCompare(b.label)
-  })
-})
+    return a.label.localeCompare(b.label);
+  });
+});
 
 // Set initial state when component mounts or permission groups load
-watch(() => props.permissionGroups, (groups) => {
-  if (groups.length > 0 && openGroups.value.length === 0) {
-    // On initial load, only expand groups with selections
-    openGroups.value = [...groupsWithSelections.value]
-  }
-}, { immediate: true })
+watch(
+  () => props.permissionGroups,
+  (groups) => {
+    if (groups.length > 0 && openGroups.value.length === 0) {
+      // On initial load, only expand groups with selections
+      openGroups.value = [...groupsWithSelections.value];
+    }
+  },
+  { immediate: true },
+);
 
 // Auto-expand groups when permissions are selected
-watch(() => props.selectedPermissions, (newPerms, oldPerms) => {
-  if (!oldPerms) return
+watch(
+  () => props.selectedPermissions,
+  (newPerms, oldPerms) => {
+    if (!oldPerms) return;
 
-  // Find newly selected permissions
-  const oldSet = new Set(oldPerms)
-  const newlySelected = newPerms.filter(p => !oldSet.has(p))
+    // Find newly selected permissions
+    const oldSet = new Set(oldPerms);
+    const newlySelected = newPerms.filter((p) => !oldSet.has(p));
 
-  if (newlySelected.length > 0) {
-    // Find which groups contain the newly selected permissions and expand them
-    const groupsToExpand = props.permissionGroups
-      .filter(g => g.permissions.some(p => newlySelected.includes(p.key)))
-      .map(g => g.resource)
+    if (newlySelected.length > 0) {
+      // Find which groups contain the newly selected permissions and expand them
+      const groupsToExpand = props.permissionGroups
+        .filter((g) => g.permissions.some((p) => newlySelected.includes(p.key)))
+        .map((g) => g.resource);
 
-    // Add to openGroups if not already open
-    const currentOpen = new Set(openGroups.value)
-    groupsToExpand.forEach(g => currentOpen.add(g))
-    openGroups.value = [...currentOpen]
-  }
-})
+      // Add to openGroups if not already open
+      const currentOpen = new Set(openGroups.value);
+      groupsToExpand.forEach((g) => currentOpen.add(g));
+      openGroups.value = [...currentOpen];
+    }
+  },
+);
 </script>
 
 <template>
   <div class="space-y-2">
     <!-- Empty state -->
-    <div v-if="permissionGroups.length === 0" class="text-center py-8 text-muted-foreground border rounded-lg">
-      <p>No permissions available. Please check if permissions are seeded in the database.</p>
+    <div
+      v-if="permissionGroups.length === 0"
+      class="text-center py-8 text-muted-foreground border rounded-lg"
+    >
+      <p>
+        No permissions available. Please check if permissions are seeded in the
+        database.
+      </p>
     </div>
 
     <!-- Permission groups -->
@@ -161,12 +193,15 @@ watch(() => props.selectedPermissions, (newPerms, oldPerms) => {
               :checked="isGroupFullySelected(group)"
               :indeterminate="isGroupPartiallySelected(group)"
               :disabled="disabled"
+              :aria-label="`Toggle all ${group.label} permissions`"
               @click.stop
               @update:checked="toggleGroup(group)"
             />
             <span class="font-medium">{{ group.label }}</span>
             <Badge variant="secondary" class="ml-2">
-              {{ getSelectedCountForGroup(group) }}/{{ group.permissions.length }}
+              {{ getSelectedCountForGroup(group) }}/{{
+                group.permissions.length
+              }}
             </Badge>
           </div>
         </AccordionTrigger>
@@ -181,6 +216,7 @@ watch(() => props.selectedPermissions, (newPerms, oldPerms) => {
                 :id="permission.key"
                 :checked="isSelected(permission.key)"
                 :disabled="disabled"
+                :aria-label="`${getActionLabel(permission.action)} ${group.label}`"
                 @update:checked="togglePermission(permission.key)"
               />
               <div class="grid gap-0.5 leading-none">
@@ -191,7 +227,10 @@ watch(() => props.selectedPermissions, (newPerms, oldPerms) => {
                 >
                   {{ getActionLabel(permission.action) }}
                 </Label>
-                <p v-if="permission.description" class="text-xs text-muted-foreground">
+                <p
+                  v-if="permission.description"
+                  class="text-xs text-muted-foreground"
+                >
                   {{ permission.description }}
                 </p>
               </div>

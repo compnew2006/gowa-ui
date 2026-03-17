@@ -224,6 +224,63 @@ func TestApp_GetWidget_InvalidID(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
 }
 
+func TestApp_GetWidgetData_NoPermission(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	owner := createUserWithPermissionKeys(t, app, org.ID, "widget-owner", []string{
+		"analytics:read",
+		"analytics:write",
+		"analytics:delete",
+	})
+	otherUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("widget-data-no-perm")), testutil.WithPassword("password"))
+	widget := createTestWidget(t, app, org.ID, &owner.ID, "Data Widget", true, false)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, otherUser.ID)
+	testutil.SetPathParam(req, "id", widget.ID.String())
+
+	err := app.GetWidgetData(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_GetAllWidgetsData_NoPermission(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("widgets-all-no-perm")), testutil.WithPassword("password"))
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.GetAllWidgetsData(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_SaveWidgetLayout_NoPermission(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "widget-layout-reader", []string{"analytics:read"})
+	widget := createTestWidget(t, app, org.ID, &user.ID, "Layout Widget", true, false)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"layout": []map[string]any{
+			{
+				"id":     widget.ID.String(),
+				"grid_x": 1,
+				"grid_y": 1,
+				"grid_w": 4,
+				"grid_h": 3,
+			},
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.SaveWidgetLayout(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
 // --- CreateDashboardWidget Tests ---
 
 func TestApp_CreateWidget_Success(t *testing.T) {
@@ -307,6 +364,32 @@ func TestApp_CreateWidget_WithFilters(t *testing.T) {
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 	assert.Len(t, resp.Data.Filters, 1)
+}
+
+func TestApp_CreateWidget_InvalidFilterField(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	perms := getAnalyticsPermissions(t, app)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics User", false, false, perms)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-invalid-filter")), testutil.WithPassword("password"), testutil.WithRoleID(&role.ID))
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"name":        "Invalid Filter Widget",
+		"data_source": "messages",
+		"metric":      "count",
+		"filters": []map[string]any{
+			{
+				"field":    "status OR 1=1",
+				"operator": "equals",
+				"value":    "sent",
+			},
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.CreateWidget(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
 }
 
 func TestApp_CreateWidget_InvalidDataSource(t *testing.T) {

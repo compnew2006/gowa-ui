@@ -30,6 +30,9 @@ const (
 // AuthenticateFn validates a JWT token and returns user ID and organization ID.
 type AuthenticateFn func(token string) (uuid.UUID, uuid.UUID, error)
 
+// ContactAccessFn validates that a user may subscribe to a contact-scoped stream.
+type ContactAccessFn func(userID, orgID, contactID uuid.UUID) bool
+
 // Client represents a WebSocket client connection
 type Client struct {
 	hub *Hub
@@ -50,6 +53,9 @@ type Client struct {
 
 	// Function to validate JWT tokens
 	authFn AuthenticateFn
+
+	// Function to validate contact subscriptions.
+	contactAccessFn ContactAccessFn
 
 	// Current contact being viewed (nil if none)
 	currentContact *uuid.UUID
@@ -77,6 +83,12 @@ func NewUnauthenticatedClient(hub *Hub, conn *websocket.Conn, authFn Authenticat
 		send:   make(chan []byte, 256),
 		authFn: authFn,
 	}
+}
+
+// SetContactAccessFn configures an optional authorization callback for
+// contact-scoped subscriptions.
+func (c *Client) SetContactAccessFn(fn ContactAccessFn) {
+	c.contactAccessFn = fn
 }
 
 // ReadPump pumps messages from the websocket connection to the hub
@@ -302,6 +314,13 @@ func (c *Client) handleSetContact(payload any) {
 	} else {
 		contactID, err := uuid.Parse(setContact.ContactID)
 		if err != nil {
+			return
+		}
+		if c.contactAccessFn != nil && !c.contactAccessFn(c.userID, c.organizationID, contactID) {
+			c.hub.log.Warn("Client attempted unauthorized contact subscription",
+				"user_id", c.userID,
+				"org_id", c.organizationID,
+				"contact_id", contactID)
 			return
 		}
 		c.currentContact = &contactID

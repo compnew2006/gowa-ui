@@ -1,5 +1,22 @@
 # CHANGELOG.md
 
+## 2026-03-17
+
+### Fixed
+
+- Fixed chat assignment permissions to honor `chat.assign:write` (and `contacts:write`) and enforce assignee instance access on contact and transfer assignment.
+- Filtered assignment lists to only show agents allowed to access the contact or transfer WhatsApp account, and exposed `instance_id` in transfer responses for client-side filtering.
+
+## 2026-03-12
+
+### Added
+
+- Added chat workspace documentation covering rich message rendering, agent workflows, and clickable internet links in chat bubbles and template previews.
+
+### Fixed
+
+- Chat text bubbles, button replies, and text captions now turn supported internet links into clickable links while keeping trailing punctuation outside the anchor and leaving email addresses as plain text.
+
 ## 2026-03-11
 
 ### Fixed

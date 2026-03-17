@@ -83,13 +83,26 @@ func updateOrganizationSettings(t *testing.T, app *handlers.App, orgID uuid.UUID
 	require.NoError(t, app.DB.Model(&org).Update("settings", org.Settings).Error)
 }
 
+func createCampaignUser(t *testing.T, app *handlers.App, orgID uuid.UUID, opts ...testutil.UserOption) *models.User {
+	t.Helper()
+
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, orgID, "campaign-manager", []string{
+		"campaigns:read",
+		"campaigns:write",
+		"campaigns:delete",
+		"campaigns:execute",
+	})
+	opts = append(opts, testutil.WithRoleID(&role.ID))
+	return testutil.CreateTestUser(t, app.DB, orgID, opts...)
+}
+
 // --- ListCampaigns Tests ---
 
 func TestApp_ListCampaigns_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("list-campaigns")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("list-campaigns")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("test-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 
@@ -120,7 +133,7 @@ func TestApp_ListCampaigns_FilterByStatus(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("list-filter")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("list-filter")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("test-account-filter"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 
@@ -165,7 +178,7 @@ func TestApp_CreateCampaign_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-campaign")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-campaign")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("create-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 
@@ -196,7 +209,7 @@ func TestApp_CreateCampaign_WithScheduledAt(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-scheduled")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-scheduled")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("scheduled-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 
@@ -226,7 +239,7 @@ func TestApp_CreateCampaign_InvalidTemplateID(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("invalid-template")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("invalid-template")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("invalid-template-account"))
 
 	req := testutil.NewJSONRequest(t, map[string]interface{}{
@@ -245,7 +258,7 @@ func TestApp_CreateCampaign_TemplateNotFound(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("template-not-found")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("template-not-found")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("no-template-account"))
 
 	req := testutil.NewJSONRequest(t, map[string]interface{}{
@@ -264,7 +277,7 @@ func TestApp_CreateCampaign_AccountNotFound(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("account-not-found")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("account-not-found")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("temp-account-for-template"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 
@@ -284,7 +297,7 @@ func TestApp_CreateCampaign_InvalidRequestBody(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("invalid-body")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("invalid-body")), testutil.WithPassword("password"))
 
 	req := testutil.NewRequest(t)
 	req.RequestCtx.Request.SetBody([]byte("invalid json"))
@@ -302,7 +315,7 @@ func TestApp_GetCampaign_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-campaign")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-campaign")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("get-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -328,7 +341,7 @@ func TestApp_GetCampaign_NotFound(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-not-found")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-not-found")), testutil.WithPassword("password"))
 
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, user.ID)
@@ -343,7 +356,7 @@ func TestApp_GetCampaign_InvalidID(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-invalid-id")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-invalid-id")), testutil.WithPassword("password"))
 
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, user.ID)
@@ -360,7 +373,7 @@ func TestApp_UpdateCampaign_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-campaign")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-campaign")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("update-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -389,7 +402,7 @@ func TestApp_UpdateCampaign_NotDraft(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-not-draft")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-not-draft")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("update-not-draft-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusProcessing)
@@ -409,7 +422,7 @@ func TestApp_UpdateCampaign_NotFound(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-not-found")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-not-found")), testutil.WithPassword("password"))
 
 	req := testutil.NewJSONRequest(t, map[string]interface{}{
 		"name": "Updated Name",
@@ -428,7 +441,7 @@ func TestApp_DeleteCampaign_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-campaign")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-campaign")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("delete-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -451,7 +464,7 @@ func TestApp_DeleteCampaign_WithRecipients(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-with-recipients")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-with-recipients")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("delete-recipients-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -476,7 +489,7 @@ func TestApp_DeleteCampaign_RunningCampaign(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-running")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-running")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("delete-running-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusProcessing)
@@ -494,7 +507,7 @@ func TestApp_DeleteCampaign_NotFound(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-not-found")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("delete-not-found")), testutil.WithPassword("password"))
 
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, user.ID)
@@ -511,7 +524,7 @@ func TestApp_StartCampaign_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-campaign")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-campaign")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("start-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -540,7 +553,7 @@ func TestApp_StartCampaign_NoPendingRecipients(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-no-recipients")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-no-recipients")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("start-no-recipients-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -563,7 +576,7 @@ func TestApp_StartCampaign_InvalidStatus(t *testing.T) {
 			mockQueue := testutil.NewMockQueue()
 			app := newTestApp(t, withQueue(mockQueue))
 			org := testutil.CreateTestOrganization(t, app.DB)
-			user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-invalid-"+string(status))), testutil.WithPassword("password"))
+			user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-invalid-"+string(status))), testutil.WithPassword("password"))
 			account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("start-invalid-"+string(status)))
 			template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 			campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, status)
@@ -584,7 +597,7 @@ func TestApp_StartCampaign_CanResumePaused(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("resume-paused")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("resume-paused")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("resume-paused-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusPaused)
@@ -605,7 +618,7 @@ func TestApp_StartCampaign_FailsWhenInstanceNotConnected(t *testing.T) {
 	app := newTestApp(t, withQueue(mockQueue))
 	app.Config.WhatsApp.Provider = "whatsmeow"
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-not-connected")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-not-connected")), testutil.WithPassword("password"))
 	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusDisconnected, nil, "")
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusDraft)
@@ -626,7 +639,7 @@ func TestApp_StartCampaign_FailsWhenInstanceBlocked(t *testing.T) {
 	app := newTestApp(t, withQueue(mockQueue))
 	app.Config.WhatsApp.Provider = "whatsmeow"
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-blocked")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-blocked")), testutil.WithPassword("password"))
 	blockedUntil := time.Now().UTC().Add(30 * time.Minute)
 	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusConnected, &blockedUntil, "temporary platform block")
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
@@ -648,7 +661,7 @@ func TestApp_StartCampaign_FailsWhenDelayBelowStrictFloor(t *testing.T) {
 	app := newTestApp(t, withQueue(mockQueue))
 	app.Config.WhatsApp.Provider = "whatsmeow"
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-delay-floor")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-delay-floor")), testutil.WithPassword("password"))
 	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusConnected, nil, "")
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusDraft)
@@ -677,7 +690,7 @@ func TestApp_StartCampaign_FailsWhenCampaignDraftOnlyEnabled(t *testing.T) {
 	app := newTestApp(t, withQueue(mockQueue))
 	app.Config.WhatsApp.Provider = "whatsmeow"
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-draft-only")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-draft-only")), testutil.WithPassword("password"))
 	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusConnected, nil, "")
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusDraft)
@@ -701,7 +714,7 @@ func TestApp_StartCampaign_FailsWhenRecipientsWithoutInboundHistory(t *testing.T
 	app := newTestApp(t, withQueue(mockQueue))
 	app.Config.WhatsApp.Provider = "whatsmeow"
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-no-inbound")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("start-wm-no-inbound")), testutil.WithPassword("password"))
 	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusConnected, nil, "")
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusDraft)
@@ -733,7 +746,7 @@ func TestApp_PauseCampaign_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("pause-campaign")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("pause-campaign")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("pause-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusProcessing)
@@ -755,7 +768,7 @@ func TestApp_PauseCampaign_NotRunning(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("pause-not-running")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("pause-not-running")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("pause-not-running-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -775,7 +788,7 @@ func TestApp_CancelCampaign_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("cancel-campaign")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("cancel-campaign")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("cancel-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusProcessing)
@@ -801,7 +814,7 @@ func TestApp_CancelCampaign_AlreadyFinished(t *testing.T) {
 			mockQueue := testutil.NewMockQueue()
 			app := newTestApp(t, withQueue(mockQueue))
 			org := testutil.CreateTestOrganization(t, app.DB)
-			user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("cancel-finished-"+string(status))), testutil.WithPassword("password"))
+			user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("cancel-finished-"+string(status))), testutil.WithPassword("password"))
 			account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("cancel-finished-"+string(status)))
 			template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 			campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, status)
@@ -823,7 +836,7 @@ func TestApp_ImportRecipients_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-recipients")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-recipients")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("import-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -858,7 +871,7 @@ func TestApp_ImportRecipients_WithTemplateParams(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-with-params")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-with-params")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("import-params-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -891,7 +904,7 @@ func TestApp_ImportRecipients_DeduplicatesNormalizedPhoneNumbers(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-dedupe")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-dedupe")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("import-dedupe-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -930,7 +943,7 @@ func TestApp_ImportRecipients_StrictInboundOnlyRejectsUnknownNumber(t *testing.T
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-inbound-policy")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-inbound-policy")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("import-inbound-policy-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -960,7 +973,7 @@ func TestApp_ImportRecipients_NotDraft(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-not-draft")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-not-draft")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("import-not-draft-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusProcessing)
@@ -984,7 +997,7 @@ func TestApp_GetCampaignRecipients_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-recipients")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-recipients")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("get-recipients-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -1014,7 +1027,7 @@ func TestApp_GetCampaignRecipients_CampaignNotFound(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-recipients-not-found")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-recipients-not-found")), testutil.WithPassword("password"))
 
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, user.ID)
@@ -1031,7 +1044,7 @@ func TestApp_RetryFailed_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("retry-failed")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("retry-failed")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("retry-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusCompleted)
@@ -1066,7 +1079,7 @@ func TestApp_RetryFailed_NoFailedRecipients(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("retry-no-failed")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("retry-no-failed")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("retry-no-failed-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusCompleted)
@@ -1085,7 +1098,7 @@ func TestApp_RetryFailed_InvalidStatus(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("retry-invalid-status")), testutil.WithPassword("password"))
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("retry-invalid-status")), testutil.WithPassword("password"))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("retry-invalid-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -1110,8 +1123,8 @@ func TestApp_Campaign_CrossOrgIsolation(t *testing.T) {
 	org1 := testutil.CreateTestOrganization(t, app.DB)
 	org2 := testutil.CreateTestOrganization(t, app.DB)
 
-	user1 := testutil.CreateTestUser(t, app.DB, org1.ID, testutil.WithEmail(testutil.UniqueEmail("cross-org-1")), testutil.WithPassword("password"))
-	user2 := testutil.CreateTestUser(t, app.DB, org2.ID, testutil.WithEmail(testutil.UniqueEmail("cross-org-2")), testutil.WithPassword("password"))
+	user1 := createCampaignUser(t, app, org1.ID, testutil.WithEmail(testutil.UniqueEmail("cross-org-1")), testutil.WithPassword("password"))
+	user2 := createCampaignUser(t, app, org2.ID, testutil.WithEmail(testutil.UniqueEmail("cross-org-2")), testutil.WithPassword("password"))
 
 	account1 := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org1.ID, testutil.WithAccountName("cross-org-account-1"))
 	template1 := testutil.CreateTestTemplate(t, app.DB, org1.ID, account1.Name)

@@ -41,11 +41,12 @@ type agentTransferRow struct {
 	ExpiresAt             *time.Time            `gorm:"column:expires_at"`
 
 	// Joined fields
-	ContactName       *string `gorm:"column:contact_name"`
-	AgentName         *string `gorm:"column:agent_name"`
-	TeamName          *string `gorm:"column:team_name"`
-	TransferredByName *string `gorm:"column:transferred_by_name"`
-	ResumedByName     *string `gorm:"column:resumed_by_name"`
+	ContactName       *string    `gorm:"column:contact_name"`
+	ContactInstanceID *uuid.UUID `gorm:"column:contact_instance_id"`
+	AgentName         *string    `gorm:"column:agent_name"`
+	TeamName          *string    `gorm:"column:team_name"`
+	TransferredByName *string    `gorm:"column:transferred_by_name"`
+	ResumedByName     *string    `gorm:"column:resumed_by_name"`
 }
 
 // CreateAgentTransferRequest represents the request to create an agent transfer
@@ -68,6 +69,7 @@ type AssignTransferRequest struct {
 type AgentTransferResponse struct {
 	ID                string                `json:"id"`
 	ContactID         string                `json:"contact_id"`
+	InstanceID        *string               `json:"instance_id,omitempty"`
 	ContactName       string                `json:"contact_name"`
 	PhoneNumber       string                `json:"phone_number"`
 	WhatsAppAccount   string                `json:"whatsapp_account"`
@@ -137,7 +139,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	}
 
 	// Build SELECT clause based on what relations are needed
-	selectCols := []string{"agent_transfers.*"}
+	selectCols := []string{"agent_transfers.*", "contacts.instance_id AS contact_instance_id"}
 	if includeAll || includeSet["contact"] {
 		selectCols = append(selectCols, "contacts.profile_name AS contact_name")
 	}
@@ -160,10 +162,8 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 		Where("agent_transfers.organization_id = ?", orgID).
 		Order("agent_transfers.transferred_at ASC") // FIFO
 
-	// Only add JOINs for requested relations (lazy loading)
-	if includeAll || includeSet["contact"] {
-		query = query.Joins("LEFT JOIN contacts ON contacts.id = agent_transfers.contact_id")
-	}
+	// Always join contacts to include instance_id in responses.
+	query = query.Joins("LEFT JOIN contacts ON contacts.id = agent_transfers.contact_id")
 	if includeAll || includeSet["agent"] {
 		query = query.Joins("LEFT JOIN users AS agent ON agent.id = agent_transfers.agent_id")
 	}
@@ -298,6 +298,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 		resp := AgentTransferResponse{
 			ID:              t.ID.String(),
 			ContactID:       t.ContactID.String(),
+			InstanceID:      stringifyInstanceID(t.ContactInstanceID),
 			PhoneNumber:     phoneNumber,
 			WhatsAppAccount: t.WhatsAppAccount,
 			Status:          t.Status,
@@ -557,6 +558,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	resp := AgentTransferResponse{
 		ID:              transfer.ID.String(),
 		ContactID:       transfer.ContactID.String(),
+		InstanceID:      stringifyInstanceID(contact.InstanceID),
 		ContactName:     contactName,
 		PhoneNumber:     phoneNumber,
 		WhatsAppAccount: transfer.WhatsAppAccount,
@@ -761,6 +763,26 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Team not found", nil, "")
 			}
 			transfer.TeamID = &parsedTeamID
+		}
+	}
+
+	if targetAgentID != nil {
+		if transfer.Contact == nil {
+			var contact models.Contact
+			if err := a.DB.Where("id = ? AND organization_id = ?", transfer.ContactID, orgID).First(&contact).Error; err != nil {
+				a.Log.Error("Failed to load contact for transfer assignment", "error", err, "transfer_id", transfer.ID, "contact_id", transfer.ContactID)
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load contact", nil, "")
+			}
+			transfer.Contact = &contact
+		}
+
+		allowed, err := a.canUserSeeContactInstance(orgID, *targetAgentID, transfer.Contact)
+		if err != nil {
+			a.Log.Error("Failed to validate assignee instance access", "error", err, "user_id", targetAgentID, "contact_id", transfer.ContactID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate assignee access", nil, "")
+		}
+		if !allowed {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Assignee does not have access to this WhatsApp account", nil, "")
 		}
 	}
 
@@ -996,6 +1018,7 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 			contactName = MaskIfPhoneNumber(contactName)
 		}
 		resp.ContactName = contactName
+		resp.InstanceID = stringifyInstanceID(transfer.Contact.InstanceID)
 	}
 
 	agentIDStr := userID.String()

@@ -68,11 +68,18 @@ type RecipientRequest struct {
 	TemplateParams map[string]interface{} `json:"template_params"`
 }
 
+func (a *App) requireCampaignPermission(r *fastglue.Request, userID uuid.UUID, action string) error {
+	return a.requirePermission(r, userID, models.ResourceCampaigns, action)
+}
+
 // ListCampaigns implements campaign listing
 func (a *App) ListCampaigns(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionRead); err != nil {
+		return nil
 	}
 
 	pg := parsePagination(r)
@@ -158,6 +165,9 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionWrite); err != nil {
+		return nil
+	}
 
 	var req CampaignRequest
 	if err := a.decodeRequest(r, &req); err != nil {
@@ -237,9 +247,12 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 
 // GetCampaign implements getting a single campaign
 func (a *App) GetCampaign(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionRead); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "campaign")
@@ -284,9 +297,12 @@ func (a *App) GetCampaign(r *fastglue.Request) error {
 
 // UpdateCampaign implements campaign update
 func (a *App) UpdateCampaign(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "campaign")
@@ -579,9 +595,12 @@ func (a *App) countInboundPolicyViolationsForRecipients(orgID uuid.UUID, recipie
 
 // DeleteCampaign implements campaign deletion
 func (a *App) DeleteCampaign(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionDelete); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "campaign")
@@ -620,9 +639,12 @@ func (a *App) DeleteCampaign(r *fastglue.Request) error {
 
 // StartCampaign implements starting a campaign
 func (a *App) StartCampaign(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionExecute); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "campaign")
@@ -724,9 +746,12 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 
 // PauseCampaign implements pausing a campaign
 func (a *App) PauseCampaign(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionExecute); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "campaign")
@@ -758,9 +783,12 @@ func (a *App) PauseCampaign(r *fastglue.Request) error {
 
 // CancelCampaign implements cancelling a campaign
 func (a *App) CancelCampaign(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionExecute); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "campaign")
@@ -792,9 +820,12 @@ func (a *App) CancelCampaign(r *fastglue.Request) error {
 
 // RetryFailed retries sending to all failed recipients
 func (a *App) RetryFailed(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionExecute); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "campaign")
@@ -884,9 +915,12 @@ func (a *App) RetryFailed(r *fastglue.Request) error {
 
 // ImportRecipients implements adding recipients to a campaign
 func (a *App) ImportRecipients(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "campaign")
@@ -981,9 +1015,12 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 
 // GetCampaignRecipients implements listing campaign recipients
 func (a *App) GetCampaignRecipients(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionRead); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "campaign")
@@ -1018,9 +1055,12 @@ func (a *App) GetCampaignRecipients(r *fastglue.Request) error {
 
 // DeleteCampaignRecipient deletes a single recipient from a campaign
 func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	campaignUUID, err := parsePathUUID(r, "id", "campaign")
@@ -1064,9 +1104,12 @@ func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
 
 // UploadCampaignMedia uploads media for a campaign's template header
 func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	campaignUUID, err := parsePathUUID(r, "id", "campaign")
@@ -1219,9 +1262,12 @@ func (a *App) saveCampaignMedia(campaignID string, data []byte, mimeType string)
 // ServeCampaignMedia serves campaign media files for preview
 func (a *App) ServeCampaignMedia(r *fastglue.Request) error {
 	// Get auth context
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireCampaignPermission(r, userID, models.ActionRead); err != nil {
+		return nil
 	}
 
 	// Get campaign ID from URL

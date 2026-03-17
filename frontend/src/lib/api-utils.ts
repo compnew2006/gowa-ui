@@ -91,15 +91,43 @@ export function getErrorMessage(error: unknown, defaultMessage = 'An error occur
 
   // Handle Axios error with response
   if (isAxiosError(error)) {
-    const responseMessage = error.response?.data?.message
+    const responseData: unknown = error.response?.data
+    const responseMessage =
+      typeof responseData === 'object' &&
+      responseData !== null &&
+      'message' in responseData &&
+      typeof responseData.message === 'string'
+        ? responseData.message
+        : undefined
     if (responseMessage && typeof responseMessage === 'string') {
       return responseMessage
     }
 
     // Handle error array in response
-    const errors = error.response?.data?.errors
+    const errors =
+      typeof responseData === 'object' &&
+      responseData !== null &&
+      'errors' in responseData
+        ? responseData.errors
+        : undefined
     if (Array.isArray(errors) && errors.length > 0) {
       return errors[0].message || errors[0] || defaultMessage
+    }
+
+    if (error.response?.status === 413) {
+      return 'Upload rejected by the server before it reached Whatomate. Increase the proxy upload limit (nginx client_max_body_size).'
+    }
+
+    if (typeof responseData === 'string') {
+      const htmlTitle = extractHtmlErrorTitle(responseData)
+      if (htmlTitle) {
+        return htmlTitle
+      }
+
+      const normalized = responseData.replace(/\s+/g, ' ').trim()
+      if (normalized !== '') {
+        return normalized
+      }
     }
   }
 
@@ -114,6 +142,20 @@ export function getErrorMessage(error: unknown, defaultMessage = 'An error occur
   }
 
   return defaultMessage
+}
+
+function extractHtmlErrorTitle(content: string): string {
+  const titleMatch = content.match(/<title[^>]*>(.*?)<\/title>/i)
+  if (titleMatch?.[1]) {
+    return titleMatch[1].trim()
+  }
+
+  const headingMatch = content.match(/<h1[^>]*>(.*?)<\/h1>/i)
+  if (headingMatch?.[1]) {
+    return headingMatch[1].trim()
+  }
+
+  return ''
 }
 
 /**

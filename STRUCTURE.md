@@ -1065,6 +1065,7 @@
 - 📁 **bin/**
   - 📄 whatomate
 - 📁 **specs/**
+  - 📄 assign-to-agent-permissions_design.md
   - 📁 **001-whatsmeow-integration/**
     - 📄 data-model.md
     - 📄 plan.md

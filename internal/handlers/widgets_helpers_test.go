@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWidgetGetString(t *testing.T) {
@@ -373,10 +374,11 @@ func TestResolveDataSourceTable(t *testing.T) {
 
 func TestBuildFilterSQL(t *testing.T) {
 	tests := []struct {
-		name           string
-		filter         FilterInput
-		expectedSQL    string
-		expectedValue  interface{}
+		name          string
+		filter        FilterInput
+		expectedSQL   string
+		expectedValue interface{}
+		expectErr     bool
 	}{
 		{
 			name: "equals operator",
@@ -449,44 +451,40 @@ func TestBuildFilterSQL(t *testing.T) {
 			expectedValue: "2024-12-31",
 		},
 		{
-			name: "unknown operator defaults to equals",
+			name: "unknown operator rejected",
 			filter: FilterInput{
 				Field:    "status",
 				Operator: "unknown",
 				Value:    "active",
 			},
-			expectedSQL:   "status = ?",
-			expectedValue: "active",
+			expectErr: true,
 		},
 		{
-			name: "invalid field name sanitized",
+			name: "invalid field name rejected",
 			filter: FilterInput{
 				Field:    "field;DROP TABLE--",
 				Operator: "equals",
 				Value:    "test",
 			},
-			expectedSQL:   "invalid_field_name = ?",
-			expectedValue: "test",
+			expectErr: true,
 		},
 		{
-			name: "field with spaces sanitized",
+			name: "field with spaces rejected",
 			filter: FilterInput{
 				Field:    "field name",
 				Operator: "equals",
 				Value:    "test",
 			},
-			expectedSQL:   "invalid_field_name = ?",
-			expectedValue: "test",
+			expectErr: true,
 		},
 		{
-			name: "field with SQL injection attempt sanitized",
+			name: "field with SQL injection attempt rejected",
 			filter: FilterInput{
 				Field:    "status' OR '1'='1",
 				Operator: "equals",
 				Value:    "active",
 			},
-			expectedSQL:   "invalid_field_name = ?",
-			expectedValue: "active",
+			expectErr: true,
 		},
 		{
 			name: "valid field with underscore",
@@ -509,20 +507,32 @@ func TestBuildFilterSQL(t *testing.T) {
 			expectedValue: "test",
 		},
 		{
-			name: "empty field name sanitized",
+			name: "empty field name rejected",
 			filter: FilterInput{
 				Field:    "",
 				Operator: "equals",
 				Value:    "test",
 			},
-			expectedSQL:   "invalid_field_name = ?",
-			expectedValue: "test",
+			expectErr: true,
 		},
+	}
+
+	columns := map[string]string{
+		"status":     "status",
+		"name":       "name",
+		"count":      "count",
+		"created_at": "created_at",
+		"field123":   "field123",
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sql, value := buildFilterSQL(tt.filter)
+			sql, value, err := buildFilterSQL(columns, tt.filter)
+			if tt.expectErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
 			assert.Equal(t, tt.expectedSQL, sql)
 			assert.Equal(t, tt.expectedValue, value)
 		})

@@ -23,10 +23,10 @@ func CSRFProtection() fastglue.FastMiddleware {
 			return r
 		}
 
-		// Skip if there is no access cookie — the auth middleware will reject
-		// the request with 401 anyway.
-		cookieVal := r.RequestCtx.Request.Header.Cookie("whm_access")
-		if len(cookieVal) == 0 {
+		// Skip only when the request is not using cookie-based auth at all.
+		accessCookie := r.RequestCtx.Request.Header.Cookie("whm_access")
+		refreshCookie := r.RequestCtx.Request.Header.Cookie("whm_refresh")
+		if len(accessCookie) == 0 && len(refreshCookie) == 0 {
 			return r
 		}
 

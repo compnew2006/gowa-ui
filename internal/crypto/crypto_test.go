@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -17,9 +18,12 @@ func TestEncryptDecrypt(t *testing.T) {
 	if encrypted == plaintext {
 		t.Fatal("Encrypted value should differ from plaintext")
 	}
+	if !strings.HasPrefix(encrypted, prefix) {
+		t.Fatalf("encrypted value should use %q prefix, got %q", prefix, encrypted)
+	}
 
 	if !IsEncrypted(encrypted) {
-		t.Fatal("Encrypted value should have enc: prefix")
+		t.Fatal("Encrypted value should have an encryption prefix")
 	}
 
 	decrypted, err := Decrypt(encrypted, key)

@@ -84,9 +84,9 @@ func createMockOAuthServer(t *testing.T, userInfoHandler http.HandlerFunc) *http
 	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"access_token": "test-access-token",
-			"token_type":   "Bearer",
-			"expires_in":   3600,
+			"access_token":  "test-access-token",
+			"token_type":    "Bearer",
+			"expires_in":    3600,
 			"refresh_token": "test-refresh-token",
 		})
 	})
@@ -134,6 +134,7 @@ func TestApp_GetPublicSSOProviders_Success(t *testing.T) {
 
 	assert.Contains(t, providers, "google")
 	assert.Equal(t, "Google", providers["google"].Name)
+	assert.Equal(t, org.Slug, providers["google"].OrganizationSlug)
 	assert.Contains(t, providers, "microsoft")
 	assert.Equal(t, "Microsoft", providers["microsoft"].Name)
 	assert.Contains(t, providers, "github")
@@ -163,7 +164,7 @@ func TestApp_GetPublicSSOProviders_NoProviders(t *testing.T) {
 	assert.Empty(t, resp.Data)
 }
 
-func TestApp_GetPublicSSOProviders_Deduplication(t *testing.T) {
+func TestApp_GetPublicSSOProviders_IncludesOrganizationScopedDuplicates(t *testing.T) {
 	app := newTestApp(t)
 	org1 := testutil.CreateTestOrganization(t, app.DB)
 	org2 := testutil.CreateTestOrganization(t, app.DB)
@@ -185,9 +186,14 @@ func TestApp_GetPublicSSOProviders_Deduplication(t *testing.T) {
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 
-	// Should only return one Google provider despite being in multiple orgs
-	assert.Len(t, resp.Data, 1)
+	assert.Len(t, resp.Data, 2)
 	assert.Equal(t, "google", resp.Data[0].Provider)
+	assert.Equal(t, "google", resp.Data[1].Provider)
+	assert.NotEqual(t, resp.Data[0].OrganizationSlug, resp.Data[1].OrganizationSlug)
+	assert.Contains(t, []string{resp.Data[0].OrganizationSlug, resp.Data[1].OrganizationSlug}, org1.Slug)
+	assert.Contains(t, []string{resp.Data[0].OrganizationSlug, resp.Data[1].OrganizationSlug}, org2.Slug)
+	assert.Contains(t, resp.Data[0].Name, "Google")
+	assert.Contains(t, resp.Data[1].Name, "Google")
 }
 
 // Test InitSSO
@@ -281,6 +287,53 @@ func TestApp_InitSSO_CustomProvider(t *testing.T) {
 
 	redirectURL := string(req.RequestCtx.Response.Header.Peek("Location"))
 	assert.Contains(t, redirectURL, "custom.example.com")
+}
+
+func TestApp_InitSSO_RequiresOrganizationWhenProviderSharedAcrossOrganizations(t *testing.T) {
+	app := newTestApp(t)
+	org1 := testutil.CreateTestOrganization(t, app.DB)
+	org2 := testutil.CreateTestOrganization(t, app.DB)
+	createTestSSOProvider(t, app.DB, org1.ID, "google", true)
+	createTestSSOProvider(t, app.DB, org2.ID, "google", true)
+
+	req := testutil.NewJSONRequest(t, nil)
+	req.RequestCtx.SetUserValue("provider", "google")
+
+	err := app.InitSSO(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "Organization selection is required")
+}
+
+func TestApp_InitSSO_UsesRequestedOrganizationSlug(t *testing.T) {
+	app := newTestApp(t)
+	org1 := testutil.CreateTestOrganization(t, app.DB)
+	org2 := testutil.CreateTestOrganization(t, app.DB)
+
+	p1 := createTestSSOProvider(t, app.DB, org1.ID, "google", true)
+	p2 := createTestSSOProvider(t, app.DB, org2.ID, "google", true)
+	p1.ClientID = "client-one"
+	p2.ClientID = "client-two"
+	require.NoError(t, app.DB.Save(p1).Error)
+	require.NoError(t, app.DB.Save(p2).Error)
+
+	req := testutil.NewJSONRequest(t, nil)
+	req.RequestCtx.SetUserValue("provider", "google")
+	req.RequestCtx.QueryArgs().Set("org", org2.Slug)
+
+	err := app.InitSSO(req)
+	require.NoError(t, err)
+
+	redirectURL := string(req.RequestCtx.Response.Header.Peek("Location"))
+	assert.Contains(t, redirectURL, "client_id=client-two")
+
+	stateNonce := extractStateFromAuthURL(t, redirectURL)
+	stateKey := "sso:state:" + stateNonce
+	stateJSON, err := app.Redis.Get(context.Background(), stateKey).Bytes()
+	require.NoError(t, err)
+
+	var state handlers.SSOState
+	require.NoError(t, json.Unmarshal(stateJSON, &state))
+	assert.Equal(t, org2.ID.String(), state.OrgID)
 }
 
 // Test CallbackSSO
@@ -681,14 +734,15 @@ func TestApp_UpdateSSOProvider_CreateNew(t *testing.T) {
 	req.RequestCtx.SetUserValue("provider", "google")
 
 	body := map[string]any{
-		"client_id":        "new-client-id",
-		"client_secret":    "new-client-secret",
-		"is_enabled":       true,
+		"client_id":         "new-client-id",
+		"client_secret":     "new-client-secret",
+		"is_enabled":        true,
 		"allow_auto_create": true,
-		"default_role":     "agent",
-		"allowed_domains":  "example.com",
+		"default_role":      "agent",
+		"allowed_domains":   "example.com",
 	}
-	jsonBody, _ := json.Marshal(body); req.RequestCtx.Request.SetBody(jsonBody)
+	jsonBody, _ := json.Marshal(body)
+	req.RequestCtx.Request.SetBody(jsonBody)
 
 	err := app.UpdateSSOProvider(req)
 	require.NoError(t, err)
@@ -728,14 +782,15 @@ func TestApp_UpdateSSOProvider_UpdateExisting(t *testing.T) {
 	req.RequestCtx.SetUserValue("provider", "google")
 
 	body := map[string]any{
-		"client_id":        "updated-client-id",
-		"client_secret":    "", // Don't update secret
-		"is_enabled":       false,
+		"client_id":         "updated-client-id",
+		"client_secret":     "", // Don't update secret
+		"is_enabled":        false,
 		"allow_auto_create": false,
-		"default_role":     "admin",
-		"allowed_domains":  "updated.com",
+		"default_role":      "admin",
+		"allowed_domains":   "updated.com",
 	}
-	jsonBody, _ := json.Marshal(body); req.RequestCtx.Request.SetBody(jsonBody)
+	jsonBody, _ := json.Marshal(body)
+	req.RequestCtx.Request.SetBody(jsonBody)
 
 	err := app.UpdateSSOProvider(req)
 	require.NoError(t, err)
@@ -770,7 +825,8 @@ func TestApp_UpdateSSOProvider_InvalidProvider(t *testing.T) {
 		"client_id":     "test-client-id",
 		"client_secret": "test-client-secret",
 	}
-	jsonBody, _ := json.Marshal(body); req.RequestCtx.Request.SetBody(jsonBody)
+	jsonBody, _ := json.Marshal(body)
+	req.RequestCtx.Request.SetBody(jsonBody)
 
 	err := app.UpdateSSOProvider(req)
 	require.NoError(t, err)
@@ -789,7 +845,8 @@ func TestApp_UpdateSSOProvider_CustomProviderMissingURLs(t *testing.T) {
 		"client_secret": "test-client-secret",
 		// Missing auth_url, token_url, user_info_url
 	}
-	jsonBody, _ := json.Marshal(body); req.RequestCtx.Request.SetBody(jsonBody)
+	jsonBody, _ := json.Marshal(body)
+	req.RequestCtx.Request.SetBody(jsonBody)
 
 	err := app.UpdateSSOProvider(req)
 	require.NoError(t, err)
@@ -804,16 +861,17 @@ func TestApp_UpdateSSOProvider_CustomProviderSuccess(t *testing.T) {
 	req.RequestCtx.SetUserValue("provider", "custom")
 
 	body := map[string]any{
-		"client_id":        "test-client-id",
-		"client_secret":    "test-client-secret",
-		"is_enabled":       true,
-		"auth_url":         "https://custom.example.com/oauth/authorize",
-		"token_url":        "https://custom.example.com/oauth/token",
-		"user_info_url":    "https://custom.example.com/oauth/userinfo",
+		"client_id":         "test-client-id",
+		"client_secret":     "test-client-secret",
+		"is_enabled":        true,
+		"auth_url":          "https://custom.example.com/oauth/authorize",
+		"token_url":         "https://custom.example.com/oauth/token",
+		"user_info_url":     "https://custom.example.com/oauth/userinfo",
 		"allow_auto_create": true,
-		"default_role":     "agent",
+		"default_role":      "agent",
 	}
-	jsonBody, _ := json.Marshal(body); req.RequestCtx.Request.SetBody(jsonBody)
+	jsonBody, _ := json.Marshal(body)
+	req.RequestCtx.Request.SetBody(jsonBody)
 
 	err := app.UpdateSSOProvider(req)
 	require.NoError(t, err)
@@ -848,7 +906,8 @@ func TestApp_UpdateSSOProvider_Unauthorized(t *testing.T) {
 		"client_id":     "test-client-id",
 		"client_secret": "test-client-secret",
 	}
-	jsonBody, _ := json.Marshal(body); req.RequestCtx.Request.SetBody(jsonBody)
+	jsonBody, _ := json.Marshal(body)
+	req.RequestCtx.Request.SetBody(jsonBody)
 
 	err := app.UpdateSSOProvider(req)
 	require.NoError(t, err)
