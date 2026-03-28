@@ -25,7 +25,7 @@ Base Domain Pattern (suggested): <tenant>.ofuqalmadenah.com
 - PostgreSQL User: whatomate_holol_wenjaz
 - PostgreSQL Password: [REDACTED]
 - Default Admin Email: admin+holol-wenjaz@whatomate.local
-- Default Admin Password: [REDACTED]
+- Default Admin Password: Zqxtu8r3mRhwhJ6oLYaxqE/7
 - Nginx vhost: /etc/nginx/sites-available/whatomate-holol-wenjaz.conf
 - Certbot command used: certbot --nginx -d holol-wenjaz.ofuqalmadenah.com
 
@@ -61,7 +61,7 @@ Base Domain Pattern (suggested): <tenant>.ofuqalmadenah.com
 - PostgreSQL User: whatomate_matbaat_ruya
 - PostgreSQL Password: [REDACTED]
 - Default Admin Email: admin+matbaat-ruya@whatomate.local
-- Default Admin Password: [REDACTED]
+- Default Admin Password: nRiMXl0DuJe8xfOS707NdPnU
 - Nginx vhost: /etc/nginx/sites-available/whatomate-matbaat-ruya.conf
 - Certbot command used: certbot --nginx -d matbaat-ruya.ofuqalmadenah.com
 
@@ -686,7 +686,6 @@ Updated: 2026-03-03 15:35:00 UTC
 - Apply changes:
   - `systemctl daemon-reload`
   - `systemctl restart whatomate-housekeeping.timer`
-
 
 ## Storage Policy Update (Message Media Safety)
 
