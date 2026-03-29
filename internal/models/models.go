@@ -343,6 +343,26 @@ func (Contact) TableName() string {
 	return "contacts"
 }
 
+// ContactUserDeletion tracks per-user soft deletion timestamps for chats.
+// This is not a GORM soft-delete model; deleted_at represents the user's hide time.
+type ContactUserDeletion struct {
+	ID             uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	OrganizationID uuid.UUID `gorm:"type:uuid;not null;index;uniqueIndex:idx_contact_user_deletions" json:"organization_id"`
+	ContactID      uuid.UUID `gorm:"type:uuid;not null;index;uniqueIndex:idx_contact_user_deletions" json:"contact_id"`
+	UserID         uuid.UUID `gorm:"type:uuid;not null;index;uniqueIndex:idx_contact_user_deletions" json:"user_id"`
+	DeletedAt      time.Time `gorm:"type:timestamptz;not null" json:"deleted_at"`
+	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+
+	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+	Contact      *Contact      `gorm:"foreignKey:ContactID" json:"contact,omitempty"`
+	User         *User         `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+
+func (ContactUserDeletion) TableName() string {
+	return "contact_user_deletions"
+}
+
 // BeforeCreate normalizes lifecycle fields for newly created contacts.
 func (c *Contact) BeforeCreate(*gorm.DB) error {
 	if c.Status == "" {

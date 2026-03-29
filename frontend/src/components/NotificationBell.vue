@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { messagesService, notificationsService } from '@/services/api'
 import { wsService } from '@/services/websocket'
 import { useContactsStore, type Contact } from '@/stores/contacts'
@@ -18,6 +19,7 @@ import { Bell, Loader2, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 const router = useRouter()
+const { t } = useI18n()
 const contactsStore = useContactsStore()
 const authStore = useAuthStore()
 const open = ref(false)
@@ -47,6 +49,43 @@ const totalUnreadCount = computed(() => undismissedInstanceCount.value + unreadM
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString()
+}
+
+function resolveNotificationContactId(notification: InstanceNotification): string {
+  if (notification.contact_id) return notification.contact_id
+  const metadataId = notification.metadata?.contact_id
+  return typeof metadataId === 'string' ? metadataId : ''
+}
+
+function resolveNotificationChatLabel(notification: InstanceNotification): string {
+  const name = String(notification.metadata?.contact_name || '').trim()
+  const phone = String(notification.metadata?.contact_phone || '').trim()
+  if (name && phone && name !== phone) {
+    return `${name} (${phone})`
+  }
+  return name || phone || t('chat.unknownChat')
+}
+
+function resolveNotificationActor(notification: InstanceNotification): string {
+  const actor = String(notification.metadata?.actor_name || '').trim()
+  return actor || t('chat.unknownUser')
+}
+
+function formatNotificationMessage(notification: InstanceNotification): string {
+  if (notification.event_type === 'chat_deleted_by_user') {
+    return t('chat.chatDeletedByUserNotification', {
+      user: resolveNotificationActor(notification),
+      chat: resolveNotificationChatLabel(notification)
+    })
+  }
+  return notification.message
+}
+
+function handleNotificationClick(notification: InstanceNotification) {
+  const contactId = resolveNotificationContactId(notification)
+  if (!contactId) return
+  open.value = false
+  router.push(`/chat/${contactId}`)
 }
 
 function getContactLabel(contact: Contact): string {
@@ -247,17 +286,20 @@ onUnmounted(() => {
               System Notifications
             </div>
             <div class="divide-y divide-white/[0.08] light:divide-gray-200">
-              <div
+              <button
                 v-for="notification in notifications"
                 :key="notification.id"
-                class="px-4 py-3 flex items-start gap-2"
+                type="button"
+                class="px-4 py-3 flex items-start gap-2 text-left w-full"
+                :class="resolveNotificationContactId(notification) ? 'hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors' : ''"
+                @click="handleNotificationClick(notification)"
               >
                 <div class="flex-1 min-w-0">
                   <div class="text-xs uppercase tracking-wide text-white/40 light:text-gray-500">
                     {{ notification.event_type.replace('_', ' ') }}
                   </div>
                   <p class="text-sm text-white light:text-gray-900 mt-1 break-words">
-                    {{ notification.message }}
+                    {{ formatNotificationMessage(notification) }}
                   </p>
                   <p class="text-[11px] text-white/40 light:text-gray-500 mt-1">
                     {{ formatDate(notification.created_at) }}
@@ -267,11 +309,11 @@ onUnmounted(() => {
                   variant="ghost"
                   size="icon"
                   class="h-7 w-7 text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-400 light:hover:text-gray-700 light:hover:bg-gray-100"
-                  @click="dismissNotification(notification.id)"
+                  @click.stop="dismissNotification(notification.id)"
                 >
                   <X class="h-3.5 w-3.5" />
                 </Button>
-              </div>
+              </button>
             </div>
           </div>
         </div>

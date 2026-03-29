@@ -187,7 +187,15 @@
     "statusReplyFailed": "No se pudo enviar la respuesta",
     "instance": "Instancia",
     "selectInstance": "Seleccionar instancia",
-    "noConnectedInstances": "No hay instancias conectadas"
+    "noConnectedInstances": "No hay instancias conectadas",
+    "softDeleteChat": "Ocultar chat",
+    "softDeleteConfirm": "¿Estás seguro de que quieres ocultar este chat? Volverá a aparecer cuando lleguen nuevos mensajes.",
+    "softDeleteConfirmLabel": "Confirmar ocultar chat",
+    "softDeleteSuccess": "Chat oculto",
+    "softDeleteFailed": "No se pudo ocultar el chat",
+    "chatDeletedByUserNotification": "{user} ocultó el chat {chat}",
+    "unknownUser": "Un usuario",
+    "unknownChat": "un chat"
   },
   "instances": {
     "chat_close_rating": {

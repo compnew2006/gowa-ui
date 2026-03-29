@@ -476,6 +476,11 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	// Use explicit contacts table qualification so later JOINs (closed chat filters)
 	// cannot make organization_id references ambiguous.
 	query := ctxDB.Model(&models.Contact{}).Where("contacts.organization_id = ?", orgID)
+	query = query.Joins(
+		"LEFT JOIN contact_user_deletions cud ON cud.contact_id = contacts.id AND cud.organization_id = ? AND cud.user_id = ?",
+		orgID,
+		userID,
+	).Where("(cud.id IS NULL OR COALESCE(contacts.last_message_at, contacts.created_at) > cud.deleted_at)")
 	statusFilter, parseStatusErr := parseChatStatusFilter(statusParam)
 	if parseStatusErr != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, parseStatusErr.Error(), nil, "status")
@@ -647,6 +652,15 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	if collabErr != nil {
 		a.Log.Error("Failed to load collaborator contacts", "error", collabErr, "org_id", orgID, "user_id", userID)
 	}
+	contactIDs := make([]uuid.UUID, 0, len(contacts))
+	for _, c := range contacts {
+		contactIDs = append(contactIDs, c.ID)
+	}
+	deletionMap, deletionErr := a.getContactUserDeletionMap(ctx, orgID, userID, contactIDs)
+	if deletionErr != nil {
+		a.Log.Error("Failed to load chat deletions", "error", deletionErr, "org_id", orgID, "user_id", userID)
+		deletionMap = map[uuid.UUID]time.Time{}
+	}
 
 	// Convert to response format
 	response := make([]ContactResponse, len(contacts))
@@ -659,15 +673,22 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 
 		// Count unread messages
 		var unreadCount int64
+		deletedAt, hasDeletion := deletionMap[c.ID]
 		if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
-			buildConversationScopeQuery(ctxDB, orgID, conversationContext.ConversationID, c.InstanceID).
+			msgQuery := buildConversationScopeQuery(ctxDB, orgID, conversationContext.ConversationID, c.InstanceID).
 				Model(&models.Message{}).
-				Where("direction = ? AND status != ?", models.DirectionIncoming, models.MessageStatusRead).
-				Count(&unreadCount)
+				Where("direction = ? AND status != ?", models.DirectionIncoming, models.MessageStatusRead)
+			if hasDeletion {
+				msgQuery = msgQuery.Where("created_at > ?", deletedAt)
+			}
+			msgQuery.Count(&unreadCount)
 		} else {
-			ctxDB.Model(&models.Message{}).
-				Where("contact_id = ? AND direction = ? AND status != ?", c.ID, models.DirectionIncoming, models.MessageStatusRead).
-				Count(&unreadCount)
+			msgQuery := ctxDB.Model(&models.Message{}).
+				Where("contact_id = ? AND direction = ? AND status != ?", c.ID, models.DirectionIncoming, models.MessageStatusRead)
+			if hasDeletion {
+				msgQuery = msgQuery.Where("created_at > ?", deletedAt)
+			}
+			msgQuery.Count(&unreadCount)
 		}
 
 		tags := []string{}
@@ -922,6 +943,10 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	}
 	shouldMaskPhoneNumbers := a.ShouldMaskPhoneNumbers(orgID)
 	conversationContext := a.resolveContactConversationContext(ctx, orgID, contact)
+	deletedAt, deletionErr := a.getContactUserDeletionTimestamp(ctx, orgID, contact.ID, userID)
+	if deletionErr != nil {
+		a.Log.Error("Failed to resolve chat deletion timestamp", "error", deletionErr, "contact_id", contact.ID, "user_id", userID)
+	}
 
 	// Pagination parameters
 	limit, _ := strconv.Atoi(string(r.RequestCtx.QueryArgs().Peek("limit")))
@@ -935,6 +960,9 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	msgQuery := ctxDB.Where("contact_id = ?", contactID)
 	if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
 		msgQuery = buildGroupConversationMessagesQuery(ctxDB, orgID, conversationContext.ConversationID, contact.ID, contact.InstanceID)
+	}
+	if deletedAt != nil {
+		msgQuery = msgQuery.Where("created_at > ?", *deletedAt)
 	}
 
 	// Filter by WhatsApp account if specified

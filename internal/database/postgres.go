@@ -116,6 +116,7 @@ func GetMigrationModels() []MigrationModel {
 		{"WhatsAppInstance", &models.WhatsAppInstance{}},
 		{"InstanceNotification", &models.InstanceNotification{}},
 		{"Contact", &models.Contact{}},
+		{"ContactUserDeletion", &models.ContactUserDeletion{}},
 		{"Tag", &models.Tag{}},
 		{"Message", &models.Message{}},
 		{"WhatsAppStatus", &models.WhatsAppStatus{}},
@@ -712,6 +713,9 @@ func SeedSystemRolesForAllOrgs(db *gorm.DB) error {
 	if err := BackfillSystemChatPrefixPermission(db); err != nil {
 		return fmt.Errorf("failed to backfill system chat prefix permission: %w", err)
 	}
+	if err := BackfillSystemContactSoftDeletePermission(db); err != nil {
+		return fmt.Errorf("failed to backfill system contact soft delete permission: %w", err)
+	}
 
 	// Migrate existing users from old role column to new role_id
 	if err := MigrateExistingUserRoles(db); err != nil {
@@ -840,6 +844,48 @@ func BackfillSystemChatPrefixPermission(db *gorm.DB) error {
 	if err := db.Where("resource = ? AND action = ?", models.ResourceChat, models.ActionPrefix).
 		First(&permission).Error; err != nil {
 		return fmt.Errorf("failed to resolve chat:prefix permission: %w", err)
+	}
+
+	var systemRoles []models.CustomRole
+	if err := db.Where("is_system = ? AND LOWER(name) IN ?", true, []string{"admin", "manager", "agent"}).
+		Find(&systemRoles).Error; err != nil {
+		return fmt.Errorf("failed to list system roles: %w", err)
+	}
+
+	for _, role := range systemRoles {
+		var count int64
+		if err := db.Table("role_permissions").
+			Where("custom_role_id = ? AND permission_id = ?", role.ID, permission.ID).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("failed to inspect role permissions: %w", err)
+		}
+		if count > 0 {
+			continue
+		}
+
+		if err := db.Exec(
+			"INSERT INTO role_permissions (custom_role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+			role.ID,
+			permission.ID,
+		).Error; err != nil {
+			return fmt.Errorf("failed to backfill role %s: %w", role.ID, err)
+		}
+	}
+
+	return nil
+}
+
+// BackfillSystemContactSoftDeletePermission ensures system admin/manager/agent roles
+// include contacts:soft_delete so per-user chat hiding is available by default.
+// This is idempotent and only affects system roles.
+func BackfillSystemContactSoftDeletePermission(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+	var permission models.Permission
+	if err := db.Where("resource = ? AND action = ?", models.ResourceContacts, models.ActionSoftDelete).
+		First(&permission).Error; err != nil {
+		return fmt.Errorf("failed to resolve contacts:soft_delete permission: %w", err)
 	}
 
 	var systemRoles []models.CustomRole

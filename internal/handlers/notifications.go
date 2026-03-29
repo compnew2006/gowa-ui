@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
@@ -12,12 +13,16 @@ import (
 
 // ListNotifications returns instance notifications for the current organization.
 func (a *App) ListNotifications(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
 	includeDismissed := string(r.RequestCtx.QueryArgs().Peek("include_dismissed")) == "true"
+	isAdmin := false
+	if perms, permErr := a.getUserPermissionsCached(userID, orgID); permErr == nil {
+		isAdmin = perms.IsSuperAdmin || strings.EqualFold(strings.TrimSpace(perms.RoleName), "admin")
+	}
 
 	query := a.DB.
 		Where("organization_id = ?", orgID).
@@ -25,6 +30,9 @@ func (a *App) ListNotifications(r *fastglue.Request) error {
 		Order("created_at DESC")
 	if !includeDismissed {
 		query = query.Where("is_dismissed = ?", false)
+	}
+	if !isAdmin {
+		query = query.Where("event_type != ?", "chat_deleted_by_user")
 	}
 
 	var notifications []models.InstanceNotification
@@ -38,7 +46,7 @@ func (a *App) ListNotifications(r *fastglue.Request) error {
 
 // DismissNotification marks a notification as dismissed.
 func (a *App) DismissNotification(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -56,6 +64,15 @@ func (a *App) DismissNotification(r *fastglue.Request) error {
 		}
 		a.Log.Error("Failed to fetch notification", "error", err, "notification_id", id)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to dismiss notification", nil, "")
+	}
+	if notification.EventType == "chat_deleted_by_user" {
+		isAdmin := false
+		if perms, permErr := a.getUserPermissionsCached(userID, orgID); permErr == nil {
+			isAdmin = perms.IsSuperAdmin || strings.EqualFold(strings.TrimSpace(perms.RoleName), "admin")
+		}
+		if !isAdmin {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Notification not available", nil, "")
+		}
 	}
 
 	if !notification.IsDismissed {

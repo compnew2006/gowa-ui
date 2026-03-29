@@ -251,6 +251,15 @@ func closeChatUpdates(closedByUserID uuid.UUID, currentAssignee *uuid.UUID) map[
 	}
 }
 
+func closeChatUpdatesForSoftDelete(closedByUserID uuid.UUID, closedAt time.Time) map[string]any {
+	return map[string]any{
+		"status":            models.ChatStatusClosed,
+		"assigned_user_id":  nil,
+		"closed_at":         &closedAt,
+		"closed_by_user_id": &closedByUserID,
+	}
+}
+
 func reopenChatUpdates() map[string]any {
 	return chatAssignmentUpdates(nil)
 }

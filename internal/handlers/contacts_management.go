@@ -837,6 +837,145 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 	})
 }
 
+// SoftDeleteContactForUser hides a chat for the current user without deleting data.
+func (a *App) SoftDeleteContactForUser(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionSoftDelete, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to hide chats", nil, "")
+	}
+
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	if err != nil {
+		return nil
+	}
+
+	if normalizeContactStatus(contact) != models.ChatStatusClosed {
+		closedAt := time.Now().UTC()
+		if err := a.DB.Model(contact).Updates(closeChatUpdatesForSoftDelete(userID, closedAt)).Error; err != nil {
+			a.Log.Error("Failed to close chat on soft delete", "error", err, "contact_id", contact.ID, "user_id", userID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chat", nil, "")
+		}
+		contact.Status = models.ChatStatusClosed
+		contact.AssignedUserID = nil
+		contact.ClosedAt = &closedAt
+		contact.ClosedByUserID = &userID
+		a.appendClosedChatSystemMessage(contact, userID)
+		a.handleManualChatCloseRatingPrompt(orgID, userID, contact)
+		a.broadcastContactLifecycleUpdate(orgID, contact, false)
+	}
+
+	ctx, cancel := context.WithTimeout(r.RequestCtx, 5*time.Second)
+	defer cancel()
+
+	deletedAt := time.Now().UTC()
+	if err := a.upsertContactUserDeletion(ctx, orgID, contact.ID, userID, deletedAt); err != nil {
+		a.Log.Error("Failed to soft delete chat", "error", err, "contact_id", contact.ID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to hide chat", nil, "")
+	}
+
+	a.notifyChatDeletedByUser(ctx, orgID, userID, contact)
+
+	return r.SendEnvelope(map[string]any{
+		"message":    "Chat hidden successfully",
+		"deleted_at": deletedAt,
+	})
+}
+
+func (a *App) notifyChatDeletedByUser(ctx context.Context, orgID, userID uuid.UUID, contact *models.Contact) {
+	if contact == nil {
+		return
+	}
+
+	instanceID := contact.InstanceID
+	if instanceID == nil {
+		var instance models.WhatsAppInstance
+		if err := a.DB.WithContext(ctx).
+			Where("organization_id = ?", orgID).
+			Order("is_default DESC, created_at ASC").
+			First(&instance).Error; err == nil {
+			instanceID = &instance.ID
+		}
+	}
+	if instanceID == nil {
+		a.Log.Warn("Skipping chat deleted notification; no instance available", "contact_id", contact.ID, "org_id", orgID)
+		return
+	}
+
+	actorName := strings.TrimSpace(a.ResolveActivityActorName(userID))
+	if actorName == "" {
+		actorName = "A user"
+	}
+
+	conversationContext := a.resolveContactConversationContext(ctx, orgID, *contact)
+	contactName := strings.TrimSpace(contact.ProfileName)
+	contactPhone := strings.TrimSpace(contact.PhoneNumber)
+	if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
+		contactPhone = conversationContext.ConversationID
+	}
+	if conversationContext.DisplayName != "" {
+		contactName = conversationContext.DisplayName
+	}
+	contactLabel := contactName
+	if contactLabel == "" {
+		contactLabel = contactPhone
+	}
+	if contactName != "" && contactPhone != "" && contactName != contactPhone {
+		contactLabel = fmt.Sprintf("%s (%s)", contactName, contactPhone)
+	}
+	if contactLabel == "" {
+		contactLabel = "a chat"
+	}
+
+	metadata := models.JSONB{
+		"actor_id":      userID.String(),
+		"actor_name":    actorName,
+		"contact_id":    contact.ID.String(),
+		"contact_name":  contactName,
+		"contact_phone": contactPhone,
+	}
+
+	notification := &models.InstanceNotification{
+		OrganizationID: orgID,
+		InstanceID:     *instanceID,
+		EventType:      "chat_deleted_by_user",
+		Message:        fmt.Sprintf("%s deleted chat %s", actorName, contactLabel),
+		IsDismissed:    false,
+		ContactID:      &contact.ID,
+		Metadata:       metadata,
+	}
+
+	if err := a.DB.WithContext(ctx).Create(notification).Error; err != nil {
+		a.Log.Error("Failed to create chat deleted notification", "error", err, "contact_id", contact.ID)
+		return
+	}
+
+	if a.WSHub == nil {
+		return
+	}
+
+	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+		Type: websocket.TypeInstanceNotification,
+		Payload: websocket.InstanceNotificationPayload{
+			ID:         notification.ID.String(),
+			InstanceID: notification.InstanceID.String(),
+			EventType:  notification.EventType,
+			Message:    notification.Message,
+			CreatedAt:  notification.CreatedAt.Format(time.RFC3339),
+			ContactID:  contact.ID.String(),
+			Metadata:   map[string]any(notification.Metadata),
+		},
+	})
+}
+
 // buildContactResponse creates a ContactResponse from a Contact model
 func (a *App) buildContactResponse(contact *models.Contact, orgID, userID uuid.UUID) ContactResponse {
 	status := normalizeContactStatus(contact)
@@ -846,15 +985,22 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID, userID uuid.U
 
 	// Count unread messages
 	var unreadCount int64
+	deletedAt, _ := a.getContactUserDeletionTimestamp(context.Background(), orgID, contact.ID, userID)
 	if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
-		buildConversationScopeQuery(a.DB, orgID, conversationContext.ConversationID, contact.InstanceID).
+		msgQuery := buildConversationScopeQuery(a.DB, orgID, conversationContext.ConversationID, contact.InstanceID).
 			Model(&models.Message{}).
-			Where("direction = ? AND status != ?", models.DirectionIncoming, models.MessageStatusRead).
-			Count(&unreadCount)
+			Where("direction = ? AND status != ?", models.DirectionIncoming, models.MessageStatusRead)
+		if deletedAt != nil {
+			msgQuery = msgQuery.Where("created_at > ?", *deletedAt)
+		}
+		msgQuery.Count(&unreadCount)
 	} else {
-		a.DB.Model(&models.Message{}).
-			Where("contact_id = ? AND direction = ? AND status != ?", contact.ID, models.DirectionIncoming, models.MessageStatusRead).
-			Count(&unreadCount)
+		msgQuery := a.DB.Model(&models.Message{}).
+			Where("contact_id = ? AND direction = ? AND status != ?", contact.ID, models.DirectionIncoming, models.MessageStatusRead)
+		if deletedAt != nil {
+			msgQuery = msgQuery.Where("created_at > ?", *deletedAt)
+		}
+		msgQuery.Count(&unreadCount)
 	}
 
 	tags := []string{}

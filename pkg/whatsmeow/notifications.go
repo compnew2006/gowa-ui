@@ -27,6 +27,14 @@ func (cm *ConnectionManager) broadcastInstanceNotification(orgID uuid.UUID, noti
 	if cm.hub == nil || notification == nil {
 		return
 	}
+	contactID := ""
+	if notification.ContactID != nil {
+		contactID = notification.ContactID.String()
+	}
+	metadata := map[string]any(nil)
+	if len(notification.Metadata) > 0 {
+		metadata = map[string]any(notification.Metadata)
+	}
 	cm.hub.BroadcastToOrg(orgID, websocket.WSMessage{
 		Type: websocket.TypeInstanceNotification,
 		Payload: websocket.InstanceNotificationPayload{
@@ -35,6 +43,8 @@ func (cm *ConnectionManager) broadcastInstanceNotification(orgID uuid.UUID, noti
 			EventType:  notification.EventType,
 			Message:    notification.Message,
 			CreatedAt:  notification.CreatedAt.Format(time.RFC3339),
+			ContactID:  contactID,
+			Metadata:   metadata,
 		},
 	})
 }

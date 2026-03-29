@@ -90,11 +90,13 @@ type InstancePayload struct {
 
 // InstanceNotificationPayload is the payload for instance_notification events.
 type InstanceNotificationPayload struct {
-	ID         string `json:"id"`
-	InstanceID string `json:"instance_id"`
-	EventType  string `json:"event_type"`
-	Message    string `json:"message"`
-	CreatedAt  string `json:"created_at"`
+	ID         string         `json:"id"`
+	InstanceID string         `json:"instance_id"`
+	EventType  string         `json:"event_type"`
+	Message    string         `json:"message"`
+	CreatedAt  string         `json:"created_at"`
+	ContactID  string         `json:"contact_id,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 // InstanceReconnectFailedPayload is the payload for instance_reconnect_failed events.

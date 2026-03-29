@@ -70,6 +70,8 @@ export interface InstanceNotification {
     is_dismissed: boolean
     created_at: string
     updated_at: string
+    contact_id?: string
+    metadata?: Record<string, any>
     instance?: {
         id: string
         name: string

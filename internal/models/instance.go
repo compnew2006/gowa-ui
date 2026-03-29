@@ -38,6 +38,8 @@ type InstanceNotification struct {
 	EventType      string    `gorm:"not null" json:"event_type"` // e.g., "ban", "logout"
 	Message        string    `json:"message"`
 	IsDismissed    bool      `gorm:"default:false" json:"is_dismissed"`
+	ContactID      *uuid.UUID `gorm:"type:uuid;index" json:"contact_id,omitempty"`
+	Metadata       JSONB      `gorm:"type:jsonb;default:'{}'" json:"metadata,omitempty"`
 
 	// Relations
 	Organization Organization     `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`

@@ -92,6 +92,7 @@ import {
   Reply,
   X,
   SmilePlus,
+  Archive,
   Trash2,
   MapPin,
   ExternalLink,
@@ -190,6 +191,9 @@ const isAdminUser = computed(
 );
 const isAgentUser = computed(
   () => (authStore.userRole || "").toLowerCase() === "agent",
+);
+const canSoftDeleteChats = computed(() =>
+  authStore.hasPermission("contacts", "soft_delete"),
 );
 const canShowAddContact = computed(
   () => isAdminUser.value || authStore.hasPermission("contacts", "write"),
@@ -735,8 +739,12 @@ function openTemplatePicker() {
 const isAddContactOpen = ref(false);
 const deletingSidebarEntryKey = ref<string | null>(null);
 const pendingSidebarDeleteEntryKey = ref<string | null>(null);
+const softDeletingSidebarEntryKey = ref<string | null>(null);
+const pendingSidebarSoftDeleteEntryKey = ref<string | null>(null);
 const SIDEBAR_DELETE_CONFIRM_TIMEOUT_MS = 5000;
 let pendingSidebarDeleteTimeout: ReturnType<typeof setTimeout> | null = null;
+let pendingSidebarSoftDeleteTimeout: ReturnType<typeof setTimeout> | null =
+  null;
 let contactSelectionSequence = 0;
 const CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY = "chat.contactsSidebarWidth";
 const CONTACTS_SIDEBAR_MIN_WIDTH = 280;
@@ -2005,6 +2013,7 @@ async function switchAccount(accountToggleKey: string) {
 
 function handleContactClick(entry: SidebarContactEntry) {
   clearPendingSidebarDeleteConfirmation();
+  clearPendingSidebarSoftDeleteConfirmation();
   const target = getSidebarEntryPreferredContact(entry);
   router.push(`/chat/${target.id}`);
 }
@@ -2014,6 +2023,14 @@ function clearPendingSidebarDeleteConfirmation() {
   if (pendingSidebarDeleteTimeout) {
     clearTimeout(pendingSidebarDeleteTimeout);
     pendingSidebarDeleteTimeout = null;
+  }
+}
+
+function clearPendingSidebarSoftDeleteConfirmation() {
+  pendingSidebarSoftDeleteEntryKey.value = null;
+  if (pendingSidebarSoftDeleteTimeout) {
+    clearTimeout(pendingSidebarSoftDeleteTimeout);
+    pendingSidebarSoftDeleteTimeout = null;
   }
 }
 
@@ -2028,8 +2045,20 @@ function armSidebarDeleteConfirmation(entryKey: string) {
   }, SIDEBAR_DELETE_CONFIRM_TIMEOUT_MS);
 }
 
+function armSidebarSoftDeleteConfirmation(entryKey: string) {
+  pendingSidebarSoftDeleteEntryKey.value = entryKey;
+  if (pendingSidebarSoftDeleteTimeout) {
+    clearTimeout(pendingSidebarSoftDeleteTimeout);
+  }
+  pendingSidebarSoftDeleteTimeout = setTimeout(() => {
+    pendingSidebarSoftDeleteEntryKey.value = null;
+    pendingSidebarSoftDeleteTimeout = null;
+  }, SIDEBAR_DELETE_CONFIRM_TIMEOUT_MS);
+}
+
 async function deleteSidebarEntry(entry: SidebarContactEntry) {
   if (!isAdminUser.value || deletingSidebarEntryKey.value) return;
+  clearPendingSidebarSoftDeleteConfirmation();
 
   const contactIDs = Array.from(
     new Set(entry.sourceContactIDs.filter((id): id is string => Boolean(id))),
@@ -2086,6 +2115,60 @@ async function deleteSidebarEntry(entry: SidebarContactEntry) {
     toast.error(message);
   } finally {
     deletingSidebarEntryKey.value = null;
+  }
+}
+
+async function softDeleteSidebarEntry(entry: SidebarContactEntry) {
+  if (!canSoftDeleteChats.value || softDeletingSidebarEntryKey.value) return;
+  clearPendingSidebarDeleteConfirmation();
+
+  const contactIDs = Array.from(
+    new Set(entry.sourceContactIDs.filter((id): id is string => Boolean(id))),
+  );
+  if (contactIDs.length === 0) return;
+  if (pendingSidebarSoftDeleteEntryKey.value !== entry.key) {
+    armSidebarSoftDeleteConfirmation(entry.key);
+    return;
+  }
+  clearPendingSidebarSoftDeleteConfirmation();
+
+  softDeletingSidebarEntryKey.value = entry.key;
+  try {
+    await Promise.all(contactIDs.map((id) => contactsService.softDelete(id)));
+
+    const currentContactID = contactsStore.currentContact?.id || null;
+    const deletedCurrentContact = currentContactID
+      ? contactIDs.includes(currentContactID)
+      : false;
+
+    if (deletedCurrentContact) {
+      stopTypingForContact(contactsStore.currentContact, { force: true });
+      resetTypingPresenceState();
+      wsService.setCurrentContact(null);
+      contactsStore.setCurrentContact(null);
+      contactsStore.clearMessages();
+      notesStore.clearNotes();
+      contactSessionData.value = null;
+      isInfoPanelOpen.value = false;
+      isNotesPanelOpen.value = false;
+    }
+
+    await refreshContactsSidebar();
+
+    if (
+      deletedCurrentContact ||
+      (contactId.value && contactIDs.includes(contactId.value))
+    ) {
+      await router.push("/chat");
+    }
+
+    toast.success(t("chat.softDeleteSuccess"));
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message || t("chat.softDeleteFailed");
+    toast.error(message);
+  } finally {
+    softDeletingSidebarEntryKey.value = null;
   }
 }
 
@@ -4254,6 +4337,7 @@ async function sendMediaMessage() {
                   <p
                     v-if="
                       entry.displayContact.assigned_user_id &&
+                      entry.displayContact.status !== 'closed' &&
                       !isContactsSidebarCompact
                     "
                     class="mt-0.5 truncate text-[11px] text-emerald-400/85 light:text-emerald-700"
@@ -4281,6 +4365,33 @@ async function sendMediaMessage() {
                   >
                     {{ entry.displayContact.unread_count }}
                   </Badge>
+                  <button
+                    v-if="canSoftDeleteChats"
+                    type="button"
+                    class="inline-flex h-5 w-5 items-center justify-center rounded-md transition-colors"
+                    :class="
+                      pendingSidebarSoftDeleteEntryKey === entry.key
+                        ? 'text-amber-200 bg-amber-500/20 hover:bg-amber-500/30 hover:text-amber-100 light:text-amber-700 light:bg-amber-100 light:hover:bg-amber-200'
+                        : 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/20 light:text-amber-600 light:hover:text-amber-700 light:hover:bg-amber-100'
+                    "
+                    :aria-label="
+                      pendingSidebarSoftDeleteEntryKey === entry.key
+                        ? `${$t('chat.softDeleteConfirmLabel')}: ${entry.displayContact.name || entry.displayContact.phone_number}`
+                        : `${$t('chat.softDeleteChat')}: ${entry.displayContact.name || entry.displayContact.phone_number}`
+                    "
+                    :disabled="softDeletingSidebarEntryKey === entry.key"
+                    @click.stop="softDeleteSidebarEntry(entry)"
+                  >
+                    <Loader2
+                      v-if="softDeletingSidebarEntryKey === entry.key"
+                      class="h-3.5 w-3.5 animate-spin"
+                    />
+                    <Check
+                      v-else-if="pendingSidebarSoftDeleteEntryKey === entry.key"
+                      class="h-3.5 w-3.5"
+                    />
+                    <Archive v-else class="h-3.5 w-3.5" />
+                  </button>
                   <button
                     v-if="isAdminUser"
                     type="button"

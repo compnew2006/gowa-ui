@@ -41,6 +41,7 @@ import {
   Tags,
   Loader2,
   Trash2,
+  Archive,
   UserPlus,
   Search,
 } from "lucide-vue-next";
@@ -144,11 +145,15 @@ const canEditTags = computed(() =>
 const canDeleteChats = computed(() =>
   authStore.hasPermission("contacts", "delete"),
 );
+const canSoftDeleteChats = computed(() =>
+  authStore.hasPermission("contacts", "soft_delete"),
+);
 const canInviteCollaborators = computed(() =>
   authStore.hasPermission("chat.collaborators", "write"),
 );
 const currentUserId = computed(() => authStore.user?.id || "");
 const isDeletingChat = ref(false);
+const isSoftDeletingChat = ref(false);
 
 const handleCollaboratorUpdate = (payload: any) => {
   if (!payload?.contact_id || payload.contact_id !== props.contact.id) return;
@@ -470,6 +475,24 @@ async function deleteChat() {
     isDeletingChat.value = false;
   }
 }
+
+async function softDeleteChat() {
+  if (isSoftDeletingChat.value || !canSoftDeleteChats.value) return;
+
+  const confirmed = window.confirm(t("chat.softDeleteConfirm"));
+  if (!confirmed) return;
+
+  isSoftDeletingChat.value = true;
+  try {
+    await contactsService.softDelete(props.contact.id);
+    toast.success(t("chat.softDeleteSuccess"));
+    emit("deleted", props.contact.id);
+  } catch (e: any) {
+    toast.error(e.response?.data?.message || t("chat.softDeleteFailed"));
+  } finally {
+    isSoftDeletingChat.value = false;
+  }
+}
 </script>
 
 <template>
@@ -491,6 +514,18 @@ async function deleteChat() {
     <div class="h-12 px-3 border-b flex items-center justify-between">
       <h3 class="font-medium text-sm">{{ $t("chat.contactInfo") }}</h3>
       <div class="flex items-center gap-1">
+        <Button
+          v-if="canSoftDeleteChats"
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8 text-amber-400 hover:text-amber-300"
+          :disabled="isSoftDeletingChat"
+          :title="$t('chat.softDeleteChat')"
+          @click="softDeleteChat"
+        >
+          <Loader2 v-if="isSoftDeletingChat" class="h-4 w-4 animate-spin" />
+          <Archive v-else class="h-4 w-4" />
+        </Button>
         <Button
           v-if="canDeleteChats"
           variant="ghost"

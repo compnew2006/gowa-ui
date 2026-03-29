@@ -79,6 +79,7 @@ const (
 	ActionRead    = "read"
 	ActionWrite   = "write"
 	ActionDelete  = "delete"
+	ActionSoftDelete = "soft_delete"
 	ActionSync    = "sync"
 	ActionExecute = "execute"
 	ActionImport  = "import"
@@ -159,12 +160,13 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceChatCollaborators, Action: ActionRead, Description: "View chat collaborators"},
 		{Resource: ResourceChatCollaborators, Action: ActionWrite, Description: "Invite and manage chat collaborators"},
 
-		// Contacts
-		{Resource: ResourceContacts, Action: ActionRead, Description: "View contacts"},
-		{Resource: ResourceContacts, Action: ActionWrite, Description: "Create and edit contacts"},
-		{Resource: ResourceContacts, Action: ActionDelete, Description: "Delete contacts"},
-		{Resource: ResourceContacts, Action: ActionImport, Description: "Import contacts"},
-		{Resource: ResourceContacts, Action: ActionExport, Description: "Export contacts"},
+	// Contacts
+	{Resource: ResourceContacts, Action: ActionRead, Description: "View contacts"},
+	{Resource: ResourceContacts, Action: ActionWrite, Description: "Create and edit contacts"},
+	{Resource: ResourceContacts, Action: ActionDelete, Description: "Delete contacts"},
+	{Resource: ResourceContacts, Action: ActionSoftDelete, Description: "Soft delete chats"},
+	{Resource: ResourceContacts, Action: ActionImport, Description: "Import contacts"},
+	{Resource: ResourceContacts, Action: ActionExport, Description: "Export contacts"},
 
 		// Tags
 		{Resource: ResourceTags, Action: ActionRead, Description: "View tags"},
@@ -240,7 +242,7 @@ func SystemRolePermissions() map[string][]string {
 		"chat:read", "chat:write", "chat:prefix", "chat.assign:write",
 		"chat.collaborators:read", "chat.collaborators:write",
 		// Contacts
-		"contacts:read", "contacts:write", "contacts:delete", "contacts:import", "contacts:export",
+		"contacts:read", "contacts:write", "contacts:delete", "contacts:soft_delete", "contacts:import", "contacts:export",
 		// Tags
 		"tags:read", "tags:write", "tags:delete",
 		// Analytics
@@ -261,8 +263,8 @@ func SystemRolePermissions() map[string][]string {
 		// Chat
 		"chat:read", "chat:write", "chat:prefix",
 		"chat.collaborators:read", "chat.collaborators:write",
-		// Contacts (read only)
-		"contacts:read",
+		// Contacts
+		"contacts:read", "contacts:soft_delete",
 		// Tags (read only - agents can see tags on contacts)
 		"tags:read",
 		// Analytics (own)

@@ -234,6 +234,7 @@ export const contactsService = {
   create: (data: JsonRecord) => api.post("/contacts", data),
   update: (id: string, data: JsonRecord) => api.put(`/contacts/${id}`, data),
   delete: (id: string) => api.delete(`/contacts/${id}`),
+  softDelete: (id: string) => api.post(`/contacts/${id}/soft-delete`),
   assign: (id: string, userId: string | null) =>
     api.put(`/contacts/${id}/assign`, { user_id: userId }),
   updateTags: (id: string, tags: string[]) =>

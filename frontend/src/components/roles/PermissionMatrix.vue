@@ -30,6 +30,7 @@ const actionLabels: Record<string, string> = {
   execute: "Execute",
   import: "Import",
   export: "Export",
+  soft_delete: "Soft Delete",
   pickup: "Pick Up",
   assign: "Assign",
   prefix: "Prefix Agent Name",
