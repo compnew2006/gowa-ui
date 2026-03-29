@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const minProductionJWTSecretLength = 32
+const minJWTSecretLength = 32
 
 var insecureJWTSecretValues = map[string]struct{}{
 	"your-super-secret-jwt-key-change-in-production": {},
@@ -30,8 +30,8 @@ func ValidateJWTSecret(cfg *Config) error {
 		return fmt.Errorf("jwt.secret uses an insecure placeholder value; set a unique secret in config.toml or WHATOMATE_JWT_SECRET")
 	}
 
-	if strings.EqualFold(strings.TrimSpace(cfg.App.Environment), "production") && len(secret) < minProductionJWTSecretLength {
-		return fmt.Errorf("jwt.secret must be at least %d characters in production", minProductionJWTSecretLength)
+	if len(secret) < minJWTSecretLength {
+		return fmt.Errorf("jwt.secret must be at least %d characters", minJWTSecretLength)
 	}
 
 	// Persist trimmed value so signing/verification do not depend on accidental whitespace.

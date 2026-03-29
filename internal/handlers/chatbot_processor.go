@@ -2108,8 +2108,8 @@ func (a *App) generateAnthropicResponse(settings *models.ChatbotSettings, sessio
 
 // generateGoogleResponse generates a response using Google Gemini API
 func (a *App) generateGoogleResponse(settings *models.ChatbotSettings, session *models.ChatbotSession, userMessage string, contextData string) (string, error) {
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
-		settings.AI.Model, settings.AI.APIKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent",
+		settings.AI.Model)
 
 	// Build contents array
 	contents := []map[string]interface{}{}
@@ -2180,6 +2180,7 @@ func (a *App) generateGoogleResponse(settings *models.ChatbotSettings, session *
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", settings.AI.APIKey)
 
 	resp, err := a.HTTPClient.Do(req)
 	if err != nil {

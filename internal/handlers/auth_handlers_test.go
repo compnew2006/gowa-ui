@@ -428,22 +428,14 @@ func TestRegister_Success_NewUser(t *testing.T) {
 	var resp struct {
 		Status string `json:"status"`
 		Data   struct {
-			ExpiresIn int `json:"expires_in"`
-			User      struct {
-				ID       string `json:"id"`
-				Email    string `json:"email"`
-				FullName string `json:"full_name"`
-				IsActive bool   `json:"is_active"`
-			} `json:"user"`
+			Message string `json:"message"`
 		} `json:"data"`
 	}
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 
 	assert.Equal(t, "success", resp.Status)
-	assert.Equal(t, email, resp.Data.User.Email)
-	assert.Equal(t, "New User", resp.Data.User.FullName)
-	assert.True(t, resp.Data.User.IsActive)
+	assert.NotEmpty(t, resp.Data.Message)
 
 	// Verify user was created in database
 	var user models.User
@@ -460,7 +452,7 @@ func TestRegister_Success_NewUser(t *testing.T) {
 	assert.True(t, userOrg.IsDefault)
 }
 
-func TestRegister_Success_ExistingUserJoinsNewOrg(t *testing.T) {
+func TestRegister_ExistingUserDoesNotJoinNewOrg(t *testing.T) {
 	app := newTestApp(t)
 	org1 := testutil.CreateTestOrganization(t, app.DB)
 	org2 := testutil.CreateTestOrganization(t, app.DB)
@@ -486,7 +478,7 @@ func TestRegister_Success_ExistingUserJoinsNewOrg(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
-	// Verify user now belongs to both orgs
+	// Verify user still only belongs to original org
 	var user models.User
 	err = app.DB.Where("email = ?", email).First(&user).Error
 	require.NoError(t, err)
@@ -494,7 +486,7 @@ func TestRegister_Success_ExistingUserJoinsNewOrg(t *testing.T) {
 	var userOrgs []models.UserOrganization
 	err = app.DB.Where("user_id = ?", user.ID).Find(&userOrgs).Error
 	require.NoError(t, err)
-	assert.Len(t, userOrgs, 2)
+	assert.Len(t, userOrgs, 1)
 }
 
 func TestRegister_Failure_MissingInvitationToken(t *testing.T) {
@@ -552,7 +544,7 @@ func TestRegister_Failure_OrganizationMismatch(t *testing.T) {
 	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "Invitation link organization mismatch")
 }
 
-func TestRegister_Failure_ExistingUserWrongPassword(t *testing.T) {
+func TestRegister_ExistingUserWrongPassword_GenericResponse(t *testing.T) {
 	app := newTestApp(t)
 	org1 := testutil.CreateTestOrganization(t, app.DB)
 	org2 := testutil.CreateTestOrganization(t, app.DB)
@@ -575,10 +567,10 @@ func TestRegister_Failure_ExistingUserWrongPassword(t *testing.T) {
 
 	err := app.Register(req)
 	require.NoError(t, err)
-	testutil.AssertErrorResponse(t, req, fasthttp.StatusConflict, "An account with this email already exists")
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 }
 
-func TestRegister_Failure_ExistingUserAlreadyInOrg(t *testing.T) {
+func TestRegister_ExistingUserAlreadyInOrg_GenericResponse(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 	email := testutil.UniqueEmail("already-in-org")
@@ -601,7 +593,7 @@ func TestRegister_Failure_ExistingUserAlreadyInOrg(t *testing.T) {
 
 	err := app.Register(req)
 	require.NoError(t, err)
-	testutil.AssertErrorResponse(t, req, fasthttp.StatusConflict, "You are already a member of this organization")
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 }
 
 func TestRegister_Failure_WeakPassword(t *testing.T) {

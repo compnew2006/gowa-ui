@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
+	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/database"
 	"github.com/compnew2006/whatomate/internal/frontend"
 	"github.com/compnew2006/whatomate/internal/handlers"
@@ -47,6 +48,8 @@ func main() {
 		runServer(os.Args[2:])
 	case "worker":
 		runWorker(os.Args[2:])
+	case "crypto-migrate":
+		runCryptoMigrate(os.Args[2:])
 	case "version":
 		fmt.Printf("Whatomate %s (built %s)\n", Version, BuildTime)
 	case "help", "-h", "--help":
@@ -67,6 +70,7 @@ Usage:
 Commands:
   server    Start the API server (with optional embedded workers)
   worker    Start background workers only (no API server)
+  crypto-migrate  Upgrade encrypted secrets from enc:/enc2: to enc3:
   version   Show version information
   help      Show this help message
 
@@ -79,12 +83,19 @@ Worker Options:
   -config string    Path to config file (default "config.toml")
   -workers int      Number of workers to run (default 1)
 
+Crypto Migration Options:
+  -config string       Path to config file (default "config.toml")
+  -dry-run             Scan only; do not update rows
+  -batch-size int      Number of rows per batch (default 500)
+  -include-enc2        Upgrade enc2 payloads in addition to enc (default true)
+
 Examples:
   whatomate server                     # API + 1 embedded worker
   whatomate server -workers 0          # API only (no workers)
   whatomate server -workers 4          # API + 4 embedded workers
   whatomate server -migrate            # Run migrations and start server
   whatomate worker -workers 4          # 4 workers only (no API)
+  whatomate crypto-migrate -dry-run    # Scan for legacy encrypted secrets
 
 Deployment Scenarios:
   All-in-one:    whatomate server
@@ -129,6 +140,18 @@ func runServer(args []string) {
 	}
 	if err := config.ValidateDefaultAdmin(cfg); err != nil {
 		lo.Fatal("Invalid default admin configuration", "error", err)
+	}
+	if err := config.ValidateDatabaseCredentials(cfg); err != nil {
+		lo.Fatal("Invalid database configuration", "error", err)
+	}
+	if err := config.ValidateWebhookVerifyToken(cfg); err != nil {
+		lo.Fatal("Invalid WhatsApp configuration", "error", err)
+	}
+	if err := config.ValidateDatabaseCredentials(cfg); err != nil {
+		lo.Fatal("Invalid database configuration", "error", err)
+	}
+	if err := config.ValidateWebhookVerifyToken(cfg); err != nil {
+		lo.Fatal("Invalid WhatsApp configuration", "error", err)
 	}
 
 	// Warn if debug mode is on in production
@@ -500,6 +523,8 @@ func runWorker(args []string) {
 		messageProvider = whatsmeow.NewWhatsmeowAdapter(whatsmeowManager, db, lo)
 		lo.Info("Worker MessageProvider set to whatsmeow")
 	} else {
+		waClient := whatsapp.NewWithBaseURL(lo, cfg.WhatsApp.BaseURL)
+		messageProvider = whatsapp.NewMetaAdapter(waClient, db, lo)
 		lo.Info("Worker MessageProvider set to meta")
 	}
 
@@ -552,6 +577,66 @@ func runWorker(args []string) {
 		}
 	}
 	lo.Info("Workers stopped")
+}
+
+// ============================================================================
+// CRYPTO MIGRATION COMMAND
+// ============================================================================
+
+func runCryptoMigrate(args []string) {
+	migrateFlags := flag.NewFlagSet("crypto-migrate", flag.ExitOnError)
+	configPath := migrateFlags.String("config", "config.toml", "Path to config file")
+	dryRun := migrateFlags.Bool("dry-run", false, "Scan only; do not update rows")
+	batchSize := migrateFlags.Int("batch-size", 500, "Number of rows per batch")
+	includeEnc2 := migrateFlags.Bool("include-enc2", true, "Upgrade enc2 payloads in addition to enc")
+	_ = migrateFlags.Parse(args)
+
+	lo := logf.New(logf.Opts{
+		EnableColor:     true,
+		Level:           logf.InfoLevel,
+		EnableCaller:    true,
+		TimestampFormat: "2006-01-02 15:04:05",
+		DefaultFields:   []any{"app", "whatomate-crypto-migrate"},
+	})
+
+	lo.Info("Starting crypto migration", "dry_run", *dryRun, "batch_size", *batchSize, "include_enc2", *includeEnc2)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		lo.Fatal("Failed to load config", "error", err)
+	}
+	if err := config.ValidateEncryptionKey(cfg); err != nil {
+		lo.Fatal("Invalid encryption configuration", "error", err)
+	}
+	if strings.TrimSpace(cfg.App.EncryptionKey) == "" {
+		lo.Fatal("Encryption key is required for migration")
+	}
+
+	db, err := database.NewPostgres(&cfg.Database, cfg.App.Debug)
+	if err != nil {
+		lo.Fatal("Failed to connect to database", "error", err)
+	}
+	lo.Info("Connected to PostgreSQL")
+
+	opts := appcrypto.MigrationOptions{
+		DryRun:      *dryRun,
+		BatchSize:   *batchSize,
+		IncludeEnc2: *includeEnc2,
+	}
+
+	summaries, err := appcrypto.MigrateEncryptedColumns(db, cfg.App.EncryptionKey, opts, lo)
+	if err != nil {
+		lo.Fatal("Crypto migration failed", "error", err)
+	}
+
+	totalUpdated := 0
+	totalFailed := 0
+	for _, summary := range summaries {
+		totalUpdated += summary.Updated
+		totalFailed += summary.Failed
+	}
+
+	lo.Info("Crypto migration completed", "updated", totalUpdated, "failed", totalFailed, "dry_run", *dryRun)
 }
 
 // ============================================================================

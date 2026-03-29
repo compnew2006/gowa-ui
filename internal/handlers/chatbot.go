@@ -3,6 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
@@ -743,6 +746,31 @@ type FlowStepRequest struct {
 	MaxRetries      int                      `json:"max_retries"`
 }
 
+func validateChatbotAPIConfig(apiConfig map[string]interface{}) error {
+	if len(apiConfig) == 0 {
+		return fmt.Errorf("api_config.url is required for API steps")
+	}
+	urlVal, ok := apiConfig["url"]
+	if !ok {
+		return fmt.Errorf("api_config.url is required for API steps")
+	}
+	urlStr, ok := urlVal.(string)
+	if !ok || strings.TrimSpace(urlStr) == "" {
+		return fmt.Errorf("api_config.url must be a non-empty string")
+	}
+	if err := validateWebhookURL(urlStr); err != nil {
+		return err
+	}
+	parsed, err := url.Parse(urlStr)
+	if err != nil {
+		return err
+	}
+	if strings.ContainsAny(parsed.Scheme, "{}") || strings.ContainsAny(parsed.Hostname(), "{}") {
+		return fmt.Errorf("api_config.url must use a static scheme and host")
+	}
+	return nil
+}
+
 // CreateChatbotFlow creates a new chatbot flow
 func (a *App) CreateChatbotFlow(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
@@ -800,6 +828,12 @@ func (a *App) CreateChatbotFlow(r *fastglue.Request) error {
 
 	// Create steps
 	for i, stepReq := range req.Steps {
+		if stepReq.MessageType == models.FlowStepTypeAPIFetch {
+			if err := validateChatbotAPIConfig(stepReq.ApiConfig); err != nil {
+				tx.Rollback()
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "api_config.url")
+			}
+		}
 		// Convert buttons to JSONBArray
 		var buttons models.JSONBArray
 		for _, btn := range stepReq.Buttons {
@@ -961,6 +995,12 @@ func (a *App) UpdateChatbotFlow(r *fastglue.Request) error {
 
 		// Create new steps
 		for i, stepReq := range req.Steps {
+			if stepReq.MessageType == models.FlowStepTypeAPIFetch {
+				if err := validateChatbotAPIConfig(stepReq.ApiConfig); err != nil {
+					tx.Rollback()
+					return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "api_config.url")
+				}
+			}
 			// Convert buttons to JSONBArray
 			var buttons models.JSONBArray
 			for _, btn := range stepReq.Buttons {

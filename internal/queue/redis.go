@@ -146,6 +146,31 @@ func (q *RedisQueue) EnqueueInboundMedia(ctx context.Context, job *InboundMediaJ
 	return nil
 }
 
+// EnqueueContactRepair adds a single direct-contact repair job to the queue.
+func (q *RedisQueue) EnqueueContactRepair(ctx context.Context, job *ContactRepairJob) error {
+	if job.EnqueuedAt.IsZero() {
+		job.EnqueuedAt = time.Now()
+	}
+
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal contact repair job: %w", err)
+	}
+
+	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: StreamName,
+		Values: map[string]interface{}{
+			"type":    string(JobTypeContactRepair),
+			"payload": string(payload),
+		},
+	}).Result()
+	if err != nil {
+		return fmt.Errorf("failed to enqueue contact repair job: %w", err)
+	}
+
+	return nil
+}
+
 // Close closes the queue connection.
 func (q *RedisQueue) Close() error {
 	return nil // Redis client is managed externally.
@@ -403,6 +428,14 @@ func (c *RedisConsumer) processMessage(ctx context.Context, msg redis.XMessage, 
 		}
 		c.log.Debug("Processing inbound media job", "stream", c.streamName, "message_id", job.MessageID, "wa_message_id", job.WhatsAppMessageID, "redis_message_id", msg.ID)
 		return handler.HandleInboundMediaJob(ctx, &job)
+
+	case JobTypeContactRepair:
+		var job ContactRepairJob
+		if err := json.Unmarshal([]byte(payload), &job); err != nil {
+			return newPermanentProcessError(fmt.Errorf("failed to unmarshal contact repair job: %w", err))
+		}
+		c.log.Debug("Processing contact repair job", "stream", c.streamName, "contact_id", job.ContactID, "organization_id", job.OrganizationID, "redis_message_id", msg.ID)
+		return handler.HandleContactRepairJob(ctx, &job)
 
 	default:
 		return newPermanentProcessError(fmt.Errorf("unknown job type: %s", jobType))

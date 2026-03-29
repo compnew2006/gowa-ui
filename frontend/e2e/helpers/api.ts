@@ -88,16 +88,13 @@ export class ApiHelper {
     full_name: string
     organization_id?: string
     invitation_token: string
-  }): Promise<{ user: User }> {
+  }): Promise<void> {
     const response = await this.request.post(`${BASE_URL}/api/auth/register`, {
       data
     })
     if (!response.ok()) {
       throw new Error(`Registration failed: ${await response.text()}`)
     }
-    const result = await response.json()
-    this.csrfToken = extractCSRFToken(response)
-    return { user: result.data.user }
   }
 
   // Create a signed registration invite token for the active organization.

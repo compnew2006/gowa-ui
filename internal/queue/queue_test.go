@@ -87,6 +87,7 @@ type mockHandler struct {
 	mu               sync.Mutex
 	jobs             []*queue.RecipientJob
 	inboundMediaJobs []*queue.InboundMediaJob
+	contactJobs      []*queue.ContactRepairJob
 	err              error // if set, handler returns this error
 }
 
@@ -104,6 +105,13 @@ func (h *mockHandler) HandleInboundMediaJob(_ context.Context, job *queue.Inboun
 	return h.err
 }
 
+func (h *mockHandler) HandleContactRepairJob(_ context.Context, job *queue.ContactRepairJob) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.contactJobs = append(h.contactJobs, job)
+	return h.err
+}
+
 func (h *mockHandler) getJobs() []*queue.RecipientJob {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -117,6 +125,14 @@ func (h *mockHandler) getInboundMediaJobs() []*queue.InboundMediaJob {
 	defer h.mu.Unlock()
 	dst := make([]*queue.InboundMediaJob, len(h.inboundMediaJobs))
 	copy(dst, h.inboundMediaJobs)
+	return dst
+}
+
+func (h *mockHandler) getContactJobs() []*queue.ContactRepairJob {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	dst := make([]*queue.ContactRepairJob, len(h.contactJobs))
+	copy(dst, h.contactJobs)
 	return dst
 }
 

@@ -2,107 +2,39 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { contactsService, chatsService, messagesService } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
-
-export type ChatStatus = "pending" | "open" | "closed";
-export type ChatBucketTab = "pending" | "assigned";
-
-export interface Contact {
-  id: string;
-  phone_number: string;
-  instance_id?: string;
-  conversation_id?: string;
-  is_group_chat?: boolean;
-  name: string;
-  profile_name?: string;
-  avatar_url?: string;
-  status: ChatStatus;
-  tags: string[];
-  metadata: Record<string, any>;
-  last_message_at?: string;
-  last_message_preview?: string;
-  last_inbound_at?: string;
-  service_window_open?: boolean;
-  unread_count: number;
-  assigned_user_id?: string;
-  assigned_user_name?: string;
-  is_public?: boolean;
-  is_collaborator?: boolean;
-  closed_at?: string;
-  closed_by_user_id?: string;
-  closed_by_name?: string;
-  whatsapp_account?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ReplyPreview {
-  id: string;
-  content: any;
-  message_type: string;
-  direction: "incoming" | "outgoing";
-  sender_phone?: string;
-  media_url?: string;
-  media_mime_type?: string;
-  media_filename?: string;
-}
-
-export interface Reaction {
-  emoji: string;
-  from_phone?: string;
-  from_user?: string;
-}
-
-export interface Message {
-  id: string;
-  contact_id: string;
-  conversation_id?: string;
-  is_group_chat?: boolean;
-  sender_phone?: string;
-  sender_push_name?: string;
-  direction: "incoming" | "outgoing";
-  message_type: string;
-  content: any;
-  media_url?: string;
-  media_mime_type?: string;
-  media_filename?: string;
-  interactive_data?: {
-    type?: string;
-    body?: string;
-    buttons?: Array<{
-      type?: string;
-      reply?: { id: string; title: string };
-      id?: string;
-      title?: string;
-    }>;
-    rows?: Array<{
-      id?: string;
-      title?: string;
-    }>;
-  };
-  status: string;
-  wamid?: string;
-  error_message?: string;
-  is_reply?: boolean;
-  reply_to_message_id?: string;
-  reply_to_message?: ReplyPreview;
-  reactions?: Reaction[];
-  instance_id?: string;
-  metadata?: Record<string, any>;
-  whatsapp_account?: string;
-  created_at: string;
-  updated_at: string;
-}
-
+import { unwrapResponse } from "@/lib/api-utils";
+import type {
+  ChatBucketTab,
+  ChatStatus,
+  ChatTypeFilter,
+  Contact,
+  Message,
+  Reaction,
+  ReplyPreview,
+} from "@/types/contacts";
 interface AddMessageOptions {
   appendToActiveThread?: boolean;
 }
-
-export type ChatTypeFilter = "private" | "group" | "channel";
 
 const unsupportedMessageBody = "[Unsupported message type]";
 const deletedMessageBody = "(This message was deleted)";
 const legacyDeletedMessageBody = "This message was deleted";
 const syntheticPlaceholderCompanionWindowMs = 3000;
+
+interface ContactsListPayload {
+  contacts: Contact[];
+  total?: number;
+  page?: number;
+  limit?: number;
+}
+
+interface MessagesListPayload {
+  messages: Message[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  has_more?: boolean;
+}
 
 function normalizeChatStatus(
   rawStatus: unknown,
@@ -392,6 +324,7 @@ export const useContactsStore = defineStore("contacts", () => {
   const hasMoreMessages = ref(false);
   let messageFetchSequence = 0;
   let latestMessageFetchSequence = 0;
+  let fetchChatsSequence = 0;
   const searchQuery = ref("");
   const selectedTags = ref<string[]>([]);
   const selectedInstanceId = ref("");
@@ -717,7 +650,7 @@ export const useContactsStore = defineStore("contacts", () => {
         limit: contactsLimit.value,
         ...params,
       });
-      const data = response.data.data || response.data;
+      const data = unwrapResponse<ContactsListPayload>(response);
       replaceContacts(data.contacts || []);
       contactsTotal.value = data.total ?? contacts.value.length;
       pendingChatsTotal.value = pendingChats.value.length;
@@ -735,6 +668,7 @@ export const useContactsStore = defineStore("contacts", () => {
     limit?: number;
     assigned_to?: "me" | string;
   }) {
+    const requestSequence = ++fetchChatsSequence;
     isLoading.value = true;
     try {
       assignedChatsAssignedToFilter.value = params?.assigned_to;
@@ -780,8 +714,12 @@ export const useContactsStore = defineStore("contacts", () => {
             : Promise.resolve(null),
         ]);
 
-      const pendingData = pendingResponse.data.data || pendingResponse.data;
-      const assignedData = assignedResponse.data.data || assignedResponse.data;
+      if (requestSequence !== fetchChatsSequence) {
+        return;
+      }
+
+      const pendingData = unwrapResponse<ContactsListPayload>(pendingResponse);
+      const assignedData = unwrapResponse<ContactsListPayload>(assignedResponse);
       const pendingList = normalizeContacts(pendingData.contacts || []);
       const assignedList = normalizeContacts(assignedData.contacts || []);
       pendingChatsTotal.value = pendingData.total ?? pendingList.length;
@@ -789,7 +727,7 @@ export const useContactsStore = defineStore("contacts", () => {
       const searchedClosed =
         includeClosedInSearch && closedResponse
           ? normalizeContacts(
-              (closedResponse.data.data || closedResponse.data).contacts || [],
+              unwrapResponse<ContactsListPayload>(closedResponse).contacts || [],
             )
           : null;
       if (searchedClosed) {
@@ -815,9 +753,14 @@ export const useContactsStore = defineStore("contacts", () => {
           : pendingChatsTotal.value;
       contactsPage.value = 1;
     } catch (error) {
+      if (requestSequence !== fetchChatsSequence) {
+        return;
+      }
       console.error("Failed to fetch chats:", error);
     } finally {
-      isLoading.value = false;
+      if (requestSequence === fetchChatsSequence) {
+        isLoading.value = false;
+      }
     }
   }
 
@@ -834,7 +777,7 @@ export const useContactsStore = defineStore("contacts", () => {
         limit: params?.limit ?? contactsLimit.value,
         status: "pending",
       });
-      const data = response.data.data || response.data;
+      const data = unwrapResponse<ContactsListPayload>(response);
       const nextPending = normalizeContacts(data.contacts || []);
 
       mergeContactsIntoStore(nextPending);
@@ -870,7 +813,7 @@ export const useContactsStore = defineStore("contacts", () => {
         status: "open",
         assigned_to: params?.assigned_to,
       });
-      const data = response.data.data || response.data;
+      const data = unwrapResponse<ContactsListPayload>(response);
       const nextAssigned = normalizeContacts(data.contacts || []);
 
       mergeContactsIntoStore(nextAssigned);
@@ -910,7 +853,7 @@ export const useContactsStore = defineStore("contacts", () => {
             ? assignedChatsAssignedToFilter.value
             : undefined,
       });
-      const data = response.data.data || response.data;
+      const data = unwrapResponse<ContactsListPayload>(response);
       const newContacts = normalizeContacts(data.contacts || []);
 
       if (newContacts.length > 0) {
@@ -936,7 +879,7 @@ export const useContactsStore = defineStore("contacts", () => {
   async function fetchContact(id: string) {
     try {
       const response = await contactsService.get(id);
-      const data = normalizeContact(response.data.data || response.data);
+      const data = normalizeContact(unwrapResponse<Contact>(response));
       upsertContact(data);
       if (currentContact.value?.id === id) {
         currentContact.value = data;
@@ -969,7 +912,7 @@ export const useContactsStore = defineStore("contacts", () => {
         closed_to: params?.closed_to,
         instance_id: params?.instance_id,
       });
-      const data = response.data.data || response.data;
+      const data = unwrapResponse<ContactsListPayload>(response);
       const nextClosed = normalizeContacts(data.contacts || []);
 
       mergeContactsIntoStore(nextClosed);
@@ -995,40 +938,52 @@ export const useContactsStore = defineStore("contacts", () => {
   }
 
   async function claimChat(chatId: string) {
-    const response = await chatsService.claim(chatId);
-    const updated = normalizeContact(
-      (response.data.data || response.data) as Contact,
-    );
-    upsertContact(updated);
-    isMessageAccessRestricted.value = false;
-    return updated;
+    try {
+      const response = await chatsService.claim(chatId);
+      const updated = normalizeContact(unwrapResponse<Contact>(response));
+      upsertContact(updated);
+      isMessageAccessRestricted.value = false;
+      return updated;
+    } catch (error) {
+      console.error("Failed to claim chat:", error);
+      return null;
+    }
   }
 
   async function closeChat(chatId: string) {
-    const response = await chatsService.close(chatId);
-    const updated = normalizeContact(
-      (response.data.data || response.data) as Contact,
-    );
-    upsertContact(updated);
-    return updated;
+    try {
+      const response = await chatsService.close(chatId);
+      const updated = normalizeContact(unwrapResponse<Contact>(response));
+      upsertContact(updated);
+      return updated;
+    } catch (error) {
+      console.error("Failed to close chat:", error);
+      return null;
+    }
   }
 
   async function reopenChat(chatId: string) {
-    const response = await chatsService.reopen(chatId);
-    const updated = normalizeContact(
-      (response.data.data || response.data) as Contact,
-    );
-    upsertContact(updated);
-    return updated;
+    try {
+      const response = await chatsService.reopen(chatId);
+      const updated = normalizeContact(unwrapResponse<Contact>(response));
+      upsertContact(updated);
+      return updated;
+    } catch (error) {
+      console.error("Failed to reopen chat:", error);
+      return null;
+    }
   }
 
   async function setChatPublic(chatId: string, isPublic: boolean) {
-    const response = await chatsService.setPublic(chatId, isPublic);
-    const updated = normalizeContact(
-      (response.data.data || response.data) as Contact,
-    );
-    upsertContact(updated);
-    return updated;
+    try {
+      const response = await chatsService.setPublic(chatId, isPublic);
+      const updated = normalizeContact(unwrapResponse<Contact>(response));
+      upsertContact(updated);
+      return updated;
+    } catch (error) {
+      console.error("Failed to update chat public state:", error);
+      return null;
+    }
   }
 
   async function fetchMessages(
@@ -1047,7 +1002,7 @@ export const useContactsStore = defineStore("contacts", () => {
       if (requestSequence !== latestMessageFetchSequence) {
         return;
       }
-      const data = response.data.data || response.data;
+      const data = unwrapResponse<MessagesListPayload>(response);
       messages.value = removeSyntheticPlaceholderMessages(data.messages || []);
       hasMoreMessages.value = data.has_more === true;
       const contact = contacts.value.find((c) => c.id === contactId);
@@ -1092,7 +1047,7 @@ export const useContactsStore = defineStore("contacts", () => {
         before_id: oldestMessageId,
         account,
       });
-      const data = response.data.data || response.data;
+      const data = unwrapResponse<MessagesListPayload>(response);
       const olderMessages = data.messages || [];
       if (currentContact.value?.id !== contactId) {
         return;
@@ -1116,7 +1071,7 @@ export const useContactsStore = defineStore("contacts", () => {
   async function sendMessage(
     contactId: string,
     type: string,
-    content: any,
+    content: unknown,
     replyToMessageId?: string,
     whatsappAccount?: string,
     explicitInstanceID?: string,
@@ -1136,7 +1091,7 @@ export const useContactsStore = defineStore("contacts", () => {
         whatsapp_account: whatsappAccount,
       });
       // API returns { status: "success", data: { ... } }
-      const newMessage = response.data.data || response.data;
+      const newMessage = unwrapResponse<Message>(response);
       // Use addMessage which has duplicate checking (WebSocket may also broadcast this)
       addMessage(newMessage);
 
@@ -1159,7 +1114,7 @@ export const useContactsStore = defineStore("contacts", () => {
         template_params: templateParams,
         account_name: accountName,
       });
-      const data = response.data.data || response.data;
+      const data = unwrapResponse<Message>(response);
       // Use addMessage which has duplicate checking (WebSocket may also broadcast this)
       addMessage(data);
       return data;

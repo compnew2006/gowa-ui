@@ -9,6 +9,7 @@ func TestValidateJWTSecret(t *testing.T) {
 	t.Parallel()
 
 	validProdSecret := strings.Repeat("x", 32)
+	validDevSecret := strings.Repeat("d", 32)
 
 	tests := []struct {
 		name    string
@@ -48,7 +49,7 @@ func TestValidateJWTSecret(t *testing.T) {
 			name: "development custom secret",
 			cfg: &Config{
 				App: AppConfig{Environment: "development"},
-				JWT: JWTConfig{Secret: "dev-local-secret"},
+				JWT: JWTConfig{Secret: validDevSecret},
 			},
 			wantErr: false,
 		},
@@ -64,7 +65,7 @@ func TestValidateJWTSecret(t *testing.T) {
 			name: "secret gets trimmed",
 			cfg: &Config{
 				App: AppConfig{Environment: "development"},
-				JWT: JWTConfig{Secret: "   dev-local-secret   "},
+				JWT: JWTConfig{Secret: "   " + validDevSecret + "   "},
 			},
 			wantErr: false,
 		},

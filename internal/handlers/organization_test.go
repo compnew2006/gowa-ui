@@ -20,7 +20,11 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-settings")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("get-settings")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	// Set organization settings
 	org.Settings = models.JSONB{
@@ -67,7 +71,11 @@ func TestApp_GetOrganizationSettings_Defaults(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-settings-defaults")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("get-settings-defaults")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	// Organization with nil settings should return defaults
 	req := testutil.NewGETRequest(t)
@@ -116,7 +124,11 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-settings")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("update-settings")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	maskEnabled := true
 	timezone := "America/New_York"
@@ -169,7 +181,11 @@ func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("partial-update")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("partial-update")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	// Set initial settings
 	org.Settings = models.JSONB{
@@ -211,7 +227,11 @@ func TestApp_UpdateOrganizationSettings_InvalidAssignedChatResetMode(t *testing.
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("invalid-reset-mode")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("invalid-reset-mode")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"assigned_chat_reset_mode": "every_10_minutes",
@@ -228,7 +248,11 @@ func TestApp_UpdateOrganizationSettings_InvalidAssignedChatResetHour(t *testing.
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("invalid-reset-hour")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("invalid-reset-hour")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"assigned_chat_reset_hour": 24,
@@ -245,7 +269,11 @@ func TestApp_UpdateOrganizationSettings_InvalidChatCloseRatingFollowupWindowMinu
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("invalid-followup-window")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("invalid-followup-window")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"chat_close_rating_followup_window_minutes": 0,
@@ -262,7 +290,11 @@ func TestApp_UpdateOrganizationSettings_MidnightModeForcesZeroHour(t *testing.T)
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("midnight-reset-hour")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("midnight-reset-hour")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"assigned_chat_reset_mode": "midnight",
@@ -313,7 +345,11 @@ func TestApp_UpdateOrganizationSettings_EmptyNameIgnored(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("empty-name")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("empty-name")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 	originalName := org.Name
 
 	// Send an empty name -- should be ignored
@@ -337,7 +373,11 @@ func TestApp_UpdateOrganizationSettings_InvalidJSON(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("invalid-json")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("invalid-json")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	// Create a request with invalid JSON body
 	req := testutil.NewGETRequest(t)
@@ -358,7 +398,11 @@ func TestApp_GetCurrentOrganization_Success(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-current-org")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("get-current-org")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, user.ID)
@@ -397,7 +441,11 @@ func TestApp_GetCurrentOrganization_NotFound(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-org-404")))
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("get-org-404")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
 
 	// Set auth context with a non-existent organization ID
 	req := testutil.NewGETRequest(t)

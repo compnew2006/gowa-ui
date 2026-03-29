@@ -1,40 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { chatbotService } from '@/services/api'
-
-export interface AgentTransfer {
-  id: string
-  contact_id: string
-  contact_name: string
-  phone_number: string
-  whatsapp_account: string
-  instance_id?: string
-  status: 'active' | 'resumed' | 'expired'
-  source: 'manual' | 'flow' | 'keyword'
-  agent_id?: string
-  agent_name?: string
-  team_id?: string
-  team_name?: string
-  transferred_by?: string
-  transferred_by_name?: string
-  notes?: string
-  transferred_at: string
-  resumed_at?: string
-  resumed_by?: string
-  resumed_by_name?: string
-  // SLA fields
-  sla_response_deadline?: string
-  sla_resolution_deadline?: string
-  sla_breached: boolean
-  sla_breached_at?: string
-  escalation_level: number
-  escalated_at?: string
-  picked_up_at?: string
-  expires_at?: string
-}
-
-// Helper to determine SLA status
-export type SLAStatus = 'ok' | 'warning' | 'breached' | 'expired'
+import { useAuthStore } from '@/stores/auth'
+import type { AgentTransfer, SLAStatus } from '@/types/transfers'
 
 export function getSLAStatus(transfer: AgentTransfer): SLAStatus {
   if (transfer.status === 'expired') return 'expired'
@@ -69,6 +37,7 @@ export function getSLAStatus(transfer: AgentTransfer): SLAStatus {
 }
 
 export const useTransfersStore = defineStore('transfers', () => {
+  const authStore = useAuthStore()
   const transfers = ref<AgentTransfer[]>([])
   const generalQueueCount = ref(0)
   const teamQueueCounts = ref<Record<string, number>>({})
@@ -93,7 +62,10 @@ export const useTransfersStore = defineStore('transfers', () => {
   )
 
   const myTransfers = computed(() => {
-    const userId = localStorage.getItem('user_id')
+    const userId = authStore.user?.id
+    if (!userId) {
+      return []
+    }
     return transfers.value.filter(t =>
       t.status === 'active' && t.agent_id === userId
     )

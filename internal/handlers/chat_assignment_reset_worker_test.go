@@ -22,7 +22,7 @@ func newChatAssignmentResetTestApp(t *testing.T) *App {
 
 	return &App{
 		Config: &config.Config{
-			App: config.AppConfig{EncryptionKey: "test-encryption-key"},
+			App: config.AppConfig{EncryptionKey: testutil.TestEncryptionKey},
 			JWT: config.JWTConfig{Secret: testutil.TestJWTSecret},
 		},
 		DB:    db,

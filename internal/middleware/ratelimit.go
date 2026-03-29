@@ -47,9 +47,11 @@ func RateLimit(opts RateLimitOpts) fastglue.FastMiddleware {
 
 		count, err := opts.Redis.Incr(ctx, key).Result()
 		if err != nil {
-			// Fail open — log and allow request.
+			// Fail closed — deny request if rate limiter storage is unavailable.
 			opts.Log.Error("Rate limit Redis INCR failed", "error", err, "key", key)
-			return r
+			_ = r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable,
+				"Rate limiting is temporarily unavailable. Please try again later.", nil, "")
+			return nil
 		}
 
 		// Set expiry on first increment (new window).

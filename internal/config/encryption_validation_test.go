@@ -9,6 +9,7 @@ func TestValidateEncryptionKey(t *testing.T) {
 	t.Parallel()
 
 	validProdKey := strings.Repeat("k", 32)
+	validDevKey := strings.Repeat("d", 32)
 
 	tests := []struct {
 		name    string
@@ -21,11 +22,11 @@ func TestValidateEncryptionKey(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "development empty key allowed",
+			name: "development empty key rejected",
 			cfg: &Config{
 				App: AppConfig{Environment: "development", EncryptionKey: ""},
 			},
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "placeholder key",
@@ -44,7 +45,7 @@ func TestValidateEncryptionKey(t *testing.T) {
 		{
 			name: "development key allowed",
 			cfg: &Config{
-				App: AppConfig{Environment: "development", EncryptionKey: "dev-local-key"},
+				App: AppConfig{Environment: "development", EncryptionKey: validDevKey},
 			},
 			wantErr: false,
 		},
@@ -58,7 +59,7 @@ func TestValidateEncryptionKey(t *testing.T) {
 		{
 			name: "key is trimmed",
 			cfg: &Config{
-				App: AppConfig{Environment: "development", EncryptionKey: "   dev-local-key   "},
+				App: AppConfig{Environment: "development", EncryptionKey: "   " + validDevKey + "   "},
 			},
 			wantErr: false,
 		},

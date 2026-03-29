@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -839,7 +840,7 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 // buildContactResponse creates a ContactResponse from a Contact model
 func (a *App) buildContactResponse(contact *models.Contact, orgID, userID uuid.UUID) ContactResponse {
 	status := normalizeContactStatus(contact)
-	conversationContext := a.resolveContactConversationContext(orgID, *contact)
+	conversationContext := a.resolveContactConversationContext(context.Background(), orgID, *contact)
 	a.repairDirectContactPhoneFromConversation(contact, conversationContext.ConversationID)
 	a.scheduleContactAvatarRefresh(contact)
 

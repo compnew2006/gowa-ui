@@ -1,51 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
-
-export interface UserSettings {
-  email_notifications?: boolean
-  new_message_alerts?: boolean
-  campaign_updates?: boolean
-  notification_sound?: 'notification1' | 'notification2' | 'notification'
-  send_restrictions?: {
-    enabled?: boolean
-    include_all_contacts?: boolean
-    authorized_numbers?: string[]
-    allowed_instance_ids?: string[]
-    allowed_instance_id?: string | null
-    prefix_agent_name?: boolean
-    allow_unclaimed_chat_view?: boolean
-    allow_unclaimed_chat_send?: boolean
-  }
-}
-
-export interface Permission {
-  id: string
-  resource: string
-  action: string
-  description?: string
-}
-
-export interface UserRole {
-  id: string
-  name: string
-  description?: string
-  is_system: boolean
-  permissions?: Permission[]
-}
-
-export interface User {
-  id: string
-  email: string
-  full_name: string
-  role_id?: string
-  role?: UserRole
-  organization_id: string
-  organization_name?: string
-  settings?: UserSettings
-  is_available?: boolean
-  is_super_admin?: boolean
-}
+import type { User } from '@/types/auth'
+import { unwrapResponse } from '@/lib/api-utils'
 
 export interface AuthState {
   user: User | null
@@ -109,7 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function refreshUserData(): Promise<boolean> {
     try {
       const response = await api.get('/me')
-      const freshUser = response.data.data
+      const freshUser = unwrapResponse<User>(response)
       user.value = freshUser
       localStorage.setItem('user', JSON.stringify(freshUser))
       return true
@@ -122,7 +79,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(email: string, password: string): Promise<void> {
     const response = await api.post('/auth/login', { email, password })
     // Server sets cookies; response body has { user, expires_in }
-    setAuth({ user: response.data.data.user })
+    const payload = unwrapResponse<{ user: User }>(response)
+    setAuth({ user: payload.user })
   }
 
   async function register(data: {
@@ -132,13 +90,13 @@ export const useAuthStore = defineStore('auth', () => {
     organization_id?: string
     invitation_token: string
   }): Promise<void> {
-    const response = await api.post('/auth/register', data)
-    setAuth({ user: response.data.data.user })
+    await api.post('/auth/register', data)
   }
 
   async function switchOrg(organizationId: string): Promise<void> {
     const response = await api.post('/auth/switch-org', { organization_id: organizationId })
-    setAuth({ user: response.data.data.user })
+    const payload = unwrapResponse<{ user: User }>(response)
+    setAuth({ user: payload.user })
     // Update localStorage org override
     localStorage.setItem('selected_organization_id', organizationId)
   }

@@ -41,7 +41,7 @@ const handleRegister = async () => {
     return
   }
 
-  if (password.value.length < 8) {
+  if (password.value.length < 12) {
     toast.error(t('auth.passwordTooShort'))
     return
   }
@@ -57,7 +57,7 @@ const handleRegister = async () => {
       invitation_token: invitationToken.value
     })
     toast.success(t('auth.registrationSuccess'))
-    router.push('/')
+    router.push('/login')
   } catch (error: any) {
     const message = error.response?.data?.message || t('auth.registrationFailed')
     toast.error(message)

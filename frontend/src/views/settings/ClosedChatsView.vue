@@ -182,6 +182,10 @@ async function reopenChat(chat: Contact) {
   reopeningChatId.value = chat.id;
   try {
     const updated = await contactsStore.reopenChat(chat.id);
+    if (!updated) {
+      toast.error(t("closedChats.reopenFailed"));
+      return;
+    }
     toast.success(t("closedChats.reopenedSuccess"));
     await loadClosedChats();
     router.push({

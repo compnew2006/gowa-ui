@@ -150,6 +150,11 @@ func webhookTestApp(t *testing.T) *App {
 	t.Helper()
 	db := testutil.SetupTestDB(t)
 	return &App{
+		Config: &config.Config{
+			App: config.AppConfig{
+				EncryptionKey: testutil.TestEncryptionKey,
+			},
+		},
 		DB:  db,
 		Log: testutil.NopLogger(),
 	}
@@ -537,7 +542,7 @@ func TestWebhookHandler_AcceptsValidSignedPayload(t *testing.T) {
 	app := webhookTestApp(t)
 	app.Config = &config.Config{
 		App: config.AppConfig{
-			EncryptionKey: "test-encryption-key",
+			EncryptionKey: testutil.TestEncryptionKey,
 		},
 	}
 
@@ -550,6 +555,8 @@ func TestWebhookHandler_AcceptsValidSignedPayload(t *testing.T) {
 
 	encryptedSecret, err := appcrypto.Encrypt("handler-secret-123", app.Config.App.EncryptionKey)
 	require.NoError(t, err)
+	encryptedToken, err := appcrypto.Encrypt("token", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
 
 	account := models.WhatsAppAccount{
 		BaseModel:      models.BaseModel{ID: uuid.New()},
@@ -557,7 +564,7 @@ func TestWebhookHandler_AcceptsValidSignedPayload(t *testing.T) {
 		Name:           "wh-handler-account",
 		PhoneID:        "phone-handler-1",
 		BusinessID:     "business-handler-1",
-		AccessToken:    "token",
+		AccessToken:    encryptedToken,
 		AppSecret:      encryptedSecret,
 	}
 	require.NoError(t, app.DB.Create(&account).Error)

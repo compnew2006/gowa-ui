@@ -4,6 +4,7 @@ import { instancesService } from '@/services/api'
 import type { InstanceHealth, WhatsAppInstance } from '@/types/whatsmeow'
 import { toast } from 'vue-sonner'
 import { i18n } from '@/i18n'
+import { unwrapResponse } from '@/lib/api-utils'
 
 export const useInstancesStore = defineStore('instances', () => {
   const t = i18n.global.t
@@ -19,7 +20,7 @@ export const useInstancesStore = defineStore('instances', () => {
     error.value = null
     try {
       const response = await instancesService.list()
-      const list = (response.data.data || response.data) as WhatsAppInstance[]
+      const list = unwrapResponse<WhatsAppInstance[]>(response)
       instances.value = list.map(instance => ({
         ...instance,
         health: healthByInstance.value[instance.id]
@@ -36,7 +37,7 @@ export const useInstancesStore = defineStore('instances', () => {
   async function fetchInstanceHealth(id: string) {
     try {
       const response = await instancesService.health(id)
-      const health = (response.data.data || response.data) as InstanceHealth
+      const health = unwrapResponse<InstanceHealth>(response)
       healthByInstance.value[id] = health
       const instance = instances.value.find(item => item.id === id)
       if (instance) {
@@ -67,7 +68,7 @@ export const useInstancesStore = defineStore('instances', () => {
   async function fetchInstance(id: string) {
     try {
       const response = await instancesService.get(id)
-      const payload = (response.data.data || response.data) as WhatsAppInstance
+      const payload = unwrapResponse<WhatsAppInstance>(response)
       const index = instances.value.findIndex(instance => instance.id === id)
       const existing = index !== -1 ? instances.value[index] : undefined
       const nextInstance: WhatsAppInstance = {

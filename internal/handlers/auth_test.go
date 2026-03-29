@@ -218,41 +218,29 @@ func TestApp_Register_Success(t *testing.T) {
 	var resp struct {
 		Status string `json:"status"`
 		Data   struct {
-			ExpiresIn int `json:"expires_in"`
-			User      struct {
-				ID       string `json:"id"`
-				Email    string `json:"email"`
-				FullName string `json:"full_name"`
-				RoleID   string `json:"role_id"`
-				IsActive bool   `json:"is_active"`
-			} `json:"user"`
+			Message string `json:"message"`
 		} `json:"data"`
 	}
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 
 	assert.Equal(t, "success", resp.Status)
-	assert.Equal(t, email, resp.Data.User.Email)
-	assert.Equal(t, "New User", resp.Data.User.FullName)
-	assert.NotEmpty(t, resp.Data.User.RoleID, "User should have a role assigned")
-	assert.True(t, resp.Data.User.IsActive)
+	assert.NotEmpty(t, resp.Data.Message)
 
-	// Tokens should be in cookies
-	assert.NotEmpty(t, testutil.GetResponseCookie(req, "whm_access"))
-	assert.NotEmpty(t, testutil.GetResponseCookie(req, "whm_refresh"))
+	// Tokens should NOT be in cookies
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_access"))
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_refresh"))
 
 	// Verify the user has the default role in the database
-	userID, err := uuid.Parse(resp.Data.User.ID)
-	require.NoError(t, err)
 	var user models.User
-	require.NoError(t, app.DB.Preload("Role").Where("id = ?", userID).First(&user).Error)
+	require.NoError(t, app.DB.Preload("Role").Where("email = ?", email).First(&user).Error)
 	assert.NotNil(t, user.Role)
 	assert.Equal(t, defaultRole.Name, user.Role.Name)
 	assert.True(t, user.Role.IsSystem)
 
 	// Verify user_organizations entry was created
 	var userOrg models.UserOrganization
-	require.NoError(t, app.DB.Where("user_id = ? AND organization_id = ?", userID, org.ID).First(&userOrg).Error)
+	require.NoError(t, app.DB.Where("user_id = ? AND organization_id = ?", user.ID, org.ID).First(&userOrg).Error)
 	assert.True(t, userOrg.IsDefault)
 }
 
@@ -260,7 +248,7 @@ func TestApp_Register_EmailAlreadyExists_WrongPassword(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 	email := testutil.UniqueEmail("existing")
-	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword("password123"))
+	existingUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword("password123"))
 
 	// Create a second org to register into
 	org2 := testutil.CreateTestOrganization(t, app.DB)
@@ -277,14 +265,34 @@ func TestApp_Register_EmailAlreadyExists_WrongPassword(t *testing.T) {
 
 	err := app.Register(req)
 	require.NoError(t, err)
-	testutil.AssertErrorResponse(t, req, fasthttp.StatusConflict, "An account with this email already exists")
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Status string `json:"status"`
+		Data   struct {
+			Message string `json:"message"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "success", resp.Status)
+	assert.NotEmpty(t, resp.Data.Message)
+
+	// Tokens should NOT be in cookies
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_access"))
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_refresh"))
+
+	// Ensure user was not added to org2
+	var userOrg models.UserOrganization
+	err = app.DB.Where("user_id = ? AND organization_id = ?", existingUser.ID, org2.ID).First(&userOrg).Error
+	assert.Error(t, err)
 }
 
-func TestApp_Register_ExistingUser_JoinsNewOrg(t *testing.T) {
+func TestApp_Register_ExistingUser_DoesNotJoinNewOrg(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 	email := testutil.UniqueEmail("multiorg")
-	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword("password123"))
+	existingUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword("password123"))
 
 	// Create a second org with a default role
 	org2 := testutil.CreateTestOrganization(t, app.DB)
@@ -303,8 +311,25 @@ func TestApp_Register_ExistingUser_JoinsNewOrg(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
-	// Tokens should be in cookies, not body
-	assert.NotEmpty(t, testutil.GetResponseCookie(req, "whm_access"))
+	var resp struct {
+		Status string `json:"status"`
+		Data   struct {
+			Message string `json:"message"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "success", resp.Status)
+	assert.NotEmpty(t, resp.Data.Message)
+
+	// Tokens should NOT be in cookies
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_access"))
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_refresh"))
+
+	// Ensure user was not added to org2
+	var userOrg models.UserOrganization
+	err = app.DB.Where("user_id = ? AND organization_id = ?", existingUser.ID, org2.ID).First(&userOrg).Error
+	assert.Error(t, err)
 }
 
 func TestApp_Register_InvalidRequestBody(t *testing.T) {

@@ -47,7 +47,15 @@ func (a *App) buildOAuthConfig(provider string, ssoConfig *models.SSOProvider, r
 	callbackURL := fmt.Sprintf("%s://%s%s/api/auth/sso/%s/callback", scheme, host, basePath, provider)
 
 	// Decrypt SSO client secret
-	decryptedSecret, err := appcrypto.Decrypt(ssoConfig.ClientSecret, a.Config.App.EncryptionKey)
+	allowLegacy := true
+	if a.Config != nil && a.Config.App.AllowLegacyEncryption != nil {
+		allowLegacy = *a.Config.App.AllowLegacyEncryption
+	}
+	if !appcrypto.IsEncrypted(ssoConfig.ClientSecret) {
+		a.Log.Error("SSO client secret is not encrypted", "provider", provider)
+		return nil
+	}
+	decryptedSecret, err := appcrypto.DecryptWithPolicy(ssoConfig.ClientSecret, a.Config.App.EncryptionKey, allowLegacy)
 	if err != nil {
 		a.Log.Error("Failed to decrypt SSO client secret", "error", err)
 		return nil

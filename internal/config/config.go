@@ -41,10 +41,11 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Name          string `koanf:"name"`
-	Environment   string `koanf:"environment"` // development, staging, production
-	Debug         bool   `koanf:"debug"`
-	EncryptionKey string `koanf:"encryption_key"` // AES-256 key for encrypting secrets at rest
+	Name                  string `koanf:"name"`
+	Environment           string `koanf:"environment"` // development, staging, production
+	Debug                 bool   `koanf:"debug"`
+	EncryptionKey         string `koanf:"encryption_key"` // AES-256 key for encrypting secrets at rest
+	AllowLegacyEncryption *bool  `koanf:"allow_legacy_encryption"`
 }
 
 type ServerConfig struct {
@@ -210,6 +211,10 @@ func setDefaults(cfg *Config) {
 	if cfg.App.Environment == "" {
 		cfg.App.Environment = "development"
 	}
+	if cfg.App.AllowLegacyEncryption == nil {
+		allowLegacy := true
+		cfg.App.AllowLegacyEncryption = &allowLegacy
+	}
 	if cfg.Server.Host == "" {
 		cfg.Server.Host = "0.0.0.0"
 	}
@@ -322,7 +327,7 @@ func setDefaults(cfg *Config) {
 		cfg.DefaultAdmin.FullName = "Admin"
 	}
 	// Cookie defaults
-	if cfg.App.Environment == "production" {
+	if strings.EqualFold(strings.TrimSpace(cfg.App.Environment), "production") {
 		cfg.Cookie.Secure = true
 	}
 	// Rate limiting defaults

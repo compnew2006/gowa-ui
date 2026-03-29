@@ -2778,6 +2778,10 @@ async function claimCurrentChat() {
     const updated = await contactsStore.claimChat(
       contactsStore.currentContact.id,
     );
+    if (!updated) {
+      toast.error("Failed to claim chat");
+      return;
+    }
     toast.success("Chat claimed successfully");
     contactsStore.setActiveChatTab("assigned");
     await refreshContactsSidebar();
@@ -2796,7 +2800,13 @@ async function closeCurrentChat() {
   if (!contactsStore.currentContact || isClosingCurrentChat.value) return;
   isClosingCurrentChat.value = true;
   try {
-    await contactsStore.closeChat(contactsStore.currentContact.id);
+    const updated = await contactsStore.closeChat(
+      contactsStore.currentContact.id,
+    );
+    if (!updated) {
+      toast.error("Failed to close chat");
+      return;
+    }
     toast.success("Chat closed");
     await refreshContactsSidebar();
     stopTypingForContact(contactsStore.currentContact, { force: true });
@@ -2820,6 +2830,10 @@ async function reopenCurrentChat() {
     const updated = await contactsStore.reopenChat(
       contactsStore.currentContact.id,
     );
+    if (!updated) {
+      toast.error("Failed to reopen chat");
+      return;
+    }
     toast.success("Chat reopened and moved to pending queue");
     contactsStore.setActiveChatTab("pending");
     await refreshContactsSidebar();
@@ -2850,6 +2864,10 @@ async function toggleCurrentChatPublicVisibility() {
       contactsStore.currentContact.id,
       nextIsPublic,
     );
+    if (!updated) {
+      toast.error("Failed to update public chat setting");
+      return;
+    }
     toast.success(
       nextIsPublic ? t("chat.publicChatEnabled") : t("chat.publicChatDisabled"),
     );

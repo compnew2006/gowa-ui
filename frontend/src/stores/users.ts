@@ -1,29 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { usersService } from '@/services/api'
-import type { UserSettings } from '@/stores/auth'
-
-export interface UserRole {
-  id: string
-  name: string
-  description?: string
-  is_system: boolean
-}
-
-export interface User {
-  id: string
-  email: string
-  full_name: string
-  role_id?: string
-  role?: UserRole
-  is_active: boolean
-  is_super_admin?: boolean
-  is_member?: boolean
-  organization_id: string
-  settings?: UserSettings
-  created_at: string
-  updated_at: string
-}
+import type { User } from '@/types/auth'
+import { unwrapResponse } from '@/lib/api-utils'
 
 export interface CreateUserData {
   email: string
@@ -65,7 +44,7 @@ export const useUsersStore = defineStore('users', () => {
     error.value = null
     try {
       const response = await usersService.list(params)
-      const data = response.data.data || response.data
+      const data = unwrapResponse<FetchUsersResponse>(response)
       users.value = data.users || []
       return {
         users: data.users || [],
@@ -86,7 +65,7 @@ export const useUsersStore = defineStore('users', () => {
     error.value = null
     try {
       const response = await usersService.create(data)
-      const newUser = response.data.data
+      const newUser = unwrapResponse<User>(response)
       users.value.unshift(newUser)
       return newUser
     } catch (err: any) {
@@ -102,7 +81,7 @@ export const useUsersStore = defineStore('users', () => {
     error.value = null
     try {
       const response = await usersService.update(id, data)
-      const updatedUser = response.data.data
+      const updatedUser = unwrapResponse<User>(response)
       const index = users.value.findIndex(u => u.id === id)
       if (index !== -1) {
         users.value[index] = updatedUser

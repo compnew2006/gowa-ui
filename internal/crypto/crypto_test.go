@@ -18,8 +18,8 @@ func TestEncryptDecrypt(t *testing.T) {
 	if encrypted == plaintext {
 		t.Fatal("Encrypted value should differ from plaintext")
 	}
-	if !strings.HasPrefix(encrypted, prefix) {
-		t.Fatalf("encrypted value should use %q prefix, got %q", prefix, encrypted)
+	if !strings.HasPrefix(encrypted, prefixV3) {
+		t.Fatalf("encrypted value should use %q prefix, got %q", prefixV3, encrypted)
 	}
 
 	if !IsEncrypted(encrypted) {

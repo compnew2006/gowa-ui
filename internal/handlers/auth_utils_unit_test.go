@@ -9,6 +9,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -206,7 +207,7 @@ func TestGenerateAccessToken_Success(t *testing.T) {
 	app := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret:           "test-secret-key-for-jwt-signing",
+				Secret:           testutil.TestJWTSecret,
 				AccessExpiryMins: 60,
 			},
 		},
@@ -257,7 +258,7 @@ func TestGenerateAccessToken_CustomExpiry(t *testing.T) {
 	app := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret:           "test-secret-key-for-jwt-signing",
+				Secret:           testutil.TestJWTSecret,
 				AccessExpiryMins: 120, // 2 hours
 			},
 		},
@@ -291,7 +292,7 @@ func TestGenerateRefreshToken_Success(t *testing.T) {
 	app := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret:            "test-secret-key-for-jwt-signing",
+				Secret:            testutil.TestJWTSecret,
 				RefreshExpiryDays: 7,
 			},
 		},
@@ -323,7 +324,7 @@ func TestGenerateRefreshToken_NilRedis(t *testing.T) {
 	app := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret:            "test-secret-key-for-jwt-signing",
+				Secret:            testutil.TestJWTSecret,
 				RefreshExpiryDays: 7,
 			},
 		},
@@ -355,7 +356,7 @@ func TestGenerateRefreshToken_RedisWriteFailure(t *testing.T) {
 	app := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret:            "test-secret-key-for-jwt-signing",
+				Secret:            testutil.TestJWTSecret,
 				RefreshExpiryDays: 7,
 			},
 		},
@@ -405,7 +406,7 @@ func TestGenerateRegisterInviteToken_Success(t *testing.T) {
 	app := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret: "test-secret-key-for-jwt-signing",
+				Secret: testutil.TestJWTSecret,
 			},
 		},
 	}
@@ -446,7 +447,7 @@ func TestValidateRegisterInviteToken_ValidToken(t *testing.T) {
 	app := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret: "test-secret-key-for-jwt-signing",
+				Secret: testutil.TestJWTSecret,
 			},
 		},
 	}
@@ -472,7 +473,7 @@ func TestValidateRegisterInviteToken_InvalidToken(t *testing.T) {
 	app := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret: "test-secret-key-for-jwt-signing",
+				Secret: testutil.TestJWTSecret,
 			},
 		},
 	}
@@ -493,7 +494,7 @@ func TestValidateRegisterInviteToken_WrongSecret(t *testing.T) {
 	app1 := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret: "test-secret-key-for-jwt-signing",
+				Secret: testutil.TestJWTSecret,
 			},
 		},
 	}
@@ -507,7 +508,7 @@ func TestValidateRegisterInviteToken_WrongSecret(t *testing.T) {
 	app2 := &handlers.App{
 		Config: &config.Config{
 			JWT: config.JWTConfig{
-				Secret: "different-secret-key",
+				Secret: testutil.TestJWTSecret + "-other",
 			},
 		},
 	}

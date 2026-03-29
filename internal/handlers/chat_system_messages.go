@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"strings"
 
 	"github.com/compnew2006/whatomate/internal/models"
@@ -26,7 +27,7 @@ func (a *App) appendSystemChatMessage(contact *models.Contact, content string, m
 	}
 	metadata[chatSystemEventMetadataKey] = true
 
-	conversationContext := a.resolveContactConversationContext(contact.OrganizationID, *contact)
+	conversationContext := a.resolveContactConversationContext(context.Background(), contact.OrganizationID, *contact)
 	if conversationContext.IsGroupChat {
 		if _, ok := metadata["is_group_chat"]; !ok {
 			metadata["is_group_chat"] = true

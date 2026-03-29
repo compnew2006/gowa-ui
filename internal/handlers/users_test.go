@@ -404,6 +404,26 @@ func TestApp_UpdateUser(t *testing.T) {
 		assert.Equal(t, "Self Updated Name", resp.Data.FullName)
 	})
 
+	t.Run("self password change rejected", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		user := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("selfpassword")),
+		)
+
+		reqBody := map[string]interface{}{
+			"password": "NewPassword123!",
+		}
+
+		req := testutil.NewJSONRequest(t, reqBody)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", user.ID.String())
+
+		err := app.UpdateUser(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+	})
+
 	t.Run("not found", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)

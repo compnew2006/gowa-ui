@@ -17,6 +17,9 @@ const (
 
 	// JobTypeInboundMedia is for async inbound media recovery processing
 	JobTypeInboundMedia JobType = "inbound_media"
+
+	// JobTypeContactRepair is for async direct-contact phone repair processing
+	JobTypeContactRepair JobType = "contact_repair"
 )
 
 // RecipientJob represents a single recipient message job
@@ -45,6 +48,14 @@ type InboundMediaJob struct {
 	EnqueuedAt         time.Time          `json:"enqueued_at"`
 }
 
+// ContactRepairJob represents a background repair for direct contact phone numbers.
+type ContactRepairJob struct {
+	ContactID      uuid.UUID `json:"contact_id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	ConversationID string    `json:"conversation_id"`
+	EnqueuedAt     time.Time `json:"enqueued_at"`
+}
+
 // Queue defines the interface for job queue operations
 type Queue interface {
 	// EnqueueRecipient adds a single recipient job to the queue
@@ -56,6 +67,9 @@ type Queue interface {
 	// EnqueueInboundMedia adds a single inbound-media recovery job to the queue.
 	EnqueueInboundMedia(ctx context.Context, job *InboundMediaJob) error
 
+	// EnqueueContactRepair adds a single direct-contact repair job to the queue.
+	EnqueueContactRepair(ctx context.Context, job *ContactRepairJob) error
+
 	// Close closes the queue connection
 	Close() error
 }
@@ -64,6 +78,7 @@ type Queue interface {
 type JobHandler interface {
 	HandleRecipientJob(ctx context.Context, job *RecipientJob) error
 	HandleInboundMediaJob(ctx context.Context, job *InboundMediaJob) error
+	HandleContactRepairJob(ctx context.Context, job *ContactRepairJob) error
 }
 
 // Consumer defines the interface for consuming jobs from the queue

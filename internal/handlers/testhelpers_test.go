@@ -51,7 +51,7 @@ func newTestApp(t *testing.T, opts ...appOption) *handlers.App {
 
 	cfg := &config.Config{
 		App: config.AppConfig{
-			EncryptionKey: "test-encryption-key",
+			EncryptionKey: testutil.TestEncryptionKey,
 		},
 		JWT: config.JWTConfig{
 			Secret:            testutil.TestJWTSecret,

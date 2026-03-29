@@ -164,61 +164,20 @@ func (a *App) Register(r *fastglue.Request) error {
 		}
 	}
 
-	// Check if email already exists
-	var existingUser models.User
-	if err := a.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
-		if err := bcrypt.CompareHashAndPassword([]byte(existingUser.PasswordHash), []byte(req.Password)); err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusConflict, "An account with this email already exists", nil, "")
-		}
+	if err := validatePasswordStrength(req.Password); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "password")
+	}
 
-		if !existingUser.IsActive {
-			return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Account is disabled", nil, "")
-		}
-
-		var count int64
-		a.DB.Model(&models.UserOrganization{}).
-			Where("user_id = ? AND organization_id = ?", existingUser.ID, inviteOrgID).
-			Count(&count)
-		if count > 0 {
-			return r.SendErrorEnvelope(fasthttp.StatusConflict, "You are already a member of this organization", nil, "")
-		}
-
-		userOrg := models.UserOrganization{
-			UserID:         existingUser.ID,
-			OrganizationID: inviteOrgID,
-			RoleID:         &defaultRole.ID,
-			IsDefault:      false,
-		}
-		if err := a.DB.Create(&userOrg).Error; err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to join organization", nil, "")
-		}
-
-		existingUser.OrganizationID = inviteOrgID
-		existingUser.Role = &defaultRole
-		existingUser.RoleID = &defaultRole.ID
-
-		accessToken, accessTokenExpiresAt, err := a.generateAccessToken(&existingUser)
-		if err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-		}
-		refreshToken, err := a.generateRefreshToken(&existingUser)
-		if err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-		}
-
-		if err := a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken); err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Internal Server Error", nil, "")
-		}
-
-		now := time.Now()
-		return r.SendEnvelope(CookieAuthResponse{
-			ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
-			User:      existingUser,
+	sendRegistrationAck := func() error {
+		return r.SendEnvelope(map[string]any{
+			"message": "Registration submitted. Please sign in to continue.",
 		})
 	}
 
-	if err := validatePasswordStrength(req.Password); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "password")
+	// If email already exists, do not validate password or mutate membership.
+	var existingUser models.User
+	if err := a.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
+		return sendRegistrationAck()
 	}
 
 	hashedPassword, hashErr := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -256,25 +215,7 @@ func (a *App) Register(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create account", nil, "")
 	}
 
-	user.Role = &defaultRole
-	accessToken, accessTokenExpiresAt, err := a.generateAccessToken(&user)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-	}
-	refreshToken, err := a.generateRefreshToken(&user)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-	}
-
-	if err := a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Internal Server Error", nil, "")
-	}
-
-	now := time.Now()
-	return r.SendEnvelope(CookieAuthResponse{
-		ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
-		User:      user,
-	})
+	return sendRegistrationAck()
 }
 
 // RefreshToken refreshes access token using refresh token with rotation.

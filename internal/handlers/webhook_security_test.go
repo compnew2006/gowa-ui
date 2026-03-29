@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -24,14 +25,20 @@ func TestValidateWebhookRequest(t *testing.T) {
 	}
 	require.NoError(t, app.DB.Create(&org).Error)
 
+	plainSecret := "app-secret-123"
+	encToken, err := appcrypto.Encrypt("token", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+	encSecret, err := appcrypto.Encrypt(plainSecret, app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+
 	account := models.WhatsAppAccount{
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: org.ID,
 		Name:           "wh-sec-account",
 		PhoneID:        "phone-sec-1",
 		BusinessID:     "business-sec-1",
-		AccessToken:    "token",
-		AppSecret:      "app-secret-123",
+		AccessToken:    encToken,
+		AppSecret:      encSecret,
 	}
 	require.NoError(t, app.DB.Create(&account).Error)
 
@@ -52,7 +59,7 @@ func TestValidateWebhookRequest(t *testing.T) {
 	})
 
 	t.Run("valid signature", func(t *testing.T) {
-		mac := hmac.New(sha256.New, []byte(account.AppSecret))
+		mac := hmac.New(sha256.New, []byte(plainSecret))
 		mac.Write(body)
 		signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 		err := app.validateWebhookRequest(body, []byte(signature), &payload)
@@ -71,14 +78,20 @@ func TestValidateWebhookSignaturePayload(t *testing.T) {
 	}
 	require.NoError(t, app.DB.Create(&org).Error)
 
+	plainSecret := "signature-secret-123"
+	encToken, err := appcrypto.Encrypt("token", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+	encSecret, err := appcrypto.Encrypt(plainSecret, app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+
 	account := models.WhatsAppAccount{
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: org.ID,
 		Name:           "wh-sec-signature-account",
 		PhoneID:        "phone-signature-1",
 		BusinessID:     "business-signature-1",
-		AccessToken:    "token",
-		AppSecret:      "signature-secret-123",
+		AccessToken:    encToken,
+		AppSecret:      encSecret,
 	}
 	require.NoError(t, app.DB.Create(&account).Error)
 
@@ -86,7 +99,7 @@ func TestValidateWebhookSignaturePayload(t *testing.T) {
 	var payload webhookSignaturePayload
 	require.NoError(t, json.Unmarshal(body, &payload))
 
-	mac := hmac.New(sha256.New, []byte(account.AppSecret))
+	mac := hmac.New(sha256.New, []byte(plainSecret))
 	mac.Write(body)
 	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
@@ -104,14 +117,20 @@ func TestCollectWebhookAppSecrets_BusinessIDFallback(t *testing.T) {
 	}
 	require.NoError(t, app.DB.Create(&org).Error)
 
+	plainSecret := "app-secret-456"
+	encToken, err := appcrypto.Encrypt("token", app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+	encSecret, err := appcrypto.Encrypt(plainSecret, app.Config.App.EncryptionKey)
+	require.NoError(t, err)
+
 	account := models.WhatsAppAccount{
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: org.ID,
 		Name:           "wh-sec-account-2",
 		PhoneID:        "phone-sec-2",
 		BusinessID:     "business-sec-2",
-		AccessToken:    "token",
-		AppSecret:      "app-secret-456",
+		AccessToken:    encToken,
+		AppSecret:      encSecret,
 	}
 	require.NoError(t, app.DB.Create(&account).Error)
 
@@ -121,7 +140,7 @@ func TestCollectWebhookAppSecrets_BusinessIDFallback(t *testing.T) {
 
 	secrets, err := app.collectWebhookAppSecrets(&payload)
 	require.NoError(t, err)
-	assert.Contains(t, secrets, "app-secret-456")
+	assert.Contains(t, secrets, plainSecret)
 }
 
 func TestCountWebhookEvents(t *testing.T) {

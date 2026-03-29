@@ -129,26 +129,20 @@ func (a *App) WebhookHandler(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusRequestEntityTooLarge, "Webhook payload too large", nil, "")
 	}
 
-	var signaturePayload webhookSignaturePayload
-	if err := json.Unmarshal(body, &signaturePayload); err != nil {
+	var payload WebhookPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
 		a.Log.Error("Failed to parse webhook payload", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid payload", nil, "")
 	}
 
-	if signaturePayload.Object != "whatsapp_business_account" {
-		a.Log.Warn("Rejected webhook with invalid object", "object", signaturePayload.Object)
+	if payload.Object != "whatsapp_business_account" {
+		a.Log.Warn("Rejected webhook with invalid object", "object", payload.Object)
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid webhook object", nil, "")
 	}
 
-	if err := a.validateWebhookSignaturePayload(body, signature, &signaturePayload); err != nil {
+	if err := a.validateWebhookRequest(body, signature, &payload); err != nil {
 		a.Log.Warn("Rejected webhook request", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Invalid webhook signature", nil, "")
-	}
-
-	var payload WebhookPayload
-	if err := json.Unmarshal(body, &payload); err != nil {
-		a.Log.Error("Failed to parse verified webhook payload", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid payload", nil, "")
 	}
 
 	eventCount := countWebhookEvents(&payload)

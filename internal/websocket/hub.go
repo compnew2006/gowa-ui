@@ -34,8 +34,8 @@ func NewHub(log logf.Logger) *Hub {
 	return &Hub{
 		clients:    make(map[uuid.UUID]map[uuid.UUID]map[*Client]struct{}),
 		broadcast:  make(chan BroadcastMessage, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		register:   make(chan *Client, 256),
+		unregister: make(chan *Client, 256),
 		log:        log,
 	}
 }

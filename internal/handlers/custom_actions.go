@@ -467,6 +467,9 @@ func (a *App) executeURLAction(action models.CustomAction, ctxData map[string]in
 
 	// Replace variables in URL
 	finalURL := replaceVariables(config.URL, ctxData)
+	if err := validateWebhookURL(finalURL); err != nil {
+		return nil, fmt.Errorf("invalid redirect URL: %w", err)
+	}
 
 	// Generate a random token
 	tokenBytes := make([]byte, 16)
@@ -640,6 +643,15 @@ func validateActionConfig(actionType models.ActionType, config map[string]interf
 	case models.ActionTypeURL:
 		if _, ok := config["url"]; !ok {
 			return &ValidationError{Field: "config.url", Message: "URL is required for URL actions"}
+		}
+		if urlVal, ok := config["url"]; ok {
+			if urlStr, ok := urlVal.(string); ok {
+				if err := validateWebhookURL(urlStr); err != nil {
+					return &ValidationError{Field: "config.url", Message: err.Error()}
+				}
+			} else {
+				return &ValidationError{Field: "config.url", Message: "URL must be a string"}
+			}
 		}
 	case models.ActionTypeJavascript:
 		if _, ok := config["code"]; !ok {

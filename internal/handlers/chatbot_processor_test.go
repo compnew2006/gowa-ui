@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/test/testutil"
@@ -33,6 +34,11 @@ func newProcessorTestApp(t *testing.T) *App {
 	t.Cleanup(waServer.Close)
 
 	app := &App{
+		Config: &config.Config{
+			App: config.AppConfig{
+				EncryptionKey: testutil.TestEncryptionKey,
+			},
+		},
 		DB:       db,
 		Log:      log,
 		WhatsApp: whatsapp.NewWithBaseURL(log, waServer.URL),

@@ -469,6 +469,9 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		user.FullName = req.FullName
 	}
 	if req.Password != "" {
+		if currentUserID == id {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Use /me/password to change your password", nil, "")
+		}
 		if err := validatePasswordStrength(req.Password); err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "password")
 		}

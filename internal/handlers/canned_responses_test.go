@@ -32,6 +32,13 @@ func createTestCannedResponse(t *testing.T, app *handlers.App, orgID, userID uui
 	return cr
 }
 
+func createCannedResponsesUser(t *testing.T, app *handlers.App, orgID uuid.UUID) *models.User {
+	t.Helper()
+
+	adminRole := testutil.CreateAdminRole(t, app.DB, orgID)
+	return testutil.CreateTestUser(t, app.DB, orgID, testutil.WithRoleID(&adminRole.ID))
+}
+
 // --- ListCannedResponses Tests ---
 
 func TestApp_ListCannedResponses(t *testing.T) {
@@ -40,7 +47,7 @@ func TestApp_ListCannedResponses(t *testing.T) {
 	t.Run("success with results", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		createTestCannedResponse(t, app, org.ID, user.ID, "Greeting", "/greet", "Hello! How can I help?", "general")
 		createTestCannedResponse(t, app, org.ID, user.ID, "Farewell", "/bye", "Thank you, goodbye!", "general")
@@ -65,7 +72,7 @@ func TestApp_ListCannedResponses(t *testing.T) {
 	t.Run("empty list", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewGETRequest(t)
 		testutil.SetAuthContext(req, org.ID, user.ID)
@@ -87,7 +94,7 @@ func TestApp_ListCannedResponses(t *testing.T) {
 	t.Run("filters by category", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		createTestCannedResponse(t, app, org.ID, user.ID, "Sales Intro", "/sales", "Welcome to sales!", "sales")
 		createTestCannedResponse(t, app, org.ID, user.ID, "Support Intro", "/support", "How can we help?", "support")
@@ -114,7 +121,7 @@ func TestApp_ListCannedResponses(t *testing.T) {
 	t.Run("filters by search", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		createTestCannedResponse(t, app, org.ID, user.ID, "Hello World", "/hello", "Hello there!", "general")
 		createTestCannedResponse(t, app, org.ID, user.ID, "Goodbye", "/goodbye", "See you later!", "general")
@@ -141,7 +148,7 @@ func TestApp_ListCannedResponses(t *testing.T) {
 	t.Run("filters active only", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		activeCR := createTestCannedResponse(t, app, org.ID, user.ID, "Active One", "/active", "Active content", "general")
 		inactiveCR := createTestCannedResponse(t, app, org.ID, user.ID, "Inactive One", "/inactive", "Inactive content", "general")
@@ -172,8 +179,8 @@ func TestApp_ListCannedResponses(t *testing.T) {
 		app := newTestApp(t)
 		org1 := testutil.CreateTestOrganization(t, app.DB)
 		org2 := testutil.CreateTestOrganization(t, app.DB)
-		user1 := testutil.CreateTestUser(t, app.DB, org1.ID)
-		user2 := testutil.CreateTestUser(t, app.DB, org2.ID)
+		user1 := createCannedResponsesUser(t, app, org1.ID)
+		user2 := createCannedResponsesUser(t, app, org2.ID)
 
 		createTestCannedResponse(t, app, org1.ID, user1.ID, "Org1 Response", "/org1", "Org1 content", "general")
 		createTestCannedResponse(t, app, org2.ID, user2.ID, "Org2 Response", "/org2", "Org2 content", "general")
@@ -216,7 +223,7 @@ func TestApp_CreateCannedResponse(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewJSONRequest(t, map[string]any{
 			"name":     "Welcome Message",
@@ -247,7 +254,7 @@ func TestApp_CreateCannedResponse(t *testing.T) {
 	t.Run("validation error missing name", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewJSONRequest(t, map[string]any{
 			"content": "Some content",
@@ -262,7 +269,7 @@ func TestApp_CreateCannedResponse(t *testing.T) {
 	t.Run("validation error missing content", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewJSONRequest(t, map[string]any{
 			"name": "No Content Response",
@@ -277,7 +284,7 @@ func TestApp_CreateCannedResponse(t *testing.T) {
 	t.Run("validation error missing both name and content", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewJSONRequest(t, map[string]any{
 			"shortcut": "/empty",
@@ -292,7 +299,7 @@ func TestApp_CreateCannedResponse(t *testing.T) {
 	t.Run("duplicate name conflict", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		createTestCannedResponse(t, app, org.ID, user.ID, "Duplicate Name", "/dup", "First content", "general")
 
@@ -330,7 +337,7 @@ func TestApp_GetCannedResponse(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		cr := createTestCannedResponse(t, app, org.ID, user.ID, "Get Me", "/getme", "Get this response", "support")
 
@@ -358,7 +365,7 @@ func TestApp_GetCannedResponse(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewGETRequest(t)
 		testutil.SetAuthContext(req, org.ID, user.ID)
@@ -372,7 +379,7 @@ func TestApp_GetCannedResponse(t *testing.T) {
 	t.Run("invalid id", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewGETRequest(t)
 		testutil.SetAuthContext(req, org.ID, user.ID)
@@ -387,8 +394,8 @@ func TestApp_GetCannedResponse(t *testing.T) {
 		app := newTestApp(t)
 		org1 := testutil.CreateTestOrganization(t, app.DB)
 		org2 := testutil.CreateTestOrganization(t, app.DB)
-		user1 := testutil.CreateTestUser(t, app.DB, org1.ID)
-		user2 := testutil.CreateTestUser(t, app.DB, org2.ID)
+		user1 := createCannedResponsesUser(t, app, org1.ID)
+		user2 := createCannedResponsesUser(t, app, org2.ID)
 
 		cr := createTestCannedResponse(t, app, org1.ID, user1.ID, "Org1 Only", "/org1only", "Secret content", "general")
 
@@ -422,7 +429,7 @@ func TestApp_UpdateCannedResponse(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		cr := createTestCannedResponse(t, app, org.ID, user.ID, "Original Name", "/orig", "Original content", "general")
 
@@ -456,7 +463,7 @@ func TestApp_UpdateCannedResponse(t *testing.T) {
 	t.Run("partial update", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		cr := createTestCannedResponse(t, app, org.ID, user.ID, "Keep Name", "/keep", "Keep content", "keep-cat")
 
@@ -484,7 +491,7 @@ func TestApp_UpdateCannedResponse(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewJSONRequest(t, map[string]any{
 			"name":    "Updated",
@@ -501,7 +508,7 @@ func TestApp_UpdateCannedResponse(t *testing.T) {
 	t.Run("invalid id", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewJSONRequest(t, map[string]any{
 			"name":    "Updated",
@@ -519,8 +526,8 @@ func TestApp_UpdateCannedResponse(t *testing.T) {
 		app := newTestApp(t)
 		org1 := testutil.CreateTestOrganization(t, app.DB)
 		org2 := testutil.CreateTestOrganization(t, app.DB)
-		user1 := testutil.CreateTestUser(t, app.DB, org1.ID)
-		user2 := testutil.CreateTestUser(t, app.DB, org2.ID)
+		user1 := createCannedResponsesUser(t, app, org1.ID)
+		user2 := createCannedResponsesUser(t, app, org2.ID)
 
 		cr := createTestCannedResponse(t, app, org1.ID, user1.ID, "Org1 CR", "/org1cr", "Org1 content", "general")
 
@@ -564,7 +571,7 @@ func TestApp_DeleteCannedResponse(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		cr := createTestCannedResponse(t, app, org.ID, user.ID, "Delete Me", "/delme", "To be deleted", "general")
 
@@ -594,7 +601,7 @@ func TestApp_DeleteCannedResponse(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewGETRequest(t)
 		testutil.SetAuthContext(req, org.ID, user.ID)
@@ -608,7 +615,7 @@ func TestApp_DeleteCannedResponse(t *testing.T) {
 	t.Run("invalid id", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewGETRequest(t)
 		testutil.SetAuthContext(req, org.ID, user.ID)
@@ -623,8 +630,8 @@ func TestApp_DeleteCannedResponse(t *testing.T) {
 		app := newTestApp(t)
 		org1 := testutil.CreateTestOrganization(t, app.DB)
 		org2 := testutil.CreateTestOrganization(t, app.DB)
-		user1 := testutil.CreateTestUser(t, app.DB, org1.ID)
-		user2 := testutil.CreateTestUser(t, app.DB, org2.ID)
+		user1 := createCannedResponsesUser(t, app, org1.ID)
+		user2 := createCannedResponsesUser(t, app, org2.ID)
 
 		cr := createTestCannedResponse(t, app, org1.ID, user1.ID, "Cannot Delete", "/nodelete", "Protected content", "general")
 
@@ -662,7 +669,7 @@ func TestApp_CreateCannedResponse_DuplicateShortcut(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	createTestCannedResponse(t, app, org.ID, user.ID, "First", "/dup-shortcut", "First content", "general")
 
@@ -694,8 +701,8 @@ func TestApp_CreateCannedResponse_SameNameDifferentOrgs(t *testing.T) {
 	app := newTestApp(t)
 	org1 := testutil.CreateTestOrganization(t, app.DB)
 	org2 := testutil.CreateTestOrganization(t, app.DB)
-	user1 := testutil.CreateTestUser(t, app.DB, org1.ID)
-	user2 := testutil.CreateTestUser(t, app.DB, org2.ID)
+	user1 := createCannedResponsesUser(t, app, org1.ID)
+	user2 := createCannedResponsesUser(t, app, org2.ID)
 
 	// Create a canned response in org1
 	createTestCannedResponse(t, app, org1.ID, user1.ID, "Shared Name", "/sn1", "Org1 content", "general")
@@ -724,7 +731,7 @@ func TestApp_CreateCannedResponse_InvalidJSON(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	// Send raw invalid JSON body
 	ctx := &fasthttp.RequestCtx{}
@@ -744,7 +751,7 @@ func TestApp_CreateCannedResponse_WithAllOptionalFields(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"name":     "Full Response",
@@ -778,7 +785,7 @@ func TestApp_CreateCannedResponse_WithoutShortcutOrCategory(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	// Shortcut and category are optional
 	req := testutil.NewJSONRequest(t, map[string]any{
@@ -809,7 +816,7 @@ func TestApp_ListCannedResponses_SearchByShortcut(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	createTestCannedResponse(t, app, org.ID, user.ID, "Alpha", "/alpha-cmd", "Alpha content", "general")
 	createTestCannedResponse(t, app, org.ID, user.ID, "Beta", "/beta-cmd", "Beta content", "general")
@@ -838,7 +845,7 @@ func TestApp_ListCannedResponses_OrderedByUsageCount(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	crLow := createTestCannedResponse(t, app, org.ID, user.ID, "Low Usage", "/low", "Low usage content", "general")
 	crHigh := createTestCannedResponse(t, app, org.ID, user.ID, "High Usage", "/high", "High usage content", "general")
@@ -872,7 +879,7 @@ func TestApp_ListCannedResponses_SearchByContent(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	createTestCannedResponse(t, app, org.ID, user.ID, "Promo", "/promo", "Special discount offer!", "sales")
 	createTestCannedResponse(t, app, org.ID, user.ID, "Normal", "/normal", "Regular response", "general")
@@ -901,7 +908,7 @@ func TestApp_ListCannedResponses_CombinedCategoryAndSearch(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	createTestCannedResponse(t, app, org.ID, user.ID, "Sales Hello", "/sh", "Hello from sales", "sales")
 	createTestCannedResponse(t, app, org.ID, user.ID, "Support Hello", "/sph", "Hello from support", "support")
@@ -934,7 +941,7 @@ func TestApp_UpdateCannedResponse_DeactivateResponse(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	cr := createTestCannedResponse(t, app, org.ID, user.ID, "To Deactivate", "/deact", "Will be deactivated", "general")
 	assert.True(t, cr.IsActive)
@@ -969,7 +976,7 @@ func TestApp_UpdateCannedResponse_ClearShortcutAndCategory(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	cr := createTestCannedResponse(t, app, org.ID, user.ID, "With Shortcut", "/shortcut", "Has shortcut", "support")
 
@@ -1002,7 +1009,7 @@ func TestApp_UpdateCannedResponse_PreservesUsageCount(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	cr := createTestCannedResponse(t, app, org.ID, user.ID, "Count Preserver", "/countpres", "Usage should stay", "general")
 	// Set a usage count
@@ -1036,7 +1043,7 @@ func TestApp_DeleteCannedResponse_DoubleDelete(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	cr := createTestCannedResponse(t, app, org.ID, user.ID, "Delete Twice", "/del2x", "Double delete test", "general")
 
@@ -1064,7 +1071,7 @@ func TestApp_DeleteCannedResponse_VerifyNotListedAfterDelete(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	cr := createTestCannedResponse(t, app, org.ID, user.ID, "Will Vanish", "/vanish", "Gone after delete", "general")
 	createTestCannedResponse(t, app, org.ID, user.ID, "Will Stay", "/stay", "Remains after delete", "general")
@@ -1105,8 +1112,8 @@ func TestApp_IncrementCannedResponseUsage_CrossOrgIsolation(t *testing.T) {
 	app := newTestApp(t)
 	org1 := testutil.CreateTestOrganization(t, app.DB)
 	org2 := testutil.CreateTestOrganization(t, app.DB)
-	user1 := testutil.CreateTestUser(t, app.DB, org1.ID)
-	user2 := testutil.CreateTestUser(t, app.DB, org2.ID)
+	user1 := createCannedResponsesUser(t, app, org1.ID)
+	user2 := createCannedResponsesUser(t, app, org2.ID)
 
 	cr := createTestCannedResponse(t, app, org1.ID, user1.ID, "Org1 Usage", "/org1usage", "Org1 only", "general")
 
@@ -1132,7 +1139,7 @@ func TestApp_IncrementCannedResponseUsage_ReflectedInGet(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	cr := createTestCannedResponse(t, app, org.ID, user.ID, "Get After Increment", "/getinc", "Check via get", "general")
 
@@ -1169,7 +1176,7 @@ func TestApp_CannedResponse_FullLifecycle(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	user := createCannedResponsesUser(t, app, org.ID)
 
 	// 1. Create
 	createReq := testutil.NewJSONRequest(t, map[string]any{
@@ -1288,7 +1295,7 @@ func TestApp_IncrementCannedResponseUsage(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		cr := createTestCannedResponse(t, app, org.ID, user.ID, "Usage Counter", "/usage", "Count me", "general")
 		assert.Equal(t, 0, cr.UsageCount)
@@ -1319,7 +1326,7 @@ func TestApp_IncrementCannedResponseUsage(t *testing.T) {
 	t.Run("increments multiple times", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		cr := createTestCannedResponse(t, app, org.ID, user.ID, "Multi Usage", "/multi", "Count multiple", "general")
 
@@ -1342,7 +1349,7 @@ func TestApp_IncrementCannedResponseUsage(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewJSONRequest(t, nil)
 		testutil.SetAuthContext(req, org.ID, user.ID)
@@ -1358,7 +1365,7 @@ func TestApp_IncrementCannedResponseUsage(t *testing.T) {
 	t.Run("invalid id", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
-		user := testutil.CreateTestUser(t, app.DB, org.ID)
+		user := createCannedResponsesUser(t, app, org.ID)
 
 		req := testutil.NewJSONRequest(t, nil)
 		testutil.SetAuthContext(req, org.ID, user.ID)

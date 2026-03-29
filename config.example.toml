@@ -9,6 +9,7 @@ name = "Whatomate"
 environment = "development"  # development, staging, production
 debug = true
 encryption_key = ""  # AES-256 key for encrypting secrets at rest. Required for storing/updating account secrets; required in production.
+allow_legacy_encryption = true  # Set false after running crypto-migrate to reject enc:/enc2: payloads.
 
 [server]
 host = "0.0.0.0"
@@ -22,8 +23,8 @@ allowed_origins = ""  # Comma-separated CORS/WS origins. Empty = same-origin + l
 [database]
 host = "db"  # Use "localhost" for local development
 port = 5432
-user = "whatomate"
-password = "whatomate"
+user = "change-me"
+password = "change-me"
 name = "whatomate"
 ssl_mode = "disable"
 max_open_conns = 25
@@ -42,7 +43,7 @@ access_expiry_mins = 15
 refresh_expiry_days = 1
 
 [whatsapp]
-webhook_verify_token = "secret"
+webhook_verify_token = "change-me"
 api_version = "v18.0"
 base_url = "https://graph.facebook.com"
 provider = "meta" # meta, whatsmeow

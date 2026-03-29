@@ -96,10 +96,17 @@ func (a *App) decryptChatbotAIKey(settings *models.ChatbotSettings) error {
 		return nil
 	}
 	encKey := ""
+	allowLegacy := true
 	if a.Config != nil {
 		encKey = a.Config.App.EncryptionKey
+		if a.Config.App.AllowLegacyEncryption != nil {
+			allowLegacy = *a.Config.App.AllowLegacyEncryption
+		}
 	}
-	dec, err := crypto.Decrypt(settings.AI.APIKey, encKey)
+	if !crypto.IsEncrypted(settings.AI.APIKey) {
+		return fmt.Errorf("failed to decrypt chatbot AI API key: %w", crypto.ErrNotEncrypted)
+	}
+	dec, err := crypto.DecryptWithPolicy(settings.AI.APIKey, encKey, allowLegacy)
 	if err != nil {
 		return fmt.Errorf("failed to decrypt chatbot AI API key: %w", err)
 	}
@@ -295,15 +302,25 @@ func (a *App) getWhatsAppAccountCached(phoneID string) (*models.WhatsAppAccount,
 // Handles both encrypted ("enc:" prefixed) and legacy unencrypted values transparently.
 func (a *App) decryptAccountSecrets(account *models.WhatsAppAccount) error {
 	encKey := ""
+	allowLegacy := true
 	if a.Config != nil {
 		encKey = a.Config.App.EncryptionKey
+		if a.Config.App.AllowLegacyEncryption != nil {
+			allowLegacy = *a.Config.App.AllowLegacyEncryption
+		}
 	}
-	if dec, err := crypto.Decrypt(account.AccessToken, encKey); err == nil {
+	if account.AccessToken != "" && !crypto.IsEncrypted(account.AccessToken) {
+		return fmt.Errorf("failed to decrypt access token for account %s: %w", account.Name, crypto.ErrNotEncrypted)
+	}
+	if dec, err := crypto.DecryptWithPolicy(account.AccessToken, encKey, allowLegacy); err == nil {
 		account.AccessToken = dec
 	} else if account.AccessToken != "" {
 		return fmt.Errorf("failed to decrypt access token for account %s: %w", account.Name, err)
 	}
-	if dec, err := crypto.Decrypt(account.AppSecret, encKey); err == nil {
+	if account.AppSecret != "" && !crypto.IsEncrypted(account.AppSecret) {
+		return fmt.Errorf("failed to decrypt app secret for account %s: %w", account.Name, crypto.ErrNotEncrypted)
+	}
+	if dec, err := crypto.DecryptWithPolicy(account.AppSecret, encKey, allowLegacy); err == nil {
 		account.AppSecret = dec
 	} else if account.AppSecret != "" {
 		return fmt.Errorf("failed to decrypt app secret for account %s: %w", account.Name, err)
@@ -549,8 +566,8 @@ func (a *App) getUserPermissionsCached(userID uuid.UUID, orgIDs ...uuid.UUID) (*
 //   - resource: The resource type (e.g., models.ResourceUsers, models.ResourceContacts)
 //   - action: The action type (e.g., models.ActionRead, models.ActionWrite)
 //   - orgIDs: Optional organization IDs to check org-specific permissions for.
-//             If not provided, checks the user's default role permissions.
-//             If multiple orgs are provided, checks if user has permission in ANY of them.
+//     If not provided, checks the user's default role permissions.
+//     If multiple orgs are provided, checks if user has permission in ANY of them.
 //
 // Returns:
 //   - true: User has the permission (or is super admin)

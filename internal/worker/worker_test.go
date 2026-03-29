@@ -100,6 +100,11 @@ func testWorker(t *testing.T) *Worker {
 		Log:      log,
 		WhatsApp: whatsapp.New(log),
 	}
+	w.Config = &config.Config{
+		App: config.AppConfig{
+			EncryptionKey: testutil.TestEncryptionKey,
+		},
+	}
 
 	// Set up Publisher if Redis is available
 	if rdb := testutil.SetupTestRedis(t); rdb != nil {
@@ -114,6 +119,9 @@ func testWhatsmeowWorker(t *testing.T, messageProvider *stubMessageProvider) *Wo
 	t.Helper()
 	w := testWorker(t)
 	w.Config = &config.Config{
+		App: config.AppConfig{
+			EncryptionKey: testutil.TestEncryptionKey,
+		},
 		WhatsApp: config.WhatsAppConfig{
 			Provider: "whatsmeow",
 		},
@@ -256,12 +264,18 @@ func createTestCampaignData(t *testing.T, w *Worker) (*models.Organization, *mod
 
 	// Create WhatsApp account with unique name
 	accountName := "test-account-" + uniqueID
+	encKey := testutil.TestEncryptionKey
+	if w.Config != nil && strings.TrimSpace(w.Config.App.EncryptionKey) != "" {
+		encKey = w.Config.App.EncryptionKey
+	}
+	encToken, err := crypto.Encrypt("test-token", encKey)
+	require.NoError(t, err)
 	account := &models.WhatsAppAccount{
 		OrganizationID: org.ID,
 		Name:           accountName,
 		PhoneID:        "phone-" + uniqueID,
 		BusinessID:     "business-" + uniqueID,
-		AccessToken:    "test-token",
+		AccessToken:    encToken,
 	}
 	require.NoError(t, w.DB.Create(account).Error)
 
@@ -448,12 +462,18 @@ func createMinimalCampaignData(t *testing.T, w *Worker, status models.CampaignSt
 	require.NoError(t, w.DB.Create(user).Error)
 
 	accountName := "test-account-" + uniqueID
+	encKey := testutil.TestEncryptionKey
+	if w.Config != nil && strings.TrimSpace(w.Config.App.EncryptionKey) != "" {
+		encKey = w.Config.App.EncryptionKey
+	}
+	encToken, err := crypto.Encrypt("test-token", encKey)
+	require.NoError(t, err)
 	account := &models.WhatsAppAccount{
 		OrganizationID: org.ID,
 		Name:           accountName,
 		PhoneID:        "phone-" + uniqueID,
 		BusinessID:     "business-" + uniqueID,
-		AccessToken:    "test-token",
+		AccessToken:    encToken,
 	}
 	require.NoError(t, w.DB.Create(account).Error)
 
@@ -977,13 +997,14 @@ func TestWorker_DecryptAccountSecrets_WithEncryptionKey(t *testing.T) {
 		AppSecret:   encSecret,
 	}
 
-	w.decryptAccountSecrets(account)
+	err = w.decryptAccountSecrets(account)
+	require.NoError(t, err)
 
 	assert.Equal(t, plainToken, account.AccessToken)
 	assert.Equal(t, plainSecret, account.AppSecret)
 }
 
-func TestWorker_DecryptAccountSecrets_NilConfig(t *testing.T) {
+func TestWorker_DecryptAccountSecrets_PlaintextRejected(t *testing.T) {
 	w := &Worker{}
 
 	account := &models.WhatsAppAccount{
@@ -991,10 +1012,8 @@ func TestWorker_DecryptAccountSecrets_NilConfig(t *testing.T) {
 		AppSecret:   "plain-secret",
 	}
 
-	w.decryptAccountSecrets(account)
-
-	assert.Equal(t, "plain-token", account.AccessToken)
-	assert.Equal(t, "plain-secret", account.AppSecret)
+	err := w.decryptAccountSecrets(account)
+	require.Error(t, err)
 }
 
 func TestWorker_HandleRecipientJob_WithEncryptedToken(t *testing.T) {

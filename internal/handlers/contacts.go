@@ -3,12 +3,12 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -287,7 +287,7 @@ type contactConversationContext struct {
 	DisplayName    string
 }
 
-func (a *App) resolveContactConversationContext(orgID uuid.UUID, contact models.Contact) contactConversationContext {
+func (a *App) resolveContactConversationContext(ctx context.Context, orgID uuid.UUID, contact models.Contact) contactConversationContext {
 	if isGroupContact(&contact) {
 		conversationID := strings.TrimSpace(contact.PhoneNumber)
 		if conversationID == "" {
@@ -325,8 +325,12 @@ func (a *App) resolveContactConversationContext(orgID uuid.UUID, contact models.
 		}
 	}
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var latestMessage models.Message
-	if err := a.DB.WithContext(context.Background()).
+	if err := a.DB.WithContext(ctx).
 		Select("conversation_id", "metadata", "direction").
 		Where("organization_id = ? AND contact_id = ?", orgID, contact.ID).
 		Order("created_at DESC").
@@ -392,10 +396,32 @@ func (a *App) resolveContactConversationContext(orgID uuid.UUID, contact models.
 	return contactConversationContext{}
 }
 
-// repairDirectContactPhoneFromConversation keeps private-chat contacts on canonical PN identity.
-// It uses the latest direct conversation JID (`<pn>@s.whatsapp.net`) as source of truth.
+func applyDirectContactPhoneFromConversation(contact *models.Contact, conversationID string) {
+	if contact == nil {
+		return
+	}
+	if isGroupContact(contact) || isChannelContact(contact) {
+		return
+	}
+
+	canonicalPhone := strings.TrimSpace(directUserFromConversationID(conversationID))
+	if canonicalPhone == "" {
+		return
+	}
+
+	contact.PhoneNumber = canonicalPhone
+}
+
 func (a *App) repairDirectContactPhoneFromConversation(contact *models.Contact, conversationID string) {
-	if a == nil || contact == nil {
+	applyDirectContactPhoneFromConversation(contact, conversationID)
+	if a == nil {
+		return
+	}
+	a.enqueueDirectContactRepair(contact, conversationID)
+}
+
+func (a *App) enqueueDirectContactRepair(contact *models.Contact, conversationID string) {
+	if a == nil || a.Queue == nil || contact == nil {
 		return
 	}
 	if isGroupContact(contact) || isChannelContact(contact) {
@@ -407,54 +433,16 @@ func (a *App) repairDirectContactPhoneFromConversation(contact *models.Contact, 
 		return
 	}
 
-	err := a.DB.Transaction(func(tx *gorm.DB) error {
-		target := models.Contact{}
-		targetQuery := tx.Where("organization_id = ? AND phone_number = ?", contact.OrganizationID, canonicalPhone)
-		if contact.InstanceID != nil {
-			targetQuery = targetQuery.Where("instance_id = ?", *contact.InstanceID)
-		} else {
-			targetQuery = targetQuery.Where("instance_id IS NULL")
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-		if err := targetQuery.First(&target).Error; err == nil {
-			if target.ID == contact.ID {
-				contact.PhoneNumber = canonicalPhone
-				return nil
-			}
-
-			if err := tx.Model(&models.Message{}).
-				Where("organization_id = ? AND contact_id = ?", contact.OrganizationID, contact.ID).
-				Update("contact_id", target.ID).Error; err != nil {
-				return err
-			}
-
-			profileName := strings.TrimSpace(contact.ProfileName)
-			if (target.ProfileName == "" || target.ProfileName == target.PhoneNumber) && profileName != "" && profileName != canonicalPhone {
-				if err := tx.Model(&models.Contact{}).Where("id = ?", target.ID).Update("profile_name", profileName).Error; err != nil {
-					return err
-				}
-				target.ProfileName = profileName
-			}
-
-			if err := tx.Delete(&models.Contact{}, "id = ?", contact.ID).Error; err != nil {
-				return err
-			}
-
-			*contact = target
-			contact.PhoneNumber = canonicalPhone
-			return nil
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-
-		if err := tx.Model(&models.Contact{}).Where("id = ?", contact.ID).Update("phone_number", canonicalPhone).Error; err != nil {
-			return err
-		}
-		contact.PhoneNumber = canonicalPhone
-		return nil
-	})
-	if err != nil {
-		a.Log.Warn("Failed to repair direct contact phone", "contact_id", contact.ID, "conversation_id", conversationID, "canonical_phone", canonicalPhone, "error", err)
+	job := &queue.ContactRepairJob{
+		ContactID:      contact.ID,
+		OrganizationID: contact.OrganizationID,
+		ConversationID: conversationID,
+	}
+	if err := a.Queue.EnqueueContactRepair(ctx, job); err != nil {
+		a.Log.Warn("Failed to enqueue contact phone repair", "contact_id", contact.ID, "conversation_id", conversationID, "canonical_phone", canonicalPhone, "error", err)
 	}
 }
 
@@ -465,6 +453,10 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+
+	ctx, cancel := context.WithTimeout(r.RequestCtx, 5*time.Second)
+	defer cancel()
+	ctxDB := a.DB.WithContext(ctx)
 
 	// Pagination
 	pg := parsePaginationWithDefaults(r, 50, 500)
@@ -483,7 +475,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	var contacts []models.Contact
 	// Use explicit contacts table qualification so later JOINs (closed chat filters)
 	// cannot make organization_id references ambiguous.
-	query := a.DB.Model(&models.Contact{}).Where("contacts.organization_id = ?", orgID)
+	query := ctxDB.Model(&models.Contact{}).Where("contacts.organization_id = ?", orgID)
 	statusFilter, parseStatusErr := parseChatStatusFilter(statusParam)
 	if parseStatusErr != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, parseStatusErr.Error(), nil, "status")
@@ -660,19 +652,20 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	response := make([]ContactResponse, len(contacts))
 	for i, c := range contacts {
 		status := normalizeContactStatus(&c)
-		conversationContext := a.resolveContactConversationContext(orgID, c)
-		a.repairDirectContactPhoneFromConversation(&c, conversationContext.ConversationID)
+		conversationContext := a.resolveContactConversationContext(ctx, orgID, c)
+		applyDirectContactPhoneFromConversation(&c, conversationContext.ConversationID)
+		a.enqueueDirectContactRepair(&c, conversationContext.ConversationID)
 		a.scheduleContactAvatarRefresh(&c)
 
 		// Count unread messages
 		var unreadCount int64
 		if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
-			buildConversationScopeQuery(a.DB, orgID, conversationContext.ConversationID, c.InstanceID).
+			buildConversationScopeQuery(ctxDB, orgID, conversationContext.ConversationID, c.InstanceID).
 				Model(&models.Message{}).
 				Where("direction = ? AND status != ?", models.DirectionIncoming, models.MessageStatusRead).
 				Count(&unreadCount)
 		} else {
-			a.DB.Model(&models.Message{}).
+			ctxDB.Model(&models.Message{}).
 				Where("contact_id = ? AND direction = ? AND status != ?", c.ID, models.DirectionIncoming, models.MessageStatusRead).
 				Count(&unreadCount)
 		}
@@ -765,13 +758,16 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	ctx, cancel := context.WithTimeout(r.RequestCtx, 5*time.Second)
+	defer cancel()
+	ctxDB := a.DB.WithContext(ctx)
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return nil
 	}
 
 	var contact models.Contact
-	query := a.DB.Preload("ClosedByUser").Preload("AssignedUser").Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := ctxDB.Preload("ClosedByUser").Preload("AssignedUser").Where("id = ? AND organization_id = ?", contactID, orgID)
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
@@ -788,17 +784,18 @@ func (a *App) GetContact(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 	// Count unread messages
-	conversationContext := a.resolveContactConversationContext(orgID, contact)
-	a.repairDirectContactPhoneFromConversation(&contact, conversationContext.ConversationID)
+	conversationContext := a.resolveContactConversationContext(ctx, orgID, contact)
+	applyDirectContactPhoneFromConversation(&contact, conversationContext.ConversationID)
+	a.enqueueDirectContactRepair(&contact, conversationContext.ConversationID)
 	a.scheduleContactAvatarRefresh(&contact)
 	var unreadCount int64
 	if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
-		buildConversationScopeQuery(a.DB, orgID, conversationContext.ConversationID, contact.InstanceID).
+		buildConversationScopeQuery(ctxDB, orgID, conversationContext.ConversationID, contact.InstanceID).
 			Model(&models.Message{}).
 			Where("direction = ? AND status != ?", models.DirectionIncoming, models.MessageStatusRead).
 			Count(&unreadCount)
 	} else {
-		a.DB.Model(&models.Message{}).
+		ctxDB.Model(&models.Message{}).
 			Where("contact_id = ? AND direction = ? AND status != ?", contact.ID, models.DirectionIncoming, models.MessageStatusRead).
 			Count(&unreadCount)
 	}
@@ -884,6 +881,9 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	ctx, cancel := context.WithTimeout(r.RequestCtx, 5*time.Second)
+	defer cancel()
+	ctxDB := a.DB.WithContext(ctx)
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return nil
@@ -899,7 +899,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 
 	// Verify contact belongs to org and stays inside the current user's chat scope.
 	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := ctxDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if limitChatVisibilityToAgentScope {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
@@ -921,7 +921,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		)
 	}
 	shouldMaskPhoneNumbers := a.ShouldMaskPhoneNumbers(orgID)
-	conversationContext := a.resolveContactConversationContext(orgID, contact)
+	conversationContext := a.resolveContactConversationContext(ctx, orgID, contact)
 
 	// Pagination parameters
 	limit, _ := strconv.Atoi(string(r.RequestCtx.QueryArgs().Peek("limit")))
@@ -932,9 +932,9 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	}
 
 	// Build base query
-	msgQuery := a.DB.Where("contact_id = ?", contactID)
+	msgQuery := ctxDB.Where("contact_id = ?", contactID)
 	if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
-		msgQuery = buildGroupConversationMessagesQuery(a.DB, orgID, conversationContext.ConversationID, contact.ID, contact.InstanceID)
+		msgQuery = buildGroupConversationMessagesQuery(ctxDB, orgID, conversationContext.ConversationID, contact.ID, contact.InstanceID)
 	}
 
 	// Filter by WhatsApp account if specified
@@ -1169,9 +1169,20 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 
 // markMessagesAsRead marks messages as read and sends read receipts
 func (a *App) markMessagesAsRead(orgID uuid.UUID, contactID uuid.UUID, contact *models.Contact) {
-	var unreadMessages []models.Message
-	a.DB.Where("contact_id = ? AND direction = ? AND status != ?", contactID, models.DirectionIncoming, models.MessageStatusRead).
-		Find(&unreadMessages)
+	const maxReadReceiptMessages = 1000
+
+	type receiptCandidate struct {
+		WhatsAppMessageID string
+		InstanceID        *uuid.UUID
+	}
+
+	var receiptCandidates []receiptCandidate
+	a.DB.Model(&models.Message{}).
+		Select("whats_app_message_id", "instance_id").
+		Where("contact_id = ? AND direction = ? AND status != ?", contactID, models.DirectionIncoming, models.MessageStatusRead).
+		Order("created_at DESC").
+		Limit(maxReadReceiptMessages).
+		Scan(&receiptCandidates)
 
 	a.DB.Model(&models.Message{}).
 		Where("contact_id = ? AND direction = ?", contactID, models.DirectionIncoming).
@@ -1179,7 +1190,7 @@ func (a *App) markMessagesAsRead(orgID uuid.UUID, contactID uuid.UUID, contact *
 
 	a.DB.Model(contact).Update("is_read", true)
 
-	if len(unreadMessages) > 0 && contact.WhatsAppAccount != "" {
+	if len(receiptCandidates) > 0 && contact.WhatsAppAccount != "" {
 		if account, err := a.resolveWhatsAppAccount(orgID, contact.WhatsAppAccount); err == nil {
 			if account.AutoReadReceipt {
 				a.wg.Add(1)
@@ -1190,7 +1201,7 @@ func (a *App) markMessagesAsRead(orgID uuid.UUID, contactID uuid.UUID, contact *
 					defer cancel()
 
 					waAccount := a.toWhatsAppAccount(account)
-					for _, msg := range unreadMessages {
+					for _, msg := range receiptCandidates {
 						// Check if context was cancelled
 						if ctx.Err() != nil {
 							a.Log.Warn("Read receipt sending cancelled", "reason", ctx.Err())

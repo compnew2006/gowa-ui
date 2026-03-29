@@ -3,6 +3,7 @@ import axios, {
   type AxiosError,
   type InternalAxiosRequestConfig,
 } from "axios";
+import type { Permission } from "@/types/auth";
 
 function normalizeBasePath(value: unknown): string {
   const raw = typeof value === "string" ? value.trim() : "";
@@ -42,7 +43,9 @@ function normalizeApiBaseURL(value: string): string {
 
 // Get base path from server-injected config or fallback.
 // Keep API base URL absolute to avoid accidental relative calls like "api/statuses".
-const basePath = normalizeBasePath((window as any).__BASE_PATH__);
+const basePath = normalizeBasePath(
+  (window as Window & { __BASE_PATH__?: string }).__BASE_PATH__,
+);
 const API_BASE_URL = normalizeApiBaseURL(
   import.meta.env.VITE_API_URL || `${basePath}/api`,
 );
@@ -55,6 +58,8 @@ export const api: AxiosInstance = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+type JsonRecord = Record<string, unknown>;
 
 // Helper to read a cookie by name
 function getCookie(name: string): string | null {
@@ -197,7 +202,9 @@ export const usersService = {
 
 export const apiKeysService = {
   list: (params?: { search?: string; page?: number; limit?: number }) =>
-    api.get<{ api_keys: any[]; total?: number }>("/api-keys", { params }),
+    api.get<{ api_keys: JsonRecord[]; total?: number }>("/api-keys", {
+      params,
+    }),
   create: (data: { name: string; expires_at?: string }) =>
     api.post("/api-keys", data),
   delete: (id: string) => api.delete(`/api-keys/${id}`),
@@ -224,8 +231,8 @@ export const contactsService = {
     assigned_to?: "me" | "unassigned" | string;
   }) => api.get("/contacts", { params }),
   get: (id: string) => api.get(`/contacts/${id}`),
-  create: (data: any) => api.post("/contacts", data),
-  update: (id: string, data: any) => api.put(`/contacts/${id}`, data),
+  create: (data: JsonRecord) => api.post("/contacts", data),
+  update: (id: string, data: JsonRecord) => api.put(`/contacts/${id}`, data),
   delete: (id: string) => api.delete(`/contacts/${id}`),
   assign: (id: string, userId: string | null) =>
     api.put(`/contacts/${id}/assign`, { user_id: userId }),
@@ -291,7 +298,7 @@ export interface ActivityLog {
   path?: string;
   ip_address?: string;
   user_agent?: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface ActivityLogListParams {
@@ -318,7 +325,7 @@ export interface CreateActivityLogPayload {
   action: string;
   contact_id?: string;
   message_id?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export const activityLogsService = {
@@ -416,7 +423,7 @@ export const messagesService = {
     contactId: string,
     data: {
       type: string;
-      content: any;
+      content: unknown;
       reply_to_message_id?: string;
       instance_id?: string;
       whatsapp_account?: string;
@@ -554,21 +561,18 @@ export const templatesService = {
     search?: string;
     page?: number;
     limit?: number;
-  }) => api.get<{ templates: any[]; total?: number }>("/templates", { params }),
+  }) =>
+    api.get<{ templates: JsonRecord[]; total?: number }>("/templates", {
+      params,
+    }),
   get: (id: string) => api.get(`/templates/${id}`),
   uploadMedia: (accountName: string, file: File) => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("account", accountName);
-    const csrfToken = getCookie("whm_csrf");
-    return axios.post(
-      `${api.defaults.baseURL}/templates/upload-media`,
-      formData,
-      {
-        withCredentials: true,
-        headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {},
-      },
-    );
+    return api.post("/templates/upload-media", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
   },
 };
 
@@ -578,9 +582,9 @@ export const flowsService = {
     search?: string;
     page?: number;
     limit?: number;
-  }) => api.get<{ flows: any[]; total?: number }>("/flows", { params }),
-  create: (data: any) => api.post("/flows", data),
-  update: (id: string, data: any) => api.put(`/flows/${id}`, data),
+  }) => api.get<{ flows: JsonRecord[]; total?: number }>("/flows", { params }),
+  create: (data: JsonRecord) => api.post("/flows", data),
+  update: (id: string, data: JsonRecord) => api.put(`/flows/${id}`, data),
   delete: (id: string) => api.delete(`/flows/${id}`),
   saveToMeta: (id: string) => api.post(`/flows/${id}/save-to-meta`),
   publish: (id: string) => api.post(`/flows/${id}/publish`),
@@ -598,8 +602,8 @@ export const campaignsService = {
     page?: number;
     limit?: number;
   }) => api.get("/campaigns", { params }),
-  create: (data: any) => api.post("/campaigns", data),
-  update: (id: string, data: any) => api.put(`/campaigns/${id}`, data),
+  create: (data: JsonRecord) => api.post("/campaigns", data),
+  update: (id: string, data: JsonRecord) => api.put(`/campaigns/${id}`, data),
   delete: (id: string) => api.delete(`/campaigns/${id}`),
   start: (id: string) => api.post(`/campaigns/${id}/start`),
   pause: (id: string) => api.post(`/campaigns/${id}/pause`),
@@ -612,7 +616,7 @@ export const campaignsService = {
     recipients: Array<{
       phone_number: string;
       recipient_name?: string;
-      template_params?: Record<string, any>;
+      template_params?: Record<string, unknown>;
     }>,
   ) => api.post(`/campaigns/${id}/recipients/import`, { recipients }),
   deleteRecipient: (campaignId: string, recipientId: string) =>
@@ -645,7 +649,7 @@ export const instancesService = {
     name: string;
     is_default?: boolean;
     auto_read_receipt?: boolean;
-    settings?: Record<string, any>;
+    settings?: Record<string, unknown>;
   }) => api.post("/instances", data),
   update: (
     id: string,
@@ -653,7 +657,7 @@ export const instancesService = {
       name?: string;
       is_default?: boolean;
       auto_read_receipt?: boolean;
-      settings?: Record<string, any>;
+      settings?: Record<string, unknown>;
     },
   ) => api.put(`/instances/${id}`, data),
   delete: (id: string, options?: { deleteChats?: boolean }) =>
@@ -696,22 +700,27 @@ export const notificationsService = {
 export const chatbotService = {
   // Settings
   getSettings: () => api.get("/chatbot/settings"),
-  updateSettings: (data: any) => api.put("/chatbot/settings", data),
+  updateSettings: (data: JsonRecord) => api.put("/chatbot/settings", data),
 
   // Keywords
   listKeywords: (params?: { search?: string; page?: number; limit?: number }) =>
-    api.get<{ rules: any[]; total?: number }>("/chatbot/keywords", { params }),
-  createKeyword: (data: any) => api.post("/chatbot/keywords", data),
-  updateKeyword: (id: string, data: any) =>
+    api.get<{ rules: JsonRecord[]; total?: number }>("/chatbot/keywords", {
+      params,
+    }),
+  createKeyword: (data: JsonRecord) => api.post("/chatbot/keywords", data),
+  updateKeyword: (id: string, data: JsonRecord) =>
     api.put(`/chatbot/keywords/${id}`, data),
   deleteKeyword: (id: string) => api.delete(`/chatbot/keywords/${id}`),
 
   // Flows
   listFlows: (params?: { search?: string; page?: number; limit?: number }) =>
-    api.get<{ flows: any[]; total?: number }>("/chatbot/flows", { params }),
+    api.get<{ flows: JsonRecord[]; total?: number }>("/chatbot/flows", {
+      params,
+    }),
   getFlow: (id: string) => api.get(`/chatbot/flows/${id}`),
-  createFlow: (data: any) => api.post("/chatbot/flows", data),
-  updateFlow: (id: string, data: any) => api.put(`/chatbot/flows/${id}`, data),
+  createFlow: (data: JsonRecord) => api.post("/chatbot/flows", data),
+  updateFlow: (id: string, data: JsonRecord) =>
+    api.put(`/chatbot/flows/${id}`, data),
   deleteFlow: (id: string) => api.delete(`/chatbot/flows/${id}`),
 
   // AI Contexts
@@ -720,11 +729,14 @@ export const chatbotService = {
     page?: number;
     limit?: number;
   }) =>
-    api.get<{ contexts: any[]; total?: number }>("/chatbot/ai-contexts", {
+    api.get<{ contexts: JsonRecord[]; total?: number }>(
+      "/chatbot/ai-contexts",
+      {
       params,
-    }),
-  createAIContext: (data: any) => api.post("/chatbot/ai-contexts", data),
-  updateAIContext: (id: string, data: any) =>
+      },
+    ),
+  createAIContext: (data: JsonRecord) => api.post("/chatbot/ai-contexts", data),
+  updateAIContext: (id: string, data: JsonRecord) =>
     api.put(`/chatbot/ai-contexts/${id}`, data),
   deleteAIContext: (id: string) => api.delete(`/chatbot/ai-contexts/${id}`),
 
@@ -1019,7 +1031,7 @@ export interface DashboardWidget {
   grid_y: number;
   grid_w: number;
   grid_h: number;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
   is_shared: boolean;
   is_default: boolean;
   is_owner: boolean;
@@ -1079,7 +1091,7 @@ export const widgetsService = {
     show_change?: boolean;
     color?: string;
     size?: string;
-    config?: Record<string, any>;
+    config?: Record<string, unknown>;
     is_shared?: boolean;
   }) => api.post<DashboardWidget>("/widgets", data),
   update: (
@@ -1097,7 +1109,7 @@ export const widgetsService = {
       show_change: boolean;
       color: string;
       size: string;
-      config: Record<string, any>;
+      config: Record<string, unknown>;
       is_shared: boolean;
     }>,
   ) => api.put<DashboardWidget>(`/widgets/${id}`, data),
@@ -1289,7 +1301,7 @@ export interface ActionResult {
     message: string;
     type: "success" | "error" | "info" | "warning";
   };
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
 }
 
 export const customActionsService = {
@@ -1303,7 +1315,7 @@ export const customActionsService = {
     name: string;
     icon?: string;
     action_type: "webhook" | "url" | "javascript";
-    config: Record<string, any>;
+    config: Record<string, unknown>;
     is_active?: boolean;
     display_order?: number;
   }) => api.post<CustomAction>("/custom-actions", data),
@@ -1313,7 +1325,7 @@ export const customActionsService = {
       name?: string;
       icon?: string;
       action_type?: "webhook" | "url" | "javascript";
-      config?: Record<string, any>;
+      config?: Record<string, unknown>;
       is_active?: boolean;
       display_order?: number;
     },
@@ -1326,14 +1338,6 @@ export const customActionsService = {
 };
 
 // Roles and Permissions
-export interface Permission {
-  id: string;
-  resource: string;
-  action: string;
-  description: string;
-  key: string; // "resource:action"
-}
-
 export interface Role {
   id: string;
   name: string;

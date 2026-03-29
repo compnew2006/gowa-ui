@@ -2,9 +2,15 @@ package handlers
 
 import "fmt"
 
-const minPasswordLength = 12
+const (
+	minPasswordLength = 12
+	maxPasswordLength = 128
+)
 
 func validatePasswordStrength(password string) error {
+	if len(password) > maxPasswordLength {
+		return fmt.Errorf("password must be at most %d characters", maxPasswordLength)
+	}
 	if len(password) < minPasswordLength {
 		return fmt.Errorf("password must be at least %d characters", minPasswordLength)
 	}

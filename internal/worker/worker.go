@@ -12,6 +12,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/contactutil"
 	"github.com/compnew2006/whatomate/internal/crypto"
+	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/templateutil"
@@ -256,7 +257,12 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 			w.incrementCampaignCount(job.CampaignID, "failed_count")
 			return nil // Don't retry, mark as failed
 		}
-		w.decryptAccountSecrets(&account)
+		if err := w.decryptAccountSecrets(&account); err != nil {
+			w.Log.Error("Failed to decrypt WhatsApp account secrets", "error", err, "account_name", campaign.WhatsAppAccount)
+			w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", "Failed to decrypt WhatsApp account secrets")
+			w.incrementCampaignCount(job.CampaignID, "failed_count")
+			return nil
+		}
 
 		waMessageID, sendErr = w.sendTemplateMessage(ctx, &account, campaign.Template, recipient, campaign.HeaderMediaID)
 	}
@@ -379,14 +385,18 @@ func (w *Worker) updateRecipientStatus(recipientID uuid.UUID, status models.Mess
 	if status == models.MessageStatusSent {
 		updates["sent_at"] = time.Now()
 	}
-	w.DB.Model(&models.BulkMessageRecipient{}).Where("id = ?", recipientID).Updates(updates)
+	if err := w.DB.Model(&models.BulkMessageRecipient{}).Where("id = ?", recipientID).Updates(updates).Error; err != nil {
+		w.Log.Error("Failed to update recipient status", "error", err, "recipient_id", recipientID, "status", status)
+	}
 }
 
 // incrementCampaignCount increments a campaign counter atomically
 func (w *Worker) incrementCampaignCount(campaignID uuid.UUID, column string) {
-	w.DB.Model(&models.BulkMessageCampaign{}).
+	if err := w.DB.Model(&models.BulkMessageCampaign{}).
 		Where("id = ?", campaignID).
-		Update(column, gorm.Expr(column+" + 1"))
+		Update(column, gorm.Expr(column+" + 1")).Error; err != nil {
+		w.Log.Error("Failed to increment campaign count", "error", err, "campaign_id", campaignID, "column", column)
+	}
 }
 
 // publishCampaignStats publishes campaign stats for real-time updates
@@ -411,27 +421,36 @@ func (w *Worker) publishCampaignStats(ctx context.Context, campaignID, organizat
 func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organizationID uuid.UUID) {
 	// Count pending recipients
 	var pendingCount int64
-	w.DB.Model(&models.BulkMessageRecipient{}).
+	if err := w.DB.Model(&models.BulkMessageRecipient{}).
 		Where("campaign_id = ? AND status = ?", campaignID, models.MessageStatusPending).
-		Count(&pendingCount)
+		Count(&pendingCount).Error; err != nil {
+		w.Log.Error("Failed to count pending campaign recipients", "error", err, "campaign_id", campaignID)
+		return
+	}
 
 	// If no pending recipients, mark campaign as completed
 	if pendingCount == 0 {
+		now := time.Now()
+		result := w.DB.Model(&models.BulkMessageCampaign{}).
+			Where("id = ? AND status = ?", campaignID, models.CampaignStatusProcessing).
+			Updates(map[string]interface{}{
+				"status":       models.CampaignStatusCompleted,
+				"completed_at": now,
+			})
+		if result.Error != nil {
+			w.Log.Error("Failed to mark campaign as completed", "error", result.Error, "campaign_id", campaignID)
+			return
+		}
+		if result.RowsAffected == 0 {
+			// Another worker already completed or campaign no longer processing.
+			return
+		}
+
 		var campaign models.BulkMessageCampaign
 		if err := w.DB.Where("id = ?", campaignID).First(&campaign).Error; err != nil {
+			w.Log.Error("Failed to load completed campaign", "error", err, "campaign_id", campaignID)
 			return
 		}
-
-		// Only complete if currently processing
-		if campaign.Status != models.CampaignStatusProcessing {
-			return
-		}
-
-		now := time.Now()
-		w.DB.Model(&campaign).Updates(map[string]interface{}{
-			"status":       models.CampaignStatusCompleted,
-			"completed_at": now,
-		})
 
 		w.Log.Info("Campaign completed", "campaign_id", campaignID, "sent", campaign.SentCount, "failed", campaign.FailedCount)
 
@@ -449,6 +468,28 @@ func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organi
 		// Publish current stats
 		w.publishCampaignStats(ctx, campaignID, organizationID)
 	}
+}
+
+// HandleContactRepairJob processes a direct-contact repair job.
+func (w *Worker) HandleContactRepairJob(ctx context.Context, job *queue.ContactRepairJob) error {
+	if job == nil {
+		return nil
+	}
+
+	var contact models.Contact
+	if err := w.DB.Where("id = ? AND organization_id = ?", job.ContactID, job.OrganizationID).First(&contact).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return queue.NewPermanentError(fmt.Errorf("contact not found: %s", job.ContactID))
+		}
+		return err
+	}
+
+	if err := handlers.RepairDirectContactPhoneFromConversation(w.DB, &contact, job.ConversationID); err != nil {
+		w.Log.Warn("Failed to repair direct contact phone", "contact_id", job.ContactID, "conversation_id", job.ConversationID, "error", err)
+		return err
+	}
+
+	return nil
 }
 
 // sendTemplateMessage sends a template message via WhatsApp Cloud API
@@ -601,12 +642,32 @@ func buildMediaParameter(headerType, keyName, value string) map[string]interface
 }
 
 // decryptAccountSecrets decrypts encrypted account secrets for worker send paths.
-func (w *Worker) decryptAccountSecrets(account *models.WhatsAppAccount) {
+func (w *Worker) decryptAccountSecrets(account *models.WhatsAppAccount) error {
 	var key string
+	allowLegacy := true
 	if w.Config != nil {
 		key = w.Config.App.EncryptionKey
+		if w.Config.App.AllowLegacyEncryption != nil {
+			allowLegacy = *w.Config.App.AllowLegacyEncryption
+		}
 	}
-	crypto.DecryptFields(key, &account.AccessToken, &account.AppSecret)
+	if account.AccessToken != "" && !crypto.IsEncrypted(account.AccessToken) {
+		return fmt.Errorf("access token is not encrypted")
+	}
+	if account.AppSecret != "" && !crypto.IsEncrypted(account.AppSecret) {
+		return fmt.Errorf("app secret is not encrypted")
+	}
+	if dec, err := crypto.DecryptWithPolicy(account.AccessToken, key, allowLegacy); err != nil {
+		return fmt.Errorf("failed to decrypt access token: %w", err)
+	} else {
+		account.AccessToken = dec
+	}
+	if dec, err := crypto.DecryptWithPolicy(account.AppSecret, key, allowLegacy); err != nil {
+		return fmt.Errorf("failed to decrypt app secret: %w", err)
+	} else {
+		account.AppSecret = dec
+	}
+	return nil
 }
 
 // Close cleans up worker resources

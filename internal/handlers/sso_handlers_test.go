@@ -43,7 +43,7 @@ func createTestSSOProvider(t *testing.T, db *gorm.DB, orgID uuid.UUID, provider 
 	}
 
 	// Encrypt the secret
-	encSecret, err := appcrypto.Encrypt(ssoProvider.ClientSecret, "test-encryption-key")
+	encSecret, err := appcrypto.Encrypt(ssoProvider.ClientSecret, testutil.TestEncryptionKey)
 	require.NoError(t, err)
 	ssoProvider.ClientSecret = encSecret
 

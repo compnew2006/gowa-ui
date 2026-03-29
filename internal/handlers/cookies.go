@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -16,6 +17,9 @@ const (
 // setAuthCookies sets httpOnly auth cookies and a JS-readable CSRF cookie.
 func (a *App) setAuthCookies(r *fastglue.Request, accessToken string, accessTokenExpiresAt time.Time, refreshToken string) error {
 	secure := a.Config.Cookie.Secure
+	if a.Config != nil && strings.EqualFold(strings.TrimSpace(a.Config.App.Environment), "production") {
+		secure = true
+	}
 	domain := a.Config.Cookie.Domain
 	bp := a.Config.Server.BasePath // e.g. "/whatomate" or ""
 
@@ -73,6 +77,10 @@ func (a *App) setAuthCookies(r *fastglue.Request, accessToken string, accessToke
 // clearAuthCookies expires all auth cookies.
 func (a *App) clearAuthCookies(r *fastglue.Request) {
 	domain := a.Config.Cookie.Domain
+	secure := a.Config.Cookie.Secure
+	if a.Config != nil && strings.EqualFold(strings.TrimSpace(a.Config.App.Environment), "production") {
+		secure = true
+	}
 
 	bp := a.Config.Server.BasePath
 	for _, name := range []string{cookieAccessName, cookieRefreshName, cookieCSRFName} {
@@ -81,7 +89,7 @@ func (a *App) clearAuthCookies(r *fastglue.Request) {
 		c.SetValue("")
 		c.SetMaxAge(-1)
 		c.SetHTTPOnly(name != cookieCSRFName)
-		c.SetSecure(a.Config.Cookie.Secure)
+		c.SetSecure(secure)
 		c.SetSameSite(fasthttp.CookieSameSiteLaxMode)
 		switch name {
 		case cookieAccessName:

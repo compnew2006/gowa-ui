@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/middleware"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/golang-jwt/jwt/v5"
@@ -17,6 +18,7 @@ import (
 
 // TestJWTSecret is the shared JWT secret for tests.
 const TestJWTSecret = "unit-test-signing-value-1234567890"
+const TestEncryptionKey = "0123456789abcdef0123456789abcdef"
 
 // --- Organization ---
 
@@ -151,13 +153,16 @@ func SetFullAuthContext(req *fastglue.Request, orgID, userID uuid.UUID, roleID *
 func CreateTestWhatsAppAccount(t *testing.T, db *gorm.DB, orgID uuid.UUID) *models.WhatsAppAccount {
 	t.Helper()
 
+	encToken, err := appcrypto.Encrypt("test-token", TestEncryptionKey)
+	require.NoError(t, err)
+
 	account := &models.WhatsAppAccount{
 		BaseModel:          models.BaseModel{ID: uuid.New()},
 		OrganizationID:     orgID,
 		Name:               "test-account-" + uuid.New().String()[:8],
 		PhoneID:            "phone-" + uuid.New().String()[:8],
 		BusinessID:         "business-" + uuid.New().String()[:8],
-		AccessToken:        "test-token",
+		AccessToken:        encToken,
 		WebhookVerifyToken: "webhook-token",
 		APIVersion:         "v18.0",
 		Status:             "active",
@@ -180,13 +185,16 @@ func WithAccountName(name string) WhatsAppAccountOption {
 func CreateTestWhatsAppAccountWith(t *testing.T, db *gorm.DB, orgID uuid.UUID, opts ...WhatsAppAccountOption) *models.WhatsAppAccount {
 	t.Helper()
 
+	encToken, err := appcrypto.Encrypt("test-token", TestEncryptionKey)
+	require.NoError(t, err)
+
 	account := &models.WhatsAppAccount{
 		BaseModel:          models.BaseModel{ID: uuid.New()},
 		OrganizationID:     orgID,
 		Name:               "test-account-" + uuid.New().String()[:8],
 		PhoneID:            "phone-" + uuid.New().String()[:8],
 		BusinessID:         "business-" + uuid.New().String()[:8],
-		AccessToken:        "test-token",
+		AccessToken:        encToken,
 		WebhookVerifyToken: "webhook-token",
 		APIVersion:         "v18.0",
 		Status:             "active",
