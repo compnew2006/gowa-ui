@@ -6,10 +6,15 @@
 - Automated Frontend Testing: Integrated and executed comprehensive E2E test suite using **TestSprite MCP**.
 - Generated `testsprite-mcp-test-report.md` covering 30 test cases across Authentication, Chat, Contacts, and Settings.
 - Achieved **60% pass rate** on the first full production preview run (18/30 passed).
+- **Global Error UI**: Implemented a comprehensive frontend error handling system with permission-based routing fixes.
 
 ### Fixed
 - Resolved environment-specific testing issues by switching from dev-server (8080) to production preview (3000) for UI stability.
 - Identified intermittent SPA "Blank Screen" rendering issues on navigation, now documented for investigation.
+
+### Changed
+- **Core Refactor**: Significantly improved internal handling of authentication, WebSockets, media processing, and message providers for better stability.
+- **Frontend Refactor**: Integrated Content Security Policy (CSP) nonce support and optimized bundle size by removing redundant grid-layout chunks.
 
 
 ## 2026-03-17
