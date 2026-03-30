@@ -28,6 +28,8 @@ const availableEvents = ref<WebhookEvent[]>([])
 const isLoading = ref(false)
 const isSaving = ref(false)
 const isTesting = ref<string | null>(null)
+const testResult = ref<{ success: boolean; status?: number; data?: any; error?: string } | null>(null)
+const isTestResultDialogOpen = ref(false)
 
 const isDialogOpen = ref(false)
 const isEditing = ref(false)
@@ -134,9 +136,27 @@ async function toggleWebhook(webhook: Webhook) {
 
 async function testWebhook(webhook: Webhook) {
   isTesting.value = webhook.id
-  try { await webhooksService.test(webhook.id); toast.success(t('webhooks.testSent')) }
-  catch (e) { toast.error(getErrorMessage(e, t('webhooks.testFailed'))) }
-  finally { isTesting.value = null }
+  testResult.value = null
+  try {
+    const response = await webhooksService.test(webhook.id)
+    testResult.value = {
+      success: true,
+      status: response.status,
+      data: response.data?.data || response.data
+    }
+    isTestResultDialogOpen.value = true
+    toast.success(t('webhooks.testSent'))
+  } catch (e: any) {
+    testResult.value = {
+      success: false,
+      status: e.response?.status,
+      error: getErrorMessage(e, t('webhooks.testFailed'))
+    }
+    isTestResultDialogOpen.value = true
+    toast.error(getErrorMessage(e, t('webhooks.testFailed')))
+  } finally {
+    isTesting.value = null
+  }
 }
 
 async function deleteWebhook() {
@@ -269,5 +289,33 @@ onMounted(() => fetchWebhooks())
     </Dialog>
 
     <DeleteConfirmDialog v-model:open="isDeleteDialogOpen" :title="$t('webhooks.deleteWebhook')" :item-name="webhookToDelete?.name" @confirm="deleteWebhook" />
+
+    <!-- Test Result Dialog -->
+    <Dialog v-model:open="isTestResultDialogOpen">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ $t('webhooks.testResult') || 'Webhook Test Result' }}</DialogTitle>
+          <DialogDescription>{{ $t('webhooks.testResultDesc') || 'Details of the webhook delivery attempt.' }}</DialogDescription>
+        </DialogHeader>
+        <div class="space-y-4 py-4">
+          <div :class="['p-4 rounded-lg border', testResult?.success ? 'bg-green-500/10 border-green-500/20 text-green-500' : 'bg-red-500/10 border-red-500/20 text-red-500']">
+            <div class="flex items-center gap-2 font-medium mb-1">
+              <span v-if="testResult?.success">✓ Success</span>
+              <span v-else>✗ Failed</span>
+              <Badge v-if="testResult?.status" variant="outline" class="ml-auto">{{ testResult.status }}</Badge>
+            </div>
+            <p class="text-sm opacity-90">{{ testResult?.success ? 'The webhook was delivered successfully.' : testResult?.error }}</p>
+          </div>
+
+          <div v-if="testResult?.data" class="space-y-2">
+            <Label class="text-xs uppercase tracking-wider opacity-50">Response Payload</Label>
+            <pre class="bg-[#141414] p-3 rounded border border-white/[0.08] text-[11px] overflow-x-auto max-h-48"><code>{{ JSON.stringify(testResult.data, null, 2) }}</code></pre>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button @click="isTestResultDialogOpen = false">Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

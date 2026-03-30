@@ -1,5 +1,17 @@
 # CHANGELOG.md
 
+## 2026-03-30
+
+### Added
+- Automated Frontend Testing: Integrated and executed comprehensive E2E test suite using **TestSprite MCP**.
+- Generated `testsprite-mcp-test-report.md` covering 30 test cases across Authentication, Chat, Contacts, and Settings.
+- Achieved **60% pass rate** on the first full production preview run (18/30 passed).
+
+### Fixed
+- Resolved environment-specific testing issues by switching from dev-server (8080) to production preview (3000) for UI stability.
+- Identified intermittent SPA "Blank Screen" rendering issues on navigation, now documented for investigation.
+
+
 ## 2026-03-17
 
 ### Fixed

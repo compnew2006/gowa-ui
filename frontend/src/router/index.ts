@@ -339,6 +339,7 @@ function getFirstAccessibleRoute(
     }
   }
   // Fallback to profile (always accessible)
+  console.warn("No accessible routes found for user, falling back to profile.");
   return "/profile";
 }
 
@@ -360,8 +361,13 @@ router.beforeEach(async (to, _from, next) => {
     const requiredPermission = to.meta.permission;
     if (requiredPermission) {
       if (!authStore.hasPermission(requiredPermission, "read")) {
-        // Redirect to first accessible page
-        return next({ path: getFirstAccessibleRoute(authStore) });
+        const fallback = getFirstAccessibleRoute(authStore);
+        console.warn(`Access denied to ${to.path}. Redirecting to ${fallback}`);
+        if (fallback === to.path) {
+          // Prevent infinite redirect loop
+          return next({ name: "profile" });
+        }
+        return next({ path: fallback });
       }
     }
   } else {

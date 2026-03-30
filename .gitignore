@@ -6,7 +6,10 @@ bin/
 *.bin
 /server
 /main
-
+/testsprite_tests
+/frontend/testsprite_tests
+/frontend/dist
+/frontend/node_modules
 # Build and lint outputs
 go_lint.txt
 go_lint.json

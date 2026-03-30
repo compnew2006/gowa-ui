@@ -75,3 +75,16 @@
 - **The Reality:** Parallel test execution or existing local Redis instances cause connection collisions, leading to "address already in use" or tests accidentally connecting to a real local database instead of the mock.
 - **The Fix:** Created a `getMockRedisConfig` helper that dynamically retrieves the random port assigned by `miniredis.Run()` and injects it into the client configuration.
 - **The Law:** Always use dynamic port allocation for mock services in unit tests to ensure isolation and prevent environmental cross-contamination.
+
+## [2026-03-30] Issue: Frontend E2E tests target wrong port or blank screens
+
+- **The Trap:** Relying on the development server (localhost:8080) for automated frontend testing, assuming it's identical to the production build.
+- **The Reality:** The dev server often has different routing, HMR overhead, or proxy behaviors that can cause hydration/blank screen issues (404 on valid routes or blank pages) under automated load.
+- **The Fix:** Switched to the production preview server (`npm run preview` on port 3000). This provides a stable, minified environment that more accurately reflects the user experience and reduces Vite-side hydration timing issues.
+- **The Law:** Always use `npm run build && npm run preview` (production mode) when running comprehensive automated E2E or AI-driven tests to ensure environment stability and realistic performance.
+## [2026-03-30] Issue: Frontend Blank Screens from Permission Mismatches
+
+- **The Trap:** Frontend permission checks (`hasPermission`) only matched `Permission` objects (resource/action). However, some backend responses or creation workflows use raw string keys like `"resource:action"`.
+- **The Reality:** When the frontend encountered a string instead of an object, the check failed, triggering an unauthorized redirect to a potentially unauthorized "blank" route.
+- **The Fix:** Refactor `authStore.hasPermission` in `auth.ts` to handle both object and string formats using a centralized `targetKey` mapping.
+- **The Law:** Always design permission guards to handle both granular objects and flat string keys to ensure resilience across different API synchronization stages.

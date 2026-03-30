@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PageHeader, SearchInput, DataTable, CrudFormDialog, DeleteConfirmDialog, type Column } from '@/components/shared'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useUsersStore, type User } from '@/stores/users'
+import { useUsersStore } from '@/stores/users'
+import type { User } from '@/types/auth'
 import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
 import { useOrganizationsStore } from '@/stores/organizations'
@@ -92,7 +93,7 @@ const getDefaultRoleId = () => rolesStore.roles.find(r => r.name === 'agent' && 
 
 function openCreateDialog() { formData.value.role_id = getDefaultRoleId(); baseOpenCreateDialog() }
 function openEditDialog(user: User) {
-  baseOpenEditDialog(user, (u) => ({ email: u.email, password: '', full_name: u.full_name, role_id: u.role_id || '', is_active: u.is_active, is_super_admin: u.is_super_admin || false }))
+  baseOpenEditDialog(user, (u) => ({ email: u.email, password: '', full_name: u.full_name, role_id: u.role_id || '', is_active: u.is_active ?? true, is_super_admin: u.is_super_admin || false }))
 }
 
 watch(() => organizationsStore.selectedOrgId, () => {
@@ -148,8 +149,11 @@ async function saveUser() {
     }
     closeDialog()
     await fetchUsers()
-  } catch (e) { toast.error(getErrorMessage(e, t('common.failedSave', { resource: t('resources.user') }))) }
-  finally { isSubmitting.value = false }
+  } catch (e) {
+    toast.error(getErrorMessage(e, t('common.failedSave', { resource: t('resources.user') })))
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 async function confirmDelete() {
@@ -516,7 +520,7 @@ async function saveStrictSendingRestrictions() {
                   <Badge variant="outline" :class="user.is_active ? 'border-green-600 text-green-600' : ''">{{ user.is_active ? $t('common.active') : $t('common.inactive') }}</Badge>
                 </template>
                 <template #cell-created="{ item: user }">
-                  <span class="text-muted-foreground">{{ formatDate(user.created_at) }}</span>
+                  <span class="text-muted-foreground">{{ formatDate(user.created_at || '') }}</span>
                 </template>
                 <template #cell-actions="{ item: user }">
                   <div class="flex items-center justify-end gap-1">

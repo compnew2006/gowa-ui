@@ -133,7 +133,18 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     }
 
-    return permissions.some(p => p.resource === resource && p.action === action)
+    // Handle both string keys (e.g., "resource:read") and objects (e.g., { resource: "resource", action: "read" })
+    const targetKey = `${resource}:${action}`
+
+    return permissions.some(p => {
+      if (typeof p === 'string') {
+        return p === targetKey || p === `${resource}:manage` || p === '*:*'
+      }
+      return (
+        (p.resource === resource && (p.action === action || p.action === 'manage')) ||
+        (p.resource === '*' && p.action === '*')
+      )
+    })
   }
 
   return {
