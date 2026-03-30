@@ -32,6 +32,31 @@ const (
 const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; frame-src 'self' data: blob: https:; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss: blob:"
 const accessTokenSubject = "access"
 
+// ContentSecurityPolicyWithNonce returns the default CSP with a script nonce injected.
+func ContentSecurityPolicyWithNonce(nonce string) string {
+	nonce = strings.TrimSpace(nonce)
+	if nonce == "" {
+		return defaultContentSecurityPolicy
+	}
+	return strings.Replace(defaultContentSecurityPolicy, "script-src 'self';", "script-src 'self' 'nonce-"+nonce+"';", 1)
+}
+
+func shouldSkipCSP(path string) bool {
+	if path == "" {
+		return false
+	}
+	if path == "/" {
+		return true
+	}
+	if strings.HasPrefix(path, "/api") {
+		return false
+	}
+	if strings.Contains(path, ".") {
+		return false
+	}
+	return true
+}
+
 // JWTClaims represents JWT claims
 type JWTClaims struct {
 	UserID         uuid.UUID  `json:"user_id"`
@@ -225,7 +250,9 @@ func CORS(allowedOrigins map[string]bool) fastglue.FastMiddleware {
 func SecurityHeaders() fastglue.FastMiddleware {
 	return func(r *fastglue.Request) *fastglue.Request {
 		h := &r.RequestCtx.Response.Header
-		h.Set("Content-Security-Policy", defaultContentSecurityPolicy)
+		if !shouldSkipCSP(string(r.RequestCtx.Path())) {
+			h.Set("Content-Security-Policy", defaultContentSecurityPolicy)
+		}
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")

@@ -1,5 +1,62 @@
 # Session Summary
 
+## 2026-03-30 12:22
+
+### Completed
+- Built and deployed the CSP nonce update for inline theme initialization; created a fresh backup of the previously installed binary.
+- Restarted `whatomate` plus tenant systemd services.
+- Updated deployment docs and synced them to the VPS.
+
+### Verification
+- Local HTTP smoke (VPS): `ofuqalmadenah.com` -> `200`, `holol-wenjaz` -> `200`, `alarkan-almthalia` -> `200`, `matbaat-ruya` -> `200`.
+- CSP header includes `script-src 'self' 'nonce-...'`, and the inline theme script includes a matching `nonce`.
+- Playwright MCP loaded `https://ofuqalmadenah.com/settings` and `https://ofuqalmadenah.com/chat` with no CSP inline-script errors (only expected `401` responses due to unauthenticated session).
+
+### Notes
+- Chrome DevTools MCP was unavailable due to a profile lock; Playwright MCP was used for UI verification.
+- `whatomate-housekeeping.service` is in `failed` state (pre-existing).
+
+## 2026-03-30 11:58
+
+### Completed
+- Backed up `/opt/whatomate/bin/whatomate` before deployment and synced the updated frontend build to the VPS.
+- Built with `make build-prod`, installed the new binary, and restarted `whatomate` plus all tenant services.
+- Updated `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/docs/whatomate_multi_instances_info.md` and synced it to `/root/whatomate_multi_instances_info.md` and `/root/whatomate_production_info.md`.
+
+### Verification
+- Local HTTP smoke (VPS): `ofuqalmadenah.com` -> `200`, `holol-wenjaz` -> `200`, `alarkan-almthalia` -> `200`, `matbaat-ruya` -> `200`.
+- Playwright MCP loaded `https://ofuqalmadenah.com/chat` with no console errors reported.
+
+
+## 2026-03-30 12:05
+
+### Completed
+- Moved the inline theme-init script to `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/public/theme-init.js` and referenced it from `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/index.html` to satisfy CSP `script-src 'self'`.
+- Removed the `grid-layout` manual chunk split in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/vite.config.ts` to avoid the circular chunk and runtime `ReferenceError` in `grid-layout`.
+- Rebuilt the frontend and verified the login screen renders in Vite preview without console errors.
+
+### Verification
+- `npm run build` (frontend) succeeded.
+- Playwright MCP loaded `http://127.0.0.1:4173/login` with no console errors and the login form present.
+
+
+## 2026-03-30 11:45
+
+### Completed
+- Backed up the existing production binary on the VPS before deploy.
+- Synced the local workspace to `/opt/whatomate-src`, built with `make build-prod`, and installed the new binary to `/opt/whatomate/bin/whatomate`.
+- Restarted `whatomate` and tenant services, verified local HTTP 200s.
+- Updated deployment logs in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/docs/whatomate_multi_instances_info.md` and synced to `/root/whatomate_multi_instances_info.md` + `/root/whatomate_production_info.md`.
+
+### Verification
+- Local HTTP smoke: `ofuqalmadenah.com` (127.0.0.1:18123) -> `200`
+- Local HTTP smoke: `holol-wenjaz.ofuqalmadenah.com` (127.0.0.1:18124) -> `200`
+- Local HTTP smoke: `alarkan-almthalia.ofuqalmadenah.com` (127.0.0.1:18125) -> `200`
+- Local HTTP smoke: `matbaat-ruya.ofuqalmadenah.com` (127.0.0.1:18126) -> `200`
+- MCP UI check (Playwright fallback): loaded `https://holol-wenjaz.ofuqalmadenah.com/login` (title `Whatomate`). Console reported CSP inline-script blocked and a `ReferenceError` in the `grid-layout` bundle.
+- Chrome DevTools MCP could not start because a browser profile was already running.
+
+
 ## 2026-03-29 19:19
 
 ### Completed

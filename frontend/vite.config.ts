@@ -38,8 +38,6 @@ export default defineConfig({
             'reka-ui': ['reka-ui'],
             // Charts (heavy)
             'charts': ['chart.js', 'vue-chartjs'],
-            // Grid layout (heavy)
-            'grid-layout': ['grid-layout-plus'],
             // Emoji picker (heavy)
             'emoji-picker': ['vue3-emoji-picker'],
             // Form validation

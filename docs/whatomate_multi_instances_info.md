@@ -1067,3 +1067,134 @@ Updated: 2026-03-17 03:28:38 UTC
 ### Note
 
 - Vite emitted the existing warning about `<script src="./theme-init.js">` lacking `type="module"`; the build and embed steps still completed successfully.
+
+## Deployment Update
+
+Updated: 2026-03-30 11:42:13 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src`
+- Source sync method: `rsync` (with `--delete`; excluded `.git`, `node_modules/`, `frontend/dist/`, `uploads/`, `config.toml`, and local build/test artifacts)
+- Source revision on deploy: `975bb5a` (working tree clean)
+- Native build command on VPS: `cd /opt/whatomate-src && make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260330_113853.bak`
+- Installed binary SHA256: `6208363121d05b7f75555931688a2a44e91388b8a74ad160796f7efa6cc16588`
+- Installed binary version output: `Whatomate dev (built 2026-03-30_11:40:30)`
+- Deployment purpose: deploy the current local project state to production.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- Local HTTP smoke:
+  - `ofuqalmadenah.com` (127.0.0.1:18123) -> `200`
+  - `holol-wenjaz.ofuqalmadenah.com` (127.0.0.1:18124) -> `200`
+  - `alarkan-almthalia.ofuqalmadenah.com` (127.0.0.1:18125) -> `200`
+  - `matbaat-ruya.ofuqalmadenah.com` (127.0.0.1:18126) -> `200`
+
+### Note
+
+- Vite emitted the circular chunk warning during build (`grid-layout -> vue-vendor -> grid-layout`); build completed successfully.
+
+## Deployment Update
+
+Updated: 2026-03-30 11:56:29 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src`
+- Source sync method: `rsync` (with `--delete`; excluded `.git`, `node_modules/`, `frontend/dist/`, `uploads/`, `config.toml`, and local build/test artifacts)
+- Source revision on deploy: `975bb5a` (working tree dirty: `frontend/index.html`, `frontend/public/theme-init.js`, `frontend/vite.config.ts`, `docs/whatomate_multi_instances_info.md`, `summery.md`)
+- Native build command on VPS: `cd /opt/whatomate-src && make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260330_115417.bak`
+- Installed binary SHA256: `e086b30f2276676ddb4d409c21a7ffa722647bfd16ffe120bb5aae8fd408c53c`
+- Installed binary version output: `Whatomate dev (built 2026-03-30_11:55:32)`
+- Deployment purpose: deploy CSP-friendly theme init and remove the grid-layout manual chunk that triggered `ReferenceError` in production.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- Local HTTP smoke:
+  - `ofuqalmadenah.com` (127.0.0.1:18123) -> `200`
+  - `holol-wenjaz.ofuqalmadenah.com` (127.0.0.1:18124) -> `200`
+  - `alarkan-almthalia.ofuqalmadenah.com` (127.0.0.1:18125) -> `200`
+  - `matbaat-ruya.ofuqalmadenah.com` (127.0.0.1:18126) -> `200`
+- MCP UI check (Playwright): loaded `https://ofuqalmadenah.com/chat` with no console errors reported.
+
+## Deployment Update
+
+Updated: 2026-03-30 12:22:36 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src`
+- Source sync method: `rsync` (with `--delete`; excluded `.git`, `node_modules/`, `frontend/dist/`, `uploads/`, `config.toml`, and local build/test artifacts)
+- Source revision on deploy: `975bb5a` (working tree dirty: `docs/whatomate_multi_instances_info.md`, `frontend/public/theme-init.js` (deleted), `frontend/vite.config.ts`, `internal/frontend/embed.go`, `internal/middleware/middleware.go`, `summery.md`)
+- Native build command on VPS: `cd /opt/whatomate-src && make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260330_122032.bak`
+- Installed binary SHA256: `01832e7c89056dbd520ac767322dc8c740e713f464a209b0e2fc5072fd8fc88b`
+- Installed binary version output: `Whatomate dev (built 2026-03-30_12:19:09)`
+- Deployment purpose: add CSP nonce injection for inline theme initialization and prevent duplicate CSP headers on SPA routes (fixes inline script CSP violations on production).
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- Local HTTP smoke:
+  - `ofuqalmadenah.com` (127.0.0.1:18123) -> `200`
+  - `holol-wenjaz.ofuqalmadenah.com` (127.0.0.1:18124) -> `200`
+  - `alarkan-almthalia.ofuqalmadenah.com` (127.0.0.1:18125) -> `200`
+  - `matbaat-ruya.ofuqalmadenah.com` (127.0.0.1:18126) -> `200`
+- CSP header check:
+  - Single `Content-Security-Policy` header returned with `script-src 'self' 'nonce-...'`.
+  - HTML inline theme script includes a matching `nonce` attribute.
+- MCP UI check (Playwright): loaded `https://ofuqalmadenah.com/settings` and `https://ofuqalmadenah.com/chat` with no CSP inline-script violations (only expected `401` API responses due to unauthenticated session).
+
+### Skills Applied
+
+- `devops-engineer` (build, backup, install, systemd restart, smoke checks)
+- `debugging-wizard` (CSP error reproduction, header/nonce verification, confirmation of fix)
+
+### Competencies Applied
+
+- CSP policy design with nonces for inline bootstrapping
+- Go HTTP header handling and HTML placeholder injection
+- Vite build + embedded asset packaging
+- Systemd service management
+- Browser console verification using MCP tooling
+
+### Note
+
+- Chrome DevTools MCP was unavailable due to an existing profile lock; Playwright MCP was used for UI verification.

@@ -1,6 +1,8 @@
 package frontend
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -9,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/compnew2006/whatomate/internal/middleware"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
@@ -35,10 +38,11 @@ var mimeTypes = map[string]string{
 //go:embed all:dist
 var distFS embed.FS
 
-// cachedIndexHTML stores the modified index.html with injected base path
-var cachedIndexHTML []byte
+// cachedIndexHTMLTemplate stores the modified index.html with injected base path and CSP nonce placeholder.
+var cachedIndexHTMLTemplate []byte
 
 const basePathBootstrapScriptName = "__whatomate_base_path__.js"
+const cspNoncePlaceholder = "__CSP_NONCE__"
 
 // Handler returns a fasthttp handler that serves the embedded frontend files
 // basePath should be empty string for root deployment or "/subpath" for subdirectory
@@ -68,9 +72,12 @@ func Handler(basePath string) fasthttp.RequestHandler {
 	baseTag := fmt.Sprintf(`<head><base href="%s">`, baseHref)
 	modifiedHTML := strings.Replace(string(indexContent), "<head>", baseTag, 1)
 
+	// Add a nonce placeholder to the inline theme-init script so CSP can allow it.
+	modifiedHTML = strings.Replace(modifiedHTML, "<script>", fmt.Sprintf(`<script nonce="%s">`, cspNoncePlaceholder), 1)
+
 	// Inject external base path bootstrap script to avoid inline script CSP violations.
 	basePathScriptTag := fmt.Sprintf(`<script src="./%s"></script></head>`, basePathBootstrapScriptName)
-	cachedIndexHTML = []byte(strings.Replace(modifiedHTML, "</head>", basePathScriptTag, 1))
+	cachedIndexHTMLTemplate = []byte(strings.Replace(modifiedHTML, "</head>", basePathScriptTag, 1))
 
 	// Create file server
 	fileServer := http.FileServer(http.FS(distSubFS))
@@ -159,7 +166,11 @@ func Handler(basePath string) fasthttp.RequestHandler {
 		// For root or non-existent files (SPA routes), serve modified index.html
 		if path == "/" || (!strings.HasPrefix(path, "/api") && !strings.Contains(path, ".")) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write(cachedIndexHTML)
+			nonce, _ := generateCSPNonce()
+			w.Header().Del("Content-Security-Policy")
+			w.Header().Set("Content-Security-Policy", middleware.ContentSecurityPolicyWithNonce(nonce))
+			html := strings.ReplaceAll(string(cachedIndexHTMLTemplate), cspNoncePlaceholder, nonce)
+			_, _ = w.Write([]byte(html))
 			return
 		}
 
@@ -178,6 +189,15 @@ func IsEmbedded() bool {
 		return false
 	}
 	return len(entries) > 0
+}
+
+func generateCSPNonce() (string, error) {
+	const nonceSize = 16
+	buf := make([]byte, nonceSize)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawStdEncoding.EncodeToString(buf), nil
 }
 
 // notEmbeddedHandler returns a handler that displays a message when frontend is not embedded
