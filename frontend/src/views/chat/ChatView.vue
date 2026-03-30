@@ -1467,7 +1467,7 @@ onMounted(async () => {
 
   // Ensure auth session is restored
   if (!authStore.isAuthenticated) {
-    authStore.restoreSession();
+    await authStore.restoreSession();
   }
 
   contactsStore.setActiveChatTab(resolveRouteChatTab());

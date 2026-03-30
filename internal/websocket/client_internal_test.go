@@ -22,7 +22,7 @@ func TestClientHandleSetContact_RespectsAccessValidator(t *testing.T) {
 
 	client.handleSetContact(map[string]any{"contact_id": targetContact.String()})
 
-	assert.Nil(t, client.currentContact)
+	assert.Nil(t, client.getCurrentContact())
 }
 
 func TestClientHandleSetContact_SetsAndClearsCurrentContact(t *testing.T) {
@@ -37,9 +37,9 @@ func TestClientHandleSetContact_SetsAndClearsCurrentContact(t *testing.T) {
 	})
 
 	client.handleSetContact(map[string]any{"contact_id": targetContact.String()})
-	require.NotNil(t, client.currentContact)
-	assert.Equal(t, targetContact, *client.currentContact)
+	require.NotNil(t, client.getCurrentContact())
+	assert.Equal(t, targetContact, *client.getCurrentContact())
 
 	client.handleSetContact(map[string]any{"contact_id": ""})
-	assert.Nil(t, client.currentContact)
+	assert.Nil(t, client.getCurrentContact())
 }

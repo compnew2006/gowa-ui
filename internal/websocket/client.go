@@ -58,6 +58,7 @@ type Client struct {
 	contactAccessFn ContactAccessFn
 
 	// Current contact being viewed (nil if none)
+	currentContactMu sync.RWMutex
 	currentContact *uuid.UUID
 }
 
@@ -309,7 +310,7 @@ func (c *Client) handleSetContact(payload any) {
 	}
 
 	if setContact.ContactID == "" {
-		c.currentContact = nil
+		c.setCurrentContact(nil)
 		c.hub.log.Debug("Client cleared current contact", "user_id", c.userID)
 	} else {
 		contactID, err := uuid.Parse(setContact.ContactID)
@@ -323,11 +324,32 @@ func (c *Client) handleSetContact(payload any) {
 				"contact_id", contactID)
 			return
 		}
-		c.currentContact = &contactID
+		c.setCurrentContact(&contactID)
 		c.hub.log.Debug("Client set current contact",
 			"user_id", c.userID,
 			"contact_id", contactID)
 	}
+}
+
+func (c *Client) setCurrentContact(contactID *uuid.UUID) {
+	c.currentContactMu.Lock()
+	if contactID == nil {
+		c.currentContact = nil
+	} else {
+		idCopy := *contactID
+		c.currentContact = &idCopy
+	}
+	c.currentContactMu.Unlock()
+}
+
+func (c *Client) getCurrentContact() *uuid.UUID {
+	c.currentContactMu.RLock()
+	defer c.currentContactMu.RUnlock()
+	if c.currentContact == nil {
+		return nil
+	}
+	idCopy := *c.currentContact
+	return &idCopy
 }
 
 // SendChan returns the client's send channel for use in tests.

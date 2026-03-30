@@ -199,6 +199,13 @@ func stringifyInstanceID(instanceID *uuid.UUID) *string {
 	return &value
 }
 
+func conversationUnreadKey(conversationID string, instanceID *uuid.UUID) string {
+	if instanceID == nil {
+		return conversationID + "|"
+	}
+	return conversationID + "|" + instanceID.String()
+}
+
 func cloneJSONB(metadata models.JSONB) models.JSONB {
 	if metadata == nil {
 		return models.JSONB{}
@@ -662,33 +669,115 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		deletionMap = map[uuid.UUID]time.Time{}
 	}
 
+	conversationContexts := make([]contactConversationContext, len(contacts))
+	directContactIDs := make([]uuid.UUID, 0, len(contacts))
+	groupConversationIDs := make([]string, 0, len(contacts))
+	groupConversationIDSet := make(map[string]struct{}, len(contacts))
+	groupKeyByContactID := make(map[uuid.UUID]string, len(contacts))
+
+	for i, c := range contacts {
+		conversationContext := a.resolveContactConversationContext(ctx, orgID, c)
+		conversationContexts[i] = conversationContext
+		if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
+			groupKeyByContactID[c.ID] = conversationUnreadKey(conversationContext.ConversationID, c.InstanceID)
+			if _, ok := groupConversationIDSet[conversationContext.ConversationID]; !ok {
+				groupConversationIDSet[conversationContext.ConversationID] = struct{}{}
+				groupConversationIDs = append(groupConversationIDs, conversationContext.ConversationID)
+			}
+		} else {
+			directContactIDs = append(directContactIDs, c.ID)
+		}
+	}
+
+	directUnreadCounts := map[uuid.UUID]int64{}
+	var directUnreadErr error
+	if len(directContactIDs) > 0 {
+		type directUnreadRow struct {
+			ContactID   uuid.UUID `gorm:"column:contact_id"`
+			UnreadCount int64     `gorm:"column:unread_count"`
+		}
+		var rows []directUnreadRow
+		directUnreadErr = ctxDB.Model(&models.Message{}).
+			Select("messages.contact_id, COUNT(*) as unread_count").
+			Joins("LEFT JOIN contact_user_deletions cud ON cud.organization_id = ? AND cud.user_id = ? AND cud.contact_id = messages.contact_id", orgID, userID).
+			Where("messages.organization_id = ? AND messages.direction = ? AND messages.status != ? AND messages.contact_id IN ?",
+				orgID, models.DirectionIncoming, models.MessageStatusRead, directContactIDs).
+			Where("cud.deleted_at IS NULL OR messages.created_at > cud.deleted_at").
+			Group("messages.contact_id").
+			Scan(&rows).Error
+		if directUnreadErr != nil {
+			a.Log.Error("Failed to precompute unread counts for contacts", "error", directUnreadErr, "org_id", orgID, "user_id", userID)
+		} else {
+			for _, row := range rows {
+				directUnreadCounts[row.ContactID] = row.UnreadCount
+			}
+		}
+	}
+
+	groupUnreadCounts := map[string]int64{}
+	var groupUnreadErr error
+	if len(groupConversationIDs) > 0 {
+		type groupUnreadRow struct {
+			ConversationID string     `gorm:"column:conversation_id"`
+			InstanceID     *uuid.UUID `gorm:"column:instance_id"`
+			UnreadCount    int64      `gorm:"column:unread_count"`
+		}
+		var rows []groupUnreadRow
+		groupUnreadErr = ctxDB.Model(&models.Message{}).
+			Select("messages.conversation_id, messages.instance_id, COUNT(*) as unread_count").
+			Joins("LEFT JOIN contact_user_deletions cud ON cud.organization_id = ? AND cud.user_id = ? AND cud.contact_id = messages.contact_id", orgID, userID).
+			Where("messages.organization_id = ? AND messages.direction = ? AND messages.status != ? AND messages.conversation_id IN ?",
+				orgID, models.DirectionIncoming, models.MessageStatusRead, groupConversationIDs).
+			Where("cud.deleted_at IS NULL OR messages.created_at > cud.deleted_at").
+			Group("messages.conversation_id, messages.instance_id").
+			Scan(&rows).Error
+		if groupUnreadErr != nil {
+			a.Log.Error("Failed to precompute unread counts for group chats", "error", groupUnreadErr, "org_id", orgID, "user_id", userID)
+		} else {
+			for _, row := range rows {
+				groupUnreadCounts[conversationUnreadKey(row.ConversationID, row.InstanceID)] = row.UnreadCount
+			}
+		}
+	}
+
 	// Convert to response format
 	response := make([]ContactResponse, len(contacts))
 	for i, c := range contacts {
 		status := normalizeContactStatus(&c)
-		conversationContext := a.resolveContactConversationContext(ctx, orgID, c)
+		conversationContext := conversationContexts[i]
 		applyDirectContactPhoneFromConversation(&c, conversationContext.ConversationID)
 		a.enqueueDirectContactRepair(&c, conversationContext.ConversationID)
 		a.scheduleContactAvatarRefresh(&c)
 
 		// Count unread messages
 		var unreadCount int64
-		deletedAt, hasDeletion := deletionMap[c.ID]
 		if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
-			msgQuery := buildConversationScopeQuery(ctxDB, orgID, conversationContext.ConversationID, c.InstanceID).
-				Model(&models.Message{}).
-				Where("direction = ? AND status != ?", models.DirectionIncoming, models.MessageStatusRead)
-			if hasDeletion {
-				msgQuery = msgQuery.Where("created_at > ?", deletedAt)
+			if groupUnreadErr == nil {
+				if key, ok := groupKeyByContactID[c.ID]; ok {
+					unreadCount = groupUnreadCounts[key]
+				}
+			} else {
+				deletedAt, hasDeletion := deletionMap[c.ID]
+				msgQuery := buildConversationScopeQuery(ctxDB, orgID, conversationContext.ConversationID, c.InstanceID).
+					Model(&models.Message{}).
+					Where("direction = ? AND status != ?", models.DirectionIncoming, models.MessageStatusRead)
+				if hasDeletion {
+					msgQuery = msgQuery.Where("created_at > ?", deletedAt)
+				}
+				msgQuery.Count(&unreadCount)
 			}
-			msgQuery.Count(&unreadCount)
 		} else {
-			msgQuery := ctxDB.Model(&models.Message{}).
-				Where("contact_id = ? AND direction = ? AND status != ?", c.ID, models.DirectionIncoming, models.MessageStatusRead)
-			if hasDeletion {
-				msgQuery = msgQuery.Where("created_at > ?", deletedAt)
+			if directUnreadErr == nil {
+				unreadCount = directUnreadCounts[c.ID]
+			} else {
+				deletedAt, hasDeletion := deletionMap[c.ID]
+				msgQuery := ctxDB.Model(&models.Message{}).
+					Where("contact_id = ? AND direction = ? AND status != ?", c.ID, models.DirectionIncoming, models.MessageStatusRead)
+				if hasDeletion {
+					msgQuery = msgQuery.Where("created_at > ?", deletedAt)
+				}
+				msgQuery.Count(&unreadCount)
 			}
-			msgQuery.Count(&unreadCount)
 		}
 
 		tags := []string{}

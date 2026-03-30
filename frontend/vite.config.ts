@@ -28,21 +28,31 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Core Vue ecosystem
-          'vue-vendor': ['vue', 'vue-router', 'pinia'],
-          // UI primitives
-          'reka-ui': ['reka-ui'],
-          // Charts (heavy)
-          'charts': ['chart.js', 'vue-chartjs'],
-          // Grid layout (heavy)
-          'grid-layout': ['grid-layout-plus'],
-          // Emoji picker (heavy)
-          'emoji-picker': ['vue3-emoji-picker'],
-          // Form validation
-          'validation': ['vee-validate', '@vee-validate/zod', 'zod'],
-          // Utilities
-          'utils': ['@vueuse/core', 'axios', 'clsx', 'tailwind-merge', 'class-variance-authority']
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+
+          const chunkGroups: Record<string, string[]> = {
+            // Core Vue ecosystem
+            'vue-vendor': ['vue', 'vue-router', 'pinia'],
+            // UI primitives
+            'reka-ui': ['reka-ui'],
+            // Charts (heavy)
+            'charts': ['chart.js', 'vue-chartjs'],
+            // Grid layout (heavy)
+            'grid-layout': ['grid-layout-plus'],
+            // Emoji picker (heavy)
+            'emoji-picker': ['vue3-emoji-picker'],
+            // Form validation
+            'validation': ['vee-validate', '@vee-validate/zod', 'zod'],
+            // Utilities
+            'utils': ['@vueuse/core', 'axios', 'clsx', 'tailwind-merge', 'class-variance-authority']
+          }
+
+          for (const [chunkName, deps] of Object.entries(chunkGroups)) {
+            if (deps.some((dep) => id.includes(`/node_modules/${dep}/`))) {
+              return chunkName
+            }
+          }
         }
       }
     },

@@ -32,9 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('refresh_token')
   }
 
-  function restoreSession(): boolean {
-    const storedUser = localStorage.getItem('user')
-
+  async function restoreSession(): Promise<boolean> {
     // Remove legacy token keys if present
     if (localStorage.getItem('auth_token')) {
       localStorage.removeItem('auth_token')
@@ -43,23 +41,13 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.removeItem('refresh_token')
     }
 
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser)
-        if (!parsed || typeof parsed !== 'object' || !parsed.id || !parsed.email) {
-          clearAuth()
-          return false
-        }
-        user.value = parsed
-        // Fetch fresh user data in background to verify session + get updated permissions
-        refreshUserData()
-        return true
-      } catch {
-        clearAuth()
-        return false
-      }
+    const refreshed = await refreshUserData()
+    if (!refreshed) {
+      clearAuth()
+      return false
     }
-    return false
+
+    return true
   }
 
   // Fetch fresh user data from API (including updated permissions)

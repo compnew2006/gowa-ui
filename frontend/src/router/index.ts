@@ -348,13 +348,13 @@ router.beforeEach(async (to, _from, next) => {
 
   // Check if route requires auth
   if (to.meta.requiresAuth !== false) {
-    if (!authStore.isAuthenticated) {
-      // Try to restore session from localStorage
-      const restored = authStore.restoreSession();
-      if (!restored) {
-        return next({ name: "login", query: { redirect: to.fullPath } });
+      if (!authStore.isAuthenticated) {
+        // Try to restore session from localStorage
+        const restored = await authStore.restoreSession();
+        if (!restored) {
+          return next({ name: "login", query: { redirect: to.fullPath } });
+        }
       }
-    }
 
     // Check permission-based access
     const requiredPermission = to.meta.permission;

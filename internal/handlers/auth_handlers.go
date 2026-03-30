@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/middleware"
@@ -456,27 +457,42 @@ func (a *App) Logout(r *fastglue.Request) error {
 		refreshTokenStr = req.RefreshToken
 	}
 
-	if refreshTokenStr != "" {
-		token, _ := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
-			return a.jwtSecretBytes()
-		})
-		if token != nil {
-			if claims, ok := token.Claims.(*middleware.JWTClaims); ok {
-				if claims.UserID != uuid.Nil {
-					u := claims.UserID
-					loggedUserID = &u
-				}
-				if claims.OrganizationID != uuid.Nil {
-					o := claims.OrganizationID
-					loggedOrgID = &o
-				}
-				if claims.ID != "" {
-					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer cancel()
-					a.Redis.Del(ctx, refreshTokenKey(claims.ID))
-				}
-			}
+	if refreshTokenStr == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Missing refresh token", nil, "")
+	}
+
+	token, err := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+		signingMethod, ok := token.Method.(*jwt.SigningMethodHMAC)
+		if !ok || signingMethod.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, fmt.Errorf("unexpected JWT signing method: %s", token.Method.Alg())
 		}
+		return a.jwtSecretBytes()
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	
+	if err != nil || !token.Valid {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
+	}
+
+	claims, ok := token.Claims.(*middleware.JWTClaims)
+	if !ok || claims.ID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token claims", nil, "")
+	}
+
+	if claims.UserID != uuid.Nil {
+		u := claims.UserID
+		loggedUserID = &u
+	}
+	if claims.OrganizationID != uuid.Nil {
+		o := claims.OrganizationID
+		loggedOrgID = &o
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	deleted, _ := a.Redis.Del(ctx, refreshTokenKey(claims.ID)).Result()
+	
+	if deleted == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Token already revoked or not found", nil, "")
 	}
 
 	a.clearAuthCookies(r)

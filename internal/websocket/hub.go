@@ -153,8 +153,11 @@ func (h *Hub) broadcastMessage(msg BroadcastMessage) {
 		for client := range userClients {
 			// If ContactID is specified, only send to clients explicitly subscribed
 			// to that contact.
-			if msg.ContactID != uuid.Nil && (client.currentContact == nil || *client.currentContact != msg.ContactID) {
-				continue
+			if msg.ContactID != uuid.Nil {
+				currentContact := client.getCurrentContact()
+				if currentContact == nil || *currentContact != msg.ContactID {
+					continue
+				}
 			}
 
 			select {

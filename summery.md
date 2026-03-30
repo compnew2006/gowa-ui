@@ -1,5 +1,56 @@
 # Session Summary
 
+## 2026-03-29 19:19
+
+### Completed
+- Hardened WebSocket contact subscription state with locking and updated tests.
+- Resolved async send race by pre-resolving provider instance IDs before goroutines.
+- Enforced JWT algorithm validation for invite tokens and logout refresh parsing.
+- Batched unread contact counts with aggregate queries and fallback logic.
+- Guarded media handler against invalid `message_id` assertions.
+- Made auth `restoreSession` async with server-verified `/me` refresh and updated call sites.
+- Marked `ResourceAPIKeys` security finding as a desloppify false positive.
+
+### Tests
+- `go test ./internal/websocket -count=1` (pass)
+- `go test ./internal/handlers -count=1` (fail: `internal/handlers/campaigns_test.go` uses `testutil.MockQueue` missing `EnqueueContactRepair`)
+- `npm run test:unit` (pass)
+- `npm run test` (fail: Playwright suite reports widespread UI test failures; see output for details)
+
+### Manual QA (MCP)
+- Closed the existing Chrome DevTools MCP session; tool transport failed to restart after shutdown.
+- Used Playwright MCP as fallback: login succeeded, chat page loaded with sidebar + message list, refresh returned to chat view, and logout returned to login screen.
+
+## 2026-03-29 18:20
+
+### Completed
+- Ran SAST and secrets scans with Semgrep and performed a focused manual security review (auth, CSRF, SSRF, file upload paths, Dockerfiles).
+- Ran dependency audits for root and frontend Node workspaces.
+- Performed a basic Chrome DevTools load check of the local ACP guide page.
+
+### Tests / Scans
+- `semgrep --config=auto --exclude=node_modules --exclude=vendor --json --output semgrep_latest.json`
+- `semgrep --config=p/secrets --exclude=node_modules --exclude=vendor --json --output semgrep_secrets.json`
+- `npm audit --json > npm_audit_root.json` (root)
+- `npm audit --json > npm_audit_frontend.json` (frontend, exit code 1 due to findings)
+
+### Manual QA (Chrome DevTools)
+- Opened `file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/acp_guide.html` and verified no console errors.
+
+## 2026-03-29 18:25
+
+### Completed
+- Resolved high-severity frontend dependency vulnerabilities by upgrading `happy-dom` and enforcing safe transitive versions via npm overrides.
+- Refreshed `npm_audit_frontend.json` with a clean audit result (0 vulnerabilities).
+- Performed a post-change Chrome DevTools sanity check on the ACP guide page.
+
+### Tests / Scans
+- `npm install --package-lock-only`
+- `npm audit --json > npm_audit_frontend.json`
+
+### Manual QA (Chrome DevTools)
+- Opened `file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/acp_guide.html` and verified no console errors.
+
 ## 2026-03-29 18:05
 
 ### Completed

@@ -1,0 +1,2619 @@
+[
+  {
+    "id": "TC001",
+    "title": "Login with email/password redirects to dashboard",
+    "description": "Verifies a user can sign in with valid credentials and land on the dashboard.",
+    "category": "User Authentication",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user lands on the dashboard"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Invalid password shows error and stays on login",
+    "description": "Verifies invalid credentials display an error and do not navigate away from the login page.",
+    "category": "User Authentication",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with an invalid password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an invalid credentials error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user remains on the login page"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Navigate from login to registration",
+    "description": "Verifies the sign up link takes the user to the registration page.",
+    "category": "User Authentication",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Click the sign up link to navigate to registration"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the registration page is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Register with email/password completes and proceeds to next step",
+    "description": "Verifies a user can submit the registration form and sees a confirmation or is redirected to login.",
+    "category": "User Authentication",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /register"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the registration email field with a new valid email"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with a valid password"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the confirm password field to match the password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the registration form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a registration confirmation is visible or the user is redirected to the login page"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Login form required-field validation",
+    "description": "Verifies submitting the login form with missing fields shows validation errors.",
+    "category": "User Authentication",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a required field validation error is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Dashboard loads primary analytics content",
+    "description": "Verifies the dashboard page loads and displays analytics widgets after login.",
+    "category": "Dashboard Analytics",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the dashboard to load"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify analytics widgets are displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Filter dashboard by date range updates widgets",
+    "description": "Verifies applying a date range filter updates the dashboard charts/metrics.",
+    "category": "Dashboard Analytics",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Open the dashboard date range filter"
+      },
+      {
+        "type": "action",
+        "description": "Select a valid date range"
+      },
+      {
+        "type": "action",
+        "description": "Apply the date filter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard widgets update to reflect the selected date range"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Add and save a new dashboard widget",
+    "description": "Verifies a user can add a new widget, configure it, and see it appear on the dashboard.",
+    "category": "Dashboard Analytics",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click to add a new dashboard widget"
+      },
+      {
+        "type": "action",
+        "description": "Configure the widget settings with valid values"
+      },
+      {
+        "type": "action",
+        "description": "Save the widget"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a new widget is displayed on the dashboard"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Dashboard empty-state when filtering to a no-data range",
+    "description": "Verifies widgets show an empty state when a date filter yields no available data.",
+    "category": "Dashboard Analytics",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Open the dashboard date range filter"
+      },
+      {
+        "type": "action",
+        "description": "Select a valid date range that is likely to have no data (e.g., a very narrow recent period)"
+      },
+      {
+        "type": "action",
+        "description": "Apply the date filter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty state is displayed for at least one affected widget"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Chat workspace loads conversation list",
+    "description": "Verifies the chat workspace loads and shows the conversation list after login.",
+    "category": "Chat Workspace",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation item to open the chat workspace"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a conversation list is displayed in the chat sidebar"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Open a conversation and send a text message",
+    "description": "Verifies selecting a conversation and sending a text message results in the message appearing in the conversation thread.",
+    "category": "Chat Workspace",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation item to open the chat workspace"
+      },
+      {
+        "type": "action",
+        "description": "Select a conversation from the conversation list"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the message input field with Chat message TC011"
+      },
+      {
+        "type": "action",
+        "description": "Send the text message"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the message Chat message TC011 appears in the conversation thread"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Use a canned response and send it",
+    "description": "Verifies inserting a canned response into the composer and sending it results in the message appearing in the thread.",
+    "category": "Chat Workspace",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation item to open the chat workspace"
+      },
+      {
+        "type": "action",
+        "description": "Select a conversation from the conversation list"
+      },
+      {
+        "type": "action",
+        "description": "Open the canned responses picker"
+      },
+      {
+        "type": "action",
+        "description": "Select a canned response to insert into the message composer"
+      },
+      {
+        "type": "action",
+        "description": "Send the text message"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the sent canned response message appears in the conversation thread"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Contacts: search contacts list by name or phone",
+    "description": "Verifies the contacts page loads and searching filters the list results.",
+    "category": "Contact Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to open contacts settings"
+      },
+      {
+        "type": "action",
+        "description": "Fill a query into the contacts search field"
+      },
+      {
+        "type": "action",
+        "description": "Wait for the contacts list to refresh"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the contacts list is filtered to match the search query"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Contacts: create a new contact and see it listed",
+    "description": "Verifies a user can create a contact and the new contact appears in the contacts list.",
+    "category": "Contact Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to open contacts settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new contact"
+      },
+      {
+        "type": "action",
+        "description": "Fill Contact name into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill +15555550123 into the phone field"
+      },
+      {
+        "type": "action",
+        "description": "Save the contact"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a contact named Contact name is shown in the contacts list"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Contacts: edit an existing contact and see updated value in list",
+    "description": "Verifies a user can edit a contact and the updated details are reflected in the list.",
+    "category": "Contact Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to open contacts settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new contact"
+      },
+      {
+        "type": "action",
+        "description": "Fill EditMe into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill +15555550124 into the phone field"
+      },
+      {
+        "type": "action",
+        "description": "Save the contact"
+      },
+      {
+        "type": "action",
+        "description": "Open the contact details for EditMe from the list"
+      },
+      {
+        "type": "action",
+        "description": "Edit the contact name to EditMe Updated"
+      },
+      {
+        "type": "action",
+        "description": "Save changes to the contact"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a contact named EditMe Updated is shown in the contacts list"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Contacts: creating a contact with invalid phone shows validation and is not created",
+    "description": "Verifies phone validation prevents saving an invalid contact and no new contact appears in the list.",
+    "category": "Contact Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to open contacts settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new contact"
+      },
+      {
+        "type": "action",
+        "description": "Fill InvalidPhone Contact into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill an invalid phone number into the phone field"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to save the contact"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a phone validation error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify InvalidPhone Contact is not shown in the contacts list"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Contacts: delete a contact removes it from the list",
+    "description": "Verifies a user can delete a contact and it no longer appears in the contacts list.",
+    "category": "Contact Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to open contacts settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new contact"
+      },
+      {
+        "type": "action",
+        "description": "Fill DeleteMe into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill +15555550125 into the phone field"
+      },
+      {
+        "type": "action",
+        "description": "Save the contact"
+      },
+      {
+        "type": "action",
+        "description": "Open the contact actions for DeleteMe"
+      },
+      {
+        "type": "action",
+        "description": "Delete the contact"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the deletion in the app confirmation UI"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify DeleteMe is not shown in the contacts list"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Contacts: assign a contact to an agent",
+    "description": "Verifies a user can assign a contact to an agent and the assignment is reflected in the UI.",
+    "category": "Contact Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to open contacts settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new contact"
+      },
+      {
+        "type": "action",
+        "description": "Fill AssignMe into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill +15555550126 into the phone field"
+      },
+      {
+        "type": "action",
+        "description": "Save the contact"
+      },
+      {
+        "type": "action",
+        "description": "Open the contact details for AssignMe from the list"
+      },
+      {
+        "type": "action",
+        "description": "Open the assignment control"
+      },
+      {
+        "type": "action",
+        "description": "Select an available agent"
+      },
+      {
+        "type": "action",
+        "description": "Save the assignment change"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected agent is shown as the assigned agent for AssignMe"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Contacts: add and remove a tag on a contact",
+    "description": "Verifies a user can manage tags on a contact and the tag changes are visible.",
+    "category": "Contact Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to open contacts settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new contact"
+      },
+      {
+        "type": "action",
+        "description": "Fill TagMe into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Fill +15555550127 into the phone field"
+      },
+      {
+        "type": "action",
+        "description": "Save the contact"
+      },
+      {
+        "type": "action",
+        "description": "Open the contact details for TagMe from the list"
+      },
+      {
+        "type": "action",
+        "description": "Open the tag management control"
+      },
+      {
+        "type": "action",
+        "description": "Add an existing tag to the contact"
+      },
+      {
+        "type": "action",
+        "description": "Remove the same tag from the contact"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the removed tag is no longer shown on the contact"
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Contacts: export contacts to CSV triggers an export action",
+    "description": "Verifies the export control initiates an export flow without requiring file download validation.",
+    "category": "Contact Management",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to open contacts settings"
+      },
+      {
+        "type": "action",
+        "description": "Start the export contacts to CSV action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an export started confirmation or progress indicator is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC021",
+    "title": "Chatbot Keywords: create and list a new keyword rule",
+    "description": "Creates a new keyword auto-reply rule and verifies it appears in the keyword rules list.",
+    "category": "Chatbot Keywords",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to the chatbot keywords page"
+      },
+      {
+        "type": "action",
+        "description": "Create a new keyword rule"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique keyword into the keywords field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique response message into the response field"
+      },
+      {
+        "type": "action",
+        "description": "Set the rule to active"
+      },
+      {
+        "type": "action",
+        "description": "Save the keyword rule"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new keyword rule is listed with the unique keyword"
+      }
+    ]
+  },
+  {
+    "id": "TC022",
+    "title": "Chatbot Keywords: toggle rule active status",
+    "description": "Toggles an existing keyword rule between active and inactive and verifies the status changes in the list.",
+    "category": "Chatbot Keywords",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to the chatbot keywords page"
+      },
+      {
+        "type": "action",
+        "description": "Create a new keyword rule"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique keyword into the keywords field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique response message into the response field"
+      },
+      {
+        "type": "action",
+        "description": "Save the keyword rule"
+      },
+      {
+        "type": "action",
+        "description": "Toggle the rule active status from the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the rule shows an inactive status"
+      },
+      {
+        "type": "action",
+        "description": "Toggle the rule active status from the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the rule shows an active status"
+      }
+    ]
+  },
+  {
+    "id": "TC023",
+    "title": "Chatbot Keywords: validation when saving without keywords",
+    "description": "Attempts to create a keyword rule without keywords and verifies a validation error prevents creation.",
+    "category": "Chatbot Keywords",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to the chatbot keywords page"
+      },
+      {
+        "type": "action",
+        "description": "Create a new keyword rule"
+      },
+      {
+        "type": "action",
+        "description": "Leave the keywords field empty"
+      },
+      {
+        "type": "action",
+        "description": "Fill a response message into the response field"
+      },
+      {
+        "type": "action",
+        "description": "Save the keyword rule"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the rule is not added to the keyword rules list"
+      }
+    ]
+  },
+  {
+    "id": "TC024",
+    "title": "Chatbot Keywords: edit an existing keyword rule",
+    "description": "Edits a keyword rule and verifies the updated keyword/response is reflected in the list.",
+    "category": "Chatbot Keywords",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to the chatbot keywords page"
+      },
+      {
+        "type": "action",
+        "description": "Create a new keyword rule"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique keyword into the keywords field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique response message into the response field"
+      },
+      {
+        "type": "action",
+        "description": "Save the keyword rule"
+      },
+      {
+        "type": "action",
+        "description": "Edit the newly created keyword rule"
+      },
+      {
+        "type": "action",
+        "description": "Update the response field with a different unique message"
+      },
+      {
+        "type": "action",
+        "description": "Save the keyword rule"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated response message is shown for the rule"
+      }
+    ]
+  },
+  {
+    "id": "TC025",
+    "title": "Chatbot Keywords: delete a keyword rule",
+    "description": "Deletes a keyword rule and verifies it no longer appears in the list.",
+    "category": "Chatbot Keywords",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to the chatbot keywords page"
+      },
+      {
+        "type": "action",
+        "description": "Create a new keyword rule"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique keyword into the keywords field"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique response message into the response field"
+      },
+      {
+        "type": "action",
+        "description": "Save the keyword rule"
+      },
+      {
+        "type": "action",
+        "description": "Delete the newly created keyword rule"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the deleted rule is not present in the keyword rules list"
+      }
+    ]
+  },
+  {
+    "id": "TC026",
+    "title": "Webhooks: Create a new webhook and see it listed",
+    "description": "Creates a webhook with selected events and verifies it appears in the webhooks list.",
+    "category": "Webhooks",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to webhooks settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new webhook"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid webhook endpoint URL into the endpoint field"
+      },
+      {
+        "type": "action",
+        "description": "Select at least one event trigger option"
+      },
+      {
+        "type": "action",
+        "description": "Save the webhook"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the newly created webhook endpoint is displayed in the webhooks list"
+      }
+    ]
+  },
+  {
+    "id": "TC027",
+    "title": "Webhooks: Test a webhook endpoint and see a delivery report",
+    "description": "Runs a test delivery for a webhook and verifies a test result report is shown.",
+    "category": "Webhooks",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to webhooks settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new webhook"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid webhook endpoint URL into the endpoint field"
+      },
+      {
+        "type": "action",
+        "description": "Select at least one event trigger option"
+      },
+      {
+        "type": "action",
+        "description": "Save the webhook"
+      },
+      {
+        "type": "action",
+        "description": "Initiate a test delivery for the webhook"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a test delivery report is displayed for the webhook"
+      }
+    ]
+  },
+  {
+    "id": "TC028",
+    "title": "Webhooks: Delete a webhook and confirm it is removed from the list",
+    "description": "Deletes an existing webhook created in-test and verifies it no longer appears in the list.",
+    "category": "Webhooks",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to webhooks settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new webhook"
+      },
+      {
+        "type": "action",
+        "description": "Fill a valid webhook endpoint URL into the endpoint field"
+      },
+      {
+        "type": "action",
+        "description": "Select at least one event trigger option"
+      },
+      {
+        "type": "action",
+        "description": "Save the webhook"
+      },
+      {
+        "type": "action",
+        "description": "Delete the newly created webhook"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the deleted webhook endpoint is no longer displayed in the webhooks list"
+      }
+    ]
+  },
+  {
+    "id": "TC029",
+    "title": "Webhooks: Validate required fields when creating a webhook",
+    "description": "Attempts to save a webhook without required inputs and verifies validation feedback is shown and the webhook is not created.",
+    "category": "Webhooks",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to webhooks settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new webhook"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to save the webhook without filling required fields"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify validation errors are displayed for the missing required fields"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no new webhook is added to the webhooks list"
+      }
+    ]
+  },
+  {
+    "id": "TC030",
+    "title": "Webhooks: View webhooks list loads primary content",
+    "description": "Opens the webhooks page and verifies the list area for existing webhooks is displayed.",
+    "category": "Webhooks",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to webhooks settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the webhooks list section is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC031",
+    "title": "API Keys: Create a new API key, copy it, and see it listed",
+    "description": "Creates an API key, copies it via the UI control, and verifies the new key appears in the list.",
+    "category": "API Keys",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to API keys settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new API key"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique name into the API key name field"
+      },
+      {
+        "type": "action",
+        "description": "Select a valid expiration option for the API key"
+      },
+      {
+        "type": "action",
+        "description": "Create the API key"
+      },
+      {
+        "type": "action",
+        "description": "Copy the newly created API key value"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the newly created API key entry is displayed in the API keys list"
+      }
+    ]
+  },
+  {
+    "id": "TC032",
+    "title": "API Keys: Revoke an API key and verify it is revoked or removed",
+    "description": "Revokes an API key created in-test and verifies the UI reflects revocation/removal.",
+    "category": "API Keys",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to API keys settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new API key"
+      },
+      {
+        "type": "action",
+        "description": "Fill a unique name into the API key name field"
+      },
+      {
+        "type": "action",
+        "description": "Select a valid expiration option for the API key"
+      },
+      {
+        "type": "action",
+        "description": "Create the API key"
+      },
+      {
+        "type": "action",
+        "description": "Revoke the newly created API key"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the API key is marked revoked or is no longer displayed in the API keys list"
+      }
+    ]
+  },
+  {
+    "id": "TC033",
+    "title": "API Keys: Validate required fields when creating an API key",
+    "description": "Attempts to create an API key without required inputs and verifies validation feedback is shown and no key is created.",
+    "category": "API Keys",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to API keys settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new API key"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to create the API key without filling required fields"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify validation errors are displayed for the missing required fields"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no new API key is added to the API keys list"
+      }
+    ]
+  },
+  {
+    "id": "TC034",
+    "title": "API Keys: View API keys list loads primary content",
+    "description": "Opens the API keys page and verifies the API keys list area is displayed.",
+    "category": "API Keys",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to API keys settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the API keys list section is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC035",
+    "title": "User Management: Create a new user with role assignment and see it listed",
+    "description": "Creates a user, assigns a role, saves, and verifies the new user appears in the users list with the assigned role.",
+    "category": "User Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to users settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new user"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"e2e.user+um1@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"E2E UM User 1\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Assign a role to the user"
+      },
+      {
+        "type": "action",
+        "description": "Save the new user"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a user with email \"e2e.user+um1@example.com\" is displayed in the users list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the assigned role is displayed for \"e2e.user+um1@example.com\" in the users list"
+      }
+    ]
+  },
+  {
+    "id": "TC036",
+    "title": "User Management: Edit user details and see updated information",
+    "description": "Edits a created user's details and verifies the updated info is shown in the list or user details view.",
+    "category": "User Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to users settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new user"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"e2e.user+um2@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"E2E UM User 2\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Assign a role to the user"
+      },
+      {
+        "type": "action",
+        "description": "Save the new user"
+      },
+      {
+        "type": "action",
+        "description": "Open the user row for \"e2e.user+um2@example.com\" for editing"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"E2E UM User 2 Updated\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Save the user changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user \"e2e.user+um2@example.com\" shows the name \"E2E UM User 2 Updated\""
+      }
+    ]
+  },
+  {
+    "id": "TC037",
+    "title": "User Management: Prevent creating a user with an email already in use",
+    "description": "Attempts to create a second user with the same email and verifies a validation error is shown and the duplicate user is not created.",
+    "category": "User Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to users settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new user"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"e2e.user+dup@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"E2E UM Dup\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Assign a role to the user"
+      },
+      {
+        "type": "action",
+        "description": "Save the new user"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new user"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"e2e.user+dup@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"E2E UM Dup 2\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Assign a role to the user"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to save the new user"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a duplicate email validation error is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify only one user with email \"e2e.user+dup@example.com\" is displayed in the users list"
+      }
+    ]
+  },
+  {
+    "id": "TC038",
+    "title": "User Management: Deactivate or delete a user and verify it is no longer active/listed",
+    "description": "Deactivates or deletes a created user and verifies the UI reflects the user is removed or inactive.",
+    "category": "User Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to users settings"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new user"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"e2e.user+remove@example.com\" into the email field"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"E2E UM Remove\" into the name field"
+      },
+      {
+        "type": "action",
+        "description": "Assign a role to the user"
+      },
+      {
+        "type": "action",
+        "description": "Save the new user"
+      },
+      {
+        "type": "action",
+        "description": "Deactivate or delete the user \"e2e.user+remove@example.com\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user \"e2e.user+remove@example.com\" is not displayed in the active users list or is marked inactive"
+      }
+    ]
+  },
+  {
+    "id": "TC039",
+    "title": "User Management: View users list loads primary content",
+    "description": "Opens the users management page and verifies the users list area is displayed.",
+    "category": "User Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the navigation link to users settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the users list section is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC040",
+    "title": "Create a new custom role and save permissions",
+    "description": "Verifies a user can create a new role, configure its permission matrix, and see it appear in the roles list.",
+    "category": "Roles and Permissions",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /settings/roles"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new role"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"QA Custom Role A\" into the role name field"
+      },
+      {
+        "type": "action",
+        "description": "Update the role permissions matrix by enabling at least one permission"
+      },
+      {
+        "type": "action",
+        "description": "Save the role"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the roles list includes \"QA Custom Role A\""
+      }
+    ]
+  },
+  {
+    "id": "TC041",
+    "title": "Edit an existing custom role permission matrix and save",
+    "description": "Verifies a user can edit a role and persist permission matrix changes.",
+    "category": "Roles and Permissions",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /settings/roles"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new role"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"QA Custom Role Edit\" into the role name field"
+      },
+      {
+        "type": "action",
+        "description": "Save the role"
+      },
+      {
+        "type": "action",
+        "description": "Open the role details for \"QA Custom Role Edit\""
+      },
+      {
+        "type": "action",
+        "description": "Update the role permissions matrix by toggling at least one permission"
+      },
+      {
+        "type": "action",
+        "description": "Save the role"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the roles list still includes \"QA Custom Role Edit\""
+      }
+    ]
+  },
+  {
+    "id": "TC042",
+    "title": "Attempt to delete a built-in/system role is prevented",
+    "description": "Verifies the UI blocks deletion of a system role and shows a visible error/blocked state.",
+    "category": "Roles and Permissions",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /settings/roles"
+      },
+      {
+        "type": "action",
+        "description": "Open a built-in/system role from the roles list"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to delete the role"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an error or blocked-deletion state is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC043",
+    "title": "Delete a custom role removes it from the list",
+    "description": "Verifies a user can delete a custom role and it no longer appears in the roles list.",
+    "category": "Roles and Permissions",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /settings/roles"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new role"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"QA Custom Role Delete\" into the role name field"
+      },
+      {
+        "type": "action",
+        "description": "Save the role"
+      },
+      {
+        "type": "action",
+        "description": "Open the role details for \"QA Custom Role Delete\""
+      },
+      {
+        "type": "action",
+        "description": "Delete the role"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the roles list does not include \"QA Custom Role Delete\""
+      }
+    ]
+  },
+  {
+    "id": "TC044",
+    "title": "Set a custom role as the default role",
+    "description": "Verifies a user can set a role as default and the UI indicates it is the default role.",
+    "category": "Roles and Permissions",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /settings/roles"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new role"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"QA Default Role\" into the role name field"
+      },
+      {
+        "type": "action",
+        "description": "Save the role"
+      },
+      {
+        "type": "action",
+        "description": "Set \"QA Default Role\" as the default role"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the roles list indicates \"QA Default Role\" is the default role"
+      }
+    ]
+  },
+  {
+    "id": "TC045",
+    "title": "Role creation requires a name",
+    "description": "Verifies validation prevents saving a new role when required fields are missing.",
+    "category": "Roles and Permissions",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /settings/roles"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new role"
+      },
+      {
+        "type": "action",
+        "description": "Leave the role name field empty"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to save the role"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC046",
+    "title": "Load roles page and display roles list",
+    "description": "Verifies the roles management page loads and shows primary content.",
+    "category": "Roles and Permissions",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /settings/roles"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the roles list is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC047",
+    "title": "Permission matrix changes are reflected in the edit view after saving",
+    "description": "Verifies saved permission changes persist by reopening the role and observing the matrix state.",
+    "category": "Roles and Permissions",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /settings/roles"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new role"
+      },
+      {
+        "type": "action",
+        "description": "Fill \"QA Matrix Persist\" into the role name field"
+      },
+      {
+        "type": "action",
+        "description": "Update the role permissions matrix by enabling at least one permission"
+      },
+      {
+        "type": "action",
+        "description": "Save the role"
+      },
+      {
+        "type": "action",
+        "description": "Open the role details for \"QA Matrix Persist\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the permission matrix reflects previously saved selections"
+      }
+    ]
+  },
+  {
+    "id": "TC048",
+    "title": "Switch UI language from the selector and see immediate UI update",
+    "description": "Verifies that changing the selected language updates the visible UI language immediately without leaving the page.",
+    "category": "Language Switching",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the language selector"
+      },
+      {
+        "type": "action",
+        "description": "Select a different language from the dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the UI language changes immediately on the current page"
+      }
+    ]
+  },
+  {
+    "id": "TC049",
+    "title": "Selected language persists after reload",
+    "description": "Verifies that the chosen language remains selected after a full page reload.",
+    "category": "Language Switching",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the language selector"
+      },
+      {
+        "type": "action",
+        "description": "Select a different language from the dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Reload the application page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the UI is still displayed in the previously selected language"
+      }
+    ]
+  },
+  {
+    "id": "TC050",
+    "title": "Unsupported locale selection falls back to default language",
+    "description": "Verifies that selecting an unsupported locale results in fallback to the default locale and shows a visible notification.",
+    "category": "Language Switching",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the language selector"
+      },
+      {
+        "type": "action",
+        "description": "Select an unsupported locale option from the dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the UI falls back to the default language"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a notification is visible indicating the selected locale is not supported"
+      }
+    ]
+  },
+  {
+    "id": "TC051",
+    "title": "Language selector dropdown can be opened and dismissed without changing language",
+    "description": "Verifies the language dropdown interaction does not change the current language unless a language is selected.",
+    "category": "Language Switching",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the language selector"
+      },
+      {
+        "type": "action",
+        "description": "Press Escape"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the UI language remains unchanged"
+      }
+    ]
+  },
+  {
+    "id": "TC052",
+    "title": "Switch language twice and end state matches the last selection",
+    "description": "Verifies that multiple consecutive language changes result in the UI reflecting the final selected language.",
+    "category": "Language Switching",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the language selector"
+      },
+      {
+        "type": "action",
+        "description": "Select a different language from the dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the language selector"
+      },
+      {
+        "type": "action",
+        "description": "Select another language from the dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the UI language matches the last selected language"
+      }
+    ]
+  },
+  {
+    "id": "TC053",
+    "title": "Switch to an RTL language updates layout direction where applicable",
+    "description": "Verifies that selecting a right-to-left language applies RTL directionality in the UI where supported.",
+    "category": "Language Switching",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the language selector"
+      },
+      {
+        "type": "action",
+        "description": "Select a right-to-left language from the dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the application layout switches to right-to-left directionality"
+      }
+    ]
+  },
+  {
+    "id": "TC054",
+    "title": "Switch organization from selector updates current context",
+    "description": "Verifies that selecting a different organization changes the active organization context.",
+    "category": "Organization Switching",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the organization selector"
+      },
+      {
+        "type": "action",
+        "description": "Select a different organization from the dropdown"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the current organization context changes to the selected organization"
+      }
+    ]
+  },
+  {
+    "id": "TC055",
+    "title": "Switch organization and see data/settings reflect the chosen organization",
+    "description": "Verifies that after changing organization, the visible settings/data reflect the new organization context.",
+    "category": "Organization Switching",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the organization selector"
+      },
+      {
+        "type": "action",
+        "description": "Select a different organization from the dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify settings and data displayed reflect the selected organization context"
+      }
+    ]
+  },
+  {
+    "id": "TC056",
+    "title": "Organization selection persists after reload",
+    "description": "Verifies that the active organization remains selected after a full page reload.",
+    "category": "Organization Switching",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the organization selector"
+      },
+      {
+        "type": "action",
+        "description": "Select a different organization from the dropdown"
+      },
+      {
+        "type": "action",
+        "description": "Reload the application page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the previously selected organization is still the active organization"
+      }
+    ]
+  },
+  {
+    "id": "TC057",
+    "title": "Attempt to select an organization with no access shows permission error and does not switch",
+    "description": "Verifies that selecting an organization the user cannot access results in a permission error and the current organization remains unchanged.",
+    "category": "Organization Switching",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the organization selector"
+      },
+      {
+        "type": "action",
+        "description": "Select an organization that indicates the user no longer belongs to it"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a permission error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the active organization remains the previously selected organization"
+      }
+    ]
+  }
+]

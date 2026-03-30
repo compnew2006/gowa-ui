@@ -187,9 +187,14 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 	var sendFn func(sendCtx context.Context) (string, error)
 
 	if a.isWhatsmeowProvider() && a.MessageProvider != nil {
+		providerInstanceID, resolveErr := a.resolveProviderInstanceID(ctx, req, msg)
+		if resolveErr != nil {
+			a.finalizeMessageSend(msg, req, opts, "", resolveErr)
+			return msg, resolveErr
+		}
 		// Route through MessageProvider (whatsmeow adapter)
 		sendFn = func(sendCtx context.Context) (string, error) {
-			return a.sendViaProvider(sendCtx, req, msg)
+			return a.sendViaProvider(sendCtx, req, msg, providerInstanceID)
 		}
 	} else {
 		// Route through Meta client (existing behavior)
@@ -389,45 +394,64 @@ func contentHasAgentPrefix(content, agentName string) bool {
 	return strings.HasPrefix(remaining, ":")
 }
 
+func (a *App) resolveProviderInstanceID(ctx context.Context, req OutgoingMessageRequest, msg *models.Message) (string, error) {
+	if msg == nil {
+		return "", fmt.Errorf("message is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if msg.InstanceID != nil {
+		return msg.InstanceID.String(), nil
+	}
+	if req.Contact != nil && req.Contact.InstanceID != nil {
+		instanceID := *req.Contact.InstanceID
+		msg.InstanceID = &instanceID
+		if err := a.DB.WithContext(ctx).Model(&models.Message{}).
+			Where("id = ?", msg.ID).
+			Update("instance_id", msg.InstanceID).Error; err != nil {
+			a.Log.Warn("failed to persist contact instance ID for provider send", "message_id", msg.ID, "error", err)
+		}
+		return msg.InstanceID.String(), nil
+	}
+
+	orgID := uuid.Nil
+	if req.Account != nil {
+		orgID = req.Account.OrganizationID
+	} else if req.Contact != nil {
+		orgID = req.Contact.OrganizationID
+	}
+	if orgID == uuid.Nil {
+		return "", fmt.Errorf("cannot resolve organization for provider send")
+	}
+
+	ctxDB := a.DB.WithContext(ctx)
+	var instance models.WhatsAppInstance
+	if err := ctxDB.Where("organization_id = ? AND is_default = ? AND status = ?",
+		orgID, true, models.InstanceStatusConnected).
+		First(&instance).Error; err != nil {
+		if err := ctxDB.Where("organization_id = ? AND status = ?",
+			orgID, models.InstanceStatusConnected).
+			First(&instance).Error; err != nil {
+			return "", fmt.Errorf("no connected WhatsApp instance found")
+		}
+	}
+
+	instanceID := instance.ID
+	msg.InstanceID = &instanceID
+	if err := ctxDB.Model(&models.Message{}).Where("id = ?", msg.ID).
+		Update("instance_id", msg.InstanceID).Error; err != nil {
+		a.Log.Warn("failed to persist resolved instance ID for provider send", "message_id", msg.ID, "error", err)
+	}
+
+	return instanceID.String(), nil
+}
+
 // sendViaProvider routes the message through the MessageProvider interface.
 // This is used when the provider is whatsmeow (or any future MessageProvider).
-func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, msg *models.Message) (string, error) {
-	// Determine instanceID — for whatsmeow, use the contact's instance or the message's instance
-	instanceID := ""
-	if msg.InstanceID != nil {
-		instanceID = msg.InstanceID.String()
-	} else if req.Contact != nil && req.Contact.InstanceID != nil {
-		instanceID = req.Contact.InstanceID.String()
-	} else {
-		orgID := uuid.Nil
-		if req.Account != nil {
-			orgID = req.Account.OrganizationID
-		} else if req.Contact != nil {
-			orgID = req.Contact.OrganizationID
-		}
-		if orgID == uuid.Nil {
-			return "", fmt.Errorf("cannot resolve organization for provider send")
-		}
-		// Try to find the default instance for the org
-		var instance models.WhatsAppInstance
-		if err := a.DB.Where("organization_id = ? AND is_default = ? AND status = ?",
-			orgID, true, models.InstanceStatusConnected).
-			First(&instance).Error; err != nil {
-			// Fall back to any connected instance
-			if err := a.DB.Where("organization_id = ? AND status = ?",
-				orgID, models.InstanceStatusConnected).
-				First(&instance).Error; err != nil {
-				return "", fmt.Errorf("no connected WhatsApp instance found")
-			}
-		}
-		instanceID = instance.ID.String()
-		// Update message with the resolved instance
-		instID := instance.ID
-		msgInstanceID := &instID
-		if err := a.DB.Model(&models.Message{}).Where("id = ?", msg.ID).Update("instance_id", msgInstanceID).Error; err != nil {
-			a.Log.Warn("failed to persist resolved instance ID for provider send", "message_id", msg.ID, "error", err)
-		}
-		msg.InstanceID = msgInstanceID
+func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, msg *models.Message, instanceID string) (string, error) {
+	if instanceID == "" {
+		return "", fmt.Errorf("missing instance ID for provider send")
 	}
 
 	to := req.Contact.PhoneNumber

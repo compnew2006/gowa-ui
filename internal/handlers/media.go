@@ -214,7 +214,11 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	}
 
 	// Get the message ID from URL parameter
-	messageIDStr := r.RequestCtx.UserValue("message_id").(string)
+	messageIDValue := r.RequestCtx.UserValue("message_id")
+	messageIDStr, ok := messageIDValue.(string)
+	if !ok || messageIDStr == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid message ID", nil, "")
+	}
 	messageID, err := uuid.Parse(messageIDStr)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid message ID", nil, "")

@@ -1,0 +1,52 @@
+Running testsprite_tests/TC001_postapiauthloginwithvalidcredentials.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+PASSED: testsprite_tests/TC001_postapiauthloginwithvalidcredentials.py
+-------------------
+Running testsprite_tests/TC002_postapiauthloginwithinvalidcredentials.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+PASSED: testsprite_tests/TC002_postapiauthloginwithinvalidcredentials.py
+-------------------
+Running testsprite_tests/TC003_postapiauthlogoutwithvalidauthcookie.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+PASSED: testsprite_tests/TC003_postapiauthlogoutwithvalidauthcookie.py
+-------------------
+Running testsprite_tests/TC004_postapiauthlogoutwithexpiredtoken.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+PASSED: testsprite_tests/TC004_postapiauthlogoutwithexpiredtoken.py
+-------------------
+Running testsprite_tests/TC005_getapicontactswithvalidauthcookie.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+PASSED: testsprite_tests/TC005_getapicontactswithvalidauthcookie.py
+-------------------
+Running testsprite_tests/TC006_postapicontactswithvalidpayload.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+PASSED: testsprite_tests/TC006_postapicontactswithvalidpayload.py
+-------------------
+Running testsprite_tests/TC007_getapicontactswithoutauthcookie.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+PASSED: testsprite_tests/TC007_getapicontactswithoutauthcookie.py
+-------------------
+Running testsprite_tests/TC008_postapicontactswithinvalidpayload.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+PASSED: testsprite_tests/TC008_postapicontactswithinvalidpayload.py
+-------------------
+Running testsprite_tests/TC009_postapiwebhookwithvalidsignature.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Test TC009 Passed: Webhook message verified and contact 12345550123 found.
+PASSED: testsprite_tests/TC009_postapiwebhookwithvalidsignature.py
+-------------------
+Running testsprite_tests/TC010_postapiwebhookwithinvalidsignature.py...
+/Users/noiemany/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Test TC010 Passed: Invalid signature correctly rejected with 403.
+PASSED: testsprite_tests/TC010_postapiwebhookwithinvalidsignature.py
+-------------------
