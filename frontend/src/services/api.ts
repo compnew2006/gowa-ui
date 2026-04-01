@@ -151,6 +151,70 @@ export const authService = {
   getWSToken: () => api.get("/auth/ws-token"),
 };
 
+export type LeadRequestPlan =
+  | "starter"
+  | "growth"
+  | "dedicated"
+  | "enterprise";
+
+export type LeadRequestStatus =
+  | "new"
+  | "contacted"
+  | "qualified"
+  | "closed";
+
+export interface PublicLeadRequestPayload {
+  full_name: string;
+  company_name: string;
+  work_email: string;
+  phone_whatsapp: string;
+  country?: string;
+  message?: string;
+  requested_plan?: LeadRequestPlan;
+  source_page: "pricing";
+  source_route: "/pricing" | "/plans" | "/offer";
+}
+
+export interface LeadRequest {
+  id: string;
+  full_name: string;
+  company_name: string;
+  work_email: string;
+  phone_whatsapp: string;
+  country?: string;
+  message?: string;
+  requested_plan?: LeadRequestPlan;
+  source_page: string;
+  source_route: string;
+  status: LeadRequestStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeadRequestListResponse {
+  lead_requests: LeadRequest[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export const leadRequestsService = {
+  createPublic: (data: PublicLeadRequestPayload) =>
+    api.post<{
+      id: string;
+      status: LeadRequestStatus;
+      message: string;
+    }>("/public/lead-requests", data),
+  list: (params?: {
+    search?: string;
+    status?: LeadRequestStatus | "all";
+    page?: number;
+    limit?: number;
+  }) => api.get<LeadRequestListResponse>("/lead-requests", { params }),
+  updateStatus: (id: string, status: LeadRequestStatus) =>
+    api.put<LeadRequest>(`/lead-requests/${id}/status`, { status }),
+};
+
 export const usersService = {
   list: (params?: { search?: string; page?: number; limit?: number }) =>
     api.get("/users", { params }),

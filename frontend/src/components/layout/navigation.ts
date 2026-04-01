@@ -22,6 +22,7 @@ import {
   Smartphone,
   ClipboardList,
   Archive,
+  Inbox,
 } from "lucide-vue-next";
 import type { Component } from "vue";
 
@@ -210,6 +211,12 @@ export const navigationItems: NavItem[] = [
         path: "/settings/activity-logs",
         icon: ClipboardList,
         managerOrAdminOnly: true,
+      },
+      {
+        name: "nav.leadRequests",
+        path: "/settings/lead-requests",
+        icon: Inbox,
+        permission: "settings.general",
       },
       {
         name: "nav.roles",

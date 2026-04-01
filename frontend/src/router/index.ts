@@ -223,6 +223,12 @@ const router = createRouter({
           meta: { managerOrAdminOnly: true },
         },
         {
+          path: "settings/lead-requests",
+          name: "lead-requests",
+          component: () => import("@/views/settings/LeadRequestsView.vue"),
+          meta: { permission: "settings.general" },
+        },
+        {
           path: "settings/roles",
           name: "roles",
           component: () => import("@/views/settings/RolesView.vue"),
@@ -310,6 +316,7 @@ const navigationOrder = [
       { path: "/settings/teams", permission: "teams" },
       { path: "/settings/users", permission: "users" },
       { path: "/settings/activity-logs", permission: "settings.general" },
+      { path: "/settings/lead-requests", permission: "settings.general" },
       { path: "/settings/roles", permission: "roles" },
       { path: "/settings/api-keys", permission: "api_keys" },
       { path: "/settings/webhooks", permission: "webhooks" },

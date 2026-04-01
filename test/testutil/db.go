@@ -126,6 +126,7 @@ func runMigrations(db *gorm.DB) error {
 		&models.Widget{},
 		// Activity logs
 		&models.ActivityLog{},
+		&models.LeadRequest{},
 	)
 }
 
@@ -136,6 +137,7 @@ func cleanupTables(db *gorm.DB) {
 		// Dashboard tables
 		"widgets",
 		"activity_logs",
+		"lead_requests",
 		"contact_collaborators",
 		// Catalog tables
 		"catalog_products",
@@ -193,6 +195,7 @@ func TruncateTables(db *gorm.DB) {
 	tables := []string{
 		"widgets",
 		"activity_logs",
+		"lead_requests",
 		"catalog_products",
 		"catalogs",
 		"canned_responses",

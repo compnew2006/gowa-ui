@@ -708,10 +708,14 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		g.POST("/api/auth/refresh", withRateLimit(app.RefreshToken, middleware.RateLimitOpts{
 			Redis: rdb, Log: lo, Max: cfg.RateLimit.RefreshMaxAttempts, Window: window, KeyPrefix: "refresh", TrustProxy: cfg.RateLimit.TrustProxy,
 		}))
+		g.POST("/api/public/lead-requests", withRateLimit(app.CreatePublicLeadRequest, middleware.RateLimitOpts{
+			Redis: rdb, Log: lo, Max: cfg.RateLimit.RegisterMaxAttempts, Window: window, KeyPrefix: "lead_request", TrustProxy: cfg.RateLimit.TrustProxy,
+		}))
 	} else {
 		g.POST("/api/auth/login", app.Login)
 		g.POST("/api/auth/register", app.Register)
 		g.POST("/api/auth/refresh", app.RefreshToken)
+		g.POST("/api/public/lead-requests", app.CreatePublicLeadRequest)
 	}
 	// Authenticated endpoint: generate signed registration invite for current org.
 	g.POST("/api/auth/register/invite", app.CreateRegisterInvite)
@@ -758,7 +762,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		path := string(r.RequestCtx.Path())
 		// Skip auth for public routes
 		if path == "/health" || path == "/ready" ||
-			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
+			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" || path == "/api/public/lead-requests" ||
 			path == "/api/auth/logout" || path == "/api/webhook" || path == "/ws" {
 			return r
 		}
@@ -799,6 +803,8 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/me/organizations", app.ListMyOrganizations)
 	g.POST("/api/activity-logs", app.CreateActivityLog)
 	g.GET("/api/activity-logs", app.ListActivityLogs)
+	g.GET("/api/lead-requests", app.ListLeadRequests)
+	g.PUT("/api/lead-requests/{id}/status", app.UpdateLeadRequestStatus)
 
 	// User Management (admin only - enforced by middleware)
 	g.GET("/api/users", app.ListUsers)

@@ -156,6 +156,7 @@ func GetMigrationModels() []MigrationModel {
 		{"ConversationNote", &models.ConversationNote{}},
 		{"ActivityLog", &models.ActivityLog{}},
 		{"ContactCollaborator", &models.ContactCollaborator{}},
+		{"LeadRequest", &models.LeadRequest{}},
 	}
 }
 

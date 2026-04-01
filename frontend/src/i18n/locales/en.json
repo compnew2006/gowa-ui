@@ -170,6 +170,9 @@
     "Flow": "Flow",
     "keywordRule": "keyword rule",
     "KeywordRule": "Keyword rule",
+    "leadRequest": "lead request",
+    "leadRequests": "lead requests",
+    "LeadRequest": "Lead request",
     "media": "media",
     "Media": "Media",
     "member": "member",
@@ -239,6 +242,7 @@
     "webhooks": "Webhooks",
     "customActions": "Custom Actions",
     "activityLogs": "Activity Logs",
+    "leadRequests": "Lead Requests",
     "sso": "SSO",
     "skipToMain": "Skip to main content",
     "expandSidebar": "Expand sidebar",
@@ -697,6 +701,53 @@
     "notificationSound2": "Sound 2",
     "notificationSoundOriginal": "Original Sound",
     "previewSound": "Play"
+  },
+  "leadRequests": {
+    "title": "Lead Requests",
+    "subtitle": "Review public pricing-page demo requests and keep follow-up moving.",
+    "inboxTitle": "Lead request inbox",
+    "inboxDescription": "Search recent submissions, inspect context, and update follow-up status.",
+    "searchPlaceholder": "Search lead requests...",
+    "filterStatus": "Filter by status",
+    "noMatching": "No matching lead requests",
+    "noMatchingDescription": "Try a different search term or status filter.",
+    "emptyTitle": "No lead requests yet",
+    "emptyDescription": "New demo requests from the public pricing page will appear here.",
+    "detailsTitle": "Lead request details",
+    "detailsDescription": "Review the submission and update its follow-up status.",
+    "noCountry": "No country provided",
+    "noMessage": "No message provided.",
+    "updateStatus": "Update status",
+    "columns": {
+      "submitter": "Submitter",
+      "company": "Company",
+      "contact": "Contact",
+      "requestedPlan": "Requested plan",
+      "created": "Submitted"
+    },
+    "fields": {
+      "email": "Work email",
+      "phoneWhatsApp": "Phone / WhatsApp",
+      "country": "Country",
+      "requestedPlan": "Requested plan",
+      "source": "Source route",
+      "submittedAt": "Submitted at",
+      "message": "Message",
+      "status": "Status"
+    },
+    "status": {
+      "new": "New",
+      "contacted": "Contacted",
+      "qualified": "Qualified",
+      "closed": "Closed"
+    },
+    "plan": {
+      "unspecified": "Unspecified",
+      "starter": "Starter",
+      "growth": "Growth",
+      "dedicated": "Dedicated Business",
+      "enterprise": "Enterprise"
+    }
   },
   "closedChats": {
     "title": "Closed Chats",

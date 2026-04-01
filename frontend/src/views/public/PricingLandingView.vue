@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, markRaw, ref } from 'vue'
+import { computed, markRaw, nextTick, onMounted, ref } from 'vue'
 import type { Component } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   ArrowRight,
   BarChart3,
@@ -14,6 +15,7 @@ import {
   Key,
   Layers,
   Link2,
+  Loader2,
   Lock,
   Megaphone,
   MessageSquare,
@@ -27,14 +29,22 @@ import {
   Workflow,
   Zap,
 } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import ThemeSwitcher from '@/components/layout/ThemeSwitcher.vue'
+import { leadRequestsService, type LeadRequestPlan } from '@/services/api'
 
 type Lang = 'en' | 'ar'
 type BiText = { en: string; ar: string }
+type SectionId = 'features' | 'plans' | 'compare' | 'faq'
 
 type NavItem = {
-  href: string
+  section: SectionId
   label: BiText
 }
 
@@ -52,7 +62,7 @@ type FeatureGroup = {
 }
 
 type PlanItem = {
-  key: string
+  key: LeadRequestPlan
   badge?: BiText
   highlight?: boolean
   title: BiText
@@ -84,11 +94,24 @@ type FaqItem = {
 const initialLang: Lang = typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('ar')
   ? 'ar'
   : 'en'
+const route = useRoute()
 const language = ref<Lang>(initialLang)
+const isLeadDialogOpen = ref(false)
+const isSubmittingLead = ref(false)
+const requestedPlan = ref<LeadRequestPlan | undefined>()
+const leadForm = ref({
+  fullName: '',
+  companyName: '',
+  workEmail: '',
+  phoneWhatsApp: '',
+  country: '',
+  message: '',
+})
 
 const isArabic = computed(() => language.value === 'ar')
 const pageDir = computed(() => (isArabic.value ? 'rtl' : 'ltr'))
 const year = new Date().getFullYear()
+const selectedPlan = computed(() => plans.find((plan) => plan.key === requestedPlan.value))
 
 const text = (value: BiText) => (isArabic.value ? value.ar : value.en)
 
@@ -173,17 +196,57 @@ const ui = {
   },
   finalPrimary: { en: 'Use Dedicated Business Offer', ar: 'استخدم عرض البيئة الخاصة للأعمال' },
   finalSecondary: { en: 'Contact / Custom Quote', ar: 'تواصل / عرض سعر مخصص' },
+  planActionCta: { en: 'Request Demo for This Plan', ar: 'اطلب عرضًا لهذه الباقة' },
   footerText: {
     en: 'Built for agencies and operators selling WhatsApp growth systems.',
     ar: 'مصممة للوكالات والمشغلين الذين يبيعون أنظمة نمو واتساب.',
   },
 } as const
 
+const leadFormUi = {
+  title: { en: 'Request a demo', ar: 'اطلب عرضًا' },
+  description: {
+    en: 'Share a few details and the sales team can follow up with the right plan and onboarding scope.',
+    ar: 'شارك بعض التفاصيل وسيتابع فريق المبيعات معك بالباقـة المناسبة ونطاق التهيئة المطلوب.',
+  },
+  selectedPlan: { en: 'Requested plan', ar: 'الباقة المطلوبة' },
+  noSelectedPlan: { en: 'General inquiry', ar: 'استفسار عام' },
+  fullName: { en: 'Full name', ar: 'الاسم الكامل' },
+  fullNamePlaceholder: { en: 'John Doe', ar: 'محمد أحمد' },
+  companyName: { en: 'Company name', ar: 'اسم الشركة' },
+  companyNamePlaceholder: { en: 'Example Corp', ar: 'شركة المثال' },
+  workEmail: { en: 'Work email', ar: 'البريد المهني' },
+  workEmailPlaceholder: { en: 'team@example.com', ar: 'team@example.com' },
+  phoneWhatsApp: { en: 'Phone / WhatsApp', ar: 'الهاتف / واتساب' },
+  phoneWhatsAppPlaceholder: { en: '+9665...', ar: '+9665...' },
+  country: { en: 'Country', ar: 'الدولة' },
+  countryPlaceholder: { en: 'Saudi Arabia', ar: 'السعودية' },
+  message: { en: 'Message', ar: 'الرسالة' },
+  messagePlaceholder: {
+    en: 'Tell us about your team size, use case, and target launch date.',
+    ar: 'أخبرنا عن حجم الفريق، وحالة الاستخدام، وموعد الإطلاق المستهدف.',
+  },
+  submit: { en: 'Submit request', ar: 'إرسال الطلب' },
+  success: {
+    en: 'Demo request submitted. The sales team can follow up from the inbox.',
+    ar: 'تم إرسال طلب العرض، ويمكن لفريق المبيعات متابعته من صندوق الطلبات.',
+  },
+  failed: { en: 'Failed to submit demo request', ar: 'تعذر إرسال طلب العرض' },
+  requiredFields: {
+    en: 'Please complete full name, company name, work email, and phone / WhatsApp.',
+    ar: 'يرجى تعبئة الاسم الكامل واسم الشركة والبريد المهني والهاتف / واتساب.',
+  },
+  invalidEmail: {
+    en: 'Please enter a valid work email address.',
+    ar: 'يرجى إدخال بريد مهني صالح.',
+  },
+} as const
+
 const navItems: NavItem[] = [
-  { href: '#features', label: ui.navFeatures },
-  { href: '#plans', label: ui.navPlans },
-  { href: '#compare', label: ui.navCompare },
-  { href: '#faq', label: ui.navFaq },
+  { section: 'features', label: ui.navFeatures },
+  { section: 'plans', label: ui.navPlans },
+  { section: 'compare', label: ui.navCompare },
+  { section: 'faq', label: ui.navFaq },
 ]
 
 const stats: StatItem[] = [
@@ -627,6 +690,89 @@ const faqItems: FaqItem[] = [
   },
 ]
 
+function scrollToSection(section: SectionId) {
+  if (typeof document === 'undefined') return
+
+  const target = document.getElementById(section)
+  if (!target) return
+
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  if (typeof window !== 'undefined') {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${section}`)
+  }
+}
+
+function openLeadDialog(plan?: LeadRequestPlan) {
+  requestedPlan.value = plan
+  isLeadDialogOpen.value = true
+}
+
+function resetLeadForm() {
+  leadForm.value = {
+    fullName: '',
+    companyName: '',
+    workEmail: '',
+    phoneWhatsApp: '',
+    country: '',
+    message: '',
+  }
+  requestedPlan.value = undefined
+}
+
+function getCurrentSourceRoute(): '/pricing' | '/plans' | '/offer' {
+  if (route.path === '/plans' || route.path === '/offer') {
+    return route.path
+  }
+  return '/pricing'
+}
+
+function isSectionId(value: string): value is SectionId {
+  return value === 'features' || value === 'plans' || value === 'compare' || value === 'faq'
+}
+
+async function submitLeadRequest() {
+  const trimmed = {
+    full_name: leadForm.value.fullName.trim(),
+    company_name: leadForm.value.companyName.trim(),
+    work_email: leadForm.value.workEmail.trim(),
+    phone_whatsapp: leadForm.value.phoneWhatsApp.trim(),
+    country: leadForm.value.country.trim(),
+    message: leadForm.value.message.trim(),
+  }
+
+  if (!trimmed.full_name || !trimmed.company_name || !trimmed.work_email || !trimmed.phone_whatsapp) {
+    toast.error(text(leadFormUi.requiredFields))
+    return
+  }
+
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailPattern.test(trimmed.work_email)) {
+    toast.error(text(leadFormUi.invalidEmail))
+    return
+  }
+
+  isSubmittingLead.value = true
+  try {
+    await leadRequestsService.createPublic({
+      ...trimmed,
+      country: trimmed.country || undefined,
+      message: trimmed.message || undefined,
+      requested_plan: requestedPlan.value,
+      source_page: 'pricing',
+      source_route: getCurrentSourceRoute(),
+    })
+    toast.success(text(leadFormUi.success))
+    isLeadDialogOpen.value = false
+    resetLeadForm()
+  } catch (error: any) {
+    const message = error?.response?.data?.message || text(leadFormUi.failed)
+    toast.error(message)
+  } finally {
+    isSubmittingLead.value = false
+  }
+}
+
 const planColumnHeaders = [
   { en: 'Starter', ar: 'البداية' },
   { en: 'Growth', ar: 'النمو' },
@@ -640,6 +786,16 @@ const accentChecklist = [
   { icon: markRaw(Lock), label: { en: 'SSL + isolated subdomain', ar: 'SSL + نطاق فرعي معزول' } },
   { icon: markRaw(Key), label: { en: 'Per-client admin and users', ar: 'مدير ومستخدمون مستقلون لكل عميل' } },
 ]
+
+onMounted(async () => {
+  if (!route.hash) return
+
+  const section = route.hash.replace('#', '')
+  if (!isSectionId(section)) return
+
+  await nextTick()
+  scrollToSection(section)
+})
 </script>
 
 <template>
@@ -670,14 +826,15 @@ const accentChecklist = [
         </div>
 
         <nav class="hidden items-center gap-5 md:flex">
-          <a
+          <button
             v-for="item in navItems"
-            :key="item.href"
-            :href="item.href"
+            :key="item.section"
+            type="button"
             class="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            @click="scrollToSection(item.section)"
           >
             {{ text(item.label) }}
-          </a>
+          </button>
         </nav>
 
         <div class="flex items-center gap-2">
@@ -707,8 +864,8 @@ const accentChecklist = [
           <Button as-child size="sm" variant="outline" class="hidden md:inline-flex">
             <RouterLink to="/login">{{ text(ui.tertiaryCta) }}</RouterLink>
           </Button>
-          <Button as-child size="sm" class="shadow-emerald-500/30">
-            <a href="#plans">{{ text(ui.secondaryCta) }}</a>
+          <Button size="sm" class="shadow-emerald-500/30" @click="scrollToSection('plans')">
+            {{ text(ui.secondaryCta) }}
           </Button>
         </div>
       </div>
@@ -733,14 +890,12 @@ const accentChecklist = [
             </div>
 
             <div class="flex flex-col gap-3 sm:flex-row">
-              <Button as-child size="lg" class="group">
-                <RouterLink to="/register">
-                  <span>{{ text(ui.primaryCta) }}</span>
-                  <ArrowRight class="size-4 transition-transform group-hover:translate-x-0.5" />
-                </RouterLink>
+              <Button size="lg" class="group" @click="openLeadDialog()">
+                <span>{{ text(ui.primaryCta) }}</span>
+                <ArrowRight class="size-4 transition-transform group-hover:translate-x-0.5" />
               </Button>
-              <Button as-child size="lg" variant="outline">
-                <a href="#plans">{{ text(ui.secondaryCta) }}</a>
+              <Button size="lg" variant="outline" @click="scrollToSection('plans')">
+                {{ text(ui.secondaryCta) }}
               </Button>
             </div>
 
@@ -994,8 +1149,8 @@ const accentChecklist = [
 
             <div class="mt-5 border-t border-border/70 pt-4">
               <div class="mb-3 text-xs text-muted-foreground">{{ text(plan.cta) }}</div>
-              <Button as-child class="w-full" :variant="plan.highlight ? 'default' : 'outline'">
-                <a href="#compare">{{ isArabic ? 'قارن الباقة' : 'Compare This Plan' }}</a>
+              <Button class="w-full" :variant="plan.highlight ? 'default' : 'outline'" @click="openLeadDialog(plan.key)">
+                {{ text(ui.planActionCta) }}
               </Button>
             </div>
           </article>
@@ -1118,8 +1273,8 @@ const accentChecklist = [
             </div>
 
             <div class="space-y-3 rounded-2xl border border-border/70 bg-background/60 p-4 backdrop-blur-sm">
-              <Button as-child class="w-full justify-center">
-                <a href="#plans">{{ text(ui.finalPrimary) }}</a>
+              <Button class="w-full justify-center" @click="scrollToSection('plans')">
+                {{ text(ui.finalPrimary) }}
               </Button>
               <Button as-child variant="outline" class="w-full justify-center">
                 <a href="mailto:sales@ofuqalmadenah.com">{{ text(ui.finalSecondary) }}</a>
@@ -1132,6 +1287,97 @@ const accentChecklist = [
         </div>
       </section>
     </main>
+
+    <Dialog v-model:open="isLeadDialogOpen">
+      <DialogContent class="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{{ text(leadFormUi.title) }}</DialogTitle>
+          <DialogDescription>{{ text(leadFormUi.description) }}</DialogDescription>
+        </DialogHeader>
+
+        <form class="space-y-5 py-2" @submit.prevent="submitLeadRequest">
+          <div class="flex flex-wrap items-center gap-2 rounded-2xl border border-border/70 bg-muted/30 px-4 py-3">
+            <span class="text-xs font-medium text-muted-foreground">{{ text(leadFormUi.selectedPlan) }}</span>
+            <Badge variant="outline" class="text-xs">
+              {{ selectedPlan ? text(selectedPlan.title) : text(leadFormUi.noSelectedPlan) }}
+            </Badge>
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="space-y-2">
+              <Label for="lead-full-name">{{ text(leadFormUi.fullName) }}</Label>
+              <Input
+                id="lead-full-name"
+                v-model="leadForm.fullName"
+                :placeholder="text(leadFormUi.fullNamePlaceholder)"
+                autocomplete="name"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <Label for="lead-company-name">{{ text(leadFormUi.companyName) }}</Label>
+              <Input
+                id="lead-company-name"
+                v-model="leadForm.companyName"
+                :placeholder="text(leadFormUi.companyNamePlaceholder)"
+                autocomplete="organization"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <Label for="lead-work-email">{{ text(leadFormUi.workEmail) }}</Label>
+              <Input
+                id="lead-work-email"
+                v-model="leadForm.workEmail"
+                type="email"
+                :placeholder="text(leadFormUi.workEmailPlaceholder)"
+                autocomplete="email"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <Label for="lead-phone-whatsapp">{{ text(leadFormUi.phoneWhatsApp) }}</Label>
+              <Input
+                id="lead-phone-whatsapp"
+                v-model="leadForm.phoneWhatsApp"
+                :placeholder="text(leadFormUi.phoneWhatsAppPlaceholder)"
+                autocomplete="tel"
+              />
+            </div>
+
+            <div class="space-y-2 sm:col-span-2">
+              <Label for="lead-country">{{ text(leadFormUi.country) }}</Label>
+              <Input
+                id="lead-country"
+                v-model="leadForm.country"
+                :placeholder="text(leadFormUi.countryPlaceholder)"
+                autocomplete="country-name"
+              />
+            </div>
+
+            <div class="space-y-2 sm:col-span-2">
+              <Label for="lead-message">{{ text(leadFormUi.message) }}</Label>
+              <Textarea
+                id="lead-message"
+                v-model="leadForm.message"
+                :placeholder="text(leadFormUi.messagePlaceholder)"
+                :rows="5"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" @click="isLeadDialogOpen = false">
+              {{ isArabic ? 'إغلاق' : 'Close' }}
+            </Button>
+            <Button type="submit" :disabled="isSubmittingLead">
+              <Loader2 v-if="isSubmittingLead" class="size-4 animate-spin" />
+              <span>{{ text(leadFormUi.submit) }}</span>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
 
     <footer class="relative z-10 border-t border-border/70 bg-background/80">
       <div class="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between md:px-6">
