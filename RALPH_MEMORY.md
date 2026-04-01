@@ -88,3 +88,10 @@
 - **The Reality:** When the frontend encountered a string instead of an object, the check failed, triggering an unauthorized redirect to a potentially unauthorized "blank" route.
 - **The Fix:** Refactor `authStore.hasPermission` in `auth.ts` to handle both object and string formats using a centralized `targetKey` mapping.
 - **The Law:** Always design permission guards to handle both granular objects and flat string keys to ensure resilience across different API synchronization stages.
+
+## [2026-04-01] Issue: Integrating PostHog into a Vue 3/Vite project
+
+- **The Trap:** Initializing PostHog directly in `main.ts` without checking for environment variables, which can lead to console errors or app crashes in environments where PostHog is not yet configured.
+- **The Reality:** Vite's `import.meta.env` requires explicit typing in `env.d.ts` for safety, and PostHog's automatic pageview tracking can sometimes conflict with single-page app (SPA) routers if not handled via a navigation guard.
+- **The Fix:** Created a fault-tolerant initialization utility in `src/lib/posthog.ts` that includes a `DEV` mode warning and integrated a `router.afterEach` guard in `main.ts` for consistent page-level capture.
+- **The Law:** Always use a dedicated initialization utility with environment guards for third-party analytics to ensure the core application remains resilient even if the service is missing or fails.

@@ -1,5 +1,13 @@
 # CHANGELOG.md
 
+## 2026-04-01
+
+### Added
+- **PostHog Integration**: Installed and configured `posthog-js` for frontend analytics and session recording.
+- **Automatic Pageview Tracking**: Integrated PostHog with `vue-router` to capture page navigation events automatically.
+- **Environment Configuration**: Added `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` to `.env.example` and `env.d.ts` for type-safe configuration.
+- **Initialization Utility**: Created `src/lib/posthog.ts` for fault-tolerant PostHog initialization.
+
 ## 2026-03-30
 
 ### Added

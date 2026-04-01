@@ -35,6 +35,7 @@
     "lucide-vue-next": "^0.303.0",
     "pdf-lib": "^1.17.1",
     "pinia": "^2.1.7",
+    "posthog-js": "^1.364.5",
     "qrcode.vue": "^3.8.0",
     "reka-ui": "^2.7.0",
     "tailwind-merge": "^2.2.0",
