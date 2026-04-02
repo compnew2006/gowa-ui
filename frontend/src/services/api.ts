@@ -3,7 +3,11 @@ import axios, {
   type AxiosError,
   type InternalAxiosRequestConfig,
 } from "axios";
-import type { Permission } from "@/types/auth";
+import type {
+  Permission,
+  UserSettings,
+  ChatBackgroundSettings,
+} from "@/types/auth";
 
 function normalizeBasePath(value: unknown): string {
   const raw = typeof value === "string" ? value.trim() : "";
@@ -60,6 +64,16 @@ export const api: AxiosInstance = axios.create({
 });
 
 type JsonRecord = Record<string, unknown>;
+
+export interface CurrentUserSettingsResponse {
+  message: string;
+  settings: UserSettings;
+}
+
+export interface UploadChatBackgroundResponse {
+  message: string;
+  chat_background: ChatBackgroundSettings;
+}
 
 // Helper to read a cookie by name
 function getCookie(name: string): string | null {
@@ -226,11 +240,25 @@ export const usersService = {
   ) => api.put(`/users/${id}/send-restrictions`, data),
   me: () => api.get("/me"),
   updateSettings: (data: {
-    email_notifications: boolean;
-    new_message_alerts: boolean;
-    campaign_updates: boolean;
+    email_notifications?: boolean;
+    new_message_alerts?: boolean;
+    campaign_updates?: boolean;
     notification_sound?: "notification1" | "notification2" | "notification";
-  }) => api.put("/me/settings", data),
+    chat_background?: ChatBackgroundSettings | null;
+  }) => api.put<CurrentUserSettingsResponse>("/me/settings", data),
+  uploadChatBackground: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<UploadChatBackgroundResponse>(
+      "/me/chat-background",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      },
+    );
+  },
   changePassword: (data: { current_password: string; new_password: string }) =>
     api.put("/me/password", data),
   updateAvailability: (isAvailable: boolean) =>
@@ -278,8 +306,7 @@ export const contactsService = {
   updateTags: (id: string, tags: string[]) =>
     api.put(`/contacts/${id}/tags`, { tags }),
   getSessionData: (id: string) => api.get(`/contacts/${id}/session-data`),
-  listCollaborators: (id: string) =>
-    api.get(`/contacts/${id}/collaborators`),
+  listCollaborators: (id: string) => api.get(`/contacts/${id}/collaborators`),
   inviteCollaborator: (id: string, data: { user_id: string; role?: string }) =>
     api.post(`/contacts/${id}/collaborators`, data),
   acceptCollaborator: (id: string, userId: string) =>
@@ -771,7 +798,7 @@ export const chatbotService = {
     api.get<{ contexts: JsonRecord[]; total?: number }>(
       "/chatbot/ai-contexts",
       {
-      params,
+        params,
       },
     ),
   createAIContext: (data: JsonRecord) => api.post("/chatbot/ai-contexts", data),

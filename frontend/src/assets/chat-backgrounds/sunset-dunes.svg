@@ -1,0 +1,32 @@
+<svg width="1600" height="1200" viewBox="0 0 1600 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="1200" fill="#3B1725"/>
+  <rect width="1600" height="1200" fill="url(#sky)"/>
+  <circle cx="1210" cy="266" r="146" fill="#FFE7B0" fill-opacity="0.9"/>
+  <circle cx="1210" cy="266" r="220" fill="#FFD166" fill-opacity="0.2"/>
+  <path d="M-88 688C130 590 300 726 530 650C712 590 862 418 1118 444C1320 466 1450 612 1684 548V1200H-88V688Z" fill="url(#duneA)"/>
+  <path d="M-120 860C94 760 314 868 568 824C790 784 912 620 1166 632C1396 644 1504 820 1694 792V1200H-120V860Z" fill="url(#duneB)"/>
+  <path d="M-126 1022C132 920 372 1042 632 1008C886 974 1050 870 1282 898C1454 918 1564 1002 1720 978V1200H-126V1022Z" fill="#5A1E26" fill-opacity="0.88"/>
+  <g opacity="0.38">
+    <path d="M180 566C278 528 386 530 520 578" stroke="#FFF2CC" stroke-width="14" stroke-linecap="round"/>
+    <path d="M452 470C590 420 702 434 826 500" stroke="#F7C873" stroke-width="12" stroke-linecap="round"/>
+    <path d="M798 562C930 512 1052 524 1160 590" stroke="#FFF2CC" stroke-width="12" stroke-linecap="round"/>
+  </g>
+  <defs>
+    <linearGradient id="sky" x1="324" y1="42" x2="1200" y2="764" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5E2241"/>
+      <stop offset="0.4" stop-color="#9B3B4E"/>
+      <stop offset="0.7" stop-color="#D4654E"/>
+      <stop offset="1" stop-color="#F3A15F"/>
+    </linearGradient>
+    <linearGradient id="duneA" x1="366" y1="490" x2="1388" y2="978" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0C27B"/>
+      <stop offset="0.5" stop-color="#E78F57"/>
+      <stop offset="1" stop-color="#B8543A"/>
+    </linearGradient>
+    <linearGradient id="duneB" x1="132" y1="742" x2="1522" y2="1044" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D88D52"/>
+      <stop offset="0.58" stop-color="#A94D3E"/>
+      <stop offset="1" stop-color="#7A2832"/>
+    </linearGradient>
+  </defs>
+</svg>

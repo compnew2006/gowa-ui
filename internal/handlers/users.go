@@ -1,6 +1,13 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -73,17 +80,68 @@ type RoleInfo struct {
 
 // UserSettingsRequest represents notification/settings preferences
 type UserSettingsRequest struct {
-	EmailNotifications bool   `json:"email_notifications"`
-	NewMessageAlerts   bool   `json:"new_message_alerts"`
-	CampaignUpdates    bool   `json:"campaign_updates"`
-	NotificationSound  string `json:"notification_sound"`
+	EmailNotifications *bool                           `json:"email_notifications"`
+	NewMessageAlerts   *bool                           `json:"new_message_alerts"`
+	CampaignUpdates    *bool                           `json:"campaign_updates"`
+	NotificationSound  *string                         `json:"notification_sound"`
+	ChatBackground     OptionalUserChatBackgroundField `json:"chat_background"`
+}
+
+type UserChatBackgroundRequest struct {
+	Kind           string `json:"kind"`
+	PresetID       string `json:"preset_id,omitempty"`
+	CustomAssetID  string `json:"custom_asset_id,omitempty"`
+	CustomFilename string `json:"custom_filename,omitempty"`
+	CustomMimeType string `json:"custom_mime_type,omitempty"`
+}
+
+type UserChatBackground struct {
+	Kind           string `json:"kind"`
+	PresetID       string `json:"preset_id,omitempty"`
+	CustomAssetID  string `json:"custom_asset_id,omitempty"`
+	CustomFilename string `json:"custom_filename,omitempty"`
+	CustomMimeType string `json:"custom_mime_type,omitempty"`
+}
+
+type OptionalUserChatBackgroundField struct {
+	Set   bool
+	Value *UserChatBackgroundRequest
+}
+
+func (f *OptionalUserChatBackgroundField) UnmarshalJSON(data []byte) error {
+	f.Set = true
+
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		f.Value = nil
+		return nil
+	}
+
+	var value UserChatBackgroundRequest
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+
+	f.Value = &value
+	return nil
 }
 
 const (
-	notificationSound1 = "notification1"
-	notificationSound2 = "notification2"
-	notificationSound  = "notification"
+	notificationSound1          = "notification1"
+	notificationSound2          = "notification2"
+	notificationSound           = "notification"
+	maxChatBackgroundUploadSize = 5 << 20
+	chatBackgroundKindPreset    = "preset"
+	chatBackgroundKindCustom    = "custom"
 )
+
+var allowedChatBackgroundPresetIDs = map[string]struct{}{
+	"aurora-veil":  {},
+	"sunset-dunes": {},
+	"paper-garden": {},
+	"linen-grid":   {},
+	"dot-orbit":    {},
+	"ripple-lines": {},
+}
 
 func normalizeNotificationSound(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
@@ -95,6 +153,168 @@ func normalizeNotificationSound(raw string) string {
 		fallthrough
 	default:
 		return notificationSound1
+	}
+}
+
+func normalizeChatBackgroundMIME(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(strings.Split(raw, ";")[0])) {
+	case "image/jpeg":
+		return "image/jpeg"
+	case "image/png":
+		return "image/png"
+	case "image/webp":
+		return "image/webp"
+	default:
+		return ""
+	}
+}
+
+func isAllowedChatBackgroundPresetID(id string) bool {
+	_, ok := allowedChatBackgroundPresetIDs[strings.TrimSpace(id)]
+	return ok
+}
+
+func decodeStoredChatBackground(raw any) *UserChatBackground {
+	if raw == nil {
+		return nil
+	}
+
+	payload, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+
+	var bg UserChatBackground
+	if err := json.Unmarshal(payload, &bg); err != nil {
+		return nil
+	}
+
+	switch strings.ToLower(strings.TrimSpace(bg.Kind)) {
+	case chatBackgroundKindPreset:
+		bg.PresetID = strings.TrimSpace(bg.PresetID)
+		if !isAllowedChatBackgroundPresetID(bg.PresetID) {
+			return nil
+		}
+		return &UserChatBackground{
+			Kind:     chatBackgroundKindPreset,
+			PresetID: bg.PresetID,
+		}
+	case chatBackgroundKindCustom:
+		bg.CustomAssetID = strings.TrimSpace(bg.CustomAssetID)
+		bg.CustomFilename = sanitizeFilename(bg.CustomFilename)
+		bg.CustomMimeType = normalizeChatBackgroundMIME(bg.CustomMimeType)
+		if bg.CustomAssetID == "" || bg.CustomMimeType == "" {
+			return nil
+		}
+		if bg.CustomFilename == "" || bg.CustomFilename == "unnamed" {
+			bg.CustomFilename = bg.CustomAssetID + getExtensionFromMimeType(bg.CustomMimeType)
+		}
+		return &UserChatBackground{
+			Kind:           chatBackgroundKindCustom,
+			CustomAssetID:  bg.CustomAssetID,
+			CustomFilename: bg.CustomFilename,
+			CustomMimeType: bg.CustomMimeType,
+		}
+	default:
+		return nil
+	}
+}
+
+func (bg UserChatBackground) toSettingsValue() map[string]any {
+	if bg.Kind == chatBackgroundKindPreset {
+		return map[string]any{
+			"kind":      bg.Kind,
+			"preset_id": bg.PresetID,
+		}
+	}
+
+	return map[string]any{
+		"kind":             bg.Kind,
+		"custom_asset_id":  bg.CustomAssetID,
+		"custom_filename":  bg.CustomFilename,
+		"custom_mime_type": bg.CustomMimeType,
+	}
+}
+
+func chatBackgroundRelativePath(userID uuid.UUID, bg *UserChatBackground) string {
+	if bg == nil || bg.Kind != chatBackgroundKindCustom {
+		return ""
+	}
+	ext := getExtensionFromMimeType(bg.CustomMimeType)
+	if ext == "" {
+		return ""
+	}
+	return filepath.Join("chat-backgrounds", userID.String(), bg.CustomAssetID+ext)
+}
+
+func (a *App) deleteStoredMediaFile(relativePath string) error {
+	cleanRelativePath := filepath.Clean(strings.TrimSpace(relativePath))
+	if cleanRelativePath == "" || cleanRelativePath == "." {
+		return nil
+	}
+
+	baseDir, err := filepath.Abs(a.getMediaStoragePath())
+	if err != nil {
+		return fmt.Errorf("resolve storage path: %w", err)
+	}
+	fullPath, err := filepath.Abs(filepath.Join(baseDir, cleanRelativePath))
+	if err != nil {
+		return fmt.Errorf("resolve file path: %w", err)
+	}
+	if !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
+		return fmt.Errorf("invalid file path")
+	}
+
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat file: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to delete symlink")
+	}
+
+	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove file: %w", err)
+	}
+	return nil
+}
+
+func (a *App) resolveRequestedChatBackground(
+	user *models.User,
+	req *UserChatBackgroundRequest,
+) (*UserChatBackground, string, error) {
+	existing := decodeStoredChatBackground(user.Settings["chat_background"])
+	if req == nil {
+		cleanupPath := ""
+		if existing != nil && existing.Kind == chatBackgroundKindCustom {
+			cleanupPath = chatBackgroundRelativePath(user.ID, existing)
+		}
+		return nil, cleanupPath, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(req.Kind)) {
+	case chatBackgroundKindPreset:
+		presetID := strings.TrimSpace(req.PresetID)
+		if !isAllowedChatBackgroundPresetID(presetID) {
+			return nil, "", fmt.Errorf("invalid chat background preset")
+		}
+		cleanupPath := ""
+		if existing != nil && existing.Kind == chatBackgroundKindCustom {
+			cleanupPath = chatBackgroundRelativePath(user.ID, existing)
+		}
+		return &UserChatBackground{
+			Kind:     chatBackgroundKindPreset,
+			PresetID: presetID,
+		}, cleanupPath, nil
+	case chatBackgroundKindCustom:
+		if existing == nil || existing.Kind != chatBackgroundKindCustom {
+			return nil, "", fmt.Errorf("upload a custom chat background before saving")
+		}
+		return existing, "", nil
+	default:
+		return nil, "", fmt.Errorf("invalid chat background kind")
 	}
 }
 
@@ -705,21 +925,177 @@ func (a *App) UpdateCurrentUserSettings(r *fastglue.Request) error {
 		user.Settings = make(models.JSONB)
 	}
 
-	// Update notification settings
-	user.Settings["email_notifications"] = req.EmailNotifications
-	user.Settings["new_message_alerts"] = req.NewMessageAlerts
-	user.Settings["campaign_updates"] = req.CampaignUpdates
-	user.Settings["notification_sound"] = normalizeNotificationSound(req.NotificationSound)
+	if req.EmailNotifications != nil {
+		user.Settings["email_notifications"] = *req.EmailNotifications
+	}
+	if req.NewMessageAlerts != nil {
+		user.Settings["new_message_alerts"] = *req.NewMessageAlerts
+	}
+	if req.CampaignUpdates != nil {
+		user.Settings["campaign_updates"] = *req.CampaignUpdates
+	}
+	if req.NotificationSound != nil {
+		user.Settings["notification_sound"] = normalizeNotificationSound(*req.NotificationSound)
+	}
 
-	if err := a.DB.Save(&user).Error; err != nil {
-		a.Log.Error("Failed to update user settings", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
+	if req.ChatBackground.Set {
+		nextChatBackground, cleanupPath, err := a.resolveRequestedChatBackground(&user, req.ChatBackground.Value)
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "chat_background")
+		}
+		if nextChatBackground != nil {
+			user.Settings["chat_background"] = nextChatBackground.toSettingsValue()
+		} else {
+			delete(user.Settings, "chat_background")
+		}
+
+		if err := a.DB.Save(&user).Error; err != nil {
+			a.Log.Error("Failed to update user settings", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
+		}
+
+		if cleanupPath != "" {
+			if err := a.deleteStoredMediaFile(cleanupPath); err != nil {
+				a.Log.Warn("Failed to delete previous chat background asset after preset switch", "path", cleanupPath, "error", err)
+			}
+		}
+	} else {
+		if err := a.DB.Save(&user).Error; err != nil {
+			a.Log.Error("Failed to update user settings", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
+		}
 	}
 
 	return r.SendEnvelope(map[string]interface{}{
 		"message":  "Settings updated successfully",
 		"settings": user.Settings,
 	})
+}
+
+func (a *App) UploadCurrentUserChatBackground(r *fastglue.Request) error {
+	userID, ok := r.RequestCtx.UserValue("user_id").(uuid.UUID)
+	if !ok {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	var user models.User
+	if err := a.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "User not found", nil, "")
+	}
+
+	form, err := r.RequestCtx.MultipartForm()
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid multipart form", nil, "")
+	}
+
+	files := form.File["file"]
+	if len(files) == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No file provided", nil, "file")
+	}
+
+	fileHeader := files[0]
+	file, err := fileHeader.Open()
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to open file", nil, "file")
+	}
+	defer func() { _ = file.Close() }()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxChatBackgroundUploadSize+1))
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read file", nil, "file")
+	}
+	if len(data) > maxChatBackgroundUploadSize {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 5MB", nil, "file")
+	}
+
+	detectedMimeType := normalizeChatBackgroundMIME(http.DetectContentType(data))
+	if detectedMimeType == "" {
+		return r.SendErrorEnvelope(
+			fasthttp.StatusBadRequest,
+			"Unsupported file type. Use JPG, PNG, or WebP",
+			nil,
+			"file",
+		)
+	}
+
+	sanitizedFilename := sanitizeFilename(fileHeader.Filename)
+	assetID := uuid.New().String()
+	extension := getExtensionFromMimeType(detectedMimeType)
+	if extension == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Unsupported file type. Use JPG, PNG, or WebP", nil, "file")
+	}
+
+	subdir := filepath.Join("chat-backgrounds", user.ID.String())
+	if err := a.ensureMediaDir(subdir); err != nil {
+		a.Log.Error("Failed to create chat background directory", "user_id", user.ID, "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save chat background", nil, "")
+	}
+
+	relativePath := filepath.Join(subdir, assetID+extension)
+	fullPath := filepath.Join(a.getMediaStoragePath(), relativePath)
+	if err := os.WriteFile(fullPath, data, 0600); err != nil {
+		a.Log.Error("Failed to write chat background file", "user_id", user.ID, "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save chat background", nil, "")
+	}
+
+	if user.Settings == nil {
+		user.Settings = make(models.JSONB)
+	}
+
+	previousBackground := decodeStoredChatBackground(user.Settings["chat_background"])
+	nextBackground := UserChatBackground{
+		Kind:           chatBackgroundKindCustom,
+		CustomAssetID:  assetID,
+		CustomFilename: sanitizedFilename,
+		CustomMimeType: detectedMimeType,
+	}
+	user.Settings["chat_background"] = nextBackground.toSettingsValue()
+
+	if err := a.DB.Save(&user).Error; err != nil {
+		_ = os.Remove(fullPath)
+		a.Log.Error("Failed to persist chat background metadata", "user_id", user.ID, "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save chat background", nil, "")
+	}
+
+	previousPath := chatBackgroundRelativePath(user.ID, previousBackground)
+	if previousPath != "" && previousPath != relativePath {
+		if err := a.deleteStoredMediaFile(previousPath); err != nil {
+			a.Log.Warn("Failed to delete previous chat background asset after replacement", "path", previousPath, "error", err)
+		}
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"message":         "Chat background uploaded successfully",
+		"chat_background": nextBackground,
+	})
+}
+
+func (a *App) GetCurrentUserChatBackground(r *fastglue.Request) error {
+	userID, ok := r.RequestCtx.UserValue("user_id").(uuid.UUID)
+	if !ok {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	var user models.User
+	if err := a.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "User not found", nil, "")
+	}
+
+	chatBackground := decodeStoredChatBackground(user.Settings["chat_background"])
+	if chatBackground == nil || chatBackground.Kind != chatBackgroundKindCustom {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat background not found", nil, "")
+	}
+
+	relativePath := chatBackgroundRelativePath(user.ID, chatBackground)
+	if relativePath == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat background not found", nil, "")
+	}
+
+	if err := a.serveLocalMediaFile(r, relativePath, chatBackground.CustomMimeType); err != nil {
+		return err
+	}
+	r.RequestCtx.Response.Header.Set("Cache-Control", "private")
+	return nil
 }
 
 // ChangePassword changes the current user's password

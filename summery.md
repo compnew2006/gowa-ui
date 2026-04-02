@@ -414,3 +414,55 @@
 ### Verification
 
 - `make run-migrate` (terminated after 15s to avoid leaving the server running)
+
+## 2026-04-03 02:05
+
+### Completed
+
+- Analyzed the `/chat` page behavior for `Send Template`, `Assign to agent`, and `Transfer to Agent` from the Vue UI, frontend stores/services, and backend handlers.
+- Verified the live `/chat` page with Chrome DevTools MCP on `http://localhost:8080` after logging in as `admin@test.com`.
+- Confirmed `Assign Contact` dialog opens from the header action, `Transfer to Agent` is present as a header action, and the composer `Send Template` control opens the template picker.
+
+### Key Findings
+
+- `Send Template`
+  - UI entry points:
+    - Composer template icon in `frontend/src/views/chat/ChatView.vue`
+    - Service-window banner CTA when the 24-hour window is expired
+  - Behavior:
+    - Opens `TemplatePicker`, loads only `APPROVED` templates, optionally filtered by selected account.
+    - Selecting a template opens a preview / parameter dialog.
+    - Sending calls `contactsStore.sendTemplate(...)`, which posts to `/api/messages/template`.
+    - Backend validates approved status, resolves account, validates required params, and sends/stores a template message.
+  - Primary use case:
+    - Re-engagement or compliant outbound messaging, especially when freeform WhatsApp replies are blocked by the service window.
+
+- `Assign to agent`
+  - UI entry point:
+    - Header action with `UserPlus` icon in `frontend/src/views/chat/ChatView.vue`
+  - Behavior:
+    - Opens `Assign Contact` dialog with searchable assignable users.
+    - Can assign or unassign via `contactsService.assign(...)` to `/api/contacts/{id}/assign`.
+    - Backend updates `assigned_user_id` and chat lifecycle status using `chatAssignmentUpdates(...)`.
+    - Assignment emits a system chat message when the assignee changes.
+  - Primary use case:
+    - Explicit ownership routing of a chat to a specific human, without creating a chatbot transfer record.
+
+- `Transfer to Agent`
+  - UI entry point:
+    - Header action with `UserX` icon in `frontend/src/views/chat/ChatView.vue`
+  - Behavior:
+    - Calls `chatbotService.createTransfer(...)` to `/api/chatbot/transfers`.
+    - Backend creates an active `AgentTransfer`, may assign directly or send to queue, cancels active chatbot session, and refreshes transfer state.
+    - After a transfer exists, the UI swaps this action for `Resume Chatbot`.
+  - Primary use case:
+    - Escalation / handoff from chatbot automation to human handling, with queueing, SLA, and resume semantics.
+
+### Manual QA (Chrome DevTools)
+
+- Logged into `http://localhost:8080/login` using `admin@test.com`.
+- Opened `/chat`, selected a pending conversation, and confirmed:
+  - `Assign to agent` tooltip and dialog are present.
+  - `Transfer to Agent` tooltip is present on the header action.
+  - `Send Template` tooltip is present on the composer control.
+  - Clicking `Send Template` opens the template picker; in the current dataset it showed `No approved templates`.

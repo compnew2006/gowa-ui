@@ -1,0 +1,28 @@
+<svg width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="480" height="480" fill="#F5F0E6"/>
+  <path d="M0 0H480V480H0V0Z" fill="url(#wash)"/>
+  <g opacity="0.55">
+    <path d="M0 120H480" stroke="#D8C2A4" stroke-width="1.5"/>
+    <path d="M0 240H480" stroke="#D8C2A4" stroke-width="1.5"/>
+    <path d="M0 360H480" stroke="#D8C2A4" stroke-width="1.5"/>
+    <path d="M120 0V480" stroke="#D8C2A4" stroke-width="1.5"/>
+    <path d="M240 0V480" stroke="#D8C2A4" stroke-width="1.5"/>
+    <path d="M360 0V480" stroke="#D8C2A4" stroke-width="1.5"/>
+  </g>
+  <g opacity="0.24">
+    <path d="M0 60H480" stroke="#C6AB87" stroke-width="0.75"/>
+    <path d="M0 180H480" stroke="#C6AB87" stroke-width="0.75"/>
+    <path d="M0 300H480" stroke="#C6AB87" stroke-width="0.75"/>
+    <path d="M0 420H480" stroke="#C6AB87" stroke-width="0.75"/>
+    <path d="M60 0V480" stroke="#C6AB87" stroke-width="0.75"/>
+    <path d="M180 0V480" stroke="#C6AB87" stroke-width="0.75"/>
+    <path d="M300 0V480" stroke="#C6AB87" stroke-width="0.75"/>
+    <path d="M420 0V480" stroke="#C6AB87" stroke-width="0.75"/>
+  </g>
+  <defs>
+    <linearGradient id="wash" x1="36" y1="24" x2="446" y2="460" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FAF6EF"/>
+      <stop offset="1" stop-color="#EADCC5"/>
+    </linearGradient>
+  </defs>
+</svg>

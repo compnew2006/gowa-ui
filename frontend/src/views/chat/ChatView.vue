@@ -157,6 +157,7 @@ import { useNotesStore } from "@/stores/notes";
 import { CreateContactDialog } from "@/components/shared";
 import { Info } from "lucide-vue-next";
 import { useMediaGroups } from "@/composables/useMediaGroups";
+import { resolveChatBackgroundStyle } from "@/lib/chat-backgrounds";
 
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -170,6 +171,12 @@ const tagsStore = useTagsStore();
 const notesStore = useNotesStore();
 const instancesStore = useInstancesStore();
 const { isDark } = useColorMode();
+const chatBackgroundStyle = computed(() =>
+  resolveChatBackgroundStyle(authStore.user?.settings?.chat_background, {
+    theme: isDark.value ? "dark" : "light",
+    variant: "chat",
+  }),
+);
 
 // Media grouping for batch download
 const { getGroupForMessage, isGroupLeader, isGroupTail, isGroupMember } =
@@ -4809,6 +4816,8 @@ async function sendMediaMessage() {
             v-else
             :ref="(el: any) => (messagesScroll.scrollAreaRef.value = el)"
             class="h-full p-3 chat-background"
+            :style="chatBackgroundStyle"
+            data-testid="chat-message-area"
           >
             <div class="space-y-2">
               <!-- Loading indicator for older messages -->

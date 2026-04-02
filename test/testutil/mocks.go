@@ -257,14 +257,16 @@ func (m *MockWhatsAppClient) GetMessagesSentTo(phone string) []MockSentMessage {
 
 // MockQueue is a mock implementation of queue.Queue.
 type MockQueue struct {
-	mu               sync.Mutex
-	Jobs             []*queue.RecipientJob
-	InboundMediaJobs []*queue.InboundMediaJob
+	mu                sync.Mutex
+	Jobs              []*queue.RecipientJob
+	InboundMediaJobs  []*queue.InboundMediaJob
+	ContactRepairJobs []*queue.ContactRepairJob
 
 	// Configurable behavior
 	EnqueueFunc        func(ctx context.Context, job *queue.RecipientJob) error
 	EnqueuesFunc       func(ctx context.Context, jobs []*queue.RecipientJob) error
 	EnqueueInboundFunc func(ctx context.Context, job *queue.InboundMediaJob) error
+	EnqueueContactFunc func(ctx context.Context, job *queue.ContactRepairJob) error
 
 	// Error to return
 	Error error
@@ -273,8 +275,9 @@ type MockQueue struct {
 // NewMockQueue creates a new mock queue.
 func NewMockQueue() *MockQueue {
 	return &MockQueue{
-		Jobs:             make([]*queue.RecipientJob, 0),
-		InboundMediaJobs: make([]*queue.InboundMediaJob, 0),
+		Jobs:              make([]*queue.RecipientJob, 0),
+		InboundMediaJobs:  make([]*queue.InboundMediaJob, 0),
+		ContactRepairJobs: make([]*queue.ContactRepairJob, 0),
 	}
 }
 
@@ -329,6 +332,23 @@ func (m *MockQueue) EnqueueInboundMedia(ctx context.Context, job *queue.InboundM
 	return nil
 }
 
+// EnqueueContactRepair mocks enqueueing a single direct-contact repair job.
+func (m *MockQueue) EnqueueContactRepair(ctx context.Context, job *queue.ContactRepairJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+
+	m.ContactRepairJobs = append(m.ContactRepairJobs, job)
+
+	if m.EnqueueContactFunc != nil {
+		return m.EnqueueContactFunc(ctx, job)
+	}
+	return nil
+}
+
 // Close is a no-op for the mock.
 func (m *MockQueue) Close() error {
 	return nil
@@ -357,6 +377,7 @@ func (m *MockQueue) Reset() {
 	defer m.mu.Unlock()
 	m.Jobs = m.Jobs[:0]
 	m.InboundMediaJobs = m.InboundMediaJobs[:0]
+	m.ContactRepairJobs = m.ContactRepairJobs[:0]
 	m.Error = nil
 }
 
@@ -366,8 +387,10 @@ type MockJobHandler struct {
 	ProcessedCh       chan *queue.RecipientJob
 	Processed         []*queue.RecipientJob
 	InboundProcessed  []*queue.InboundMediaJob
+	ContactProcessed  []*queue.ContactRepairJob
 	HandleFunc        func(ctx context.Context, job *queue.RecipientJob) error
 	HandleInboundFunc func(ctx context.Context, job *queue.InboundMediaJob) error
+	HandleContactFunc func(ctx context.Context, job *queue.ContactRepairJob) error
 	Error             error
 }
 
@@ -377,6 +400,7 @@ func NewMockJobHandler() *MockJobHandler {
 		ProcessedCh:      make(chan *queue.RecipientJob, 100),
 		Processed:        make([]*queue.RecipientJob, 0),
 		InboundProcessed: make([]*queue.InboundMediaJob, 0),
+		ContactProcessed: make([]*queue.ContactRepairJob, 0),
 	}
 }
 
@@ -412,6 +436,21 @@ func (m *MockJobHandler) HandleInboundMediaJob(ctx context.Context, job *queue.I
 	}
 	if m.HandleInboundFunc != nil {
 		return m.HandleInboundFunc(ctx, job)
+	}
+	return nil
+}
+
+// HandleContactRepairJob mocks handling a direct-contact repair job.
+func (m *MockJobHandler) HandleContactRepairJob(ctx context.Context, job *queue.ContactRepairJob) error {
+	m.mu.Lock()
+	m.ContactProcessed = append(m.ContactProcessed, job)
+	m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+	if m.HandleContactFunc != nil {
+		return m.HandleContactFunc(ctx, job)
 	}
 	return nil
 }

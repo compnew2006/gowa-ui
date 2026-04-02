@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Select,
   SelectContent,
@@ -28,6 +29,10 @@ import {
   MessageSquare,
   Play,
   Archive,
+  ImageIcon,
+  LayoutGrid,
+  Upload,
+  CheckCircle2,
 } from "lucide-vue-next";
 import { usersService, organizationService } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
@@ -36,6 +41,20 @@ import {
   ChatSidebarUnifier,
   type ChatSidebarViewMode,
 } from "@/lib/chat-sidebar-unifier";
+import { getErrorMessage, unwrapResponse } from "@/lib/api-utils";
+import {
+  CHAT_BACKGROUND_PRESETS,
+  CHAT_BACKGROUND_UPLOAD_ACCEPT,
+  getChatBackgroundPreset,
+  isSameChatBackgroundPreference,
+  normalizeChatBackgroundPreference,
+  resolveChatBackgroundAssetStyle,
+  resolveChatBackgroundStyle,
+  resolveChatBackgroundEditorMode,
+  validateChatBackgroundFile,
+  type ChatBackgroundEditorMode,
+} from "@/lib/chat-backgrounds";
+import type { ChatBackgroundSettings, UserSettings } from "@/types/auth";
 
 const { t } = useI18n();
 const authStore = useAuthStore();
@@ -215,6 +234,167 @@ const chatSettings = ref({
   chat_close_rating_templates: { ...DEFAULT_CHAT_CLOSE_RATING_TEMPLATES },
 });
 const showChatCloseRatingTemplates = ref(false);
+const savedChatBackground = ref<ChatBackgroundSettings | null>(null);
+const chatBackgroundEditorMode = ref<ChatBackgroundEditorMode>("default");
+const selectedChatBackgroundPresetID = ref<string | null>(null);
+const stagedChatBackgroundFile = ref<File | null>(null);
+const stagedChatBackgroundPreviewURL = ref<string | null>(null);
+const chatBackgroundErrorKey = ref<string | null>(null);
+const chatBackgroundUsesDefault = ref(true);
+
+const imageChatBackgroundPresets = computed(() =>
+  CHAT_BACKGROUND_PRESETS.filter((preset) => preset.category === "image"),
+);
+const patternChatBackgroundPresets = computed(() =>
+  CHAT_BACKGROUND_PRESETS.filter((preset) => preset.category === "pattern"),
+);
+const activeChatBackgroundPresetID = computed(() =>
+  chatBackgroundUsesDefault.value || chatBackgroundEditorMode.value === "upload"
+    ? null
+    : selectedChatBackgroundPresetID.value,
+);
+const defaultChatBackgroundPreviewStyle = computed(() =>
+  resolveChatBackgroundStyle(null, { variant: "preview" }),
+);
+const savedCustomChatBackgroundStyle = computed(() => {
+  if (
+    chatBackgroundUsesDefault.value ||
+    savedChatBackground.value?.kind !== "custom"
+  ) {
+    return null;
+  }
+  return resolveChatBackgroundStyle(savedChatBackground.value, {
+    variant: "preview",
+  });
+});
+const stagedChatBackgroundStyle = computed(() => {
+  if (!stagedChatBackgroundPreviewURL.value) {
+    return null;
+  }
+  return resolveChatBackgroundAssetStyle(
+    stagedChatBackgroundPreviewURL.value,
+    "image",
+    "light",
+    "preview",
+  );
+});
+
+function clearStagedChatBackgroundPreview() {
+  if (stagedChatBackgroundPreviewURL.value) {
+    URL.revokeObjectURL(stagedChatBackgroundPreviewURL.value);
+  }
+  stagedChatBackgroundPreviewURL.value = null;
+}
+
+function clearStagedChatBackgroundSelection() {
+  stagedChatBackgroundFile.value = null;
+  clearStagedChatBackgroundPreview();
+}
+
+function syncChatBackgroundState(value: unknown) {
+  savedChatBackground.value = normalizeChatBackgroundPreference(value);
+  chatBackgroundUsesDefault.value = savedChatBackground.value === null;
+  chatBackgroundEditorMode.value = resolveChatBackgroundEditorMode(
+    savedChatBackground.value,
+  );
+  selectedChatBackgroundPresetID.value =
+    savedChatBackground.value?.kind === "preset"
+      ? (savedChatBackground.value.preset_id ?? null)
+      : null;
+  chatBackgroundErrorKey.value = null;
+  clearStagedChatBackgroundSelection();
+}
+
+function setChatBackgroundMode(value: string) {
+  if (
+    value !== "default" &&
+    value !== "images" &&
+    value !== "patterns" &&
+    value !== "upload"
+  ) {
+    return;
+  }
+
+  if (value === "default") {
+    selectDefaultChatBackground();
+    return;
+  }
+
+  chatBackgroundEditorMode.value = value;
+  chatBackgroundUsesDefault.value = false;
+  chatBackgroundErrorKey.value = null;
+}
+
+function selectDefaultChatBackground() {
+  chatBackgroundUsesDefault.value = true;
+  chatBackgroundEditorMode.value = "default";
+  selectedChatBackgroundPresetID.value = null;
+  clearStagedChatBackgroundSelection();
+  chatBackgroundErrorKey.value = null;
+}
+
+function selectChatBackgroundPreset(presetID: string) {
+  chatBackgroundUsesDefault.value = false;
+  selectedChatBackgroundPresetID.value = presetID;
+  chatBackgroundErrorKey.value = null;
+}
+
+function handleChatBackgroundFileSelection(files: FileList | null) {
+  const nextFile = files?.[0];
+  if (!nextFile) {
+    return;
+  }
+
+  const validation = validateChatBackgroundFile(nextFile);
+  if (!validation.valid) {
+    clearStagedChatBackgroundSelection();
+    chatBackgroundErrorKey.value = validation.errorKey ?? null;
+    return;
+  }
+
+  clearStagedChatBackgroundSelection();
+  stagedChatBackgroundFile.value = nextFile;
+  stagedChatBackgroundPreviewURL.value = URL.createObjectURL(nextFile);
+  chatBackgroundUsesDefault.value = false;
+  chatBackgroundErrorKey.value = null;
+  chatBackgroundEditorMode.value = "upload";
+}
+
+function resolvePendingChatBackgroundSelection(): ChatBackgroundSettings | null {
+  if (
+    chatBackgroundUsesDefault.value ||
+    chatBackgroundEditorMode.value === "default"
+  ) {
+    return null;
+  }
+
+  if (chatBackgroundEditorMode.value === "upload") {
+    if (stagedChatBackgroundFile.value) {
+      return { kind: "custom" };
+    }
+    return savedChatBackground.value?.kind === "custom"
+      ? savedChatBackground.value
+      : null;
+  }
+
+  const preset = getChatBackgroundPreset(selectedChatBackgroundPresetID.value);
+  if (!preset) {
+    return null;
+  }
+  if (
+    (chatBackgroundEditorMode.value === "images" &&
+      preset.category !== "image") ||
+    (chatBackgroundEditorMode.value === "patterns" &&
+      preset.category !== "pattern")
+  ) {
+    return null;
+  }
+
+  return {
+    kind: "preset",
+    preset_id: preset.id,
+  };
+}
 
 const timezoneOptions = [
   { value: "UTC", label: "UTC (GMT+0)" },
@@ -309,6 +489,7 @@ onMounted(async () => {
         ),
       };
     }
+    syncChatBackgroundState(user.settings?.chat_background);
   } catch (error) {
     console.error("Failed to load settings:", error);
   } finally {
@@ -339,38 +520,33 @@ async function saveNotificationSettings() {
     const notificationSound = normalizeNotificationSound(
       notificationSettings.value.notification_sound,
     );
-    await usersService.updateSettings({
+    const response = await usersService.updateSettings({
       email_notifications: notificationSettings.value.email_notifications,
       new_message_alerts: notificationSettings.value.new_message_alerts,
       campaign_updates: notificationSettings.value.campaign_updates,
       notification_sound: notificationSound,
     });
-
-    if (authStore.user) {
-      authStore.user = {
-        ...authStore.user,
-        settings: {
-          ...(authStore.user.settings || {}),
-          email_notifications: notificationSettings.value.email_notifications,
-          new_message_alerts: notificationSettings.value.new_message_alerts,
-          campaign_updates: notificationSettings.value.campaign_updates,
-          notification_sound: notificationSound,
-        },
-      };
-      localStorage.setItem("user", JSON.stringify(authStore.user));
-    }
+    const payload = unwrapResponse<{
+      message: string;
+      settings: UserSettings;
+    }>(response);
+    authStore.replaceUserSettings(payload.settings);
 
     toast.success(t("settings.notificationsSaved"));
   } catch (error) {
     toast.error(
-      t("common.failedSave", { resource: t("resources.notificationSettings") }),
+      getErrorMessage(
+        error,
+        t("common.failedSave", {
+          resource: t("resources.notificationSettings"),
+        }),
+      ),
     );
   } finally {
     isSubmitting.value = false;
   }
 }
 async function saveChatSettings() {
-  isSubmitting.value = true;
   const clamped = Math.min(
     300,
     Math.max(5, Math.round(chatSettings.value.media_group_window)),
@@ -406,13 +582,77 @@ async function saveChatSettings() {
   chatSettings.value.chat_close_rating_templates =
     normalizedChatCloseRatingTemplates;
 
+  const nextChatBackground = resolvePendingChatBackgroundSelection();
+  const shouldClearChatBackground = chatBackgroundUsesDefault.value;
+  if (
+    !shouldClearChatBackground &&
+    chatBackgroundEditorMode.value === "upload" &&
+    !nextChatBackground
+  ) {
+    chatBackgroundErrorKey.value = "settings.chatBackgroundUploadRequired";
+    toast.error(t("settings.chatBackgroundUploadRequired"));
+    return;
+  }
+  if (
+    !shouldClearChatBackground &&
+    (chatBackgroundEditorMode.value === "images" ||
+      chatBackgroundEditorMode.value === "patterns") &&
+    !nextChatBackground
+  ) {
+    chatBackgroundErrorKey.value = "settings.chatBackgroundSelectPreset";
+    toast.error(t("settings.chatBackgroundSelectPreset"));
+    return;
+  }
+
+  isSubmitting.value = true;
   try {
-    localStorage.setItem(MEDIA_GROUP_WINDOW_KEY, String(clamped));
-    ChatSidebarUnifier.saveViewMode(sidebarViewMode);
-    configStore.setShowPrintButtons(chatSettings.value.show_print_buttons);
-    configStore.setShowDownloadButtons(
-      chatSettings.value.show_download_buttons,
-    );
+    if (shouldClearChatBackground && savedChatBackground.value) {
+      const settingsResponse = await usersService.updateSettings({
+        chat_background: null,
+      });
+      const payload = unwrapResponse<{
+        message: string;
+        settings: UserSettings;
+      }>(settingsResponse);
+      authStore.replaceUserSettings(payload.settings);
+      syncChatBackgroundState(payload.settings?.chat_background);
+    } else if (
+      nextChatBackground?.kind === "preset" &&
+      !isSameChatBackgroundPreference(
+        savedChatBackground.value,
+        nextChatBackground,
+      )
+    ) {
+      const settingsResponse = await usersService.updateSettings({
+        chat_background: nextChatBackground,
+      });
+      const payload = unwrapResponse<{
+        message: string;
+        settings: UserSettings;
+      }>(settingsResponse);
+      authStore.replaceUserSettings(payload.settings);
+      syncChatBackgroundState(payload.settings?.chat_background);
+    }
+
+    if (
+      !shouldClearChatBackground &&
+      chatBackgroundEditorMode.value === "upload" &&
+      stagedChatBackgroundFile.value
+    ) {
+      const uploadResponse = await usersService.uploadChatBackground(
+        stagedChatBackgroundFile.value,
+      );
+      const payload = unwrapResponse<{
+        message: string;
+        chat_background: ChatBackgroundSettings;
+      }>(uploadResponse);
+      authStore.replaceUserSettings({
+        ...(authStore.user?.settings || {}),
+        chat_background: payload.chat_background,
+      });
+      syncChatBackgroundState(payload.chat_background);
+    }
+
     await organizationService.updateSettings({
       assigned_chat_reset_enabled:
         chatSettings.value.assigned_chat_reset_enabled,
@@ -424,9 +664,19 @@ async function saveChatSettings() {
         normalizedChatCloseRatingFollowupWindowMinutes,
       chat_close_rating_templates: normalizedChatCloseRatingTemplates,
     });
+
+    localStorage.setItem(MEDIA_GROUP_WINDOW_KEY, String(clamped));
+    ChatSidebarUnifier.saveViewMode(sidebarViewMode);
+    configStore.setShowPrintButtons(chatSettings.value.show_print_buttons);
+    configStore.setShowDownloadButtons(
+      chatSettings.value.show_download_buttons,
+    );
+
     toast.success(t("settings.chatPreferencesSaved"));
   } catch (error) {
-    toast.error(t("settings.chatPreferencesSaveFailed"));
+    toast.error(
+      getErrorMessage(error, t("settings.chatPreferencesSaveFailed")),
+    );
   } finally {
     isSubmitting.value = false;
   }
@@ -438,6 +688,7 @@ onBeforeUnmount(() => {
     previewAudio = null;
   }
   isPreviewPlaying.value = false;
+  clearStagedChatBackgroundSelection();
 });
 </script>
 
@@ -871,6 +1122,261 @@ onBeforeUnmount(() => {
                   </Select>
                 </div>
                 <Separator class="bg-border" />
+                <div class="space-y-4">
+                  <div class="space-y-1">
+                    <Label class="text-foreground/80">{{
+                      $t("settings.chatBackground")
+                    }}</Label>
+                    <p class="text-xs text-muted-foreground">
+                      {{ $t("settings.chatBackgroundDesc") }}
+                    </p>
+                  </div>
+
+                  <ToggleGroup
+                    type="single"
+                    :model-value="chatBackgroundEditorMode"
+                    class="grid w-full grid-cols-1 gap-2 rounded-[calc(var(--radius)-0.1rem)] border border-border bg-muted/40 p-1 sm:grid-cols-4"
+                    @update:model-value="
+                      (value) =>
+                        setChatBackgroundMode(
+                          typeof value === 'string' ? value : '',
+                        )
+                    "
+                  >
+                    <ToggleGroupItem
+                      value="default"
+                      class="h-auto justify-start gap-2 rounded-md px-3 py-2 text-left data-[state=on]:bg-background data-[state=on]:shadow-sm"
+                      data-testid="chat-background-mode-default"
+                    >
+                      <MessageSquare class="h-4 w-4" />
+                      <span>{{ $t("settings.chatBackgroundDefault") }}</span>
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="images"
+                      class="h-auto justify-start gap-2 rounded-md px-3 py-2 text-left data-[state=on]:bg-background data-[state=on]:shadow-sm"
+                      data-testid="chat-background-mode-images"
+                    >
+                      <ImageIcon class="h-4 w-4" />
+                      <span>{{ $t("settings.chatBackgroundModeImages") }}</span>
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="patterns"
+                      class="h-auto justify-start gap-2 rounded-md px-3 py-2 text-left data-[state=on]:bg-background data-[state=on]:shadow-sm"
+                      data-testid="chat-background-mode-patterns"
+                    >
+                      <LayoutGrid class="h-4 w-4" />
+                      <span>{{
+                        $t("settings.chatBackgroundModePatterns")
+                      }}</span>
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="upload"
+                      class="h-auto justify-start gap-2 rounded-md px-3 py-2 text-left data-[state=on]:bg-background data-[state=on]:shadow-sm"
+                      data-testid="chat-background-mode-upload"
+                    >
+                      <Upload class="h-4 w-4" />
+                      <span>{{ $t("settings.chatBackgroundModeUpload") }}</span>
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+
+                  <div
+                    v-if="chatBackgroundEditorMode === 'default'"
+                    class="overflow-hidden rounded-xl border border-border bg-card"
+                    data-testid="chat-background-default-preview"
+                  >
+                    <div
+                      class="flex h-28 items-end justify-between border-b border-black/5 px-4 py-3"
+                      :style="defaultChatBackgroundPreviewStyle"
+                    >
+                      <div
+                        class="rounded-full bg-background/80 p-2 text-foreground shadow-sm"
+                      >
+                        <MessageSquare class="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div class="flex items-start justify-between gap-3 p-3">
+                      <div>
+                        <p class="text-sm font-medium text-foreground">
+                          {{ $t("settings.chatBackgroundDefault") }}
+                        </p>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                          {{ $t("settings.chatBackgroundDefaultDesc") }}
+                        </p>
+                      </div>
+                      <CheckCircle2 class="mt-0.5 h-4 w-4 text-primary" />
+                    </div>
+                  </div>
+
+                  <div
+                    v-else-if="chatBackgroundEditorMode === 'images'"
+                    class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                  >
+                    <button
+                      v-for="preset in imageChatBackgroundPresets"
+                      :key="preset.id"
+                      type="button"
+                      class="group overflow-hidden rounded-xl border bg-card text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      :class="
+                        activeChatBackgroundPresetID === preset.id
+                          ? 'border-primary shadow-sm ring-1 ring-primary/40'
+                          : 'border-border'
+                      "
+                      :data-testid="`chat-background-preset-${preset.id}`"
+                      @click="selectChatBackgroundPreset(preset.id)"
+                    >
+                      <div
+                        class="h-32 border-b border-black/5"
+                        :style="
+                          resolveChatBackgroundAssetStyle(
+                            preset.assetUrl,
+                            preset.category,
+                            'light',
+                            'preview',
+                          )
+                        "
+                      />
+                      <div class="flex items-start justify-between gap-3 p-3">
+                        <div>
+                          <p class="text-sm font-medium text-foreground">
+                            {{ $t(preset.labelKey) }}
+                          </p>
+                          <p class="mt-1 text-xs text-muted-foreground">
+                            {{ $t(preset.descriptionKey) }}
+                          </p>
+                        </div>
+                        <CheckCircle2
+                          v-if="activeChatBackgroundPresetID === preset.id"
+                          class="mt-0.5 h-4 w-4 text-primary"
+                        />
+                      </div>
+                    </button>
+                  </div>
+
+                  <div
+                    v-else-if="chatBackgroundEditorMode === 'patterns'"
+                    class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                  >
+                    <button
+                      v-for="preset in patternChatBackgroundPresets"
+                      :key="preset.id"
+                      type="button"
+                      class="group overflow-hidden rounded-xl border bg-card text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      :class="
+                        activeChatBackgroundPresetID === preset.id
+                          ? 'border-primary shadow-sm ring-1 ring-primary/40'
+                          : 'border-border'
+                      "
+                      :data-testid="`chat-background-preset-${preset.id}`"
+                      @click="selectChatBackgroundPreset(preset.id)"
+                    >
+                      <div
+                        class="h-32 border-b border-black/5"
+                        :style="
+                          resolveChatBackgroundAssetStyle(
+                            preset.assetUrl,
+                            preset.category,
+                            'light',
+                            'preview',
+                          )
+                        "
+                      />
+                      <div class="flex items-start justify-between gap-3 p-3">
+                        <div>
+                          <p class="text-sm font-medium text-foreground">
+                            {{ $t(preset.labelKey) }}
+                          </p>
+                          <p class="mt-1 text-xs text-muted-foreground">
+                            {{ $t(preset.descriptionKey) }}
+                          </p>
+                        </div>
+                        <CheckCircle2
+                          v-if="activeChatBackgroundPresetID === preset.id"
+                          class="mt-0.5 h-4 w-4 text-primary"
+                        />
+                      </div>
+                    </button>
+                  </div>
+
+                  <div
+                    v-else
+                    class="space-y-3 rounded-[calc(var(--radius)-0.1rem)] border border-dashed border-border bg-muted/30 p-4"
+                  >
+                    <div class="space-y-1">
+                      <Label
+                        for="chat-background-upload"
+                        class="text-foreground/80"
+                        >{{ $t("settings.chatBackgroundUploadLabel") }}</Label
+                      >
+                      <p class="text-xs text-muted-foreground">
+                        {{ $t("settings.chatBackgroundUploadDesc") }}
+                      </p>
+                    </div>
+                    <Input
+                      id="chat-background-upload"
+                      type="file"
+                      :accept="CHAT_BACKGROUND_UPLOAD_ACCEPT"
+                      class="border-input bg-input text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary"
+                      data-testid="chat-background-upload-input"
+                      @change="
+                        (event: Event) =>
+                          handleChatBackgroundFileSelection(
+                            (event.target as HTMLInputElement).files,
+                          )
+                      "
+                    />
+                    <p
+                      v-if="chatBackgroundErrorKey"
+                      class="text-sm text-destructive"
+                      data-testid="chat-background-upload-error"
+                    >
+                      {{ $t(chatBackgroundErrorKey) }}
+                    </p>
+                    <div
+                      v-if="
+                        stagedChatBackgroundStyle ||
+                        savedCustomChatBackgroundStyle
+                      "
+                      class="space-y-2"
+                    >
+                      <div
+                        class="overflow-hidden rounded-xl border border-border bg-card"
+                      >
+                        <div
+                          class="h-40"
+                          :style="
+                            stagedChatBackgroundStyle ||
+                            savedCustomChatBackgroundStyle ||
+                            {}
+                          "
+                        />
+                        <div class="flex items-start justify-between gap-3 p-3">
+                          <div>
+                            <p class="text-sm font-medium text-foreground">
+                              {{
+                                stagedChatBackgroundFile
+                                  ? stagedChatBackgroundFile.name
+                                  : savedChatBackground?.custom_filename ||
+                                    $t("settings.chatBackgroundCurrentCustom")
+                              }}
+                            </p>
+                            <p class="mt-1 text-xs text-muted-foreground">
+                              {{
+                                stagedChatBackgroundFile
+                                  ? $t("settings.chatBackgroundUploadPending")
+                                  : $t("settings.chatBackgroundCurrentCustom")
+                              }}
+                            </p>
+                          </div>
+                          <CheckCircle2 class="mt-0.5 h-4 w-4 text-primary" />
+                        </div>
+                      </div>
+                    </div>
+                    <p v-else class="text-xs text-muted-foreground">
+                      {{ $t("settings.chatBackgroundUploadEmpty") }}
+                    </p>
+                  </div>
+                </div>
+                <Separator class="bg-border" />
                 <div class="space-y-3">
                   <div class="flex items-center justify-between">
                     <div>
@@ -1151,6 +1657,7 @@ onBeforeUnmount(() => {
                     class="border-input bg-input text-foreground hover:bg-accent"
                     @click="saveChatSettings"
                     :disabled="isSubmitting"
+                    data-testid="settings-chat-save"
                   >
                     <Loader2
                       v-if="isSubmitting"
