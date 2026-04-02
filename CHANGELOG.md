@@ -1,5 +1,18 @@
 # CHANGELOG.md
 
+## 2026-04-02
+
+### Added
+- Added a configurable marketing-sidecar handoff for `/pricing`, `/plans`, and `/offer` via `VITE_PUBLIC_MARKETING_BASE_URL`.
+- Added `frontend/src/lib/marketing-redirect.ts` plus unit coverage for redirect target construction and loop suppression.
+
+### Changed
+- Replaced the embedded public pricing route with a lightweight redirect/fallback view so the main app no longer owns public sales content.
+- Generalized public lead request source validation so future sidecars can submit marketing leads without a pricing-only backend contract.
+
+### Removed
+- Removed `frontend/src/views/public/PricingLandingView.vue` and the main SPA’s bundled pricing/plans/offers page content.
+
 ## 2026-04-01
 
 ### Added

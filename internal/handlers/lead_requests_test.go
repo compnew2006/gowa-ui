@@ -61,7 +61,7 @@ func TestApp_CreatePublicLeadRequest(t *testing.T) {
 			"country":        "Saudi Arabia",
 			"message":        "Need a demo for our support team.",
 			"requested_plan": "growth",
-			"source_page":    "pricing",
+			"source_page":    "marketing-sidecar",
 			"source_route":   "/plans",
 		})
 
@@ -108,6 +108,40 @@ func TestApp_CreatePublicLeadRequest(t *testing.T) {
 		err := app.CreatePublicLeadRequest(req)
 		require.NoError(t, err)
 		testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "work_email must be a valid email address")
+	})
+
+	t.Run("rejects invalid source page", func(t *testing.T) {
+		app := newTestApp(t)
+
+		req := testutil.NewJSONRequest(t, map[string]any{
+			"full_name":      "Alice Example",
+			"company_name":   "Example Corp",
+			"work_email":     "alice@example.com",
+			"phone_whatsapp": "+966500001111",
+			"source_page":    "Pricing Page",
+			"source_route":   "/pricing",
+		})
+
+		err := app.CreatePublicLeadRequest(req)
+		require.NoError(t, err)
+		testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "source_page must be a lowercase slug using letters, numbers, dots, underscores, or hyphens")
+	})
+
+	t.Run("rejects invalid source route", func(t *testing.T) {
+		app := newTestApp(t)
+
+		req := testutil.NewJSONRequest(t, map[string]any{
+			"full_name":      "Alice Example",
+			"company_name":   "Example Corp",
+			"work_email":     "alice@example.com",
+			"phone_whatsapp": "+966500001111",
+			"source_page":    "marketing-sidecar",
+			"source_route":   "pricing",
+		})
+
+		err := app.CreatePublicLeadRequest(req)
+		require.NoError(t, err)
+		testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "source_route must start with / and contain no whitespace")
 	})
 }
 

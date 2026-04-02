@@ -95,3 +95,10 @@
 - **The Reality:** Vite's `import.meta.env` requires explicit typing in `env.d.ts` for safety, and PostHog's automatic pageview tracking can sometimes conflict with single-page app (SPA) routers if not handled via a navigation guard.
 - **The Fix:** Created a fault-tolerant initialization utility in `src/lib/posthog.ts` that includes a `DEV` mode warning and integrated a `router.afterEach` guard in `main.ts` for consistent page-level capture.
 - **The Law:** Always use a dedicated initialization utility with environment guards for third-party analytics to ensure the core application remains resilient even if the service is missing or fails.
+
+## 2026-04-02 19:08 Issue: Removing public pricing routes without a handoff seam
+
+- The Trap: Deleting `PricingLandingView.vue` and the `/pricing` aliases directly, assuming the marketing sidecar would be wired everywhere in the same rollout.
+- The Reality: `/pricing`, `/plans`, and `/offer` are stable public entry URLs and part of the lead-capture boundary, so hard deletion would create broken links and a brittle migration.
+- The Fix: Replaced the routes with a configurable sidecar-handoff view, removed the old page content, and generalized lead-source validation while keeping lead storage/admin handling in the monolith.
+- The Law: When moving public pages to a sidecar, preserve the public URLs first and migrate ownership through a redirect or proxy seam instead of a hard delete.

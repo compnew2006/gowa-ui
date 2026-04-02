@@ -1,5 +1,24 @@
 # MEMORY.md
 
+## 2026-04-02 19:08
+
+### Work Summary
+- Replaced the public pricing landing route group with a marketing-sidecar handoff view and removed the embedded pricing/offers page implementation from the frontend.
+- Added a reusable redirect helper plus targeted unit coverage for sidecar URL construction.
+- Generalized backend lead-request source validation so the future sidecar can keep using the monolith lead inbox without a pricing-only payload contract.
+
+### Architectural Decisions
+- Kept `/pricing`, `/plans`, and `/offer` as stable public entry URLs, but transferred ownership to a redirect seam instead of leaving sales content inside the main SPA.
+- Preserved `POST /api/public/lead-requests` and the authenticated `/settings/lead-requests` workflow in the monolith for the first migration phase.
+- Used `VITE_PUBLIC_MARKETING_BASE_URL` as the explicit extension point so the sidecar can live on an external origin or a same-origin prefixed path.
+
+### Current Project State
+- Frontend unit test passes: `npx vitest run src/lib/marketing-redirect.test.ts`
+- Frontend build passes: `npm run build`
+- Go production build passes: `go build ./cmd/whatomate`
+- `npm run typecheck` is still failing due to pre-existing frontend typing issues in contacts/auth/chatbot modules unrelated to this change.
+- `go test ./internal/handlers -run 'TestApp_(CreatePublicLeadRequest|ListLeadRequests|UpdateLeadRequestStatus)$' -count=1` is still blocked by the pre-existing `testutil.MockQueue` / `EnqueueContactRepair` compile failure in `internal/handlers/campaigns_test.go`.
+
 ## 2026-03-17 20:27
 
 ### Work Summary

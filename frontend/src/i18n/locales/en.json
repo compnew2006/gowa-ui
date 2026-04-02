@@ -2634,5 +2634,16 @@
       "pairingCodeGenerated": "Pairing code generated. Enter it in WhatsApp linked devices.",
       "pairingCodeFailed": "Failed to request pairing code"
     }
+  },
+  "marketingRedirect": {
+    "badge": "Public route moved",
+    "title": "Pricing, plans, and offers now live outside the main app",
+    "description": "The main Whatomate frontend no longer serves public sales pages. This route is reserved for the marketing sidecar.",
+    "routeHint": "Requested route: {route}",
+    "redirecting": "Redirecting you to the configured marketing destination now.",
+    "redirectReady": "This route is ready to hand traffic to the marketing sidecar.",
+    "notConfigured": "A marketing destination has not been configured yet for this environment.",
+    "openSite": "Open marketing site",
+    "goToLogin": "Go to login"
   }
 }

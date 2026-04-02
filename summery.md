@@ -1,5 +1,59 @@
 # Session Summary
 
+## 2026-04-02 19:08
+
+### Completed
+- Removed the embedded pricing/plans/offers page implementation from the main frontend by deleting `frontend/src/views/public/PricingLandingView.vue`.
+- Replaced `/pricing`, `/plans`, and `/offer` with a marketing-sidecar handoff view backed by `VITE_PUBLIC_MARKETING_BASE_URL`.
+- Added `frontend/src/lib/marketing-redirect.ts` and `frontend/src/lib/marketing-redirect.test.ts`.
+- Generalized backend lead source validation in `internal/models/lead_request.go` and `internal/handlers/lead_requests.go` so future sidecar submissions are not locked to pricing-only metadata.
+- Updated architecture and state docs for the new handoff boundary.
+
+### Verification
+- `npx vitest run src/lib/marketing-redirect.test.ts` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-sidecar-removal-plan/frontend`
+- `npm run build` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-sidecar-removal-plan/frontend`
+- `go build ./cmd/whatomate` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-sidecar-removal-plan`
+- Chrome DevTools MCP:
+  - loaded `http://127.0.0.1:4173/pricing`
+  - loaded `http://127.0.0.1:4173/plans`
+  - loaded `http://127.0.0.1:4173/offer`
+  - confirmed all three routes render the new sidecar-handoff page
+  - confirmed no console warnings or errors
+
+### Blockers / Notes
+- `npm run typecheck` still fails because of pre-existing frontend typing issues in contacts/auth/chatbot modules unrelated to this task.
+- `go test ./internal/handlers -run 'TestApp_(CreatePublicLeadRequest|ListLeadRequests|UpdateLeadRequestStatus)$' -count=1` still fails to compile because `internal/handlers/campaigns_test.go` depends on a stale `testutil.MockQueue` missing `EnqueueContactRepair`.
+
+## 2026-04-02 18:58
+
+### Completed
+- Created a dedicated worktree at `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-sidecar-removal-plan` on branch `codex/sidecar-removal-plan`.
+- Reverse-engineered the current public pricing surface and documented the safe sidecar migration plan in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-sidecar-removal-plan/specs/pricing-sidecar-removal_design.md`.
+- Updated `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-sidecar-removal-plan/PLAN.md` to point the next implementation pass at the new design artifact.
+- Applied only the relevant planning skills for this task:
+  - `architecture-guardian`
+  - `spec-miner`
+
+### Key Findings
+- `/pricing`, `/plans`, and `/offer` are one public route group implemented by `frontend/src/router/index.ts` and `frontend/src/views/public/PricingLandingView.vue`.
+- The marketing page is coupled to the existing lead workflow through `POST /api/public/lead-requests`.
+- Backend validation in `internal/handlers/lead_requests.go` currently hardcodes `source_page=pricing` and allows only `/pricing`, `/plans`, and `/offer` as `source_route`.
+- The authenticated admin lead inbox at `/settings/lead-requests` is a separate concern and should stay alive during the first sidecar migration phase.
+- There is no dedicated automated E2E coverage today for the public pricing aliases.
+
+### Verification
+- `npm ci` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-sidecar-removal-plan/frontend`
+- `npm run build` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-sidecar-removal-plan/frontend`
+- Chrome DevTools MCP smoke:
+  - loaded `http://127.0.0.1:4173/pricing`
+  - loaded `http://127.0.0.1:4173/plans`
+  - loaded `http://127.0.0.1:4173/offer`
+  - no console warnings or errors observed across the checked routes
+
+### Notes
+- The first build attempt in the new worktree failed because the worktree did not yet have `frontend/node_modules`; installing dependencies in the worktree resolved that.
+- The recommended migration seam is a redirect/proxy handoff for the public routes while preserving the monolith lead-ingestion contract initially.
+
 ## 2026-03-30 12:22
 
 ### Completed

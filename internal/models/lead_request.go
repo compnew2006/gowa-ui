@@ -1,5 +1,10 @@
 package models
 
+import (
+	"regexp"
+	"strings"
+)
+
 // LeadRequestStatus represents the lifecycle status of a public demo request.
 type LeadRequestStatus string
 
@@ -24,7 +29,9 @@ var validLeadRequestStatuses = map[LeadRequestStatus]struct{}{
 	LeadRequestStatusClosed:    {},
 }
 
-// LeadRequest stores a public-facing demo/trial request submitted from the pricing page.
+var leadRequestSourcePagePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,49}$`)
+
+// LeadRequest stores a public-facing demo/trial request submitted from a marketing surface.
 type LeadRequest struct {
 	BaseModel
 	FullName      string            `gorm:"size:255;not null;index" json:"full_name"`
@@ -51,4 +58,16 @@ func IsValidLeadRequestPlan(plan string) bool {
 func IsValidLeadRequestStatus(status LeadRequestStatus) bool {
 	_, ok := validLeadRequestStatuses[status]
 	return ok
+}
+
+func IsValidLeadRequestSourcePage(sourcePage string) bool {
+	return leadRequestSourcePagePattern.MatchString(strings.TrimSpace(sourcePage))
+}
+
+func IsValidLeadRequestSourceRoute(sourceRoute string) bool {
+	trimmedRoute := strings.TrimSpace(sourceRoute)
+	return trimmedRoute != "" &&
+		len(trimmedRoute) <= 100 &&
+		strings.HasPrefix(trimmedRoute, "/") &&
+		!strings.ContainsAny(trimmedRoute, " \t\r\n")
 }

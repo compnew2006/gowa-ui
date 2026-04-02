@@ -151,29 +151,9 @@ export const authService = {
   getWSToken: () => api.get("/auth/ws-token"),
 };
 
-export type LeadRequestPlan =
-  | "starter"
-  | "growth"
-  | "dedicated"
-  | "enterprise";
+export type LeadRequestPlan = "starter" | "growth" | "dedicated" | "enterprise";
 
-export type LeadRequestStatus =
-  | "new"
-  | "contacted"
-  | "qualified"
-  | "closed";
-
-export interface PublicLeadRequestPayload {
-  full_name: string;
-  company_name: string;
-  work_email: string;
-  phone_whatsapp: string;
-  country?: string;
-  message?: string;
-  requested_plan?: LeadRequestPlan;
-  source_page: "pricing";
-  source_route: "/pricing" | "/plans" | "/offer";
-}
+export type LeadRequestStatus = "new" | "contacted" | "qualified" | "closed";
 
 export interface LeadRequest {
   id: string;
@@ -199,12 +179,6 @@ export interface LeadRequestListResponse {
 }
 
 export const leadRequestsService = {
-  createPublic: (data: PublicLeadRequestPayload) =>
-    api.post<{
-      id: string;
-      status: LeadRequestStatus;
-      message: string;
-    }>("/public/lead-requests", data),
   list: (params?: {
     search?: string;
     status?: LeadRequestStatus | "all";

@@ -34,6 +34,14 @@ Whatomate is primarily a Go monolith (`cmd/whatomate`) with embedded frontend as
 - Compose: optional `mcp-server` profile in `docker/docker-compose.yml`.
 - Sidecar talks to Whatomate over internal network (`WHATOMATE_BASE_URL`).
 
+## Marketing Sidecar Handoff
+
+- The main frontend no longer serves bundled pricing/plans/offers content.
+- `/pricing`, `/plans`, and `/offer` now resolve to a lightweight redirect handoff view in the SPA.
+- The redirect destination is configured with `VITE_PUBLIC_MARKETING_BASE_URL`, which may point to an external origin or a same-origin path prefix.
+- Public lead ingestion remains in the monolith through `POST /api/public/lead-requests`.
+- Lead source validation is now generic enough for sidecar-owned marketing routes instead of hardcoding pricing-only values.
+
 ## Testing Strategy
 
 - Unit tests: config, errors, schema validation

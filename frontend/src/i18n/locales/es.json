@@ -207,5 +207,16 @@
       "usingOrgDefault": "Usando los valores predeterminados",
       "usingCustomTemplates": "Usando plantillas personalizadas"
     }
+  },
+  "marketingRedirect": {
+    "badge": "Ruta pública movida",
+    "title": "Precios, planes y ofertas ahora viven fuera de la app principal",
+    "description": "El frontend principal de Whatomate ya no sirve páginas públicas de ventas. Esta ruta queda reservada para el sidecar de marketing.",
+    "routeHint": "Ruta solicitada: {route}",
+    "redirecting": "Redirigiendo ahora al destino de marketing configurado.",
+    "redirectReady": "Esta ruta ya está lista para entregar tráfico al sidecar de marketing.",
+    "notConfigured": "Todavía no hay un destino de marketing configurado para este entorno.",
+    "openSite": "Abrir sitio de marketing",
+    "goToLogin": "Ir al inicio de sesión"
   }
 }

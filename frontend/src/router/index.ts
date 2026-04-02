@@ -42,8 +42,8 @@ const router = createRouter({
     {
       path: "/pricing",
       alias: ["/plans", "/offer"],
-      name: "pricing-landing",
-      component: () => import("@/views/public/PricingLandingView.vue"),
+      name: "marketing-redirect",
+      component: () => import("@/views/public/MarketingRedirectView.vue"),
       meta: { requiresAuth: false },
     },
     {

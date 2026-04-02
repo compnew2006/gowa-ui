@@ -10,12 +10,6 @@ import (
 	"github.com/zerodha/fastglue"
 )
 
-var allowedLeadRequestRoutes = map[string]struct{}{
-	"/pricing": {},
-	"/plans":   {},
-	"/offer":   {},
-}
-
 type CreateLeadRequestRequest struct {
 	FullName      string `json:"full_name"`
 	CompanyName   string `json:"company_name"`
@@ -112,11 +106,11 @@ func (a *App) CreatePublicLeadRequest(r *fastglue.Request) error {
 	if req.RequestedPlan != "" && !models.IsValidLeadRequestPlan(req.RequestedPlan) {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "requested_plan must be starter, growth, dedicated, or enterprise", nil, "")
 	}
-	if req.SourcePage != "pricing" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "source_page must be pricing", nil, "")
+	if !models.IsValidLeadRequestSourcePage(req.SourcePage) {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "source_page must be a lowercase slug using letters, numbers, dots, underscores, or hyphens", nil, "")
 	}
-	if _, ok := allowedLeadRequestRoutes[req.SourceRoute]; !ok {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "source_route must be /pricing, /plans, or /offer", nil, "")
+	if !models.IsValidLeadRequestSourceRoute(req.SourceRoute) {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "source_route must start with / and contain no whitespace", nil, "")
 	}
 
 	lead := models.LeadRequest{
