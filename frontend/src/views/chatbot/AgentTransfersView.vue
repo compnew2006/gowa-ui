@@ -379,7 +379,7 @@ function formatTimeRemaining(deadline: string | undefined): string {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
       :title="$t('agentTransfers.title')"
       :subtitle="$t('agentTransfers.subtitle')"
@@ -426,7 +426,7 @@ function formatTimeRemaining(deadline: string | undefined): string {
         <!-- Agent View (no tabs, just their transfers) -->
         <div v-else-if="!isAdminOrManager">
           <div
-            class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200"
+            class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 shadow-sm"
           >
             <div class="p-6">
               <h3 class="text-lg font-semibold text-white light:text-gray-900">

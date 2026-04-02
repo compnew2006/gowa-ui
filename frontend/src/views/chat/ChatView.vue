@@ -3935,27 +3935,27 @@ async function sendMediaMessage() {
 </script>
 
 <template>
-  <div class="flex h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="flex h-full bg-background text-foreground">
     <!-- Contacts List -->
     <div
       data-contacts-sidebar="true"
-      class="relative min-h-0 shrink-0 flex flex-col bg-[#0a0a0b] light:bg-white"
+      class="relative flex min-h-0 shrink-0 flex-col bg-sidebar text-sidebar-foreground"
       :class="
         isRTL
-          ? 'border-l border-white/[0.08] light:border-gray-200'
-          : 'border-r border-white/[0.08] light:border-gray-200'
+          ? 'border-l border-sidebar-border'
+          : 'border-r border-sidebar-border'
       "
       :style="{ width: `${contactsSidebarWidth}px` }"
     >
       <StatusStoriesBar :instances="instancesStore.instances" />
 
       <!-- Search Header -->
-      <div class="p-2 border-b border-white/[0.08] light:border-gray-200">
+      <div class="border-b border-sidebar-border p-2">
         <div class="flex items-center gap-2">
           <div class="relative flex-1">
             <Search
               :class="
-                'absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40 light:text-gray-400 ' +
+                'absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-sidebar-foreground/50 ' +
                 (isRTL ? 'right-2.5' : 'left-2.5')
               "
             />
@@ -3963,7 +3963,7 @@ async function sendMediaMessage() {
               v-model="contactsStore.searchQuery"
               :placeholder="$t('chat.searchContacts') + '...'"
               :class="
-                'h-8 text-sm bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-gray-50 light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400 ' +
+                'h-8 border-sidebar-border bg-sidebar-accent/65 text-sidebar-foreground placeholder:text-sidebar-foreground/50 ' +
                 (isRTL ? 'pr-8 text-right' : 'pl-8 text-left')
               "
             />
@@ -3974,7 +3974,7 @@ async function sendMediaMessage() {
               <Button
                 variant="ghost"
                 size="icon"
-                class="h-8 w-8 shrink-0 text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                class="h-8 w-8 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 @click="openAddContactDialog"
               >
                 <UserPlus class="h-4 w-4" />
@@ -3991,14 +3991,14 @@ async function sendMediaMessage() {
                 class="h-8 w-8 shrink-0 relative"
                 :class="
                   activeFilterCount > 0
-                    ? 'text-emerald-400 bg-emerald-500/10'
-                    : 'text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100'
+                    ? 'bg-primary/12 text-primary'
+                    : 'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 "
               >
                 <Filter class="h-4 w-4" />
                 <span
                   v-if="activeFilterCount > 0"
-                  class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 text-[10px] text-white flex items-center justify-center"
+                  class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground"
                 >
                   {{ activeFilterCount }}
                 </span>
@@ -4022,13 +4022,12 @@ async function sendMediaMessage() {
                 </div>
                 <Separator />
                 <div class="space-y-1.5 px-1">
-                  <span
-                    class="text-xs font-medium text-white/60 light:text-gray-500"
-                    >{{ $t("chat.filterByInstance") }}</span
-                  >
+                  <span class="text-xs font-medium text-muted-foreground">{{
+                    $t("chat.filterByInstance")
+                  }}</span>
                   <select
                     :value="contactsStore.selectedInstanceId"
-                    class="h-8 w-full rounded-md border border-white/[0.12] bg-black/20 px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400 light:border-gray-300 light:bg-white light:text-gray-800"
+                    class="h-8 w-full rounded-md border border-input bg-input px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30"
                     @change="updateInstanceFilter"
                   >
                     <option value="">{{ $t("chat.allInstances") }}</option>
@@ -4043,15 +4042,14 @@ async function sendMediaMessage() {
                 </div>
                 <Separator />
                 <div class="space-y-1 px-1">
-                  <span
-                    class="text-xs font-medium text-white/60 light:text-gray-500"
-                    >{{ $t("chat.chatType") }}</span
-                  >
+                  <span class="text-xs font-medium text-muted-foreground">{{
+                    $t("chat.chatType")
+                  }}</span>
                   <button
-                    class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
+                    class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
                     :class="
                       contactsStore.selectedChatTypes.includes('private') &&
-                      'bg-white/[0.08] light:bg-gray-100'
+                      'bg-accent text-accent-foreground'
                     "
                     @click="toggleChatTypeFilter('private')"
                   >
@@ -4061,14 +4059,14 @@ async function sendMediaMessage() {
                     >
                     <Check
                       v-if="contactsStore.selectedChatTypes.includes('private')"
-                      class="h-4 w-4 text-emerald-400 shrink-0"
+                      class="h-4 w-4 shrink-0 text-primary"
                     />
                   </button>
                   <button
-                    class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
+                    class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
                     :class="
                       contactsStore.selectedChatTypes.includes('group') &&
-                      'bg-white/[0.08] light:bg-gray-100'
+                      'bg-accent text-accent-foreground'
                     "
                     @click="toggleChatTypeFilter('group')"
                   >
@@ -4078,14 +4076,14 @@ async function sendMediaMessage() {
                     >
                     <Check
                       v-if="contactsStore.selectedChatTypes.includes('group')"
-                      class="h-4 w-4 text-emerald-400 shrink-0"
+                      class="h-4 w-4 shrink-0 text-primary"
                     />
                   </button>
                   <button
-                    class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
+                    class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
                     :class="
                       contactsStore.selectedChatTypes.includes('channel') &&
-                      'bg-white/[0.08] light:bg-gray-100'
+                      'bg-accent text-accent-foreground'
                     "
                     @click="toggleChatTypeFilter('channel')"
                   >
@@ -4095,14 +4093,14 @@ async function sendMediaMessage() {
                     >
                     <Check
                       v-if="contactsStore.selectedChatTypes.includes('channel')"
-                      class="h-4 w-4 text-emerald-400 shrink-0"
+                      class="h-4 w-4 shrink-0 text-primary"
                     />
                   </button>
                 </div>
                 <Separator />
                 <div class="space-y-1">
                   <span
-                    class="px-1 text-xs font-medium text-white/60 light:text-gray-500"
+                    class="px-1 text-xs font-medium text-muted-foreground"
                     >{{ $t("chat.tags") }}</span
                   >
                   <div
@@ -4115,10 +4113,10 @@ async function sendMediaMessage() {
                     <button
                       v-for="tag in tagsStore.tags"
                       :key="tag.name"
-                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
+                      class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
                       :class="
                         contactsStore.selectedTags.includes(tag.name) &&
-                        'bg-white/[0.08] light:bg-gray-100'
+                        'bg-accent text-accent-foreground'
                       "
                       @click="toggleTagFilter(tag.name)"
                     >
@@ -4137,7 +4135,7 @@ async function sendMediaMessage() {
                       >
                       <Check
                         v-if="contactsStore.selectedTags.includes(tag.name)"
-                        class="h-4 w-4 text-emerald-400 shrink-0"
+                        class="h-4 w-4 shrink-0 text-primary"
                       />
                     </button>
                   </div>
@@ -4150,7 +4148,7 @@ async function sendMediaMessage() {
         <div v-if="activeFilterCount > 0" class="flex flex-wrap gap-1 mt-2">
           <TagBadge
             v-if="contactsStore.selectedInstanceId"
-            color="green"
+            color="blue"
             class="cursor-pointer hover:opacity-80"
             @click="clearInstanceFilter"
           >
@@ -4179,14 +4177,14 @@ async function sendMediaMessage() {
           </TagBadge>
         </div>
         <div
-          class="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] p-1 light:bg-gray-100"
+          class="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-sidebar-accent/75 p-1"
         >
           <button
             class="rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
             :class="
               contactsStore.activeChatTab === 'assigned'
-                ? 'bg-emerald-500/20 text-emerald-300 light:bg-emerald-100 light:text-emerald-700'
-                : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-white'
+                ? 'bg-primary/12 text-primary'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
             "
             @click="switchChatTab('assigned')"
           >
@@ -4196,8 +4194,8 @@ async function sendMediaMessage() {
             class="rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
             :class="
               contactsStore.activeChatTab === 'pending'
-                ? 'bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700'
-                : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-white'
+                ? 'bg-accent text-accent-foreground'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
             "
             @click="switchChatTab('pending')"
           >
@@ -4216,9 +4214,9 @@ async function sendMediaMessage() {
             v-for="entry in sidebarContacts"
             :key="entry.key"
             :class="[
-              'group flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors',
+              'group flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors hover:bg-sidebar-accent/80',
               isSidebarEntryActive(entry) &&
-                'bg-white/[0.08] light:bg-gray-100',
+                'bg-sidebar-accent text-sidebar-accent-foreground',
             ]"
             data-testid="chat-sidebar-entry"
             :data-sidebar-entry-key="entry.key"
@@ -4226,13 +4224,11 @@ async function sendMediaMessage() {
           >
             <button
               type="button"
-              class="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+              class="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               :aria-label="`${t('resources.ProfilePhoto')}: ${entry.displayContact.name || entry.displayContact.phone_number}`"
               @click.stop="openProfilePhotoDialog(entry.displayContact)"
             >
-              <Avatar
-                class="h-9 w-9 ring-2 ring-white/[0.1] light:ring-gray-200"
-              >
+              <Avatar class="h-9 w-9 ring-2 ring-sidebar-border">
                 <AvatarImage :src="entry.displayContact.avatar_url" />
                 <AvatarFallback
                   :class="
@@ -4256,9 +4252,7 @@ async function sendMediaMessage() {
               :class="['flex-1 min-w-0', isRTL ? 'text-right' : 'text-left']"
             >
               <div class="flex min-w-0 items-center justify-between gap-2">
-                <p
-                  class="text-sm font-medium truncate text-white light:text-gray-900"
-                >
+                <p class="truncate text-sm font-medium text-sidebar-foreground">
                   {{
                     entry.displayContact.name ||
                     entry.displayContact.phone_number
@@ -4266,7 +4260,7 @@ async function sendMediaMessage() {
                 </p>
                 <span
                   v-if="!isContactsSidebarCompact"
-                  class="shrink-0 text-[11px] text-white/40 light:text-gray-500"
+                  class="shrink-0 text-[11px] text-sidebar-foreground/55"
                 >
                   {{ formatContactTime(entry.displayContact.last_message_at) }}
                 </span>
@@ -4276,7 +4270,7 @@ async function sendMediaMessage() {
                   <div class="flex min-w-0 items-center gap-1.5">
                     <p
                       v-if="!isContactsSidebarCompact"
-                      class="text-xs text-white/50 light:text-gray-500 truncate"
+                      class="truncate text-xs text-sidebar-foreground/60"
                     >
                       {{ entry.displayContact.phone_number }}
                     </p>
@@ -4328,7 +4322,7 @@ async function sendMediaMessage() {
                     <span
                       v-for="acct in entry.accountNames"
                       :key="`sidebar-account-${entry.key}-${acct}`"
-                      class="inline-flex max-w-[130px] items-center rounded-full border border-white/[0.14] bg-white/[0.04] px-2 py-0.5 text-[10px] leading-none text-white/70 light:border-gray-300 light:bg-gray-100 light:text-gray-700"
+                      class="inline-flex max-w-[130px] items-center rounded-full border border-sidebar-border bg-sidebar-accent/70 px-2 py-0.5 text-[10px] leading-none text-sidebar-foreground/75"
                       :title="acct"
                     >
                       <span class="truncate">{{ acct }}</span>
@@ -4340,7 +4334,7 @@ async function sendMediaMessage() {
                       entry.displayContact.status !== 'closed' &&
                       !isContactsSidebarCompact
                     "
-                    class="mt-0.5 truncate text-[11px] text-emerald-400/85 light:text-emerald-700"
+                    class="mt-0.5 truncate text-[11px] text-primary"
                   >
                     {{ $t("chat.assignedTo") }}:
                     {{ getAssignedAgentName(entry.displayContact) }}
@@ -4349,30 +4343,30 @@ async function sendMediaMessage() {
                 <div class="ml-2 flex items-center gap-1">
                   <Badge
                     v-if="entry.displayContact.is_public"
-                    class="h-5 text-[10px] bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-700"
+                    class="h-5 border-0 bg-primary/12 text-[10px] text-primary"
                   >
                     {{ $t("chat.publicShort") }}
                   </Badge>
                   <Badge
                     v-if="entry.displayContact.status === 'closed'"
-                    class="h-5 text-[10px] bg-rose-500/20 text-rose-300 uppercase light:bg-rose-100 light:text-rose-700"
+                    class="h-5 border-0 bg-destructive/10 text-[10px] uppercase text-destructive"
                   >
                     {{ entry.displayContact.status }}
                   </Badge>
                   <Badge
                     v-if="entry.displayContact.unread_count > 0"
-                    class="h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700"
+                    class="h-5 border-0 bg-primary/12 text-[10px] text-primary"
                   >
                     {{ entry.displayContact.unread_count }}
                   </Badge>
                   <button
                     v-if="canSoftDeleteChats"
                     type="button"
-                    class="inline-flex h-5 w-5 items-center justify-center rounded-md transition-colors"
+                    class="inline-flex h-5 w-5 items-center justify-center rounded-md border transition-colors"
                     :class="
                       pendingSidebarSoftDeleteEntryKey === entry.key
-                        ? 'text-amber-200 bg-amber-500/20 hover:bg-amber-500/30 hover:text-amber-100 light:text-amber-700 light:bg-amber-100 light:hover:bg-amber-200'
-                        : 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/20 light:text-amber-600 light:hover:text-amber-700 light:hover:bg-amber-100'
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary'
                     "
                     :aria-label="
                       pendingSidebarSoftDeleteEntryKey === entry.key
@@ -4395,11 +4389,11 @@ async function sendMediaMessage() {
                   <button
                     v-if="isAdminUser"
                     type="button"
-                    class="inline-flex h-5 w-5 items-center justify-center rounded-md transition-colors"
+                    class="inline-flex h-5 w-5 items-center justify-center rounded-md border transition-colors"
                     :class="
                       pendingSidebarDeleteEntryKey === entry.key
-                        ? 'text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 hover:text-emerald-200 light:text-emerald-700 light:bg-emerald-100 light:hover:bg-emerald-200'
-                        : 'text-red-400/80 hover:text-red-300 hover:bg-red-500/15 light:text-red-600 light:hover:text-red-700 light:hover:bg-red-100'
+                        ? 'border-destructive bg-destructive text-destructive-foreground'
+                        : 'border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive'
                     "
                     :aria-label="
                       pendingSidebarDeleteEntryKey === entry.key
@@ -4430,13 +4424,13 @@ async function sendMediaMessage() {
             class="p-3 text-center"
           >
             <Loader2
-              class="h-5 w-5 mx-auto animate-spin text-white/40 light:text-gray-400"
+              class="mx-auto h-5 w-5 animate-spin text-muted-foreground"
             />
           </div>
 
           <div
             v-if="sidebarContacts.length === 0"
-            class="p-3 text-center text-white/40 light:text-gray-500"
+            class="p-3 text-center text-muted-foreground"
           >
             <User class="h-6 w-6 mx-auto mb-1.5 opacity-50" />
             <p class="text-sm">
@@ -4454,31 +4448,29 @@ async function sendMediaMessage() {
         class="absolute top-0 bottom-0 hidden md:block w-1 z-20 cursor-col-resize transition-colors"
         :class="[
           isRTL ? 'left-0' : 'right-0',
-          isContactsSidebarResizing
-            ? 'bg-emerald-500/30'
-            : 'hover:bg-emerald-500/20',
+          isContactsSidebarResizing ? 'bg-primary/25' : 'hover:bg-primary/15',
         ]"
         @mousedown="startContactsSidebarResize"
       />
     </div>
 
     <!-- Chat Area -->
-    <div class="flex-1 min-w-0 flex flex-col bg-[#0f0f10] light:bg-gray-50">
+    <div class="flex min-w-0 flex-1 flex-col bg-background">
       <!-- No Contact Selected -->
       <div
         v-if="!contactsStore.currentContact"
-        class="flex-1 flex items-center justify-center text-white/40 light:text-gray-500"
+        class="flex flex-1 items-center justify-center text-muted-foreground"
       >
         <div class="text-center">
           <div
-            class="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20"
+            class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/12 shadow-sm"
           >
-            <Send class="h-8 w-8 text-white" />
+            <Send class="h-8 w-8 text-primary" />
           </div>
-          <h3 class="font-medium text-lg mb-1 text-white light:text-gray-900">
+          <h3 class="mb-1 text-lg font-medium text-foreground">
             {{ $t("chat.selectConversation") }}
           </h3>
-          <p class="text-sm text-white/50 light:text-gray-500">
+          <p class="text-sm text-muted-foreground">
             {{ $t("chat.chooseContact") }}
           </p>
         </div>
@@ -4488,18 +4480,16 @@ async function sendMediaMessage() {
       <template v-else>
         <!-- Chat Header -->
         <div
-          class="h-14 flex-shrink-0 px-4 border-b border-white/[0.08] light:border-gray-200 flex items-center justify-between bg-[#0f0f10] light:bg-white"
+          class="flex h-14 flex-shrink-0 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur"
         >
           <div class="flex items-center gap-2">
             <button
               type="button"
-              class="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+              class="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               :aria-label="`${t('resources.ProfilePhoto')}: ${contactsStore.currentContact.name || contactsStore.currentContact.phone_number}`"
               @click="openProfilePhotoDialog(contactsStore.currentContact)"
             >
-              <Avatar
-                class="h-8 w-8 ring-2 ring-white/[0.1] light:ring-gray-200"
-              >
+              <Avatar class="h-8 w-8 ring-2 ring-border">
                 <AvatarImage :src="contactsStore.currentContact.avatar_url" />
                 <AvatarFallback
                   :class="
@@ -4521,7 +4511,7 @@ async function sendMediaMessage() {
             </button>
             <div>
               <div class="flex items-center gap-1.5">
-                <p class="text-sm font-medium text-white light:text-gray-900">
+                <p class="text-sm font-medium text-foreground">
                   {{
                     contactsStore.currentContact.name ||
                     contactsStore.currentContact.phone_number
@@ -4529,30 +4519,30 @@ async function sendMediaMessage() {
                 </p>
                 <Badge
                   v-if="contactsStore.currentContact.is_public"
-                  class="text-[10px] h-5 bg-sky-500/20 text-sky-300 light:bg-sky-100 light:text-sky-700"
+                  class="h-5 border-0 bg-primary/12 text-[10px] text-primary"
                 >
                   {{ $t("chat.publicChat") }}
                 </Badge>
                 <Badge
                   v-if="contactsStore.currentContact.status === 'pending'"
-                  class="text-[10px] h-5 bg-amber-500/20 text-amber-300 light:bg-amber-100 light:text-amber-700"
+                  class="h-5 border-0 bg-accent text-[10px] text-accent-foreground"
                 >
                   Pending
                 </Badge>
                 <Badge
                   v-if="contactsStore.currentContact.status === 'closed'"
-                  class="text-[10px] h-5 bg-zinc-500/20 text-zinc-300 light:bg-zinc-100 light:text-zinc-700"
+                  class="h-5 border-0 bg-muted text-[10px] text-muted-foreground"
                 >
                   Closed
                 </Badge>
                 <Badge
                   v-if="activeTransferId"
-                  class="text-[10px] h-5 bg-orange-500/20 text-orange-400 light:bg-orange-100 light:text-orange-700"
+                  class="h-5 border-0 bg-accent text-[10px] text-primary"
                 >
                   Paused
                 </Badge>
               </div>
-              <p class="text-[11px] text-white/50 light:text-gray-500">
+              <p class="text-[11px] text-muted-foreground">
                 {{ contactsStore.currentContact.phone_number }}
               </p>
             </div>
@@ -4563,7 +4553,7 @@ async function sendMediaMessage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                   @click="isAssignDialogOpen = true"
                 >
                   <UserPlus class="h-4 w-4" />
@@ -4576,7 +4566,7 @@ async function sendMediaMessage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                   :disabled="isUpdatingCurrentChatPublic"
                   @click="toggleCurrentChatPublicVisibility"
                 >
@@ -4589,7 +4579,7 @@ async function sendMediaMessage() {
                     class="h-4 w-4"
                     :class="
                       contactsStore.currentContact?.is_public
-                        ? 'text-sky-300 light:text-sky-700'
+                        ? 'text-primary'
                         : ''
                     "
                   />
@@ -4608,7 +4598,7 @@ async function sendMediaMessage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                   :disabled="isClaimingCurrentChat"
                   @click="claimCurrentChat"
                 >
@@ -4626,7 +4616,7 @@ async function sendMediaMessage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                   :disabled="isClosingCurrentChat"
                   @click="closeCurrentChat"
                 >
@@ -4644,7 +4634,7 @@ async function sendMediaMessage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                   :disabled="isTransferring"
                   @click="transferToAgent"
                 >
@@ -4658,7 +4648,7 @@ async function sendMediaMessage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                   :disabled="isResuming"
                   @click="resumeChatbot"
                 >
@@ -4673,7 +4663,7 @@ async function sendMediaMessage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                   :disabled="executingActionId === action.id"
                   @click="executeCustomAction(action)"
                 >
@@ -4696,10 +4686,9 @@ async function sendMediaMessage() {
                   variant="ghost"
                   size="icon"
                   id="notes-button"
-                  class="h-8 w-8 relative text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  class="relative h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                   :class="
-                    isNotesPanelOpen &&
-                    'bg-amber-500/10 text-amber-400 light:bg-amber-50 light:text-amber-600'
+                    isNotesPanelOpen && 'bg-accent text-accent-foreground'
                   "
                   @click="isNotesPanelOpen = !isNotesPanelOpen"
                 >
@@ -4707,7 +4696,7 @@ async function sendMediaMessage() {
                   <span
                     v-if="notesStore.notes.length > 0 && !isNotesPanelOpen"
                     id="notes-badge"
-                    class="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] rounded-full bg-amber-500 text-[10px] text-white flex items-center justify-center px-1"
+                    class="absolute -top-0.5 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground"
                   >
                     {{ notesStore.notes.length }}
                   </span>
@@ -4721,11 +4710,8 @@ async function sendMediaMessage() {
                   variant="ghost"
                   size="icon"
                   id="info-button"
-                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
-                  :class="
-                    isInfoPanelOpen &&
-                    'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'
-                  "
+                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  :class="isInfoPanelOpen && 'bg-accent text-accent-foreground'"
                   @click="isInfoPanelOpen = !isInfoPanelOpen"
                 >
                   <Info class="h-4 w-4" />
@@ -4740,10 +4726,10 @@ async function sendMediaMessage() {
         <div
           v-if="isSidebarUnifiedMode && contactAccounts.length > 1"
           data-testid="chat-account-tabs"
-          class="flex-shrink-0 px-4 py-2 border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b] light:bg-gray-50"
+          class="flex-shrink-0 border-b border-border bg-card/70 px-4 py-2"
         >
           <div
-            class="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] light:bg-gray-100 p-1"
+            class="inline-flex items-center gap-1 rounded-lg bg-accent/80 p-1"
           >
             <button
               v-for="acct in contactAccounts"
@@ -4756,8 +4742,8 @@ async function sendMediaMessage() {
               :class="[
                 'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all',
                 acct === selectedAccount
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-white/[0.08] text-white/70 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300',
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:bg-background/90 hover:text-foreground',
               ]"
               @click="switchAccount(acct)"
             >
@@ -4770,21 +4756,17 @@ async function sendMediaMessage() {
           v-if="isCurrentChatRestricted"
           class="flex-1 min-h-0 flex items-center justify-center px-6"
         >
-          <div
-            class="max-w-md w-full rounded-xl border border-amber-400/30 bg-amber-500/10 p-6 text-center"
-          >
-            <h3
-              class="text-lg font-semibold text-amber-200 light:text-amber-800"
-            >
+          <div class="widget-surface max-w-md w-full p-6 text-center">
+            <h3 class="text-lg font-semibold text-foreground">
               Restricted View
             </h3>
-            <p class="mt-2 text-sm text-amber-100/80 light:text-amber-700">
+            <p class="mt-2 text-sm text-muted-foreground">
               This chat is currently unassigned. You must claim it to view
               messages.
             </p>
             <Button
               v-if="canClaimCurrentChat"
-              class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500"
+              class="mt-4 w-full"
               :disabled="isClaimingCurrentChat"
               @click="claimCurrentChat"
             >
@@ -4805,7 +4787,7 @@ async function sendMediaMessage() {
           <Transition name="sticky-date">
             <div
               v-if="showStickyDate"
-              class="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 bg-white/[0.08] light:bg-gray-200 backdrop-blur-sm rounded-full text-[11px] text-white/50 light:text-gray-600 font-medium shadow-sm"
+              class="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full border border-border bg-card/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur-sm"
             >
               {{ stickyDate }}
             </div>
@@ -4816,7 +4798,7 @@ async function sendMediaMessage() {
               contactsStore.isLoadingMessages &&
               contactsStore.messages.length === 0
             "
-            class="h-full flex items-center justify-center text-white/50 light:text-gray-500"
+            class="flex h-full items-center justify-center text-muted-foreground"
           >
             <div class="flex items-center gap-2 text-sm">
               <Loader2 class="h-4 w-4 animate-spin" />
@@ -4835,7 +4817,7 @@ async function sendMediaMessage() {
                 class="flex justify-center py-2"
               >
                 <div
-                  class="flex items-center gap-2 text-white/40 light:text-gray-500 text-sm"
+                  class="flex items-center gap-2 text-sm text-muted-foreground"
                 >
                   <div
                     class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
@@ -4854,7 +4836,7 @@ async function sendMediaMessage() {
                   :data-date-separator="getDateLabel(message.created_at)"
                 >
                   <div
-                    class="px-3 py-1 bg-white/[0.06] light:bg-gray-200 rounded-full text-[11px] text-white/40 light:text-gray-600 font-medium"
+                    class="rounded-full border border-border bg-card/90 px-3 py-1 text-[11px] font-medium text-muted-foreground"
                   >
                     {{ getDateLabel(message.created_at) }}
                   </div>
@@ -4926,7 +4908,7 @@ async function sendMediaMessage() {
                     </button>
                     <p
                       v-if="shouldShowGroupSenderPhone(message)"
-                      class="mb-1 text-[11px] font-medium text-emerald-300 light:text-emerald-700"
+                      class="mb-1 text-[11px] font-medium text-primary"
                     >
                       {{ getGroupSenderPhone(message) }}
                     </p>
@@ -5185,7 +5167,7 @@ async function sendMediaMessage() {
                         class="flex items-center gap-3 px-3 py-3 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
                       >
                         <div
-                          class="h-10 w-10 rounded-full bg-red-900/30 light:bg-red-100 flex items-center justify-center shrink-0"
+                          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10"
                         >
                           <MapPin class="h-5 w-5 text-red-500" />
                         </div>
@@ -5498,7 +5480,7 @@ async function sendMediaMessage() {
                       v-if="canRevokeMessage(message)"
                       variant="ghost"
                       size="icon"
-                      class="h-6 w-6 text-destructive hover:text-destructive"
+                      class="h-6 w-6 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
                       :disabled="revokingMessageId === message.id"
                       title="Revoke message"
                       @click="revokeMessage(message)"
@@ -5516,7 +5498,7 @@ async function sendMediaMessage() {
                       "
                       variant="ghost"
                       size="icon"
-                      class="h-6 w-6 text-destructive hover:text-destructive"
+                      class="h-6 w-6 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
                       :disabled="retryingMessageId === message.id"
                       @click="retryMessage(message)"
                       title="Retry sending"
@@ -5546,7 +5528,7 @@ async function sendMediaMessage() {
 
         <div
           v-if="isCurrentChatClosed && !isCurrentChatRestricted"
-          class="px-4 py-2 border-t border-white/[0.08] light:border-gray-200 bg-zinc-500/10 text-xs text-zinc-300 light:bg-zinc-100 light:text-zinc-700 flex items-center justify-between gap-3"
+          class="flex items-center justify-between gap-3 border-t border-border bg-muted/55 px-4 py-2 text-xs text-muted-foreground"
         >
           <span
             >This chat is closed. You can view message history in read-only
@@ -5556,7 +5538,7 @@ async function sendMediaMessage() {
             v-if="canReopenCurrentChat"
             size="sm"
             variant="outline"
-            class="h-7 px-2.5 text-xs bg-white/[0.06] border-white/[0.15] text-white/80 hover:bg-white/[0.1] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50"
+            class="h-7 px-2.5 text-xs"
             :disabled="isReopeningCurrentChat"
             @click="reopenCurrentChat"
           >
@@ -5572,7 +5554,7 @@ async function sendMediaMessage() {
         <!-- Service window expired banner -->
         <div
           v-if="isServiceWindowExpired"
-          class="px-4 py-2.5 border-t border-red-500/20 bg-red-500/10 flex items-center gap-2"
+          class="flex items-center gap-2 border-t border-destructive/20 bg-destructive/10 px-4 py-2.5"
         >
           <Clock class="h-4 w-4 text-red-500 shrink-0" />
           <span class="text-sm text-red-500 flex-1">{{
@@ -5581,7 +5563,7 @@ async function sendMediaMessage() {
           <Button
             variant="outline"
             size="sm"
-            class="border-red-500/30 text-red-500 hover:bg-red-500/10 shrink-0"
+            class="shrink-0 border-destructive/30 text-destructive hover:bg-destructive/10"
             @click="openTemplatePicker"
           >
             {{ $t("chat.sendTemplateAction") }}
@@ -5596,33 +5578,33 @@ async function sendMediaMessage() {
             !isCurrentChatRestricted &&
             !isCurrentChatSendRestricted
           "
-          class="px-4 py-2 border-t border-white/[0.08] light:border-gray-200 bg-white/[0.04] light:bg-gray-50 flex items-center justify-between"
+          class="flex items-center justify-between border-t border-border bg-card/80 px-4 py-2"
         >
           <div class="flex-1 min-w-0">
-            <p class="text-xs font-medium text-white/50 light:text-gray-500">
+            <p class="text-xs font-medium text-muted-foreground">
               Replying to
               {{ getReplyingToAuthorLabel(contactsStore.replyingTo) }}
             </p>
-            <p class="text-sm truncate text-white/70 light:text-gray-700">
+            <p class="truncate text-sm text-foreground/80">
               {{ getMessageContent(contactsStore.replyingTo) || "[Media]" }}
             </p>
           </div>
           <button
-            class="w-6 h-6 rounded hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center shrink-0 transition-colors"
+            class="flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-accent"
             @click="contactsStore.clearReplyingTo"
           >
-            <X class="h-4 w-4 text-white/50 light:text-gray-500" />
+            <X class="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
 
         <!-- Message Input -->
         <div
           v-if="!isCurrentChatClosed && !isCurrentChatRestricted"
-          class="p-4 border-t border-white/[0.08] light:border-gray-200 bg-[#0f0f10] light:bg-white"
+          class="border-t border-border bg-card/95 p-4"
         >
           <div
             v-if="isCurrentChatSendRestricted"
-            class="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 light:border-amber-200 light:bg-amber-50 light:text-amber-700"
+            class="mb-2 rounded-lg border border-accent px-3 py-2 text-xs text-muted-foreground"
           >
             This chat can be viewed without claim, but sending is blocked until
             you claim it.
@@ -5630,16 +5612,16 @@ async function sendMediaMessage() {
 
           <div
             v-if="pendingCannedResponse?.attachments?.length"
-            class="mb-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2"
+            class="mb-2 rounded-lg border border-primary/20 bg-primary/8 p-2"
           >
             <div class="mb-1 flex items-center justify-between">
-              <p class="text-xs text-emerald-200 light:text-emerald-700">
+              <p class="text-xs text-primary">
                 {{ pendingCannedResponse.attachments.length }} canned media
                 attachment(s) ready
               </p>
               <button
                 type="button"
-                class="text-xs text-emerald-300 hover:text-emerald-100 light:text-emerald-700 light:hover:text-emerald-900"
+                class="text-xs text-primary hover:text-foreground"
                 @click="clearPendingCannedAttachments"
               >
                 Clear
@@ -5649,7 +5631,7 @@ async function sendMediaMessage() {
               <div
                 v-for="(attachment, index) in pendingCannedResponse.attachments"
                 :key="attachment.id"
-                class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600/15 px-2 py-1 text-xs text-emerald-100 light:bg-emerald-100 light:text-emerald-800"
+                class="inline-flex items-center gap-1.5 rounded-md bg-primary/12 px-2 py-1 text-xs text-primary"
               >
                 <component
                   :is="getPendingAttachmentIcon(attachment.type)"
@@ -5671,14 +5653,14 @@ async function sendMediaMessage() {
 
           <div
             v-if="isBatchPrintSelectionMode"
-            class="mb-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2"
+            class="mb-2 rounded-lg border border-primary/20 bg-primary/8 px-3 py-2"
           >
             <div class="flex items-center justify-between gap-3">
-              <p class="text-xs text-emerald-200 light:text-emerald-700">
+              <p class="text-xs text-primary">
                 {{ $t("chat.batchPrintSelectionModeDesc") }}
               </p>
               <div class="flex items-center gap-2">
-                <span class="text-xs text-emerald-100 light:text-emerald-800">
+                <span class="text-xs text-primary">
                   {{
                     $t("chat.batchPrintSelectedCount", {
                       count: selectedBatchPrintCount,
@@ -5688,7 +5670,7 @@ async function sendMediaMessage() {
                 <Button
                   variant="ghost"
                   size="xs"
-                  class="h-7 px-2 text-[11px] text-emerald-100 hover:text-emerald-50 light:text-emerald-800 light:hover:text-emerald-900"
+                  class="h-7 px-2 text-[11px] text-primary hover:bg-primary/12 hover:text-foreground"
                   @click="cancelBatchPrintSelection"
                 >
                   {{ $t("common.cancel") }}
@@ -5699,7 +5681,7 @@ async function sendMediaMessage() {
 
           <form
             @submit.prevent="sendMessage"
-            class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200"
+            class="flex items-center gap-2 rounded-xl border border-border bg-background/80 p-2"
             :class="isCurrentChatSendRestricted && 'opacity-70'"
           >
             <Tooltip>
@@ -5710,10 +5692,10 @@ async function sendMediaMessage() {
                       <button
                         type="button"
                         :disabled="isCurrentChatSendRestricted"
-                        class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors"
+                        class="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent"
                       >
                         <Smile
-                          class="w-[18px] h-[18px] text-white/40 light:text-gray-500"
+                          class="h-[18px] w-[18px] text-muted-foreground"
                         />
                       </button>
                     </PopoverTrigger>
@@ -5768,12 +5750,10 @@ async function sendMediaMessage() {
                 <button
                   type="button"
                   :disabled="isCurrentChatSendRestricted"
-                  class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors"
+                  class="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent"
                   @click="openFilePicker"
                 >
-                  <Paperclip
-                    class="w-[18px] h-[18px] text-white/40 light:text-gray-500"
-                  />
+                  <Paperclip class="h-[18px] w-[18px] text-muted-foreground" />
                 </button>
               </TooltipTrigger>
               <TooltipContent>{{ $t("chat.attachFile") }}</TooltipContent>
@@ -5782,7 +5762,7 @@ async function sendMediaMessage() {
               <TooltipTrigger as-child>
                 <button
                   type="button"
-                  class="relative w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                   :disabled="
                     isPreparingBatchPrint ||
                     (isBatchPrintSelectionMode && !canMergeSelectedBubbleFiles)
@@ -5791,21 +5771,21 @@ async function sendMediaMessage() {
                 >
                   <Loader2
                     v-if="isPreparingBatchPrint"
-                    class="w-[18px] h-[18px] text-white/40 light:text-gray-500 animate-spin"
+                    class="h-[18px] w-[18px] animate-spin text-muted-foreground"
                   />
                   <Check
                     v-else-if="isBatchPrintSelectionMode"
-                    class="w-[18px] h-[18px] text-emerald-300 light:text-emerald-600"
+                    class="h-[18px] w-[18px] text-primary"
                   />
                   <Printer
                     v-else
-                    class="w-[18px] h-[18px] text-white/40 light:text-gray-500"
+                    class="h-[18px] w-[18px] text-muted-foreground"
                   />
                   <span
                     v-if="
                       isBatchPrintSelectionMode && selectedBatchPrintCount > 0
                     "
-                    class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-[10px] font-semibold leading-4 text-white text-center"
+                    class="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-center text-[10px] font-semibold leading-4 text-primary-foreground"
                   >
                     {{ selectedBatchPrintCount }}
                   </span>
@@ -5830,14 +5810,14 @@ async function sendMediaMessage() {
               v-model="messageInput"
               :placeholder="$t('chat.typeMessage') + '...'"
               rows="1"
-              class="flex-1 bg-transparent text-[14px] text-white light:text-gray-900 placeholder:text-white/30 light:placeholder:text-gray-400 focus:outline-none resize-none min-h-[36px] max-h-[120px] py-2 overflow-y-auto"
+              class="min-h-[36px] max-h-[120px] flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none"
               :disabled="isCurrentChatSendRestricted || isSending"
               @keydown.enter.exact.prevent="sendMessage"
               @input="autoResizeTextarea"
             />
             <button
               type="submit"
-              class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50"
+              class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               :disabled="
                 isCurrentChatSendRestricted || !canSendMessage || isSending
               "
@@ -6174,7 +6154,7 @@ async function sendMediaMessage() {
                     class="flex flex-1 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors"
                     :class="
                       activeMediaUpload?.id === upload.id
-                        ? 'border-emerald-500/60 bg-emerald-500/10'
+                        ? 'border-primary/45 bg-primary/10'
                         : 'border-border bg-muted/30 hover:bg-muted/60'
                     "
                     :disabled="isUploadingMedia"
@@ -6288,7 +6268,7 @@ async function sendMediaMessage() {
           />
           <div
             v-else
-            class="flex h-48 w-48 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 text-4xl font-semibold text-white"
+            class="flex h-48 w-48 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-blue-600 text-4xl font-semibold text-white"
           >
             {{
               getInitials(
@@ -6313,11 +6293,11 @@ async function sendMediaMessage() {
 <style scoped>
 /* Media group visual connector */
 .media-group-member {
-  border-left: 2px solid rgba(16, 185, 129, 0.35);
+  border-left: 2px solid rgb(var(--primary) / 0.26);
 }
 
 :root.light .media-group-member {
-  border-left-color: rgba(16, 185, 129, 0.25);
+  border-left-color: rgb(var(--primary) / 0.2);
 }
 
 .batch-print-selectable-bubble {
@@ -6325,15 +6305,15 @@ async function sendMediaMessage() {
 }
 
 .batch-print-selectable-bubble:hover {
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 0 0 1px rgb(var(--primary) / 0.28);
 }
 
 .batch-print-selected-bubble {
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 0 2px rgb(var(--primary) / 0.48);
 }
 
 :root.light .batch-print-selected-bubble {
-  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.55);
+  box-shadow: 0 0 0 2px rgb(var(--primary) / 0.42);
 }
 
 .batch-print-bubble-marker {
@@ -6355,8 +6335,8 @@ async function sendMediaMessage() {
 
 .batch-print-bubble-marker--selected {
   color: rgb(236, 253, 245);
-  border-color: rgba(16, 185, 129, 0.95);
-  background: rgb(16, 185, 129);
+  border-color: rgb(var(--primary) / 0.95);
+  background: rgb(var(--primary));
 }
 
 :root.light .batch-print-bubble-marker {

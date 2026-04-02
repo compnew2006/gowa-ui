@@ -1,198 +1,300 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
-import { useConfigStore } from '@/stores/config'
-import { localeDirectionManager } from '@/i18n/locale-direction'
-import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { ref, computed, onMounted } from "vue";
+import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
+import { useAuthStore } from "@/stores/auth";
+import { useConfigStore } from "@/stores/config";
+import { localeDirectionManager } from "@/i18n/locale-direction";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
   Menu,
-  X
-} from 'lucide-vue-next'
-import { wsService } from '@/services/websocket'
-import { authService } from '@/services/api'
-import OrganizationSwitcher from './OrganizationSwitcher.vue'
-import UserMenu from './UserMenu.vue'
-import { navigationItems } from './navigation'
-import NotificationBell from '../NotificationBell.vue'
+  X,
+} from "lucide-vue-next";
+import { wsService } from "@/services/websocket";
+import { authService } from "@/services/api";
+import OrganizationSwitcher from "./OrganizationSwitcher.vue";
+import UserMenu from "./UserMenu.vue";
+import { navigationItems } from "./navigation";
 
-const { locale } = useI18n() // Enable $t() in template
+const { locale } = useI18n(); // Enable $t() in template
 
-const route = useRoute()
-const router = useRouter()
-const authStore = useAuthStore()
-const configStore = useConfigStore()
-const isCollapsed = ref(false)
-const isMobileMenuOpen = ref(false)
-const isRTL = computed(() => localeDirectionManager.isRTL(locale.value))
-const isAdminUser = computed(() =>
-  authStore.user?.is_super_admin === true || (authStore.userRole || '').toLowerCase() === 'admin'
-)
-const isManagerOrAdminUser = computed(() =>
-  authStore.user?.is_super_admin === true ||
-  ['admin', 'manager'].includes((authStore.userRole || '').toLowerCase())
-)
+const route = useRoute();
+const router = useRouter();
+const authStore = useAuthStore();
+const configStore = useConfigStore();
+const SIDEBAR_PINNED_STORAGE_KEY = "layout.sidebarPinnedOpen";
+const pinnedOpen = ref(false);
+const hasDesktopHover = ref(false);
+const hasDesktopFocusWithin = ref(false);
+const isMobileMenuOpen = ref(false);
+const isRTL = computed(() => localeDirectionManager.isRTL(locale.value));
+const isDesktopSidebarExpanded = computed(
+  () =>
+    pinnedOpen.value || hasDesktopHover.value || hasDesktopFocusWithin.value,
+);
+const isSidebarExpanded = computed(
+  () => isMobileMenuOpen.value || isDesktopSidebarExpanded.value,
+);
+const mainContentOffsetClass = computed(() =>
+  isRTL.value ? "md:pr-16" : "md:pl-16",
+);
+const desktopSidebarPositionClass = computed(() =>
+  isRTL.value ? "right-0 border-l" : "left-0 border-r",
+);
+const mobileSidebarClosedClass = computed(() =>
+  isRTL.value ? "translate-x-full md:translate-x-0" : "-translate-x-full md:translate-x-0",
+);
+const isAdminUser = computed(
+  () =>
+    authStore.user?.is_super_admin === true ||
+    (authStore.userRole || "").toLowerCase() === "admin",
+);
+const isManagerOrAdminUser = computed(
+  () =>
+    authStore.user?.is_super_admin === true ||
+    ["admin", "manager"].includes((authStore.userRole || "").toLowerCase()),
+);
 
 // Connect WebSocket on mount using short-lived WS token
 onMounted(() => {
+  try {
+    pinnedOpen.value =
+      window.localStorage.getItem(SIDEBAR_PINNED_STORAGE_KEY) === "true";
+  } catch {
+    pinnedOpen.value = false;
+  }
+
   if (authStore.isAuthenticated) {
     // Load app config (provider & feature flags)
-    configStore.fetchConfig()
+    configStore.fetchConfig();
 
     wsService.connect(async () => {
       try {
-        const resp = await authService.getWSToken()
-        return resp.data.data.token
+        const resp = await authService.getWSToken();
+        return resp.data.data.token;
       } catch {
-        return null
+        return null;
       }
-    })
+    });
   }
-})
+});
 
 // Meta-only nav paths that should be hidden when provider is whatsmeow
-const metaOnlyPaths = new Set(['/templates', '/flows', '/analytics/meta-insights'])
+const metaOnlyPaths = new Set([
+  "/templates",
+  "/flows",
+  "/analytics/meta-insights",
+]);
 // Meta-only child paths within settings
-const metaOnlyChildPaths = new Set(['/settings/accounts'])
+const metaOnlyChildPaths = new Set(["/settings/accounts"]);
 
 // Filter navigation based on user permissions AND provider features
 const navigation = computed(() => {
-  const f = configStore.features
+  const f = configStore.features;
   return navigationItems
-    .filter(item => {
+    .filter((item) => {
       if (item.adminOnly && !isAdminUser.value) {
-        return false
+        return false;
       }
       if (item.managerOrAdminOnly && !isManagerOrAdminUser.value) {
-        return false
+        return false;
       }
       // Hide entire nav items that are Meta-only when provider is whatsmeow
-      if (metaOnlyPaths.has(item.path) && !f.templates && !f.flows && !f.campaigns && !f.meta_insights) {
+      if (
+        metaOnlyPaths.has(item.path) &&
+        !f.templates &&
+        !f.flows &&
+        !f.campaigns &&
+        !f.meta_insights
+      ) {
         // Check specific feature per path
-        if (item.path === '/templates' && !f.templates) return false
-        if (item.path === '/flows' && !f.flows) return false
-        if (item.path === '/campaigns' && !f.campaigns) return false
-        if (item.path === '/analytics/meta-insights' && !f.meta_insights) return false
+        if (item.path === "/templates" && !f.templates) return false;
+        if (item.path === "/flows" && !f.flows) return false;
+        if (item.path === "/campaigns" && !f.campaigns) return false;
+        if (item.path === "/analytics/meta-insights" && !f.meta_insights)
+          return false;
       } else if (metaOnlyPaths.has(item.path)) {
-        if (item.path === '/templates' && !f.templates) return false
-        if (item.path === '/flows' && !f.flows) return false
-        if (item.path === '/campaigns' && !f.campaigns) return false
-        if (item.path === '/analytics/meta-insights' && !f.meta_insights) return false
+        if (item.path === "/templates" && !f.templates) return false;
+        if (item.path === "/flows" && !f.flows) return false;
+        if (item.path === "/campaigns" && !f.campaigns) return false;
+        if (item.path === "/analytics/meta-insights" && !f.meta_insights)
+          return false;
       }
       // Permission-based filter
       if (item.childPermissions) {
-        return item.childPermissions.some(p => authStore.hasPermission(p, 'read'))
+        return item.childPermissions.some((p) =>
+          authStore.hasPermission(p, "read"),
+        );
       }
-      return !item.permission || authStore.hasPermission(item.permission, 'read')
+      return (
+        !item.permission || authStore.hasPermission(item.permission, "read")
+      );
     })
-    .map(item => {
+    .map((item) => {
       // Filter children that are Meta-only
-      let filteredChildren = item.children?.filter(child => {
-        if (metaOnlyChildPaths.has(child.path) && !f.business_profile) return false
-        if (child.adminOnly && !isAdminUser.value) return false
-        if (child.managerOrAdminOnly && !isManagerOrAdminUser.value) return false
-        return !child.permission || authStore.hasPermission(child.permission, 'read')
-      })
+      let filteredChildren = item.children?.filter((child) => {
+        if (metaOnlyChildPaths.has(child.path) && !f.business_profile)
+          return false;
+        if (child.adminOnly && !isAdminUser.value) return false;
+        if (child.managerOrAdminOnly && !isManagerOrAdminUser.value)
+          return false;
+        return (
+          !child.permission || authStore.hasPermission(child.permission, "read")
+        );
+      });
 
-      let effectivePath = item.path
-      if (item.childPermissions && item.permission && !authStore.hasPermission(item.permission, 'read') && filteredChildren?.length) {
-        effectivePath = filteredChildren[0].path
+      let effectivePath = item.path;
+      if (
+        item.childPermissions &&
+        item.permission &&
+        !authStore.hasPermission(item.permission, "read") &&
+        filteredChildren?.length
+      ) {
+        effectivePath = filteredChildren[0].path;
       }
 
-      const originalPath = item.path
-      const isActive = originalPath === '/'
-        ? route.name === 'dashboard'
-        : originalPath === '/chat'
-          ? route.name === 'chat' || route.name === 'chat-conversation'
-          : route.path.startsWith(originalPath)
+      const originalPath = item.path;
+      const isActive =
+        originalPath === "/dashboard"
+          ? route.name === "dashboard"
+          : originalPath === "/chat"
+            ? route.name === "chat" || route.name === "chat-conversation"
+            : route.path.startsWith(originalPath);
 
       return {
         ...item,
         path: effectivePath,
         active: isActive,
-        children: filteredChildren
-      }
-    })
-})
+        children: filteredChildren,
+      };
+    });
+});
 
-const toggleSidebar = () => {
-  isCollapsed.value = !isCollapsed.value
-}
+const persistSidebarPinState = (nextValue: boolean) => {
+  try {
+    window.localStorage.setItem(SIDEBAR_PINNED_STORAGE_KEY, String(nextValue));
+  } catch {
+    // Ignore storage failures and keep the in-memory preference.
+  }
+};
+
+const toggleSidebarPin = () => {
+  pinnedOpen.value = !pinnedOpen.value;
+  persistSidebarPinState(pinnedOpen.value);
+};
+
+const handleDesktopSidebarMouseEnter = () => {
+  hasDesktopHover.value = true;
+};
+
+const handleDesktopSidebarMouseLeave = () => {
+  hasDesktopHover.value = false;
+};
+
+const handleDesktopSidebarFocusIn = () => {
+  hasDesktopFocusWithin.value = true;
+};
+
+const handleDesktopSidebarFocusOut = (event: FocusEvent) => {
+  const currentTarget = event.currentTarget as HTMLElement | null;
+  const nextTarget = event.relatedTarget as Node | null;
+
+  if (currentTarget?.contains(nextTarget)) {
+    return;
+  }
+
+  hasDesktopFocusWithin.value = false;
+};
 
 const handleLogout = async () => {
-  await authStore.logout()
-  router.push('/login')
-}
+  await authStore.logout();
+  router.push("/login");
+};
 </script>
 
 <template>
-  <div class="flex h-screen bg-[#0a0a0b] light:bg-gray-50">
+  <div class="relative h-screen overflow-hidden bg-background text-foreground">
     <!-- Skip link for accessibility -->
-    <a href="#main-content" class="skip-link">{{ $t('nav.skipToMain') }}</a>
+    <a href="#main-content" class="skip-link">{{ $t("nav.skipToMain") }}</a>
 
     <!-- Mobile header -->
-    <header class="fixed top-0 left-0 right-0 z-50 flex h-12 items-center justify-between border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b]/95 light:bg-white/95 backdrop-blur-sm px-3 md:hidden">
+    <header
+      class="fixed top-0 left-0 right-0 z-50 flex h-12 items-center justify-between border-b border-border bg-background/90 px-3 backdrop-blur-sm md:hidden"
+    >
       <RouterLink to="/" class="flex items-center gap-2">
-        <div class="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+        <div
+          class="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
+        >
           <MessageSquare class="h-4 w-4 text-white" />
         </div>
-        <span class="font-semibold text-sm text-white light:text-gray-900">Whatomate</span>
+        <span class="text-sm font-semibold text-foreground">Whatomate</span>
       </RouterLink>
-      <div class="flex items-center gap-1">
-        <NotificationBell />
-        <Button
-          variant="ghost"
-          size="icon"
-          class="h-8 w-8 text-white/70 hover:text-white hover:bg-white/[0.08] light:text-gray-600 light:hover:text-gray-900 light:hover:bg-gray-100"
-          aria-label="Toggle menu"
-          :aria-expanded="isMobileMenuOpen"
-          @click="isMobileMenuOpen = !isMobileMenuOpen"
-        >
-          <X v-if="isMobileMenuOpen" class="h-5 w-5" />
-          <Menu v-else class="h-5 w-5" />
-        </Button>
-      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent"
+        aria-label="Toggle menu"
+        :aria-expanded="isMobileMenuOpen"
+        @click="isMobileMenuOpen = !isMobileMenuOpen"
+      >
+        <X v-if="isMobileMenuOpen" class="h-5 w-5" />
+        <Menu v-else class="h-5 w-5" />
+      </Button>
     </header>
 
     <!-- Mobile menu overlay -->
     <div
       v-if="isMobileMenuOpen"
+      data-testid="mobile-menu-overlay"
       class="fixed inset-0 z-40 bg-black/60 light:bg-black/30 backdrop-blur-sm md:hidden"
       @click="isMobileMenuOpen = false"
     />
 
     <!-- Sidebar -->
     <aside
+      data-testid="app-sidebar"
+      :data-sidebar-state="isSidebarExpanded ? 'expanded' : 'collapsed'"
+      :data-sidebar-pinned="pinnedOpen ? 'true' : 'false'"
       :class="[
-        'flex flex-col border-r border-white/[0.08] light:border-gray-200 bg-[#0a0a0b] light:bg-white transition-all duration-300',
-        'fixed inset-y-0 left-0 z-40 md:relative',
-        'transform md:transform-none',
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
-        isCollapsed ? 'w-64 md:w-16' : 'w-64'
+        'group/sidebar fixed inset-y-0 z-40 flex flex-col overflow-hidden border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-300 ease-out',
+        desktopSidebarPositionClass,
+        isMobileMenuOpen
+          ? 'translate-x-0'
+          : mobileSidebarClosedClass,
+        isSidebarExpanded ? 'w-64 shadow-2xl md:shadow-none' : 'w-16',
       ]"
       role="navigation"
       aria-label="Main navigation"
+      @mouseenter="handleDesktopSidebarMouseEnter"
+      @mouseleave="handleDesktopSidebarMouseLeave"
+      @focusin="handleDesktopSidebarFocusIn"
+      @focusout="handleDesktopSidebarFocusOut"
     >
       <!-- Logo (hidden on mobile, shown in header instead) -->
-      <div class="hidden md:flex h-12 items-center px-3 border-b border-white/[0.08] light:border-gray-200 relative">
+      <div
+        class="relative hidden h-12 items-center border-b border-sidebar-border px-3 md:flex"
+      >
         <RouterLink
           to="/"
           :class="[
-            'flex items-center gap-2',
-            isCollapsed && 'mx-auto'
+            'flex min-w-0 items-center gap-2 overflow-hidden',
+            isSidebarExpanded ? 'pr-8' : 'mx-auto',
           ]"
         >
-          <div class="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <div
+            class="flex h-7 w-7 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+          >
             <MessageSquare class="h-4 w-4 text-white" />
           </div>
           <span
-            v-if="!isCollapsed"
-            class="font-semibold text-sm text-white light:text-gray-900"
+            :class="[
+              'overflow-hidden whitespace-nowrap text-sm font-semibold text-sidebar-foreground transition-[max-width,opacity] duration-200',
+              isSidebarExpanded ? 'max-w-32 opacity-100' : 'max-w-0 opacity-0',
+            ]"
           >
             Whatomate
           </span>
@@ -200,23 +302,29 @@ const handleLogout = async () => {
         <Button
           variant="ghost"
           size="icon"
-          class="absolute right-2 h-7 w-7 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-400 light:hover:text-gray-900 light:hover:bg-gray-100"
-          :aria-label="isCollapsed ? $t('nav.expandSidebar') : $t('nav.collapseSidebar')"
-          :aria-expanded="!isCollapsed"
-          @click="toggleSidebar"
+          data-testid="sidebar-pin-toggle"
+          :class="[
+            'absolute h-7 w-7 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+            isRTL ? 'left-2' : 'right-2',
+          ]"
+          :aria-label="
+            pinnedOpen ? $t('nav.collapseSidebar') : $t('nav.expandSidebar')
+          "
+          :aria-expanded="isSidebarExpanded"
+          @click="toggleSidebarPin"
         >
-          <ChevronLeft v-if="!isCollapsed" class="h-3.5 w-3.5" />
-          <ChevronRight v-else class="h-3.5 w-3.5" />
+          <ChevronRight
+            v-if="(isRTL && pinnedOpen) || (!isRTL && !pinnedOpen)"
+            class="h-3.5 w-3.5"
+          />
+          <ChevronLeft v-else class="h-3.5 w-3.5" />
         </Button>
-        <div class="absolute right-10">
-          <NotificationBell />
-        </div>
       </div>
       <!-- Mobile logo spacer -->
       <div class="h-12 md:hidden" />
 
       <!-- Organization Switcher (Super Admin only) -->
-      <OrganizationSwitcher :collapsed="isCollapsed" />
+      <OrganizationSwitcher :expanded="isSidebarExpanded" />
 
       <!-- Navigation -->
       <ScrollArea class="flex-1 py-2">
@@ -227,21 +335,26 @@ const handleLogout = async () => {
               :class="[
                 'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200',
                 item.active
-                  ? 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'
-                  : 'text-white/50 hover:text-white hover:bg-white/[0.04] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-50',
-                isCollapsed && 'md:justify-center md:px-2',
-                isRTL && !isCollapsed && 'text-right flex-row-reverse'
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground',
+                !isSidebarExpanded && 'justify-center px-2.5',
+                isRTL && isSidebarExpanded && 'text-right flex-row-reverse',
               ]"
               role="menuitem"
               :aria-current="item.active ? 'page' : undefined"
+              :title="!isSidebarExpanded ? $t(item.name) : undefined"
               @click="isMobileMenuOpen = false"
             >
-              <component :is="item.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
+              <component
+                :is="item.icon"
+                class="h-4 w-4 shrink-0"
+                aria-hidden="true"
+              />
               <span
                 :class="[
-                  isCollapsed && 'md:sr-only',
-                  !isCollapsed && 'flex-1',
-                  isRTL && !isCollapsed ? 'text-right' : 'text-left'
+                  'overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200',
+                  isSidebarExpanded ? 'max-w-40 flex-1 opacity-100' : 'max-w-0 opacity-0',
+                  isRTL && isSidebarExpanded ? 'text-right' : 'text-left',
                 ]"
               >
                 {{ $t(item.name) }}
@@ -249,7 +362,7 @@ const handleLogout = async () => {
             </RouterLink>
 
             <!-- Submenu items -->
-            <template v-if="item.children && item.active && !isCollapsed">
+            <template v-if="item.children && item.active && isSidebarExpanded">
               <RouterLink
                 v-for="child in item.children"
                 :key="child.path"
@@ -258,15 +371,21 @@ const handleLogout = async () => {
                   'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-all duration-200',
                   isRTL ? 'mr-4 text-right flex-row-reverse' : 'ml-4 text-left',
                   route.path === child.path
-                    ? 'bg-white/[0.06] text-white light:bg-gray-100 light:text-gray-900'
-                    : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04] light:text-gray-400 light:hover:text-gray-700 light:hover:bg-gray-50'
+                    ? 'bg-sidebar-accent/80 text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground/55 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
                 ]"
                 role="menuitem"
                 :aria-current="route.path === child.path ? 'page' : undefined"
                 @click="isMobileMenuOpen = false"
               >
-                <component :is="child.icon" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span :class="['flex-1', isRTL ? 'text-right' : 'text-left']">{{ $t(child.name) }}</span>
+                <component
+                  :is="child.icon"
+                  class="h-3.5 w-3.5 shrink-0"
+                  aria-hidden="true"
+                />
+                <span :class="['flex-1', isRTL ? 'text-right' : 'text-left']">{{
+                  $t(child.name)
+                }}</span>
               </RouterLink>
             </template>
           </template>
@@ -274,11 +393,18 @@ const handleLogout = async () => {
       </ScrollArea>
 
       <!-- User Menu -->
-      <UserMenu :collapsed="isCollapsed" @logout="handleLogout" />
+      <UserMenu :expanded="isSidebarExpanded" @logout="handleLogout" />
     </aside>
 
     <!-- Main content -->
-    <main id="main-content" class="flex-1 overflow-hidden pt-12 md:pt-0 bg-[#0a0a0b] light:bg-gray-50" role="main">
+    <main
+      id="main-content"
+      :class="[
+        'h-full overflow-hidden bg-background pt-12 md:pt-0',
+        mainContentOffsetClass,
+      ]"
+      role="main"
+    >
       <RouterView />
     </main>
   </div>

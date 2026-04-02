@@ -95,7 +95,7 @@ test.describe('Language Switching', () => {
       await page.waitForLoadState('networkidle')
 
       // Open user menu popover (in sidebar)
-      const userMenuButton = page.locator('aside').getByRole('button').filter({ hasText: /@/ }).first()
+      const userMenuButton = page.getByTestId('sidebar-user-menu-trigger')
       await userMenuButton.click()
 
       // The popover is portaled by Radix outside aside
@@ -108,7 +108,7 @@ test.describe('Language Switching', () => {
       await page.waitForLoadState('networkidle')
 
       // Open user menu
-      const userMenuButton = page.locator('aside').getByRole('button').filter({ hasText: /@/ }).first()
+      const userMenuButton = page.getByTestId('sidebar-user-menu-trigger')
       await userMenuButton.click()
 
       // The language switcher is in the popover that appears in the sidebar area
@@ -141,7 +141,9 @@ test.describe('Language Switching', () => {
       await page.locator('[role="option"]').filter({ hasText: 'Español' }).click()
 
       // Sidebar nav items should be in Spanish
-      const sidebar = page.locator('aside')
+      const sidebar = page.getByTestId('app-sidebar')
+      await sidebar.hover()
+      await expect(sidebar).toHaveAttribute('data-sidebar-state', 'expanded')
       await expect(sidebar.getByText('Panel')).toBeVisible() // Dashboard -> Panel
       await expect(sidebar.getByText('Configuración')).toBeVisible() // Settings -> Configuración
     })

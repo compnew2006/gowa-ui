@@ -1,60 +1,65 @@
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted } from "vue";
 
-export type ColorMode = 'light' | 'dark' | 'system'
+export type ColorMode = "light" | "dark" | "system";
 
-const colorMode = ref<ColorMode>('dark')
-const isDark = ref(true)
+const colorMode = ref<ColorMode>("system");
+const isDark = ref(false);
+let mediaListenerAttached = false;
 
 function getSystemTheme(): boolean {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function applyTheme(dark: boolean) {
+  document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.classList.toggle("light", !dark);
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
 }
 
 function updateTheme() {
-  if (colorMode.value === 'system') {
-    isDark.value = getSystemTheme()
+  if (colorMode.value === "system") {
+    isDark.value = getSystemTheme();
   } else {
-    isDark.value = colorMode.value === 'dark'
+    isDark.value = colorMode.value === "dark";
   }
 
-  // Dark-first: we use .light class for light mode, .dark class for dark mode
-  if (isDark.value) {
-    document.documentElement.classList.remove('light')
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-    document.documentElement.classList.add('light')
+  applyTheme(isDark.value);
+}
+
+function ensureSystemListener() {
+  if (mediaListenerAttached) {
+    return;
   }
+
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  mediaQuery.addEventListener("change", () => {
+    if (colorMode.value === "system") {
+      updateTheme();
+    }
+  });
+  mediaListenerAttached = true;
 }
 
 export function useColorMode() {
   onMounted(() => {
-    // Load saved preference
-    const saved = localStorage.getItem('color-mode') as ColorMode | null
-    if (saved) {
-      colorMode.value = saved
-    }
-    updateTheme()
-
-    // Listen for system theme changes
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      if (colorMode.value === 'system') {
-        updateTheme()
-      }
-    })
-  })
+    const saved = localStorage.getItem("color-mode") as ColorMode | null;
+    colorMode.value = saved ?? "system";
+    ensureSystemListener();
+    updateTheme();
+  });
 
   watch(colorMode, (newMode) => {
-    localStorage.setItem('color-mode', newMode)
-    updateTheme()
-  })
+    localStorage.setItem("color-mode", newMode);
+    updateTheme();
+  });
 
   function setColorMode(mode: ColorMode) {
-    colorMode.value = mode
+    colorMode.value = mode;
   }
 
   return {
     colorMode,
     isDark,
-    setColorMode
-  }
+    setColorMode,
+  };
 }

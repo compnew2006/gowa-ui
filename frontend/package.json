@@ -21,6 +21,7 @@
     "test:report": "playwright show-report"
   },
   "dependencies": {
+    "@fontsource/open-sans": "^5.2.7",
     "@radix-icons/vue": "^1.0.0",
     "@tanstack/vue-query": "^5.17.0",
     "@vee-validate/zod": "^4.15.1",

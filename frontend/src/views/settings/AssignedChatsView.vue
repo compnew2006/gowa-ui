@@ -1,52 +1,57 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { UserCheck } from 'lucide-vue-next'
-import { PageHeader } from '@/components/shared'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { useContactsStore, type Contact } from '@/stores/contacts'
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { UserCheck } from "lucide-vue-next";
+import { PageHeader } from "@/components/shared";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { useContactsStore, type Contact } from "@/stores/contacts";
 
-const router = useRouter()
-const contactsStore = useContactsStore()
-const isLoading = ref(false)
-const searchQuery = ref('')
+const router = useRouter();
+const contactsStore = useContactsStore();
+const isLoading = ref(false);
+const searchQuery = ref("");
 
 const filteredAssignedChats = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
-  if (!query) return contactsStore.assignedChats
-  return contactsStore.assignedChats.filter(chat =>
-    (chat.name || '').toLowerCase().includes(query) ||
-    (chat.phone_number || '').toLowerCase().includes(query) ||
-    (chat.assigned_user_id || '').toLowerCase().includes(query)
-  )
-})
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) return contactsStore.assignedChats;
+  return contactsStore.assignedChats.filter(
+    (chat) =>
+      (chat.name || "").toLowerCase().includes(query) ||
+      (chat.phone_number || "").toLowerCase().includes(query) ||
+      (chat.assigned_user_id || "").toLowerCase().includes(query),
+  );
+});
 
 function formatDate(value?: string): string {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString()
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString();
 }
 
 async function loadAssignedChats() {
-  isLoading.value = true
+  isLoading.value = true;
   try {
-    await contactsStore.fetchAssignedChats({ limit: 200 })
+    await contactsStore.fetchAssignedChats({ limit: 200 });
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
 }
 
 function openAssignedChat(chat: Contact) {
-  router.push({ name: 'chat-conversation', params: { contactId: chat.id }, query: { tab: 'assigned' } })
+  router.push({
+    name: "chat-conversation",
+    params: { contactId: chat.id },
+    query: { tab: "assigned" },
+  });
 }
 
-onMounted(loadAssignedChats)
+onMounted(loadAssignedChats);
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
       title="Assigned Chats"
       subtitle="Active chats that are currently assigned to agents."
@@ -61,23 +66,46 @@ onMounted(loadAssignedChats)
           placeholder="Search assigned chats..."
           class="max-w-md bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-white light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
         />
-        <Button variant="outline" :disabled="isLoading" @click="loadAssignedChats">
-          {{ isLoading ? 'Refreshing...' : 'Refresh' }}
+        <Button
+          variant="outline"
+          :disabled="isLoading"
+          @click="loadAssignedChats"
+        >
+          {{ isLoading ? "Refreshing..." : "Refresh" }}
         </Button>
       </div>
 
-      <div class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200 overflow-hidden">
+      <div
+        class="rounded-[calc(var(--radius)+0.25rem)] overflow-hidden border border-border bg-card/95 shadow-sm"
+      >
         <table class="w-full text-sm">
           <thead class="bg-white/[0.04] light:bg-gray-50">
             <tr>
-              <th class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700">Contact Name</th>
-              <th class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700">Assigned User</th>
-              <th class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700">Last Activity</th>
+              <th
+                class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
+              >
+                Contact Name
+              </th>
+              <th
+                class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
+              >
+                Assigned User
+              </th>
+              <th
+                class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
+              >
+                Last Activity
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="isLoading">
-              <td colspan="3" class="px-4 py-8 text-center text-white/50 light:text-gray-500">Loading assigned chats...</td>
+              <td
+                colspan="3"
+                class="px-4 py-8 text-center text-white/50 light:text-gray-500"
+              >
+                Loading assigned chats...
+              </td>
             </tr>
             <tr
               v-for="chat in filteredAssignedChats"
@@ -86,14 +114,27 @@ onMounted(loadAssignedChats)
               @click="openAssignedChat(chat)"
             >
               <td class="px-4 py-3 text-white light:text-gray-900">
-                <div class="font-medium">{{ chat.name || chat.profile_name || chat.phone_number }}</div>
-                <div class="text-xs text-white/50 light:text-gray-500">{{ chat.phone_number }}</div>
+                <div class="font-medium">
+                  {{ chat.name || chat.profile_name || chat.phone_number }}
+                </div>
+                <div class="text-xs text-white/50 light:text-gray-500">
+                  {{ chat.phone_number }}
+                </div>
               </td>
-              <td class="px-4 py-3 text-white/80 light:text-gray-700">{{ chat.assigned_user_id || '—' }}</td>
-              <td class="px-4 py-3 text-white/80 light:text-gray-700">{{ formatDate(chat.last_message_at || chat.updated_at) }}</td>
+              <td class="px-4 py-3 text-white/80 light:text-gray-700">
+                {{ chat.assigned_user_id || "—" }}
+              </td>
+              <td class="px-4 py-3 text-white/80 light:text-gray-700">
+                {{ formatDate(chat.last_message_at || chat.updated_at) }}
+              </td>
             </tr>
             <tr v-if="!isLoading && filteredAssignedChats.length === 0">
-              <td colspan="3" class="px-4 py-8 text-center text-white/50 light:text-gray-500">No assigned chats found.</td>
+              <td
+                colspan="3"
+                class="px-4 py-8 text-center text-white/50 light:text-gray-500"
+              >
+                No assigned chats found.
+              </td>
             </tr>
           </tbody>
         </table>

@@ -14,7 +14,7 @@ test.describe('Dashboard Widget Permissions', () => {
   test.describe('Admin User (with full permissions)', () => {
     test.beforeEach(async ({ page }) => {
       await loginAsAdmin(page)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
     })
 
@@ -84,7 +84,7 @@ test.describe('Dashboard Widget Permissions', () => {
 
     test('user with analytics:write can see Add Widget button', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       const addButton = page.locator('button').filter({ hasText: /Add Widget/i })
@@ -93,7 +93,7 @@ test.describe('Dashboard Widget Permissions', () => {
 
     test('user with analytics:write can see edit button on widget hover', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       // Wait for widgets to load
@@ -152,7 +152,7 @@ test.describe('Dashboard Widget Permissions', () => {
 
     test('user with analytics:delete can see delete button on widget hover', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       // Wait for widgets to load
@@ -169,7 +169,7 @@ test.describe('Dashboard Widget Permissions', () => {
 
     test('user with analytics:delete but NOT analytics:write cannot see Add Widget button', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       const addButton = page.locator('button').filter({ hasText: /Add Widget/i })
@@ -178,7 +178,7 @@ test.describe('Dashboard Widget Permissions', () => {
 
     test('user with analytics:delete but NOT analytics:write cannot see edit button', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       // Wait for widgets to load
@@ -234,9 +234,14 @@ test.describe('Dashboard Widget Permissions', () => {
       if (roleId) await api.deleteRole(roleId).catch(() => {})
     })
 
+    test('user with only analytics:read lands on /dashboard after login', async ({ page }) => {
+      await loginWithCredentials(page, userEmail, userPassword)
+      await expect(page).toHaveURL(/\/dashboard$/)
+    })
+
     test('user with only analytics:read cannot see Add Widget button', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       const addButton = page.locator('button').filter({ hasText: /Add Widget/i })
@@ -245,7 +250,7 @@ test.describe('Dashboard Widget Permissions', () => {
 
     test('user with only analytics:read cannot see edit button on widget hover', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       // Wait for widgets to load
@@ -262,7 +267,7 @@ test.describe('Dashboard Widget Permissions', () => {
 
     test('user with only analytics:read cannot see delete button on widget hover', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       // Wait for widgets to load
@@ -279,7 +284,7 @@ test.describe('Dashboard Widget Permissions', () => {
 
     test('user with only analytics:read can still view dashboard and widgets', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       // Should see dashboard
@@ -336,7 +341,7 @@ test.describe('Dashboard Widget Permissions', () => {
 
     test('user with full analytics permissions can see all widget controls', async ({ page }) => {
       await loginWithCredentials(page, userEmail, userPassword)
-      await page.goto('/')
+      await page.goto('/dashboard')
       await page.waitForLoadState('networkidle')
 
       // Should see Add Widget button

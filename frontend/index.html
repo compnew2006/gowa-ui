@@ -1,21 +1,21 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Whatomate - WhatsApp Business Platform">
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Whatomate - WhatsApp Business Platform" />
     <title>Whatomate</title>
     <script>
       (function () {
-        var mode = localStorage.getItem("color-mode");
+        var mode = localStorage.getItem("color-mode") || "system";
         var isDark =
           mode === "dark" ||
-          ((mode === "system" || !mode) &&
+          (mode === "system" &&
             window.matchMedia("(prefers-color-scheme: dark)").matches);
-        if (isDark) {
-          document.documentElement.classList.add("dark");
-        }
+        document.documentElement.classList.toggle("dark", isDark);
+        document.documentElement.classList.toggle("light", !isDark);
+        document.documentElement.style.colorScheme = isDark ? "dark" : "light";
       })();
     </script>
   </head>

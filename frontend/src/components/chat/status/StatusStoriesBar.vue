@@ -1,129 +1,138 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { toast } from 'vue-sonner'
-import { ChevronDown, Plus, RefreshCw } from 'lucide-vue-next'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Button } from '@/components/ui/button'
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { toast } from "vue-sonner";
+import { ChevronDown, Plus, RefreshCw } from "lucide-vue-next";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+} from "@/components/ui/collapsible";
+import NotificationBell from "@/components/NotificationBell.vue";
 import {
   statusesService,
   type WhatsAppStatusGroup,
   type WhatsAppStatusesListPayload,
-} from '@/services/api'
-import StatusComposerDialog from './StatusComposerDialog.vue'
-import StatusViewerDialog from './StatusViewerDialog.vue'
+} from "@/services/api";
+import StatusComposerDialog from "./StatusComposerDialog.vue";
+import StatusViewerDialog from "./StatusViewerDialog.vue";
 
 type InstanceOption = {
-  id: string
-  name: string
-  status?: string
-}
+  id: string;
+  name: string;
+  status?: string;
+};
 
 const props = defineProps<{
-  instances: InstanceOption[]
-}>()
+  instances: InstanceOption[];
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const groups = ref<WhatsAppStatusGroup[]>([])
-const viewerGroups = ref<WhatsAppStatusGroup[]>([])
-const isLoading = ref(false)
-const isComposerOpen = ref(false)
-const isViewerOpen = ref(false)
-let refreshTimer: ReturnType<typeof setInterval> | null = null
+const groups = ref<WhatsAppStatusGroup[]>([]);
+const viewerGroups = ref<WhatsAppStatusGroup[]>([]);
+const isLoading = ref(false);
+const isComposerOpen = ref(false);
+const isViewerOpen = ref(false);
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const connectedInstances = computed(() =>
   props.instances.filter((instance) => {
-    const status = String(instance.status || '').toLowerCase()
-    return status === 'connected' || status === 'connecting'
+    const status = String(instance.status || "").toLowerCase();
+    return status === "connected" || status === "connecting";
   }),
-)
+);
 
-const selfGroup = computed(() => groups.value.find((group) => group.is_self) || null)
-const otherGroups = computed(() => groups.value.filter((group) => !group.is_self))
-const totalGroups = computed(() => groups.value.length)
-const isDrawerOpen = ref(false)
+const selfGroup = computed(
+  () => groups.value.find((group) => group.is_self) || null,
+);
+const otherGroups = computed(() =>
+  groups.value.filter((group) => !group.is_self),
+);
+const totalGroups = computed(() => groups.value.length);
+const isDrawerOpen = ref(false);
 
 function getGroupInstanceLabel(group: WhatsAppStatusGroup): string {
-  const instanceName = String(group.instance_name || '').trim()
-  if (instanceName) return instanceName
-  const instanceID = String(group.instance_id || '').trim()
-  return instanceID ? `Instance ${instanceID.slice(0, 8)}` : 'Unknown Instance'
+  const instanceName = String(group.instance_name || "").trim();
+  if (instanceName) return instanceName;
+  const instanceID = String(group.instance_id || "").trim();
+  return instanceID ? `Instance ${instanceID.slice(0, 8)}` : "Unknown Instance";
 }
 
 function toggleDrawerFromBar(event: MouseEvent) {
-  const target = event.target as HTMLElement | null
+  const target = event.target as HTMLElement | null;
   if (target?.closest('[data-status-interactive="true"]')) {
-    return
+    return;
   }
-  isDrawerOpen.value = !isDrawerOpen.value
+  isDrawerOpen.value = !isDrawerOpen.value;
 }
 
 async function loadStatuses() {
-  isLoading.value = true
+  isLoading.value = true;
   try {
-    const response = await statusesService.list()
+    const response = await statusesService.list();
     const payload: WhatsAppStatusesListPayload =
-      'data' in response.data ? response.data.data : response.data
-    groups.value = Array.isArray(payload.groups) ? payload.groups : []
+      "data" in response.data ? response.data.data : response.data;
+    groups.value = Array.isArray(payload.groups) ? payload.groups : [];
   } catch (error: any) {
     const message =
-      error?.response?.data?.message || error?.message || t('chat.statusLoadFailed')
-    toast.error(message)
+      error?.response?.data?.message ||
+      error?.message ||
+      t("chat.statusLoadFailed");
+    toast.error(message);
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
 }
 
 function openViewer(group: WhatsAppStatusGroup) {
-  const remaining = groups.value.filter((entry) => entry.group_id !== group.group_id)
-  viewerGroups.value = [group, ...remaining]
-  isViewerOpen.value = true
+  const remaining = groups.value.filter(
+    (entry) => entry.group_id !== group.group_id,
+  );
+  viewerGroups.value = [group, ...remaining];
+  isViewerOpen.value = true;
 }
 
 function openComposer() {
   if (connectedInstances.value.length === 0) {
-    toast.error(t('chat.noConnectedInstances'))
-    return
+    toast.error(t("chat.noConnectedInstances"));
+    return;
   }
-  isComposerOpen.value = true
+  isComposerOpen.value = true;
 }
 
 onMounted(() => {
-  void loadStatuses()
+  void loadStatuses();
   refreshTimer = setInterval(() => {
-    void loadStatuses()
-  }, 45000)
-})
+    void loadStatuses();
+  }, 45000);
+});
 
 onBeforeUnmount(() => {
   if (refreshTimer) {
-    clearInterval(refreshTimer)
-    refreshTimer = null
+    clearInterval(refreshTimer);
+    refreshTimer = null;
   }
-})
+});
 </script>
 
 <template>
   <div
-    class="border-b border-white/[0.08] px-2 py-2 light:border-gray-200"
+    class="border-b border-sidebar-border px-2 py-2"
     data-testid="status-stories-bar"
     @click="toggleDrawerFromBar"
   >
     <Collapsible v-model:open="isDrawerOpen">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <p class="text-xs font-medium text-white/60 light:text-gray-600">
-            {{ $t('chat.statuses') }}
+          <p class="text-xs font-medium text-sidebar-foreground/65">
+            {{ $t("chat.statuses") }}
           </p>
           <span
             v-if="totalGroups > 0"
-            class="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300 light:bg-emerald-100 light:text-emerald-700"
+            class="rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
           >
             {{ totalGroups }}
           </span>
@@ -132,15 +141,21 @@ onBeforeUnmount(() => {
           <Button
             size="icon"
             variant="ghost"
-            class="h-6 w-6 text-white/50 hover:text-white light:text-gray-500 light:hover:text-gray-900"
+            class="h-6 w-6 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             :aria-label="$t('common.refresh')"
             data-status-interactive="true"
             @click="loadStatuses"
           >
-            <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': isLoading }" />
+            <RefreshCw
+              class="h-3.5 w-3.5"
+              :class="{ 'animate-spin': isLoading }"
+            />
           </Button>
+          <div data-status-interactive="true">
+            <NotificationBell compact />
+          </div>
           <CollapsibleTrigger
-            class="inline-flex h-6 w-6 items-center justify-center rounded-md text-white/50 transition-colors hover:text-white light:text-gray-500 light:hover:text-gray-900"
+            class="inline-flex h-6 w-6 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             :aria-label="$t('chat.statuses')"
             data-testid="status-drawer-toggle"
             data-status-interactive="true"
@@ -163,14 +178,16 @@ onBeforeUnmount(() => {
             @click="openComposer"
           >
             <div class="relative">
-              <Avatar class="h-10 w-10 ring-2 ring-dashed ring-emerald-400/70">
-                <AvatarFallback class="bg-emerald-500/15 text-emerald-400">
+              <Avatar class="h-10 w-10 ring-2 ring-dashed ring-primary/70">
+                <AvatarFallback class="bg-primary/12 text-primary">
                   <Plus class="h-4 w-4" />
                 </AvatarFallback>
               </Avatar>
             </div>
-            <p class="mt-1 w-12 truncate text-center text-[10px] text-white/60 light:text-gray-600">
-              {{ selfGroup ? $t('chat.myStatus') : $t('chat.addStatus') }}
+            <p
+              class="mt-1 w-12 truncate text-center text-[10px] text-sidebar-foreground/65"
+            >
+              {{ selfGroup ? $t("chat.myStatus") : $t("chat.addStatus") }}
             </p>
           </button>
 
@@ -183,16 +200,24 @@ onBeforeUnmount(() => {
             :title="`${group.sender_name || group.sender_jid} • ${getGroupInstanceLabel(group)}`"
             @click="openViewer(group)"
           >
-            <Avatar class="h-10 w-10 ring-2 ring-emerald-400/80 ring-offset-1 ring-offset-transparent">
-              <AvatarFallback class="bg-slate-700 text-xs text-white">
-                {{ (group.sender_name || group.sender_jid).slice(0, 1).toUpperCase() }}
+            <Avatar
+              class="h-10 w-10 ring-2 ring-primary/75 ring-offset-1 ring-offset-transparent"
+            >
+              <AvatarFallback
+                class="bg-sidebar-accent text-xs text-sidebar-foreground"
+              >
+                {{
+                  (group.sender_name || group.sender_jid)
+                    .slice(0, 1)
+                    .toUpperCase()
+                }}
               </AvatarFallback>
             </Avatar>
             <div class="mt-1 w-16 text-center leading-tight">
-              <p class="truncate text-[10px] text-white/70 light:text-gray-700">
+              <p class="truncate text-[10px] text-sidebar-foreground/80">
                 {{ group.sender_name || group.sender_jid }}
               </p>
-              <p class="truncate text-[9px] text-white/45 light:text-gray-500">
+              <p class="truncate text-[9px] text-sidebar-foreground/55">
                 {{ getGroupInstanceLabel(group) }}
               </p>
             </div>

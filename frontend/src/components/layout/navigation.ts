@@ -40,7 +40,7 @@ export interface NavItem {
 export const navigationItems: NavItem[] = [
   {
     name: "nav.dashboard",
-    path: "/",
+    path: "/dashboard",
     icon: LayoutDashboard,
     permission: "analytics",
   },

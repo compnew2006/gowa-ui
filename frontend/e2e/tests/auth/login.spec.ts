@@ -16,9 +16,10 @@ test.describe('Login', () => {
     await expect(loginPage.submitButton).toBeVisible()
   })
 
-  test('should login successfully with valid credentials', async () => {
+  test('should login successfully with valid credentials', async ({ page }) => {
     await loginPage.login(TEST_USERS.admin.email, TEST_USERS.admin.password)
     await loginPage.expectLoginSuccess()
+    await expect(page).toHaveURL(/\/chat(?:\/.*)?$/)
   })
 
   test('should show error with invalid credentials', async () => {
@@ -62,11 +63,10 @@ test.describe('Authentication Redirect', () => {
     await expect(page).toHaveURL(/\/login/)
   })
 
-  test('should redirect to dashboard after login', async ({ page }) => {
+  test('should redirect chat-capable users to chat after login', async ({ page }) => {
     const loginPage = new LoginPage(page)
     await loginPage.goto()
     await loginPage.login(TEST_USERS.admin.email, TEST_USERS.admin.password)
-    // Should be on dashboard or chat
-    await expect(page).toHaveURL(/\/(dashboard|chat)?/)
+    await expect(page).toHaveURL(/\/chat(?:\/.*)?$/)
   })
 })

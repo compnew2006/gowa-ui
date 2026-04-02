@@ -19,9 +19,13 @@ import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/lib/api-utils'
 import { Building2, Plus, Loader2, Trash2 } from 'lucide-vue-next'
 
-defineProps<{
+const props = withDefaults(defineProps<{
+  expanded?: boolean
   collapsed?: boolean
-}>()
+}>(), {
+  expanded: undefined,
+  collapsed: false,
+})
 
 const { t } = useI18n()
 const organizationsStore = useOrganizationsStore()
@@ -49,6 +53,7 @@ const currentOrgId = computed(() => {
   }
   return authStore.user?.organization_id || ''
 })
+const isExpanded = computed(() => props.expanded ?? !props.collapsed)
 
 onMounted(async () => {
   // Fetch user's org memberships for all authenticated users
@@ -174,8 +179,12 @@ const refreshOrgs = async () => {
 </script>
 
 <template>
-  <div v-if="shouldShowSwitcher" class="px-2 py-2 border-b">
-    <div v-if="!collapsed" class="space-y-1">
+  <div
+    v-if="shouldShowSwitcher"
+    data-testid="org-switcher"
+    class="border-b border-sidebar-border px-2 py-2"
+  >
+    <div v-if="isExpanded" class="space-y-1">
       <div class="flex items-center justify-between">
         <span class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide px-1">
           Organization

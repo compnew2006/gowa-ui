@@ -1,18 +1,24 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button'
-import { Sun, Moon, Monitor } from 'lucide-vue-next'
-import { useColorMode } from '@/composables/useColorMode'
+import { Button } from "@/components/ui/button";
+import { Sun, Moon, Monitor } from "lucide-vue-next";
+import { useColorMode } from "@/composables/useColorMode";
 
-const { colorMode, setColorMode } = useColorMode()
+const { colorMode, setColorMode } = useColorMode();
 </script>
 
 <template>
-  <div class="flex gap-0.5 px-1.5 py-1" role="radiogroup" aria-label="Color theme">
+  <div
+    class="flex gap-1 rounded-full border border-border bg-muted/60 p-1"
+    role="radiogroup"
+    aria-label="Color theme"
+  >
     <Button
       variant="ghost"
       size="icon"
       class="h-7 w-7"
-      :class="colorMode === 'light' && 'bg-accent'"
+      :class="
+        colorMode === 'light' && 'bg-background text-foreground shadow-sm'
+      "
       :aria-checked="colorMode === 'light'"
       aria-label="Light theme"
       role="radio"
@@ -24,7 +30,7 @@ const { colorMode, setColorMode } = useColorMode()
       variant="ghost"
       size="icon"
       class="h-7 w-7"
-      :class="colorMode === 'dark' && 'bg-accent'"
+      :class="colorMode === 'dark' && 'bg-background text-foreground shadow-sm'"
       :aria-checked="colorMode === 'dark'"
       aria-label="Dark theme"
       role="radio"
@@ -36,7 +42,9 @@ const { colorMode, setColorMode } = useColorMode()
       variant="ghost"
       size="icon"
       class="h-7 w-7"
-      :class="colorMode === 'system' && 'bg-accent'"
+      :class="
+        colorMode === 'system' && 'bg-background text-foreground shadow-sm'
+      "
       :aria-checked="colorMode === 'system'"
       aria-label="System theme"
       role="radio"

@@ -243,7 +243,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
       :title="$t('closedChats.title')"
       :subtitle="$t('closedChats.subtitle')"
@@ -406,7 +406,7 @@ onMounted(() => {
       </div>
 
       <div
-        class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200 overflow-hidden"
+        class="rounded-[calc(var(--radius)+0.25rem)] overflow-hidden border border-border bg-card/95 shadow-sm"
       >
         <div
           class="max-h-[62vh] overflow-auto"

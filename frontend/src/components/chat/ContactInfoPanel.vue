@@ -257,7 +257,7 @@ function getFieldValue(key: string): string {
 function getColorClass(color?: string): string {
   switch (color) {
     case "success":
-      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+      return "bg-primary/12 text-primary";
     case "warning":
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
     case "error":
@@ -518,7 +518,7 @@ async function softDeleteChat() {
           v-if="canSoftDeleteChats"
           variant="ghost"
           size="icon"
-          class="h-8 w-8 text-amber-400 hover:text-amber-300"
+          class="h-8 w-8 border border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
           :disabled="isSoftDeletingChat"
           :title="$t('chat.softDeleteChat')"
           @click="softDeleteChat"
@@ -530,7 +530,7 @@ async function softDeleteChat() {
           v-if="canDeleteChats"
           variant="ghost"
           size="icon"
-          class="h-8 w-8 text-red-500 hover:text-red-600"
+          class="h-8 w-8 border border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
           :disabled="isDeletingChat"
           title="Delete chat"
           @click="deleteChat"
@@ -733,7 +733,7 @@ async function softDeleteChat() {
                   "
                   variant="ghost"
                   size="icon"
-                  class="h-7 w-7"
+                  class="h-7 w-7 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
                   :disabled="collaboratorActionId === collab.user_id"
                   @click="removeCollaborator(collab)"
                 >

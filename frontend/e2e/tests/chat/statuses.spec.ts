@@ -393,6 +393,29 @@ test.describe('Chat Statuses', () => {
     const storiesBar = page.getByTestId('status-stories-bar')
     await expect(storiesBar).toBeVisible()
 
+    const refreshButton = storiesBar.getByRole('button', { name: 'Refresh' })
+    const notificationBell = storiesBar.getByTestId('notification-bell-button')
+    const drawerToggle = storiesBar.getByTestId('status-drawer-toggle')
+
+    await expect(refreshButton).toBeVisible()
+    await expect(notificationBell).toBeVisible()
+    await expect(drawerToggle).toBeVisible()
+
+    const refreshBox = await refreshButton.boundingBox()
+    const bellBox = await notificationBell.boundingBox()
+    const drawerBox = await drawerToggle.boundingBox()
+
+    expect(refreshBox).not.toBeNull()
+    expect(bellBox).not.toBeNull()
+    expect(drawerBox).not.toBeNull()
+    expect(refreshBox!.x).toBeLessThan(bellBox!.x)
+    expect(bellBox!.x).toBeLessThan(drawerBox!.x)
+
+    await notificationBell.click()
+    await expect(page.getByText('No notifications')).toBeVisible()
+    await expect(page.getByTestId('status-create-button')).toBeHidden()
+    await page.keyboard.press('Escape')
+
     await storiesBar.click({ position: { x: 12, y: 12 } })
 
     await expect(page.getByTestId('status-create-button')).toBeVisible()

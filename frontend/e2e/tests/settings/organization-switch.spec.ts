@@ -5,7 +5,14 @@ import { ApiHelper } from '../../helpers'
 const ADMIN_EMAIL = 'admin@admin.com'
 const ADMIN_PASSWORD = 'admin'
 const FALLBACK_ADMIN_EMAIL = 'admin@test.com'
-const FALLBACK_ADMIN_PASSWORD = 'password'
+const FALLBACK_ADMIN_PASSWORD = 'Password123!'
+
+async function expandSidebar(page: any) {
+  const sidebar = page.getByTestId('app-sidebar')
+  await sidebar.hover()
+  await expect(sidebar).toHaveAttribute('data-sidebar-state', 'expanded')
+  return sidebar
+}
 
 /** Login as super admin, falling back to test admin. Returns ApiHelper or null. */
 async function loginAdmin(api: ApiHelper): Promise<boolean> {
@@ -61,6 +68,7 @@ test.describe('Organization Switching (Super Admin)', () => {
     }
 
     // Look for organization switcher in sidebar
+    await expandSidebar(page)
     page.locator('[data-testid="org-switcher"]').or(
       page.locator('aside').locator('button').filter({ hasText: /organization|org/i })
     ).or(
@@ -110,7 +118,7 @@ test.describe('Organization Switching (Super Admin)', () => {
     // Login as regular agent
     await page.goto('/login')
     await page.locator('input[type="email"]').fill('agent@test.com')
-    await page.locator('input[type="password"]').fill('password')
+    await page.locator('input[type="password"]').fill('Password123!')
     await page.locator('button[type="submit"]').click()
     await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10000 })
 
@@ -133,7 +141,7 @@ test.describe('Organization Switching (Super Admin)', () => {
   test('API ignores X-Organization-ID header for regular user', async ({ request }) => {
     const api = new ApiHelper(request)
     try {
-      await api.login('agent@test.com', 'password')
+      await api.login('agent@test.com', 'Password123!')
     } catch {
       test.skip(true, 'agent@test.com not available')
       return
@@ -187,7 +195,7 @@ test.describe('Create Organization via Sidebar', () => {
 
   // Helper to find the plus button in the org switcher
   async function getOrgPlusButton(page: any) {
-    const sidebar = page.locator('aside')
+    const sidebar = await expandSidebar(page)
     // Use exact match for the "Organization" label to avoid matching "No organizations found"
     const orgLabel = sidebar.getByText('Organization', { exact: true })
     await expect(orgLabel).toBeVisible({ timeout: 10000 })

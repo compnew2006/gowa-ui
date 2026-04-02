@@ -4,7 +4,7 @@ import { loginAsAdmin } from '../../helpers'
 test.describe('Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page)
-    await page.goto('/')
+    await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
   })
 
@@ -52,11 +52,11 @@ test.describe('Dashboard', () => {
     await expect(main.getByText('Quick Actions', { exact: true })).toBeVisible({ timeout: 15000 })
     await expect(main.getByText('Common tasks and shortcuts')).toBeVisible()
 
-    // Check for quick action links - scope to main to avoid sidebar duplicates
+    // Quick actions should only render links this user can actually open.
     await expect(main.locator('a[href="/chat"]')).toBeVisible()
     await expect(main.locator('a[href="/campaigns"]')).toBeVisible()
-    await expect(main.locator('a[href="/templates"]')).toBeVisible()
     await expect(main.locator('a[href="/chatbot"]')).toBeVisible()
+    await expect(main.locator('a[href="/templates"]')).toHaveCount(0)
   })
 
   test('should navigate to chat from quick actions', async ({ page }) => {
@@ -70,9 +70,8 @@ test.describe('Dashboard', () => {
     await expect(page).toHaveURL(/\/campaigns/)
   })
 
-  test('should navigate to templates from quick actions', async ({ page }) => {
-    await page.locator('main a[href="/templates"]').click()
-    await expect(page).toHaveURL(/\/templates/)
+  test('should not render inaccessible quick actions', async ({ page }) => {
+    await expect(page.locator('main a[href="/templates"]')).toHaveCount(0)
   })
 
   test('should navigate to chatbot from quick actions', async ({ page }) => {

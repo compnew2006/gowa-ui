@@ -1,52 +1,61 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { toast } from 'vue-sonner'
-import { MessageSquare, Loader2 } from 'lucide-vue-next'
+import { ref, computed } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import { useI18n } from "vue-i18n";
+import { useAuthStore } from "@/stores/auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { toast } from "vue-sonner";
+import { MessageSquare, Loader2 } from "lucide-vue-next";
 
-const { t } = useI18n()
-const router = useRouter()
-const route = useRoute()
-const authStore = useAuthStore()
+const { t } = useI18n();
+const router = useRouter();
+const route = useRoute();
+const authStore = useAuthStore();
 
-const fullName = ref('')
-const email = ref('')
-const password = ref('')
-const confirmPassword = ref('')
-const isLoading = ref(false)
+const fullName = ref("");
+const email = ref("");
+const password = ref("");
+const confirmPassword = ref("");
+const isLoading = ref(false);
 
-const organizationId = computed(() => (route.query.org as string) || '')
-const invitationToken = computed(() => (route.query.invite as string) || '')
-const hasInvitation = computed(() => !!organizationId.value && !!invitationToken.value)
+const organizationId = computed(() => (route.query.org as string) || "");
+const invitationToken = computed(() => (route.query.invite as string) || "");
+const hasInvitation = computed(
+  () => !!organizationId.value && !!invitationToken.value,
+);
 
 const handleRegister = async () => {
   if (!hasInvitation.value) {
-    toast.error(t('auth.invitationRequired'))
-    return
+    toast.error(t("auth.invitationRequired"));
+    return;
   }
 
   if (!fullName.value || !email.value || !password.value) {
-    toast.error(t('auth.fillAllFields'))
-    return
+    toast.error(t("auth.fillAllFields"));
+    return;
   }
 
   if (password.value !== confirmPassword.value) {
-    toast.error(t('auth.passwordsMismatch'))
-    return
+    toast.error(t("auth.passwordsMismatch"));
+    return;
   }
 
   if (password.value.length < 12) {
-    toast.error(t('auth.passwordTooShort'))
-    return
+    toast.error(t("auth.passwordTooShort"));
+    return;
   }
 
-  isLoading.value = true
+  isLoading.value = true;
 
   try {
     await authStore.register({
@@ -54,31 +63,34 @@ const handleRegister = async () => {
       email: email.value,
       password: password.value,
       organization_id: organizationId.value,
-      invitation_token: invitationToken.value
-    })
-    toast.success(t('auth.registrationSuccess'))
-    router.push('/login')
+      invitation_token: invitationToken.value,
+    });
+    toast.success(t("auth.registrationSuccess"));
+    router.push("/login");
   } catch (error: any) {
-    const message = error.response?.data?.message || t('auth.registrationFailed')
-    toast.error(message)
+    const message =
+      error.response?.data?.message || t("auth.registrationFailed");
+    toast.error(message);
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
-}
+};
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 light:from-violet-50 light:to-violet-100 p-4">
-    <Card class="w-full max-w-md">
+  <div class="auth-shell">
+    <Card class="auth-card">
       <CardHeader class="space-y-1 text-center">
         <div class="flex justify-center mb-4">
-          <div class="h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
+          <div class="brand-badge">
             <MessageSquare class="h-7 w-7 text-primary-foreground" />
           </div>
         </div>
-        <CardTitle class="text-2xl font-bold">{{ $t('auth.createAccount') }}</CardTitle>
+        <CardTitle class="text-2xl font-bold">{{
+          $t("auth.createAccount")
+        }}</CardTitle>
         <CardDescription>
-          {{ $t('auth.createAccountDesc') }}
+          {{ $t("auth.createAccountDesc") }}
         </CardDescription>
       </CardHeader>
 
@@ -87,14 +99,14 @@ const handleRegister = async () => {
         <CardContent>
           <div class="text-center py-4">
             <p class="text-sm text-muted-foreground">
-              {{ $t('auth.invitationRequired') }}
+              {{ $t("auth.invitationRequired") }}
             </p>
           </div>
         </CardContent>
         <CardFooter class="flex flex-col space-y-4">
           <RouterLink to="/login" class="w-full">
             <Button variant="outline" class="w-full">
-              {{ $t('auth.signIn') }}
+              {{ $t("auth.signIn") }}
             </Button>
           </RouterLink>
         </CardFooter>
@@ -104,7 +116,7 @@ const handleRegister = async () => {
       <form v-else @submit.prevent="handleRegister">
         <CardContent class="space-y-4">
           <div class="space-y-2">
-            <Label for="fullName">{{ $t('auth.fullName') }}</Label>
+            <Label for="fullName">{{ $t("auth.fullName") }}</Label>
             <Input
               id="fullName"
               v-model="fullName"
@@ -115,7 +127,7 @@ const handleRegister = async () => {
             />
           </div>
           <div class="space-y-2">
-            <Label for="email">{{ $t('common.email') }}</Label>
+            <Label for="email">{{ $t("common.email") }}</Label>
             <Input
               id="email"
               v-model="email"
@@ -126,7 +138,7 @@ const handleRegister = async () => {
             />
           </div>
           <div class="space-y-2">
-            <Label for="password">{{ $t('auth.password') }}</Label>
+            <Label for="password">{{ $t("auth.password") }}</Label>
             <Input
               id="password"
               v-model="password"
@@ -137,7 +149,9 @@ const handleRegister = async () => {
             />
           </div>
           <div class="space-y-2">
-            <Label for="confirmPassword">{{ $t('auth.confirmPassword') }}</Label>
+            <Label for="confirmPassword">{{
+              $t("auth.confirmPassword")
+            }}</Label>
             <Input
               id="confirmPassword"
               v-model="confirmPassword"
@@ -151,12 +165,12 @@ const handleRegister = async () => {
         <CardFooter class="flex flex-col space-y-4">
           <Button type="submit" class="w-full" :disabled="isLoading">
             <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
-            {{ $t('auth.createAccountBtn') }}
+            {{ $t("auth.createAccountBtn") }}
           </Button>
           <p class="text-sm text-center text-muted-foreground">
-            {{ $t('auth.alreadyHaveAccount') }}
+            {{ $t("auth.alreadyHaveAccount") }}
             <RouterLink to="/login" class="text-primary hover:underline">
-              {{ $t('auth.signIn') }}
+              {{ $t("auth.signIn") }}
             </RouterLink>
           </p>
         </CardFooter>

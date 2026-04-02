@@ -305,7 +305,7 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
       :title="$t('roles.title')"
       :subtitle="$t('roles.subtitle')"

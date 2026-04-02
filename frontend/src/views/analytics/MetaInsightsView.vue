@@ -685,7 +685,7 @@ const chartOptions = {
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
       :title="$t('metaInsights.title')"
       :description="$t('metaInsights.subtitle')"
@@ -814,52 +814,52 @@ const chartOptions = {
           <TabsContent value="analytics" class="space-y-6">
             <template v-if="isLoading">
               <div class="grid gap-4 md:grid-cols-3">
-                <div v-for="i in 3" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
-                  <Skeleton class="h-4 w-24 mb-2 bg-white/[0.08] light:bg-gray-200" />
-                  <Skeleton class="h-8 w-16 bg-white/[0.08] light:bg-gray-200" />
+                <div v-for="i in 3" :key="i" class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
+                  <Skeleton class="mb-2 h-4 w-24 bg-accent/80" />
+                  <Skeleton class="h-8 w-16 bg-accent/80" />
                 </div>
               </div>
             </template>
             <template v-else-if="aggregatedData && activeTab === 'analytics'">
               <!-- Stats Cards -->
               <div class="grid gap-4 md:grid-cols-3">
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.messagesSent') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.messagesSent') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
                       <Send class="h-5 w-5 text-blue-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregateMessagingData>).totals.sent.toLocaleString() }}
                     </div>
                   </div>
                 </div>
 
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.messagesDelivered') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.messagesDelivered') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                       <CheckCircle class="h-5 w-5 text-emerald-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregateMessagingData>).totals.delivered.toLocaleString() }}
                     </div>
                   </div>
                 </div>
 
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.deliveryRate') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.deliveryRate') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
                       <TrendingUp class="h-5 w-5 text-purple-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ ((aggregatedData as ReturnType<typeof aggregateMessagingData>).totals.sent > 0
                         ? ((aggregatedData as ReturnType<typeof aggregateMessagingData>).totals.delivered / (aggregatedData as ReturnType<typeof aggregateMessagingData>).totals.sent * 100).toFixed(1)
                         : 0) }}%
@@ -893,34 +893,34 @@ const chartOptions = {
           <!-- Pricing Analytics -->
           <TabsContent value="pricing_analytics" class="space-y-6">
             <template v-if="isLoading">
-              <Skeleton class="h-64 bg-white/[0.08] light:bg-gray-200" />
+              <Skeleton class="h-64 bg-accent/80" />
             </template>
             <template v-else-if="aggregatedData && activeTab === 'pricing_analytics'">
               <!-- Stats Cards -->
               <div class="grid gap-4 md:grid-cols-2">
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.totalMessages') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.totalMessages') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
                       <MessagesSquare class="h-5 w-5 text-blue-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregatePricingData>).totals.volume.toLocaleString() }}
                     </div>
                   </div>
                 </div>
 
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.totalCost') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.totalCost') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                       <DollarSign class="h-5 w-5 text-emerald-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ formatCurrency((aggregatedData as ReturnType<typeof aggregatePricingData>).totals.cost) }}
                     </div>
                   </div>
@@ -953,13 +953,13 @@ const chartOptions = {
                   </CardHeader>
                   <CardContent>
                     <div class="space-y-3">
-                      <div class="flex items-center justify-between py-2 border-b border-white/[0.08] light:border-gray-100">
-                        <span class="text-sm text-white/70 light:text-gray-600">{{ $t('metaInsights.freeCustomerService') }}</span>
-                        <span class="font-semibold text-white light:text-gray-900">{{ (aggregatedData as ReturnType<typeof aggregatePricingData>).freeMessages.customerService.toLocaleString() }}</span>
+                      <div class="flex items-center justify-between border-b border-border py-2">
+                        <span class="text-sm text-foreground/80">{{ $t('metaInsights.freeCustomerService') }}</span>
+                        <span class="font-semibold text-foreground">{{ (aggregatedData as ReturnType<typeof aggregatePricingData>).freeMessages.customerService.toLocaleString() }}</span>
                       </div>
-                      <div class="flex items-center justify-between py-2 border-b border-white/[0.08] light:border-gray-100">
-                        <span class="text-sm text-white/70 light:text-gray-600">{{ $t('metaInsights.freeEntryPoint') }}</span>
-                        <span class="font-semibold text-white light:text-gray-900">{{ (aggregatedData as ReturnType<typeof aggregatePricingData>).freeMessages.entryPoint.toLocaleString() }}</span>
+                      <div class="flex items-center justify-between border-b border-border py-2">
+                        <span class="text-sm text-foreground/80">{{ $t('metaInsights.freeEntryPoint') }}</span>
+                        <span class="font-semibold text-foreground">{{ (aggregatedData as ReturnType<typeof aggregatePricingData>).freeMessages.entryPoint.toLocaleString() }}</span>
                       </div>
                       <div class="flex items-center justify-between py-2 bg-green-500/10 rounded px-2 -mx-2">
                         <span class="text-sm font-medium text-green-400 light:text-green-600">{{ $t('metaInsights.totalFree') }}</span>
@@ -977,11 +977,11 @@ const chartOptions = {
                   </CardHeader>
                   <CardContent>
                     <div class="space-y-3">
-                      <div v-for="(count, category) in (aggregatedData as ReturnType<typeof aggregatePricingData>).paidMessages.byCategory" :key="category" class="flex items-center justify-between py-2 border-b border-white/[0.08] light:border-gray-100 last:border-0">
-                        <span class="text-sm text-white/70 light:text-gray-600">{{ formatCategory(category as string) }}</span>
-                        <span class="font-semibold text-white light:text-gray-900">{{ (count as number).toLocaleString() }}</span>
+                      <div v-for="(count, category) in (aggregatedData as ReturnType<typeof aggregatePricingData>).paidMessages.byCategory" :key="category" class="flex items-center justify-between border-b border-border py-2 last:border-0">
+                        <span class="text-sm text-foreground/80">{{ formatCategory(category as string) }}</span>
+                        <span class="font-semibold text-foreground">{{ (count as number).toLocaleString() }}</span>
                       </div>
-                      <div v-if="Object.keys((aggregatedData as ReturnType<typeof aggregatePricingData>).paidMessages.byCategory).length === 0" class="text-center text-white/40 light:text-gray-400 py-4">
+                      <div v-if="Object.keys((aggregatedData as ReturnType<typeof aggregatePricingData>).paidMessages.byCategory).length === 0" class="py-4 text-center text-muted-foreground">
                         {{ $t('metaInsights.noPaidMessages') }}
                       </div>
                       <div v-else class="flex items-center justify-between py-2 bg-amber-500/10 rounded px-2 -mx-2">
@@ -1000,9 +1000,9 @@ const chartOptions = {
                   </CardHeader>
                   <CardContent>
                     <div class="space-y-3">
-                      <div v-for="(cost, category) in (aggregatedData as ReturnType<typeof aggregatePricingData>).costByCategory" :key="category" class="flex items-center justify-between py-2 border-b border-white/[0.08] light:border-gray-100 last:border-0">
-                        <span class="text-sm text-white/70 light:text-gray-600">{{ formatCategory(category as string) }}</span>
-                        <span class="font-semibold text-white light:text-gray-900">{{ formatCurrency(cost as number) }}</span>
+                      <div v-for="(cost, category) in (aggregatedData as ReturnType<typeof aggregatePricingData>).costByCategory" :key="category" class="flex items-center justify-between border-b border-border py-2 last:border-0">
+                        <span class="text-sm text-foreground/80">{{ formatCategory(category as string) }}</span>
+                        <span class="font-semibold text-foreground">{{ formatCurrency(cost as number) }}</span>
                       </div>
                       <div class="flex items-center justify-between py-2 bg-emerald-500/10 rounded px-2 -mx-2">
                         <span class="text-sm font-medium text-emerald-400 light:text-emerald-600">{{ $t('metaInsights.totalCost') }}</span>
@@ -1020,11 +1020,11 @@ const chartOptions = {
                   </CardHeader>
                   <CardContent>
                     <div class="space-y-3">
-                      <div v-for="(data, country) in (aggregatedData as ReturnType<typeof aggregatePricingData>).byCountry" :key="country" class="flex items-center justify-between py-2 border-b border-white/[0.08] light:border-gray-100 last:border-0">
-                        <span class="text-sm text-white/70 light:text-gray-600">{{ country }}</span>
+                      <div v-for="(data, country) in (aggregatedData as ReturnType<typeof aggregatePricingData>).byCountry" :key="country" class="flex items-center justify-between border-b border-border py-2 last:border-0">
+                        <span class="text-sm text-foreground/80">{{ country }}</span>
                         <div class="text-right">
-                          <span class="font-semibold text-white light:text-gray-900">{{ (data as {volume: number, cost: number}).volume.toLocaleString() }} {{ $t('metaInsights.msgs') }}</span>
-                          <span class="text-white/50 light:text-gray-500 ml-2">{{ formatCurrency((data as {volume: number, cost: number}).cost) }}</span>
+                          <span class="font-semibold text-foreground">{{ (data as {volume: number, cost: number}).volume.toLocaleString() }} {{ $t('metaInsights.msgs') }}</span>
+                          <span class="ml-2 text-muted-foreground">{{ formatCurrency((data as {volume: number, cost: number}).cost) }}</span>
                         </div>
                       </div>
                     </div>
@@ -1043,94 +1043,94 @@ const chartOptions = {
           <TabsContent value="template_analytics" class="space-y-6">
             <template v-if="isLoading">
               <div class="grid gap-4 md:grid-cols-3">
-                <div v-for="i in 3" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
-                  <Skeleton class="h-4 w-24 mb-2 bg-white/[0.08] light:bg-gray-200" />
-                  <Skeleton class="h-8 w-16 bg-white/[0.08] light:bg-gray-200" />
+                <div v-for="i in 3" :key="i" class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
+                  <Skeleton class="mb-2 h-4 w-24 bg-accent/80" />
+                  <Skeleton class="h-8 w-16 bg-accent/80" />
                 </div>
               </div>
             </template>
             <template v-else-if="aggregatedData && activeTab === 'template_analytics'">
               <!-- Stats Cards -->
               <div class="grid gap-4 md:grid-cols-6">
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.sent') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.sent') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
                       <Send class="h-5 w-5 text-blue-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregateTemplateData>).totals.sent.toLocaleString() }}
                     </div>
                   </div>
                 </div>
 
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.delivered') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.delivered') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                       <CheckCircle class="h-5 w-5 text-emerald-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregateTemplateData>).totals.delivered.toLocaleString() }}
                     </div>
                   </div>
                 </div>
 
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.read') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.read') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
                       <Eye class="h-5 w-5 text-purple-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregateTemplateData>).totals.read.toLocaleString() }}
                     </div>
                   </div>
                 </div>
 
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.replied') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.replied') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
                       <MessagesSquare class="h-5 w-5 text-amber-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregateTemplateData>).totals.replied.toLocaleString() }}
                     </div>
                   </div>
                 </div>
 
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.clicked') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.clicked') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
                       <MousePointerClick class="h-5 w-5 text-cyan-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregateTemplateData>).totals.clicked.toLocaleString() }}
                     </div>
                   </div>
                 </div>
 
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.totalCost') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.totalCost') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-rose-500/20 flex items-center justify-center">
                       <DollarSign class="h-5 w-5 text-rose-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregateTemplateData>).totals.cost > 0
                         ? formatCurrency((aggregatedData as ReturnType<typeof aggregateTemplateData>).totals.cost)
                         : '-' }}
@@ -1148,7 +1148,7 @@ const chartOptions = {
                       <CardDescription>{{ $t('metaInsights.performanceByTemplate') }}</CardDescription>
                     </div>
                     <div class="relative w-full sm:w-64">
-                      <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40 light:text-gray-400" />
+                      <Search class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         v-model="templateSearchQuery"
                         :placeholder="$t('metaInsights.searchTemplates')"
@@ -1209,38 +1209,38 @@ const chartOptions = {
           <TabsContent value="call_analytics" class="space-y-6">
             <template v-if="isLoading">
               <div class="grid gap-4 md:grid-cols-2">
-                <div v-for="i in 2" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
-                  <Skeleton class="h-4 w-24 mb-2 bg-white/[0.08] light:bg-gray-200" />
-                  <Skeleton class="h-8 w-16 bg-white/[0.08] light:bg-gray-200" />
+                <div v-for="i in 2" :key="i" class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
+                  <Skeleton class="mb-2 h-4 w-24 bg-accent/80" />
+                  <Skeleton class="h-8 w-16 bg-accent/80" />
                 </div>
               </div>
             </template>
             <template v-else-if="aggregatedData && activeTab === 'call_analytics'">
               <!-- Stats Cards -->
               <div class="grid gap-4 md:grid-cols-2">
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.totalCalls') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.totalCalls') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
                       <Phone class="h-5 w-5 text-blue-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ (aggregatedData as ReturnType<typeof aggregateCallData>).totals.calls.toLocaleString() }}
                     </div>
                   </div>
                 </div>
 
-                <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+                <div class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm">
                   <div class="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('metaInsights.totalDuration') }}</span>
+                    <span class="text-sm font-medium text-muted-foreground">{{ $t('metaInsights.totalDuration') }}</span>
                     <div class="h-10 w-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                       <TrendingUp class="h-5 w-5 text-emerald-400" />
                     </div>
                   </div>
                   <div class="pt-2">
-                    <div class="text-3xl font-bold text-white light:text-gray-900">
+                    <div class="text-3xl font-bold text-foreground">
                       {{ formatDuration((aggregatedData as ReturnType<typeof aggregateCallData>).totals.duration) }}
                     </div>
                   </div>
@@ -1260,8 +1260,8 @@ const chartOptions = {
                         :key="type"
                         class="flex items-center justify-between"
                       >
-                        <span class="text-white/70 light:text-gray-600">{{ formatCategory(type) }}</span>
-                        <span class="font-medium text-white light:text-gray-900">{{ count.toLocaleString() }}</span>
+                        <span class="text-foreground/80">{{ formatCategory(type) }}</span>
+                        <span class="font-medium text-foreground">{{ count.toLocaleString() }}</span>
                       </div>
                       <div v-if="Object.keys((aggregatedData as ReturnType<typeof aggregateCallData>).byType).length === 0" class="text-muted-foreground text-center py-4">
                         {{ $t('metaInsights.noCallData') }}
@@ -1281,8 +1281,8 @@ const chartOptions = {
                         :key="direction"
                         class="flex items-center justify-between"
                       >
-                        <span class="text-white/70 light:text-gray-600">{{ formatCategory(direction) }}</span>
-                        <span class="font-medium text-white light:text-gray-900">{{ count.toLocaleString() }}</span>
+                        <span class="text-foreground/80">{{ formatCategory(direction) }}</span>
+                        <span class="font-medium text-foreground">{{ count.toLocaleString() }}</span>
                       </div>
                       <div v-if="Object.keys((aggregatedData as ReturnType<typeof aggregateCallData>).byDirection).length === 0" class="text-muted-foreground text-center py-4">
                         {{ $t('metaInsights.noCallData') }}

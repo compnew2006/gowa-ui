@@ -18,8 +18,11 @@ import { TablePage, DialogPage } from "../../pages";
 // Helper to get visible sidebar menu items
 async function getSidebarMenuItems(page: Page): Promise<string[]> {
   const items: string[] = [];
+  const sidebar = page.getByTestId("app-sidebar");
+  await sidebar.hover();
+  await expect(sidebar).toHaveAttribute("data-sidebar-state", "expanded");
   const navLinks = page.locator(
-    'aside nav a, aside nav button[class*="justify-start"]',
+    '[data-testid="app-sidebar"] nav a, [data-testid="app-sidebar"] nav button[class*="justify-start"]',
   );
   const count = await navLinks.count();
   for (let i = 0; i < count; i++) {
@@ -486,7 +489,9 @@ test.describe("Dynamic Role Updates", () => {
     // Should see Chat
     expect(menuItems.some((item) => item.includes("chat"))).toBeTruthy();
 
-    // Should NOT see Settings
-    expect(menuItems.some((item) => item.includes("settings"))).toBeFalsy();
+    // Should NOT see analytics or user-management screens.
+    expect(menuItems.some((item) => item.includes("dashboard"))).toBeFalsy();
+    expect(menuItems.some((item) => item.includes("users"))).toBeFalsy();
+    expect(menuItems.some((item) => item.includes("roles"))).toBeFalsy();
   });
 });

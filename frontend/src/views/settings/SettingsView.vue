@@ -157,8 +157,6 @@ function normalizeAssignedChatResetHour(value: unknown): number {
   return Math.min(23, Math.max(0, rounded));
 }
 
-
-
 function normalizeChatCloseRatingFollowupWindowMinutes(value: unknown): number {
   const parsed =
     typeof value === "number"
@@ -412,7 +410,9 @@ async function saveChatSettings() {
     localStorage.setItem(MEDIA_GROUP_WINDOW_KEY, String(clamped));
     ChatSidebarUnifier.saveViewMode(sidebarViewMode);
     configStore.setShowPrintButtons(chatSettings.value.show_print_buttons);
-    configStore.setShowDownloadButtons(chatSettings.value.show_download_buttons);
+    configStore.setShowDownloadButtons(
+      chatSettings.value.show_download_buttons,
+    );
     await organizationService.updateSettings({
       assigned_chat_reset_enabled:
         chatSettings.value.assigned_chat_reset_enabled,
@@ -442,7 +442,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
       :title="$t('settings.title')"
       :subtitle="$t('settings.subtitle')"
@@ -453,25 +453,25 @@ onBeforeUnmount(() => {
       <div class="p-6 space-y-4 max-w-4xl mx-auto">
         <Tabs default-value="general" class="w-full">
           <TabsList
-            class="grid w-full grid-cols-3 mb-6 bg-white/[0.04] border border-white/[0.08] light:bg-gray-100 light:border-gray-200"
+            class="mb-6 grid w-full grid-cols-3 rounded-full border border-border bg-accent/70 p-1"
           >
             <TabsTrigger
               value="general"
-              class="data-[state=active]:bg-white/[0.08] data-[state=active]:text-white text-white/50 light:data-[state=active]:bg-white light:data-[state=active]:text-gray-900 light:text-gray-500"
+              class="text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
               <Settings class="h-4 w-4 mr-2" />
               {{ $t("settings.general") }}
             </TabsTrigger>
             <TabsTrigger
               value="chat"
-              class="data-[state=active]:bg-white/[0.08] data-[state=active]:text-white text-white/50 light:data-[state=active]:bg-white light:data-[state=active]:text-gray-900 light:text-gray-500"
+              class="text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
               <MessageSquare class="h-4 w-4 mr-2" />
               {{ $t("settings.chat") }}
             </TabsTrigger>
             <TabsTrigger
               value="notifications"
-              class="data-[state=active]:bg-white/[0.08] data-[state=active]:text-white text-white/50 light:data-[state=active]:bg-white light:data-[state=active]:text-gray-900 light:text-gray-500"
+              class="text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
               <Bell class="h-4 w-4 mr-2" />
               {{ $t("settings.notifications") }}
@@ -481,25 +481,21 @@ onBeforeUnmount(() => {
           <!-- General Settings Tab -->
           <TabsContent value="general">
             <div
-              class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200"
+              class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 shadow-sm"
             >
               <div class="p-6 pb-3">
-                <h3
-                  class="text-lg font-semibold text-white light:text-gray-900"
-                >
+                <h3 class="text-lg font-semibold text-foreground">
                   {{ $t("settings.generalSettings") }}
                 </h3>
-                <p class="text-sm text-white/40 light:text-gray-500">
+                <p class="text-sm text-muted-foreground">
                   {{ $t("settings.generalSettingsDesc") }}
                 </p>
               </div>
               <div class="p-6 pt-3 space-y-4">
                 <div class="space-y-2">
-                  <Label
-                    for="org_name"
-                    class="text-white/70 light:text-gray-700"
-                    >{{ $t("settings.organizationName") }}</Label
-                  >
+                  <Label for="org_name" class="text-foreground/80">{{
+                    $t("settings.organizationName")
+                  }}</Label>
                   <Input
                     id="org_name"
                     v-model="generalSettings.organization_name"
@@ -508,27 +504,25 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                   <div class="space-y-2">
-                    <Label
-                      for="timezone"
-                      class="text-white/70 light:text-gray-700"
-                      >{{ $t("settings.defaultTimezone") }}</Label
-                    >
+                    <Label for="timezone" class="text-foreground/80">{{
+                      $t("settings.defaultTimezone")
+                    }}</Label>
                     <Select v-model="generalSettings.default_timezone">
                       <SelectTrigger
-                        class="bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700"
+                        class="border-input bg-input text-foreground"
                       >
                         <SelectValue
                           :placeholder="$t('settings.selectTimezone')"
                         />
                       </SelectTrigger>
                       <SelectContent
-                        class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200"
+                        class="border-border bg-popover text-popover-foreground"
                       >
                         <SelectItem
                           v-for="option in timezoneOptions"
                           :key="option.value"
                           :value="option.value"
-                          class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >
                           {{ option.label }}
                         </SelectItem>
@@ -536,35 +530,33 @@ onBeforeUnmount(() => {
                     </Select>
                   </div>
                   <div class="space-y-2">
-                    <Label
-                      for="date_format"
-                      class="text-white/70 light:text-gray-700"
-                      >{{ $t("settings.dateFormat") }}</Label
-                    >
+                    <Label for="date_format" class="text-foreground/80">{{
+                      $t("settings.dateFormat")
+                    }}</Label>
                     <Select v-model="generalSettings.date_format">
                       <SelectTrigger
-                        class="bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700"
+                        class="border-input bg-input text-foreground"
                       >
                         <SelectValue
                           :placeholder="$t('settings.selectFormat')"
                         />
                       </SelectTrigger>
                       <SelectContent
-                        class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200"
+                        class="border-border bg-popover text-popover-foreground"
                       >
                         <SelectItem
                           value="YYYY-MM-DD"
-                          class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
                           >YYYY-MM-DD</SelectItem
                         >
                         <SelectItem
                           value="DD/MM/YYYY"
-                          class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
                           >DD/MM/YYYY</SelectItem
                         >
                         <SelectItem
                           value="MM/DD/YYYY"
-                          class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
                           >MM/DD/YYYY</SelectItem
                         >
                       </SelectContent>
@@ -572,22 +564,22 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <div class="space-y-2">
-                  <Label class="text-white/70 light:text-gray-700">
+                  <Label class="text-foreground/80">
                     <Globe class="h-4 w-4 inline mr-1" />
                     {{ $t("settings.language") }}
                   </Label>
                   <LanguageSwitcher class="max-w-xs" />
-                  <p class="text-xs text-white/40 light:text-gray-500">
+                  <p class="text-xs text-muted-foreground">
                     {{ $t("settings.languageDesc") }}
                   </p>
                 </div>
-                <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                <Separator class="bg-border" />
                 <div class="flex items-center justify-between">
                   <div>
-                    <p class="font-medium text-white light:text-gray-900">
+                    <p class="font-medium text-foreground">
                       {{ $t("settings.maskPhoneNumbers") }}
                     </p>
-                    <p class="text-sm text-white/40 light:text-gray-500">
+                    <p class="text-sm text-muted-foreground">
                       {{ $t("settings.maskPhoneNumbersDesc") }}
                     </p>
                   </div>
@@ -598,12 +590,12 @@ onBeforeUnmount(() => {
                     "
                   />
                 </div>
-                <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                <Separator class="bg-border" />
                 <div class="flex justify-end">
                   <Button
                     variant="outline"
                     size="sm"
-                    class="bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50"
+                    class="border-input bg-input text-foreground hover:bg-accent"
                     @click="saveGeneralSettings"
                     :disabled="isSubmitting"
                   >
@@ -621,25 +613,23 @@ onBeforeUnmount(() => {
           <!-- Notification Settings Tab -->
           <TabsContent value="notifications">
             <div
-              class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200"
+              class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 shadow-sm"
             >
               <div class="p-6 pb-3">
-                <h3
-                  class="text-lg font-semibold text-white light:text-gray-900"
-                >
+                <h3 class="text-lg font-semibold text-foreground">
                   {{ $t("settings.notifications") }}
                 </h3>
-                <p class="text-sm text-white/40 light:text-gray-500">
+                <p class="text-sm text-muted-foreground">
                   {{ $t("settings.notificationsDesc") }}
                 </p>
               </div>
               <div class="p-6 pt-3 space-y-4">
                 <div class="flex items-center justify-between">
                   <div>
-                    <p class="font-medium text-white light:text-gray-900">
+                    <p class="font-medium text-foreground">
                       {{ $t("settings.emailNotifications") }}
                     </p>
-                    <p class="text-sm text-white/40 light:text-gray-500">
+                    <p class="text-sm text-muted-foreground">
                       {{ $t("settings.emailNotificationsDesc") }}
                     </p>
                   </div>
@@ -650,13 +640,13 @@ onBeforeUnmount(() => {
                     "
                   />
                 </div>
-                <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                <Separator class="bg-border" />
                 <div class="flex items-center justify-between">
                   <div>
-                    <p class="font-medium text-white light:text-gray-900">
+                    <p class="font-medium text-foreground">
                       {{ $t("settings.newMessageAlerts") }}
                     </p>
-                    <p class="text-sm text-white/40 light:text-gray-500">
+                    <p class="text-sm text-muted-foreground">
                       {{ $t("settings.newMessageAlertsDesc") }}
                     </p>
                   </div>
@@ -667,43 +657,43 @@ onBeforeUnmount(() => {
                     "
                   />
                 </div>
-                <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                <Separator class="bg-border" />
                 <div class="space-y-2">
                   <div>
-                    <p class="font-medium text-white light:text-gray-900">
+                    <p class="font-medium text-foreground">
                       {{ $t("settings.notificationSound") }}
                     </p>
-                    <p class="text-sm text-white/40 light:text-gray-500">
+                    <p class="text-sm text-muted-foreground">
                       {{ $t("settings.notificationSoundDesc") }}
                     </p>
                   </div>
                   <div class="flex items-center gap-2">
                     <Select v-model="notificationSettings.notification_sound">
                       <SelectTrigger
-                        class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700"
+                        class="w-full max-w-xs border-input bg-input text-foreground"
                       >
                         <SelectValue
                           :placeholder="$t('settings.selectNotificationSound')"
                         />
                       </SelectTrigger>
                       <SelectContent
-                        class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200"
+                        class="border-border bg-popover text-popover-foreground"
                       >
                         <SelectItem
                           value="notification1"
-                          class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >
                           {{ $t("settings.notificationSound1") }}
                         </SelectItem>
                         <SelectItem
                           value="notification2"
-                          class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >
                           {{ $t("settings.notificationSound2") }}
                         </SelectItem>
                         <SelectItem
                           value="notification"
-                          class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >
                           {{ $t("settings.notificationSoundOriginal") }}
                         </SelectItem>
@@ -713,7 +703,7 @@ onBeforeUnmount(() => {
                       type="button"
                       variant="outline"
                       size="sm"
-                      class="shrink-0 bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50"
+                      class="shrink-0 border-input bg-input text-foreground hover:bg-accent"
                       :disabled="isPreviewPlaying"
                       @click="previewNotificationSound"
                     >
@@ -726,13 +716,13 @@ onBeforeUnmount(() => {
                     </Button>
                   </div>
                 </div>
-                <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                <Separator class="bg-border" />
                 <div class="flex items-center justify-between">
                   <div>
-                    <p class="font-medium text-white light:text-gray-900">
+                    <p class="font-medium text-foreground">
                       {{ $t("settings.campaignUpdates") }}
                     </p>
-                    <p class="text-sm text-white/40 light:text-gray-500">
+                    <p class="text-sm text-muted-foreground">
                       {{ $t("settings.campaignUpdatesDesc") }}
                     </p>
                   </div>
@@ -747,7 +737,7 @@ onBeforeUnmount(() => {
                   <Button
                     variant="outline"
                     size="sm"
-                    class="bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50"
+                    class="border-input bg-input text-foreground hover:bg-accent"
                     @click="saveNotificationSettings"
                     :disabled="isSubmitting"
                   >
@@ -765,26 +755,22 @@ onBeforeUnmount(() => {
           <!-- Chat Preferences Tab -->
           <TabsContent value="chat">
             <div
-              class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200"
+              class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 shadow-sm"
             >
               <div class="p-6 pb-3">
-                <h3
-                  class="text-lg font-semibold text-white light:text-gray-900"
-                >
+                <h3 class="text-lg font-semibold text-foreground">
                   {{ $t("settings.chatPreferences") }}
                 </h3>
-                <p class="text-sm text-white/40 light:text-gray-500">
+                <p class="text-sm text-muted-foreground">
                   {{ $t("settings.chatPreferencesDesc") }}
                 </p>
               </div>
               <div class="p-6 pt-3 space-y-4">
                 <div class="space-y-2">
-                  <Label
-                    for="media_group_window"
-                    class="text-white/70 light:text-gray-700"
-                    >{{ $t("settings.mediaGroupingWindow") }}</Label
-                  >
-                  <p class="text-xs text-white/40 light:text-gray-500">
+                  <Label for="media_group_window" class="text-foreground/80">{{
+                    $t("settings.mediaGroupingWindow")
+                  }}</Label>
+                  <p class="text-xs text-muted-foreground">
                     {{ $t("settings.mediaGroupingWindowDesc") }}
                   </p>
                   <Select
@@ -797,53 +783,53 @@ onBeforeUnmount(() => {
                     "
                   >
                     <SelectTrigger
-                      class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700"
+                      class="w-full max-w-xs border-input bg-input text-foreground"
                     >
                       <SelectValue
                         :placeholder="$t('settings.selectGroupingWindow')"
                       />
                     </SelectTrigger>
                     <SelectContent
-                      class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200"
+                      class="border-border bg-popover text-popover-foreground"
                     >
                       <SelectItem
                         value="15"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >{{
                           $t("settings.mediaGroupingWindow15Seconds")
                         }}</SelectItem
                       >
                       <SelectItem
                         value="30"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >{{
                           $t("settings.mediaGroupingWindow30Seconds")
                         }}</SelectItem
                       >
                       <SelectItem
                         value="60"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >{{
                           $t("settings.mediaGroupingWindow60SecondsDefault")
                         }}</SelectItem
                       >
                       <SelectItem
                         value="120"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >{{
                           $t("settings.mediaGroupingWindow2Minutes")
                         }}</SelectItem
                       >
                       <SelectItem
                         value="180"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >{{
                           $t("settings.mediaGroupingWindow3Minutes")
                         }}</SelectItem
                       >
                       <SelectItem
                         value="300"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >{{
                           $t("settings.mediaGroupingWindow5Minutes")
                         }}</SelectItem
@@ -852,61 +838,61 @@ onBeforeUnmount(() => {
                   </Select>
                 </div>
                 <div class="space-y-2">
-                  <Label class="text-white/70 light:text-gray-700">{{
+                  <Label class="text-foreground/80">{{
                     $t("settings.sidebarViewMode")
                   }}</Label>
-                  <p class="text-xs text-white/40 light:text-gray-500">
+                  <p class="text-xs text-muted-foreground">
                     {{ $t("settings.sidebarViewModeDesc") }}
                   </p>
                   <Select v-model="chatSettings.sidebar_view_mode">
                     <SelectTrigger
-                      class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700"
+                      class="w-full max-w-xs border-input bg-input text-foreground"
                     >
                       <SelectValue
                         :placeholder="$t('settings.selectSidebarViewMode')"
                       />
                     </SelectTrigger>
                     <SelectContent
-                      class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200"
+                      class="border-border bg-popover text-popover-foreground"
                     >
                       <SelectItem
                         value="unified"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                         >{{ $t("settings.sidebarViewModeUnified") }}</SelectItem
                       >
                       <SelectItem
                         value="separate"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
-                        >{{ $t("settings.sidebarViewModeSeparate") }}</SelectItem
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
+                        >{{
+                          $t("settings.sidebarViewModeSeparate")
+                        }}</SelectItem
                       >
                     </SelectContent>
                   </Select>
                 </div>
-                <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                <Separator class="bg-border" />
                 <div class="space-y-3">
                   <div class="flex items-center justify-between">
                     <div>
-                      <p class="font-medium text-white light:text-gray-900">
+                      <p class="font-medium text-foreground">
                         {{ $t("settings.showPrintButtons") }}
                       </p>
-                      <p class="text-sm text-white/40 light:text-gray-500">
+                      <p class="text-sm text-muted-foreground">
                         {{ $t("settings.showPrintButtonsDesc") }}
                       </p>
                     </div>
                     <Switch
                       :checked="chatSettings.show_print_buttons"
-                      @update:checked="
-                        chatSettings.show_print_buttons = $event
-                      "
+                      @update:checked="chatSettings.show_print_buttons = $event"
                     />
                   </div>
-                  <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                  <Separator class="bg-border" />
                   <div class="flex items-center justify-between">
                     <div>
-                      <p class="font-medium text-white light:text-gray-900">
+                      <p class="font-medium text-foreground">
                         {{ $t("settings.showDownloadButtons") }}
                       </p>
-                      <p class="text-sm text-white/40 light:text-gray-500">
+                      <p class="text-sm text-muted-foreground">
                         {{ $t("settings.showDownloadButtonsDesc") }}
                       </p>
                     </div>
@@ -918,14 +904,14 @@ onBeforeUnmount(() => {
                     />
                   </div>
                 </div>
-                <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                <Separator class="bg-border" />
                 <div class="space-y-2">
                   <div class="flex items-center justify-between gap-3">
                     <div>
-                      <Label class="text-white/70 light:text-gray-700">{{
+                      <Label class="text-foreground/80">{{
                         $t("settings.assignedChatResetEnabled")
                       }}</Label>
-                      <p class="text-xs text-white/40 light:text-gray-500">
+                      <p class="text-xs text-muted-foreground">
                         {{ $t("settings.assignedChatResetEnabledDesc") }}
                       </p>
                     </div>
@@ -936,10 +922,10 @@ onBeforeUnmount(() => {
                       "
                     />
                   </div>
-                  <Label class="text-white/70 light:text-gray-700">{{
+                  <Label class="text-foreground/80">{{
                     $t("settings.assignedChatResetSchedule")
                   }}</Label>
-                  <p class="text-xs text-white/40 light:text-gray-500">
+                  <p class="text-xs text-muted-foreground">
                     {{ $t("settings.assignedChatResetScheduleDesc") }}
                   </p>
                   <Select
@@ -947,24 +933,24 @@ onBeforeUnmount(() => {
                     :disabled="!chatSettings.assigned_chat_reset_enabled"
                   >
                     <SelectTrigger
-                      class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700"
+                      class="w-full max-w-xs border-input bg-input text-foreground"
                     >
                       <SelectValue
                         :placeholder="$t('settings.selectResetSchedule')"
                       />
                     </SelectTrigger>
                     <SelectContent
-                      class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200"
+                      class="border-border bg-popover text-popover-foreground"
                     >
                       <SelectItem
                         value="midnight"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                       >
                         {{ $t("settings.defaultMidnight") }}
                       </SelectItem>
                       <SelectItem
                         value="custom_hour"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                       >
                         {{ $t("settings.customHour") }}
                       </SelectItem>
@@ -978,7 +964,7 @@ onBeforeUnmount(() => {
                   "
                   class="space-y-2"
                 >
-                  <Label class="text-white/70 light:text-gray-700">{{
+                  <Label class="text-foreground/80">{{
                     $t("settings.customResetHour")
                   }}</Label>
                   <Select
@@ -992,34 +978,34 @@ onBeforeUnmount(() => {
                     :disabled="!chatSettings.assigned_chat_reset_enabled"
                   >
                     <SelectTrigger
-                      class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700"
+                      class="w-full max-w-xs border-input bg-input text-foreground"
                     >
                       <SelectValue
                         :placeholder="$t('settings.selectResetHour')"
                       />
                     </SelectTrigger>
                     <SelectContent
-                      class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200"
+                      class="border-border bg-popover text-popover-foreground"
                     >
                       <SelectItem
                         v-for="option in chatResetHourOptions"
                         :key="option.value"
                         :value="option.value"
-                        class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100"
+                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
                       >
                         {{ option.label }}
                       </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                <Separator class="bg-border" />
                 <div class="space-y-3">
                   <div class="flex items-center justify-between gap-3">
                     <div>
-                      <Label class="text-white/70 light:text-gray-700">{{
+                      <Label class="text-foreground/80">{{
                         $t("settings.chatCloseRatingEnabled")
                       }}</Label>
-                      <p class="text-xs text-white/40 light:text-gray-500">
+                      <p class="text-xs text-muted-foreground">
                         {{ $t("settings.chatCloseRatingEnabledDesc") }}
                       </p>
                     </div>
@@ -1031,17 +1017,13 @@ onBeforeUnmount(() => {
                     />
                   </div>
 
-
-
                   <div class="space-y-2">
-                    <Label class="text-white/70 light:text-gray-700">{{
+                    <Label class="text-foreground/80">{{
                       $t("settings.chatCloseRatingFollowupWindowMinutes")
                     }}</Label>
-                    <p class="text-xs text-white/40 light:text-gray-500">
+                    <p class="text-xs text-muted-foreground">
                       {{
-                        $t(
-                          "settings.chatCloseRatingFollowupWindowMinutesDesc",
-                        )
+                        $t("settings.chatCloseRatingFollowupWindowMinutesDesc")
                       }}
                     </p>
                     <Input
@@ -1049,7 +1031,7 @@ onBeforeUnmount(() => {
                       min="1"
                       max="1440"
                       step="1"
-                      class="w-full max-w-xs bg-white/[0.04] border-white/[0.1] text-white/70 light:bg-white light:border-gray-200 light:text-gray-700"
+                      class="w-full max-w-xs border-input bg-input text-foreground"
                       :model-value="
                         String(
                           chatSettings.chat_close_rating_followup_window_minutes,
@@ -1072,7 +1054,7 @@ onBeforeUnmount(() => {
                       type="button"
                       variant="outline"
                       size="sm"
-                      class="bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50"
+                      class="border-input bg-input text-foreground hover:bg-accent"
                       :disabled="!chatSettings.chat_close_rating_enabled"
                       @click="
                         showChatCloseRatingTemplates =
@@ -1083,20 +1065,20 @@ onBeforeUnmount(() => {
                     </Button>
                     <div
                       v-if="showChatCloseRatingTemplates"
-                      class="space-y-3 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3 light:border-gray-200 light:bg-gray-50"
+                      class="space-y-3 rounded-[calc(var(--radius)-0.1rem)] border border-border bg-card/80 p-3"
                     >
-                      <p class="text-xs text-white/40 light:text-gray-500">
+                      <p class="text-xs text-muted-foreground">
                         {{ $t("settings.chatCloseRatingTemplatesDesc") }}
                       </p>
 
                       <div class="space-y-2">
-                        <Label class="text-white/70 light:text-gray-700">{{
+                        <Label class="text-foreground/80">{{
                           $t("settings.chatCloseRatingTemplateEn")
                         }}</Label>
                         <Textarea
                           v-model="chatSettings.chat_close_rating_templates.en"
                           :rows="3"
-                          class="bg-white/[0.04] border-white/[0.1] text-white/80 placeholder:text-white/35 light:bg-white light:border-gray-200 light:text-gray-700"
+                          class="border-input bg-input text-foreground placeholder:text-muted-foreground"
                           :placeholder="
                             $t('settings.chatCloseRatingTemplatePlaceholder')
                           "
@@ -1105,13 +1087,13 @@ onBeforeUnmount(() => {
                       </div>
 
                       <div class="space-y-2">
-                        <Label class="text-white/70 light:text-gray-700">{{
+                        <Label class="text-foreground/80">{{
                           $t("settings.chatCloseRatingTemplateAr")
                         }}</Label>
                         <Textarea
                           v-model="chatSettings.chat_close_rating_templates.ar"
                           :rows="3"
-                          class="bg-white/[0.04] border-white/[0.1] text-white/80 placeholder:text-white/35 light:bg-white light:border-gray-200 light:text-gray-700"
+                          class="border-input bg-input text-foreground placeholder:text-muted-foreground"
                           :placeholder="
                             $t('settings.chatCloseRatingTemplatePlaceholder')
                           "
@@ -1120,13 +1102,13 @@ onBeforeUnmount(() => {
                       </div>
 
                       <div class="space-y-2">
-                        <Label class="text-white/70 light:text-gray-700">{{
+                        <Label class="text-foreground/80">{{
                           $t("settings.chatCloseRatingTemplateEs")
                         }}</Label>
                         <Textarea
                           v-model="chatSettings.chat_close_rating_templates.es"
                           :rows="3"
-                          class="bg-white/[0.04] border-white/[0.1] text-white/80 placeholder:text-white/35 light:bg-white light:border-gray-200 light:text-gray-700"
+                          class="border-input bg-input text-foreground placeholder:text-muted-foreground"
                           :placeholder="
                             $t('settings.chatCloseRatingTemplatePlaceholder')
                           "
@@ -1134,30 +1116,26 @@ onBeforeUnmount(() => {
                         />
                       </div>
 
-                      <p
-                        class="text-[11px] text-white/40 light:text-gray-500 font-mono"
-                      >
+                      <p class="font-mono text-[11px] text-muted-foreground">
                         {{ $t("settings.chatCloseRatingPlaceholders") }}
                       </p>
                     </div>
                   </div>
                 </div>
-                <Separator class="bg-white/[0.08] light:bg-gray-200" />
+                <Separator class="bg-border" />
                 <div class="space-y-3">
                   <div>
-                    <h4
-                      class="text-sm font-medium text-white light:text-gray-900"
-                    >
+                    <h4 class="text-sm font-medium text-foreground">
                       {{ $t("settings.chatQueues") }}
                     </h4>
-                    <p class="text-xs text-white/40 light:text-gray-500">
+                    <p class="text-xs text-muted-foreground">
                       {{ $t("settings.chatQueuesDesc") }}
                     </p>
                   </div>
                   <div class="grid gap-2 sm:grid-cols-1">
                     <RouterLink
                       to="/settings/closed-chats"
-                      class="rounded-lg border border-zinc-400/30 bg-zinc-500/10 px-3 py-2 text-xs text-zinc-100 hover:bg-zinc-500/20 light:border-zinc-200 light:bg-zinc-100 light:text-zinc-700"
+                      class="rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground hover:bg-accent"
                     >
                       <span class="inline-flex items-center gap-1.5 font-medium"
                         ><Archive class="h-3.5 w-3.5" />
@@ -1170,7 +1148,7 @@ onBeforeUnmount(() => {
                   <Button
                     variant="outline"
                     size="sm"
-                    class="bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50"
+                    class="border-input bg-input text-foreground hover:bg-accent"
                     @click="saveChatSettings"
                     :disabled="isSubmitting"
                   >

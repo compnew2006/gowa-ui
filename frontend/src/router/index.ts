@@ -53,6 +53,10 @@ const router = createRouter({
       children: [
         {
           path: "",
+          redirect: "/chat",
+        },
+        {
+          path: "dashboard",
           name: "dashboard",
           component: () => import("@/views/dashboard/DashboardView.vue"),
           meta: { permission: "analytics" },
@@ -283,8 +287,8 @@ const router = createRouter({
 // Navigation items with permissions in priority order (matches AppLayout.vue)
 // Used to find the first accessible route for a user
 const navigationOrder = [
-  { path: "/", permission: "analytics" },
   { path: "/chat", permission: "chat" },
+  { path: "/dashboard", permission: "analytics" },
   {
     path: "/chatbot",
     permission: "settings.chatbot",

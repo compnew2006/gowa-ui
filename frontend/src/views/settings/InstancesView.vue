@@ -26,8 +26,14 @@ import {
   type InstanceTagColorKey,
   type InstanceTagDisplayMode,
 } from "@/lib/instance-tag";
-import { normalizeAutoRejectCallSettings, type AutoRejectCallSettings } from "@/lib/instance-auto-reject";
-import { type AutoCampaignSettings, normalizeAutoCampaignSettings } from "@/lib/instance-auto-campaign";
+import {
+  normalizeAutoRejectCallSettings,
+  type AutoRejectCallSettings,
+} from "@/lib/instance-auto-reject";
+import {
+  type AutoCampaignSettings,
+  normalizeAutoCampaignSettings,
+} from "@/lib/instance-auto-campaign";
 import { type InstanceChatCloseRatingSettings } from "@/lib/instance-chat-close-rating";
 
 const instancesStore = useInstancesStore();
@@ -124,7 +130,8 @@ async function loadOrganizationPolicySettings() {
   try {
     const response = await organizationService.getSettings();
     const payload = response.data?.data || response.data || {};
-    campaignDraftOnlyEnforced.value = payload.settings?.campaign_draft_only === true;
+    campaignDraftOnlyEnforced.value =
+      payload.settings?.campaign_draft_only === true;
   } catch {
     campaignDraftOnlyEnforced.value = false;
   }
@@ -221,7 +228,12 @@ function startQRSnapshotPoll(instanceID: string) {
       !qrModalOpen.value ||
       qrCode.value
     ) {
-      if (!instanceID || instanceID !== currentInstanceId.value || !qrModalOpen.value || qrCode.value) {
+      if (
+        !instanceID ||
+        instanceID !== currentInstanceId.value ||
+        !qrModalOpen.value ||
+        qrCode.value
+      ) {
         clearQRSnapshotPoll();
       }
       return;
@@ -268,7 +280,11 @@ async function syncInstanceStatus(instanceID: string) {
 function scheduleConnectWatchdog(instanceID: string) {
   clearConnectWatchdog();
   connectWatchdogTimer = window.setTimeout(async () => {
-    if (instanceID !== currentInstanceId.value || !qrModalOpen.value || qrCode.value) {
+    if (
+      instanceID !== currentInstanceId.value ||
+      !qrModalOpen.value ||
+      qrCode.value
+    ) {
       return;
     }
 
@@ -613,7 +629,10 @@ async function handleAutoSyncUpdate(id: string, enabled: boolean) {
   }
 }
 
-async function handleAutoDownloadIncomingMediaUpdate(id: string, enabled: boolean) {
+async function handleAutoDownloadIncomingMediaUpdate(
+  id: string,
+  enabled: boolean,
+) {
   const instance = instancesStore.instances.find((item) => item.id === id);
   if (!instance) return;
 
@@ -657,7 +676,9 @@ async function handleAutoCampaignSettingsUpdate(
 
   autoCampaignSaving.value[id] = true;
   try {
-    const current = normalizeAutoCampaignSettings(instance.settings?.auto_campaign);
+    const current = normalizeAutoCampaignSettings(
+      instance.settings?.auto_campaign,
+    );
     const next = normalizeAutoCampaignSettings({
       ...current,
       ...payload,
@@ -704,7 +725,9 @@ async function handleAutoCampaignMediaClear(id: string) {
 
   autoCampaignSaving.value[id] = true;
   try {
-    const current = normalizeAutoCampaignSettings(instance.settings?.auto_campaign);
+    const current = normalizeAutoCampaignSettings(
+      instance.settings?.auto_campaign,
+    );
     const settings = {
       ...(instance.settings || {}),
       auto_campaign: normalizeAutoCampaignSettings({
@@ -734,13 +757,14 @@ async function handleUpdateChatCloseRatingSettings(
       settingsPayload = {
         ...(instance.settings || {}),
         chat_close_rating_enabled: payload.enabled,
-        chat_close_rating_followup_window_minutes: payload.followup_window_minutes,
+        chat_close_rating_followup_window_minutes:
+          payload.followup_window_minutes,
       };
-      
+
       // Filter out empty templates
       const templates: Record<string, string> = {};
       for (const [lang, template] of Object.entries(payload.templates || {})) {
-        if (template && template.trim() !== '') {
+        if (template && template.trim() !== "") {
           templates[lang] = template.trim();
         }
       }
@@ -763,7 +787,7 @@ async function handleUpdateChatCloseRatingSettings(
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
       :title="$t('settings.instances.title')"
       :subtitle="$t('settings.instances.subtitle')"
@@ -796,7 +820,9 @@ async function handleUpdateChatCloseRatingSettings(
         v-if="instancesStore.loading && instancesStore.instances.length === 0"
         class="flex justify-center items-center h-64"
       >
-        <Loader2 class="h-8 w-8 text-white/20 light:text-gray-400 animate-spin" />
+        <Loader2
+          class="h-8 w-8 text-white/20 light:text-gray-400 animate-spin"
+        />
       </div>
 
       <div
@@ -836,10 +862,10 @@ async function handleUpdateChatCloseRatingSettings(
           "
           :auto-reject-saving="autoRejectSaving[instance.id] || false"
           :auto-campaign-saving="autoCampaignSaving[instance.id] || false"
-          :auto-campaign-uploading="
-            autoCampaignUploading[instance.id] || false
+          :auto-campaign-uploading="autoCampaignUploading[instance.id] || false"
+          :chat-close-rating-saving="
+            chatCloseRatingSaving[instance.id] || false
           "
-          :chat-close-rating-saving="chatCloseRatingSaving[instance.id] || false"
           @connect="handleConnect"
           @disconnect="disconnectInstance"
           @edit="openEditDialog"
@@ -853,7 +879,9 @@ async function handleUpdateChatCloseRatingSettings(
           @update-auto-campaign-settings="handleAutoCampaignSettingsUpdate"
           @upload-auto-campaign-media="handleAutoCampaignMediaUpload"
           @clear-auto-campaign-media="handleAutoCampaignMediaClear"
-          @update-chat-close-rating-settings="handleUpdateChatCloseRatingSettings"
+          @update-chat-close-rating-settings="
+            handleUpdateChatCloseRatingSettings
+          "
         />
       </div>
     </div>
@@ -915,9 +943,11 @@ async function handleUpdateChatCloseRatingSettings(
         </DialogHeader>
         <div class="grid gap-4 py-4">
           <div class="grid gap-2">
-            <Label htmlFor="edit-name" class="text-white/70 light:text-gray-700">{{
-              $t("settings.instances.dialog.accountName")
-            }}</Label>
+            <Label
+              htmlFor="edit-name"
+              class="text-white/70 light:text-gray-700"
+              >{{ $t("settings.instances.dialog.accountName") }}</Label
+            >
             <Input
               id="edit-name"
               v-model="editInstanceName"
@@ -973,7 +1003,9 @@ async function handleUpdateChatCloseRatingSettings(
         {{ $t("settings.instances.dialog.deleteDescription") }}
       </template>
       <template #details>
-        <div class="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+        <div
+          class="rounded-md border border-destructive/30 bg-destructive/5 p-3"
+        >
           <div class="flex items-start gap-2">
             <Checkbox
               id="delete-instance-chats"

@@ -1,277 +1,308 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { computed, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   activityLogsService,
   type ActivityLog as ActivityLogAPI,
   type ActivityLog,
   type ActivityLogListParams,
-  type CreateActivityLogPayload
-} from '@/services/api'
-import { ActivityLogNarrator, type ActivityNarrative } from './activity-log-narrator'
-import { ActivityLogContactResolver } from './activity-log-contact-resolver'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CrudFormDialog, DataTable, PageHeader, type Column } from '@/components/shared'
-import { ClipboardList, Plus, RotateCcw, RefreshCcw } from 'lucide-vue-next'
-import { toast } from 'vue-sonner'
-import { getErrorMessage } from '@/lib/api-utils'
+  type CreateActivityLogPayload,
+} from "@/services/api";
+import {
+  ActivityLogNarrator,
+  type ActivityNarrative,
+} from "./activity-log-narrator";
+import { ActivityLogContactResolver } from "./activity-log-contact-resolver";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  CrudFormDialog,
+  DataTable,
+  PageHeader,
+  type Column,
+} from "@/components/shared";
+import { ClipboardList, Plus, RotateCcw, RefreshCcw } from "lucide-vue-next";
+import { toast } from "vue-sonner";
+import { getErrorMessage } from "@/lib/api-utils";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 interface ActivityFilters {
-  category: string
-  eventType: string
-  source: string
-  status: string
-  startDate: string
-  endDate: string
+  category: string;
+  eventType: string;
+  source: string;
+  status: string;
+  startDate: string;
+  endDate: string;
 }
 
 interface CustomEventForm {
-  eventType: string
-  action: string
-  contactID: string
-  messageID: string
-  metadataText: string
+  eventType: string;
+  action: string;
+  contactID: string;
+  messageID: string;
+  metadataText: string;
 }
 
 const defaultFilters: ActivityFilters = {
-  category: 'all',
-  eventType: '',
-  source: 'all',
-  status: 'all',
-  startDate: '',
-  endDate: ''
-}
+  category: "all",
+  eventType: "",
+  source: "all",
+  status: "all",
+  startDate: "",
+  endDate: "",
+};
 
 const defaultCustomEventForm: CustomEventForm = {
-  eventType: '',
-  action: '',
-  contactID: '',
-  messageID: '',
-  metadataText: '{}'
-}
+  eventType: "",
+  action: "",
+  contactID: "",
+  messageID: "",
+  metadataText: "{}",
+};
 
-const logs = ref<ActivityLog[]>([])
-const isLoading = ref(false)
-const isSubmitting = ref(false)
-const filters = ref<ActivityFilters>({ ...defaultFilters })
-const isCreateDialogOpen = ref(false)
-const customEventForm = ref<CustomEventForm>({ ...defaultCustomEventForm })
+const logs = ref<ActivityLog[]>([]);
+const isLoading = ref(false);
+const isSubmitting = ref(false);
+const filters = ref<ActivityFilters>({ ...defaultFilters });
+const isCreateDialogOpen = ref(false);
+const customEventForm = ref<CustomEventForm>({ ...defaultCustomEventForm });
 
-const currentPage = ref(1)
-const totalItems = ref(0)
-const pageSize = 50
-const narrator = new ActivityLogNarrator()
-const contactResolver = new ActivityLogContactResolver()
+const currentPage = ref(1);
+const totalItems = ref(0);
+const pageSize = 50;
+const narrator = new ActivityLogNarrator();
+const contactResolver = new ActivityLogContactResolver();
 const defaultNarrative: ActivityNarrative = {
-  eventClass: 'general',
-  sentence: 'Activity recorded'
-}
-const contactLabels = ref<Map<string, string>>(new Map())
-let contactResolveRunID = 0
+  eventClass: "general",
+  sentence: "Activity recorded",
+};
+const contactLabels = ref<Map<string, string>>(new Map());
+let contactResolveRunID = 0;
 
 const columns = computed<Column<ActivityLog>[]>(() => [
-  { key: 'timestamp', label: t('activityLogs.columns.timestamp'), sortable: true, sortKey: 'created_at' },
-  { key: 'event_class', label: t('activityLogs.columns.eventClass') },
-  { key: 'activity', label: t('activityLogs.columns.activity') },
-  { key: 'status', label: t('activityLogs.columns.status') },
-])
+  {
+    key: "timestamp",
+    label: t("activityLogs.columns.timestamp"),
+    sortable: true,
+    sortKey: "created_at",
+  },
+  { key: "event_class", label: t("activityLogs.columns.eventClass") },
+  { key: "activity", label: t("activityLogs.columns.activity") },
+  { key: "status", label: t("activityLogs.columns.status") },
+]);
 
-const sortKey = ref('created_at')
-const sortDirection = ref<'asc' | 'desc'>('desc')
+const sortKey = ref("created_at");
+const sortDirection = ref<"asc" | "desc">("desc");
 
 function buildListParams(): ActivityLogListParams {
   const params: ActivityLogListParams = {
     page: currentPage.value,
-    limit: pageSize
-  }
+    limit: pageSize,
+  };
 
-  if (filters.value.category !== 'all') params.category = filters.value.category
-  if (filters.value.source !== 'all') params.source = filters.value.source
-  if (filters.value.status !== 'all') params.status = filters.value.status
+  if (filters.value.category !== "all")
+    params.category = filters.value.category;
+  if (filters.value.source !== "all") params.source = filters.value.source;
+  if (filters.value.status !== "all") params.status = filters.value.status;
 
-  const eventType = filters.value.eventType.trim()
-  if (eventType) params.event_type = eventType
+  const eventType = filters.value.eventType.trim();
+  if (eventType) params.event_type = eventType;
 
-  if (filters.value.startDate) params.start_date = filters.value.startDate
-  if (filters.value.endDate) params.end_date = filters.value.endDate
+  if (filters.value.startDate) params.start_date = filters.value.startDate;
+  if (filters.value.endDate) params.end_date = filters.value.endDate;
 
-  return params
+  return params;
 }
 
 async function fetchLogs() {
-  isLoading.value = true
+  isLoading.value = true;
   try {
-    const response = await activityLogsService.list(buildListParams())
-    const data = (response.data as any).data || response.data
-    logs.value = data.logs || []
-    totalItems.value = data.total ?? logs.value.length
-    void resolveContactLabels(logs.value)
+    const response = await activityLogsService.list(buildListParams());
+    const data = (response.data as any).data || response.data;
+    logs.value = data.logs || [];
+    totalItems.value = data.total ?? logs.value.length;
+    void resolveContactLabels(logs.value);
   } catch (error) {
-    toast.error(getErrorMessage(error, t('activityLogs.failedLoad')))
+    toast.error(getErrorMessage(error, t("activityLogs.failedLoad")));
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
 }
 
 async function resolveContactLabels(currentLogs: ActivityLogAPI[]) {
-  const runID = ++contactResolveRunID
+  const runID = ++contactResolveRunID;
   if (currentLogs.length === 0) {
-    contactLabels.value = new Map()
-    return
+    contactLabels.value = new Map();
+    return;
   }
   try {
-    const resolved = await contactResolver.resolve(currentLogs)
-    if (runID !== contactResolveRunID) return
-    contactLabels.value = resolved
+    const resolved = await contactResolver.resolve(currentLogs);
+    if (runID !== contactResolveRunID) return;
+    contactLabels.value = resolved;
   } catch {
-    if (runID !== contactResolveRunID) return
-    contactLabels.value = new Map()
+    if (runID !== contactResolveRunID) return;
+    contactLabels.value = new Map();
   }
 }
 
 function handlePageChange(page: number) {
-  currentPage.value = page
-  fetchLogs()
+  currentPage.value = page;
+  fetchLogs();
 }
 
 function applyFilters() {
-  currentPage.value = 1
-  fetchLogs()
+  currentPage.value = 1;
+  fetchLogs();
 }
 
 function resetFilters() {
-  filters.value = { ...defaultFilters }
-  currentPage.value = 1
-  fetchLogs()
+  filters.value = { ...defaultFilters };
+  currentPage.value = 1;
+  fetchLogs();
 }
 
 function openCreateDialog() {
-  customEventForm.value = { ...defaultCustomEventForm }
-  isCreateDialogOpen.value = true
+  customEventForm.value = { ...defaultCustomEventForm };
+  isCreateDialogOpen.value = true;
 }
 
 function parseMetadata(metadataText: string): Record<string, any> {
-  const trimmed = metadataText.trim()
-  if (!trimmed) return {}
+  const trimmed = metadataText.trim();
+  if (!trimmed) return {};
 
-  const parsed = JSON.parse(trimmed)
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(t('activityLogs.validation.metadataObject'))
+  const parsed = JSON.parse(trimmed);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(t("activityLogs.validation.metadataObject"));
   }
-  return parsed
+  return parsed;
 }
 
 async function createCustomEvent() {
-  const eventType = customEventForm.value.eventType.trim()
-  const action = customEventForm.value.action.trim()
+  const eventType = customEventForm.value.eventType.trim();
+  const action = customEventForm.value.action.trim();
 
   if (!eventType) {
-    toast.error(t('activityLogs.validation.eventTypeRequired'))
-    return
+    toast.error(t("activityLogs.validation.eventTypeRequired"));
+    return;
   }
   if (!action) {
-    toast.error(t('activityLogs.validation.actionRequired'))
-    return
+    toast.error(t("activityLogs.validation.actionRequired"));
+    return;
   }
 
-  let metadata: Record<string, any>
+  let metadata: Record<string, any>;
   try {
-    metadata = parseMetadata(customEventForm.value.metadataText)
+    metadata = parseMetadata(customEventForm.value.metadataText);
   } catch (error) {
-    toast.error(getErrorMessage(error, t('activityLogs.validation.metadataJson')))
-    return
+    toast.error(
+      getErrorMessage(error, t("activityLogs.validation.metadataJson")),
+    );
+    return;
   }
 
   const payload: CreateActivityLogPayload = {
-    category: 'custom',
+    category: "custom",
     event_type: eventType,
     action,
-    metadata
-  }
+    metadata,
+  };
 
-  const contactID = customEventForm.value.contactID.trim()
-  const messageID = customEventForm.value.messageID.trim()
-  if (contactID) payload.contact_id = contactID
-  if (messageID) payload.message_id = messageID
+  const contactID = customEventForm.value.contactID.trim();
+  const messageID = customEventForm.value.messageID.trim();
+  if (contactID) payload.contact_id = contactID;
+  if (messageID) payload.message_id = messageID;
 
-  isSubmitting.value = true
+  isSubmitting.value = true;
   try {
-    await activityLogsService.create(payload)
-    toast.success(t('activityLogs.customEventCreated'))
-    isCreateDialogOpen.value = false
-    await fetchLogs()
+    await activityLogsService.create(payload);
+    toast.success(t("activityLogs.customEventCreated"));
+    isCreateDialogOpen.value = false;
+    await fetchLogs();
   } catch (error) {
-    toast.error(getErrorMessage(error, t('activityLogs.failedCreate')))
+    toast.error(getErrorMessage(error, t("activityLogs.failedCreate")));
   } finally {
-    isSubmitting.value = false
+    isSubmitting.value = false;
   }
 }
 
 function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return new Date(value).toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 const narrativesByID = computed(() => {
-  const narrativeMap = new Map<string, ActivityNarrative>()
+  const narrativeMap = new Map<string, ActivityNarrative>();
   for (const log of logs.value) {
-    narrativeMap.set(log.id, narrator.build(log, { contactLabels: contactLabels.value }))
+    narrativeMap.set(
+      log.id,
+      narrator.build(log, { contactLabels: contactLabels.value }),
+    );
   }
-  return narrativeMap
-})
+  return narrativeMap;
+});
 
 function getNarrative(log: ActivityLog): ActivityNarrative {
-  return narrativesByID.value.get(log.id) || defaultNarrative
+  return narrativesByID.value.get(log.id) || defaultNarrative;
 }
 
 function getActivityDescription(log: ActivityLog): string {
-  return getNarrative(log).sentence
+  return getNarrative(log).sentence;
 }
 
 function getEventClassLabel(log: ActivityLog): string {
-  return t(`activityLogs.eventClasses.${getNarrative(log).eventClass}`)
+  return t(`activityLogs.eventClasses.${getNarrative(log).eventClass}`);
 }
 
 function getEventClassClass(log: ActivityLog): string {
-  const eventClass = getNarrative(log).eventClass
-  if (eventClass === 'user') return 'border-emerald-600 text-emerald-600'
-  if (eventClass === 'auth') return 'border-blue-600 text-blue-600'
-  if (eventClass === 'system') return 'border-amber-600 text-amber-600'
-  if (eventClass === 'custom') return 'border-violet-600 text-violet-600'
-  return ''
+  const eventClass = getNarrative(log).eventClass;
+  if (eventClass === "user") return "border-emerald-600 text-emerald-600";
+  if (eventClass === "auth") return "border-blue-600 text-blue-600";
+  if (eventClass === "system") return "border-amber-600 text-amber-600";
+  if (eventClass === "custom") return "border-violet-600 text-violet-600";
+  return "";
 }
 
 function getStatusLabel(status: string): string {
-  if (status === 'success') return t('common.success')
-  if (status === 'failure') return t('common.failed')
-  return status || '—'
+  if (status === "success") return t("common.success");
+  if (status === "failure") return t("common.failed");
+  return status || "—";
 }
 
 function getStatusClass(status: string): string {
-  if (status === 'success') return 'border-emerald-600 text-emerald-600'
-  if (status === 'failure') return 'border-destructive text-destructive'
-  return ''
+  if (status === "success") return "border-emerald-600 text-emerald-600";
+  if (status === "failure") return "border-destructive text-destructive";
+  return "";
 }
 
-onMounted(() => fetchLogs())
+onMounted(() => fetchLogs());
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
       :title="$t('activityLogs.title')"
       :subtitle="$t('activityLogs.subtitle')"
@@ -282,11 +313,11 @@ onMounted(() => fetchLogs())
         <div class="flex items-center gap-2">
           <Button variant="outline" size="sm" @click="fetchLogs">
             <RefreshCcw class="h-4 w-4 mr-2" />
-            {{ $t('activityLogs.refresh') }}
+            {{ $t("activityLogs.refresh") }}
           </Button>
           <Button variant="outline" size="sm" @click="openCreateDialog">
             <Plus class="h-4 w-4 mr-2" />
-            {{ $t('activityLogs.logCustomEvent') }}
+            {{ $t("activityLogs.logCustomEvent") }}
           </Button>
         </div>
       </template>
@@ -297,83 +328,113 @@ onMounted(() => fetchLogs())
         <div class="max-w-7xl mx-auto space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>{{ $t('activityLogs.filtersTitle') }}</CardTitle>
-              <CardDescription>{{ $t('activityLogs.filtersDescription') }}</CardDescription>
+              <CardTitle>{{ $t("activityLogs.filtersTitle") }}</CardTitle>
+              <CardDescription>{{
+                $t("activityLogs.filtersDescription")
+              }}</CardDescription>
             </CardHeader>
             <CardContent>
               <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div class="space-y-2">
-                  <Label>{{ $t('activityLogs.filters.category') }}</Label>
+                  <Label>{{ $t("activityLogs.filters.category") }}</Label>
                   <Select v-model="filters.category">
                     <SelectTrigger>
                       <SelectValue :placeholder="$t('common.select')" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">{{ $t('activityLogs.options.all') }}</SelectItem>
-                      <SelectItem value="auth">{{ $t('activityLogs.options.auth') }}</SelectItem>
-                      <SelectItem value="engagement">{{ $t('activityLogs.options.engagement') }}</SelectItem>
-                      <SelectItem value="system">{{ $t('activityLogs.options.system') }}</SelectItem>
-                      <SelectItem value="custom">{{ $t('activityLogs.options.custom') }}</SelectItem>
+                      <SelectItem value="all">{{
+                        $t("activityLogs.options.all")
+                      }}</SelectItem>
+                      <SelectItem value="auth">{{
+                        $t("activityLogs.options.auth")
+                      }}</SelectItem>
+                      <SelectItem value="engagement">{{
+                        $t("activityLogs.options.engagement")
+                      }}</SelectItem>
+                      <SelectItem value="system">{{
+                        $t("activityLogs.options.system")
+                      }}</SelectItem>
+                      <SelectItem value="custom">{{
+                        $t("activityLogs.options.custom")
+                      }}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div class="space-y-2">
-                  <Label>{{ $t('activityLogs.filters.eventType') }}</Label>
+                  <Label>{{ $t("activityLogs.filters.eventType") }}</Label>
                   <Input
                     v-model="filters.eventType"
-                    :placeholder="$t('activityLogs.filters.eventTypePlaceholder')"
+                    :placeholder="
+                      $t('activityLogs.filters.eventTypePlaceholder')
+                    "
                   />
                 </div>
 
                 <div class="space-y-2">
-                  <Label>{{ $t('activityLogs.filters.source') }}</Label>
+                  <Label>{{ $t("activityLogs.filters.source") }}</Label>
                   <Select v-model="filters.source">
                     <SelectTrigger>
                       <SelectValue :placeholder="$t('common.select')" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">{{ $t('activityLogs.options.all') }}</SelectItem>
-                      <SelectItem value="auth">{{ $t('activityLogs.options.auth') }}</SelectItem>
-                      <SelectItem value="engagement">{{ $t('activityLogs.options.engagement') }}</SelectItem>
-                      <SelectItem value="system">{{ $t('activityLogs.options.system') }}</SelectItem>
-                      <SelectItem value="custom">{{ $t('activityLogs.options.custom') }}</SelectItem>
+                      <SelectItem value="all">{{
+                        $t("activityLogs.options.all")
+                      }}</SelectItem>
+                      <SelectItem value="auth">{{
+                        $t("activityLogs.options.auth")
+                      }}</SelectItem>
+                      <SelectItem value="engagement">{{
+                        $t("activityLogs.options.engagement")
+                      }}</SelectItem>
+                      <SelectItem value="system">{{
+                        $t("activityLogs.options.system")
+                      }}</SelectItem>
+                      <SelectItem value="custom">{{
+                        $t("activityLogs.options.custom")
+                      }}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div class="space-y-2">
-                  <Label>{{ $t('activityLogs.filters.status') }}</Label>
+                  <Label>{{ $t("activityLogs.filters.status") }}</Label>
                   <Select v-model="filters.status">
                     <SelectTrigger>
                       <SelectValue :placeholder="$t('common.select')" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">{{ $t('activityLogs.options.all') }}</SelectItem>
-                      <SelectItem value="success">{{ $t('common.success') }}</SelectItem>
-                      <SelectItem value="failure">{{ $t('common.failed') }}</SelectItem>
+                      <SelectItem value="all">{{
+                        $t("activityLogs.options.all")
+                      }}</SelectItem>
+                      <SelectItem value="success">{{
+                        $t("common.success")
+                      }}</SelectItem>
+                      <SelectItem value="failure">{{
+                        $t("common.failed")
+                      }}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div class="space-y-2">
-                  <Label>{{ $t('activityLogs.filters.startDate') }}</Label>
+                  <Label>{{ $t("activityLogs.filters.startDate") }}</Label>
                   <Input v-model="filters.startDate" type="date" />
                 </div>
 
                 <div class="space-y-2">
-                  <Label>{{ $t('activityLogs.filters.endDate') }}</Label>
+                  <Label>{{ $t("activityLogs.filters.endDate") }}</Label>
                   <Input v-model="filters.endDate" type="date" />
                 </div>
               </div>
 
               <div class="mt-4 flex items-center gap-2">
                 <Button variant="outline" size="sm" @click="applyFilters">
-                  {{ $t('activityLogs.applyFilters') }}
+                  {{ $t("activityLogs.applyFilters") }}
                 </Button>
                 <Button variant="ghost" size="sm" @click="resetFilters">
                   <RotateCcw class="h-4 w-4 mr-2" />
-                  {{ $t('activityLogs.resetFilters') }}
+                  {{ $t("activityLogs.resetFilters") }}
                 </Button>
               </div>
             </CardContent>
@@ -381,8 +442,10 @@ onMounted(() => fetchLogs())
 
           <Card>
             <CardHeader>
-              <CardTitle>{{ $t('activityLogs.historyTitle') }}</CardTitle>
-              <CardDescription>{{ $t('activityLogs.historyDescription') }}</CardDescription>
+              <CardTitle>{{ $t("activityLogs.historyTitle") }}</CardTitle>
+              <CardDescription>{{
+                $t("activityLogs.historyDescription")
+              }}</CardDescription>
             </CardHeader>
             <CardContent>
               <DataTable
@@ -402,17 +465,25 @@ onMounted(() => fetchLogs())
                 @page-change="handlePageChange"
               >
                 <template #cell-timestamp="{ item: log }">
-                  <span class="whitespace-nowrap">{{ formatTimestamp(log.created_at) }}</span>
+                  <span class="whitespace-nowrap">{{
+                    formatTimestamp(log.created_at)
+                  }}</span>
                 </template>
 
                 <template #cell-event_class="{ item: log }">
-                  <Badge variant="outline" :class="getEventClassClass(log)" class="capitalize">
+                  <Badge
+                    variant="outline"
+                    :class="getEventClassClass(log)"
+                    class="capitalize"
+                  >
                     {{ getEventClassLabel(log) }}
                   </Badge>
                 </template>
 
                 <template #cell-activity="{ item: log }">
-                  <span class="text-sm leading-6">{{ getActivityDescription(log) }}</span>
+                  <span class="text-sm leading-6">{{
+                    getActivityDescription(log)
+                  }}</span>
                 </template>
 
                 <template #cell-status="{ item: log }">
@@ -438,7 +509,9 @@ onMounted(() => fetchLogs())
     >
       <div class="space-y-4 py-2">
         <div class="space-y-2">
-          <Label for="custom-event-type">{{ $t('activityLogs.customForm.eventType') }}</Label>
+          <Label for="custom-event-type">{{
+            $t("activityLogs.customForm.eventType")
+          }}</Label>
           <Input
             id="custom-event-type"
             v-model="customEventForm.eventType"
@@ -447,7 +520,9 @@ onMounted(() => fetchLogs())
         </div>
 
         <div class="space-y-2">
-          <Label for="custom-action">{{ $t('activityLogs.customForm.action') }}</Label>
+          <Label for="custom-action">{{
+            $t("activityLogs.customForm.action")
+          }}</Label>
           <Input
             id="custom-action"
             v-model="customEventForm.action"
@@ -457,7 +532,9 @@ onMounted(() => fetchLogs())
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="space-y-2">
-            <Label for="custom-contact-id">{{ $t('activityLogs.customForm.contactId') }}</Label>
+            <Label for="custom-contact-id">{{
+              $t("activityLogs.customForm.contactId")
+            }}</Label>
             <Input
               id="custom-contact-id"
               v-model="customEventForm.contactID"
@@ -466,7 +543,9 @@ onMounted(() => fetchLogs())
           </div>
 
           <div class="space-y-2">
-            <Label for="custom-message-id">{{ $t('activityLogs.customForm.messageId') }}</Label>
+            <Label for="custom-message-id">{{
+              $t("activityLogs.customForm.messageId")
+            }}</Label>
             <Input
               id="custom-message-id"
               v-model="customEventForm.messageID"
@@ -476,7 +555,9 @@ onMounted(() => fetchLogs())
         </div>
 
         <div class="space-y-2">
-          <Label for="custom-metadata">{{ $t('activityLogs.customForm.metadata') }}</Label>
+          <Label for="custom-metadata">{{
+            $t("activityLogs.customForm.metadata")
+          }}</Label>
           <Textarea
             id="custom-metadata"
             v-model="customEventForm.metadataText"

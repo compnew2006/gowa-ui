@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Activity } from 'lucide-vue-next'
-import { PageHeader } from '@/components/shared'
-import HealthDashboard from '@/components/HealthDashboard.vue'
+import { Activity } from "lucide-vue-next";
+import { PageHeader } from "@/components/shared";
+import HealthDashboard from "@/components/HealthDashboard.vue";
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
       title="Instance Health Dashboard"
       subtitle="Live uptime, throughput, error, and queue metrics for each connected number."
