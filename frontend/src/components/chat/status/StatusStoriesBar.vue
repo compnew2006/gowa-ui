@@ -52,9 +52,20 @@ const otherGroups = computed(() =>
   groups.value.filter((group) => !group.is_self),
 );
 const totalGroups = computed(() => groups.value.length);
-const totalGroupsLabel = computed(() =>
-  totalGroups.value > 9 ? "9+" : String(totalGroups.value),
-);
+const totalGroupsLabel = computed(() => String(totalGroups.value));
+const totalGroupsBadgeClass = computed(() => {
+  const digitCount = totalGroupsLabel.value.length;
+
+  if (digitCount <= 2) {
+    return "inline-grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-[9px] font-semibold leading-none text-primary-foreground shadow-sm";
+  }
+
+  if (digitCount === 3) {
+    return "inline-grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-[8px] font-semibold leading-none text-primary-foreground shadow-sm";
+  }
+
+  return "inline-grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-[8px] font-semibold leading-none text-primary-foreground shadow-sm";
+});
 const isDrawerOpen = ref(false);
 
 function getGroupInstanceLabel(group: WhatsAppStatusGroup): string {
@@ -135,7 +146,7 @@ onBeforeUnmount(() => {
           </p>
           <span
             v-if="totalGroups > 0"
-            class="inline-grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-[9px] font-semibold leading-none text-primary-foreground shadow-sm"
+            :class="totalGroupsBadgeClass"
             data-testid="status-groups-count"
           >
             {{ totalGroupsLabel }}

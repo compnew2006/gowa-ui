@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -588,6 +589,7 @@ type CreateContactRequest struct {
 	ProfileName     string         `json:"profile_name"`
 	WhatsAppAccount string         `json:"whatsapp_account"`
 	InstanceID      string         `json:"instance_id,omitempty"`
+	StartChat       bool           `json:"start_chat,omitempty"`
 	Tags            []string       `json:"tags"`
 	Metadata        map[string]any `json:"metadata"`
 }
@@ -609,6 +611,12 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 		return nil
 	}
 
+	startChat := req.StartChat && a.isWhatsmeowProvider()
+
+	req.PhoneNumber = strings.TrimSpace(req.PhoneNumber)
+	req.ProfileName = strings.TrimSpace(req.ProfileName)
+	req.WhatsAppAccount = strings.TrimSpace(req.WhatsAppAccount)
+
 	if req.PhoneNumber == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "phone_number is required", nil, "")
 	}
@@ -616,6 +624,40 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 	resolvedInstanceID, err := a.resolveContactInstanceID(orgID, req.InstanceID)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "instance_id")
+	}
+
+	if startChat {
+		instance, resolveErr := a.resolveOutboundInstance(orgID, req.InstanceID, resolvedInstanceID)
+		if resolveErr != nil {
+			if _, reasonCode, ok := asInstanceSelectionError(resolveErr); ok {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), reasonCodeDetails(reasonCode), "instance_id")
+			}
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, resolveErr.Error(), nil, "instance_id")
+		}
+
+		resolvedInstanceID = &instance.ID
+
+		lookupCtx, cancel := context.WithTimeout(r.RequestCtx, 8*time.Second)
+		defer cancel()
+
+		resolvedContact, lookupErr := a.resolveWhatsmeowContactResolver().ResolveDirectContact(lookupCtx, instance, req.PhoneNumber)
+		switch {
+		case lookupErr == nil:
+			req.PhoneNumber = strings.TrimSpace(resolvedContact.CanonicalPhone)
+			if req.ProfileName == "" {
+				req.ProfileName = strings.TrimSpace(resolvedContact.ProfileName)
+			}
+			if req.WhatsAppAccount == "" {
+				req.WhatsAppAccount = strings.TrimSpace(instance.PhoneNumber)
+			}
+		case errors.Is(lookupErr, errWhatsmeowDirectChatInvalidPhone), errors.Is(lookupErr, errWhatsmeowDirectChatNotFound):
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, lookupErr.Error(), nil, "phone_number")
+		case errors.Is(lookupErr, errWhatsmeowDirectChatUnavailable):
+			return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "The selected WhatsApp instance is not available for starting chats", nil, "instance_id")
+		default:
+			a.Log.Error("Failed to resolve WhatsMeow direct chat recipient", "error", lookupErr, "org_id", orgID, "instance_id", instance.ID, "phone_number", req.PhoneNumber)
+			return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to verify phone number on WhatsApp", nil, "phone_number")
+		}
 	}
 
 	// Normalize phone number
@@ -646,8 +688,13 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 			if req.WhatsAppAccount != "" {
 				updates["whats_app_account"] = req.WhatsAppAccount
 			}
-			if req.InstanceID != "" {
+			if resolvedInstanceID != nil {
 				updates["instance_id"] = resolvedInstanceID
+			}
+			if startChat {
+				for key, value := range chatAssignmentUpdates(&userID) {
+					updates[key] = value
+				}
 			}
 			if req.Tags != nil {
 				tagsArray := make(models.JSONBArray, len(req.Tags))
@@ -664,9 +711,19 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 			}
 			// Reload contact
 			a.DB.First(&existingContact, existingContact.ID)
+			if startChat {
+				a.broadcastContactLifecycleUpdate(orgID, &existingContact, false)
+			}
 			return r.SendEnvelope(a.buildContactResponse(&existingContact, orgID, userID))
 		}
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists", nil, "")
+	}
+
+	status := models.ChatStatusPending
+	var assignedUserID *uuid.UUID
+	if startChat {
+		status = models.ChatStatusOpen
+		assignedUserID = &userID
 	}
 
 	// Create new contact
@@ -677,7 +734,8 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 		PhoneNumber:     normalizedPhone,
 		ProfileName:     req.ProfileName,
 		WhatsAppAccount: req.WhatsAppAccount,
-		Status:          models.ChatStatusPending,
+		Status:          status,
+		AssignedUserID:  assignedUserID,
 	}
 
 	if req.Tags != nil {
@@ -695,6 +753,10 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 	if err := a.DB.Create(&contact).Error; err != nil {
 		a.Log.Error("Failed to create contact", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create contact", nil, "")
+	}
+
+	if startChat {
+		a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 	}
 
 	return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))

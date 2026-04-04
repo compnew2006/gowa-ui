@@ -6124,6 +6124,7 @@ async function sendMediaMessage() {
     <!-- Add Contact Dialog -->
     <CreateContactDialog
       v-model:open="isAddContactOpen"
+      mode="chat"
       @created="onContactCreated"
     />
   </div>

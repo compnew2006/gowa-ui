@@ -37,6 +37,8 @@ type App struct {
 	HTTPClient *http.Client
 	// MessageProvider is the abstraction for sending messages (Meta or Whatsmeow)
 	MessageProvider provider.MessageProvider
+	// WhatsmeowContactResolver resolves ad-hoc chat recipients for WhatsMeow start-chat flows.
+	WhatsmeowContactResolver WhatsmeowContactResolver
 	// WhatsmeowQueue is the per-instance message queue for whatsmeow rate limiting
 	WhatsmeowQueue *whatsmeow.QueueManager
 	// wg tracks background goroutines for graceful shutdown

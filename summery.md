@@ -581,3 +581,59 @@
     - the filter value changed to `n0n`
     - results count changed from `Showing 1 to 20 of 181 contacts` to `Showing 1 to 20 of 128 contacts`
     - rows with `None` as the instance were excluded from the filtered result
+
+## 2026-04-04 16:31
+
+### Skills Used
+
+- `fullstack-guardian`
+  - used because this change crossed the Vue chat UI, API payload, backend contact creation flow, and live browser verification
+- `golang-pro`
+  - used for the WhatsMeow-backed Go handler changes, resolver design, and table-driven backend tests
+
+### Completed
+
+- Changed the `/chat` create-contact flow into a WhatsMeow-driven direct chat flow when the provider is WhatsMeow:
+  - the dialog now opens as `Start New Chat`
+  - it requires an international phone number and a sending WhatsApp instance
+  - it hides the old WhatsApp account selector in this mode
+  - it sends `instance_id` plus `start_chat: true` instead of requiring a stored contact/account first
+- Added backend support for direct-chat contact creation:
+  - validates and normalizes international numbers
+  - resolves the selected outbound instance
+  - checks the destination with WhatsMeow before creating/restoring the contact
+  - hydrates the contact profile name from the WhatsApp verified business/public profile when available
+  - restores or creates the contact in an open/assigned chat-ready state
+- Added targeted regression coverage for both the Go handler flow and the Vue dialog payload/behavior.
+
+### Validation
+
+- `go test -race ./internal/handlers -run 'TestNormalizeWhatsmeowDirectChatPhone|TestCreateContact_StartChat'` ✅
+- `pnpm --dir frontend exec vitest run src/components/shared/CreateContactDialog.test.ts` ✅
+- `pnpm --dir frontend typecheck` was checked during this session and still fails due unrelated pre-existing issues elsewhere in the repo, including:
+  - `frontend/src/components/ui/toast/use-toast.ts`
+  - `frontend/src/stores/contacts.ts`
+  - `frontend/src/stores/roles.ts`
+  - `frontend/src/views/chat/ChatView.vue`
+  - `frontend/src/views/chatbot/AgentTransfersView.vue`
+  - `frontend/src/views/chatbot/ChatbotFlowBuilderView.vue`
+  - `frontend/src/views/dashboard/DashboardView.vue`
+  - `frontend/src/views/settings/TeamsView.vue`
+
+### Manual QA (Chrome DevTools)
+
+- Opened `http://localhost:8080/chat` in Chrome DevTools and verified the add-contact action now opens:
+  - title: `Start New Chat`
+  - description: `Choose the sending WhatsApp instance and enter an international phone number to open a direct chat.`
+  - fields shown: phone number, profile name, WhatsApp instance
+  - old WhatsApp account selector is not shown in chat mode
+- Entered an invalid number (`123`) and confirmed the browser toast:
+  - `Enter a valid international phone number with country code.`
+- Submitted a valid-format number and inspected the live request:
+  - `POST /api/contacts`
+  - request body:
+    - `{"phone_number":"+12025550100","instance_id":"5cdb3701-8f23-4673-ab42-5492b226ab41","start_chat":true}`
+  - response:
+    - `400`
+    - `phone number is not registered on WhatsApp`
+- This confirms the UI is hitting the new backend flow and that server-side WhatsMeow validation is active.
