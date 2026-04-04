@@ -14,6 +14,11 @@ export interface AutoCampaignSettings {
   last_generated_at?: string
 }
 
+export interface AutoCampaignEvaluationSchedule {
+  lastEvaluationAt?: string
+  nextEvaluationAt?: string
+}
+
 export const DEFAULT_AUTO_CAMPAIGN_SETTINGS: AutoCampaignSettings = {
   enabled: false,
   name_prefix: '',
@@ -94,6 +99,26 @@ export function cloneAutoCampaignSettings(source: AutoCampaignSettings): AutoCam
     media_mime_type: source.media_mime_type,
     media_filename: source.media_filename,
     last_generated_at: source.last_generated_at
+  }
+}
+
+export function getAutoCampaignEvaluationSchedule(raw: unknown): AutoCampaignEvaluationSchedule {
+  const settings = normalizeAutoCampaignSettings(raw)
+  if (!settings.last_generated_at) {
+    return {}
+  }
+
+  const lastEvaluationAt = new Date(settings.last_generated_at)
+  if (Number.isNaN(lastEvaluationAt.getTime())) {
+    return {}
+  }
+
+  const nextEvaluationAt = new Date(lastEvaluationAt)
+  nextEvaluationAt.setUTCDate(nextEvaluationAt.getUTCDate() + Math.max(1, settings.interval_days))
+
+  return {
+    lastEvaluationAt: lastEvaluationAt.toISOString(),
+    nextEvaluationAt: nextEvaluationAt.toISOString()
   }
 }
 

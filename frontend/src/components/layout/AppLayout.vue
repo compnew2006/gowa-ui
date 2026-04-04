@@ -7,13 +7,7 @@ import { useConfigStore } from "@/stores/config";
 import { localeDirectionManager } from "@/i18n/locale-direction";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  MessageSquare,
-  ChevronLeft,
-  ChevronRight,
-  Menu,
-  X,
-} from "lucide-vue-next";
+import { MessageSquare, Menu, X } from "lucide-vue-next";
 import { wsService } from "@/services/websocket";
 import { authService } from "@/services/api";
 import OrganizationSwitcher from "./OrganizationSwitcher.vue";
@@ -26,8 +20,6 @@ const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const configStore = useConfigStore();
-const SIDEBAR_PINNED_STORAGE_KEY = "layout.sidebarPinnedOpen";
-const pinnedOpen = ref(false);
 const hasDesktopHover = ref(false);
 const hasDesktopFocusWithin = ref(false);
 const sidebarOverlayOpenState = ref({
@@ -43,7 +35,6 @@ const hasDesktopOverlayOpen = computed(
 );
 const isDesktopSidebarExpanded = computed(
   () =>
-    pinnedOpen.value ||
     hasDesktopHover.value ||
     hasDesktopFocusWithin.value ||
     hasDesktopOverlayOpen.value,
@@ -75,13 +66,6 @@ const isManagerOrAdminUser = computed(
 
 // Connect WebSocket on mount using short-lived WS token
 onMounted(() => {
-  try {
-    pinnedOpen.value =
-      window.localStorage.getItem(SIDEBAR_PINNED_STORAGE_KEY) === "true";
-  } catch {
-    pinnedOpen.value = false;
-  }
-
   if (authStore.isAuthenticated) {
     // Load app config (provider & feature flags)
     configStore.fetchConfig();
@@ -188,19 +172,6 @@ const navigation = computed(() => {
     });
 });
 
-const persistSidebarPinState = (nextValue: boolean) => {
-  try {
-    window.localStorage.setItem(SIDEBAR_PINNED_STORAGE_KEY, String(nextValue));
-  } catch {
-    // Ignore storage failures and keep the in-memory preference.
-  }
-};
-
-const toggleSidebarPin = () => {
-  pinnedOpen.value = !pinnedOpen.value;
-  persistSidebarPinState(pinnedOpen.value);
-};
-
 const handleDesktopSidebarMouseEnter = () => {
   hasDesktopHover.value = true;
 };
@@ -282,7 +253,6 @@ const handleLogout = async () => {
     <aside
       data-testid="app-sidebar"
       :data-sidebar-state="isSidebarExpanded ? 'expanded' : 'collapsed'"
-      :data-sidebar-pinned="pinnedOpen ? 'true' : 'false'"
       :class="[
         'group/sidebar fixed inset-y-0 z-40 flex flex-col overflow-hidden border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-300 ease-out',
         desktopSidebarPositionClass,
@@ -304,7 +274,7 @@ const handleLogout = async () => {
           to="/"
           :class="[
             'flex min-w-0 items-center gap-2 overflow-hidden',
-            isSidebarExpanded ? 'pr-8' : 'mx-auto',
+            isSidebarExpanded ? '' : 'mx-auto',
           ]"
         >
           <div
@@ -321,26 +291,6 @@ const handleLogout = async () => {
             Whatomate
           </span>
         </RouterLink>
-        <Button
-          variant="ghost"
-          size="icon"
-          data-testid="sidebar-pin-toggle"
-          :class="[
-            'absolute h-7 w-7 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground',
-            isRTL ? 'left-2' : 'right-2',
-          ]"
-          :aria-label="
-            pinnedOpen ? $t('nav.collapseSidebar') : $t('nav.expandSidebar')
-          "
-          :aria-expanded="isSidebarExpanded"
-          @click="toggleSidebarPin"
-        >
-          <ChevronRight
-            v-if="(isRTL && pinnedOpen) || (!isRTL && !pinnedOpen)"
-            class="h-3.5 w-3.5"
-          />
-          <ChevronLeft v-else class="h-3.5 w-3.5" />
-        </Button>
       </div>
       <!-- Mobile logo spacer -->
       <div class="h-12 md:hidden" />
@@ -360,11 +310,11 @@ const handleLogout = async () => {
             <RouterLink
               :to="item.path"
               :class="[
-                'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200',
+                'flex items-center rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200',
                 item.active
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                   : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground',
-                !isSidebarExpanded && 'justify-center px-2.5',
+                isSidebarExpanded ? 'gap-2.5' : 'justify-center gap-0',
                 isRTL && isSidebarExpanded && 'text-right flex-row-reverse',
               ]"
               role="menuitem"

@@ -147,9 +147,9 @@ func (w *InstanceAutoCampaignWorker) processInstance(nowUTC time.Time, instance 
 		return nil
 	}
 
-	windowStartLocal := localNow.AddDate(0, 0, -settings.IntervalDays)
+	windowStartLocal, windowEndLocal := resolveAutoCampaignWindow(localNow, settings.LastGeneratedAt, settings.IntervalDays)
 	windowStartUTC := windowStartLocal.UTC()
-	windowEndUTC := localNow.UTC()
+	windowEndUTC := windowEndLocal.UTC()
 
 	contacts, err := w.loadInstanceContactsInWindow(instance.OrganizationID, instance.ID, windowStartUTC, windowEndUTC)
 	if err != nil {
@@ -164,7 +164,7 @@ func (w *InstanceAutoCampaignWorker) processInstance(nowUTC time.Time, instance 
 		return nil
 	}
 
-	campaignName := buildAutoCampaignName(settings.NamePrefix, windowStartLocal, localNow)
+	campaignName := buildAutoCampaignName(settings.NamePrefix, windowStartLocal, windowEndLocal)
 	duplicate, err := w.campaignNameExists(instance.OrganizationID, instance.ID.String(), campaignName, windowStartUTC)
 	if err != nil {
 		return err
@@ -425,6 +425,24 @@ func isAutoCampaignDue(nowUTC time.Time, lastGeneratedAt *time.Time, intervalDay
 	}
 	nextRun := lastGeneratedAt.UTC().AddDate(0, 0, intervalDays)
 	return !nowUTC.Before(nextRun)
+}
+
+func resolveAutoCampaignWindow(localNow time.Time, lastGeneratedAt *time.Time, intervalDays int) (time.Time, time.Time) {
+	windowEndLocal := localNow
+	if intervalDays < 1 {
+		intervalDays = 1
+	}
+
+	if lastGeneratedAt == nil {
+		return windowEndLocal.AddDate(0, 0, -intervalDays), windowEndLocal
+	}
+
+	windowStartLocal := lastGeneratedAt.In(localNow.Location())
+	if windowStartLocal.After(windowEndLocal) {
+		windowStartLocal = windowEndLocal
+	}
+
+	return windowStartLocal, windowEndLocal
 }
 
 func buildAutoCampaignName(prefix string, windowStart, windowEnd time.Time) string {

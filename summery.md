@@ -1,5 +1,45 @@
 # Session Summary
 
+## 2026-04-04 19:55
+
+### Completed
+
+- Centered the collapsed desktop sidebar navigation icons in `frontend/src/components/layout/AppLayout.vue` by removing the hidden-label gap from the collapsed item layout.
+- Removed the desktop sidebar expand/pin button from `frontend/src/components/layout/AppLayout.vue` so the sidebar now expands only from hover and focus-within behavior.
+- Added a repo-level Go hot reload workflow using `air`:
+  - added `.air.toml`
+  - added `Makefile` targets:
+    - `air-install`
+    - `backend-watch`
+    - `dev-watch`
+- Updated `README.md` with the recommended fast development loop for:
+  - frontend-only changes
+  - backend-only changes
+  - frontend + backend + model/schema changes
+
+### Skills Applied
+
+- `vue-expert` for the sidebar layout adjustment and removing the pin/expand control without breaking the existing hover/focus behavior
+- `devops-engineer` for the hot-reload developer workflow, `air` configuration, and Makefile/README integration
+
+### Verification
+
+- Chrome DevTools MCP against a temporary local harness for the collapsed sidebar item layout:
+  - confirmed the collapsed icon center matched the item center exactly
+  - confirmed no expand button was rendered in the verified collapsed state
+- `make air-install` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- `make -n dev-watch` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+  - confirmed the combined watcher target expands to `backend-watch` + `frontend-dev`
+- `make backend-watch` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+  - verified `air` started successfully
+  - verified the backend built successfully
+  - verified the server booted with `-migrate`
+  - verified graceful shutdown after interrupt
+
+### Notes
+
+- The first `air` config revision used the deprecated `build.bin` style and failed to execute the binary with arguments correctly. It was corrected to the current `entrypoint` + `args_bin` format and re-verified.
+
 ## 2026-04-03 02:28
 
 ### Completed

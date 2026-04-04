@@ -1,4 +1,4 @@
-.PHONY: all build build-prod run test clean docker-build docker-up docker-down migrate frontend-dev frontend-build
+.PHONY: all build build-prod run test clean docker-build docker-up docker-down migrate frontend-dev frontend-build backend-watch dev-watch air-install
 
 # Go parameters
 GOCMD=go
@@ -11,6 +11,8 @@ BINARY_PATH=./cmd/whatomate
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 LDFLAGS=-ldflags "-s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
+AIR_PACKAGE=github.com/air-verse/air@latest
+AIR_BIN=$(shell sh -c 'if [ -n "$$GOBIN" ]; then printf "%s/air" "$$GOBIN"; else printf "%s/bin/air" "$$(go env GOPATH)"; fi')
 
 # Docker parameters
 DOCKER_COMPOSE=docker compose -f docker/docker-compose.yml
@@ -42,6 +44,22 @@ run:
 # Run with migrations
 run-migrate:
 	$(GOCMD) run $(BINARY_PATH)/main.go server -config config.toml -migrate
+
+air-install:
+	$(GOCMD) install $(AIR_PACKAGE)
+
+backend-watch:
+	@AIR_CMD=$$(command -v air 2>/dev/null || true); \
+	if [ -z "$$AIR_CMD" ] && [ -x "$(AIR_BIN)" ]; then \
+		AIR_CMD="$(AIR_BIN)"; \
+	fi; \
+	if [ -z "$$AIR_CMD" ]; then \
+		echo "Installing air watcher..."; \
+		$(GOCMD) install $(AIR_PACKAGE); \
+		AIR_CMD="$(AIR_BIN)"; \
+	fi; \
+	echo "Starting backend watcher with $$AIR_CMD"; \
+	"$$AIR_CMD" -c .air.toml
 
 # Run tests
 test:
@@ -125,6 +143,13 @@ dev:
 	@make run-migrate &
 	@make frontend-dev
 
+dev-watch:
+	@echo "Starting backend watcher and frontend dev server..."
+	@trap 'kill 0' INT TERM EXIT; \
+	$(MAKE) backend-watch & \
+	$(MAKE) frontend-dev & \
+	wait
+
 # Lint
 lint:
 	golangci-lint run ./...
@@ -149,11 +174,14 @@ help:
 	@echo "  run            - Run the backend locally"
 	@echo "  run-migrate    - Run the backend with database migrations"
 	@echo "  dev            - Run both backend and frontend in development mode"
+	@echo "  backend-watch  - Run backend with Go hot reload and migrations"
+	@echo "  dev-watch      - Run backend hot reload + frontend dev server"
 	@echo ""
 	@echo "Frontend:"
 	@echo "  frontend-install - Install frontend dependencies"
 	@echo "  frontend-dev   - Run frontend in development mode"
 	@echo "  frontend-build - Build frontend for production"
+	@echo "  air-install    - Install the Go air watcher locally"
 	@echo ""
 	@echo "Testing:"
 	@echo "  test           - Run tests"

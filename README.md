@@ -181,7 +181,19 @@ npm run dev
 
 # Optional: run backend + frontend together (after db/redis are up)
 make dev
+
+# Faster daily loop: backend hot reload + frontend hot reload
+make dev-watch
 ```
+
+Recommended workflow:
+
+- Frontend-only changes: keep `cd frontend && npm run dev` running
+- Backend-only changes: use `make backend-watch`
+- Frontend + backend + model/schema changes: use `make dev-watch`
+- Production-bundle verification only: use `make build-prod`
+
+`make dev-watch` uses `air` for Go hot reload and reruns the backend with `-migrate`, so model/schema changes are picked up on restart. The first run auto-installs `air` if it is missing.
 
 ## MCP Sidecar
 

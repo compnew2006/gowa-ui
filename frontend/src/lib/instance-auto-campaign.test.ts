@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_AUTO_CAMPAIGN_SETTINGS,
   cloneAutoCampaignSettings,
+  getAutoCampaignEvaluationSchedule,
   normalizeAutoCampaignSettings,
 } from './instance-auto-campaign'
 
@@ -82,5 +83,25 @@ describe('instance-auto-campaign', () => {
 
     expect(original.name_prefix).toBe('Promo')
     expect(cloned.name_prefix).toBe('Changed')
+  })
+
+  it('computes evaluation timestamps from last_generated_at', () => {
+    const schedule = getAutoCampaignEvaluationSchedule({
+      interval_days: 7,
+      last_generated_at: '2026-03-01T12:00:00Z',
+    })
+
+    expect(schedule).toEqual({
+      lastEvaluationAt: '2026-03-01T12:00:00.000Z',
+      nextEvaluationAt: '2026-03-08T12:00:00.000Z',
+    })
+  })
+
+  it('returns an empty schedule before the first evaluation', () => {
+    expect(getAutoCampaignEvaluationSchedule({
+      enabled: true,
+      interval_days: 7,
+      message: 'Hello',
+    })).toEqual({})
   })
 })

@@ -613,6 +613,42 @@ test.describe('WhatsApp Instances', () => {
     expect(receivedUpdatePayload?.settings?.auto_campaign?.message).toBe('Hello {contact_name}')
   })
 
+  test('should show auto campaign evaluation status and eligibility guidance', async ({ page }) => {
+    await loginAsSuperAdmin(page)
+
+    const now = new Date().toISOString()
+    const instance: MockInstance = {
+      id: 'e2e-instance-auto-campaign-status-id',
+      name: `Auto Campaign Status ${Date.now()}`,
+      status: 'connected',
+      is_default: false,
+      auto_read_receipt: true,
+      organization_id: 'e2e-org-id',
+      settings: {
+        auto_campaign: {
+          enabled: true,
+          interval_days: 7,
+          target_status: 'draft',
+          message: 'Hello {contact_name}',
+          last_generated_at: '2026-03-01T12:00:00Z',
+        },
+      },
+      created_at: now,
+      updated_at: now,
+    }
+
+    await mockInstancesApi(page, [instance])
+
+    await page.goto('/settings/instances')
+    await page.getByRole('button', { name: 'Configure auto campaign' }).first().click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('Only contacts with inbound messages on this instance during the evaluation window are included.')).toBeVisible()
+    await expect(dialog.getByText('Last evaluation:')).toBeVisible()
+    await expect(dialog.getByText('Next evaluation:')).toBeVisible()
+    await expect(dialog.getByText('2026')).toBeVisible()
+  })
+
   test('should force target_status=draft when campaign_draft_only is enabled', async ({ page }) => {
     await loginAsSuperAdmin(page)
 

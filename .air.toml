@@ -1,0 +1,37 @@
+root = "."
+tmp_dir = "tmp/air"
+
+[build]
+cmd = "go build -o ./tmp/air/whatomate-dev ./cmd/whatomate"
+entrypoint = ["./tmp/air/whatomate-dev"]
+args_bin = ["server", "-config", "config.toml", "-migrate"]
+delay = 300
+exclude_dir = ["frontend", "node_modules", "tmp", "docs", "mcp-server", "internal/frontend/dist", ".git"]
+exclude_file = []
+exclude_regex = []
+exclude_unchanged = false
+follow_symlink = false
+include_dir = ["cmd", "internal", "pkg"]
+include_ext = ["go", "toml", "yaml", "yml", "json"]
+include_file = ["go.mod", "go.sum", "config.toml", "config.example.toml"]
+kill_delay = "500ms"
+log = "build-errors.log"
+poll = false
+poll_interval = 0
+rerun = false
+send_interrupt = true
+stop_on_error = true
+
+[color]
+app = "green"
+build = "yellow"
+main = "magenta"
+runner = "cyan"
+watcher = "blue"
+
+[log]
+main_only = false
+time = true
+
+[misc]
+clean_on_exit = true

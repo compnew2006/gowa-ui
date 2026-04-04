@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import WhatsAppRichTextEditor from "@/components/chat/WhatsAppRichTextEditor.vue";
 import {
   cloneAutoCampaignSettings,
+  getAutoCampaignEvaluationSchedule,
   normalizeAutoCampaignSettings,
   type AutoCampaignSettings,
 } from "@/lib/instance-auto-campaign";
@@ -48,6 +49,9 @@ const localSettings = ref<AutoCampaignSettings>(
   cloneAutoCampaignSettings(props.settings),
 );
 const fileInput = ref<HTMLInputElement | null>(null);
+const schedule = computed(() =>
+  getAutoCampaignEvaluationSchedule(localSettings.value),
+);
 
 watch(
   () => props.settings,
@@ -108,6 +112,19 @@ function handleFileSelected(event: Event) {
 function clearMedia() {
   emit("clear-media");
 }
+
+function formatScheduleValue(value?: string) {
+  if (!value) {
+    return t("instances.auto_campaign.pendingFirstRun");
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return t("instances.auto_campaign.pendingFirstRun");
+  }
+
+  return parsed.toLocaleString()
+}
 </script>
 
 <template>
@@ -138,6 +155,26 @@ function clearMedia() {
       </DialogHeader>
 
       <div class="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
+        <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm space-y-2 light:border-emerald-200 light:bg-emerald-50">
+          <p class="text-white/80 light:text-emerald-900">
+            {{ $t("instances.auto_campaign.eligibilityHint") }}
+          </p>
+          <div class="grid gap-2 md:grid-cols-2 text-xs text-white/60 light:text-emerald-800">
+            <p>
+              <span class="font-medium text-white/85 light:text-emerald-950">{{
+                $t("instances.auto_campaign.lastEvaluation")
+              }}</span>
+              {{ formatScheduleValue(schedule.lastEvaluationAt) }}
+            </p>
+            <p>
+              <span class="font-medium text-white/85 light:text-emerald-950">{{
+                $t("instances.auto_campaign.nextEvaluation")
+              }}</span>
+              {{ formatScheduleValue(schedule.nextEvaluationAt) }}
+            </p>
+          </div>
+        </div>
+
         <div class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3">
           <div class="flex items-center justify-between gap-2">
             <div>
