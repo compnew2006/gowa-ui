@@ -511,6 +511,8 @@
     "allContacts": "All Contacts",
     "allContactsDesc": "View and manage all your contacts",
     "searchContacts": "Search contacts",
+    "filterByInstance": "Filter by instance",
+    "allInstances": "All instances",
     "noMatchingContacts": "No matching contacts",
     "noMatchingContactsDesc": "Try adjusting your search terms",
     "noContactsYet": "No contacts yet",

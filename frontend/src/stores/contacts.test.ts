@@ -19,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   messagesService: {
     list: vi.fn(),
     send: vi.fn(),
-    sendTemplate: vi.fn(),
   },
 }));
 

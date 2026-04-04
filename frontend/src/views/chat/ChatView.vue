@@ -145,7 +145,6 @@ import { MessageHistoryNavigator } from "@/lib/message-history-navigator";
 import { useColorMode } from "@/composables/useColorMode";
 import { useInfiniteScroll } from "@/composables/useInfiniteScroll";
 import CannedResponsePicker from "@/components/chat/CannedResponsePicker.vue";
-import TemplatePicker from "@/components/chat/TemplatePicker.vue";
 import ContactInfoPanel from "@/components/chat/ContactInfoPanel.vue";
 import ConversationNotes from "@/components/chat/ConversationNotes.vue";
 import InstanceTag from "@/components/chat/InstanceTag.vue";
@@ -690,14 +689,6 @@ const QUOTE_NAVIGATION_MAX_HISTORY_REQUESTS = 64;
 // Emoji picker state
 const emojiPickerOpen = ref(false);
 
-// Template picker state
-const templatePickerRef = ref<HTMLElement | null>(null);
-const templateDialogOpen = ref(false);
-const selectedTemplate = ref<any>(null);
-const templateParamNames = ref<string[]>([]);
-const templateParamValues = ref<Record<string, string>>({});
-const isSendingTemplate = ref(false);
-
 // Custom actions state
 const customActions = ref<CustomAction[]>([]);
 const executingActionId = ref<string | null>(null);
@@ -736,11 +727,6 @@ const hasMergePrintableBubbles = computed(() =>
 const canMergeSelectedBubbleFiles = computed(
   () => selectedBatchPrintCount.value >= 2,
 );
-
-function openTemplatePicker() {
-  const btn = templatePickerRef.value?.querySelector("button");
-  btn?.click();
-}
 
 // Add contact dialog state
 const isAddContactOpen = ref(false);
@@ -2668,69 +2654,6 @@ function getPendingAttachmentIcon(type: string) {
 function insertEmoji(emoji: string) {
   messageInput.value += emoji;
   emojiPickerOpen.value = false;
-}
-
-// Template message handling
-function getTemplateBodyContent(tpl: any): string {
-  return tpl.body_content || "";
-}
-
-const templatePreview = computed(() => {
-  if (!selectedTemplate.value) return "";
-  let body = getTemplateBodyContent(selectedTemplate.value);
-  for (const [key, value] of Object.entries(templateParamValues.value)) {
-    body = body.replace(
-      new RegExp(`\\{\\{${key}\\}\\}`, "g"),
-      value || `{{${key}}}`,
-    );
-  }
-  return body;
-});
-
-function handleTemplateWithParams(template: any, paramNames: string[]) {
-  selectedTemplate.value = template;
-  templateParamNames.value = paramNames;
-  templateParamValues.value = Object.fromEntries(
-    paramNames.map((n) => [n, ""]),
-  );
-  templateDialogOpen.value = true;
-}
-
-async function sendTemplateMessage() {
-  if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) return;
-  if (!contactsStore.currentContact || !selectedTemplate.value) return;
-
-  // Validate all params are filled
-  const missing = templateParamNames.value.some(
-    (n) => !templateParamValues.value[n]?.trim(),
-  );
-  if (missing) {
-    toast.error(t("chat.parameterRequired"));
-    return;
-  }
-
-  isSendingTemplate.value = true;
-  try {
-    await contactsStore.sendTemplate(
-      contactsStore.currentContact.id,
-      selectedTemplate.value.name,
-      templateParamValues.value,
-      resolveOutboundWhatsAppAccount(contactsStore.currentContact),
-    );
-    toast.success(t("chat.templateSent"));
-    templateDialogOpen.value = false;
-    selectedTemplate.value = null;
-    templateParamNames.value = [];
-    templateParamValues.value = {};
-  } catch (error: any) {
-    const message = resolveSendErrorMessage(
-      error,
-      t("chat.templateSendFailed"),
-    );
-    toast.error(message);
-  } finally {
-    isSendingTemplate.value = false;
-  }
 }
 
 function resolveSendErrorMessage(error: any, fallbackMessage: string): string {
@@ -5569,14 +5492,6 @@ async function sendMediaMessage() {
           <span class="text-sm text-red-500 flex-1">{{
             $t("chat.serviceWindowExpired")
           }}</span>
-          <Button
-            variant="outline"
-            size="sm"
-            class="shrink-0 border-destructive/30 text-destructive hover:bg-destructive/10"
-            @click="openTemplatePicker"
-          >
-            {{ $t("chat.sendTemplateAction") }}
-          </Button>
         </div>
 
         <!-- Reply indicator -->
@@ -5741,21 +5656,6 @@ async function sendMediaMessage() {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
-                <span ref="templatePickerRef">
-                  <TemplatePicker
-                    :selected-account="selectedAccount"
-                    :class="
-                      isCurrentChatSendRestricted &&
-                      'pointer-events-none opacity-60'
-                    "
-                    @select-with-params="handleTemplateWithParams"
-                  />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{{ $t("chat.sendTemplate") }}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger as-child>
                 <button
                   type="button"
                   :disabled="isCurrentChatSendRestricted"
@@ -5860,76 +5760,6 @@ async function sendMediaMessage() {
       "
       @deleted="handleContactDeleted"
     />
-
-    <!-- Template Params Dialog -->
-    <Dialog v-model:open="templateDialogOpen">
-      <DialogContent class="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{{
-            templateParamNames.length > 0
-              ? $t("chat.fillParameters")
-              : $t("chat.preview")
-          }}</DialogTitle>
-          <DialogDescription>
-            {{ selectedTemplate?.display_name || selectedTemplate?.name }}
-          </DialogDescription>
-        </DialogHeader>
-        <div class="py-4 space-y-3">
-          <div
-            v-for="param in templateParamNames"
-            :key="param"
-            class="space-y-1"
-          >
-            <label class="text-sm font-medium">{{ param }}</label>
-            <Input
-              v-model="templateParamValues[param]"
-              :placeholder="param"
-              class="h-9"
-            />
-          </div>
-          <div v-if="templatePreview" class="space-y-1">
-            <label class="text-xs font-medium text-muted-foreground">{{
-              $t("chat.preview")
-            }}</label>
-            <div
-              class="chat-bubble chat-bubble-outgoing ml-auto"
-              style="max-width: 100%"
-            >
-              <span class="whitespace-pre-wrap break-words text-sm"
-                ><LinkifiedMessageText :text="templatePreview"
-              /></span>
-              <div
-                v-if="selectedTemplate?.buttons?.length"
-                class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
-              >
-                <div
-                  v-for="(btn, index) in selectedTemplate.buttons"
-                  :key="index"
-                  :class="[
-                    'py-2 text-sm text-center font-medium',
-                    Number(index) > 0 && 'border-t',
-                  ]"
-                >
-                  {{ btn.text }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="flex justify-end gap-2">
-          <Button variant="outline" @click="templateDialogOpen = false">{{
-            $t("common.cancel")
-          }}</Button>
-          <Button @click="sendTemplateMessage" :disabled="isSendingTemplate">
-            <Loader2
-              v-if="isSendingTemplate"
-              class="h-4 w-4 mr-2 animate-spin"
-            />
-            {{ $t("chat.send") }}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
 
     <!-- Assign Contact Dialog -->
     <Dialog

@@ -69,11 +69,13 @@ import { getTagColorClass } from "@/lib/constants";
 import { useDebounceFn } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import { useInstancesStore } from "@/stores/instances";
 
 const { t } = useI18n();
 const router = useRouter();
 const authStore = useAuthStore();
 const tagsStore = useTagsStore();
+const instancesStore = useInstancesStore();
 
 const canWriteContacts = authStore.hasPermission("contacts", "write");
 const canImportContacts = authStore.hasPermission("contacts", "import");
@@ -92,6 +94,7 @@ interface Contact {
   profile_name: string;
   name: string;
   whatsapp_account: string;
+  instance_id?: string | null;
   tags: string[];
   metadata: Record<string, any>;
   assigned_user_id: string | null;
@@ -130,6 +133,7 @@ const deleteDialogOpen = ref(false);
 const contactToDelete = ref<Contact | null>(null);
 const formData = ref<ContactFormData>({ ...defaultFormData });
 const searchQuery = ref("");
+const selectedInstanceId = ref("all");
 const tagSelectorOpen = ref(false);
 
 // Pagination state
@@ -140,10 +144,17 @@ const pageSize = 20;
 // Sorting state
 const sortKey = ref("last_message_at");
 const sortDirection = ref<"asc" | "desc">("desc");
+const availableInstances = computed(() => instancesStore.instances);
+const instanceNamesById = computed<Record<string, string>>(() =>
+  Object.fromEntries(
+    availableInstances.value.map((instance) => [instance.id, instance.name]),
+  ),
+);
 
 const columns = computed<Column<Contact>[]>(() => [
   { key: "profile_name", label: t("contacts.name"), sortable: true },
   { key: "phone_number", label: t("contacts.phoneNumber"), sortable: true },
+  { key: "instance_id", label: t("contacts.whatsappInstance") },
   { key: "tags", label: t("contacts.tags") },
   { key: "last_message_at", label: t("contacts.lastMessage"), sortable: true },
   { key: "created_at", label: t("contacts.created"), sortable: true },
@@ -197,6 +208,10 @@ async function fetchContacts() {
   try {
     const response = await contactsService.list({
       search: searchQuery.value || undefined,
+      instance_id:
+        selectedInstanceId.value === "all"
+          ? undefined
+          : selectedInstanceId.value,
       page: currentPage.value,
       limit: pageSize,
     });
@@ -243,6 +258,10 @@ const debouncedSearch = useDebounceFn(() => {
 }, 300);
 
 watch(searchQuery, () => debouncedSearch());
+watch(selectedInstanceId, () => {
+  currentPage.value = 1;
+  fetchContacts();
+});
 
 function handlePageChange(page: number) {
   currentPage.value = page;
@@ -253,6 +272,7 @@ onMounted(() => {
   fetchContacts();
   fetchTags();
   fetchAccounts();
+  void instancesStore.fetchInstances();
 });
 
 async function updateContact() {
@@ -328,6 +348,14 @@ function getTagDetails(tagName: string): Tag | undefined {
 function getDisplayName(contact: Contact): string {
   return contact.profile_name || contact.name || contact.phone_number;
 }
+
+function getInstanceLabel(contact: Contact): string {
+  if (!contact.instance_id) {
+    return t("common.none");
+  }
+
+  return instanceNamesById.value[contact.instance_id] || t("common.none");
+}
 </script>
 
 <template>
@@ -374,11 +402,35 @@ function getDisplayName(contact: Contact): string {
                     $t("contacts.allContactsDesc")
                   }}</CardDescription>
                 </div>
-                <SearchInput
-                  v-model="searchQuery"
-                  :placeholder="$t('contacts.searchContacts') + '...'"
-                  class="w-64"
-                />
+                <div class="flex flex-wrap items-center gap-3">
+                  <SearchInput
+                    v-model="searchQuery"
+                    :placeholder="$t('contacts.searchContacts') + '...'"
+                    class="w-64"
+                  />
+                  <Select v-model="selectedInstanceId">
+                    <SelectTrigger
+                      class="w-[220px]"
+                      data-testid="contacts-instance-filter"
+                    >
+                      <SelectValue
+                        :placeholder="$t('contacts.filterByInstance')"
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {{ $t("contacts.allInstances") }}
+                      </SelectItem>
+                      <SelectItem
+                        v-for="instance in availableInstances"
+                        :key="instance.id"
+                        :value="instance.id"
+                      >
+                        {{ instance.name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -388,12 +440,12 @@ function getDisplayName(contact: Contact): string {
                 :is-loading="isLoading"
                 :empty-icon="Users"
                 :empty-title="
-                  searchQuery
+                  searchQuery || selectedInstanceId !== 'all'
                     ? $t('contacts.noMatchingContacts')
                     : $t('contacts.noContactsYet')
                 "
                 :empty-description="
-                  searchQuery
+                  searchQuery || selectedInstanceId !== 'all'
                     ? $t('contacts.noMatchingContactsDesc')
                     : $t('contacts.noContactsYetDesc')
                 "
@@ -420,6 +472,9 @@ function getDisplayName(contact: Contact): string {
                 </template>
                 <template #cell-phone_number="{ item: contact }">
                   <code class="text-sm">{{ contact.phone_number }}</code>
+                </template>
+                <template #cell-instance_id="{ item: contact }">
+                  <span class="font-medium">{{ getInstanceLabel(contact) }}</span>
                 </template>
                 <template #cell-tags="{ item: contact }">
                   <div class="flex flex-wrap gap-1">
@@ -633,7 +688,16 @@ function getDisplayName(contact: Contact): string {
       v-model:open="isImportExportOpen"
       table="contacts"
       :table-label="$t('contacts.title')"
-      :filters="searchQuery ? { search: searchQuery } : undefined"
+      :filters="
+        searchQuery || selectedInstanceId !== 'all'
+          ? {
+              ...(searchQuery ? { search: searchQuery } : {}),
+              ...(selectedInstanceId !== 'all'
+                ? { instance_id: selectedInstanceId }
+                : {}),
+            }
+          : undefined
+      "
       :can-import="canImportContacts"
       :can-export="canExportContacts"
       @imported="onImported"

@@ -34,7 +34,6 @@ const authStore = useAuthStore();
 const open = ref(false);
 const loading = ref(false);
 const isMarkingAllRead = ref(false);
-const isClearingAll = ref(false);
 const notifications = ref<InstanceNotification[]>([]);
 
 const undismissedInstanceCount = computed(
@@ -54,7 +53,6 @@ const unreadConversations = computed(() => {
   return unread.filter((item) => item.assigned_user_id === currentUserId);
 });
 const hasUnreadMessages = computed(() => unreadConversations.value.length > 0);
-const hasSystemNotifications = computed(() => notifications.value.length > 0);
 const unreadMessagesCount = computed(() =>
   unreadConversations.value.reduce(
     (total, item) => total + (item.unread_count || 0),
@@ -212,41 +210,6 @@ async function markAllAsRead() {
   }
 }
 
-async function clearAllNotifications() {
-  if (!hasSystemNotifications.value || isClearingAll.value) return;
-
-  isClearingAll.value = true;
-  const ids = notifications.value.map((item) => item.id);
-  const failedIds: string[] = [];
-
-  try {
-    await Promise.all(
-      ids.map(async (id) => {
-        try {
-          await notificationsService.dismiss(id);
-        } catch {
-          failedIds.push(id);
-        }
-      }),
-    );
-
-    if (failedIds.length === 0) {
-      notifications.value = [];
-      toast.success("All notifications cleared");
-      return;
-    }
-
-    notifications.value = notifications.value.filter((item) =>
-      failedIds.includes(item.id),
-    );
-    toast.error(
-      `Failed to clear ${failedIds.length} notification${failedIds.length > 1 ? "s" : ""}`,
-    );
-  } finally {
-    isClearingAll.value = false;
-  }
-}
-
 function handleInstanceNotification() {
   fetchNotifications();
 }
@@ -302,16 +265,6 @@ onUnmounted(() => {
         >
           <Loader2 v-if="isMarkingAllRead" class="h-3 w-3 mr-1 animate-spin" />
           Mark all as read
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          class="h-7 border border-border bg-background/80 px-2 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-          :disabled="!hasSystemNotifications || isClearingAll"
-          @click="clearAllNotifications"
-        >
-          <Loader2 v-if="isClearingAll" class="h-3 w-3 mr-1 animate-spin" />
-          Clear all
         </Button>
       </div>
 

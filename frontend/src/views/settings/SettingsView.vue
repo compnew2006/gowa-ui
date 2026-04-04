@@ -844,9 +844,9 @@ onBeforeUnmount(() => {
                 <Separator class="bg-border" />
                 <div class="flex justify-end">
                   <Button
-                    variant="outline"
+                    variant="default"
                     size="sm"
-                    class="border-input bg-input text-foreground hover:bg-accent"
+                    class="shadow-sm"
                     @click="saveGeneralSettings"
                     :disabled="isSubmitting"
                   >

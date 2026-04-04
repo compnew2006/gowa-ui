@@ -52,6 +52,9 @@ const otherGroups = computed(() =>
   groups.value.filter((group) => !group.is_self),
 );
 const totalGroups = computed(() => groups.value.length);
+const totalGroupsLabel = computed(() =>
+  totalGroups.value > 9 ? "9+" : String(totalGroups.value),
+);
 const isDrawerOpen = ref(false);
 
 function getGroupInstanceLabel(group: WhatsAppStatusGroup): string {
@@ -132,9 +135,10 @@ onBeforeUnmount(() => {
           </p>
           <span
             v-if="totalGroups > 0"
-            class="rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+            class="inline-grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-[9px] font-semibold leading-none text-primary-foreground shadow-sm"
+            data-testid="status-groups-count"
           >
-            {{ totalGroups }}
+            {{ totalGroupsLabel }}
           </span>
         </div>
         <div class="flex items-center gap-1">

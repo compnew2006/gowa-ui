@@ -396,23 +396,29 @@ test.describe('Chat Statuses', () => {
     const refreshButton = storiesBar.getByRole('button', { name: 'Refresh' })
     const notificationBell = storiesBar.getByTestId('notification-bell-button')
     const drawerToggle = storiesBar.getByTestId('status-drawer-toggle')
+    const statusGroupsCount = storiesBar.getByTestId('status-groups-count')
 
     await expect(refreshButton).toBeVisible()
     await expect(notificationBell).toBeVisible()
     await expect(drawerToggle).toBeVisible()
+    await expect(statusGroupsCount).toBeVisible()
 
     const refreshBox = await refreshButton.boundingBox()
     const bellBox = await notificationBell.boundingBox()
     const drawerBox = await drawerToggle.boundingBox()
+    const statusGroupsCountBox = await statusGroupsCount.boundingBox()
 
     expect(refreshBox).not.toBeNull()
     expect(bellBox).not.toBeNull()
     expect(drawerBox).not.toBeNull()
+    expect(statusGroupsCountBox).not.toBeNull()
     expect(refreshBox!.x).toBeLessThan(bellBox!.x)
     expect(bellBox!.x).toBeLessThan(drawerBox!.x)
+    expect(Math.abs(statusGroupsCountBox!.width - statusGroupsCountBox!.height)).toBeLessThanOrEqual(1)
 
     await notificationBell.click()
     await expect(page.getByText('No notifications')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Clear all' })).toHaveCount(0)
     await expect(page.getByTestId('status-create-button')).toBeHidden()
     await page.keyboard.press('Escape')
 

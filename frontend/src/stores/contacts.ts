@@ -10,8 +10,9 @@ import type {
   Contact,
   Message,
   Reaction,
-  ReplyPreview,
 } from "@/types/contacts";
+
+export type { ChatTypeFilter, Contact, Message } from "@/types/contacts";
 interface AddMessageOptions {
   appendToActiveThread?: boolean;
 }
@@ -1102,28 +1103,6 @@ export const useContactsStore = defineStore("contacts", () => {
     }
   }
 
-  async function sendTemplate(
-    contactId: string,
-    templateName: string,
-    templateParams?: Record<string, string>,
-    accountName?: string,
-  ) {
-    try {
-      const response = await messagesService.sendTemplate(contactId, {
-        template_name: templateName,
-        template_params: templateParams,
-        account_name: accountName,
-      });
-      const data = unwrapResponse<Message>(response);
-      // Use addMessage which has duplicate checking (WebSocket may also broadcast this)
-      addMessage(data);
-      return data;
-    } catch (error) {
-      console.error("Failed to send template:", error);
-      throw error;
-    }
-  }
-
   function setReplyingTo(message: Message | null) {
     replyingTo.value = message;
   }
@@ -1358,7 +1337,6 @@ export const useContactsStore = defineStore("contacts", () => {
     reopenChat,
     setChatPublic,
     sendMessage,
-    sendTemplate,
     addMessage,
     updateMessageStatus,
     patchMessage,

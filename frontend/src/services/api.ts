@@ -499,14 +499,6 @@ export const messagesService = {
     contactId: string,
     data: { state: "composing" | "paused"; instance_id?: string },
   ) => api.post(`/contacts/${contactId}/typing`, data),
-  sendTemplate: (
-    contactId: string,
-    data: {
-      template_name: string;
-      template_params?: Record<string, string>;
-      account_name?: string;
-    },
-  ) => api.post("/messages/template", { contact_id: contactId, ...data }),
   sendMedia: (data: {
     contactId: string;
     file: File;

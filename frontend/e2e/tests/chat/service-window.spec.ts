@@ -53,10 +53,6 @@ test.describe('24-Hour Service Window', () => {
     // The red service window expired banner should be visible
     const banner = page.locator('text=24-hour messaging window has expired')
     await expect(banner).toBeVisible({ timeout: 5000 })
-
-    // The "Send Template" button should be in the banner
-    const sendTemplateBtn = page.getByRole('button', { name: /Send Template/i })
-    await expect(sendTemplateBtn).toBeVisible()
   })
 
   test('should NOT show expired-window banner when last_inbound_at is within 24 hours', async ({ page }) => {
@@ -88,7 +84,7 @@ test.describe('24-Hour Service Window', () => {
     await expect(banner).toBeVisible({ timeout: 5000 })
   })
 
-  test('should open template picker when clicking Send Template in banner', async ({ page }) => {
+  test('should not offer the legacy template-send action in the expired-window banner', async ({ page }) => {
     // Ensure window is expired
     await execSQL(`UPDATE contacts SET last_inbound_at = NOW() - INTERVAL '25 hours' WHERE id = '${contactId}'`)
 
@@ -96,13 +92,8 @@ test.describe('24-Hour Service Window', () => {
     const chatPage = new ChatPage(page)
     await chatPage.goto(contactId)
 
-    // Click the "Send Template" button in the banner
-    const sendTemplateBtn = page.getByRole('button', { name: /Send Template/i })
-    await expect(sendTemplateBtn).toBeVisible({ timeout: 5000 })
-    await sendTemplateBtn.click()
-
-    // The template picker popover should open (search input becomes visible)
-    await expect(chatPage.templateSearchInput).toBeVisible({ timeout: 5000 })
+    await expect(chatPage.serviceWindowBanner).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('button', { name: /Send Template/i })).toHaveCount(0)
   })
 
   test('should show error_message on failed outgoing messages', async ({ page }) => {

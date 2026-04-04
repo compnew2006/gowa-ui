@@ -30,11 +30,23 @@ const SIDEBAR_PINNED_STORAGE_KEY = "layout.sidebarPinnedOpen";
 const pinnedOpen = ref(false);
 const hasDesktopHover = ref(false);
 const hasDesktopFocusWithin = ref(false);
+const sidebarOverlayOpenState = ref({
+  organization: false,
+  userMenu: false,
+});
 const isMobileMenuOpen = ref(false);
 const isRTL = computed(() => localeDirectionManager.isRTL(locale.value));
+const hasDesktopOverlayOpen = computed(
+  () =>
+    sidebarOverlayOpenState.value.organization ||
+    sidebarOverlayOpenState.value.userMenu,
+);
 const isDesktopSidebarExpanded = computed(
   () =>
-    pinnedOpen.value || hasDesktopHover.value || hasDesktopFocusWithin.value,
+    pinnedOpen.value ||
+    hasDesktopHover.value ||
+    hasDesktopFocusWithin.value ||
+    hasDesktopOverlayOpen.value,
 );
 const isSidebarExpanded = computed(
   () => isMobileMenuOpen.value || isDesktopSidebarExpanded.value,
@@ -46,7 +58,9 @@ const desktopSidebarPositionClass = computed(() =>
   isRTL.value ? "right-0 border-l" : "left-0 border-r",
 );
 const mobileSidebarClosedClass = computed(() =>
-  isRTL.value ? "translate-x-full md:translate-x-0" : "-translate-x-full md:translate-x-0",
+  isRTL.value
+    ? "translate-x-full md:translate-x-0"
+    : "-translate-x-full md:translate-x-0",
 );
 const isAdminUser = computed(
   () =>
@@ -210,6 +224,16 @@ const handleDesktopSidebarFocusOut = (event: FocusEvent) => {
   hasDesktopFocusWithin.value = false;
 };
 
+const handleSidebarOverlayOpenChange = (
+  key: keyof typeof sidebarOverlayOpenState.value,
+  open: boolean,
+) => {
+  sidebarOverlayOpenState.value = {
+    ...sidebarOverlayOpenState.value,
+    [key]: open,
+  };
+};
+
 const handleLogout = async () => {
   await authStore.logout();
   router.push("/login");
@@ -262,9 +286,7 @@ const handleLogout = async () => {
       :class="[
         'group/sidebar fixed inset-y-0 z-40 flex flex-col overflow-hidden border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-300 ease-out',
         desktopSidebarPositionClass,
-        isMobileMenuOpen
-          ? 'translate-x-0'
-          : mobileSidebarClosedClass,
+        isMobileMenuOpen ? 'translate-x-0' : mobileSidebarClosedClass,
         isSidebarExpanded ? 'w-64 shadow-2xl md:shadow-none' : 'w-16',
       ]"
       role="navigation"
@@ -324,7 +346,12 @@ const handleLogout = async () => {
       <div class="h-12 md:hidden" />
 
       <!-- Organization Switcher (Super Admin only) -->
-      <OrganizationSwitcher :expanded="isSidebarExpanded" />
+      <OrganizationSwitcher
+        :expanded="isSidebarExpanded"
+        @overlay-open-change="
+          (open) => handleSidebarOverlayOpenChange('organization', open)
+        "
+      />
 
       <!-- Navigation -->
       <ScrollArea class="flex-1 py-2">
@@ -353,7 +380,9 @@ const handleLogout = async () => {
               <span
                 :class="[
                   'overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200',
-                  isSidebarExpanded ? 'max-w-40 flex-1 opacity-100' : 'max-w-0 opacity-0',
+                  isSidebarExpanded
+                    ? 'max-w-40 flex-1 opacity-100'
+                    : 'max-w-0 opacity-0',
                   isRTL && isSidebarExpanded ? 'text-right' : 'text-left',
                 ]"
               >
@@ -393,7 +422,13 @@ const handleLogout = async () => {
       </ScrollArea>
 
       <!-- User Menu -->
-      <UserMenu :expanded="isSidebarExpanded" @logout="handleLogout" />
+      <UserMenu
+        :expanded="isSidebarExpanded"
+        @overlay-open-change="
+          (open) => handleSidebarOverlayOpenChange('userMenu', open)
+        "
+        @logout="handleLogout"
+      />
     </aside>
 
     <!-- Main content -->

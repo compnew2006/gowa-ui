@@ -28,7 +28,7 @@ const modelValue = computed({
     :disabled="disabled"
     :class="
       cn(
-        'flex h-10 w-full rounded-lg border border-input bg-input px-3.5 py-2 text-sm text-foreground shadow-none transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:border-ring disabled:cursor-not-allowed disabled:opacity-50',
+        'flex h-10 w-full rounded-lg border border-input bg-input px-3.5 py-2 text-sm text-foreground shadow-sm ring-offset-background transition-[background-color,border-color,box-shadow] placeholder:text-muted-foreground hover:border-ring/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/15 focus-visible:border-ring/70 disabled:cursor-not-allowed disabled:opacity-50',
         props.class,
       )
     "

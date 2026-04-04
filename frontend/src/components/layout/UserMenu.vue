@@ -45,6 +45,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   logout: [];
+  "overlay-open-change": [value: boolean];
 }>();
 
 const authStore = useAuthStore();
@@ -160,6 +161,10 @@ watch(
   { immediate: true },
 );
 
+watch(isUserMenuOpen, (open) => {
+  emit("overlay-open-change", open);
+});
+
 onMounted(() => {
   authStore.restoreBreakTime();
   if (!authStore.isAvailable && authStore.breakStartedAt) {
@@ -207,7 +212,9 @@ const handleLogout = () => {
             :class="[
               'flex flex-col overflow-hidden transition-[max-width,opacity] duration-200',
               isExpanded ? 'max-w-[140px] opacity-100' : 'max-w-0 opacity-0',
-              isRTL && isExpanded ? 'items-end text-right' : 'items-start text-left',
+              isRTL && isExpanded
+                ? 'items-end text-right'
+                : 'items-start text-left',
             ]"
           >
             <span

@@ -489,6 +489,8 @@
     "allContacts": "كل جهات الاتصال",
     "allContactsDesc": "عرض وإدارة جميع جهات الاتصال الخاصة بك",
     "searchContacts": "البحث في جهات الاتصال",
+    "filterByInstance": "التصفية حسب المثيل",
+    "allInstances": "كل المثيلات",
     "noMatchingContacts": "لا توجد جهات اتصال مطابقة",
     "noMatchingContactsDesc": "حاول تعديل مصطلحات البحث",
     "noContactsYet": "لا توجد جهات اتصال بعد",
@@ -509,6 +511,8 @@
     "tagsSelected": "وسوم مختارة",
     "searchTags": "البحث في الوسوم...",
     "noTagsFound": "لم يتم العثور على وسوم",
+    "whatsappInstance": "مثيل واتساب",
+    "selectInstance": "اختر المثيل...",
     "whatsappAccount": "حساب واتساب",
     "selectAccount": "اختر حساباً..."
   },

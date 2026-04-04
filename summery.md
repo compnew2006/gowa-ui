@@ -1,5 +1,75 @@
 # Session Summary
 
+## 2026-04-03 02:28
+
+### Completed
+
+- Fixed the washed-out light-mode settings controls by strengthening the shared light-theme surface tokens in `frontend/src/assets/index.css` so the page background, cards, borders, and input surfaces no longer collapse into the same near-white tone.
+- Updated the shared form primitives to render with clearer control affordances in light mode:
+  - `frontend/src/components/ui/input/Input.vue`
+  - `frontend/src/components/ui/select/SelectTrigger.vue`
+  - `frontend/src/components/ui/textarea/Textarea.vue`
+  - `frontend/src/components/ui/switch/Switch.vue`
+- Promoted the general settings save action in `frontend/src/views/settings/SettingsView.vue` from an outline treatment to the primary button treatment so it remains clearly visible in light mode.
+
+### Skills Applied
+
+- `vue-expert` for the Vue 3 and design-token level fix across the shared UI primitives and settings view
+
+### Verification
+
+- `npx eslint src/components/ui/input/Input.vue src/components/ui/select/SelectTrigger.vue src/components/ui/switch/Switch.vue src/components/ui/textarea/Textarea.vue src/views/settings/SettingsView.vue` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend`
+- Chrome DevTools MCP against the patched Vite app on `http://127.0.0.1:3000/settings`
+  - authenticated with `admin@test.com`
+  - forced `localStorage['color-mode'] = 'light'` and reloaded to verify the actual light-mode path
+  - captured screenshots at:
+    - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/test-results/settings-light-after-fix-lightmode.png`
+    - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/test-results/settings-light-after-fix-lightmode-v2.png`
+  - confirmed rendered control values after the fix:
+    - page background `rgb(246, 249, 252)`
+    - card surface `rgba(255, 255, 255, 0.95)`
+    - input/select surface `rgb(226, 237, 245)`
+    - unchecked switch surface `rgb(231, 239, 245)`
+
+### Notes
+
+- The embedded app already running on `:8080` was kept as the API/backend target; final UI verification used the local Vite frontend on `:3000` so the browser reflected the new frontend changes immediately.
+
+## 2026-04-03 02:06
+
+### Completed
+
+- Fixed the sidebar organization switcher interaction in `frontend/src/components/layout/OrganizationSwitcher.vue` by replacing the unstable sidebar `Select` with a controlled popover-based organization menu.
+- Kept the desktop sidebar expanded while sidebar overlays are open by wiring overlay-open state through:
+  - `frontend/src/components/layout/AppLayout.vue`
+  - `frontend/src/components/layout/OrganizationSwitcher.vue`
+  - `frontend/src/components/layout/UserMenu.vue`
+- Added stable test hooks for the organization menu trigger, content, and items so the hover-to-open sidebar path can be regression-tested.
+- Added a focused regression test in `frontend/e2e/tests/settings/organization-switch.spec.ts` that verifies:
+  - the sidebar expands on hover when not pinned
+  - the organization menu opens from the sidebar
+  - a different organization can be clicked from that menu
+  - the selected organization id is persisted after switching
+
+### Skills Applied
+
+- `vue-expert` for the Vue 3 sidebar state propagation, organization-switcher refactor, and interaction fix
+- `playwright-expert` for the targeted hover/sidebar/org-switch regression coverage
+
+### Verification
+
+- `BASE_URL=http://localhost:8080 npx playwright test e2e/tests/settings/organization-switch.spec.ts --project=chromium` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend`
+  - result: `10 passed, 2 skipped`
+- `npx eslint src/components/layout/AppLayout.vue src/components/layout/OrganizationSwitcher.vue src/components/layout/UserMenu.vue e2e/tests/settings/organization-switch.spec.ts` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend`
+- Chrome DevTools MCP against `http://localhost:8080` during investigation:
+  - confirmed the organization switcher was present for the authenticated sidebar flow
+  - confirmed `/api/me/organizations` returned multiple organizations for the current admin user
+
+### Notes
+
+- `npm run typecheck` still fails in this repo because of unrelated pre-existing frontend typing issues outside the files changed in this session.
+- A later follow-up browser MCP smoke using the Ruflo browser adapter was unavailable in this environment (`agent-browser` missing), so the final interaction verification relied on the passing Playwright regression against the live app on `localhost:8080`.
+
 ## 2026-04-02 22:38
 
 ### Completed
@@ -154,7 +224,7 @@
 - The Meta analytics API endpoints returned `404` during the Chrome DevTools check:
   - `/api/analytics/meta/accounts`
   - `/api/analytics/meta?...`
-  Those are backend/data availability issues in this local environment, not theme regressions.
+    Those are backend/data availability issues in this local environment, not theme regressions.
 
 ## 2026-04-02 19:51
 
@@ -466,3 +536,48 @@
   - `Transfer to Agent` tooltip is present on the header action.
   - `Send Template` tooltip is present on the composer control.
   - Clicking `Send Template` opens the template picker; in the current dataset it showed `No approved templates`.
+
+## 2026-04-03 02:20
+
+### Completed
+
+- Removed the `/chat` template-send UI path:
+  - deleted the composer `Send Template` control
+  - removed the template parameter dialog and related handlers from `frontend/src/views/chat/ChatView.vue`
+  - removed the frontend store/API helpers for sending templates
+  - deleted the unused `frontend/src/components/chat/TemplatePicker.vue`
+  - removed the dedicated template-sending Playwright spec and cleaned the chat page object
+- Kept the service-window warning banner in `/chat`, but removed the legacy CTA button from it.
+- Added `/settings/contacts` instance awareness:
+  - new instance filter wired to `contactsService.list({ instance_id })`
+  - new `WhatsApp Instance` column showing the resolved instance name and falling back to the raw instance id or `None`
+  - export dialog filters now include the selected instance
+  - empty-state messaging now treats instance filtering like a filtered result set instead of “no contacts yet”
+
+### Validation
+
+- `frontend`: `npx vitest run src/stores/contacts.test.ts` ✅
+- `frontend`: file-scoped ESLint on the touched files ✅
+- `frontend`: `npm run typecheck` ❌
+  - still failing due pre-existing unrelated issues in:
+    - `src/components/ui/toast/use-toast.ts`
+    - `src/stores/roles.ts`
+    - `src/views/chat/ChatView.vue` (`body` typing)
+    - `src/views/chatbot/AgentTransfersView.vue`
+    - `src/views/chatbot/ChatbotFlowBuilderView.vue`
+    - `src/views/dashboard/DashboardView.vue`
+    - `src/views/settings/TeamsView.vue`
+
+### Manual QA (Chrome DevTools)
+
+- `/chat`
+  - logged in on `http://localhost:8080`
+  - opened a pending conversation (`noiemany`)
+  - confirmed there is no `Send Template` button or template icon/button in the active chat UI
+- `/settings/contacts`
+  - confirmed the new `WhatsApp Instance` column is visible
+  - confirmed the new instance filter renders with `All instances` and `n0n`
+  - selected `n0n` and verified:
+    - the filter value changed to `n0n`
+    - results count changed from `Showing 1 to 20 of 181 contacts` to `Showing 1 to 20 of 128 contacts`
+    - rows with `None` as the instance were excluded from the filtered result
