@@ -275,3 +275,62 @@ func TestApp_GetInstance_RestrictedUserCannotAccessOtherInstance(t *testing.T) {
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(allowedReq), &resp))
 	assert.Equal(t, allowed.ID, resp.Data.ID)
 }
+
+func TestApp_ListInstances_InjectsAssignedChatResetDefaults(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createInstanceManagerUser(t, app, org.ID, "instance-manager-list-defaults")
+
+	instance := createTestInstance(t, app, org.ID, "Support")
+	instance.Settings = models.JSONB{"custom_existing_setting": "keep-me"}
+	require.NoError(t, app.DB.Model(instance).Update("settings", instance.Settings).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListInstances(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data []models.WhatsAppInstance `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, "keep-me", resp.Data[0].Settings["custom_existing_setting"])
+	assert.Equal(t, true, resp.Data[0].Settings["assigned_chat_reset_enabled"])
+	assert.Equal(t, "midnight", resp.Data[0].Settings["assigned_chat_reset_mode"])
+	assert.Equal(t, float64(0), resp.Data[0].Settings["assigned_chat_reset_hour"])
+}
+
+func TestApp_GetInstance_InjectsAssignedChatResetDefaults(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createInstanceManagerUser(t, app, org.ID, "instance-manager-get-defaults")
+
+	instance := createTestInstance(t, app, org.ID, "Support")
+	instance.Settings = models.JSONB{"custom_existing_setting": "keep-me"}
+	require.NoError(t, app.DB.Model(instance).Update("settings", instance.Settings).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", instance.ID.String())
+
+	err := app.GetInstance(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data models.WhatsAppInstance `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, instance.ID, resp.Data.ID)
+	assert.Equal(t, "keep-me", resp.Data.Settings["custom_existing_setting"])
+	assert.Equal(t, true, resp.Data.Settings["assigned_chat_reset_enabled"])
+	assert.Equal(t, "midnight", resp.Data.Settings["assigned_chat_reset_mode"])
+	assert.Equal(t, float64(0), resp.Data.Settings["assigned_chat_reset_hour"])
+}

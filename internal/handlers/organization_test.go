@@ -47,20 +47,20 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 
 	var resp struct {
 		Data struct {
-			Settings handlers.OrganizationSettings `json:"settings"`
-			Name     string                        `json:"name"`
+			Settings map[string]any `json:"settings"`
+			Name     string         `json:"name"`
 		} `json:"data"`
 	}
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 
-	assert.Equal(t, true, resp.Data.Settings.MaskPhoneNumbers)
-	assert.Equal(t, true, resp.Data.Settings.StrictSendingRestrictions)
-	assert.Equal(t, "Asia/Kolkata", resp.Data.Settings.Timezone)
-	assert.Equal(t, "DD/MM/YYYY", resp.Data.Settings.DateFormat)
-	assert.Equal(t, true, resp.Data.Settings.AssignedChatResetEnabled)
-	assert.Equal(t, "custom_hour", resp.Data.Settings.AssignedChatResetMode)
-	assert.Equal(t, 9, resp.Data.Settings.AssignedChatResetHour)
+	assert.Equal(t, true, resp.Data.Settings["mask_phone_numbers"])
+	assert.Equal(t, true, resp.Data.Settings["strict_sending_restrictions_enabled"])
+	assert.Equal(t, "Asia/Kolkata", resp.Data.Settings["timezone"])
+	assert.Equal(t, "DD/MM/YYYY", resp.Data.Settings["date_format"])
+	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_enabled")
+	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_mode")
+	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_hour")
 	assert.Equal(t, org.Name, resp.Data.Name)
 }
 
@@ -85,20 +85,20 @@ func TestApp_GetOrganizationSettings_Defaults(t *testing.T) {
 
 	var resp struct {
 		Data struct {
-			Settings handlers.OrganizationSettings `json:"settings"`
-			Name     string                        `json:"name"`
+			Settings map[string]any `json:"settings"`
+			Name     string         `json:"name"`
 		} `json:"data"`
 	}
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 
-	assert.Equal(t, false, resp.Data.Settings.MaskPhoneNumbers)
-	assert.Equal(t, false, resp.Data.Settings.StrictSendingRestrictions)
-	assert.Equal(t, "UTC", resp.Data.Settings.Timezone)
-	assert.Equal(t, "YYYY-MM-DD", resp.Data.Settings.DateFormat)
-	assert.Equal(t, true, resp.Data.Settings.AssignedChatResetEnabled)
-	assert.Equal(t, "midnight", resp.Data.Settings.AssignedChatResetMode)
-	assert.Equal(t, 0, resp.Data.Settings.AssignedChatResetHour)
+	assert.Equal(t, false, resp.Data.Settings["mask_phone_numbers"])
+	assert.Equal(t, false, resp.Data.Settings["strict_sending_restrictions_enabled"])
+	assert.Equal(t, "UTC", resp.Data.Settings["timezone"])
+	assert.Equal(t, "YYYY-MM-DD", resp.Data.Settings["date_format"])
+	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_enabled")
+	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_mode")
+	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_hour")
 }
 
 func TestApp_GetOrganizationSettings_Unauthorized(t *testing.T) {
@@ -131,6 +131,12 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	timezone := "America/New_York"
 	dateFormat := "MM/DD/YYYY"
 	newName := "Updated Organization"
+	org.Settings = models.JSONB{
+		"assigned_chat_reset_enabled": true,
+		"assigned_chat_reset_mode":    "custom_hour",
+		"assigned_chat_reset_hour":    22,
+	}
+	require.NoError(t, app.DB.Save(org).Error)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"mask_phone_numbers":                  maskEnabled,
@@ -138,9 +144,6 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 		"timezone":                            timezone,
 		"date_format":                         dateFormat,
 		"name":                                newName,
-		"assigned_chat_reset_enabled":         false,
-		"assigned_chat_reset_mode":            "custom_hour",
-		"assigned_chat_reset_hour":            22,
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 
@@ -166,9 +169,10 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	assert.Equal(t, true, updatedOrg.Settings["strict_sending_restrictions_enabled"])
 	assert.Equal(t, "America/New_York", updatedOrg.Settings["timezone"])
 	assert.Equal(t, "MM/DD/YYYY", updatedOrg.Settings["date_format"])
-	assert.Equal(t, false, updatedOrg.Settings["assigned_chat_reset_enabled"])
-	assert.Equal(t, "custom_hour", updatedOrg.Settings["assigned_chat_reset_mode"])
-	assert.Equal(t, 22, updatedOrg.Settings["assigned_chat_reset_hour"])
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_enabled")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_mode")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_hour")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_last_date")
 }
 
 func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
@@ -212,12 +216,13 @@ func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
 	assert.Equal(t, false, updatedOrg.Settings["mask_phone_numbers"])
 	assert.Equal(t, "Europe/London", updatedOrg.Settings["timezone"])
 	assert.Equal(t, "YYYY-MM-DD", updatedOrg.Settings["date_format"])
-	assert.Equal(t, false, updatedOrg.Settings["assigned_chat_reset_enabled"])
-	assert.Equal(t, "custom_hour", updatedOrg.Settings["assigned_chat_reset_mode"])
-	assert.Equal(t, 8, updatedOrg.Settings["assigned_chat_reset_hour"])
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_enabled")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_mode")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_hour")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_last_date")
 }
 
-func TestApp_UpdateOrganizationSettings_InvalidAssignedChatResetMode(t *testing.T) {
+func TestApp_UpdateOrganizationSettings_IgnoresLegacyAssignedChatResetRequestFields(t *testing.T) {
 	t.Parallel()
 
 	app := newTestApp(t)
@@ -229,34 +234,24 @@ func TestApp_UpdateOrganizationSettings_InvalidAssignedChatResetMode(t *testing.
 	)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
-		"assigned_chat_reset_mode": "every_10_minutes",
+		"timezone":                    "Europe/Berlin",
+		"assigned_chat_reset_enabled": false,
+		"assigned_chat_reset_mode":    "custom_hour",
+		"assigned_chat_reset_hour":    11,
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 
 	err := app.UpdateOrganizationSettings(req)
 	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
-}
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
-func TestApp_UpdateOrganizationSettings_InvalidAssignedChatResetHour(t *testing.T) {
-	t.Parallel()
-
-	app := newTestApp(t)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
-	user := testutil.CreateTestUser(t, app.DB, org.ID,
-		testutil.WithEmail(testutil.UniqueEmail("invalid-reset-hour")),
-		testutil.WithRoleID(&adminRole.ID),
-	)
-
-	req := testutil.NewJSONRequest(t, map[string]any{
-		"assigned_chat_reset_hour": 24,
-	})
-	testutil.SetAuthContext(req, org.ID, user.ID)
-
-	err := app.UpdateOrganizationSettings(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+	var updatedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&updatedOrg).Error)
+	assert.Equal(t, "Europe/Berlin", updatedOrg.Settings["timezone"])
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_enabled")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_mode")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_hour")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_last_date")
 }
 
 func TestApp_UpdateOrganizationSettings_RemovesLegacyChatCloseRatingSettings(t *testing.T) {
@@ -302,7 +297,7 @@ func TestApp_UpdateOrganizationSettings_RemovesLegacyChatCloseRatingSettings(t *
 	assert.False(t, hasTemplates)
 }
 
-func TestApp_UpdateOrganizationSettings_MidnightModeForcesZeroHour(t *testing.T) {
+func TestApp_UpdateOrganizationSettings_RemovesLegacyAssignedChatResetSettings(t *testing.T) {
 	t.Parallel()
 
 	app := newTestApp(t)
@@ -313,9 +308,16 @@ func TestApp_UpdateOrganizationSettings_MidnightModeForcesZeroHour(t *testing.T)
 		testutil.WithRoleID(&adminRole.ID),
 	)
 
+	org.Settings = models.JSONB{
+		"assigned_chat_reset_enabled":   true,
+		"assigned_chat_reset_mode":      "custom_hour",
+		"assigned_chat_reset_hour":      17,
+		"assigned_chat_reset_last_date": "2026-04-04",
+	}
+	require.NoError(t, app.DB.Save(org).Error)
+
 	req := testutil.NewJSONRequest(t, map[string]any{
-		"assigned_chat_reset_mode": "midnight",
-		"assigned_chat_reset_hour": 17,
+		"timezone": "UTC",
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 
@@ -325,21 +327,11 @@ func TestApp_UpdateOrganizationSettings_MidnightModeForcesZeroHour(t *testing.T)
 
 	var updatedOrg models.Organization
 	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&updatedOrg).Error)
-	assert.Equal(t, "midnight", updatedOrg.Settings["assigned_chat_reset_mode"])
-	assert.Equal(t, 0, updatedOrg.Settings["assigned_chat_reset_hour"])
-
-	req = testutil.NewJSONRequest(t, map[string]any{
-		"assigned_chat_reset_mode": "midnight",
-	})
-	testutil.SetAuthContext(req, org.ID, user.ID)
-
-	err = app.UpdateOrganizationSettings(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&updatedOrg).Error)
-	assert.Equal(t, "midnight", updatedOrg.Settings["assigned_chat_reset_mode"])
-	assert.Equal(t, 0, updatedOrg.Settings["assigned_chat_reset_hour"])
+	assert.Equal(t, "UTC", updatedOrg.Settings["timezone"])
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_enabled")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_mode")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_hour")
+	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_last_date")
 }
 
 func TestApp_UpdateOrganizationSettings_Unauthorized(t *testing.T) {

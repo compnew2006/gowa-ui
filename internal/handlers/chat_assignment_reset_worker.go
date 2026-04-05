@@ -8,6 +8,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
+	waManager "github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -66,36 +67,82 @@ func (w *ChatAssignmentResetWorker) Stop() {
 }
 
 func (w *ChatAssignmentResetWorker) runOnce(nowUTC time.Time) {
-	var organizations []models.Organization
-	if err := w.app.DB.Select("id", "settings").Find(&organizations).Error; err != nil {
-		w.app.Log.Error("Assigned chat reset worker failed to load organizations", "error", err)
+	if w.app == nil || !w.app.isWhatsmeowProvider() {
 		return
 	}
 
-	for idx := range organizations {
-		if err := w.processOrganization(nowUTC, organizations[idx]); err != nil {
-			w.app.Log.Error("Assigned chat reset worker failed to process organization", "error", err, "org_id", organizations[idx].ID)
+	var instances []models.WhatsAppInstance
+	if err := w.app.DB.Select("id", "organization_id", "settings").Find(&instances).Error; err != nil {
+		w.app.Log.Error("Assigned chat reset worker failed to load instances", "error", err)
+		return
+	}
+	if len(instances) == 0 {
+		return
+	}
+
+	orgTimezones := w.loadOrganizationTimezones(instances)
+	for idx := range instances {
+		instance := instances[idx]
+		timezone := orgTimezones[instance.OrganizationID]
+		if timezone == "" {
+			timezone = "UTC"
+		}
+
+		if err := w.processInstance(nowUTC, instance, timezone); err != nil {
+			w.app.Log.Error(
+				"Assigned chat reset worker failed to process instance",
+				"error", err,
+				"org_id", instance.OrganizationID,
+				"instance_id", instance.ID,
+			)
 		}
 	}
 }
 
-func (w *ChatAssignmentResetWorker) processOrganization(nowUTC time.Time, organization models.Organization) error {
-	schedule := readChatAssignmentResetSettings(organization.Settings)
+func (w *ChatAssignmentResetWorker) loadOrganizationTimezones(instances []models.WhatsAppInstance) map[uuid.UUID]string {
+	orgIDSet := make(map[uuid.UUID]struct{}, len(instances))
+	for _, instance := range instances {
+		orgIDSet[instance.OrganizationID] = struct{}{}
+	}
+	orgIDs := make([]uuid.UUID, 0, len(orgIDSet))
+	for orgID := range orgIDSet {
+		orgIDs = append(orgIDs, orgID)
+	}
+
+	timezones := make(map[uuid.UUID]string, len(orgIDs))
+	if len(orgIDs) == 0 {
+		return timezones
+	}
+
+	var organizations []models.Organization
+	if err := w.app.DB.Select("id", "settings").Where("id IN ?", orgIDs).Find(&organizations).Error; err != nil {
+		w.app.Log.Warn("Assigned chat reset worker failed to load organization timezones; defaulting to UTC", "error", err)
+		return timezones
+	}
+	for _, org := range organizations {
+		timezones[org.ID] = parseOrganizationTimezone(org.Settings)
+	}
+
+	return timezones
+}
+
+func (w *ChatAssignmentResetWorker) processInstance(nowUTC time.Time, instance models.WhatsAppInstance, timezone string) error {
+	schedule := waManager.AssignedChatResetSettingsFromSettings(instance.Settings)
 	if !schedule.Enabled {
 		return nil
 	}
-	tzName := parseOrganizationTimezone(organization.Settings)
-	location, err := time.LoadLocation(tzName)
+
+	location, err := time.LoadLocation(timezone)
 	if err != nil {
 		location = time.UTC
-		tzName = "UTC"
+		timezone = "UTC"
 	}
 
 	localNow := nowUTC.In(location)
 	today := localNow.Format("2006-01-02")
 
-	if schedule.LastResetDate == "" && schedule.Mode == ChatAssignmentResetModeMidnight {
-		return w.persistOrganizationResetDate(organization.ID, today)
+	if schedule.LastResetDate == "" && schedule.Mode == waManager.AssignedChatResetModeMidnight {
+		return w.persistInstanceResetDate(instance.ID, today)
 	}
 
 	if schedule.LastResetDate == today {
@@ -106,35 +153,36 @@ func (w *ChatAssignmentResetWorker) processOrganization(nowUTC time.Time, organi
 		return nil
 	}
 
-	resetCount, resetCandidates, err := w.resetAssignedChats(organization.ID, nowUTC)
+	resetCount, resetCandidates, err := w.resetAssignedChats(instance.OrganizationID, instance.ID, nowUTC)
 	if err != nil {
 		return err
 	}
 
-	if err := w.persistOrganizationResetDate(organization.ID, today); err != nil {
+	if err := w.persistInstanceResetDate(instance.ID, today); err != nil {
 		return err
 	}
 
 	if resetCount > 0 {
 		contactIDs := resetCandidateIDs(resetCandidates)
-		w.broadcastResetContacts(organization.ID, contactIDs)
-		w.appendResetSystemMessages(resetCandidates, schedule, tzName, today)
+		w.broadcastResetContacts(instance.OrganizationID, contactIDs)
+		w.appendResetSystemMessages(resetCandidates, schedule, timezone, today)
 		w.app.Log.Info(
 			"Assigned chat reset completed",
-			"org_id", organization.ID,
+			"org_id", instance.OrganizationID,
+			"instance_id", instance.ID,
 			"reset_count", resetCount,
 			"mode", schedule.Mode,
 			"scheduled_hour", schedule.Hour,
-			"timezone", tzName,
+			"timezone", timezone,
 		)
 	}
 
 	return nil
 }
 
-func (w *ChatAssignmentResetWorker) resetAssignedChats(orgID uuid.UUID, nowUTC time.Time) (int64, []chatAssignmentResetCandidate, error) {
+func (w *ChatAssignmentResetWorker) resetAssignedChats(orgID, instanceID uuid.UUID, nowUTC time.Time) (int64, []chatAssignmentResetCandidate, error) {
 	query := w.app.DB.Model(&models.Contact{}).
-		Where("organization_id = ? AND assigned_user_id IS NOT NULL AND (status IS NULL OR status = '' OR status <> ?)", orgID, models.ChatStatusClosed)
+		Where("organization_id = ? AND instance_id = ? AND assigned_user_id IS NOT NULL AND (status IS NULL OR status = '' OR status <> ?)", orgID, instanceID, models.ChatStatusClosed)
 
 	var resetCandidates []chatAssignmentResetCandidate
 	if err := query.Select("id", "organization_id", "phone_number", "profile_name", "instance_id", "whats_app_account", "assigned_user_id").Find(&resetCandidates).Error; err != nil {
@@ -162,14 +210,14 @@ func (w *ChatAssignmentResetWorker) resetAssignedChats(orgID uuid.UUID, nowUTC t
 	return result.RowsAffected, resetCandidates, nil
 }
 
-func (w *ChatAssignmentResetWorker) persistOrganizationResetDate(orgID uuid.UUID, resetDate string) error {
+func (w *ChatAssignmentResetWorker) persistInstanceResetDate(instanceID uuid.UUID, resetDate string) error {
 	expr := fmt.Sprintf(
 		"jsonb_set(COALESCE(settings, '{}'::jsonb), '{%s}', to_jsonb(?::text), true)",
-		organizationSettingAssignedChatResetLastDate,
+		waManager.InstanceSettingAssignedChatResetLastDate,
 	)
 
-	return w.app.DB.Model(&models.Organization{}).
-		Where("id = ?", orgID).
+	return w.app.DB.Model(&models.WhatsAppInstance{}).
+		Where("id = ?", instanceID).
 		Update("settings", gorm.Expr(expr, resetDate)).
 		Error
 }
@@ -201,7 +249,7 @@ func resetCandidateIDs(resetCandidates []chatAssignmentResetCandidate) []uuid.UU
 
 func (w *ChatAssignmentResetWorker) appendResetSystemMessages(
 	resetCandidates []chatAssignmentResetCandidate,
-	schedule ChatAssignmentResetSettings,
+	schedule waManager.AssignedChatResetSettings,
 	timezone string,
 	resetDate string,
 ) {

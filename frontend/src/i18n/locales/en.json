@@ -2575,6 +2575,19 @@
       "description": "Configure the chat close rating messages for this specific instance.",
       "summary": "Reply window: {minutes} min"
     },
+    "assigned_chat_reset": {
+      "configureButton": "Configure assigned chat reset",
+      "title": "Assigned Chat Reset",
+      "description": "Configure the daily assigned chat reset schedule for this specific instance.",
+      "schedule": "Reset schedule",
+      "scheduleDesc": "Assigned chats on this instance are reset back to pending once per day.",
+      "defaultMidnight": "At midnight",
+      "customHourOption": "At a custom hour",
+      "customHour": "Custom hour",
+      "timezoneHint": "The schedule uses your organization timezone: {timezone}.",
+      "summaryMidnight": "Daily at 00:00 ({timezone})",
+      "summaryCustomHour": "Daily at {hour} ({timezone})"
+    },
     "auto_reject": {
       "configureButton": "Configure call auto-reject",
       "title": "Call Auto-Reject Settings",

@@ -1,180 +1,56 @@
 package handlers
 
 import (
-	"encoding/json"
-	"fmt"
-	"math"
 	"strings"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	waManager "github.com/compnew2006/whatomate/pkg/whatsmeow"
 )
 
 const (
-	organizationSettingAssignedChatResetEnabled  = "assigned_chat_reset_enabled"
-	organizationSettingAssignedChatResetMode     = "assigned_chat_reset_mode"
-	organizationSettingAssignedChatResetHour     = "assigned_chat_reset_hour"
-	organizationSettingAssignedChatResetLastDate = "assigned_chat_reset_last_date"
+	organizationSettingAssignedChatResetEnabled  = waManager.InstanceSettingAssignedChatResetEnabled
+	organizationSettingAssignedChatResetMode     = waManager.InstanceSettingAssignedChatResetMode
+	organizationSettingAssignedChatResetHour     = waManager.InstanceSettingAssignedChatResetHour
+	organizationSettingAssignedChatResetLastDate = waManager.InstanceSettingAssignedChatResetLastDate
 )
 
 // ChatAssignmentResetMode controls when assigned chats are reset back to pending.
-type ChatAssignmentResetMode string
+type ChatAssignmentResetMode = waManager.AssignedChatResetMode
 
 const (
-	ChatAssignmentResetModeMidnight   ChatAssignmentResetMode = "midnight"
-	ChatAssignmentResetModeCustomHour ChatAssignmentResetMode = "custom_hour"
+	ChatAssignmentResetModeMidnight   = waManager.AssignedChatResetModeMidnight
+	ChatAssignmentResetModeCustomHour = waManager.AssignedChatResetModeCustomHour
 )
 
 // ChatAssignmentResetSettings contains organization-level schedule preferences.
-type ChatAssignmentResetSettings struct {
-	Enabled       bool
-	Mode          ChatAssignmentResetMode
-	Hour          int
-	LastResetDate string
-}
+type ChatAssignmentResetSettings = waManager.AssignedChatResetSettings
 
 func defaultChatAssignmentResetSettings() ChatAssignmentResetSettings {
-	return ChatAssignmentResetSettings{
-		Enabled: true,
-		Mode:    ChatAssignmentResetModeMidnight,
-		Hour:    0,
-	}
+	return waManager.DefaultAssignedChatResetSettings()
 }
 
 func isValidChatAssignmentResetMode(raw string) bool {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case string(ChatAssignmentResetModeMidnight), string(ChatAssignmentResetModeCustomHour):
-		return true
-	default:
-		return false
-	}
+	return waManager.IsValidAssignedChatResetMode(raw)
 }
 
 func normalizeChatAssignmentResetMode(raw string) ChatAssignmentResetMode {
-	trimmed := strings.ToLower(strings.TrimSpace(raw))
-	if trimmed == string(ChatAssignmentResetModeCustomHour) {
-		return ChatAssignmentResetModeCustomHour
-	}
-	return ChatAssignmentResetModeMidnight
+	return waManager.NormalizeAssignedChatResetMode(raw)
 }
 
 func isValidChatAssignmentResetHour(hour int) bool {
-	return hour >= 0 && hour <= 23
+	return waManager.IsValidAssignedChatResetHour(hour)
 }
 
 func parseChatAssignmentResetHour(raw any) (int, bool) {
-	const (
-		maxInt = int(^uint(0) >> 1)
-		minInt = -maxInt - 1
-	)
-
-	switch v := raw.(type) {
-	case int:
-		return v, true
-	case int8:
-		return int(v), true
-	case int16:
-		return int(v), true
-	case int32:
-		return int(v), true
-	case int64:
-		if v < int64(minInt) || v > int64(maxInt) {
-			return 0, false
-		}
-		return int(v), true
-	case uint:
-		if uint64(v) > uint64(maxInt) {
-			return 0, false
-		}
-		return int(v), true
-	case uint8:
-		return int(v), true
-	case uint16:
-		return int(v), true
-	case uint32:
-		if uint64(v) > uint64(maxInt) {
-			return 0, false
-		}
-		return int(v), true
-	case uint64:
-		if v > uint64(maxInt) {
-			return 0, false
-		}
-		return int(v), true
-	case float64:
-		if v < float64(minInt) || v > float64(maxInt) || math.Trunc(v) != v {
-			return 0, false
-		}
-		return int(v), true
-	case float32:
-		floatV := float64(v)
-		if floatV < float64(minInt) || floatV > float64(maxInt) || math.Trunc(floatV) != floatV {
-			return 0, false
-		}
-		return int(v), true
-	case json.Number:
-		parsed, err := v.Int64()
-		if err != nil {
-			return 0, false
-		}
-		if parsed < int64(minInt) || parsed > int64(maxInt) {
-			return 0, false
-		}
-		return int(parsed), true
-	default:
-		return 0, false
-	}
+	return waManager.ParseAssignedChatResetHour(raw)
 }
 
 func readChatAssignmentResetSettings(settings models.JSONB) ChatAssignmentResetSettings {
-	config := defaultChatAssignmentResetSettings()
-	if settings == nil {
-		return config
-	}
-
-	if rawEnabled, ok := settings[organizationSettingAssignedChatResetEnabled]; ok {
-		if parsedEnabled, parsed := parseJSONBBool(rawEnabled); parsed {
-			config.Enabled = parsedEnabled
-		}
-	}
-
-	if rawMode, ok := settings[organizationSettingAssignedChatResetMode].(string); ok && strings.TrimSpace(rawMode) != "" {
-		config.Mode = normalizeChatAssignmentResetMode(rawMode)
-	}
-
-	if rawHour, ok := settings[organizationSettingAssignedChatResetHour]; ok {
-		if parsedHour, parsed := parseChatAssignmentResetHour(rawHour); parsed && isValidChatAssignmentResetHour(parsedHour) {
-			config.Hour = parsedHour
-		}
-	}
-
-	if config.Mode == ChatAssignmentResetModeMidnight {
-		config.Hour = 0
-	}
-
-	if rawLastDate, ok := settings[organizationSettingAssignedChatResetLastDate].(string); ok {
-		config.LastResetDate = strings.TrimSpace(rawLastDate)
-	}
-
-	return config
+	return waManager.AssignedChatResetSettingsFromSettings(settings)
 }
 
 func parseJSONBBool(raw any) (bool, bool) {
-	switch v := raw.(type) {
-	case bool:
-		return v, true
-	case string:
-		trimmed := strings.TrimSpace(strings.ToLower(v))
-		switch trimmed {
-		case "true", "1", "yes":
-			return true, true
-		case "false", "0", "no":
-			return false, true
-		default:
-			return false, false
-		}
-	default:
-		return false, false
-	}
+	return waManager.ParseBoolLike(raw)
 }
 
 func parseOrganizationTimezone(settings models.JSONB) string {
@@ -191,13 +67,5 @@ func parseOrganizationTimezone(settings models.JSONB) string {
 }
 
 func validateChatAssignmentResetInputs(mode *string, hour *int) error {
-	if mode != nil && !isValidChatAssignmentResetMode(*mode) {
-		return fmt.Errorf("assigned_chat_reset_mode must be one of: midnight, custom_hour")
-	}
-
-	if hour != nil && !isValidChatAssignmentResetHour(*hour) {
-		return fmt.Errorf("assigned_chat_reset_hour must be between 0 and 23")
-	}
-
-	return nil
+	return waManager.ValidateAssignedChatResetInputs(mode, hour)
 }

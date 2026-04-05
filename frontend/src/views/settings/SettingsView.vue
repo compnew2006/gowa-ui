@@ -61,7 +61,6 @@ const configStore = useConfigStore();
 
 type NotificationSoundKey = "notification1" | "notification2" | "notification";
 const DEFAULT_NOTIFICATION_SOUND: NotificationSoundKey = "notification1";
-type AssignedChatResetMode = "midnight" | "custom_hour";
 
 const isSubmitting = ref(false);
 const isLoading = ref(true);
@@ -150,22 +149,6 @@ const notificationSettings = ref<NotificationSettings>({
   notification_sound: DEFAULT_NOTIFICATION_SOUND,
 });
 
-function normalizeAssignedChatResetMode(value: unknown): AssignedChatResetMode {
-  return value === "custom_hour" ? "custom_hour" : "midnight";
-}
-
-function normalizeAssignedChatResetHour(value: unknown): number {
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value)
-        : Number.NaN;
-  if (!Number.isFinite(parsed)) return 0;
-  const rounded = Math.trunc(parsed);
-  return Math.min(23, Math.max(0, rounded));
-}
-
 // Chat Preferences (localStorage-only)
 const MEDIA_GROUP_WINDOW_KEY = "chat.mediaGroupWindowSeconds";
 const chatSettings = ref({
@@ -173,9 +156,6 @@ const chatSettings = ref({
   sidebar_view_mode: ChatSidebarUnifier.readViewMode() as ChatSidebarViewMode,
   show_print_buttons: configStore.showPrintButtons,
   show_download_buttons: configStore.showDownloadButtons,
-  assigned_chat_reset_enabled: true,
-  assigned_chat_reset_mode: "midnight" as AssignedChatResetMode,
-  assigned_chat_reset_hour: 0,
 });
 const savedChatBackground = ref<ChatBackgroundSettings | null>(null);
 const chatBackgroundEditorMode = ref<ChatBackgroundEditorMode>("default");
@@ -362,11 +342,6 @@ const timezoneOptions = [
   { value: "Australia/Sydney", label: "UTC+10/+11 (Sydney)" },
 ];
 
-const chatResetHourOptions = Array.from({ length: 24 }, (_, hour) => ({
-  value: String(hour),
-  label: `${String(hour).padStart(2, "0")}:00`,
-}));
-
 // Load chat settings from localStorage
 try {
   const stored = Number(localStorage.getItem(MEDIA_GROUP_WINDOW_KEY));
@@ -395,18 +370,6 @@ onMounted(async () => {
         date_format: orgData.settings?.date_format || "YYYY-MM-DD",
         mask_phone_numbers: orgData.settings?.mask_phone_numbers || false,
       };
-
-      const resetMode = normalizeAssignedChatResetMode(
-        orgData.settings?.assigned_chat_reset_mode,
-      );
-      const resetHour = normalizeAssignedChatResetHour(
-        orgData.settings?.assigned_chat_reset_hour,
-      );
-      chatSettings.value.assigned_chat_reset_enabled =
-        orgData.settings?.assigned_chat_reset_enabled !== false;
-      chatSettings.value.assigned_chat_reset_mode = resetMode;
-      chatSettings.value.assigned_chat_reset_hour =
-        resetMode === "midnight" ? 0 : resetHour;
     }
 
     // User notification settings
@@ -486,20 +449,9 @@ async function saveChatSettings() {
   const sidebarViewMode = ChatSidebarUnifier.normalizeViewMode(
     chatSettings.value.sidebar_view_mode,
   );
-  const normalizedMode = normalizeAssignedChatResetMode(
-    chatSettings.value.assigned_chat_reset_mode,
-  );
-  const normalizedHour =
-    normalizedMode === "midnight"
-      ? 0
-      : normalizeAssignedChatResetHour(
-          chatSettings.value.assigned_chat_reset_hour,
-        );
 
   chatSettings.value.media_group_window = clamped;
   chatSettings.value.sidebar_view_mode = sidebarViewMode;
-  chatSettings.value.assigned_chat_reset_mode = normalizedMode;
-  chatSettings.value.assigned_chat_reset_hour = normalizedHour;
 
   const nextChatBackground = resolvePendingChatBackgroundSelection();
   const shouldClearChatBackground = chatBackgroundUsesDefault.value;
@@ -571,13 +523,6 @@ async function saveChatSettings() {
       });
       syncChatBackgroundState(payload.chat_background);
     }
-
-    await organizationService.updateSettings({
-      assigned_chat_reset_enabled:
-        chatSettings.value.assigned_chat_reset_enabled,
-      assigned_chat_reset_mode: normalizedMode,
-      assigned_chat_reset_hour: normalizedHour,
-    });
 
     localStorage.setItem(MEDIA_GROUP_WINDOW_KEY, String(clamped));
     ChatSidebarUnifier.saveViewMode(sidebarViewMode);
@@ -1323,100 +1268,6 @@ onBeforeUnmount(() => {
                       "
                     />
                   </div>
-                </div>
-                <Separator class="bg-border" />
-                <div class="space-y-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <div>
-                      <Label class="text-foreground/80">{{
-                        $t("settings.assignedChatResetEnabled")
-                      }}</Label>
-                      <p class="text-xs text-muted-foreground">
-                        {{ $t("settings.assignedChatResetEnabledDesc") }}
-                      </p>
-                    </div>
-                    <Switch
-                      :checked="chatSettings.assigned_chat_reset_enabled"
-                      @update:checked="
-                        chatSettings.assigned_chat_reset_enabled = $event
-                      "
-                    />
-                  </div>
-                  <Label class="text-foreground/80">{{
-                    $t("settings.assignedChatResetSchedule")
-                  }}</Label>
-                  <p class="text-xs text-muted-foreground">
-                    {{ $t("settings.assignedChatResetScheduleDesc") }}
-                  </p>
-                  <Select
-                    v-model="chatSettings.assigned_chat_reset_mode"
-                    :disabled="!chatSettings.assigned_chat_reset_enabled"
-                  >
-                    <SelectTrigger
-                      class="w-full max-w-xs border-input bg-input text-foreground"
-                    >
-                      <SelectValue
-                        :placeholder="$t('settings.selectResetSchedule')"
-                      />
-                    </SelectTrigger>
-                    <SelectContent
-                      class="border-border bg-popover text-popover-foreground"
-                    >
-                      <SelectItem
-                        value="midnight"
-                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
-                      >
-                        {{ $t("settings.defaultMidnight") }}
-                      </SelectItem>
-                      <SelectItem
-                        value="custom_hour"
-                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
-                      >
-                        {{ $t("settings.customHour") }}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div
-                  v-if="
-                    chatSettings.assigned_chat_reset_enabled &&
-                    chatSettings.assigned_chat_reset_mode === 'custom_hour'
-                  "
-                  class="space-y-2"
-                >
-                  <Label class="text-foreground/80">{{
-                    $t("settings.customResetHour")
-                  }}</Label>
-                  <Select
-                    :model-value="String(chatSettings.assigned_chat_reset_hour)"
-                    @update:model-value="
-                      (v: unknown) => {
-                        if (typeof v === 'string')
-                          chatSettings.assigned_chat_reset_hour = Number(v);
-                      }
-                    "
-                    :disabled="!chatSettings.assigned_chat_reset_enabled"
-                  >
-                    <SelectTrigger
-                      class="w-full max-w-xs border-input bg-input text-foreground"
-                    >
-                      <SelectValue
-                        :placeholder="$t('settings.selectResetHour')"
-                      />
-                    </SelectTrigger>
-                    <SelectContent
-                      class="border-border bg-popover text-popover-foreground"
-                    >
-                      <SelectItem
-                        v-for="option in chatResetHourOptions"
-                        :key="option.value"
-                        :value="option.value"
-                        class="text-foreground/80 focus:bg-accent focus:text-foreground"
-                      >
-                        {{ option.label }}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
                 <Separator class="bg-border" />
                 <div class="space-y-3">

@@ -35,6 +35,7 @@ func EnsureInstanceSettingsDefaults(settings models.JSONB) models.JSONB {
 		normalized[InstanceSettingAutoCampaign],
 	).ToJSONB()
 	normalized = injectChatCloseRatingDefaults(normalized)
+	normalized = injectAssignedChatResetDefaults(normalized)
 	return normalized
 }
 
@@ -216,6 +217,9 @@ func ValidateInstanceSettings(settings models.JSONB) error {
 		if err := validateInstanceChatCloseRatingTemplatesSetting(raw); err != nil {
 			return fmt.Errorf("invalid %s: %w", InstanceSettingChatCloseRatingTemplates, err)
 		}
+	}
+	if err := validateAssignedChatResetSettings(settings); err != nil {
+		return err
 	}
 
 	return nil

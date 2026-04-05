@@ -192,6 +192,9 @@ func runServer(args []string) {
 			lo.Fatal("Migration failed", "error", err)
 		}
 	}
+	if err := database.BackfillInstanceAssignedChatResetSettings(db); err != nil {
+		lo.Fatal("Failed to backfill per-instance assigned chat reset settings", "error", err)
+	}
 
 	// Connect to Redis
 	rdb, err := database.NewRedis(&cfg.Redis)

@@ -185,5 +185,7 @@ test.describe("Settings Tab Navigation", () => {
     await settingsPage.switchToChatTab();
     await expect(page.getByText("Close Chat Rating")).toHaveCount(0);
     await expect(page.getByText("Rating Message Templates")).toHaveCount(0);
+    await expect(page.getByText("Enable Assigned Chat Reset")).toHaveCount(0);
+    await expect(page.getByText("Assigned Chat Reset Schedule")).toHaveCount(0);
   });
 });

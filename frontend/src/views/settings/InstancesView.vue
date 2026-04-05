@@ -38,6 +38,10 @@ import {
   sanitizeInstanceChatCloseRatingSettings,
   type InstanceChatCloseRatingSettings,
 } from "@/lib/instance-chat-close-rating";
+import {
+  sanitizeInstanceAssignedChatResetSettings,
+  type InstanceAssignedChatResetSettings,
+} from "@/lib/instance-assigned-chat-reset";
 
 const instancesStore = useInstancesStore();
 const { t } = useI18n();
@@ -99,7 +103,9 @@ const autoRejectSaving = ref<Record<string, boolean>>({});
 const autoCampaignSaving = ref<Record<string, boolean>>({});
 const autoCampaignUploading = ref<Record<string, boolean>>({});
 const chatCloseRatingSaving = ref<Record<string, boolean>>({});
+const assignedChatResetSaving = ref<Record<string, boolean>>({});
 const campaignDraftOnlyEnforced = ref(false);
+const organizationTimezone = ref("UTC");
 
 // Lifecycle
 onMounted(async () => {
@@ -135,8 +141,10 @@ async function loadOrganizationPolicySettings() {
     const payload = response.data?.data || response.data || {};
     campaignDraftOnlyEnforced.value =
       payload.settings?.campaign_draft_only === true;
+    organizationTimezone.value = payload.settings?.timezone || "UTC";
   } catch {
     campaignDraftOnlyEnforced.value = false;
+    organizationTimezone.value = "UTC";
   }
 }
 
@@ -776,6 +784,29 @@ async function handleUpdateChatCloseRatingSettings(
     chatCloseRatingSaving.value[id] = false;
   }
 }
+
+async function handleAssignedChatResetSettingsUpdate(
+  id: string,
+  payload: InstanceAssignedChatResetSettings,
+) {
+  const instance = instancesStore.instances.find((item) => item.id === id);
+  if (!instance) return;
+
+  assignedChatResetSaving.value[id] = true;
+  try {
+    const normalized = sanitizeInstanceAssignedChatResetSettings(payload);
+    const settingsPayload: Record<string, any> = {
+      ...(instance.settings || {}),
+      assigned_chat_reset_enabled: normalized.enabled,
+      assigned_chat_reset_mode: normalized.mode,
+      assigned_chat_reset_hour: normalized.hour,
+    };
+
+    await instancesStore.updateInstance(id, { settings: settingsPayload });
+  } finally {
+    assignedChatResetSaving.value[id] = false;
+  }
+}
 </script>
 
 <template>
@@ -841,7 +872,7 @@ async function handleUpdateChatCloseRatingSettings(
         </Button>
       </div>
 
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div v-else class="grid grid-cols-1 gap-6 md:grid-cols-2 2xl:grid-cols-3">
         <InstanceCard
           v-for="(instance, index) in instancesStore.instances"
           :key="instance.id"
@@ -858,6 +889,10 @@ async function handleUpdateChatCloseRatingSettings(
           :chat-close-rating-saving="
             chatCloseRatingSaving[instance.id] || false
           "
+          :assigned-chat-reset-saving="
+            assignedChatResetSaving[instance.id] || false
+          "
+          :organization-timezone="organizationTimezone"
           @connect="handleConnect"
           @disconnect="disconnectInstance"
           @edit="openEditDialog"
@@ -873,6 +908,9 @@ async function handleUpdateChatCloseRatingSettings(
           @clear-auto-campaign-media="handleAutoCampaignMediaClear"
           @update-chat-close-rating-settings="
             handleUpdateChatCloseRatingSettings
+          "
+          @update-assigned-chat-reset-settings="
+            handleAssignedChatResetSettingsUpdate
           "
         />
       </div>

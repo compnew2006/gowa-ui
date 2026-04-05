@@ -190,6 +190,10 @@ func (a *App) ListInstances(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list instances", nil, "")
 	}
 
+	for idx := range instances {
+		instances[idx].Settings = waManager.EnsureInstanceSettingsDefaults(instances[idx].Settings)
+	}
+
 	return r.SendEnvelope(instances)
 }
 
@@ -224,6 +228,8 @@ func (a *App) GetInstance(r *fastglue.Request) error {
 		a.Log.Error("Failed to get instance", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to get instance", nil, "")
 	}
+
+	instance.Settings = waManager.EnsureInstanceSettingsDefaults(instance.Settings)
 
 	return r.SendEnvelope(instance)
 }
@@ -281,12 +287,15 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 		}
 
 		updates["name"] = normalizedName
+		instance.Name = normalizedName
 	}
 	if req.IsDefault != nil {
 		updates["is_default"] = *req.IsDefault
+		instance.IsDefault = *req.IsDefault
 	}
 	if req.AutoReadReceipt != nil {
 		updates["auto_read_receipt"] = *req.AutoReadReceipt
+		instance.AutoReadReceipt = *req.AutoReadReceipt
 	}
 	if req.Settings != nil {
 		settings := waManager.EnsureInstanceSettingsDefaults(*req.Settings)
@@ -294,6 +303,7 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, settingsErr.Error(), nil, "settings")
 		}
 		updates["settings"] = settings
+		instance.Settings = settings
 	}
 
 	if len(updates) > 0 {
@@ -302,6 +312,8 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update instance", nil, "")
 		}
 	}
+
+	instance.Settings = waManager.EnsureInstanceSettingsDefaults(instance.Settings)
 
 	return r.SendEnvelope(instance)
 }

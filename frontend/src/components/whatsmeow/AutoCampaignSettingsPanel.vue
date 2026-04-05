@@ -118,12 +118,12 @@ function formatScheduleValue(value?: string) {
     return t("instances.auto_campaign.pendingFirstRun");
   }
 
-  const parsed = new Date(value)
+  const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return t("instances.auto_campaign.pendingFirstRun");
   }
 
-  return parsed.toLocaleString()
+  return parsed.toLocaleString();
 }
 </script>
 
@@ -131,14 +131,11 @@ function formatScheduleValue(value?: string) {
   <Button
     variant="outline"
     size="sm"
-    class="w-full border-white/10 text-white/70 hover:bg-white/5 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
+    class="h-auto min-h-9 w-full whitespace-normal border-white/10 px-3 py-2 text-center leading-4 text-white/70 hover:bg-white/5 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
     :disabled="saving || uploading"
     @click="dialogOpen = true"
   >
-    <Loader2
-      v-if="saving || uploading"
-      class="h-3.5 w-3.5 mr-2 animate-spin"
-    />
+    <Loader2 v-if="saving || uploading" class="h-3.5 w-3.5 mr-2 animate-spin" />
     <Settings2 v-else class="h-3.5 w-3.5 mr-2" />
     {{ $t("instances.auto_campaign.configureButton") }}
   </Button>
@@ -155,11 +152,15 @@ function formatScheduleValue(value?: string) {
       </DialogHeader>
 
       <div class="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
-        <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm space-y-2 light:border-emerald-200 light:bg-emerald-50">
+        <div
+          class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm space-y-2 light:border-emerald-200 light:bg-emerald-50"
+        >
           <p class="text-white/80 light:text-emerald-900">
             {{ $t("instances.auto_campaign.eligibilityHint") }}
           </p>
-          <div class="grid gap-2 md:grid-cols-2 text-xs text-white/60 light:text-emerald-800">
+          <div
+            class="grid gap-2 md:grid-cols-2 text-xs text-white/60 light:text-emerald-800"
+          >
             <p>
               <span class="font-medium text-white/85 light:text-emerald-950">{{
                 $t("instances.auto_campaign.lastEvaluation")
@@ -175,7 +176,9 @@ function formatScheduleValue(value?: string) {
           </div>
         </div>
 
-        <div class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3">
+        <div
+          class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3"
+        >
           <div class="flex items-center justify-between gap-2">
             <div>
               <Label class="text-white/80 light:text-gray-800">{{
@@ -239,7 +242,9 @@ function formatScheduleValue(value?: string) {
         <div class="space-y-2">
           <Label>{{ $t("instances.auto_campaign.targetStatus") }}</Label>
           <Select v-model="localSettings.target_status">
-            <SelectTrigger class="bg-white/5 border-white/10 light:bg-white light:border-gray-300">
+            <SelectTrigger
+              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+            >
               <SelectValue
                 :placeholder="
                   $t('common.selectPlaceholder', {
@@ -248,7 +253,9 @@ function formatScheduleValue(value?: string) {
                 "
               />
             </SelectTrigger>
-            <SelectContent class="bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900">
+            <SelectContent
+              class="bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900"
+            >
               <SelectItem value="draft">{{
                 $t("instances.auto_campaign.statusDraft")
               }}</SelectItem>
@@ -274,7 +281,9 @@ function formatScheduleValue(value?: string) {
           </p>
         </div>
 
-        <div class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3">
+        <div
+          class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3"
+        >
           <div class="flex items-center justify-between gap-2">
             <div>
               <Label class="text-white/80 light:text-gray-800">{{
@@ -335,7 +344,9 @@ function formatScheduleValue(value?: string) {
                 localSettings.media_filename || localSettings.media_local_path
               }}</span>
             </div>
-            <p class="mt-1 text-white/45 light:text-gray-500">{{ localSettings.media_mime_type }}</p>
+            <p class="mt-1 text-white/45 light:text-gray-500">
+              {{ localSettings.media_mime_type }}
+            </p>
           </div>
         </div>
       </div>

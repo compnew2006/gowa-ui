@@ -137,71 +137,77 @@ function selectColor(color: InstanceTagColorKey) {
       </div>
     </div>
 
-    <div class="space-y-1.5">
-      <Label
-        class="text-[11px] font-medium text-white/50 light:text-gray-500"
-        >{{ $t("instances.tags.customLabel") }}</Label
-      >
-      <Input
-        v-model="customLabel"
-        :placeholder="$t('instances.tags.labelPlaceholder')"
-        class="h-8 bg-white/[0.04] text-xs text-white placeholder:text-white/25 light:bg-white light:text-gray-900 light:placeholder:text-gray-400"
-      />
-    </div>
-
-    <div class="mt-3 space-y-1.5">
-      <Label
-        class="text-[11px] font-medium text-white/50 light:text-gray-500"
-        >{{ $t("instances.tags.showAs") }}</Label
-      >
-      <select
-        v-model="selectedDisplayMode"
-        class="h-8 w-full rounded-md border border-white/[0.12] bg-black/20 px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400 light:border-gray-300 light:bg-white light:text-gray-800"
-      >
-        <option value="custom">{{ $t("instances.tags.modeCustom") }}</option>
-        <option value="phone">{{ $t("instances.tags.modePhone") }}</option>
-        <option value="name">{{ $t("instances.tags.modeName") }}</option>
-      </select>
-    </div>
-
-    <div class="mt-3 space-y-1.5">
-      <Label
-        class="text-[11px] font-medium text-white/50 light:text-gray-500"
-        >{{ $t("instances.tags.tagColor") }}</Label
-      >
-      <div class="flex flex-wrap gap-1.5">
-        <button
-          v-for="preset in INSTANCE_TAG_COLOR_PRESETS"
-          :key="preset.key"
-          type="button"
-          class="flex h-6 w-6 items-center justify-center rounded-full border-2 transition-transform hover:scale-105"
-          :class="[
-            preset.swatchClass,
-            selectedColor === preset.key
-              ? 'border-white ring-2 ring-offset-0'
-              : 'border-transparent',
-            selectedColor === preset.key ? preset.ringClass : '',
-          ]"
-          :title="preset.label"
-          @click="selectColor(preset.key)"
+    <div class="grid gap-3 lg:grid-cols-2">
+      <div class="space-y-1.5">
+        <Label
+          class="text-[11px] font-medium text-white/50 light:text-gray-500"
+          >{{ $t("instances.tags.customLabel") }}</Label
         >
-          <Check
-            v-if="selectedColor === preset.key"
-            class="h-3.5 w-3.5 text-white"
-          />
-        </button>
+        <Input
+          v-model="customLabel"
+          :placeholder="$t('instances.tags.labelPlaceholder')"
+          class="h-8 bg-white/[0.04] text-xs text-white placeholder:text-white/25 light:bg-white light:text-gray-900 light:placeholder:text-gray-400"
+        />
+      </div>
+
+      <div class="space-y-1.5">
+        <Label
+          class="text-[11px] font-medium text-white/50 light:text-gray-500"
+          >{{ $t("instances.tags.showAs") }}</Label
+        >
+        <select
+          v-model="selectedDisplayMode"
+          class="h-8 w-full rounded-md border border-white/[0.12] bg-black/20 px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400 light:border-gray-300 light:bg-white light:text-gray-800"
+        >
+          <option value="custom">{{ $t("instances.tags.modeCustom") }}</option>
+          <option value="phone">{{ $t("instances.tags.modePhone") }}</option>
+          <option value="name">{{ $t("instances.tags.modeName") }}</option>
+        </select>
       </div>
     </div>
 
-    <Button
-      size="sm"
-      variant="outline"
-      class="mt-3 h-8 w-full border-white/[0.1] text-xs text-white/80 hover:bg-white/[0.08] light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
-      :disabled="!hasChanges || saving"
-      @click="saveSettings"
+    <div
+      class="mt-3 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between"
     >
-      <Loader2 v-if="saving" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-      {{ $t("instances.tags.saveSettings") }}
-    </Button>
+      <div class="min-w-0 flex-1 space-y-1.5">
+        <Label
+          class="text-[11px] font-medium text-white/50 light:text-gray-500"
+          >{{ $t("instances.tags.tagColor") }}</Label
+        >
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="preset in INSTANCE_TAG_COLOR_PRESETS"
+            :key="preset.key"
+            type="button"
+            class="flex h-6 w-6 items-center justify-center rounded-full border-2 transition-transform hover:scale-105"
+            :class="[
+              preset.swatchClass,
+              selectedColor === preset.key
+                ? 'border-white ring-2 ring-offset-0'
+                : 'border-transparent',
+              selectedColor === preset.key ? preset.ringClass : '',
+            ]"
+            :title="preset.label"
+            @click="selectColor(preset.key)"
+          >
+            <Check
+              v-if="selectedColor === preset.key"
+              class="h-3.5 w-3.5 text-white"
+            />
+          </button>
+        </div>
+      </div>
+
+      <Button
+        size="sm"
+        variant="outline"
+        class="h-8 w-full border-white/[0.1] text-xs text-white/80 hover:bg-white/[0.08] lg:w-auto lg:min-w-[180px] light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
+        :disabled="!hasChanges || saving"
+        @click="saveSettings"
+      >
+        <Loader2 v-if="saving" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+        {{ $t("instances.tags.saveSettings") }}
+      </Button>
+    </div>
   </div>
 </template>

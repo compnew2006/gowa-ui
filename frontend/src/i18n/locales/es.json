@@ -231,6 +231,19 @@
     "unknownChat": "un chat"
   },
   "instances": {
+    "assigned_chat_reset": {
+      "configureButton": "Configurar reinicio de chats asignados",
+      "title": "Reinicio de chats asignados",
+      "description": "Configura el horario diario de reinicio de chats asignados para esta instancia.",
+      "schedule": "Horario de reinicio",
+      "scheduleDesc": "Los chats asignados en esta instancia vuelven a pendiente una vez al día.",
+      "defaultMidnight": "A la medianoche",
+      "customHourOption": "A una hora personalizada",
+      "customHour": "Hora personalizada",
+      "timezoneHint": "El horario usa la zona horaria de tu organización: {timezone}.",
+      "summaryMidnight": "Diariamente a las 00:00 ({timezone})",
+      "summaryCustomHour": "Diariamente a las {hour} ({timezone})"
+    },
     "chat_close_rating": {
       "configureButton": "Configurar mensaje de valoración",
       "title": "Configuración de valoración al cerrar chat",

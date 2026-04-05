@@ -135,7 +135,7 @@ function handleSave() {
   <Button
     variant="outline"
     size="sm"
-    class="w-full border-white/10 text-white/70 hover:bg-white/5 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
+    class="h-auto min-h-9 w-full whitespace-normal border-white/10 px-3 py-2 text-center leading-4 text-white/70 hover:bg-white/5 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
     :disabled="saving"
     @click="dialogOpen = true"
   >
@@ -156,7 +156,9 @@ function handleSave() {
       </DialogHeader>
 
       <div class="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
-        <div class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3">
+        <div
+          class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3"
+        >
           <div class="flex items-center justify-between gap-2">
             <div>
               <Label class="text-white/80 light:text-gray-800">{{
@@ -184,7 +186,9 @@ function handleSave() {
         <div class="space-y-2">
           <Label>{{ $t("instances.auto_reject.replyMode") }}</Label>
           <Select v-model="localSettings.mode">
-            <SelectTrigger class="bg-white/5 border-white/10 light:bg-white light:border-gray-300">
+            <SelectTrigger
+              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+            >
               <SelectValue
                 :placeholder="
                   $t('common.selectPlaceholder', {
@@ -233,7 +237,9 @@ function handleSave() {
         <div class="space-y-2">
           <Label>{{ $t("instances.auto_reject.schedule") }}</Label>
           <Select v-model="localSettings.schedule.type">
-            <SelectTrigger class="bg-white/5 border-white/10 light:bg-white light:border-gray-300">
+            <SelectTrigger
+              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+            >
               <SelectValue
                 :placeholder="
                   $t('common.selectPlaceholder', {

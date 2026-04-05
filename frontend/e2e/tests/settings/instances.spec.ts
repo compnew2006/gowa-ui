@@ -781,9 +781,8 @@ test.describe("WhatsApp Instances", () => {
         "Only contacts with inbound messages on this instance during the evaluation window are included.",
       ),
     ).toBeVisible();
-    await expect(dialog.getByText("Last evaluation:")).toBeVisible();
-    await expect(dialog.getByText("Next evaluation:")).toBeVisible();
-    await expect(dialog.getByText("2026")).toBeVisible();
+    await expect(dialog.getByText(/Last evaluation:.*2026/)).toBeVisible();
+    await expect(dialog.getByText(/Next evaluation:.*2026/)).toBeVisible();
   });
 
   test("should force target_status=draft when campaign_draft_only is enabled", async ({
@@ -1061,5 +1060,75 @@ test.describe("WhatsApp Instances", () => {
     await expect(reopenDialog.locator("textarea").nth(1)).toHaveValue(
       "Rate us!",
     );
+  });
+
+  test("should save instance specific assigned chat reset settings", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+
+    const now = new Date().toISOString();
+    const instance: MockInstance = {
+      id: "e2e-instance-assigned-chat-reset-id",
+      name: `Assigned Chat Reset ${Date.now()}`,
+      status: "connected",
+      is_default: false,
+      auto_read_receipt: true,
+      organization_id: "e2e-org-id",
+      settings: {
+        auto_sync_history: false,
+        custom_existing_setting: "keep-me",
+      },
+      created_at: now,
+      updated_at: now,
+    };
+    const instances: MockInstance[] = [instance];
+    let receivedUpdatePayload: any = null;
+
+    await mockInstancesApi(page, instances, {
+      onOrganizationSettings: () => ({
+        campaign_draft_only: false,
+        timezone: "Europe/Cairo",
+      }),
+      onUpdate: (_id, payload) => {
+        receivedUpdatePayload = payload as Record<string, any>;
+      },
+    });
+
+    await page.goto("/settings/instances");
+
+    await page
+      .getByRole("button", { name: "Configure assigned chat reset" })
+      .first()
+      .click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("heading", { name: "Assigned Chat Reset" }),
+    ).toBeVisible();
+    await dialog.getByRole("combobox").first().click();
+    await page.getByRole("option", { name: "At a custom hour" }).click();
+    await dialog.getByRole("combobox").nth(1).click();
+    await page.getByRole("option", { name: "09:00" }).click();
+    await dialog.getByRole("button", { name: "Save" }).click();
+
+    await expect(
+      page
+        .locator("[data-sonner-toast]")
+        .filter({ hasText: "Instance updated successfully" }),
+    ).toBeVisible();
+    expect(receivedUpdatePayload).not.toBeNull();
+    expect(receivedUpdatePayload?.settings?.assigned_chat_reset_enabled).toBe(
+      true,
+    );
+    expect(receivedUpdatePayload?.settings?.assigned_chat_reset_mode).toBe(
+      "custom_hour",
+    );
+    expect(receivedUpdatePayload?.settings?.assigned_chat_reset_hour).toBe(9);
+    expect(receivedUpdatePayload?.settings?.auto_sync_history).toBe(false);
+    expect(receivedUpdatePayload?.settings?.custom_existing_setting).toBe(
+      "keep-me",
+    );
+    await expect(page.getByText("Daily at 09:00 (Europe/Cairo)")).toBeVisible();
   });
 });

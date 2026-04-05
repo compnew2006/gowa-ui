@@ -32,10 +32,16 @@ import {
   normalizeInstanceChatCloseRatingSettings,
   type InstanceChatCloseRatingSettings,
 } from "@/lib/instance-chat-close-rating";
+import {
+  cloneInstanceAssignedChatResetSettings,
+  normalizeInstanceAssignedChatResetSettings,
+  type InstanceAssignedChatResetSettings,
+} from "@/lib/instance-assigned-chat-reset";
 import InstanceTagSettings from "@/components/whatsmeow/InstanceTagSettings.vue";
 import AutoRejectSettingsPanel from "@/components/whatsmeow/AutoRejectSettingsPanel.vue";
 import AutoCampaignSettingsPanel from "@/components/whatsmeow/AutoCampaignSettingsPanel.vue";
 import InstanceChatCloseRatingPanel from "@/components/whatsmeow/InstanceChatCloseRatingPanel.vue";
+import InstanceAssignedChatResetPanel from "@/components/whatsmeow/InstanceAssignedChatResetPanel.vue";
 import {
   Loader2,
   Power,
@@ -57,6 +63,8 @@ const props = defineProps<{
   autoCampaignSaving?: boolean;
   autoCampaignUploading?: boolean;
   chatCloseRatingSaving?: boolean;
+  assignedChatResetSaving?: boolean;
+  organizationTimezone?: string;
 }>();
 
 const emit = defineEmits<{
@@ -74,7 +82,11 @@ const emit = defineEmits<{
     },
   ): void;
   (e: "update-auto-sync", id: string, enabled: boolean): void;
-  (e: "update-auto-download-incoming-media", id: string, enabled: boolean): void;
+  (
+    e: "update-auto-download-incoming-media",
+    id: string,
+    enabled: boolean,
+  ): void;
   (
     e: "update-auto-reject-settings",
     id: string,
@@ -91,6 +103,11 @@ const emit = defineEmits<{
     e: "update-chat-close-rating-settings",
     id: string,
     payload: InstanceChatCloseRatingSettings,
+  ): void;
+  (
+    e: "update-assigned-chat-reset-settings",
+    id: string,
+    payload: InstanceAssignedChatResetSettings,
   ): void;
 }>();
 
@@ -166,6 +183,25 @@ const chatCloseRatingSummary = computed(() => {
     minutes: s.followup_window_minutes,
   });
 });
+const assignedChatResetSettings = computed(() =>
+  normalizeInstanceAssignedChatResetSettings(props.instance.settings),
+);
+const assignedChatResetSummary = computed(() => {
+  const s = assignedChatResetSettings.value;
+  if (!s.enabled) return t("common.off");
+
+  const hourLabel = `${String(s.hour).padStart(2, "0")}:00`;
+  if (s.mode === "custom_hour") {
+    return t("instances.assigned_chat_reset.summaryCustomHour", {
+      hour: hourLabel,
+      timezone: props.organizationTimezone || "UTC",
+    });
+  }
+
+  return t("instances.assigned_chat_reset.summaryMidnight", {
+    timezone: props.organizationTimezone || "UTC",
+  });
+});
 
 const sendBlockedNotice = computed(() => {
   const blockedUntilRaw = props.instance.send_blocked_until;
@@ -175,7 +211,10 @@ const sendBlockedNotice = computed(() => {
   if (Number.isNaN(blockedUntil.getTime())) return "";
   if (blockedUntil.getTime() <= Date.now()) return "";
 
-  const reason = (props.instance.send_block_reason || "Instance sending is temporarily blocked").trim();
+  const reason = (
+    props.instance.send_block_reason ||
+    "Instance sending is temporarily blocked"
+  ).trim();
   return `${reason} (${blockedUntil.toLocaleString()})`;
 });
 
@@ -294,209 +333,291 @@ function formatUptime(totalSeconds?: number) {
             </div>
           </div>
         </div>
-        <div
-          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-              <p class="text-xs font-medium text-white light:text-gray-900">
-                {{ $t("instances.card.autoSync") }}
-              </p>
-              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
-                {{ $t("instances.card.autoSyncDesc") }}
-              </p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <Loader2
-                v-if="autoSyncSaving"
-                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
-              />
-              <Switch
-                :checked="autoSyncEnabled"
-                :disabled="autoSyncSaving"
-                @update:checked="
-                  (enabled) => emit('update-auto-sync', instance.id, enabled)
-                "
-              />
-            </div>
-          </div>
-        </div>
-        <div
-          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-              <p class="text-xs font-medium text-white light:text-gray-900">
-                {{ $t("instances.card.autoDownloadIncomingMedia") }}
-              </p>
-              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
-                {{ $t("instances.card.autoDownloadIncomingMediaDesc") }}
-              </p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <Loader2
-                v-if="autoDownloadIncomingMediaSaving"
-                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
-              />
-              <Switch
-                :checked="autoDownloadIncomingMediaEnabled"
-                :disabled="autoDownloadIncomingMediaSaving"
-                @update:checked="
-                  (enabled) =>
-                    emit('update-auto-download-incoming-media', instance.id, enabled)
-                "
-              />
-            </div>
-          </div>
-        </div>
-        <div
-          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
+        <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
                 <p class="text-xs font-medium text-white light:text-gray-900">
-                  {{ $t("instances.card.callAutoReject") }}
+                  {{ $t("instances.card.autoSync") }}
                 </p>
-                <Badge
-                  v-if="autoRejectSettings.enabled"
-                  variant="default"
-                  class="text-[10px] px-1.5 py-0"
-                  >{{ $t("common.on") }}</Badge
+                <p
+                  class="text-[11px] text-white/45 light:text-gray-500 line-clamp-2"
                 >
+                  {{ $t("instances.card.autoSyncDesc") }}
+                </p>
               </div>
-              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
-                {{ autoRejectSchedule }}
-              </p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <Loader2
-                v-if="autoRejectSaving"
-                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
-              />
-              <Switch
-                :checked="autoRejectSettings.enabled"
-                :disabled="autoRejectSaving"
-                @update:checked="
-                  (enabled) =>
-                    emit('update-auto-reject-settings', instance.id, {
-                      ...cloneAutoRejectSettings(autoRejectSettings),
-                      enabled,
-                    })
-                "
-              />
+              <div class="flex items-center gap-2 shrink-0">
+                <Loader2
+                  v-if="autoSyncSaving"
+                  class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+                />
+                <Switch
+                  :checked="autoSyncEnabled"
+                  :disabled="autoSyncSaving"
+                  @update:checked="
+                    (enabled) => emit('update-auto-sync', instance.id, enabled)
+                  "
+                />
+              </div>
             </div>
           </div>
-
-          <AutoRejectSettingsPanel
-            :settings="autoRejectSettings"
-            :saving="autoRejectSaving || false"
-            @save="
-              (payload) =>
-                emit('update-auto-reject-settings', instance.id, payload)
-            "
-          />
-        </div>
-        <div
-          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
                 <p class="text-xs font-medium text-white light:text-gray-900">
-                  {{ $t("instances.card.autoCampaign") }}
+                  {{ $t("instances.card.autoDownloadIncomingMedia") }}
                 </p>
-                <Badge
-                  v-if="autoCampaignSettings.enabled"
-                  variant="default"
-                  class="text-[10px] px-1.5 py-0"
-                  >{{ $t("common.on") }}</Badge
+                <p
+                  class="text-[11px] text-white/45 light:text-gray-500 line-clamp-2"
                 >
+                  {{ $t("instances.card.autoDownloadIncomingMediaDesc") }}
+                </p>
               </div>
-              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
-                {{ autoCampaignSummary }}
-              </p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <Loader2
-                v-if="autoCampaignSaving"
-                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
-              />
-              <Switch
-                :checked="autoCampaignSettings.enabled"
-                :disabled="autoCampaignSaving"
-                @update:checked="
-                  (enabled) =>
-                    emit('update-auto-campaign-settings', instance.id, {
-                      ...cloneAutoCampaignSettings(autoCampaignSettings),
-                      enabled,
-                    })
-                "
-              />
+              <div class="flex items-center gap-2 shrink-0">
+                <Loader2
+                  v-if="autoDownloadIncomingMediaSaving"
+                  class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+                />
+                <Switch
+                  :checked="autoDownloadIncomingMediaEnabled"
+                  :disabled="autoDownloadIncomingMediaSaving"
+                  @update:checked="
+                    (enabled) =>
+                      emit(
+                        'update-auto-download-incoming-media',
+                        instance.id,
+                        enabled,
+                      )
+                  "
+                />
+              </div>
             </div>
           </div>
-
-          <AutoCampaignSettingsPanel
-            :settings="autoCampaignSettings"
-            :saving="autoCampaignSaving || false"
-            :uploading="autoCampaignUploading || false"
-            @save="
-              (payload) =>
-                emit('update-auto-campaign-settings', instance.id, payload)
-            "
-            @upload-media="
-              (file) => emit('upload-auto-campaign-media', instance.id, file)
-            "
-            @clear-media="() => emit('clear-auto-campaign-media', instance.id)"
-          />
-        </div>
-        <div
-          class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <p class="text-xs font-medium text-white light:text-gray-900">
-                  {{ $t("instances.chat_close_rating.title") }}
-                </p>
-                <Badge
-                  v-if="chatCloseRatingSettings.enabled"
-                  variant="default"
-                  class="text-[10px] px-1.5 py-0"
-                  >{{ $t("common.on") }}</Badge
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <p class="text-xs font-medium text-white light:text-gray-900">
+                    {{ $t("instances.card.callAutoReject") }}
+                  </p>
+                  <Badge
+                    v-if="autoRejectSettings.enabled"
+                    variant="default"
+                    class="text-[10px] px-1.5 py-0"
+                    >{{ $t("common.on") }}</Badge
+                  >
+                </div>
+                <p
+                  class="text-[11px] text-white/45 light:text-gray-500 line-clamp-2"
                 >
+                  {{ autoRejectSchedule }}
+                </p>
               </div>
-              <p class="text-[11px] text-white/45 light:text-gray-500 truncate">
-                {{ chatCloseRatingSummary }}
-              </p>
+              <div class="flex items-center gap-2 shrink-0">
+                <Loader2
+                  v-if="autoRejectSaving"
+                  class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+                />
+                <Switch
+                  :checked="autoRejectSettings.enabled"
+                  :disabled="autoRejectSaving"
+                  @update:checked="
+                    (enabled) =>
+                      emit('update-auto-reject-settings', instance.id, {
+                        ...cloneAutoRejectSettings(autoRejectSettings),
+                        enabled,
+                      })
+                  "
+                />
+              </div>
             </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <Loader2
-                v-if="chatCloseRatingSaving"
-                class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
-              />
-              <Switch
-                :checked="chatCloseRatingSettings.enabled"
-                :disabled="chatCloseRatingSaving"
-                @update:checked="
-                  (enabled) =>
-                    emit('update-chat-close-rating-settings', instance.id, {
-                      ...cloneInstanceChatCloseRatingSettings(chatCloseRatingSettings),
-                      enabled,
-                    })
-                "
-              />
-            </div>
-          </div>
 
-          <InstanceChatCloseRatingPanel
-            :settings="chatCloseRatingSettings"
-            :saving="chatCloseRatingSaving || false"
-            @save="
-              (payload) =>
-                emit('update-chat-close-rating-settings', instance.id, payload)
-            "
-          />
+            <AutoRejectSettingsPanel
+              :settings="autoRejectSettings"
+              :saving="autoRejectSaving || false"
+              @save="
+                (payload) =>
+                  emit('update-auto-reject-settings', instance.id, payload)
+              "
+            />
+          </div>
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <p class="text-xs font-medium text-white light:text-gray-900">
+                    {{ $t("instances.card.autoCampaign") }}
+                  </p>
+                  <Badge
+                    v-if="autoCampaignSettings.enabled"
+                    variant="default"
+                    class="text-[10px] px-1.5 py-0"
+                    >{{ $t("common.on") }}</Badge
+                  >
+                </div>
+                <p
+                  class="text-[11px] text-white/45 light:text-gray-500 line-clamp-2"
+                >
+                  {{ autoCampaignSummary }}
+                </p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <Loader2
+                  v-if="autoCampaignSaving"
+                  class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+                />
+                <Switch
+                  :checked="autoCampaignSettings.enabled"
+                  :disabled="autoCampaignSaving"
+                  @update:checked="
+                    (enabled) =>
+                      emit('update-auto-campaign-settings', instance.id, {
+                        ...cloneAutoCampaignSettings(autoCampaignSettings),
+                        enabled,
+                      })
+                  "
+                />
+              </div>
+            </div>
+
+            <AutoCampaignSettingsPanel
+              :settings="autoCampaignSettings"
+              :saving="autoCampaignSaving || false"
+              :uploading="autoCampaignUploading || false"
+              @save="
+                (payload) =>
+                  emit('update-auto-campaign-settings', instance.id, payload)
+              "
+              @upload-media="
+                (file) => emit('upload-auto-campaign-media', instance.id, file)
+              "
+              @clear-media="
+                () => emit('clear-auto-campaign-media', instance.id)
+              "
+            />
+          </div>
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <p class="text-xs font-medium text-white light:text-gray-900">
+                    {{ $t("instances.chat_close_rating.title") }}
+                  </p>
+                  <Badge
+                    v-if="chatCloseRatingSettings.enabled"
+                    variant="default"
+                    class="text-[10px] px-1.5 py-0"
+                    >{{ $t("common.on") }}</Badge
+                  >
+                </div>
+                <p
+                  class="text-[11px] text-white/45 light:text-gray-500 line-clamp-2"
+                >
+                  {{ chatCloseRatingSummary }}
+                </p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <Loader2
+                  v-if="chatCloseRatingSaving"
+                  class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+                />
+                <Switch
+                  :checked="chatCloseRatingSettings.enabled"
+                  :disabled="chatCloseRatingSaving"
+                  @update:checked="
+                    (enabled) =>
+                      emit('update-chat-close-rating-settings', instance.id, {
+                        ...cloneInstanceChatCloseRatingSettings(
+                          chatCloseRatingSettings,
+                        ),
+                        enabled,
+                      })
+                  "
+                />
+              </div>
+            </div>
+
+            <InstanceChatCloseRatingPanel
+              :settings="chatCloseRatingSettings"
+              :saving="chatCloseRatingSaving || false"
+              @save="
+                (payload) =>
+                  emit(
+                    'update-chat-close-rating-settings',
+                    instance.id,
+                    payload,
+                  )
+              "
+            />
+          </div>
+          <div
+            class="rounded-md bg-white/[0.03] border border-white/[0.06] p-2 space-y-2 light:bg-gray-50 light:border-gray-200"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <p class="text-xs font-medium text-white light:text-gray-900">
+                    {{ $t("instances.assigned_chat_reset.title") }}
+                  </p>
+                  <Badge
+                    v-if="assignedChatResetSettings.enabled"
+                    variant="default"
+                    class="text-[10px] px-1.5 py-0"
+                  >
+                    {{ $t("common.on") }}
+                  </Badge>
+                </div>
+                <p
+                  class="text-[11px] text-white/45 light:text-gray-500 line-clamp-2"
+                >
+                  {{ assignedChatResetSummary }}
+                </p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <Loader2
+                  v-if="assignedChatResetSaving"
+                  class="h-3.5 w-3.5 animate-spin text-white/50 light:text-gray-500"
+                />
+                <Switch
+                  :checked="assignedChatResetSettings.enabled"
+                  :disabled="assignedChatResetSaving"
+                  @update:checked="
+                    (enabled) =>
+                      emit('update-assigned-chat-reset-settings', instance.id, {
+                        ...cloneInstanceAssignedChatResetSettings(
+                          assignedChatResetSettings,
+                        ),
+                        enabled,
+                      })
+                  "
+                />
+              </div>
+            </div>
+
+            <InstanceAssignedChatResetPanel
+              :settings="assignedChatResetSettings"
+              :saving="assignedChatResetSaving || false"
+              :organization-timezone="organizationTimezone"
+              @save="
+                (payload) =>
+                  emit(
+                    'update-assigned-chat-reset-settings',
+                    instance.id,
+                    payload,
+                  )
+              "
+            />
+          </div>
         </div>
       </div>
       <InstanceTagSettings

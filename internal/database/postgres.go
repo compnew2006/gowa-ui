@@ -270,6 +270,11 @@ func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) 
 		return err
 	}
 
+	if err := BackfillInstanceAssignedChatResetSettings(silentDB); err != nil {
+		fmt.Printf("\n  \033[31m✗ Failed to backfill per-instance assigned chat reset settings\033[0m\n\n")
+		return err
+	}
+
 	printProgress(currentStep, totalSteps)
 	fmt.Printf("\n  \033[32m✓ Migration completed\033[0m\n\n")
 

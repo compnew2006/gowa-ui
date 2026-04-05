@@ -1197,9 +1197,6 @@ export const organizationService = {
     timezone?: string;
     date_format?: string;
     name?: string;
-    assigned_chat_reset_enabled?: boolean;
-    assigned_chat_reset_mode?: "midnight" | "custom_hour";
-    assigned_chat_reset_hour?: number;
   }) => api.put("/org/settings", data),
 };
 

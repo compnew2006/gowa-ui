@@ -25,9 +25,6 @@ type OrganizationSettings struct {
 	StrictRolloutEnforceAt     *time.Time `json:"strict_rollout_enforce_at,omitempty"`
 	Timezone                   string     `json:"timezone"`
 	DateFormat                 string     `json:"date_format"`
-	AssignedChatResetEnabled   bool       `json:"assigned_chat_reset_enabled"`
-	AssignedChatResetMode      string     `json:"assigned_chat_reset_mode"`
-	AssignedChatResetHour      int        `json:"assigned_chat_reset_hour"`
 }
 
 // GetOrganizationSettings returns the organization settings
@@ -56,9 +53,6 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		StrictRolloutMode:          organizationStrictRolloutModeEnforce,
 		Timezone:                   "UTC",
 		DateFormat:                 "YYYY-MM-DD",
-		AssignedChatResetEnabled:   true,
-		AssignedChatResetMode:      string(ChatAssignmentResetModeMidnight),
-		AssignedChatResetHour:      0,
 	}
 
 	if org.Settings != nil {
@@ -79,11 +73,6 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		if v, ok := org.Settings["date_format"].(string); ok && v != "" {
 			settings.DateFormat = v
 		}
-
-		chatResetSettings := readChatAssignmentResetSettings(org.Settings)
-		settings.AssignedChatResetEnabled = chatResetSettings.Enabled
-		settings.AssignedChatResetMode = string(chatResetSettings.Mode)
-		settings.AssignedChatResetHour = chatResetSettings.Hour
 	}
 
 	return r.SendEnvelope(map[string]interface{}{
@@ -114,18 +103,12 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 		Timezone                   *string `json:"timezone"`
 		DateFormat                 *string `json:"date_format"`
 		Name                       *string `json:"name"`
-		AssignedChatResetEnabled   *bool   `json:"assigned_chat_reset_enabled"`
-		AssignedChatResetMode      *string `json:"assigned_chat_reset_mode"`
-		AssignedChatResetHour      *int    `json:"assigned_chat_reset_hour"`
 	}
 
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
 	}
 
-	if err := validateChatAssignmentResetInputs(req.AssignedChatResetMode, req.AssignedChatResetHour); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
-	}
 	if req.OutboundMode != nil {
 		rawMode := strings.ToLower(strings.TrimSpace(*req.OutboundMode))
 		if rawMode != organizationOutboundModeInboundOnly && rawMode != organizationOutboundModeMixed {
@@ -190,27 +173,14 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	if req.DateFormat != nil {
 		org.Settings["date_format"] = *req.DateFormat
 	}
-	if req.AssignedChatResetEnabled != nil {
-		org.Settings[organizationSettingAssignedChatResetEnabled] = *req.AssignedChatResetEnabled
-	}
+	delete(org.Settings, organizationSettingAssignedChatResetEnabled)
+	delete(org.Settings, organizationSettingAssignedChatResetMode)
+	delete(org.Settings, organizationSettingAssignedChatResetHour)
+	delete(org.Settings, organizationSettingAssignedChatResetLastDate)
 	delete(org.Settings, organizationSettingChatCloseRatingEnabled)
 	delete(org.Settings, organizationSettingChatCloseRatingWindowDays)
 	delete(org.Settings, organizationSettingChatCloseRatingFollowupWindowMinutes)
 	delete(org.Settings, organizationSettingChatCloseRatingTemplates)
-
-	modeProvided := false
-	var selectedResetMode ChatAssignmentResetMode
-	if req.AssignedChatResetMode != nil {
-		modeProvided = true
-		selectedResetMode = normalizeChatAssignmentResetMode(*req.AssignedChatResetMode)
-		org.Settings[organizationSettingAssignedChatResetMode] = string(selectedResetMode)
-	}
-	if req.AssignedChatResetHour != nil {
-		org.Settings[organizationSettingAssignedChatResetHour] = *req.AssignedChatResetHour
-	}
-	if modeProvided && selectedResetMode == ChatAssignmentResetModeMidnight {
-		org.Settings[organizationSettingAssignedChatResetHour] = 0
-	}
 	if req.Name != nil && *req.Name != "" {
 		org.Name = *req.Name
 	}

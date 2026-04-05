@@ -789,3 +789,136 @@
     - `400`
     - `phone number is not registered on WhatsApp`
 - This confirms the UI is hitting the new backend flow and that server-side WhatsMeow validation is active.
+
+## 2026-04-05 11:08
+
+### Skills Used
+
+- `fullstack-guardian`
+  - used because this change moved a feature across Vue settings screens, instance APIs, Go handlers, worker logic, and data migration/backfill
+- `playwright-expert`
+  - used for targeted E2E coverage and live browser verification of the moved settings surface
+
+### Completed
+
+- Moved `Assigned Chat Reset` off org-level `/settings` chat preferences and into each instance card on `/settings/instances`:
+  - removed the old org-level UI and save path
+  - added a per-instance panel with switch, summary, dialog, mode/hour controls, and timezone hint
+  - added instance-scoped locale strings and frontend helpers for normalization/sanitization
+- Changed backend ownership of the feature from organization settings to `whatsapp_instances.settings`:
+  - org settings no longer expose or persist `assigned_chat_reset_*`
+  - instance list/get/update now normalize and preserve assigned-reset settings alongside other instance settings
+  - added per-instance defaults/validation in the shared WhatsMeow instance settings pipeline
+- Refactored the assigned reset worker and rollout path:
+  - worker now iterates instances, uses org timezone for schedule evaluation, and resets only contacts whose `instance_id` matches the instance being processed
+  - `assigned_chat_reset_last_date` is now stored on the instance
+  - added idempotent legacy backfill from organization settings to instances and invoked it in both migration flow and server startup
+- Added regression coverage for the new contract:
+  - Go tests for instance assigned-reset defaults/validation, org settings contract removal, instance response defaults, worker scoping, and backfill behavior
+  - Playwright coverage for the new instance-level UI plus absence of the old org-level controls
+  - updated Playwright global setup so the seeded superadmin password can be provided from env for local verification
+
+### Findings
+
+- `frontend`: `npm run typecheck` still fails due unrelated pre-existing issues outside this feature slice, including:
+  - `src/components/shared/CreateContactDialog.test.ts`
+  - `src/components/ui/toast/use-toast.ts`
+  - `src/stores/contacts.ts`
+  - `src/stores/roles.ts`
+  - `src/views/chat/ChatView.vue`
+  - `src/views/chatbot/AgentTransfersView.vue`
+  - `src/views/chatbot/ChatbotFlowBuilderView.vue`
+  - `src/views/dashboard/DashboardView.vue`
+  - `src/views/settings/TeamsView.vue`
+- `backend/frontend serving`: `go run ./cmd/whatomate server -config config.toml -migrate -workers 0` still rendered the embedded fallback page (`Frontend not embedded: index.html not found...`) on `:8080`, so live UI verification was completed against the Vite app on `:3000` with the real backend/API on `:8080`
+
+### Verification
+
+- `go test ./pkg/whatsmeow -run 'AssignedChatReset|EnsureInstanceSettingsDefaults_InjectsAssignedChatResetDefaults|ValidateInstanceSettings_AssignedChatReset'` ✅
+- `go test ./internal/database -run 'BackfillInstanceAssignedChatResetSettings'` ✅
+- `go test ./internal/handlers -run 'AssignedChatReset|OrganizationSettings|InjectsAssignedChatResetDefaults'` ✅
+- `frontend`: `npm run build` ✅
+- `frontend`: `E2E_SUPERADMIN_PASSWORD=adminpassword12 npx playwright test e2e/tests/settings/instances.spec.ts e2e/tests/settings/general-settings.spec.ts` ✅ (`41 passed`)
+
+### Manual QA (Chrome DevTools)
+
+- Opened `http://localhost:3000/settings` and switched to the `Chat` tab:
+  - confirmed the org-level `Assigned Chat Reset` controls are no longer present
+- Opened `http://localhost:3000/settings/instances`:
+  - confirmed the instance card shows `Assigned Chat Reset`
+  - confirmed the live summary is rendered on the instance card (`Daily at 00:00 (UTC)`)
+  - opened `Configure assigned chat reset` and verified the dialog shows the instance-level schedule controls and timezone hint
+  - reloaded `/settings/instances` and confirmed the assigned-reset card/summary remained visible after reload
+
+### Notes
+
+- Live backend/API verification used the local seeded credentials from `config.toml`:
+  - superadmin: `admin@admin.com`
+  - Playwright setup override: `E2E_SUPERADMIN_PASSWORD=adminpassword12`
+
+## 2026-04-05 11:18 - Instance settings cards side-by-side
+
+### Goal
+
+- Make the instance setting cards on `/settings/instances` render side by side on desktop, similar to the compact stats cards layout, while preserving stacked mobile behavior.
+
+### What changed
+
+- updated the instance card settings section to use a responsive two-column grid for:
+  - `Auto-sync history`
+  - `Auto-download incoming media`
+  - `Call auto-reject`
+  - `Auto campaign`
+  - `Chat Close Rating Settings`
+  - `Assigned Chat Reset`
+- relaxed the summary text truncation inside those cards to allow a two-line clamp so the narrower desktop cards still read cleanly
+
+### Verification
+
+- `frontend`: `npm run build` ✅
+- Chrome DevTools on `http://localhost:3000/settings/instances` at desktop width ✅
+  - `Auto-sync history` and `Auto-download incoming media` share the first row
+  - `Call auto-reject` and `Auto campaign` share the second row
+  - `Chat Close Rating Settings` and `Assigned Chat Reset` share the third row
+
+## 2026-04-05 11:24 - Instance card fit fix
+
+### Goal
+
+- Fix the `/settings/instances` card layout so setting blocks and configure buttons fit inside the card cleanly across narrower desktop widths, matching the issue shown in the screenshot.
+
+### What changed
+
+- widened instance cards at normal desktop widths by changing the page grid to use three columns only at `2xl`
+- changed the inner settings grid to switch to two columns only at `xl`, so narrow cards no longer force cramped two-column content
+- updated the configure buttons for:
+  - `Call auto-reject`
+  - `Auto campaign`
+  - `Chat Close Rating Settings`
+  - `Assigned Chat Reset`
+- those buttons now allow wrapped text and taller button height instead of clipping text inside narrow cards
+
+### Verification
+
+- `frontend`: `npm run build` ✅
+- Chrome DevTools on `http://localhost:3000/settings/instances` ✅
+  - at `1280px` viewport the instance card rendered wide enough for a clean two-column settings layout
+  - at `1024px` viewport the settings stacked into one column and the configure buttons expanded without clipping
+
+## 2026-04-05 11:29 - Chat Source Tag side-by-side layout
+
+### Goal
+
+- Make the `Chat Source Tag` form use horizontal space better on `/settings/instances` by placing the controls side by side on wider screens instead of leaving them fully stacked.
+
+### What changed
+
+- moved `Custom Label` and `Show as` into a responsive two-column desktop grid
+- moved the `Tag Color` swatches and `Save Tag Settings` action into a shared desktop row that still wraps safely if space gets tight
+
+### Verification
+
+- `frontend`: `npm run build` ✅
+- Chrome DevTools on `http://localhost:3000/settings/instances` at `1280px` ✅
+  - `Custom Label` and `Show as` rendered on the same row
+  - `Tag Color` and `Save Tag Settings` rendered side by side on the following row
