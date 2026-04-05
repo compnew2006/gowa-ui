@@ -144,7 +144,7 @@ function selectColor(color: InstanceTagColorKey) {
       </div>
     </div>
 
-    <div class="grid gap-3 lg:grid-cols-2">
+    <div class="instance-tag-settings-grid grid gap-3">
       <div class="space-y-1.5">
         <Label class="text-[11px] font-medium text-muted-foreground">{{
           $t("instances.tags.customLabel")
@@ -179,9 +179,7 @@ function selectColor(color: InstanceTagColorKey) {
       </div>
     </div>
 
-    <div
-      class="mt-3 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between"
-    >
+    <div class="instance-tag-settings-actions mt-3 flex flex-col gap-3">
       <div class="min-w-0 flex-1 space-y-1.5">
         <Label class="text-[11px] font-medium text-muted-foreground">{{
           $t("instances.tags.tagColor")
@@ -213,7 +211,7 @@ function selectColor(color: InstanceTagColorKey) {
       <Button
         size="sm"
         variant="outline"
-        class="h-9 w-full text-xs lg:w-auto lg:min-w-[180px]"
+        class="instance-tag-settings-save h-9 w-full text-xs"
         :disabled="!hasChanges || saving"
         @click="saveSettings"
       >
@@ -223,3 +221,23 @@ function selectColor(color: InstanceTagColorKey) {
     </div>
   </div>
 </template>
+
+<style scoped>
+@container (min-width: 25rem) {
+  .instance-tag-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .instance-tag-settings-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+
+  .instance-tag-settings-save {
+    min-width: 180px;
+    width: auto;
+  }
+}
+</style>

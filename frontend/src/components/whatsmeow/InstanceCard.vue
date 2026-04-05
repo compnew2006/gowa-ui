@@ -233,7 +233,10 @@ function formatUptime(totalSeconds?: number) {
 </script>
 
 <template>
-  <Card class="flex h-full flex-col overflow-hidden">
+  <Card
+    data-testid="instance-card"
+    class="instance-card flex h-full flex-col overflow-hidden"
+  >
     <CardHeader class="space-y-5 border-b border-border/70 pb-5">
       <div class="flex items-start justify-between gap-3">
         <div class="flex flex-wrap items-center gap-2">
@@ -332,7 +335,7 @@ function formatUptime(totalSeconds?: number) {
     </CardHeader>
 
     <CardContent class="flex flex-1 flex-col gap-5 pt-5">
-      <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div class="instance-card-settings-grid grid grid-cols-1 gap-3">
         <div class="rounded-xl border border-border/70 bg-background/70 p-3">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
@@ -647,3 +650,15 @@ function formatUptime(totalSeconds?: number) {
     </CardFooter>
   </Card>
 </template>
+
+<style scoped>
+.instance-card {
+  container-type: inline-size;
+}
+
+@container (min-width: 25rem) {
+  .instance-card-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+</style>

@@ -1198,3 +1198,67 @@ Updated: 2026-03-30 12:22:36 UTC
 ### Note
 
 - Chrome DevTools MCP was unavailable due to an existing profile lock; Playwright MCP was used for UI verification.
+
+## Deployment Update
+
+Updated: 2026-04-05 12:32:57 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source sync target: `/opt/whatomate-src`
+- Source sync method: `rsync` (with `--delete`; excluded `.git`, `node_modules/`, `frontend/dist/`, `uploads/`, `config.toml`, and local build/test artifacts)
+- Source revision on deploy: `0c12891` (working tree dirty: `Makefile`, `docs/workflow.md`, `docs/wiki/` (untracked))
+- Native build command on VPS: `cd /opt/whatomate-src && make build-prod`
+- Build remediation on VPS: `frontend-build` refreshed dependencies with `npm ci` because `package.json` or `package-lock.json` was newer than the cached `frontend/node_modules`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binary created: `/opt/whatomate/bin/whatomate.20260405_122402.bak`
+- Installed binary SHA256: `429480ece322282b1ebea66cb990b72ae8fe931c20eb1848f67815cc985f47ec`
+- Installed binary version output: `Whatomate dev (built 2026-04-05_12:29:13)`
+- Deployment purpose: deploy the current project update and harden VPS production builds so frontend dependency changes are picked up automatically
+- Production config remediation: rotated `whatsapp.webhook_verify_token` from insecure placeholder values to unique random tokens in all active production configs so the new binary can start in production
+- Production config backups created:
+  - `/opt/whatomate/config.toml.20260405_123126.bak`
+  - `/opt/whatomate/instances/alarkan-almthalia/config.toml.20260405_123126.bak`
+  - `/opt/whatomate/instances/holol-wenjaz/config.toml.20260405_123126.bak`
+  - `/opt/whatomate/instances/matbaat-ruya/config.toml.20260405_123126.bak`
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- Local HTTP smoke:
+  - `ofuqalmadenah.com` (127.0.0.1:18123) -> `200`
+  - `holol-wenjaz.ofuqalmadenah.com` (127.0.0.1:18124) -> `200`
+  - `alarkan-almthalia.ofuqalmadenah.com` (127.0.0.1:18125) -> `200`
+  - `matbaat-ruya.ofuqalmadenah.com` (127.0.0.1:18126) -> `200`
+- MCP UI check (Chrome DevTools):
+  - Loaded `https://ofuqalmadenah.com/settings` and `https://ofuqalmadenah.com/chat`
+  - Both routes redirected to the login screen as expected for an unauthenticated session
+  - No browser console errors were reported
+
+### Skills Applied
+
+- `devops-engineer` (backup, rsync deployment, VPS build/install, systemd restart, service recovery)
+- `debugging-wizard` (remote build failure diagnosis, production config validation diagnosis, browser verification)
+
+### Competencies Applied
+
+- Ubuntu VPS deployment and rollback-safe backup handling
+- Vite dependency drift remediation on long-lived build hosts
+- Go binary packaging with embedded frontend assets
+- Production config hardening and secret rotation
+- Chrome DevTools MCP verification of the public UI
+
+### Note
+
+- `make build-prod` initially failed on the VPS because `frontend/node_modules` was stale while `package.json` and `package-lock.json` had changed; the `Makefile` now refreshes frontend dependencies when those files are newer than the cached install.
+- `npm ci` reported `2 high severity vulnerabilities` in frontend dependencies during the VPS build; they were not remediated as part of this deployment.

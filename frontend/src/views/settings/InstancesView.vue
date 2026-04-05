@@ -841,7 +841,7 @@ async function handleAssignedChatResetSettingsUpdate(
 
     <ScrollArea class="flex-1">
       <div class="p-6">
-        <div class="mx-auto flex max-w-7xl flex-col gap-6">
+        <div class="flex w-full flex-col gap-6">
           <div
             v-if="
               instancesStore.loading && instancesStore.instances.length === 0
@@ -876,7 +876,7 @@ async function handleAssignedChatResetSettingsUpdate(
 
           <div
             v-else
-            class="grid grid-cols-1 gap-6 xl:grid-cols-2 2xl:grid-cols-3"
+            class="grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr))]"
           >
             <InstanceCard
               v-for="(instance, index) in instancesStore.instances"

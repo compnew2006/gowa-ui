@@ -128,9 +128,13 @@ frontend-dev:
 	cd frontend && npm run dev
 
 frontend-build:
-	@if [ ! -d "frontend/node_modules" ]; then \
+	@if [ ! -d "frontend/node_modules" ] || [ ! -f "frontend/node_modules/.package-lock.json" ] || [ "frontend/package.json" -nt "frontend/node_modules/.package-lock.json" ] || [ "frontend/package-lock.json" -nt "frontend/node_modules/.package-lock.json" ]; then \
 		echo "Installing frontend dependencies..."; \
-		cd frontend && npm install; \
+		if [ -f "frontend/package-lock.json" ]; then \
+			cd frontend && npm ci; \
+		else \
+			cd frontend && npm install; \
+		fi; \
 	fi
 	cd frontend && npm run build
 

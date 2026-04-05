@@ -301,6 +301,41 @@ async function emitWS(
 }
 
 test.describe("WhatsApp Instances", () => {
+  test("uses the available page width for more instance cards on wide screens", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1800, height: 1400 });
+    await loginAsAdmin(page);
+
+    const now = new Date().toISOString();
+    const instances: MockInstance[] = Array.from({ length: 8 }, (_, index) => ({
+      id: `e2e-instance-layout-${index + 1}`,
+      name: `Layout Instance ${index + 1}`,
+      status: index % 2 === 0 ? "connected" : "disconnected",
+      is_default: index === 0,
+      auto_read_receipt: true,
+      organization_id: "e2e-org-id",
+      created_at: now,
+      updated_at: now,
+    }));
+
+    await mockInstancesApi(page, instances);
+
+    await page.goto("/settings/instances");
+    const cards = page.locator('[data-testid="instance-card"]');
+    await expect(cards).toHaveCount(8);
+
+    const firstRowCount = await cards.evaluateAll((elements) => {
+      const tops = elements.map((element) =>
+        Math.round(element.getBoundingClientRect().top),
+      );
+      const firstRowTop = Math.min(...tops);
+      return tops.filter((top) => Math.abs(top - firstRowTop) <= 8).length;
+    });
+
+    expect(firstRowCount).toBeGreaterThanOrEqual(5);
+  });
+
   test("should create a new instance from Add Account dialog", async ({
     page,
   }) => {

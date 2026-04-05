@@ -1,5 +1,34 @@
 # Session Summary
 
+## 2026-04-05 12:32
+
+### Completed
+
+- Backed up the running VPS binary to `/opt/whatomate/bin/whatomate.20260405_122402.bak`.
+- Synced the current workspace to `/opt/whatomate-src`, built the production binary on the VPS, and installed `/opt/whatomate/bin/whatomate`.
+- Hardened `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/Makefile` so `frontend-build` refreshes frontend dependencies when `package.json` or `package-lock.json` changed on the build host.
+- Rotated the placeholder `whatsapp.webhook_verify_token` values in all active VPS configs to unique random tokens, with per-config backups created under `/opt/whatomate` before restart.
+- Updated `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/docs/whatomate_multi_instances_info.md` and synced the deployment record to the VPS info files.
+
+### Verification
+
+- VPS binary version: `Whatomate dev (built 2026-04-05_12:29:13)`.
+- VPS binary SHA256: `429480ece322282b1ebea66cb990b72ae8fe931c20eb1848f67815cc985f47ec`.
+- Local HTTP smoke on the VPS:
+  - `ofuqalmadenah.com` -> `200`
+  - `holol-wenjaz.ofuqalmadenah.com` -> `200`
+  - `alarkan-almthalia.ofuqalmadenah.com` -> `200`
+  - `matbaat-ruya.ofuqalmadenah.com` -> `200`
+- Chrome DevTools MCP:
+  - loaded `https://ofuqalmadenah.com/settings` and `https://ofuqalmadenah.com/chat`
+  - both routes redirected to login as expected for an unauthenticated session
+  - no browser console errors
+
+### Notes
+
+- The first VPS build failed because stale `frontend/node_modules` did not include newly declared frontend dependencies; the `Makefile` change resolved that for future deployments.
+- `npm ci` on the VPS reported `2 high severity vulnerabilities` in frontend dependencies; they were not remediated in this deployment.
+
 ## 2026-04-05 12:38
 
 ### Completed
@@ -1134,3 +1163,26 @@
 - Chrome DevTools on `http://localhost:3000/settings/instances` at `1280px` ✅
   - `Custom Label` and `Show as` rendered on the same row
   - `Tag Color` and `Save Tag Settings` rendered side by side on the following row
+
+## 2026-04-05 15:05 - Instances page fills wide screens
+
+### Goal
+
+- Fix `/settings/instances` so the instance cards use the available page width on wide screens instead of stopping at three cards per row with large empty side padding.
+
+### What changed
+
+- removed the `max-w-7xl` width cap from the instances page content wrapper so the settings area can use the full available width
+- replaced the fixed `grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3` layout with an auto-fit grid using `minmax(min(100%,22rem),1fr)` so wider screens can render 4+ instance cards per row when space exists
+- added `container-type: inline-size` to each instance card and changed the inner settings grid to switch to two columns based on card width instead of viewport width
+- changed the `Chat Source Tag` section to use the same card-width-driven behavior so its fields/actions stay stacked on narrow cards and line up side by side once the card is wide enough
+- added a Playwright regression test that loads 8 mock instances at `1800px` width and asserts at least 4 cards render in the first row
+
+### Verification
+
+- `frontend`: `npm run build` ✅
+- `frontend`: `BASE_URL=http://127.0.0.1:3000 E2E_SUPERADMIN_PASSWORD=adminpassword12 npx playwright test e2e/tests/settings/instances.spec.ts --grep "uses the available page width for more instance cards on wide screens"` ✅
+
+### Notes
+
+- `http://localhost:8080/settings/instances` was still serving older frontend assets during verification, so the live backend-served page continued to show the old 3-column layout until the frontend bundle is reloaded/redeployed

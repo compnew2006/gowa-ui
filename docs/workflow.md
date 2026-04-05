@@ -56,6 +56,106 @@ Complete documentation of all distinct features, their execution paths, inputs, 
 48. [Health & Readiness Checks](#48-health--readiness-checks)
 49. [Rate Limiting](#49-rate-limiting)
 50. [Frontend Serving](#50-frontend-serving)
+51. [Send Restriction Policies](#51-send-restriction-policies)
+52. [Agent Chat Visibility Restrictions](#52-agent-chat-visibility-restrictions)
+53. [Contact Account Resolution](#53-contact-account-resolution)
+54. [Contact Repair](#54-contact-repair)
+55. [Contact User Deletions](#55-contact-user-deletions)
+56. [Closed Chat Filters](#56-closed-chat-filters)
+57. [Chat Lifecycle Management](#57-chat-lifecycle-management)
+58. [Reply Preview Helpers](#58-reply-preview-helpers)
+59. [Message Template Placeholders](#59-message-template-placeholders)
+60. [Campaign Policy Enforcement](#60-campaign-policy-enforcement)
+61. [Flows Helpers](#61-flows-helpers)
+62. [Group Message Helpers](#62-group-message-helpers)
+63. [Instance Name Validation](#63-instance-name-validation)
+64. [Instance Selector](#64-instance-selector)
+65. [Password Policy](#65-password-policy)
+66. [Provider Guard](#66-provider-guard)
+67. [Reason Codes](#67-reason-codes)
+68. [Security Headers & CSRF Protection](#68-security-headers--csrf-protection)
+69. [Request Logging & Recovery](#69-request-logging--recovery)
+70. [SSRF-Safe Dialer](#70-ssrf-safe-dialer)
+71. [Cache System](#71-cache-system)
+72. [Cookie Management](#72-cookie-management)
+73. [JWT Secret Management](#73-jwt-secret-management)
+74. [WhatsApp Client (Meta)](#74-whatsapp-client-meta)
+75. [Message Provider Abstraction](#75-message-provider-abstraction)
+76. [WhatsMeow Connection Manager](#76-whatsmeow-connection-manager)
+77. [WhatsMeow Queue Manager](#77-whatsmeow-queue-manager)
+78. [Redis Queue System](#78-redis-queue-system)
+79. [Campaign Stats Subscriber](#79-campaign-stats-subscriber)
+80. [Database Migrations](#80-database-migrations)
+81. [Encryption System](#81-encryption-system)
+82. [Contact Utilities](#82-contact-utilities)
+83. [Template Utilities](#83-template-utilities)
+84. [WebSocket Message Types](#84-websocket-message-types)
+85. [Frontend Embedded Build](#85-frontend-embedded-build)
+86. [Configuration System](#86-configuration-system)
+87. [Model Layer](#87-model-layer)
+88. [Middleware Chain](#88-middleware-chain)
+89. [Error Handling Patterns](#89-error-handling-patterns)
+90. [Testing Infrastructure](#90-testing-infrastructure)
+91. [App Configuration Endpoint](#91-app-configuration-endpoint)
+92. [User Settings & Chat Background](#92-user-settings--chat-background)
+93. [Availability Management](#93-availability-management)
+94. [Change Password](#94-change-password)
+95. [Contact Phone Start (WhatsMeow)](#95-contact-phone-start-whatsmeow)
+96. [Interactive Messages](#96-interactive-messages)
+97. [Typing Presence](#97-typing-presence)
+98. [Agent Role Chat Scoping](#98-agent-role-chat-scoping)
+99. [Organization Outbound Mode](#99-organization-outbound-mode)
+100. [Strict Rollout Mode](#100-strict-rollout-mode)
+51. [Send Restriction Policies](#51-send-restriction-policies)
+52. [Agent Chat Visibility Restrictions](#52-agent-chat-visibility-restrictions)
+53. [Contact Account Resolution](#53-contact-account-resolution)
+54. [Contact Repair](#54-contact-repair)
+55. [Contact User Deletions](#55-contact-user-deletions)
+56. [Closed Chat Filters](#56-closed-chat-filters)
+57. [Chat Lifecycle Management](#57-chat-lifecycle-management)
+58. [Reply Preview Helpers](#58-reply-preview-helpers)
+59. [Message Template Placeholders](#59-message-template-placeholders)
+60. [Campaign Policy Enforcement](#60-campaign-policy-enforcement)
+61. [Flows Helpers](#61-flows-helpers)
+62. [Group Message Helpers](#62-group-message-helpers)
+63. [Instance Name Validation](#63-instance-name-validation)
+64. [Instance Selector](#64-instance-selector)
+65. [Password Policy](#65-password-policy)
+66. [Provider Guard](#66-provider-guard)
+67. [Reason Codes](#67-reason-codes)
+68. [Security Headers & CSRF Protection](#68-security-headers--csrf-protection)
+69. [Request Logging & Recovery](#69-request-logging--recovery)
+70. [SSRF-Safe Dialer](#70-ssrf-safe-dialer)
+71. [Cache System](#71-cache-system)
+72. [Cookie Management](#72-cookie-management)
+73. [JWT Secret Management](#73-jwt-secret-management)
+74. [WhatsApp Client (Meta)](#74-whatsapp-client-meta)
+75. [Message Provider Abstraction](#75-message-provider-abstraction)
+76. [WhatsMeow Connection Manager](#76-whatsmeow-connection-manager)
+77. [WhatsMeow Queue Manager](#77-whatsmeow-queue-manager)
+78. [Redis Queue System](#78-redis-queue-system)
+79. [Campaign Stats Subscriber](#79-campaign-stats-subscriber)
+80. [Database Migrations](#80-database-migrations)
+81. [Encryption System](#81-encryption-system)
+82. [Contact Utilities](#82-contact-utilities)
+83. [Template Utilities](#83-template-utilities)
+84. [WebSocket Message Types](#84-websocket-message-types)
+85. [Frontend Embedded Build](#85-frontend-embedded-build)
+86. [Configuration System](#86-configuration-system)
+87. [Model Layer](#87-model-layer)
+88. [Middleware Chain](#88-middleware-chain)
+89. [Error Handling Patterns](#89-error-handling-patterns)
+90. [Testing Infrastructure](#90-testing-infrastructure)
+91. [App Configuration Endpoint](#91-app-configuration-endpoint)
+92. [User Settings & Chat Background](#92-user-settings--chat-background)
+93. [Availability Management](#93-availability-management)
+94. [Change Password](#94-change-password)
+95. [Contact Phone Start (WhatsMeow)](#95-contact-phone-start-whatsmeow)
+96. [Interactive Messages](#96-interactive-messages)
+97. [Typing Presence](#97-typing-presence)
+98. [Agent Role Chat Scoping](#98-agent-role-chat-scoping)
+99. [Organization Outbound Mode](#99-organization-outbound-mode)
+100. [Strict Rollout Mode](#100-strict-rollout-mode)
 
 ---
 
@@ -1876,3 +1976,2455 @@ Whatomate supports two WhatsApp providers:
 - Per-instance message queuing
 
 Provider selection is configured in `config.toml` under `whatsapp.provider`.
+
+---
+
+## 51. Send Restriction Policies
+
+**Source Files:** `internal/handlers/send_restriction_policy.go`, `internal/handlers/user_send_restrictions.go`, `internal/handlers/send_restriction_policy_helpers_test.go`
+
+### Overview
+Send restriction policies control which users can send messages to which contacts, through which instances, and under what conditions. This is a critical security and compliance feature.
+
+### Configuration Levels
+1. **Organization-level settings:**
+   - `strict_sending_restrictions_enabled`: Master toggle for strict mode
+   - `outbound_mode`: "inbound_only" or "mixed"
+   - `strict_sending_apply_to_system`: Whether restrictions apply to system/chatbot messages
+   - `campaign_draft_only`: Restrict campaigns to draft mode only
+   - `strict_rollout_mode`: "audit" (log violations) or "enforce" (block messages)
+   - `strict_rollout_enforce_at`: Timestamp when enforcement begins
+
+2. **User-level settings:**
+   - `send_restrictions`: Per-user configuration including:
+     - `enabled`: Toggle for this user
+     - `include_all_contacts`: Allow all contacts or restrict to authorized numbers
+     - `authorized_numbers`: Whitelist of phone numbers
+     - `allowed_instance_id` / `allowed_instance_ids`: Which instances user can send from
+     - `prefix_agent_name`: Auto-prefix messages with agent name
+     - `allow_unclaimed_chat_view`: View unclaimed chats
+     - `allow_unclaimed_chat_send`: Send to unclaimed chats
+
+### Enforcement Flow
+**Entry Point:** `enforceStrictSendRestrictions()` (called from `SendOutgoingMessage()`)
+**Execution Path:**
+1. Load organization settings
+2. Load user send restrictions
+3. Check if strict mode is enabled
+4. If enabled:
+   - Verify contact is in authorized numbers list (if not include_all_contacts)
+   - Verify instance is in allowed instances list
+   - Check outbound mode (inbound_only blocks proactive outbound)
+   - Check if chat is claimed (if allow_unclaimed_chat_send is false)
+5. If violation detected:
+   - In "audit" mode: log warning, allow message
+   - In "enforce" mode: return `restrictedSendViolationError`, block message
+6. Apply agent name prefix if configured
+
+### Update User Send Restrictions
+**Entry Point:** `PUT /api/users/{id}/send-restrictions` → `App.UpdateUserSendRestrictions()`
+**Inputs:** send_restrictions JSON object
+**Execution Path:**
+1. Authorize with `requirePermission(users, write)`
+2. Load user, verify org membership
+3. Validate restriction settings
+4. Update user.settings.send_restrictions
+5. Return updated settings
+
+### Get User Send Restrictions
+**Entry Point:** `GET /api/users/{id}/send-restrictions` → `App.GetUserSendRestrictions()`
+
+### Chat Claim Enforcement
+**Execution Path:**
+1. When sending message, check if chat is claimed
+2. If chat is restricted and unclaimed:
+   - Check if user can send to unclaimed chats
+   - If not, return 403 with message "This chat is currently unassigned. Claim it before sending messages."
+3. Agent-role users have chat-scoped visibility even with contacts:read permission
+
+### Outbound Mode Enforcement
+**"inbound_only" mode:**
+- Users can only reply to inbound messages
+- Proactive outbound messages are blocked
+- Campaign messages may be restricted based on campaign_draft_only setting
+
+**"mixed" mode:**
+- Both inbound replies and proactive outbound allowed
+- Standard permission checks apply
+
+---
+
+## 52. Agent Chat Visibility Restrictions
+
+**Source Files:** `internal/handlers/contacts.go`, `internal/handlers/contacts_messaging.go`, `internal/handlers/chat_access_policy.go`
+
+### Overview
+Agent-role users have restricted visibility into chats based on assignment status and access policies.
+
+### Restriction Logic
+**Execution Path:**
+1. `shouldRestrictChatVisibilityToAgentScope()` checks if user is agent role
+2. If restricted, apply `applyAgentVisibleChatAccessFilter()`:
+   - Only show chats assigned to the user
+   - Only show public chats (is_public = true)
+   - Only show chats where user is a collaborator
+3. When listing contacts, filter query based on user's access scope
+4. When sending messages, verify agent has access to the contact
+
+### Agent Message Sending
+**Execution Path:**
+1. Agent attempts to send message
+2. Load contact with agent-scoped query
+3. If contact not found in agent's scope, return 404
+4. Check if chat is closed — reject if closed
+5. Check if chat is restricted and unclaimed — require claim first
+6. Proceed with message send
+
+---
+
+## 53. Contact Account Resolution
+
+**Source Files:** `internal/handlers/contact_account_resolution.go`
+
+### Overview
+Resolves the correct WhatsApp account for a contact when sending messages, considering instance assignments and account mappings.
+
+### Execution Path
+1. Check if contact has an associated instance
+2. If instance exists, find account linked to that instance
+3. If no instance, use account from request or contact's whatsapp_account field
+4. Validate account belongs to same organization
+5. Return resolved account or error
+
+---
+
+## 54. Contact Repair
+
+**Source Files:** `internal/handlers/contact_repair.go`
+
+### Overview
+Repairs orphaned or inconsistent contact records, typically after data migrations or account changes.
+
+### Execution Path
+1. Scan for contacts with missing or invalid references
+2. Fix orphaned contacts by reassigning to correct account/instance
+3. Update contact metadata to reflect current state
+4. Log repair actions
+
+---
+
+## 55. Contact User Deletions
+
+**Source Files:** `internal/handlers/contact_user_deletions.go`
+
+### Overview
+Handles cleanup when a user is deleted, reassigning or archiving their contacts and chats.
+
+### Execution Path
+1. Find all contacts assigned to deleted user
+2. Reassign to team lead or unassign
+3. Update chat assignment records
+4. Notify affected users via WebSocket
+5. Dispatch webhook for contact reassigned events
+
+---
+
+## 56. Closed Chat Filters
+
+**Source Files:** `internal/handlers/closed_chat_filters.go`
+
+### Overview
+Provides filtering capabilities for closed chats in the contact list view.
+
+### Filter Options
+- Closed by user
+- Closed date range
+- Close reason
+- Rating status
+
+### Execution Path
+1. Apply closed_at IS NOT NULL filter
+2. Apply additional filters based on query params
+3. Join with users table for closed_by_name
+4. Paginate and return
+
+---
+
+## 57. Chat Lifecycle Management
+
+**Source Files:** `internal/handlers/chat_lifecycle.go`, `internal/handlers/chat_system_messages.go`
+
+### Chat States
+- **open**: Active chat, agents can send messages
+- **closed**: Chat closed, read-only
+- **pending**: Awaiting agent assignment
+
+### State Transitions
+1. **open → closed**: Agent or system closes chat
+   - Set closed_at, closed_by_user_id
+   - Optionally send auto-close message
+   - Optionally request rating
+   - Broadcast via WebSocket
+   - Dispatch webhook
+
+2. **closed → open**: Agent reopens chat
+   - Clear closed_at, closed_by_user_id
+   - Set status back to open
+   - Broadcast via WebSocket
+
+3. **open → pending**: Chat unassigned
+   - Clear assigned_user_id
+   - Set status to pending
+   - Notify available agents
+
+4. **pending → open**: Chat claimed
+   - Set assigned_user_id
+   - Set status to open
+   - Notify claiming agent
+
+### System Messages
+**Execution Path:**
+1. Create message with actor_type = "system"
+2. Content describes lifecycle event
+3. Save to messages table
+4. Broadcast via WebSocket
+5. No provider send (internal only)
+
+---
+
+## 58. Reply Preview Helpers
+
+**Source Files:** `internal/handlers/reply_preview_helpers.go`
+
+### Overview
+Extracts and formats reply context for messages that reference other messages.
+
+### Execution Path
+1. When message has reply_to_message_id
+2. Load referenced message
+3. Extract preview data:
+   - Content (truncated for long messages)
+   - Message type
+   - Sender info
+   - Media info (if media message)
+4. Return formatted preview for API response
+
+---
+
+## 59. Message Template Placeholders
+
+**Source Files:** `internal/handlers/message_template_placeholders.go`
+
+### Overview
+Resolves template placeholders in messages with actual values from contacts, users, or custom data.
+
+### Supported Placeholders
+- `{{contact.name}}` - Contact name
+- `{{contact.phone}}` - Contact phone number
+- `{{user.name}}` - Agent/sender name
+- `{{organization.name}}` - Organization name
+- Custom placeholders from template params
+
+### Execution Path
+1. Parse message content for placeholder patterns
+2. Load context data (contact, user, organization)
+3. Replace placeholders with actual values
+4. Handle missing values (leave as-is or use defaults)
+5. Return resolved message content
+
+---
+
+## 60. Campaign Policy Enforcement
+
+**Source Files:** `internal/handlers/campaign_policy.go`
+
+### Overview
+Enforces policies on campaign creation and execution, including rate limits, template requirements, and scheduling constraints.
+
+### Policy Checks
+1. **Template approval**: Campaign template must be APPROVED
+2. **Account status**: WhatsApp account must be active
+3. **Delay validation**: Min/max delay within acceptable range
+4. **Recipient validation**: Campaign must have at least one recipient
+5. **Schedule validation**: Scheduled time must be in the future
+6. **Rate limiting**: Check organization campaign rate limits
+
+### Execution Path
+1. `validateCampaignForCreate()` called during campaign creation
+2. `validateCampaignForStart()` called before starting campaign
+3. Return specific error messages for each policy violation
+4. Block campaign operation if policy check fails
+
+---
+
+## 61. Flows Helpers
+
+**Source Files:** `internal/handlers/flows_helpers_test.go`
+
+### Overview
+Helper functions for WhatsApp Flows operations, including JSON validation and Meta API integration.
+
+### Functions
+- Validate Flow JSON schema
+- Transform Flow JSON for Meta API
+- Parse Flow response from Meta
+- Generate Flow tokens for tracking
+
+---
+
+## 62. Group Message Helpers
+
+**Source Files:** `internal/handlers/group_message_helpers.go`
+
+### Overview
+Handles group message detection and processing for WhatsApp group chats.
+
+### Execution Path
+1. Detect if incoming message is from a group (JID contains @g.us)
+2. Extract group metadata (group ID, sender JID)
+3. Create or update group contact record
+4. Store sender info in message metadata
+5. Apply group-specific chatbot rules (if configured)
+
+---
+
+## 63. Instance Name Validation
+
+**Source Files:** `internal/handlers/instance_name_validation.go`
+
+### Overview
+Validates WhatsApp instance names for uniqueness and format.
+
+### Validation Rules
+1. Name must be non-empty
+2. Name must be unique within organization
+3. Name must match pattern (alphanumeric, hyphens, underscores)
+4. Name length limits (min 2, max 50 characters)
+
+### Execution Path
+1. `normalizeInstanceName()` - trim, lowercase, remove invalid chars
+2. `isInstanceNameTaken()` - query database for existing name
+3. Return validation error if invalid
+
+---
+
+## 64. Instance Selector
+
+**Source Files:** `internal/handlers/instance_selector.go`
+
+### Overview
+Selects the appropriate WhatsApp instance for outbound messages based on configuration, availability, and load.
+
+### Selection Strategies
+1. **Default instance**: Use organization's default instance
+2. **Contact-assigned instance**: Use instance linked to contact
+3. **Request-specified instance**: Use instance from API request
+4. **Round-robin**: Distribute across available instances (future)
+
+### Execution Path
+1. `resolveOutboundInstance()` called from message send handlers
+2. Check request-specified instance ID first
+3. Fall back to contact's instance
+4. Fall back to organization default
+5. Validate instance is connected and healthy
+6. Return instance or error with reason code
+
+---
+
+## 65. Password Policy
+
+**Source Files:** `internal/handlers/password_policy.go`
+
+### Overview
+Enforces password strength requirements during registration and password changes.
+
+### Policy Rules
+1. Minimum length: 8 characters
+2. At least one uppercase letter
+3. At least one lowercase letter
+4. At least one digit
+5. At least one special character
+6. Not in common password list
+
+### Execution Path
+1. `validatePasswordStrength()` called during registration and password change
+2. Check each policy rule
+3. Return specific error message for first violated rule
+4. Reject password if any rule fails
+
+---
+
+## 66. Provider Guard
+
+**Source Files:** `internal/handlers/provider_guard.go`
+
+### Overview
+Middleware that restricts certain endpoints to specific WhatsApp providers (Meta or WhatsMeow).
+
+### Execution Path
+1. `ProviderGuard("meta", handler)` wraps handler
+2. Check configured provider in app config
+3. If provider doesn't match, return 400 with "Feature not available for current provider"
+4. If provider matches, call wrapped handler
+
+### Protected Features
+- Templates (Meta only)
+- WhatsApp Flows (Meta only)
+- Catalogs (Meta only)
+
+---
+
+## 67. Reason Codes
+
+**Source Files:** `internal/handlers/reason_codes.go`
+
+### Overview
+Provides standardized reason codes for API error responses, enabling frontend to handle errors programmatically.
+
+### Common Reason Codes
+- `instance_not_found`: Specified instance doesn't exist
+- `instance_not_connected`: Instance is not connected
+- `instance_not_allowed`: User not permitted to use this instance
+- `chat_unclaimed`: Chat needs to be claimed before sending
+- `chat_closed`: Chat is closed and read-only
+- `restriction_violation`: Send restriction policy violated
+
+### Execution Path
+1. Create error with reason code using `asInstanceSelectionError()`
+2. Return error envelope with `reason_code` field
+3. Frontend uses reason code to display appropriate UI
+
+---
+
+## 68. Security Headers & CSRF Protection
+
+**Source Files:** `internal/middleware/security.go`, `internal/middleware/csrf.go`
+
+### Security Headers
+**Applied to all responses:**
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `X-XSS-Protection: 1; mode=block`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+
+### CSRF Protection
+**Execution Path:**
+1. Generate CSRF token on login
+2. Store token in HTTP-only cookie (`whm_csrf`)
+3. For mutating requests (POST/PUT/DELETE/PATCH):
+   - Extract token from `X-CSRF-Token` header
+   - Compare with cookie value
+   - Reject if mismatch (403 Forbidden)
+4. Safe methods (GET/HEAD/OPTIONS) skip CSRF check
+
+---
+
+## 69. Request Logging & Recovery
+
+**Source Files:** `internal/middleware/logger.go`, `internal/middleware/recovery.go`
+
+### Request Logger
+**Execution Path:**
+1. Log request method, path, remote address
+2. Log response status and duration
+3. Include request ID for tracing
+4. Log user ID if authenticated
+
+### Recovery Middleware
+**Execution Path:**
+1. Defer panic recovery at start of request
+2. If panic occurs:
+   - Log stack trace
+   - Return 500 Internal Server Error
+   - Don't expose panic details to client
+3. Continue serving other requests
+
+---
+
+## 70. SSRF-Safe Dialer
+
+**Source Files:** `internal/handlers/helpers.go`
+
+### Overview
+Prevents Server-Side Request Forgery (SSRF) attacks by blocking requests to internal IP ranges.
+
+### Blocked Ranges
+- 127.0.0.0/8 (loopback)
+- 10.0.0.0/8 (private)
+- 172.16.0.0/12 (private)
+- 192.168.0.0/16 (private)
+- 169.254.0.0/16 (link-local)
+- ::1 (IPv6 loopback)
+- fc00::/7 (IPv6 unique local)
+- fe80::/10 (IPv6 link-local)
+
+### Execution Path
+1. `SSRFSafeDialer()` creates custom HTTP transport dialer
+2. Before connecting, resolve target hostname
+3. Check if resolved IP is in blocked ranges
+4. If blocked, return connection refused error
+5. If allowed, proceed with connection
+
+---
+
+## 71. Cache System
+
+**Source Files:** `internal/handlers/cache.go`
+
+### Cached Data
+1. **WhatsApp Accounts**: Lookup by phone_number_id
+2. **Role Permissions**: Permission lists by role ID
+3. **Chatbot Settings**: Settings by organization ID
+4. **Organization Settings**: Settings by organization ID
+
+### Cache Operations
+1. **Get**: Check Redis cache first
+2. **Miss**: Load from database, store in cache with TTL
+3. **Hit**: Return cached value
+4. **Invalidate**: Delete cache key on update
+
+### TTL Settings
+- Accounts: 5 minutes
+- Role permissions: 10 minutes
+- Chatbot settings: 5 minutes
+- Organization settings: 5 minutes
+
+---
+
+## 72. Cookie Management
+
+**Source Files:** `internal/handlers/cookies.go`
+
+### Auth Cookies
+- `whm_access`: Access token (JWT), HTTP-only, Secure, SameSite=Strict
+- `whm_refresh`: Refresh token (JWT), HTTP-only, Secure, SameSite=Strict
+- `whm_csrf`: CSRF token, HTTP-only, Secure, SameSite=Strict
+
+### Cookie Operations
+1. `setAuthCookies()`: Set access, refresh, and CSRF cookies
+2. `clearAuthCookies()`: Clear all auth cookies (set expired)
+3. Cookie domain and path derived from request
+4. Secure flag always enabled in production
+
+---
+
+## 73. JWT Secret Management
+
+**Source Files:** `internal/handlers/jwt_secret.go`
+
+### Overview
+Manages JWT signing key with support for environment variable or config file.
+
+### Execution Path
+1. `jwtSecretBytes()` retrieves signing key
+2. Check environment variable `WHATOMATE_JWT_SECRET` first
+3. Fall back to config file value
+4. Validate key meets minimum length requirement
+5. Return key bytes for JWT signing
+
+---
+
+## 74. WhatsApp Client (Meta)
+
+**Source Files:** `pkg/whatsapp/client.go`
+
+### Overview
+HTTP client for Meta WhatsApp Business Cloud API.
+
+### Supported Operations
+1. Send text message
+2. Send media message (image, video, audio, document)
+3. Send template message
+4. Send interactive message (buttons, list, CTA URL)
+5. Send location message
+6. Send contact message
+7. Mark message as read
+8. Send typing indicator
+9. Upload media
+10. Download media
+11. Fetch templates
+12. Create/update/delete templates
+13. Submit template for approval
+14. Fetch Flows
+15. Create/update/delete Flows
+16. Publish/deprecate Flows
+17. Fetch catalogs and products
+18. Fetch business profile
+19. Update business profile
+20. Fetch analytics
+
+### Execution Path
+1. Build API URL from base URL and endpoint
+2. Set Authorization header with access token
+3. Build request body
+4. Send HTTP request
+5. Parse response
+6. Handle errors (rate limits, invalid credentials, etc.)
+7. Return result or error
+
+---
+
+## 75. Message Provider Abstraction
+
+**Source Files:** `pkg/provider/provider.go`, `pkg/whatsapp/meta_adapter.go`, `pkg/whatsmeow/adapter.go`
+
+### Overview
+Provider interface abstracts differences between Meta and WhatsMeow providers.
+
+### Interface Methods
+1. `SendMessage()`: Send message to contact
+2. `SendMediaMessage()`: Send media message
+3. `SendTemplateMessage()`: Send template message
+4. `MarkRead()`: Mark message as read
+5. `SendTyping()`: Send typing indicator
+
+### Meta Adapter
+- Routes calls to Meta WhatsApp Client
+- Handles Meta-specific error codes
+- Transforms response formats
+
+### WhatsMeow Adapter
+- Routes calls to WhatsMeow Connection Manager
+- Handles per-instance queuing
+- Manages rate limiting per instance
+- Handles WhatsMeow-specific errors
+
+---
+
+## 76. WhatsMeow Connection Manager
+
+**Source Files:** `pkg/whatsmeow/manager.go`
+
+### Overview
+Manages WhatsApp Web connections for multiple instances.
+
+### Connection Lifecycle
+1. **Create**: Initialize new instance, generate QR code
+2. **Connect**: Start WebSocket connection to WhatsApp
+3. **Authenticated**: Session established, ready to send
+4. **Disconnected**: Connection lost, attempt reconnect
+5. **Logout**: Session terminated, need new QR code
+
+### Connection Management
+1. `GetClient()`: Get connected client for instance
+2. `Connect()`: Start new connection
+3. `Disconnect()`: Close connection
+4. `Reconnect()`: Reconnect after disconnect
+5. `ReconnectAll()`: Reconnect all active instances
+6. `AutoConnectLinkedInstancesOnFirstRun()`: Auto-connect on startup
+
+### Event Handling
+1. **Message received**: Process inbound message, enqueue for media download
+2. **Receipt received**: Update message status
+3. **Presence update**: Update contact presence
+4. **Connection status**: Broadcast status change via WebSocket
+5. **QR code received**: Cache QR code for API retrieval
+
+### Queue Depth Management
+1. Each instance has per-instance message queue
+2. Queue depth tracked and reported via API
+3. Depth observer callback updates instance record
+4. Rate limiting based on queue depth
+
+---
+
+## 77. WhatsMeow Queue Manager
+
+**Source Files:** `pkg/whatsmeow/queue.go`
+
+### Overview
+Per-instance message queue for WhatsMeow provider with rate limiting.
+
+### Queue Operations
+1. **Enqueue**: Add message to instance queue
+2. **Dequeue**: Get next message to send
+3. **Depth**: Get current queue depth
+4. **Wait**: Block until queue has capacity
+
+### Rate Limiting
+1. Configurable messages per minute per instance
+2. Adaptive delay based on queue depth
+3. Priority queue for high-priority messages
+
+---
+
+## 78. Redis Queue System
+
+**Source Files:** `internal/queue/queue.go`, `internal/queue/consumer.go`, `internal/queue/publisher.go`
+
+### Queue Types
+1. **Campaign Queue**: Campaign message jobs
+2. **Inbound Media Queue**: Media download jobs
+3. **Pub/Sub Channels**: Campaign stats, notifications
+
+### Job Types
+1. **RecipientJob**: Campaign recipient message send
+2. **InboundMediaJob**: Download media from Meta/WhatsMeow
+3. **CampaignStatsUpdate**: Campaign progress update
+
+### Consumer Operations
+1. `Consume()`: Start consuming jobs from queue
+2. `HandleJob()`: Process individual job
+3. `Ack()`: Acknowledge successful job
+4. `Nack()`: Negative acknowledge, requeue or dead-letter
+5. `Retry()`: Retry failed job with backoff
+
+### Publisher Operations
+1. `Publish()`: Add job to queue
+2. `PublishCampaignStats()`: Broadcast stats update
+
+---
+
+## 79. Campaign Stats Subscriber
+
+**Source Files:** `internal/queue/subscriber.go`
+
+### Overview
+Subscribes to Redis pub/sub for campaign stats updates and broadcasts via WebSocket.
+
+### Execution Path
+1. Subscribe to campaign stats channel
+2. On message received:
+   - Parse stats update
+   - Broadcast to organization via WebSocket
+   - Log update
+3. On disconnect:
+   - Auto-resubscribe
+   - Reconnect to channel
+
+---
+
+## 80. Database Migrations
+
+**Source Files:** `internal/database/migrations.go`, `internal/handlers/migration_handler.go`
+
+### Overview
+Manages database schema migrations using GORM AutoMigrate.
+
+### Migration Process
+1. `RunMigrationWithProgress()`:
+   - Run GORM AutoMigrate
+   - Create default admin user if configured
+   - Create default roles for organizations
+   - Create default chatbot settings
+   - Report migration progress
+2. Migrations run on server startup with `-migrate` flag
+3. Or triggered via API by super admin
+
+### Default Admin Creation
+1. Check if admin user exists
+2. If not, create from config:
+   - `default_admin.email`
+   - `default_admin.password`
+   - `default_admin.full_name`
+3. Create organization for admin
+4. Create default roles
+5. Add admin to organization
+
+---
+
+## 81. Encryption System
+
+**Source Files:** `internal/crypto/crypto.go`, `internal/crypto/migration.go`
+
+### Overview
+Encrypts sensitive data (access tokens, API keys, secrets) in database.
+
+### Encryption Versions
+1. **enc**: Original encryption format
+2. **enc2**: Second generation format
+3. **enc3**: Current format (AES-256-GCM)
+
+### Encryption Process
+1. `Encrypt()`: Encrypt plaintext with AES-256-GCM
+2. `Decrypt()`: Decrypt ciphertext
+3. Prefix encrypted values with `enc3:` for identification
+4. Key derived from `app.encryption_key` config
+
+### Crypto Migration
+1. Scan database for legacy encrypted values (enc:, enc2:)
+2. Decrypt with old format
+3. Re-encrypt with enc3 format
+4. Update records in batches
+5. Report migration summary
+
+### Encrypted Fields
+- WhatsApp account access tokens
+- WhatsApp account webhook verify tokens
+- SSO client secrets
+- Chatbot AI API keys
+- Webhook secrets
+- Custom action headers
+
+---
+
+## 82. Contact Utilities
+
+**Source Files:** `internal/contactutil/contact.go`
+
+### GetOrCreateContact
+**Execution Path:**
+1. Query contact by phone number and organization
+2. If found, return existing contact
+3. If not found:
+   - Create new contact record
+   - Set phone number, profile name
+   - Set status to open
+   - Return new contact and isNewContact=true
+4. Update profile name if provided and different
+
+---
+
+## 83. Template Utilities
+
+**Source Files:** `internal/templateutil/template.go`
+
+### Overview
+Helper functions for template rendering and placeholder resolution.
+
+### Functions
+1. `ResolvePlaceholders()`: Replace placeholders in template
+2. `ValidateTemplateSyntax()`: Check template for valid placeholders
+3. `ExtractPlaceholders()`: List all placeholders in template
+
+---
+
+## 84. WebSocket Message Types
+
+**Source Files:** `internal/websocket/hub.go`, `internal/websocket/messages.go`
+
+### Message Types
+1. **message**: New message received
+2. **message_status**: Message status updated
+3. **contact_created**: New contact created
+4. **contact_assigned**: Contact assigned to user
+5. **chat_closed**: Chat closed
+6. **chat_reopened**: Chat reopened
+7. **campaign_stats_update**: Campaign progress update
+8. **instance_status**: Instance connection status changed
+9. **notification**: New notification
+10. **typing**: Typing indicator
+11. **presence**: Contact presence update
+12. **instance_reconnect_failed**: Instance reconnection failed
+
+### Message Format
+```json
+{
+  "type": "message",
+  "payload": { ... },
+  "timestamp": "2024-01-01T00:00:00Z"
+}
+```
+
+---
+
+## 85. Frontend Embedded Build
+
+**Source Files:** `internal/frontend/embed.go`, `frontend/`
+
+### Overview
+Frontend is built with React/Vite and embedded into Go binary.
+
+### Build Process
+1. Frontend built with `npm run build`
+2. Output copied to `internal/frontend/dist/`
+3. Go `embed` directive includes dist files
+4. Server serves embedded files at runtime
+
+### Development Mode
+1. Frontend dev server runs separately
+2. API proxy configured for development
+3. CORS enabled for dev server origin
+
+---
+
+## 86. Configuration System
+
+**Source Files:** `internal/config/config.go`
+
+### Configuration Sections
+1. **app**: Application settings (name, version, environment, debug, encryption_key)
+2. **server**: Server settings (host, port, read/write timeouts, allowed_origins, max_request_body_size)
+3. **database**: PostgreSQL connection (host, port, user, password, dbname, ssl_mode)
+4. **redis**: Redis connection (host, port, password, db)
+5. **whatsapp**: WhatsApp settings (provider, base_url, webhook_verify_token)
+6. **whatsmeow**: WhatsMeow-specific settings (queue_depth, rate_limit)
+7. **jwt**: JWT settings (secret, access_token_ttl, refresh_token_ttl)
+8. **default_admin**: Default admin user (email, password, full_name)
+9. **storage**: File storage settings (local_path)
+10. **rate_limit**: Rate limiting settings (enabled, per-user, per-IP limits)
+
+### Config Loading
+1. Load from TOML file
+2. Override with environment variables
+3. Validate required fields
+4. Set defaults for optional fields
+
+---
+
+## 87. Model Layer
+
+**Source Files:** `internal/models/`
+
+### Key Models
+1. **User**: User accounts with roles and permissions
+2. **Organization**: Multi-tenant organizations
+3. **CustomRole**: Custom roles with permissions
+4. **Permission**: Resource:action permission pairs
+5. **WhatsAppAccount**: Meta WhatsApp Business accounts
+6. **WhatsAppInstance**: WhatsMeow instances
+7. **Contact**: WhatsApp contacts
+8. **Message**: WhatsApp messages (inbound/outbound)
+9. **BulkMessageCampaign**: Campaign definitions
+10. **BulkMessageRecipient**: Campaign recipients
+11. **Template**: WhatsApp message templates
+12. **ChatbotSettings**: Chatbot configuration
+13. **KeywordRule**: Chatbot keyword rules
+14. **ChatbotFlow**: Chatbot conversation flows
+15. **AIContext**: AI context definitions
+16. **AgentTransfer**: Chatbot-to-agent transfers
+17. **CannedResponse**: Pre-written responses
+18. **Tag**: Contact tags
+19. **Team**: User teams
+20. **Webhook**: Outbound webhook definitions
+21. **CustomAction**: Custom HTTP actions
+22. **ConversationNote**: Chat notes
+23. **ActivityLog**: Audit log entries
+24. **Widget**: Custom analytics widgets
+25. **LeadRequest**: Public lead submissions
+26. **Notification**: User notifications
+27. **UserOrganization**: User-org membership records
+28. **TeamMember**: Team membership records
+29. **ContactCollaborator**: Contact collaboration records
+30. **SSOProvider**: SSO provider configurations
+
+---
+
+## 88. Middleware Chain
+
+**Source Files:** `internal/middleware/`
+
+### Request Processing Order
+1. **CORS Wrapper**: Handle CORS headers (fasthttp level)
+2. **Security Headers**: Add security headers
+3. **Request Logger**: Log request details
+4. **Recovery**: Catch panics
+5. **CSRF Protection**: Validate CSRF tokens
+6. **Activity Log Middleware**: Log significant actions
+7. **Auth Middleware**: Validate JWT/API key (for protected routes)
+8. **Role-based Access**: Check permissions (handler level)
+9. **Provider Guard**: Check provider compatibility (handler level)
+10. **Rate Limiting**: Check rate limits (endpoint level)
+
+---
+
+## 89. Error Handling Patterns
+
+### Error Envelope Format
+```json
+{
+  "error": {
+    "message": "Human-readable error message",
+    "code": "machine_readable_code",
+    "field": "field_name_if_validation_error"
+  }
+}
+```
+
+### Common HTTP Status Codes
+- **400**: Bad Request (validation errors)
+- **401**: Unauthorized (auth failures)
+- **403**: Forbidden (permission denied)
+- **404**: Not Found (resource not found)
+- **409**: Conflict (duplicate, closed chat)
+- **413**: Payload Too Large
+- **429**: Too Many Requests (rate limited)
+- **500**: Internal Server Error
+
+### Error Handling Strategy
+1. Validate input early, return 400
+2. Check auth, return 401 if invalid
+3. Check permissions, return 403 if denied
+4. Check resource exists, return 404 if not
+5. Check business rules, return 409 if violated
+6. Execute operation, return 500 on failure
+7. Never expose internal errors to client
+
+---
+
+## 90. Testing Infrastructure
+
+### Test Files
+- Unit tests: `*_test.go` files alongside source
+- E2E tests: `frontend/e2e/` with Playwright
+- Integration tests: Test handlers with test database
+
+### Test Helpers
+- `testhelpers_test.go`: Common test utilities
+- `stubs.go`: Stub implementations for testing
+- `ApiHelper`: E2E API test helper (TypeScript)
+
+### Coverage Reports
+- Multiple coverage files for different packages
+- `coverage.out`: Main coverage report
+- `coverage_*.out`: Package-specific coverage
+
+---
+
+## 51. Send Restriction Policies
+
+**Source Files:** `internal/handlers/send_restriction_policy.go`, `internal/handlers/user_send_restrictions.go`, `internal/handlers/send_restriction_policy_helpers_test.go`
+
+### Overview
+Send restriction policies control which users can send messages to which contacts, through which instances, and under what conditions. This is a critical security and compliance feature.
+
+### Configuration Levels
+1. **Organization-level settings:**
+   - `strict_sending_restrictions_enabled`: Master toggle for strict mode
+   - `outbound_mode`: "inbound_only" or "mixed"
+   - `strict_sending_apply_to_system`: Whether restrictions apply to system/chatbot messages
+   - `campaign_draft_only`: Restrict campaigns to draft mode only
+   - `strict_rollout_mode`: "audit" (log violations) or "enforce" (block messages)
+   - `strict_rollout_enforce_at`: Timestamp when enforcement begins
+
+2. **User-level settings:**
+   - `send_restrictions`: Per-user configuration including:
+     - `enabled`: Toggle for this user
+     - `include_all_contacts`: Allow all contacts or restrict to authorized numbers
+     - `authorized_numbers`: Whitelist of phone numbers
+     - `allowed_instance_id` / `allowed_instance_ids`: Which instances user can send from
+     - `prefix_agent_name`: Auto-prefix messages with agent name
+     - `allow_unclaimed_chat_view`: View unclaimed chats
+     - `allow_unclaimed_chat_send`: Send to unclaimed chats
+
+### Enforcement Flow
+**Entry Point:** `enforceStrictSendRestrictions()` (called from `SendOutgoingMessage()`)
+**Execution Path:**
+1. Load organization settings
+2. Load user send restrictions
+3. Check if strict mode is enabled
+4. If enabled:
+   - Verify contact is in authorized numbers list (if not include_all_contacts)
+   - Verify instance is in allowed instances list
+   - Check outbound mode (inbound_only blocks proactive outbound)
+   - Check if chat is claimed (if allow_unclaimed_chat_send is false)
+5. If violation detected:
+   - In "audit" mode: log warning, allow message
+   - In "enforce" mode: return `restrictedSendViolationError`, block message
+6. Apply agent name prefix if configured
+
+### Update User Send Restrictions
+**Entry Point:** `PUT /api/users/{id}/send-restrictions` → `App.UpdateUserSendRestrictions()`
+**Inputs:** send_restrictions JSON object
+**Execution Path:**
+1. Authorize with `requirePermission(users, write)`
+2. Load user, verify org membership
+3. Validate restriction settings
+4. Update user.settings.send_restrictions
+5. Return updated settings
+
+### Get User Send Restrictions
+**Entry Point:** `GET /api/users/{id}/send-restrictions` → `App.GetUserSendRestrictions()`
+
+### Chat Claim Enforcement
+**Execution Path:**
+1. When sending message, check if chat is claimed
+2. If chat is restricted and unclaimed:
+   - Check if user can send to unclaimed chats
+   - If not, return 403 with message "This chat is currently unassigned. Claim it before sending messages."
+3. Agent-role users have chat-scoped visibility even with contacts:read permission
+
+### Outbound Mode Enforcement
+**"inbound_only" mode:**
+- Users can only reply to inbound messages
+- Proactive outbound messages are blocked
+- Campaign messages may be restricted based on campaign_draft_only setting
+
+**"mixed" mode:**
+- Both inbound replies and proactive outbound allowed
+- Standard permission checks apply
+
+---
+
+## 52. Agent Chat Visibility Restrictions
+
+**Source Files:** `internal/handlers/contacts.go`, `internal/handlers/contacts_messaging.go`, `internal/handlers/chat_access_policy.go`
+
+### Overview
+Agent-role users have restricted visibility into chats based on assignment status and access policies.
+
+### Restriction Logic
+**Execution Path:**
+1. `shouldRestrictChatVisibilityToAgentScope()` checks if user is agent role
+2. If restricted, apply `applyAgentVisibleChatAccessFilter()`:
+   - Only show chats assigned to the user
+   - Only show public chats (is_public = true)
+   - Only show chats where user is a collaborator
+3. When listing contacts, filter query based on user's access scope
+4. When sending messages, verify agent has access to the contact
+
+### Agent Message Sending
+**Execution Path:**
+1. Agent attempts to send message
+2. Load contact with agent-scoped query
+3. If contact not found in agent's scope, return 404
+4. Check if chat is closed — reject if closed
+5. Check if chat is restricted and unclaimed — require claim first
+6. Proceed with message send
+
+---
+
+## 53. Contact Account Resolution
+
+**Source Files:** `internal/handlers/contact_account_resolution.go`
+
+### Overview
+Resolves the correct WhatsApp account for a contact when sending messages, considering instance assignments and account mappings.
+
+### Execution Path
+1. Check if contact has an associated instance
+2. If instance exists, find account linked to that instance
+3. If no instance, use account from request or contact's whatsapp_account field
+4. Validate account belongs to same organization
+5. Return resolved account or error
+
+---
+
+## 54. Contact Repair
+
+**Source Files:** `internal/handlers/contact_repair.go`
+
+### Overview
+Repairs orphaned or inconsistent contact records, typically after data migrations or account changes.
+
+### Execution Path
+1. Scan for contacts with missing or invalid references
+2. Fix orphaned contacts by reassigning to correct account/instance
+3. Update contact metadata to reflect current state
+4. Log repair actions
+
+---
+
+## 55. Contact User Deletions
+
+**Source Files:** `internal/handlers/contact_user_deletions.go`
+
+### Overview
+Handles cleanup when a user is deleted, reassigning or archiving their contacts and chats.
+
+### Execution Path
+1. Find all contacts assigned to deleted user
+2. Reassign to team lead or unassign
+3. Update chat assignment records
+4. Notify affected users via WebSocket
+5. Dispatch webhook for contact reassigned events
+
+---
+
+## 56. Closed Chat Filters
+
+**Source Files:** `internal/handlers/closed_chat_filters.go`
+
+### Overview
+Provides filtering capabilities for closed chats in the contact list view.
+
+### Filter Options
+- Closed by user
+- Closed date range
+- Close reason
+- Rating status
+
+### Execution Path
+1. Apply closed_at IS NOT NULL filter
+2. Apply additional filters based on query params
+3. Join with users table for closed_by_name
+4. Paginate and return
+
+---
+
+## 57. Chat Lifecycle Management
+
+**Source Files:** `internal/handlers/chat_lifecycle.go`, `internal/handlers/chat_system_messages.go`
+
+### Chat States
+- **open**: Active chat, agents can send messages
+- **closed**: Chat closed, read-only
+- **pending**: Awaiting agent assignment
+
+### State Transitions
+1. **open → closed**: Agent or system closes chat
+   - Set closed_at, closed_by_user_id
+   - Optionally send auto-close message
+   - Optionally request rating
+   - Broadcast via WebSocket
+   - Dispatch webhook
+
+2. **closed → open**: Agent reopens chat
+   - Clear closed_at, closed_by_user_id
+   - Set status back to open
+   - Broadcast via WebSocket
+
+3. **open → pending**: Chat unassigned
+   - Clear assigned_user_id
+   - Set status to pending
+   - Notify available agents
+
+4. **pending → open**: Chat claimed
+   - Set assigned_user_id
+   - Set status to open
+   - Notify claiming agent
+
+### System Messages
+**Execution Path:**
+1. Create message with actor_type = "system"
+2. Content describes lifecycle event
+3. Save to messages table
+4. Broadcast via WebSocket
+5. No provider send (internal only)
+
+---
+
+## 58. Reply Preview Helpers
+
+**Source Files:** `internal/handlers/reply_preview_helpers.go`
+
+### Overview
+Extracts and formats reply context for messages that reference other messages.
+
+### Execution Path
+1. When message has reply_to_message_id
+2. Load referenced message
+3. Extract preview data:
+   - Content (truncated for long messages)
+   - Message type
+   - Sender info
+   - Media info (if media message)
+4. Return formatted preview for API response
+
+---
+
+## 59. Message Template Placeholders
+
+**Source Files:** `internal/handlers/message_template_placeholders.go`
+
+### Overview
+Resolves template placeholders in messages with actual values from contacts, users, or custom data.
+
+### Supported Placeholders
+- `{{contact.name}}` - Contact name
+- `{{contact.phone}}` - Contact phone number
+- `{{user.name}}` - Agent/sender name
+- `{{organization.name}}` - Organization name
+- Custom placeholders from template params
+
+### Execution Path
+1. Parse message content for placeholder patterns
+2. Load context data (contact, user, organization)
+3. Replace placeholders with actual values
+4. Handle missing values (leave as-is or use defaults)
+5. Return resolved message content
+
+---
+
+## 60. Campaign Policy Enforcement
+
+**Source Files:** `internal/handlers/campaign_policy.go`
+
+### Overview
+Enforces policies on campaign creation and execution, including rate limits, template requirements, and scheduling constraints.
+
+### Policy Checks
+1. **Template approval**: Campaign template must be APPROVED
+2. **Account status**: WhatsApp account must be active
+3. **Delay validation**: Min/max delay within acceptable range
+4. **Recipient validation**: Campaign must have at least one recipient
+5. **Schedule validation**: Scheduled time must be in the future
+6. **Rate limiting**: Check organization campaign rate limits
+
+### Execution Path
+1. `validateCampaignForCreate()` called during campaign creation
+2. `validateCampaignForStart()` called before starting campaign
+3. Return specific error messages for each policy violation
+4. Block campaign operation if policy check fails
+
+---
+
+## 61. Flows Helpers
+
+**Source Files:** `internal/handlers/flows_helpers_test.go`
+
+### Overview
+Helper functions for WhatsApp Flows operations, including JSON validation and Meta API integration.
+
+### Functions
+- Validate Flow JSON schema
+- Transform Flow JSON for Meta API
+- Parse Flow response from Meta
+- Generate Flow tokens for tracking
+
+---
+
+## 62. Group Message Helpers
+
+**Source Files:** `internal/handlers/group_message_helpers.go`
+
+### Overview
+Handles group message detection and processing for WhatsApp group chats.
+
+### Execution Path
+1. Detect if incoming message is from a group (JID contains @g.us)
+2. Extract group metadata (group ID, sender JID)
+3. Create or update group contact record
+4. Store sender info in message metadata
+5. Apply group-specific chatbot rules (if configured)
+
+---
+
+## 63. Instance Name Validation
+
+**Source Files:** `internal/handlers/instance_name_validation.go`
+
+### Overview
+Validates WhatsApp instance names for uniqueness and format.
+
+### Validation Rules
+1. Name must be non-empty
+2. Name must be unique within organization
+3. Name must match pattern (alphanumeric, hyphens, underscores)
+4. Name length limits (min 2, max 50 characters)
+
+### Execution Path
+1. `normalizeInstanceName()` - trim, lowercase, remove invalid chars
+2. `isInstanceNameTaken()` - query database for existing name
+3. Return validation error if invalid
+
+---
+
+## 64. Instance Selector
+
+**Source Files:** `internal/handlers/instance_selector.go`
+
+### Overview
+Selects the appropriate WhatsApp instance for outbound messages based on configuration, availability, and load.
+
+### Selection Strategies
+1. **Default instance**: Use organization's default instance
+2. **Contact-assigned instance**: Use instance linked to contact
+3. **Request-specified instance**: Use instance from API request
+4. **Round-robin**: Distribute across available instances (future)
+
+### Execution Path
+1. `resolveOutboundInstance()` called from message send handlers
+2. Check request-specified instance ID first
+3. Fall back to contact's instance
+4. Fall back to organization default
+5. Validate instance is connected and healthy
+6. Return instance or error with reason code
+
+---
+
+## 65. Password Policy
+
+**Source Files:** `internal/handlers/password_policy.go`
+
+### Overview
+Enforces password strength requirements during registration and password changes.
+
+### Policy Rules
+1. Minimum length: 8 characters
+2. At least one uppercase letter
+3. At least one lowercase letter
+4. At least one digit
+5. At least one special character
+6. Not in common password list
+
+### Execution Path
+1. `validatePasswordStrength()` called during registration and password change
+2. Check each policy rule
+3. Return specific error message for first violated rule
+4. Reject password if any rule fails
+
+---
+
+## 66. Provider Guard
+
+**Source Files:** `internal/handlers/provider_guard.go`
+
+### Overview
+Middleware that restricts certain endpoints to specific WhatsApp providers (Meta or WhatsMeow).
+
+### Execution Path
+1. `ProviderGuard("meta", handler)` wraps handler
+2. Check configured provider in app config
+3. If provider doesn't match, return 400 with "Feature not available for current provider"
+4. If provider matches, call wrapped handler
+
+### Protected Features
+- Templates (Meta only)
+- WhatsApp Flows (Meta only)
+- Catalogs (Meta only)
+
+---
+
+## 67. Reason Codes
+
+**Source Files:** `internal/handlers/reason_codes.go`
+
+### Overview
+Provides standardized reason codes for API error responses, enabling frontend to handle errors programmatically.
+
+### Common Reason Codes
+- `instance_not_found`: Specified instance doesn't exist
+- `instance_not_connected`: Instance is not connected
+- `instance_not_allowed`: User not permitted to use this instance
+- `chat_unclaimed`: Chat needs to be claimed before sending
+- `chat_closed`: Chat is closed and read-only
+- `restriction_violation`: Send restriction policy violated
+
+### Execution Path
+1. Create error with reason code using `asInstanceSelectionError()`
+2. Return error envelope with `reason_code` field
+3. Frontend uses reason code to display appropriate UI
+
+---
+
+## 68. Security Headers & CSRF Protection
+
+**Source Files:** `internal/middleware/security.go`, `internal/middleware/csrf.go`
+
+### Security Headers
+**Applied to all responses:**
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `X-XSS-Protection: 1; mode=block`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+
+### CSRF Protection
+**Execution Path:**
+1. Generate CSRF token on login
+2. Store token in HTTP-only cookie (`whm_csrf`)
+3. For mutating requests (POST/PUT/DELETE/PATCH):
+   - Extract token from `X-CSRF-Token` header
+   - Compare with cookie value
+   - Reject if mismatch (403 Forbidden)
+4. Safe methods (GET/HEAD/OPTIONS) skip CSRF check
+
+---
+
+## 69. Request Logging & Recovery
+
+**Source Files:** `internal/middleware/logger.go`, `internal/middleware/recovery.go`
+
+### Request Logger
+**Execution Path:**
+1. Log request method, path, remote address
+2. Log response status and duration
+3. Include request ID for tracing
+4. Log user ID if authenticated
+
+### Recovery Middleware
+**Execution Path:**
+1. Defer panic recovery at start of request
+2. If panic occurs:
+   - Log stack trace
+   - Return 500 Internal Server Error
+   - Don't expose panic details to client
+3. Continue serving other requests
+
+---
+
+## 70. SSRF-Safe Dialer
+
+**Source Files:** `internal/handlers/helpers.go`
+
+### Overview
+Prevents Server-Side Request Forgery (SSRF) attacks by blocking requests to internal IP ranges.
+
+### Blocked Ranges
+- 127.0.0.0/8 (loopback)
+- 10.0.0.0/8 (private)
+- 172.16.0.0/12 (private)
+- 192.168.0.0/16 (private)
+- 169.254.0.0/16 (link-local)
+- ::1 (IPv6 loopback)
+- fc00::/7 (IPv6 unique local)
+- fe80::/10 (IPv6 link-local)
+
+### Execution Path
+1. `SSRFSafeDialer()` creates custom HTTP transport dialer
+2. Before connecting, resolve target hostname
+3. Check if resolved IP is in blocked ranges
+4. If blocked, return connection refused error
+5. If allowed, proceed with connection
+
+---
+
+## 71. Cache System
+
+**Source Files:** `internal/handlers/cache.go`
+
+### Cached Data
+1. **WhatsApp Accounts**: Lookup by phone_number_id
+2. **Role Permissions**: Permission lists by role ID
+3. **Chatbot Settings**: Settings by organization ID
+4. **Organization Settings**: Settings by organization ID
+
+### Cache Operations
+1. **Get**: Check Redis cache first
+2. **Miss**: Load from database, store in cache with TTL
+3. **Hit**: Return cached value
+4. **Invalidate**: Delete cache key on update
+
+### TTL Settings
+- Accounts: 5 minutes
+- Role permissions: 10 minutes
+- Chatbot settings: 5 minutes
+- Organization settings: 5 minutes
+
+---
+
+## 72. Cookie Management
+
+**Source Files:** `internal/handlers/cookies.go`
+
+### Auth Cookies
+- `whm_access`: Access token (JWT), HTTP-only, Secure, SameSite=Strict
+- `whm_refresh`: Refresh token (JWT), HTTP-only, Secure, SameSite=Strict
+- `whm_csrf`: CSRF token, HTTP-only, Secure, SameSite=Strict
+
+### Cookie Operations
+1. `setAuthCookies()`: Set access, refresh, and CSRF cookies
+2. `clearAuthCookies()`: Clear all auth cookies (set expired)
+3. Cookie domain and path derived from request
+4. Secure flag always enabled in production
+
+---
+
+## 73. JWT Secret Management
+
+**Source Files:** `internal/handlers/jwt_secret.go`
+
+### Overview
+Manages JWT signing key with support for environment variable or config file.
+
+### Execution Path
+1. `jwtSecretBytes()` retrieves signing key
+2. Check environment variable `WHATOMATE_JWT_SECRET` first
+3. Fall back to config file value
+4. Validate key meets minimum length requirement
+5. Return key bytes for JWT signing
+
+---
+
+## 74. WhatsApp Client (Meta)
+
+**Source Files:** `pkg/whatsapp/client.go`
+
+### Overview
+HTTP client for Meta WhatsApp Business Cloud API.
+
+### Supported Operations
+1. Send text message
+2. Send media message (image, video, audio, document)
+3. Send template message
+4. Send interactive message (buttons, list, CTA URL)
+5. Send location message
+6. Send contact message
+7. Mark message as read
+8. Send typing indicator
+9. Upload media
+10. Download media
+11. Fetch templates
+12. Create/update/delete templates
+13. Submit template for approval
+14. Fetch Flows
+15. Create/update/delete Flows
+16. Publish/deprecate Flows
+17. Fetch catalogs and products
+18. Fetch business profile
+19. Update business profile
+20. Fetch analytics
+
+### Execution Path
+1. Build API URL from base URL and endpoint
+2. Set Authorization header with access token
+3. Build request body
+4. Send HTTP request
+5. Parse response
+6. Handle errors (rate limits, invalid credentials, etc.)
+7. Return result or error
+
+---
+
+## 75. Message Provider Abstraction
+
+**Source Files:** `pkg/provider/provider.go`, `pkg/whatsapp/meta_adapter.go`, `pkg/whatsmeow/adapter.go`
+
+### Overview
+Provider interface abstracts differences between Meta and WhatsMeow providers.
+
+### Interface Methods
+1. `SendMessage()`: Send message to contact
+2. `SendMediaMessage()`: Send media message
+3. `SendTemplateMessage()`: Send template message
+4. `MarkRead()`: Mark message as read
+5. `SendTyping()`: Send typing indicator
+
+### Meta Adapter
+- Routes calls to Meta WhatsApp Client
+- Handles Meta-specific error codes
+- Transforms response formats
+
+### WhatsMeow Adapter
+- Routes calls to WhatsMeow Connection Manager
+- Handles per-instance queuing
+- Manages rate limiting per instance
+- Handles WhatsMeow-specific errors
+
+---
+
+## 76. WhatsMeow Connection Manager
+
+**Source Files:** `pkg/whatsmeow/manager.go`
+
+### Overview
+Manages WhatsApp Web connections for multiple instances.
+
+### Connection Lifecycle
+1. **Create**: Initialize new instance, generate QR code
+2. **Connect**: Start WebSocket connection to WhatsApp
+3. **Authenticated**: Session established, ready to send
+4. **Disconnected**: Connection lost, attempt reconnect
+5. **Logout**: Session terminated, need new QR code
+
+### Connection Management
+1. `GetClient()`: Get connected client for instance
+2. `Connect()`: Start new connection
+3. `Disconnect()`: Close connection
+4. `Reconnect()`: Reconnect after disconnect
+5. `ReconnectAll()`: Reconnect all active instances
+6. `AutoConnectLinkedInstancesOnFirstRun()`: Auto-connect on startup
+
+### Event Handling
+1. **Message received**: Process inbound message, enqueue for media download
+2. **Receipt received**: Update message status
+3. **Presence update**: Update contact presence
+4. **Connection status**: Broadcast status change via WebSocket
+5. **QR code received**: Cache QR code for API retrieval
+
+### Queue Depth Management
+1. Each instance has per-instance message queue
+2. Queue depth tracked and reported via API
+3. Depth observer callback updates instance record
+4. Rate limiting based on queue depth
+
+---
+
+## 77. WhatsMeow Queue Manager
+
+**Source Files:** `pkg/whatsmeow/queue.go`
+
+### Overview
+Per-instance message queue for WhatsMeow provider with rate limiting.
+
+### Queue Operations
+1. **Enqueue**: Add message to instance queue
+2. **Dequeue**: Get next message to send
+3. **Depth**: Get current queue depth
+4. **Wait**: Block until queue has capacity
+
+### Rate Limiting
+1. Configurable messages per minute per instance
+2. Adaptive delay based on queue depth
+3. Priority queue for high-priority messages
+
+---
+
+## 78. Redis Queue System
+
+**Source Files:** `internal/queue/queue.go`, `internal/queue/consumer.go`, `internal/queue/publisher.go`
+
+### Queue Types
+1. **Campaign Queue**: Campaign message jobs
+2. **Inbound Media Queue**: Media download jobs
+3. **Pub/Sub Channels**: Campaign stats, notifications
+
+### Job Types
+1. **RecipientJob**: Campaign recipient message send
+2. **InboundMediaJob**: Download media from Meta/WhatsMeow
+3. **CampaignStatsUpdate**: Campaign progress update
+
+### Consumer Operations
+1. `Consume()`: Start consuming jobs from queue
+2. `HandleJob()`: Process individual job
+3. `Ack()`: Acknowledge successful job
+4. `Nack()`: Negative acknowledge, requeue or dead-letter
+5. `Retry()`: Retry failed job with backoff
+
+### Publisher Operations
+1. `Publish()`: Add job to queue
+2. `PublishCampaignStats()`: Broadcast stats update
+
+---
+
+## 79. Campaign Stats Subscriber
+
+**Source Files:** `internal/queue/subscriber.go`
+
+### Overview
+Subscribes to Redis pub/sub for campaign stats updates and broadcasts via WebSocket.
+
+### Execution Path
+1. Subscribe to campaign stats channel
+2. On message received:
+   - Parse stats update
+   - Broadcast to organization via WebSocket
+   - Log update
+3. On disconnect:
+   - Auto-resubscribe
+   - Reconnect to channel
+
+---
+
+## 80. Database Migrations
+
+**Source Files:** `internal/database/migrations.go`, `internal/handlers/migration_handler.go`
+
+### Overview
+Manages database schema migrations using GORM AutoMigrate.
+
+### Migration Process
+1. `RunMigrationWithProgress()`:
+   - Run GORM AutoMigrate
+   - Create default admin user if configured
+   - Create default roles for organizations
+   - Create default chatbot settings
+   - Report migration progress
+2. Migrations run on server startup with `-migrate` flag
+3. Or triggered via API by super admin
+
+### Default Admin Creation
+1. Check if admin user exists
+2. If not, create from config:
+   - `default_admin.email`
+   - `default_admin.password`
+   - `default_admin.full_name`
+3. Create organization for admin
+4. Create default roles
+5. Add admin to organization
+
+---
+
+## 81. Encryption System
+
+**Source Files:** `internal/crypto/crypto.go`, `internal/crypto/migration.go`
+
+### Overview
+Encrypts sensitive data (access tokens, API keys, secrets) in database.
+
+### Encryption Versions
+1. **enc**: Original encryption format
+2. **enc2**: Second generation format
+3. **enc3**: Current format (AES-256-GCM)
+
+### Encryption Process
+1. `Encrypt()`: Encrypt plaintext with AES-256-GCM
+2. `Decrypt()`: Decrypt ciphertext
+3. Prefix encrypted values with `enc3:` for identification
+4. Key derived from `app.encryption_key` config
+
+### Crypto Migration
+1. Scan database for legacy encrypted values (enc:, enc2:)
+2. Decrypt with old format
+3. Re-encrypt with enc3 format
+4. Update records in batches
+5. Report migration summary
+
+### Encrypted Fields
+- WhatsApp account access tokens
+- WhatsApp account webhook verify tokens
+- SSO client secrets
+- Chatbot AI API keys
+- Webhook secrets
+- Custom action headers
+
+---
+
+## 82. Contact Utilities
+
+**Source Files:** `internal/contactutil/contact.go`
+
+### GetOrCreateContact
+**Execution Path:**
+1. Query contact by phone number and organization
+2. If found, return existing contact
+3. If not found:
+   - Create new contact record
+   - Set phone number, profile name
+   - Set status to open
+   - Return new contact and isNewContact=true
+4. Update profile name if provided and different
+
+---
+
+## 83. Template Utilities
+
+**Source Files:** `internal/templateutil/template.go`
+
+### Overview
+Helper functions for template rendering and placeholder resolution.
+
+### Functions
+1. `ResolvePlaceholders()`: Replace placeholders in template
+2. `ValidateTemplateSyntax()`: Check template for valid placeholders
+3. `ExtractPlaceholders()`: List all placeholders in template
+
+---
+
+## 84. WebSocket Message Types
+
+**Source Files:** `internal/websocket/hub.go`, `internal/websocket/messages.go`
+
+### Message Types
+1. **message**: New message received
+2. **message_status**: Message status updated
+3. **contact_created**: New contact created
+4. **contact_assigned**: Contact assigned to user
+5. **chat_closed**: Chat closed
+6. **chat_reopened**: Chat reopened
+7. **campaign_stats_update**: Campaign progress update
+8. **instance_status**: Instance connection status changed
+9. **notification**: New notification
+10. **typing**: Typing indicator
+11. **presence**: Contact presence update
+12. **instance_reconnect_failed**: Instance reconnection failed
+
+### Message Format
+```json
+{
+  "type": "message",
+  "payload": { ... },
+  "timestamp": "2024-01-01T00:00:00Z"
+}
+```
+
+---
+
+## 85. Frontend Embedded Build
+
+**Source Files:** `internal/frontend/embed.go`, `frontend/`
+
+### Overview
+Frontend is built with React/Vite and embedded into Go binary.
+
+### Build Process
+1. Frontend built with `npm run build`
+2. Output copied to `internal/frontend/dist/`
+3. Go `embed` directive includes dist files
+4. Server serves embedded files at runtime
+
+### Development Mode
+1. Frontend dev server runs separately
+2. API proxy configured for development
+3. CORS enabled for dev server origin
+
+---
+
+## 86. Configuration System
+
+**Source Files:** `internal/config/config.go`
+
+### Configuration Sections
+1. **app**: Application settings (name, version, environment, debug, encryption_key)
+2. **server**: Server settings (host, port, read/write timeouts, allowed_origins, max_request_body_size)
+3. **database**: PostgreSQL connection (host, port, user, password, dbname, ssl_mode)
+4. **redis**: Redis connection (host, port, password, db)
+5. **whatsapp**: WhatsApp settings (provider, base_url, webhook_verify_token)
+6. **whatsmeow**: WhatsMeow-specific settings (queue_depth, rate_limit)
+7. **jwt**: JWT settings (secret, access_token_ttl, refresh_token_ttl)
+8. **default_admin**: Default admin user (email, password, full_name)
+9. **storage**: File storage settings (local_path)
+10. **rate_limit**: Rate limiting settings (enabled, per-user, per-IP limits)
+
+### Config Loading
+1. Load from TOML file
+2. Override with environment variables
+3. Validate required fields
+4. Set defaults for optional fields
+
+---
+
+## 87. Model Layer
+
+**Source Files:** `internal/models/`
+
+### Key Models
+1. **User**: User accounts with roles and permissions
+2. **Organization**: Multi-tenant organizations
+3. **CustomRole**: Custom roles with permissions
+4. **Permission**: Resource:action permission pairs
+5. **WhatsAppAccount**: Meta WhatsApp Business accounts
+6. **WhatsAppInstance**: WhatsMeow instances
+7. **Contact**: WhatsApp contacts
+8. **Message**: WhatsApp messages (inbound/outbound)
+9. **BulkMessageCampaign**: Campaign definitions
+10. **BulkMessageRecipient**: Campaign recipients
+11. **Template**: WhatsApp message templates
+12. **ChatbotSettings**: Chatbot configuration
+13. **KeywordRule**: Chatbot keyword rules
+14. **ChatbotFlow**: Chatbot conversation flows
+15. **AIContext**: AI context definitions
+16. **AgentTransfer**: Chatbot-to-agent transfers
+17. **CannedResponse**: Pre-written responses
+18. **Tag**: Contact tags
+19. **Team**: User teams
+20. **Webhook**: Outbound webhook definitions
+21. **CustomAction**: Custom HTTP actions
+22. **ConversationNote**: Chat notes
+23. **ActivityLog**: Audit log entries
+24. **Widget**: Custom analytics widgets
+25. **LeadRequest**: Public lead submissions
+26. **Notification**: User notifications
+27. **UserOrganization**: User-org membership records
+28. **TeamMember**: Team membership records
+29. **ContactCollaborator**: Contact collaboration records
+30. **SSOProvider**: SSO provider configurations
+
+---
+
+## 88. Middleware Chain
+
+**Source Files:** `internal/middleware/`
+
+### Request Processing Order
+1. **CORS Wrapper**: Handle CORS headers (fasthttp level)
+2. **Security Headers**: Add security headers
+3. **Request Logger**: Log request details
+4. **Recovery**: Catch panics
+5. **CSRF Protection**: Validate CSRF tokens
+6. **Activity Log Middleware**: Log significant actions
+7. **Auth Middleware**: Validate JWT/API key (for protected routes)
+8. **Role-based Access**: Check permissions (handler level)
+9. **Provider Guard**: Check provider compatibility (handler level)
+10. **Rate Limiting**: Check rate limits (endpoint level)
+
+---
+
+## 89. Error Handling Patterns
+
+### Error Envelope Format
+```json
+{
+  "error": {
+    "message": "Human-readable error message",
+    "code": "machine_readable_code",
+    "field": "field_name_if_validation_error"
+  }
+}
+```
+
+### Common HTTP Status Codes
+- **400**: Bad Request (validation errors)
+- **401**: Unauthorized (auth failures)
+- **403**: Forbidden (permission denied)
+- **404**: Not Found (resource not found)
+- **409**: Conflict (duplicate, closed chat)
+- **413**: Payload Too Large
+- **429**: Too Many Requests (rate limited)
+- **500**: Internal Server Error
+
+### Error Handling Strategy
+1. Validate input early, return 400
+2. Check auth, return 401 if invalid
+3. Check permissions, return 403 if denied
+4. Check resource exists, return 404 if not
+5. Check business rules, return 409 if violated
+6. Execute operation, return 500 on failure
+7. Never expose internal errors to client
+
+---
+
+## 90. Testing Infrastructure
+
+### Test Files
+- Unit tests: `*_test.go` files alongside source
+- E2E tests: `frontend/e2e/` with Playwright
+- Integration tests: Test handlers with test database
+
+### Test Helpers
+- `testhelpers_test.go`: Common test utilities
+- `stubs.go`: Stub implementations for testing
+- `ApiHelper`: E2E API test helper (TypeScript)
+
+### Coverage Reports
+- Multiple coverage files for different packages
+- `coverage.out`: Main coverage report
+- `coverage_*.out`: Package-specific coverage
+
+---
+
+## 91. App Configuration Endpoint
+
+**Source Files:** `internal/handlers/config_handler.go`
+
+### Get App Config
+**Entry Point:** `GET /api/config` → `App.GetAppConfig()`
+**Execution Path:**
+1. Read configured WhatsApp provider (default: "meta")
+2. Determine feature flags based on provider:
+   - Meta-only: templates, flows, catalog, business_profile, meta_insights
+   - Both providers: campaigns
+3. Return config with provider and features
+**Outputs:** `{whatsapp_provider, features: {templates, flows, catalog, business_profile, campaigns, meta_insights}}`
+**Dependencies:** None (no auth required)
+**Purpose:** Frontend uses this to conditionally show/hide features
+
+---
+
+## 92. User Settings & Chat Background
+
+**Source Files:** `internal/handlers/users.go`
+
+### Update Current User Settings
+**Entry Point:** `PUT /api/me/settings` → `App.UpdateCurrentUserSettings()`
+**Inputs:** email_notifications, new_message_alerts, campaign_updates, notification_sound, chat_background
+**Execution Path:**
+1. Extract user_id from context
+2. Load user record
+3. Apply partial updates to settings JSONB:
+   - Toggle notification preferences
+   - Set notification sound (notification1, notification2, notification)
+   - Update chat background (preset or custom)
+4. Validate chat background:
+   - Preset: must be in allowed list (aurora-veil, sunset-dunes, paper-garden, linen-grid, dot-orbit, ripple-lines)
+   - Custom: validate MIME type (jpeg, png, webp), size limit (5MB)
+5. Save and return updated user
+
+### Upload User Chat Background
+**Entry Point:** `POST /api/me/chat-background` → `App.UploadCurrentUserChatBackground()`
+**Execution Path:**
+1. Receive multipart file upload
+2. Validate file size (max 5MB)
+3. Validate MIME type (jpeg, png, webp)
+4. Save to storage with user-specific path
+5. Update user settings with custom_asset_id
+6. Return background URL
+
+### Get User Chat Background
+**Entry Point:** `GET /api/me/chat-background` → `App.GetCurrentUserChatBackground()`
+
+---
+
+## 93. Availability Management
+
+**Source Files:** `internal/handlers/users.go`
+
+### Update Availability
+**Entry Point:** `PUT /api/me/availability` → `App.UpdateAvailability()`
+**Inputs:** is_available (boolean)
+**Execution Path:**
+1. Extract user_id from context
+2. Load user record
+3. Update is_available field
+4. Broadcast availability change via WebSocket
+5. Return updated user
+**Purpose:** Controls whether user appears available for chat assignment
+
+---
+
+## 94. Change Password
+
+**Source Files:** `internal/handlers/users.go`
+
+### Change Password
+**Entry Point:** `PUT /api/me/password` → `App.ChangePassword()`
+**Inputs:** current_password, new_password
+**Execution Path:**
+1. Extract user_id from context
+2. Load user record
+3. Verify current_password with bcrypt
+4. Validate new_password strength via `validatePasswordStrength()`
+5. Hash new password with bcrypt
+6. Update password_hash
+7. Invalidate all refresh tokens (force re-login)
+8. Return success
+
+---
+
+## 95. Contact Phone Start (WhatsMeow)
+
+**Source Files:** `internal/handlers/contacts_chat_start.go`
+
+### Overview
+Allows agents to start a new direct chat with a phone number via WhatsMeow, without waiting for inbound message.
+
+### Execution Path
+1. Agent provides phone number
+2. `ResolveDirectContact()` called:
+   - Normalize phone number (strip non-digits except +)
+   - Verify phone is on WhatsApp via `client.IsOnWhatsApp()`
+   - Get canonical phone (JID user)
+   - Resolve business name if verified
+3. If phone not on WhatsApp, return error
+4. Get or create contact with resolved details
+5. Open chat for contact
+**Dependencies:** Connected WhatsMeow instance
+**Edge Cases:** Phone not on WhatsApp; instance disconnected; invalid phone format
+
+---
+
+## 96. Interactive Messages
+
+**Source Files:** `internal/handlers/contacts_messaging.go`
+
+### Overview
+Supports sending interactive WhatsApp messages (buttons, lists, CTA URL).
+
+### Interactive Types
+1. **Button**: Up to 3 quick-reply buttons
+2. **List**: Single-select list with sections
+3. **CTA URL**: Call-to-action button with URL
+
+### Execution Path
+1. Parse `interactive` field from request
+2. Validate interactive type and content
+3. Build `OutgoingMessageRequest` with interactive fields
+4. Route through `SendOutgoingMessage()`
+5. Provider sends interactive message via WhatsApp API
+**Dependencies:** Meta provider (WhatsMeow has limited interactive support)
+
+---
+
+## 97. Typing Presence
+
+**Source Files:** `internal/handlers/contacts_messaging.go`
+
+### Send Typing Presence
+**Entry Point:** `POST /api/contacts/{id}/typing` → `App.SendTypingPresence()`
+**Inputs:** state (composing/paused), instance_id
+**Execution Path:**
+1. Load contact and resolve instance
+2. Route through provider:
+   - Meta: Send typing indicator via Cloud API
+   - WhatsMeow: Send chat presence update
+3. Return success
+**Purpose:** Shows "typing..." indicator to contact
+
+---
+
+## 98. Agent Role Chat Scoping
+
+**Source Files:** `internal/handlers/contacts.go`, `internal/handlers/chat_access_policy.go`
+
+### Overview
+Agent-role users see only chats they have access to, not all organization contacts.
+
+### Access Rules
+1. **Assigned chats**: Chats where assigned_user_id = current user
+2. **Public chats**: Chats where is_public = true
+3. **Collaborator chats**: Chats where user is a collaborator
+4. **Team-shared chats**: Chats shared with user's team (if configured)
+
+### Execution Path (List Contacts)
+1. Check if user is agent role via `shouldRestrictChatVisibilityToAgentScope()`
+2. If restricted:
+   - Apply `applyAgentVisibleChatAccessFilter()` to query
+   - Filter by assigned_user_id OR is_public OR collaborator
+3. If not restricted (admin/manager):
+   - Show all contacts in organization
+4. Apply additional filters (search, tags, status)
+5. Paginate and return
+
+### Execution Path (Send Message)
+1. Load contact with agent-scoped query
+2. If not found, return 404 (agent can't see this contact)
+3. Check chat status (closed = read-only)
+4. Check chat claim status (unclaimed = must claim first)
+5. Proceed with send
+
+---
+
+## 99. Organization Outbound Mode
+
+**Source Files:** `internal/handlers/send_restriction_policy.go`
+
+### Overview
+Organization-level setting that controls whether users can send outbound messages proactively.
+
+### Modes
+1. **inbound_only**: Users can only reply to inbound messages
+2. **mixed**: Users can send both replies and proactive messages
+
+### Enforcement
+**Execution Path:**
+1. Check organization outbound_mode setting
+2. If inbound_only:
+   - Check if message is a reply (reply_to_message_id set)
+   - If not a reply, block with "Outbound messages are disabled. You can only reply to incoming messages."
+3. If mixed: allow all messages (subject to other restrictions)
+4. System/chatbot messages may be exempt based on `strict_sending_apply_to_system`
+
+---
+
+## 100. Strict Rollout Mode
+
+**Source Files:** `internal/handlers/send_restriction_policy.go`
+
+### Overview
+Gradual enforcement mode for send restrictions, allowing organizations to transition from permissive to strict policies.
+
+### Rollout Phases
+1. **Audit mode**: Log violations but don't block messages
+   - Warnings sent to admins
+   - Analytics track violation frequency
+2. **Enforce mode**: Block messages that violate restrictions
+   - Activated at `strict_rollout_enforce_at` timestamp
+   - Users receive error messages
+
+### Execution Path
+1. Check `strict_rollout_mode` setting
+2. If "audit":
+   - Log violation
+   - Allow message to proceed
+   - Notify admins of violation
+3. If "enforce" and current time >= `strict_rollout_enforce_at`:
+   - Block message
+   - Return error to user
+4. If "enforce" but before enforcement date:
+   - Treat as audit mode
+   - Warn about upcoming enforcement
+
+---
+
+## 91. App Configuration Endpoint
+
+**Source Files:** `internal/handlers/config_handler.go`
+
+### Get App Config
+**Entry Point:** `GET /api/config` → `App.GetAppConfig()`
+**Execution Path:**
+1. Read configured WhatsApp provider (default: "meta")
+2. Determine feature flags based on provider:
+   - Meta-only: templates, flows, catalog, business_profile, meta_insights
+   - Both providers: campaigns
+3. Return config with provider and features
+**Outputs:** `{whatsapp_provider, features: {templates, flows, catalog, business_profile, campaigns, meta_insights}}`
+**Dependencies:** None (no auth required)
+**Purpose:** Frontend uses this to conditionally show/hide features
+
+---
+
+## 92. User Settings & Chat Background
+
+**Source Files:** `internal/handlers/users.go`
+
+### Update Current User Settings
+**Entry Point:** `PUT /api/me/settings` → `App.UpdateCurrentUserSettings()`
+**Inputs:** email_notifications, new_message_alerts, campaign_updates, notification_sound, chat_background
+**Execution Path:**
+1. Extract user_id from context
+2. Load user record
+3. Apply partial updates to settings JSONB:
+   - Toggle notification preferences
+   - Set notification sound (notification1, notification2, notification)
+   - Update chat background (preset or custom)
+4. Validate chat background:
+   - Preset: must be in allowed list (aurora-veil, sunset-dunes, paper-garden, linen-grid, dot-orbit, ripple-lines)
+   - Custom: validate MIME type (jpeg, png, webp), size limit (5MB)
+5. Save and return updated user
+
+### Upload User Chat Background
+**Entry Point:** `POST /api/me/chat-background` → `App.UploadCurrentUserChatBackground()`
+**Execution Path:**
+1. Receive multipart file upload
+2. Validate file size (max 5MB)
+3. Validate MIME type (jpeg, png, webp)
+4. Save to storage with user-specific path
+5. Update user settings with custom_asset_id
+6. Return background URL
+
+### Get User Chat Background
+**Entry Point:** `GET /api/me/chat-background` → `App.GetCurrentUserChatBackground()`
+
+---
+
+## 93. Availability Management
+
+**Source Files:** `internal/handlers/users.go`
+
+### Update Availability
+**Entry Point:** `PUT /api/me/availability` → `App.UpdateAvailability()`
+**Inputs:** is_available (boolean)
+**Execution Path:**
+1. Extract user_id from context
+2. Load user record
+3. Update is_available field
+4. Broadcast availability change via WebSocket
+5. Return updated user
+**Purpose:** Controls whether user appears available for chat assignment
+
+---
+
+## 94. Change Password
+
+**Source Files:** `internal/handlers/users.go`
+
+### Change Password
+**Entry Point:** `PUT /api/me/password` → `App.ChangePassword()`
+**Inputs:** current_password, new_password
+**Execution Path:**
+1. Extract user_id from context
+2. Load user record
+3. Verify current_password with bcrypt
+4. Validate new_password strength via `validatePasswordStrength()`
+5. Hash new password with bcrypt
+6. Update password_hash
+7. Invalidate all refresh tokens (force re-login)
+8. Return success
+
+---
+
+## 95. Contact Phone Start (WhatsMeow)
+
+**Source Files:** `internal/handlers/contacts_chat_start.go`
+
+### Overview
+Allows agents to start a new direct chat with a phone number via WhatsMeow, without waiting for inbound message.
+
+### Execution Path
+1. Agent provides phone number
+2. `ResolveDirectContact()` called:
+   - Normalize phone number (strip non-digits except +)
+   - Verify phone is on WhatsApp via `client.IsOnWhatsApp()`
+   - Get canonical phone (JID user)
+   - Resolve business name if verified
+3. If phone not on WhatsApp, return error
+4. Get or create contact with resolved details
+5. Open chat for contact
+**Dependencies:** Connected WhatsMeow instance
+**Edge Cases:** Phone not on WhatsApp; instance disconnected; invalid phone format
+
+---
+
+## 96. Interactive Messages
+
+**Source Files:** `internal/handlers/contacts_messaging.go`
+
+### Overview
+Supports sending interactive WhatsApp messages (buttons, lists, CTA URL).
+
+### Interactive Types
+1. **Button**: Up to 3 quick-reply buttons
+2. **List**: Single-select list with sections
+3. **CTA URL**: Call-to-action button with URL
+
+### Execution Path
+1. Parse `interactive` field from request
+2. Validate interactive type and content
+3. Build `OutgoingMessageRequest` with interactive fields
+4. Route through `SendOutgoingMessage()`
+5. Provider sends interactive message via WhatsApp API
+**Dependencies:** Meta provider (WhatsMeow has limited interactive support)
+
+---
+
+## 97. Typing Presence
+
+**Source Files:** `internal/handlers/contacts_messaging.go`
+
+### Send Typing Presence
+**Entry Point:** `POST /api/contacts/{id}/typing` → `App.SendTypingPresence()`
+**Inputs:** state (composing/paused), instance_id
+**Execution Path:**
+1. Load contact and resolve instance
+2. Route through provider:
+   - Meta: Send typing indicator via Cloud API
+   - WhatsMeow: Send chat presence update
+3. Return success
+**Purpose:** Shows "typing..." indicator to contact
+
+---
+
+## 98. Agent Role Chat Scoping
+
+**Source Files:** `internal/handlers/contacts.go`, `internal/handlers/chat_access_policy.go`
+
+### Overview
+Agent-role users see only chats they have access to, not all organization contacts.
+
+### Access Rules
+1. **Assigned chats**: Chats where assigned_user_id = current user
+2. **Public chats**: Chats where is_public = true
+3. **Collaborator chats**: Chats where user is a collaborator
+4. **Team-shared chats**: Chats shared with user's team (if configured)
+
+### Execution Path (List Contacts)
+1. Check if user is agent role via `shouldRestrictChatVisibilityToAgentScope()`
+2. If restricted:
+   - Apply `applyAgentVisibleChatAccessFilter()` to query
+   - Filter by assigned_user_id OR is_public OR collaborator
+3. If not restricted (admin/manager):
+   - Show all contacts in organization
+4. Apply additional filters (search, tags, status)
+5. Paginate and return
+
+### Execution Path (Send Message)
+1. Load contact with agent-scoped query
+2. If not found, return 404 (agent can't see this contact)
+3. Check chat status (closed = read-only)
+4. Check chat claim status (unclaimed = must claim first)
+5. Proceed with send
+
+---
+
+## 99. Organization Outbound Mode
+
+**Source Files:** `internal/handlers/send_restriction_policy.go`
+
+### Overview
+Organization-level setting that controls whether users can send outbound messages proactively.
+
+### Modes
+1. **inbound_only**: Users can only reply to inbound messages
+2. **mixed**: Users can send both replies and proactive messages
+
+### Enforcement
+**Execution Path:**
+1. Check organization outbound_mode setting
+2. If inbound_only:
+   - Check if message is a reply (reply_to_message_id set)
+   - If not a reply, block with "Outbound messages are disabled. You can only reply to incoming messages."
+3. If mixed: allow all messages (subject to other restrictions)
+4. System/chatbot messages may be exempt based on `strict_sending_apply_to_system`
+
+---
+
+## 100. Strict Rollout Mode
+
+**Source Files:** `internal/handlers/send_restriction_policy.go`
+
+### Overview
+Gradual enforcement mode for send restrictions, allowing organizations to transition from permissive to strict policies.
+
+### Rollout Phases
+1. **Audit mode**: Log violations but don't block messages
+   - Warnings sent to admins
+   - Analytics track violation frequency
+2. **Enforce mode**: Block messages that violate restrictions
+   - Activated at `strict_rollout_enforce_at` timestamp
+   - Users receive error messages
+
+### Execution Path
+1. Check `strict_rollout_mode` setting
+2. If "audit":
+   - Log violation
+   - Allow message to proceed
+   - Notify admins of violation
+3. If "enforce" and current time >= `strict_rollout_enforce_at`:
+   - Block message
+   - Return error to user
+4. If "enforce" but before enforcement date:
+   - Treat as audit mode
+   - Warn about upcoming enforcement
