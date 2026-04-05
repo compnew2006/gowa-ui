@@ -1200,9 +1200,6 @@ export const organizationService = {
     assigned_chat_reset_enabled?: boolean;
     assigned_chat_reset_mode?: "midnight" | "custom_hour";
     assigned_chat_reset_hour?: number;
-    chat_close_rating_enabled?: boolean;
-    chat_close_rating_followup_window_minutes?: number;
-    chat_close_rating_templates?: Record<string, string>;
   }) => api.put("/org/settings", data),
 };
 

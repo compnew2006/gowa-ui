@@ -157,6 +157,41 @@ func TestPersistParsedMessage_DoesNotReopenClosedChatForPendingRatingReply(t *te
 	assert.Equal(t, instance.PhoneNumber, savedMessage.WhatsAppAccount)
 }
 
+func TestConnectionManagerLoadChatCloseRatingSettings_UsesInstanceSettings(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Instance Settings Org",
+		Slug:      "instance-settings-org-" + uuid.NewString(),
+		Settings: models.JSONB{
+			"chat_close_rating_enabled":                 true,
+			"chat_close_rating_followup_window_minutes": 5,
+		},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Primary",
+		PhoneNumber:    "15550009999",
+		Settings: models.JSONB{
+			"chat_close_rating_enabled":                 false,
+			"chat_close_rating_followup_window_minutes": 45,
+		},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+
+	settings, err := cm.loadChatCloseRatingSettings(context.Background(), &instance.ID)
+	require.NoError(t, err)
+	assert.False(t, settings.Enabled)
+	assert.Equal(t, 45, settings.FollowupWindowMinutes)
+}
+
 func TestPersistParsedMessage_DoesNotReopenClosedChatForFollowupComment(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	testutil.TruncateTables(db)

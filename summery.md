@@ -1,5 +1,117 @@
 # Session Summary
 
+## 2026-04-05 10:21
+
+### Completed
+
+- Removed the legacy organization-level `Close Chat Rating` controls from the Chat tab in `frontend/src/views/settings/SettingsView.vue`.
+- Removed the old organization-level API and backend settings handling for close ratings in:
+  - `frontend/src/services/api.ts`
+  - `internal/handlers/organization.go`
+- Kept the feature instance-specific and cleaned the instance save path in:
+  - `frontend/src/components/whatsmeow/InstanceChatCloseRatingPanel.vue`
+  - `frontend/src/views/settings/InstancesView.vue`
+  - `frontend/src/lib/instance-chat-close-rating.ts`
+- Updated translations used by the instance summary card so the reply-window summary renders correctly instead of showing a raw i18n key.
+- Added and updated focused tests covering:
+  - legacy org-level settings removal
+  - instance-specific close-rating save behavior
+  - backend instance settings loading and validation
+
+### Findings
+
+- The stale `Close Chat Rating` section still appearing in `/settings` after the source change was caused by the running server still serving an older embedded frontend build.
+- The instance dialog had a real frontend state bug where the numeric follow-up window field could display the typed value while still saving the previous default value.
+- Restarting the app after rebuilding the embedded frontend was required to validate the actual live behavior on `http://localhost:8080`.
+
+### Verification
+
+- `go test ./internal/handlers -run 'TestApp_(GetOrganizationSettings|UpdateOrganizationSettings)|TestHandleManualChatCloseRatingPrompt|TestReadInstanceChatCloseRatingSettings'`
+  - result: pass
+- `go test ./pkg/whatsmeow -run 'Test(ConnectionManagerLoadChatCloseRatingSettings_UsesInstanceSettings|EnsureInstanceSettingsDefaults_InjectsChatCloseRatingDefaults|ValidateInstanceSettings_ChatCloseRating|PersistParsedMessage_|ParseInboundRatingValue_)'`
+  - result: pass
+- `make frontend-build embed-frontend`
+  - result: pass
+- `cd frontend && BASE_URL=http://localhost:8080 npx playwright test e2e/tests/settings/general-settings.spec.ts --grep 'should not show close chat rating controls in chat settings'`
+  - result: pass
+- `cd frontend && BASE_URL=http://localhost:8080 npx playwright test e2e/tests/settings/instances.spec.ts --grep 'should save instance specific chat close rating settings'`
+  - result: pass
+
+### Notes
+
+- `summery.md` was updated in this session at the user's request.
+- `npm --prefix frontend run typecheck` still has unrelated pre-existing repo-wide TypeScript errors outside this close-rating work.
+
+## 2026-04-05 08:32
+
+### Completed
+
+- Investigated the duplicated "Close Chat Rating" controls in the organization Chat settings at `http://localhost:8080/settings` and the instance settings at `http://localhost:8080/settings/instances`.
+- Traced the full code path for manual close prompt creation and inbound rating capture across:
+  - `internal/handlers/chat_close_ratings.go`
+  - `pkg/whatsmeow/chat_close_ratings.go`
+  - `frontend/src/views/settings/SettingsView.vue`
+  - `frontend/src/views/settings/InstancesView.vue`
+  - `frontend/src/components/whatsmeow/InstanceCard.vue`
+  - `frontend/src/components/whatsmeow/InstanceChatCloseRatingPanel.vue`
+  - `frontend/src/lib/instance-chat-close-rating.ts`
+- Confirmed the app is running with the WhatsMeow provider from `config.toml`.
+- Verified against the live database that recent `chat_closure_ratings.close_message` rows are using the instance-level custom 1-5 template for the current instance, which proves the manual close prompt path is reading instance template overrides.
+
+### Findings
+
+- The organization settings page is the live source of truth for the inbound reply-capture flow in the current WhatsMeow runtime.
+- The manual close prompt sender reads organization settings first and then applies instance overrides, so instance-level custom templates and instance-level disable can affect prompt creation.
+- The active WhatsMeow inbound capture path only loads organization settings and ignores instance overrides:
+  - it does not read instance-level `chat_close_rating_enabled`
+  - it does not read instance-level `chat_close_rating_followup_window_minutes`
+  - it hardcodes the reply lookup window to 2 days
+- Practical result in the current app:
+  - organization-level enable and follow-up window are actually enforced for reply capture
+  - instance-level custom templates are actually used for the outgoing close-rating prompt text
+  - instance-level enable as an override is not reliable when used to enable the feature while organization-level setting is disabled
+  - instance-level follow-up window is currently not effective in the active WhatsMeow reply-capture flow
+
+### Skills Applied
+
+- `spec-miner` for tracing the existing feature across UI, handlers, provider runtime, and database evidence
+- `debugging-wizard` for verifying the real runtime path, isolating the split behavior, and confirming the live provider-specific execution path
+
+### Verification
+
+- Chrome DevTools MCP against `http://localhost:8080/settings`
+  - confirmed the org-level Chat tab exposes `Close Chat Rating`, `Follow-up Window (minutes)`, and `Rating Message Templates`
+- Chrome DevTools MCP against `http://localhost:8080/settings/instances`
+  - confirmed the instance card exposes `Chat Close Rating Settings`, an enabled switch, and the per-instance configure dialog
+- Chrome DevTools MCP `fetch()` checks from the live authenticated app
+  - `/api/org/settings` returned org-level close-rating settings with the default 1-10 template
+  - `/api/instances` returned instance-level close-rating settings with custom 1-5 templates for instance `n0n`
+- Database verification via local Postgres
+  - recent `chat_closure_ratings.close_message` rows include the instance 1-5 template text, confirming instance template overrides are used during prompt creation
+- Focused Go tests
+  - `go test ./internal/handlers -run 'TestReadChatCloseRatingSettings|TestHandleManualChatCloseRatingPrompt' -count=1`
+  - `go test ./pkg/whatsmeow -run 'TestPersistParsedMessage_DoesNotReopenClosedChatForPendingRatingReply|TestPersistParsedMessage_DoesNotReopenClosedChatForFollowupComment' -count=1`
+
+### Recommendations
+
+- Keep the organization settings page as the canonical source of truth for:
+  - enable/disable
+  - follow-up window
+  - default templates
+- Reduce the instance page to one explicit override surface only:
+  - either keep only "Override organization templates" for per-instance message text
+  - or remove the instance close-rating section entirely if per-instance customization is not required
+- If instance-level overrides must remain, fix the WhatsMeow runtime first so `pkg/whatsmeow/chat_close_ratings.go` loads merged org + instance settings instead of org-only settings. Without that fix, the duplicate UI remains misleading.
+- After that, tighten the frontend contract:
+  - do not expose instance-level enable unless the runtime fully supports instance enable overrides end-to-end
+  - do not persist instance-level follow-up window unless the runtime actually consumes it
+  - align the frontend default copy so org and instance templates do not imply different rating scales unless that is intentional
+
+### Notes
+
+- No production code was changed in this session.
+- `summery.md` was updated with this investigation record.
+
 ## 2026-04-04 19:55
 
 ### Completed

@@ -87,7 +87,7 @@ func cloneDefaultChatCloseRatingTemplates() map[string]string {
 	return out
 }
 
-func readChatCloseRatingSettings(orgSettings models.JSONB, instanceSettings models.JSONB) chatCloseRatingSettings {
+func readInstanceChatCloseRatingSettings(instanceSettings models.JSONB) chatCloseRatingSettings {
 	result := chatCloseRatingSettings{
 		Enabled:               true,
 		WindowDays:            defaultChatCloseRatingWindowDays,
@@ -95,12 +95,6 @@ func readChatCloseRatingSettings(orgSettings models.JSONB, instanceSettings mode
 		FollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
 	}
 
-	// Apply organization settings first (as defaults)
-	if orgSettings != nil {
-		applyChatCloseRatingSettingsToResult(&result, orgSettings)
-	}
-
-	// Override with instance settings (instance-level takes precedence)
 	if instanceSettings != nil {
 		applyChatCloseRatingSettingsToResult(&result, instanceSettings)
 	}
@@ -483,7 +477,7 @@ func (a *App) handleManualChatCloseRatingPrompt(orgID, closingUserID uuid.UUID, 
 		}
 	}
 
-	settings := readChatCloseRatingSettings(org.Settings, instanceSettings)
+	settings := readInstanceChatCloseRatingSettings(instanceSettings)
 	if !settings.Enabled {
 		return
 	}
@@ -668,28 +662,28 @@ func parseInboundRatingValue(raw string) (int, bool) {
 	return rating, true
 }
 
-func (a *App) loadChatCloseRatingSettings(orgID uuid.UUID, instanceID *uuid.UUID) (chatCloseRatingSettings, error) {
-	var org models.Organization
-	if err := a.DB.Select("settings").Where("id = ?", orgID).First(&org).Error; err != nil {
-		return chatCloseRatingSettings{}, err
-	}
-
+func (a *App) loadChatCloseRatingSettings(instanceID *uuid.UUID) (chatCloseRatingSettings, error) {
+	result := readInstanceChatCloseRatingSettings(nil)
 	var instanceSettings models.JSONB
 	if instanceID != nil && *instanceID != uuid.Nil {
 		var instance models.WhatsAppInstance
-		if err := a.DB.Select("settings").Where("id = ?", *instanceID).First(&instance).Error; err == nil {
-			instanceSettings = instance.Settings
+		if err := a.DB.Select("settings").Where("id = ?", *instanceID).First(&instance).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return result, nil
+			}
+			return chatCloseRatingSettings{}, err
 		}
+		instanceSettings = instance.Settings
 	}
 
-	return readChatCloseRatingSettings(org.Settings, instanceSettings), nil
+	return readInstanceChatCloseRatingSettings(instanceSettings), nil
 }
 
 func (a *App) findActiveChatCloseRatingCycle(
 	orgID uuid.UUID, contact *models.Contact,
 	now time.Time,
 ) (*models.ChatClosureRating, chatCloseRatingFollowupState, error) {
-	settings, err := a.loadChatCloseRatingSettings(orgID, contact.InstanceID)
+	settings, err := a.loadChatCloseRatingSettings(contact.InstanceID)
 	if err != nil {
 		return nil, chatCloseRatingFollowupState{}, err
 	}

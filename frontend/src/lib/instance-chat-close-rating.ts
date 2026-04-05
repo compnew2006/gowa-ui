@@ -1,37 +1,110 @@
 export interface InstanceChatCloseRatingSettings {
   enabled: boolean;
-  override_org_settings: boolean; // Virtual flag for frontend
   followup_window_minutes: number;
   templates: Record<string, string>;
 }
 
-export function normalizeInstanceChatCloseRatingSettings(
-  raw: any
-): InstanceChatCloseRatingSettings {
-  // We use the presence of `chat_close_rating_templates` or similar in instance settings
-  // as an indicator that the org settings are overridden.
-  const hasOverride = raw && typeof raw === "object" && 'chat_close_rating_templates' in raw;
+export const DEFAULT_INSTANCE_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES = 15;
+export const MIN_INSTANCE_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES = 1;
+export const MAX_INSTANCE_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES = 1440;
 
-  return {
-    enabled: typeof raw?.chat_close_rating_enabled === 'boolean' ? raw.chat_close_rating_enabled : true,
-    override_org_settings: hasOverride,
-    followup_window_minutes: typeof raw?.chat_close_rating_followup_window_minutes === 'number' ? raw.chat_close_rating_followup_window_minutes : 15,
-    templates: {
-      en: 'Please rate your experience with us out of 5:\n1: 😡 Very Poor\n2: 🙁 Poor\n3: 😐 Average\n4: 🙂 Good\n5: 😍 Excellent',
-      ar: 'يرجى تقييم تجربتك معنا من 5:\n1: 😡 سيء جداً\n2: 🙁 سيء\n3: 😐 متوسط\n4: 🙂 جيد\n5: 😍 ممتاز',
-      es: 'Por favor, califique su experiencia con nosotros de 5:\n1: 😡 Muy mala\n2: 🙁 Mala\n3: 😐 Regular\n4: 🙂 Buena\n5: 😍 Excelente',
-      ...(raw?.chat_close_rating_templates || {})
+export const DEFAULT_INSTANCE_CHAT_CLOSE_RATING_TEMPLATES: Record<
+  string,
+  string
+> = {
+  en: "Hi {customer_name}, your chat {chat_id} with {agent_name} at {organization_name} is now closed. Please reply with a number from 1 to 10 to rate your experience.",
+  ar: "مرحبًا {customer_name}، تم إغلاق المحادثة {chat_id} مع {agent_name} في {organization_name}. الرجاء الرد برقم من 1 إلى 10 لتقييم تجربتك.",
+  es: "Hola {customer_name}, tu chat {chat_id} con {agent_name} en {organization_name} se ha cerrado. Responde con un numero del 1 al 10 para calificar tu experiencia.",
+};
+
+export function normalizeInstanceChatCloseRatingFollowupWindowMinutes(
+  value: unknown,
+): number {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : Number.NaN;
+
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_INSTANCE_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES;
+  }
+
+  const rounded = Math.trunc(parsed);
+  return Math.min(
+    MAX_INSTANCE_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES,
+    Math.max(MIN_INSTANCE_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES, rounded),
+  );
+}
+
+export function normalizeInstanceChatCloseRatingTemplates(
+  value: unknown,
+): Record<string, string> {
+  const templates: Record<string, string> = {
+    ...DEFAULT_INSTANCE_CHAT_CLOSE_RATING_TEMPLATES,
+  };
+
+  if (!value || typeof value !== "object") {
+    return templates;
+  }
+
+  for (const [language, rawTemplate] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    const key = language.trim().toLowerCase();
+    if (!key || typeof rawTemplate !== "string") {
+      continue;
     }
+
+    const template = rawTemplate.trim();
+    if (!template) {
+      continue;
+    }
+
+    templates[key] = template;
+  }
+
+  return templates;
+}
+
+export function normalizeInstanceChatCloseRatingSettings(
+  raw: any,
+): InstanceChatCloseRatingSettings {
+  return {
+    enabled:
+      typeof raw?.chat_close_rating_enabled === "boolean"
+        ? raw.chat_close_rating_enabled
+        : true,
+    followup_window_minutes:
+      normalizeInstanceChatCloseRatingFollowupWindowMinutes(
+        raw?.chat_close_rating_followup_window_minutes,
+      ),
+    templates: normalizeInstanceChatCloseRatingTemplates(
+      raw?.chat_close_rating_templates,
+    ),
   };
 }
 
 export function cloneInstanceChatCloseRatingSettings(
-  current: InstanceChatCloseRatingSettings
+  current: InstanceChatCloseRatingSettings,
 ): InstanceChatCloseRatingSettings {
   return {
     enabled: current.enabled,
-    override_org_settings: current.override_org_settings,
     followup_window_minutes: current.followup_window_minutes,
     templates: { ...current.templates },
+  };
+}
+
+export function sanitizeInstanceChatCloseRatingSettings(
+  current: InstanceChatCloseRatingSettings,
+): InstanceChatCloseRatingSettings {
+  return {
+    enabled: current.enabled !== false,
+    followup_window_minutes:
+      normalizeInstanceChatCloseRatingFollowupWindowMinutes(
+        current.followup_window_minutes,
+      ),
+    templates: normalizeInstanceChatCloseRatingTemplates(current.templates),
   };
 }

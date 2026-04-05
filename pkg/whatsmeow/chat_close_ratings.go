@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	organizationSettingChatCloseRatingEnabled               = "chat_close_rating_enabled"
-	organizationSettingChatCloseRatingFollowupWindowMinutes = "chat_close_rating_followup_window_minutes"
 	defaultChatCloseRatingFollowupWindowMinutes             = 15
 	maxChatCloseRatingFollowupWindowMinutes                 = 1440
 	chatCloseRatingFollowupMessageLimit                     = 3
@@ -47,12 +45,12 @@ func readChatCloseRatingSettings(settings models.JSONB) chatCloseRatingSettings 
 		return result
 	}
 
-	if rawEnabled, ok := settings[organizationSettingChatCloseRatingEnabled]; ok {
+	if rawEnabled, ok := settings[InstanceSettingChatCloseRatingEnabled]; ok {
 		if enabled, ok := rawEnabled.(bool); ok {
 			result.Enabled = enabled
 		}
 	}
-	if rawFollowupWindow, ok := settings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
+	if rawFollowupWindow, ok := settings[InstanceSettingChatCloseRatingFollowupWindowMinutes]; ok {
 		result.FollowupWindowMinutes = parseChatCloseRatingFollowupWindowMinutes(rawFollowupWindow)
 	}
 
@@ -340,23 +338,37 @@ func parseInboundRatingValue(raw string) (int, bool) {
 	return rating, true
 }
 
-func (cm *ConnectionManager) loadChatCloseRatingSettings(ctx context.Context, orgID uuid.UUID) (chatCloseRatingSettings, error) {
-	var org models.Organization
+func (cm *ConnectionManager) loadChatCloseRatingSettings(ctx context.Context, instanceID *uuid.UUID) (chatCloseRatingSettings, error) {
+	result := chatCloseRatingSettings{
+		Enabled:               true,
+		FollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
+	}
+	if instanceID == nil || *instanceID == uuid.Nil {
+		return result, nil
+	}
+
+	var instance models.WhatsAppInstance
 	if err := cm.db.WithContext(ctx).
 		Select("settings").
-		Where("id = ?", orgID).
-		First(&org).Error; err != nil {
+		Where("id = ?", *instanceID).
+		First(&instance).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return result, nil
+		}
 		return chatCloseRatingSettings{}, err
 	}
-	return readChatCloseRatingSettings(org.Settings), nil
+
+	return readChatCloseRatingSettings(instance.Settings), nil
 }
 
 func (cm *ConnectionManager) findActiveChatCloseRatingCycle(
 	ctx context.Context,
-	orgID, contactID uuid.UUID,
+	orgID uuid.UUID,
+	instanceID *uuid.UUID,
+	contactID uuid.UUID,
 	now time.Time,
 ) (*models.ChatClosureRating, chatCloseRatingFollowupState, error) {
-	settings, err := cm.loadChatCloseRatingSettings(ctx, orgID)
+	settings, err := cm.loadChatCloseRatingSettings(ctx, instanceID)
 	if err != nil {
 		return nil, chatCloseRatingFollowupState{}, err
 	}
@@ -418,7 +430,7 @@ func (cm *ConnectionManager) shouldSkipClosedChatAutoReopenForIncomingMessage(
 	}
 	_ = content
 
-	cycle, _, err := cm.findActiveChatCloseRatingCycle(ctx, orgID, contact.ID, time.Now().UTC())
+	cycle, _, err := cm.findActiveChatCloseRatingCycle(ctx, orgID, contact.InstanceID, contact.ID, time.Now().UTC())
 	if err != nil {
 		cm.logger.Error("Failed to resolve pending close rating cycle before auto-reopen", "error", err, "organization_id", orgID, "contact_id", contact.ID)
 		return false
@@ -440,7 +452,7 @@ func (cm *ConnectionManager) maybeCaptureChatCloseRating(
 	}
 
 	now := time.Now().UTC()
-	cycle, followup, err := cm.findActiveChatCloseRatingCycle(ctx, orgID, contact.ID, now)
+	cycle, followup, err := cm.findActiveChatCloseRatingCycle(ctx, orgID, contact.InstanceID, contact.ID, now)
 	if err != nil {
 		cm.logger.Error("Failed to resolve close rating cycle", "error", err, "organization_id", orgID, "contact_id", contact.ID)
 		return false

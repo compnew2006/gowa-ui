@@ -235,10 +235,7 @@
       "configureButton": "Configurar mensaje de valoración",
       "title": "Configuración de valoración al cerrar chat",
       "description": "Configura los mensajes de valoración al cerrar el chat para esta instancia específica.",
-      "overrideOrg": "Anular la configuración de la organización",
-      "overrideOrgDesc": "Cuando se activa, esta instancia utilizará estas plantillas de valoración personalizadas en lugar del valor predeterminado de la organización.",
-      "usingOrgDefault": "Usando los valores predeterminados",
-      "usingCustomTemplates": "Usando plantillas personalizadas"
+      "summary": "Ventana de respuesta: {minutes} min"
     }
   },
   "marketingRedirect": {

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -17,22 +16,18 @@ import (
 
 // OrganizationSettings represents the settings structure
 type OrganizationSettings struct {
-	MaskPhoneNumbers                     bool              `json:"mask_phone_numbers"`
-	StrictSendingRestrictions            bool              `json:"strict_sending_restrictions_enabled"`
-	OutboundMode                         string            `json:"outbound_mode"`
-	StrictSendingApplyToSystem           bool              `json:"strict_sending_apply_to_system"`
-	CampaignDraftOnly                    bool              `json:"campaign_draft_only"`
-	StrictRolloutMode                    string            `json:"strict_rollout_mode"`
-	StrictRolloutEnforceAt               *time.Time        `json:"strict_rollout_enforce_at,omitempty"`
-	Timezone                             string            `json:"timezone"`
-	DateFormat                           string            `json:"date_format"`
-	AssignedChatResetEnabled             bool              `json:"assigned_chat_reset_enabled"`
-	AssignedChatResetMode                string            `json:"assigned_chat_reset_mode"`
-	AssignedChatResetHour                int               `json:"assigned_chat_reset_hour"`
-	ChatCloseRatingEnabled               bool              `json:"chat_close_rating_enabled"`
-	ChatCloseRatingWindowDays            int               `json:"chat_close_rating_window_days"`
-	ChatCloseRatingFollowupWindowMinutes int               `json:"chat_close_rating_followup_window_minutes"`
-	ChatCloseRatingTemplates             map[string]string `json:"chat_close_rating_templates"`
+	MaskPhoneNumbers           bool       `json:"mask_phone_numbers"`
+	StrictSendingRestrictions  bool       `json:"strict_sending_restrictions_enabled"`
+	OutboundMode               string     `json:"outbound_mode"`
+	StrictSendingApplyToSystem bool       `json:"strict_sending_apply_to_system"`
+	CampaignDraftOnly          bool       `json:"campaign_draft_only"`
+	StrictRolloutMode          string     `json:"strict_rollout_mode"`
+	StrictRolloutEnforceAt     *time.Time `json:"strict_rollout_enforce_at,omitempty"`
+	Timezone                   string     `json:"timezone"`
+	DateFormat                 string     `json:"date_format"`
+	AssignedChatResetEnabled   bool       `json:"assigned_chat_reset_enabled"`
+	AssignedChatResetMode      string     `json:"assigned_chat_reset_mode"`
+	AssignedChatResetHour      int        `json:"assigned_chat_reset_hour"`
 }
 
 // GetOrganizationSettings returns the organization settings
@@ -53,21 +48,17 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 
 	// Parse settings from JSONB
 	settings := OrganizationSettings{
-		MaskPhoneNumbers:                     false,
-		StrictSendingRestrictions:            false,
-		OutboundMode:                         organizationOutboundModeMixed,
-		StrictSendingApplyToSystem:           true,
-		CampaignDraftOnly:                    false,
-		StrictRolloutMode:                    organizationStrictRolloutModeEnforce,
-		Timezone:                             "UTC",
-		DateFormat:                           "YYYY-MM-DD",
-		AssignedChatResetEnabled:             true,
-		AssignedChatResetMode:                string(ChatAssignmentResetModeMidnight),
-		AssignedChatResetHour:                0,
-		ChatCloseRatingEnabled:               true,
-		ChatCloseRatingWindowDays:            defaultChatCloseRatingWindowDays,
-		ChatCloseRatingFollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
-		ChatCloseRatingTemplates:             cloneDefaultChatCloseRatingTemplates(),
+		MaskPhoneNumbers:           false,
+		StrictSendingRestrictions:  false,
+		OutboundMode:               organizationOutboundModeMixed,
+		StrictSendingApplyToSystem: true,
+		CampaignDraftOnly:          false,
+		StrictRolloutMode:          organizationStrictRolloutModeEnforce,
+		Timezone:                   "UTC",
+		DateFormat:                 "YYYY-MM-DD",
+		AssignedChatResetEnabled:   true,
+		AssignedChatResetMode:      string(ChatAssignmentResetModeMidnight),
+		AssignedChatResetHour:      0,
 	}
 
 	if org.Settings != nil {
@@ -93,12 +84,6 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		settings.AssignedChatResetEnabled = chatResetSettings.Enabled
 		settings.AssignedChatResetMode = string(chatResetSettings.Mode)
 		settings.AssignedChatResetHour = chatResetSettings.Hour
-
-		chatCloseRatingSettings := readChatCloseRatingSettings(org.Settings, nil)
-		settings.ChatCloseRatingEnabled = chatCloseRatingSettings.Enabled
-		settings.ChatCloseRatingWindowDays = chatCloseRatingSettings.WindowDays
-		settings.ChatCloseRatingFollowupWindowMinutes = chatCloseRatingSettings.FollowupWindowMinutes
-		settings.ChatCloseRatingTemplates = chatCloseRatingSettings.Templates
 	}
 
 	return r.SendEnvelope(map[string]interface{}{
@@ -119,22 +104,19 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	}
 
 	var req struct {
-		MaskPhoneNumbers                     *bool              `json:"mask_phone_numbers"`
-		StrictSendingRestrictions            *bool              `json:"strict_sending_restrictions_enabled"`
-		OutboundMode                         *string            `json:"outbound_mode"`
-		StrictSendingApplyToSystem           *bool              `json:"strict_sending_apply_to_system"`
-		CampaignDraftOnly                    *bool              `json:"campaign_draft_only"`
-		StrictRolloutMode                    *string            `json:"strict_rollout_mode"`
-		StrictRolloutEnforceAt               *string            `json:"strict_rollout_enforce_at"`
-		Timezone                             *string            `json:"timezone"`
-		DateFormat                           *string            `json:"date_format"`
-		Name                                 *string            `json:"name"`
-		AssignedChatResetEnabled             *bool              `json:"assigned_chat_reset_enabled"`
-		AssignedChatResetMode                *string            `json:"assigned_chat_reset_mode"`
-		AssignedChatResetHour                *int               `json:"assigned_chat_reset_hour"`
-		ChatCloseRatingEnabled               *bool              `json:"chat_close_rating_enabled"`
-		ChatCloseRatingFollowupWindowMinutes *int               `json:"chat_close_rating_followup_window_minutes"`
-		ChatCloseRatingTemplates             *map[string]string `json:"chat_close_rating_templates"`
+		MaskPhoneNumbers           *bool   `json:"mask_phone_numbers"`
+		StrictSendingRestrictions  *bool   `json:"strict_sending_restrictions_enabled"`
+		OutboundMode               *string `json:"outbound_mode"`
+		StrictSendingApplyToSystem *bool   `json:"strict_sending_apply_to_system"`
+		CampaignDraftOnly          *bool   `json:"campaign_draft_only"`
+		StrictRolloutMode          *string `json:"strict_rollout_mode"`
+		StrictRolloutEnforceAt     *string `json:"strict_rollout_enforce_at"`
+		Timezone                   *string `json:"timezone"`
+		DateFormat                 *string `json:"date_format"`
+		Name                       *string `json:"name"`
+		AssignedChatResetEnabled   *bool   `json:"assigned_chat_reset_enabled"`
+		AssignedChatResetMode      *string `json:"assigned_chat_reset_mode"`
+		AssignedChatResetHour      *int    `json:"assigned_chat_reset_hour"`
 	}
 
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
@@ -143,16 +125,6 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 
 	if err := validateChatAssignmentResetInputs(req.AssignedChatResetMode, req.AssignedChatResetHour); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
-	}
-	if req.ChatCloseRatingFollowupWindowMinutes != nil {
-		if *req.ChatCloseRatingFollowupWindowMinutes < 1 || *req.ChatCloseRatingFollowupWindowMinutes > maxChatCloseRatingFollowupWindowMinutes {
-			return r.SendErrorEnvelope(
-				fasthttp.StatusBadRequest,
-				fmt.Sprintf("chat_close_rating_followup_window_minutes must be between 1 and %d", maxChatCloseRatingFollowupWindowMinutes),
-				nil,
-				"",
-			)
-		}
 	}
 	if req.OutboundMode != nil {
 		rawMode := strings.ToLower(strings.TrimSpace(*req.OutboundMode))
@@ -221,21 +193,10 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	if req.AssignedChatResetEnabled != nil {
 		org.Settings[organizationSettingAssignedChatResetEnabled] = *req.AssignedChatResetEnabled
 	}
-	if req.ChatCloseRatingEnabled != nil {
-		org.Settings[organizationSettingChatCloseRatingEnabled] = *req.ChatCloseRatingEnabled
-	}
-
-	if req.ChatCloseRatingFollowupWindowMinutes != nil {
-		org.Settings[organizationSettingChatCloseRatingFollowupWindowMinutes] = *req.ChatCloseRatingFollowupWindowMinutes
-	}
-	if req.ChatCloseRatingTemplates != nil {
-		parsedTemplates := parseChatCloseRatingTemplates(*req.ChatCloseRatingTemplates)
-		templateJSON := models.JSONB{}
-		for language, template := range parsedTemplates {
-			templateJSON[language] = template
-		}
-		org.Settings[organizationSettingChatCloseRatingTemplates] = templateJSON
-	}
+	delete(org.Settings, organizationSettingChatCloseRatingEnabled)
+	delete(org.Settings, organizationSettingChatCloseRatingWindowDays)
+	delete(org.Settings, organizationSettingChatCloseRatingFollowupWindowMinutes)
+	delete(org.Settings, organizationSettingChatCloseRatingTemplates)
 
 	modeProvided := false
 	var selectedResetMode ChatAssignmentResetMode

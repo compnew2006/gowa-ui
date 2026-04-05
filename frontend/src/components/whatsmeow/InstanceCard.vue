@@ -162,8 +162,9 @@ const chatCloseRatingSettings = computed(() =>
 const chatCloseRatingSummary = computed(() => {
   const s = chatCloseRatingSettings.value;
   if (!s.enabled) return t("common.off");
-  if (!s.override_org_settings) return t("instances.chat_close_rating.usingOrgDefault");
-  return t("instances.chat_close_rating.usingCustomTemplates");
+  return t("instances.chat_close_rating.summary", {
+    minutes: s.followup_window_minutes,
+  });
 });
 
 const sendBlockedNotice = computed(() => {

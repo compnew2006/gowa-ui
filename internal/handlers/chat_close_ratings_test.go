@@ -40,6 +40,41 @@ func TestHandleManualChatCloseRatingPrompt_CreatesPendingCycleAndPromptMessage(t
 	assert.Equal(t, cycle.CloseMessage, promptMessage.Content)
 }
 
+func TestHandleManualChatCloseRatingPrompt_UsesInstanceSpecificSettings(t *testing.T) {
+	app := newProcessorTestApp(t)
+	org, account := createProcessorTestOrg(t, app)
+	closingAgent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithFullName("Closer"))
+	instance := &models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Instance A",
+		PhoneNumber:    "15551234567",
+		Settings: models.JSONB{
+			"chat_close_rating_followup_window_minutes": 45,
+			"chat_close_rating_templates": models.JSONB{
+				"en": "Instance prompt for {customer_name} via {organization_name}",
+			},
+		},
+	}
+	require.NoError(t, app.DB.Create(instance).Error)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	contact.AssignedUserID = &closingAgent.ID
+	contact.InstanceID = &instance.ID
+	require.NoError(t, app.DB.Save(contact).Error)
+
+	app.handleManualChatCloseRatingPrompt(org.ID, closingAgent.ID, contact)
+
+	var cycle models.ChatClosureRating
+	require.NoError(t, app.DB.Where("organization_id = ? AND contact_id = ?", org.ID, contact.ID).First(&cycle).Error)
+
+	assert.Contains(t, cycle.CloseMessage, "Instance prompt for")
+	assert.Contains(t, cycle.CloseMessage, org.Name)
+	settings, err := app.loadChatCloseRatingSettings(contact.InstanceID)
+	require.NoError(t, err)
+	assert.Equal(t, 45, settings.FollowupWindowMinutes)
+}
+
 func TestMaybeCaptureChatCloseRating_CapturesFollowupMessagesWithinLimit(t *testing.T) {
 	app := newProcessorTestApp(t)
 	org, account := createProcessorTestOrg(t, app)
@@ -349,15 +384,7 @@ func TestDecodeRatingContextMessages_ParsesJSONBPayload(t *testing.T) {
 	assert.Equal(t, []string{"text 1", "text 2"}, asStringSlice(followup[chatCloseRatingFollowupCommentsKey]))
 }
 
-func TestReadChatCloseRatingSettings(t *testing.T) {
-	orgSettings := models.JSONB{
-		"chat_close_rating_enabled":                 true,
-		"chat_close_rating_followup_window_minutes": 20,
-		"chat_close_rating_templates": map[string]interface{}{
-			"en": "Org English",
-		},
-	}
-
+func TestReadInstanceChatCloseRatingSettings(t *testing.T) {
 	instanceSettings := models.JSONB{
 		"chat_close_rating_enabled":                 false,
 		"chat_close_rating_followup_window_minutes": 10,
@@ -367,19 +394,12 @@ func TestReadChatCloseRatingSettings(t *testing.T) {
 		},
 	}
 
-	// Test org settings only
-	settingsOrgOnly := readChatCloseRatingSettings(orgSettings, nil)
-	assert.True(t, settingsOrgOnly.Enabled)
-	assert.Equal(t, 20, settingsOrgOnly.FollowupWindowMinutes)
-	assert.Equal(t, "Org English", settingsOrgOnly.Templates["en"])
-	assert.Equal(t, defaultChatCloseRatingTemplates["es"], settingsOrgOnly.Templates["es"])
-
-	// Test override with instance settings
-	settingsOverride := readChatCloseRatingSettings(orgSettings, instanceSettings)
-	assert.False(t, settingsOverride.Enabled)
-	assert.Equal(t, 10, settingsOverride.FollowupWindowMinutes)
-	assert.Equal(t, "Instance English", settingsOverride.Templates["en"])
-	assert.Equal(t, "Instance Spanish", settingsOverride.Templates["es"])
+	settings := readInstanceChatCloseRatingSettings(instanceSettings)
+	assert.False(t, settings.Enabled)
+	assert.Equal(t, 10, settings.FollowupWindowMinutes)
+	assert.Equal(t, "Instance English", settings.Templates["en"])
+	assert.Equal(t, "Instance Spanish", settings.Templates["es"])
+	assert.Equal(t, defaultChatCloseRatingTemplates["ar"], settings.Templates["ar"])
 }
 
 func TestApplyChatCloseRatingSettingsToResult_AppliesAllSettings(t *testing.T) {
@@ -484,8 +504,8 @@ func TestApplyChatCloseRatingSettingsToResult_AppliesDefaultsForInvalidValues(t 
 	// Settings with invalid types and values
 	settings := models.JSONB{
 		"chat_close_rating_enabled":                 "not a bool", // wrong type
-		"chat_close_rating_window_days":             -1,          // invalid value (negative)
-		"chat_close_rating_followup_window_minutes": "invalid",   // wrong type
+		"chat_close_rating_window_days":             -1,           // invalid value (negative)
+		"chat_close_rating_followup_window_minutes": "invalid",    // wrong type
 		"chat_close_rating_templates":               "not a map",  // wrong type
 	}
 

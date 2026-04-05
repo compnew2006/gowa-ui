@@ -13,6 +13,12 @@ import (
 const (
 	// InstanceSettingAutoSyncHistory toggles WhatsApp history ingestion on connect.
 	InstanceSettingAutoSyncHistory = "auto_sync_history"
+	// InstanceSettingChatCloseRatingEnabled toggles the close rating flow for one instance.
+	InstanceSettingChatCloseRatingEnabled = "chat_close_rating_enabled"
+	// InstanceSettingChatCloseRatingFollowupWindowMinutes controls the reply capture window per instance.
+	InstanceSettingChatCloseRatingFollowupWindowMinutes = "chat_close_rating_followup_window_minutes"
+	// InstanceSettingChatCloseRatingTemplates stores per-language close rating prompt templates for one instance.
+	InstanceSettingChatCloseRatingTemplates = "chat_close_rating_templates"
 )
 
 // EnsureInstanceSettingsDefaults injects default settings for unset keys.
@@ -28,6 +34,7 @@ func EnsureInstanceSettingsDefaults(settings models.JSONB) models.JSONB {
 	normalized[InstanceSettingAutoCampaign] = NormalizeAutoCampaignSettings(
 		normalized[InstanceSettingAutoCampaign],
 	).ToJSONB()
+	normalized = injectChatCloseRatingDefaults(normalized)
 	return normalized
 }
 
@@ -46,6 +53,17 @@ func cloneSettings(settings models.JSONB) models.JSONB {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func injectChatCloseRatingDefaults(settings models.JSONB) models.JSONB {
+	normalized := cloneSettings(settings)
+	if _, ok := normalized[InstanceSettingChatCloseRatingEnabled]; !ok {
+		normalized[InstanceSettingChatCloseRatingEnabled] = true
+	}
+	if _, ok := normalized[InstanceSettingChatCloseRatingFollowupWindowMinutes]; !ok {
+		normalized[InstanceSettingChatCloseRatingFollowupWindowMinutes] = defaultChatCloseRatingFollowupWindowMinutes
+	}
+	return normalized
 }
 
 func boolSetting(settings models.JSONB, key string, fallback bool) bool {
@@ -106,6 +124,69 @@ func (cm *ConnectionManager) loadAutoRejectCallSettings(ctx context.Context, ins
 	return AutoRejectCallSettingsFromSettings(instance.Settings), nil
 }
 
+func validateInstanceChatCloseRatingEnabledSetting(raw any) error {
+	switch raw.(type) {
+	case bool, string, int, int64, float64:
+		return nil
+	default:
+		return fmt.Errorf("must be a boolean-like value")
+	}
+}
+
+func parseIntLikeSetting(raw any) (int, bool) {
+	switch value := raw.(type) {
+	case int:
+		return value, true
+	case int32:
+		return int(value), true
+	case int64:
+		return int(value), true
+	case float64:
+		return int(value), true
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err == nil {
+			return parsed, true
+		}
+	}
+
+	return 0, false
+}
+
+func validateInstanceChatCloseRatingFollowupWindowSetting(raw any) error {
+	parsed, ok := parseIntLikeSetting(raw)
+	if !ok {
+		return fmt.Errorf("must be an integer between 1 and %d", maxChatCloseRatingFollowupWindowMinutes)
+	}
+	if parsed < 1 || parsed > maxChatCloseRatingFollowupWindowMinutes {
+		return fmt.Errorf("must be between 1 and %d", maxChatCloseRatingFollowupWindowMinutes)
+	}
+	return nil
+}
+
+func validateInstanceChatCloseRatingTemplatesSetting(raw any) error {
+	switch typed := raw.(type) {
+	case map[string]string:
+		return nil
+	case map[string]any:
+		for _, value := range typed {
+			if _, ok := value.(string); !ok {
+				return fmt.Errorf("must contain only string template values")
+			}
+		}
+		return nil
+	case models.JSONB:
+		for _, value := range typed {
+			if _, ok := value.(string); !ok {
+				return fmt.Errorf("must contain only string template values")
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("must be an object keyed by language")
+	}
+}
+
 // ValidateInstanceSettings validates known instance setting domains.
 func ValidateInstanceSettings(settings models.JSONB) error {
 	if settings == nil {
@@ -120,6 +201,21 @@ func ValidateInstanceSettings(settings models.JSONB) error {
 	}
 	if err := ValidateAutoDownloadIncomingMediaSetting(settings[InstanceSettingAutoDownloadIncomingMedia]); err != nil {
 		return fmt.Errorf("invalid %s: %w", InstanceSettingAutoDownloadIncomingMedia, err)
+	}
+	if raw, ok := settings[InstanceSettingChatCloseRatingEnabled]; ok {
+		if err := validateInstanceChatCloseRatingEnabledSetting(raw); err != nil {
+			return fmt.Errorf("invalid %s: %w", InstanceSettingChatCloseRatingEnabled, err)
+		}
+	}
+	if raw, ok := settings[InstanceSettingChatCloseRatingFollowupWindowMinutes]; ok {
+		if err := validateInstanceChatCloseRatingFollowupWindowSetting(raw); err != nil {
+			return fmt.Errorf("invalid %s: %w", InstanceSettingChatCloseRatingFollowupWindowMinutes, err)
+		}
+	}
+	if raw, ok := settings[InstanceSettingChatCloseRatingTemplates]; ok {
+		if err := validateInstanceChatCloseRatingTemplatesSetting(raw); err != nil {
+			return fmt.Errorf("invalid %s: %w", InstanceSettingChatCloseRatingTemplates, err)
+		}
 	}
 
 	return nil

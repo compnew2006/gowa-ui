@@ -28,14 +28,13 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 
 	// Set organization settings
 	org.Settings = models.JSONB{
-		"mask_phone_numbers":                        true,
-		"strict_sending_restrictions_enabled":       true,
-		"timezone":                                  "Asia/Kolkata",
-		"date_format":                               "DD/MM/YYYY",
-		"assigned_chat_reset_enabled":               true,
-		"assigned_chat_reset_mode":                  "custom_hour",
-		"assigned_chat_reset_hour":                  9,
-		"chat_close_rating_followup_window_minutes": 45,
+		"mask_phone_numbers":                  true,
+		"strict_sending_restrictions_enabled": true,
+		"timezone":                            "Asia/Kolkata",
+		"date_format":                         "DD/MM/YYYY",
+		"assigned_chat_reset_enabled":         true,
+		"assigned_chat_reset_mode":            "custom_hour",
+		"assigned_chat_reset_hour":            9,
 	}
 	require.NoError(t, app.DB.Save(org).Error)
 
@@ -62,7 +61,6 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 	assert.Equal(t, true, resp.Data.Settings.AssignedChatResetEnabled)
 	assert.Equal(t, "custom_hour", resp.Data.Settings.AssignedChatResetMode)
 	assert.Equal(t, 9, resp.Data.Settings.AssignedChatResetHour)
-	assert.Equal(t, 45, resp.Data.Settings.ChatCloseRatingFollowupWindowMinutes)
 	assert.Equal(t, org.Name, resp.Data.Name)
 }
 
@@ -101,7 +99,6 @@ func TestApp_GetOrganizationSettings_Defaults(t *testing.T) {
 	assert.Equal(t, true, resp.Data.Settings.AssignedChatResetEnabled)
 	assert.Equal(t, "midnight", resp.Data.Settings.AssignedChatResetMode)
 	assert.Equal(t, 0, resp.Data.Settings.AssignedChatResetHour)
-	assert.Equal(t, 15, resp.Data.Settings.ChatCloseRatingFollowupWindowMinutes)
 }
 
 func TestApp_GetOrganizationSettings_Unauthorized(t *testing.T) {
@@ -136,15 +133,14 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	newName := "Updated Organization"
 
 	req := testutil.NewJSONRequest(t, map[string]any{
-		"mask_phone_numbers":                        maskEnabled,
-		"strict_sending_restrictions_enabled":       true,
-		"timezone":                                  timezone,
-		"date_format":                               dateFormat,
-		"name":                                      newName,
-		"assigned_chat_reset_enabled":               false,
-		"assigned_chat_reset_mode":                  "custom_hour",
-		"assigned_chat_reset_hour":                  22,
-		"chat_close_rating_followup_window_minutes": 20,
+		"mask_phone_numbers":                  maskEnabled,
+		"strict_sending_restrictions_enabled": true,
+		"timezone":                            timezone,
+		"date_format":                         dateFormat,
+		"name":                                newName,
+		"assigned_chat_reset_enabled":         false,
+		"assigned_chat_reset_mode":            "custom_hour",
+		"assigned_chat_reset_hour":            22,
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 
@@ -173,7 +169,6 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	assert.Equal(t, false, updatedOrg.Settings["assigned_chat_reset_enabled"])
 	assert.Equal(t, "custom_hour", updatedOrg.Settings["assigned_chat_reset_mode"])
 	assert.Equal(t, 22, updatedOrg.Settings["assigned_chat_reset_hour"])
-	assert.Equal(t, 20, updatedOrg.Settings["chat_close_rating_followup_window_minutes"])
 }
 
 func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
@@ -264,7 +259,7 @@ func TestApp_UpdateOrganizationSettings_InvalidAssignedChatResetHour(t *testing.
 	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
 }
 
-func TestApp_UpdateOrganizationSettings_InvalidChatCloseRatingFollowupWindowMinutes(t *testing.T) {
+func TestApp_UpdateOrganizationSettings_RemovesLegacyChatCloseRatingSettings(t *testing.T) {
 	t.Parallel()
 
 	app := newTestApp(t)
@@ -275,14 +270,36 @@ func TestApp_UpdateOrganizationSettings_InvalidChatCloseRatingFollowupWindowMinu
 		testutil.WithRoleID(&adminRole.ID),
 	)
 
+	org.Settings = models.JSONB{
+		"chat_close_rating_enabled":                 true,
+		"chat_close_rating_window_days":             2,
+		"chat_close_rating_followup_window_minutes": 25,
+		"chat_close_rating_templates": models.JSONB{
+			"en": "Legacy template",
+		},
+	}
+	require.NoError(t, app.DB.Save(org).Error)
+
 	req := testutil.NewJSONRequest(t, map[string]any{
-		"chat_close_rating_followup_window_minutes": 0,
+		"timezone": "Europe/Cairo",
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 
 	err := app.UpdateOrganizationSettings(req)
 	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var updatedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&updatedOrg).Error)
+	assert.Equal(t, "Europe/Cairo", updatedOrg.Settings["timezone"])
+	_, hasEnabled := updatedOrg.Settings["chat_close_rating_enabled"]
+	_, hasWindowDays := updatedOrg.Settings["chat_close_rating_window_days"]
+	_, hasFollowupWindow := updatedOrg.Settings["chat_close_rating_followup_window_minutes"]
+	_, hasTemplates := updatedOrg.Settings["chat_close_rating_templates"]
+	assert.False(t, hasEnabled)
+	assert.False(t, hasWindowDays)
+	assert.False(t, hasFollowupWindow)
+	assert.False(t, hasTemplates)
 }
 
 func TestApp_UpdateOrganizationSettings_MidnightModeForcesZeroHour(t *testing.T) {

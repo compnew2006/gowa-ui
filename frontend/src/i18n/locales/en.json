@@ -2573,10 +2573,7 @@
       "configureButton": "Configure rating message",
       "title": "Chat Close Rating Settings",
       "description": "Configure the chat close rating messages for this specific instance.",
-      "overrideOrg": "Override Organization Settings",
-      "overrideOrgDesc": "When enabled, this instance will use these custom rating templates instead of the organization default.",
-      "usingOrgDefault": "Using organization defaults",
-      "usingCustomTemplates": "Using custom templates"
+      "summary": "Reply window: {minutes} min"
     },
     "auto_reject": {
       "configureButton": "Configure call auto-reject",

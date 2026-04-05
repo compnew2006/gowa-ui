@@ -34,7 +34,10 @@ import {
   type AutoCampaignSettings,
   normalizeAutoCampaignSettings,
 } from "@/lib/instance-auto-campaign";
-import { type InstanceChatCloseRatingSettings } from "@/lib/instance-chat-close-rating";
+import {
+  sanitizeInstanceChatCloseRatingSettings,
+  type InstanceChatCloseRatingSettings,
+} from "@/lib/instance-chat-close-rating";
 
 const instancesStore = useInstancesStore();
 const { t } = useI18n();
@@ -752,32 +755,21 @@ async function handleUpdateChatCloseRatingSettings(
 
   chatCloseRatingSaving.value[id] = true;
   try {
-    let settingsPayload: Record<string, any>;
-    if (payload.override_org_settings) {
-      settingsPayload = {
-        ...(instance.settings || {}),
-        chat_close_rating_enabled: payload.enabled,
-        chat_close_rating_followup_window_minutes:
-          payload.followup_window_minutes,
-      };
+    const normalized = sanitizeInstanceChatCloseRatingSettings(payload);
+    const settingsPayload: Record<string, any> = {
+      ...(instance.settings || {}),
+      chat_close_rating_enabled: normalized.enabled,
+      chat_close_rating_followup_window_minutes:
+        normalized.followup_window_minutes,
+    };
 
-      // Filter out empty templates
-      const templates: Record<string, string> = {};
-      for (const [lang, template] of Object.entries(payload.templates || {})) {
-        if (template && template.trim() !== "") {
-          templates[lang] = template.trim();
-        }
+    const templates: Record<string, string> = {};
+    for (const [lang, template] of Object.entries(normalized.templates || {})) {
+      if (template && template.trim() !== "") {
+        templates[lang] = template.trim();
       }
-      settingsPayload.chat_close_rating_templates = templates;
-    } else {
-      // Clear instance overrides to fallback to org settings
-      settingsPayload = {
-        ...(instance.settings || {}),
-      };
-      delete settingsPayload.chat_close_rating_enabled;
-      delete settingsPayload.chat_close_rating_followup_window_minutes;
-      delete settingsPayload.chat_close_rating_templates;
     }
+    settingsPayload.chat_close_rating_templates = templates;
 
     await instancesStore.updateInstance(id, { settings: settingsPayload });
   } finally {

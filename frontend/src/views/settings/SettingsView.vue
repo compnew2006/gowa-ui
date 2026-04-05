@@ -5,7 +5,6 @@ import { RouterLink } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -63,15 +62,6 @@ const configStore = useConfigStore();
 type NotificationSoundKey = "notification1" | "notification2" | "notification";
 const DEFAULT_NOTIFICATION_SOUND: NotificationSoundKey = "notification1";
 type AssignedChatResetMode = "midnight" | "custom_hour";
-
-const DEFAULT_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES = 15;
-const CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MIN_MINUTES = 1;
-const CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MAX_MINUTES = 1440;
-const DEFAULT_CHAT_CLOSE_RATING_TEMPLATES: Record<string, string> = {
-  en: "Hi {customer_name}, your chat {chat_id} with {agent_name} at {organization_name} is now closed. Please reply with a number from 1 to 10 to rate your experience.",
-  ar: "مرحبًا {customer_name}، تم إغلاق المحادثة {chat_id} مع {agent_name} في {organization_name}. الرجاء الرد برقم من 1 إلى 10 لتقييم تجربتك.",
-  es: "Hola {customer_name}, tu chat {chat_id} con {agent_name} en {organization_name} se ha cerrado. Responde con un numero del 1 al 10 para calificar tu experiencia.",
-};
 
 const isSubmitting = ref(false);
 const isLoading = ref(true);
@@ -176,47 +166,6 @@ function normalizeAssignedChatResetHour(value: unknown): number {
   return Math.min(23, Math.max(0, rounded));
 }
 
-function normalizeChatCloseRatingFollowupWindowMinutes(value: unknown): number {
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value)
-        : Number.NaN;
-  if (!Number.isFinite(parsed))
-    return DEFAULT_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES;
-  const rounded = Math.trunc(parsed);
-  return Math.min(
-    CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MAX_MINUTES,
-    Math.max(CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MIN_MINUTES, rounded),
-  );
-}
-
-function normalizeChatCloseRatingTemplates(
-  value: unknown,
-): Record<string, string> {
-  const normalized: Record<string, string> = {
-    ...DEFAULT_CHAT_CLOSE_RATING_TEMPLATES,
-  };
-
-  if (!value || typeof value !== "object") {
-    return normalized;
-  }
-
-  for (const [language, rawTemplate] of Object.entries(
-    value as Record<string, unknown>,
-  )) {
-    const key = language.trim().toLowerCase();
-    if (!key) continue;
-    if (typeof rawTemplate !== "string") continue;
-    const template = rawTemplate.trim();
-    if (!template) continue;
-    normalized[key] = template;
-  }
-
-  return normalized;
-}
-
 // Chat Preferences (localStorage-only)
 const MEDIA_GROUP_WINDOW_KEY = "chat.mediaGroupWindowSeconds";
 const chatSettings = ref({
@@ -227,13 +176,7 @@ const chatSettings = ref({
   assigned_chat_reset_enabled: true,
   assigned_chat_reset_mode: "midnight" as AssignedChatResetMode,
   assigned_chat_reset_hour: 0,
-  chat_close_rating_enabled: true,
-
-  chat_close_rating_followup_window_minutes:
-    DEFAULT_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES,
-  chat_close_rating_templates: { ...DEFAULT_CHAT_CLOSE_RATING_TEMPLATES },
 });
-const showChatCloseRatingTemplates = ref(false);
 const savedChatBackground = ref<ChatBackgroundSettings | null>(null);
 const chatBackgroundEditorMode = ref<ChatBackgroundEditorMode>("default");
 const selectedChatBackgroundPresetID = ref<string | null>(null);
@@ -464,17 +407,6 @@ onMounted(async () => {
       chatSettings.value.assigned_chat_reset_mode = resetMode;
       chatSettings.value.assigned_chat_reset_hour =
         resetMode === "midnight" ? 0 : resetHour;
-      chatSettings.value.chat_close_rating_enabled =
-        orgData.settings?.chat_close_rating_enabled !== false;
-
-      chatSettings.value.chat_close_rating_followup_window_minutes =
-        normalizeChatCloseRatingFollowupWindowMinutes(
-          orgData.settings?.chat_close_rating_followup_window_minutes,
-        );
-      chatSettings.value.chat_close_rating_templates =
-        normalizeChatCloseRatingTemplates(
-          orgData.settings?.chat_close_rating_templates,
-        );
     }
 
     // User notification settings
@@ -564,23 +496,10 @@ async function saveChatSettings() {
           chatSettings.value.assigned_chat_reset_hour,
         );
 
-  const normalizedChatCloseRatingFollowupWindowMinutes =
-    normalizeChatCloseRatingFollowupWindowMinutes(
-      chatSettings.value.chat_close_rating_followup_window_minutes,
-    );
-  const normalizedChatCloseRatingTemplates = normalizeChatCloseRatingTemplates(
-    chatSettings.value.chat_close_rating_templates,
-  );
-
   chatSettings.value.media_group_window = clamped;
   chatSettings.value.sidebar_view_mode = sidebarViewMode;
   chatSettings.value.assigned_chat_reset_mode = normalizedMode;
   chatSettings.value.assigned_chat_reset_hour = normalizedHour;
-
-  chatSettings.value.chat_close_rating_followup_window_minutes =
-    normalizedChatCloseRatingFollowupWindowMinutes;
-  chatSettings.value.chat_close_rating_templates =
-    normalizedChatCloseRatingTemplates;
 
   const nextChatBackground = resolvePendingChatBackgroundSelection();
   const shouldClearChatBackground = chatBackgroundUsesDefault.value;
@@ -658,11 +577,6 @@ async function saveChatSettings() {
         chatSettings.value.assigned_chat_reset_enabled,
       assigned_chat_reset_mode: normalizedMode,
       assigned_chat_reset_hour: normalizedHour,
-      chat_close_rating_enabled: chatSettings.value.chat_close_rating_enabled,
-
-      chat_close_rating_followup_window_minutes:
-        normalizedChatCloseRatingFollowupWindowMinutes,
-      chat_close_rating_templates: normalizedChatCloseRatingTemplates,
     });
 
     localStorage.setItem(MEDIA_GROUP_WINDOW_KEY, String(clamped));
@@ -1503,130 +1417,6 @@ onBeforeUnmount(() => {
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <Separator class="bg-border" />
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between gap-3">
-                    <div>
-                      <Label class="text-foreground/80">{{
-                        $t("settings.chatCloseRatingEnabled")
-                      }}</Label>
-                      <p class="text-xs text-muted-foreground">
-                        {{ $t("settings.chatCloseRatingEnabledDesc") }}
-                      </p>
-                    </div>
-                    <Switch
-                      :checked="chatSettings.chat_close_rating_enabled"
-                      @update:checked="
-                        chatSettings.chat_close_rating_enabled = $event
-                      "
-                    />
-                  </div>
-
-                  <div class="space-y-2">
-                    <Label class="text-foreground/80">{{
-                      $t("settings.chatCloseRatingFollowupWindowMinutes")
-                    }}</Label>
-                    <p class="text-xs text-muted-foreground">
-                      {{
-                        $t("settings.chatCloseRatingFollowupWindowMinutesDesc")
-                      }}
-                    </p>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="1440"
-                      step="1"
-                      class="w-full max-w-xs border-input bg-input text-foreground"
-                      :model-value="
-                        String(
-                          chatSettings.chat_close_rating_followup_window_minutes,
-                        )
-                      "
-                      :disabled="!chatSettings.chat_close_rating_enabled"
-                      @update:model-value="
-                        (v: unknown) => {
-                          if (typeof v === 'string') {
-                            chatSettings.chat_close_rating_followup_window_minutes =
-                              Number(v);
-                          }
-                        }
-                      "
-                    />
-                  </div>
-
-                  <div class="space-y-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      class="border-input bg-input text-foreground hover:bg-accent"
-                      :disabled="!chatSettings.chat_close_rating_enabled"
-                      @click="
-                        showChatCloseRatingTemplates =
-                          !showChatCloseRatingTemplates
-                      "
-                    >
-                      {{ $t("settings.chatCloseRatingTemplates") }}
-                    </Button>
-                    <div
-                      v-if="showChatCloseRatingTemplates"
-                      class="space-y-3 rounded-[calc(var(--radius)-0.1rem)] border border-border bg-card/80 p-3"
-                    >
-                      <p class="text-xs text-muted-foreground">
-                        {{ $t("settings.chatCloseRatingTemplatesDesc") }}
-                      </p>
-
-                      <div class="space-y-2">
-                        <Label class="text-foreground/80">{{
-                          $t("settings.chatCloseRatingTemplateEn")
-                        }}</Label>
-                        <Textarea
-                          v-model="chatSettings.chat_close_rating_templates.en"
-                          :rows="3"
-                          class="border-input bg-input text-foreground placeholder:text-muted-foreground"
-                          :placeholder="
-                            $t('settings.chatCloseRatingTemplatePlaceholder')
-                          "
-                          :disabled="!chatSettings.chat_close_rating_enabled"
-                        />
-                      </div>
-
-                      <div class="space-y-2">
-                        <Label class="text-foreground/80">{{
-                          $t("settings.chatCloseRatingTemplateAr")
-                        }}</Label>
-                        <Textarea
-                          v-model="chatSettings.chat_close_rating_templates.ar"
-                          :rows="3"
-                          class="border-input bg-input text-foreground placeholder:text-muted-foreground"
-                          :placeholder="
-                            $t('settings.chatCloseRatingTemplatePlaceholder')
-                          "
-                          :disabled="!chatSettings.chat_close_rating_enabled"
-                        />
-                      </div>
-
-                      <div class="space-y-2">
-                        <Label class="text-foreground/80">{{
-                          $t("settings.chatCloseRatingTemplateEs")
-                        }}</Label>
-                        <Textarea
-                          v-model="chatSettings.chat_close_rating_templates.es"
-                          :rows="3"
-                          class="border-input bg-input text-foreground placeholder:text-muted-foreground"
-                          :placeholder="
-                            $t('settings.chatCloseRatingTemplatePlaceholder')
-                          "
-                          :disabled="!chatSettings.chat_close_rating_enabled"
-                        />
-                      </div>
-
-                      <p class="font-mono text-[11px] text-muted-foreground">
-                        {{ $t("settings.chatCloseRatingPlaceholders") }}
-                      </p>
-                    </div>
-                  </div>
                 </div>
                 <Separator class="bg-border" />
                 <div class="space-y-3">
