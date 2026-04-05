@@ -2,6 +2,7 @@ site_name: Whatomate Documentation
 site_description: Complete bilingual documentation for the Whatomate WhatsApp Business API platform
 site_author: Whatomate Team
 site_url: https://docs.whatomate.com
+docs_dir: .
 
 theme:
   name: material
@@ -120,6 +121,14 @@ nav:
       - en/index.md
       - Overview: en/overview.md
       - Quick Start: en/quickstart.md
+  - البداية:
+      - ar/index.md
+      - نظرة عامة: ar/overview.md
+      - البدء السريع: ar/quickstart.md
+  - البداية:
+      - ar/index.md
+      - نظرة عامة: ar/overview.md
+      - البدء السريع: ar/quickstart.md
   - User Guide:
       - en/users/index.md
       - Authentication: en/users/authentication.md
