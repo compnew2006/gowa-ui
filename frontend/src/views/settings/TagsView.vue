@@ -188,7 +188,7 @@ function getColorLabel(color: string): string {
       :title="$t('tags.title')"
       :subtitle="$t('tags.subtitle')"
       :icon="Tags"
-      icon-gradient="bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
       back-link="/settings"
     >
       <template #actions>

@@ -170,9 +170,6 @@
     "Flow": "Flow",
     "keywordRule": "keyword rule",
     "KeywordRule": "Keyword rule",
-    "leadRequest": "lead request",
-    "leadRequests": "lead requests",
-    "LeadRequest": "Lead request",
     "media": "media",
     "Media": "Media",
     "member": "member",
@@ -241,8 +238,6 @@
     "apiKeys": "API Keys",
     "webhooks": "Webhooks",
     "customActions": "Custom Actions",
-    "activityLogs": "Activity Logs",
-    "leadRequests": "Lead Requests",
     "sso": "SSO",
     "skipToMain": "Skip to main content",
     "expandSidebar": "Expand sidebar",
@@ -738,53 +733,6 @@
     "notificationSound2": "Sound 2",
     "notificationSoundOriginal": "Original Sound",
     "previewSound": "Play"
-  },
-  "leadRequests": {
-    "title": "Lead Requests",
-    "subtitle": "Review public pricing-page demo requests and keep follow-up moving.",
-    "inboxTitle": "Lead request inbox",
-    "inboxDescription": "Search recent submissions, inspect context, and update follow-up status.",
-    "searchPlaceholder": "Search lead requests...",
-    "filterStatus": "Filter by status",
-    "noMatching": "No matching lead requests",
-    "noMatchingDescription": "Try a different search term or status filter.",
-    "emptyTitle": "No lead requests yet",
-    "emptyDescription": "New demo requests from the public pricing page will appear here.",
-    "detailsTitle": "Lead request details",
-    "detailsDescription": "Review the submission and update its follow-up status.",
-    "noCountry": "No country provided",
-    "noMessage": "No message provided.",
-    "updateStatus": "Update status",
-    "columns": {
-      "submitter": "Submitter",
-      "company": "Company",
-      "contact": "Contact",
-      "requestedPlan": "Requested plan",
-      "created": "Submitted"
-    },
-    "fields": {
-      "email": "Work email",
-      "phoneWhatsApp": "Phone / WhatsApp",
-      "country": "Country",
-      "requestedPlan": "Requested plan",
-      "source": "Source route",
-      "submittedAt": "Submitted at",
-      "message": "Message",
-      "status": "Status"
-    },
-    "status": {
-      "new": "New",
-      "contacted": "Contacted",
-      "qualified": "Qualified",
-      "closed": "Closed"
-    },
-    "plan": {
-      "unspecified": "Unspecified",
-      "starter": "Starter",
-      "growth": "Growth",
-      "dedicated": "Dedicated Business",
-      "enterprise": "Enterprise"
-    }
   },
   "closedChats": {
     "title": "Closed Chats",
@@ -2434,79 +2382,6 @@
     "addFieldPlaceholder": "+ Add",
     "exampleUrlPlaceholder": "https://example.com",
     "dataPathPlaceholder": "data.path"
-  },
-  "activityLogs": {
-    "title": "Activity Logs",
-    "subtitle": "Track your authentication, engagement, and API activity in one timeline",
-    "refresh": "Refresh",
-    "logCustomEvent": "Log Custom Event",
-    "filtersTitle": "Filters",
-    "filtersDescription": "Filter your own events by category, source, status, event type, and date range.",
-    "applyFilters": "Apply Filters",
-    "resetFilters": "Reset Filters",
-    "historyTitle": "Activity History",
-    "historyDescription": "Only your own events are shown here.",
-    "itemName": "activity events",
-    "noLogsFound": "No activity events found",
-    "noLogsFoundDesc": "Try changing your filters or create a custom event.",
-    "failedLoad": "Failed to load activity logs",
-    "failedCreate": "Failed to create activity event",
-    "customEventCreated": "Custom activity event created",
-    "customEventTitle": "Create Custom Activity Event",
-    "customEventDescription": "Use this form to record a manual user activity event.",
-    "submitCustomEvent": "Create Event",
-    "columns": {
-      "timestamp": "Timestamp",
-      "eventClass": "Event Class",
-      "activity": "Activity",
-      "category": "Category",
-      "eventType": "Event Type",
-      "action": "Action",
-      "source": "Source",
-      "status": "Status",
-      "request": "Request",
-      "metadata": "Metadata"
-    },
-    "eventClasses": {
-      "user": "user events",
-      "auth": "auth events",
-      "system": "system events",
-      "custom": "custom events",
-      "general": "activity events"
-    },
-    "filters": {
-      "category": "Category",
-      "eventType": "Event Type",
-      "eventTypePlaceholder": "e.g. auth.login",
-      "source": "Source",
-      "status": "Status",
-      "startDate": "Start Date",
-      "endDate": "End Date"
-    },
-    "options": {
-      "all": "All",
-      "auth": "Auth",
-      "engagement": "Engagement",
-      "system": "System",
-      "custom": "Custom"
-    },
-    "customForm": {
-      "eventType": "Event Type",
-      "eventTypePlaceholder": "ui.button_click",
-      "action": "Action",
-      "actionPlaceholder": "export_contacts",
-      "contactId": "Contact ID",
-      "messageId": "Message ID",
-      "optionalUuid": "Optional UUID",
-      "metadata": "Metadata (JSON object)",
-      "metadataPlaceholder": "{\n  \"key\": \"value\"\n}"
-    },
-    "validation": {
-      "eventTypeRequired": "Event type is required",
-      "actionRequired": "Action is required",
-      "metadataJson": "Metadata must be valid JSON",
-      "metadataObject": "Metadata must be a JSON object"
-    }
   },
   "instances": {
     "status": {

@@ -165,44 +165,6 @@ export const authService = {
   getWSToken: () => api.get("/auth/ws-token"),
 };
 
-export type LeadRequestPlan = "starter" | "growth" | "dedicated" | "enterprise";
-
-export type LeadRequestStatus = "new" | "contacted" | "qualified" | "closed";
-
-export interface LeadRequest {
-  id: string;
-  full_name: string;
-  company_name: string;
-  work_email: string;
-  phone_whatsapp: string;
-  country?: string;
-  message?: string;
-  requested_plan?: LeadRequestPlan;
-  source_page: string;
-  source_route: string;
-  status: LeadRequestStatus;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface LeadRequestListResponse {
-  lead_requests: LeadRequest[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-export const leadRequestsService = {
-  list: (params?: {
-    search?: string;
-    status?: LeadRequestStatus | "all";
-    page?: number;
-    limit?: number;
-  }) => api.get<LeadRequestListResponse>("/lead-requests", { params }),
-  updateStatus: (id: string, status: LeadRequestStatus) =>
-    api.put<LeadRequest>(`/lead-requests/${id}/status`, { status }),
-};
-
 export const usersService = {
   list: (params?: { search?: string; page?: number; limit?: number }) =>
     api.get("/users", { params }),
@@ -345,60 +307,6 @@ export const chatsService = {
       account?: string;
     },
   ) => api.get(`/chats/${id}/messages`, { params }),
-};
-
-export interface ActivityLog {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  organization_id?: string;
-  user_id?: string;
-  category: string;
-  event_type: string;
-  action: string;
-  status: string;
-  source: string;
-  contact_id?: string;
-  message_id?: string;
-  method?: string;
-  path?: string;
-  ip_address?: string;
-  user_agent?: string;
-  metadata: Record<string, unknown>;
-}
-
-export interface ActivityLogListParams {
-  page?: number;
-  limit?: number;
-  category?: string;
-  event_type?: string;
-  source?: string;
-  status?: string;
-  start_date?: string;
-  end_date?: string;
-}
-
-export interface ActivityLogListResponse {
-  logs: ActivityLog[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-export interface CreateActivityLogPayload {
-  category?: "custom";
-  event_type: string;
-  action: string;
-  contact_id?: string;
-  message_id?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export const activityLogsService = {
-  list: (params?: ActivityLogListParams) =>
-    api.get<ActivityLogListResponse>("/activity-logs", { params }),
-  create: (data: CreateActivityLogPayload) =>
-    api.post<ActivityLog>("/activity-logs", data),
 };
 
 // Generic Import/Export Service
@@ -1472,35 +1380,6 @@ export const notesService = {
     api.put<ConversationNote>(`/contacts/${contactId}/notes/${noteId}`, data),
   delete: (contactId: string, noteId: string) =>
     api.delete(`/contacts/${contactId}/notes/${noteId}`),
-};
-
-// Admin: Data Migration
-export interface MigrationOrgStatus {
-  organization_id: string;
-  organization_name: string;
-  accounts_count: number;
-  instances_count: number;
-  contacts_total: number;
-  contacts_migrated: number;
-  contacts_pending: number;
-  messages_total: number;
-  messages_migrated: number;
-  messages_pending: number;
-  migration_complete: boolean;
-}
-
-export interface MigrationStatusResponse {
-  overall_complete: boolean;
-  organizations: MigrationOrgStatus[];
-}
-
-export const migrationService = {
-  trigger: (organizationId?: string) =>
-    api.post(
-      "/admin/migrate",
-      organizationId ? { organization_id: organizationId } : {},
-    ),
-  status: () => api.get<MigrationStatusResponse>("/admin/migrate/status"),
 };
 
 export default api;

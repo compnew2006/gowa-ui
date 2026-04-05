@@ -135,7 +135,7 @@ function handleSave() {
   <Button
     variant="outline"
     size="sm"
-    class="h-auto min-h-9 w-full whitespace-normal border-white/10 px-3 py-2 text-center leading-4 text-white/70 hover:bg-white/5 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
+    class="h-auto min-h-9 w-full justify-center rounded-xl border-dashed bg-background/60 px-3 py-2 text-center leading-4"
     :disabled="saving"
     @click="dialogOpen = true"
   >
@@ -145,26 +145,22 @@ function handleSave() {
   </Button>
 
   <Dialog :open="dialogOpen" @update:open="dialogOpen = $event">
-    <DialogContent
-      class="sm:max-w-[640px] bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900"
-    >
+    <DialogContent class="sm:max-w-[640px]">
       <DialogHeader>
         <DialogTitle>{{ $t("instances.auto_reject.title") }}</DialogTitle>
-        <DialogDescription class="text-white/50 light:text-gray-500">
+        <DialogDescription class="text-muted-foreground">
           {{ $t("instances.auto_reject.description") }}
         </DialogDescription>
       </DialogHeader>
 
       <div class="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
         <div
-          class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3"
+          class="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4"
         >
           <div class="flex items-center justify-between gap-2">
             <div>
-              <Label class="text-white/80 light:text-gray-800">{{
-                $t("instances.auto_reject.enable")
-              }}</Label>
-              <p class="text-xs text-white/45 light:text-gray-500">
+              <Label>{{ $t("instances.auto_reject.enable") }}</Label>
+              <p class="text-xs text-muted-foreground">
                 {{ $t("instances.auto_reject.enableDesc") }}
               </p>
             </div>
@@ -186,9 +182,7 @@ function handleSave() {
         <div class="space-y-2">
           <Label>{{ $t("instances.auto_reject.replyMode") }}</Label>
           <Select v-model="localSettings.mode">
-            <SelectTrigger
-              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
-            >
+            <SelectTrigger class="bg-background">
               <SelectValue
                 :placeholder="
                   $t('common.selectPlaceholder', {
@@ -229,7 +223,7 @@ function handleSave() {
             :rows="3"
             :placeholder="$t('instances.auto_reject.messagePlaceholder')"
           />
-          <p class="text-xs text-white/45 light:text-gray-500">
+          <p class="text-xs text-muted-foreground">
             {{ $t("instances.auto_reject.placeholderHint") }}
           </p>
         </div>
@@ -237,9 +231,7 @@ function handleSave() {
         <div class="space-y-2">
           <Label>{{ $t("instances.auto_reject.schedule") }}</Label>
           <Select v-model="localSettings.schedule.type">
-            <SelectTrigger
-              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
-            >
+            <SelectTrigger class="bg-background">
               <SelectValue
                 :placeholder="
                   $t('common.selectPlaceholder', {
@@ -264,7 +256,7 @@ function handleSave() {
 
         <div
           v-if="localSettings.schedule.type === 'custom_hours'"
-          class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3"
+          class="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4"
         >
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1.5">
@@ -272,7 +264,7 @@ function handleSave() {
               <Input
                 v-model="localSettings.schedule.start"
                 type="time"
-                class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+                class="bg-background"
               />
             </div>
             <div class="space-y-1.5">
@@ -280,7 +272,7 @@ function handleSave() {
               <Input
                 v-model="localSettings.schedule.end"
                 type="time"
-                class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+                class="bg-background"
               />
             </div>
           </div>
@@ -289,7 +281,7 @@ function handleSave() {
             <Label>{{ $t("instances.auto_reject.timezone") }}</Label>
             <Input
               v-model="localSettings.schedule.timezone"
-              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+              class="bg-background"
               :placeholder="$t('instances.auto_reject.timezonePlaceholder')"
             />
           </div>
@@ -303,11 +295,11 @@ function handleSave() {
                 type="button"
                 variant="outline"
                 size="sm"
-                class="border-white/15"
+                class="border-border"
                 :class="
                   isDaySelected(day.value)
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
-                    : 'text-white/60 light:text-gray-600'
+                    ? 'border-primary/30 bg-primary/10 text-primary'
+                    : 'text-muted-foreground'
                 "
                 @click="toggleDay(day.value)"
               >
@@ -322,27 +314,20 @@ function handleSave() {
           <Textarea
             v-model="bypassEditor"
             :rows="3"
-            class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+            class="bg-background"
             :placeholder="$t('instances.auto_reject.bypassPlaceholder')"
           />
-          <p class="text-xs text-white/45 light:text-gray-500">
+          <p class="text-xs text-muted-foreground">
             {{ $t("instances.auto_reject.bypassDesc") }}
           </p>
         </div>
       </div>
 
       <DialogFooter class="gap-2">
-        <Button
-          variant="outline"
-          class="border-white/10 text-white/70 light:border-gray-300 light:text-gray-700"
-          @click="dialogOpen = false"
-          >{{ $t("common.cancel") }}</Button
-        >
-        <Button
-          class="bg-emerald-600 hover:bg-emerald-700"
-          :disabled="saving"
-          @click="handleSave"
-        >
+        <Button variant="outline" @click="dialogOpen = false">{{
+          $t("common.cancel")
+        }}</Button>
+        <Button :disabled="saving" @click="handleSave">
           <Loader2 v-if="saving" class="h-4 w-4 mr-2 animate-spin" />
           {{ $t("instances.auto_reject.saveSettings") }}
         </Button>

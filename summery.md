@@ -1,5 +1,217 @@
 # Session Summary
 
+## 2026-04-05 12:38
+
+### Completed
+
+- Removed the `activity-logs` feature completely from backend and frontend:
+  - deleted the backend handlers, middleware, retention worker, model, routes, tests, and database migration/index wiring
+  - removed login/logout/message/restricted-send activity-log writes so no backend path still produces or reads `activity_logs`
+  - deleted the Vue activity-log view, router entries, navigation item, API client types/service, translations, E2E page object, and E2E spec
+- Removed the `lead-requests` feature completely from backend and frontend:
+  - deleted the public and authenticated backend handlers, model, routes, tests, and database migration wiring
+  - removed the settings page, router entry, navigation item, API client types/service, and translations
+- Replaced the few reused actor-display helpers that had been living in the activity-log service with neutral helpers:
+  - `NormalizeDisplayText`
+  - `ResolveUserDisplayName`
+- Rebuilt the frontend bundle and re-embedded it into `internal/frontend/dist` so the embedded app no longer contains stale `ActivityLogsView` or `LeadRequestsView` assets.
+
+### Skills Applied
+
+- `fullstack-guardian` to remove both features safely across backend routes/models/tests, frontend routing/navigation/services/views/translations, and embedded asset output
+
+### Verification
+
+- `go test ./internal/handlers -count=1`
+  - result: pass
+- `go test ./cmd/whatomate -count=1`
+  - result: pass
+- `npm --prefix frontend run build`
+  - result: pass
+- `make embed-frontend`
+  - result: pass
+- `rg -n "activity-logs|lead-requests|ActivityLogsView|LeadRequestsView|CreateActivityLog|ListActivityLogs|CreatePublicLeadRequest|ListLeadRequests|UpdateLeadRequestStatus" internal/frontend/dist frontend/dist --glob '!*.map'`
+  - result: no matches
+- Chrome DevTools MCP against `http://127.0.0.1:3000`
+  - logged in as `admin@test.com`
+  - navigated to `/settings/activity-logs` and confirmed the app returns the `404 / Page Not Found` screen
+  - navigated to `/settings/lead-requests` and confirmed the app returns the same `404 / Page Not Found` screen
+
+### Notes
+
+- Historical references remain in project documentation artifacts such as `CHANGELOG.md`, `MEMORY.md`, `PLAN.md`, `STRUCTURE.md`, `coverage.html`, and `frontend/testsprite_tests/standard_prd.json`; the runtime backend/frontend code and embedded assets have been removed.
+- `summery.md` was updated again in this session at the user's request.
+
+## 2026-04-05 12:15
+
+### Completed
+
+- Analyzed the existing `/settings/activity-logs` implementation end to end and confirmed the main limitation was backend scoping:
+  - the UI already knew how to narrate low-level actions such as opening chats/messages
+  - the API only returned the current user's own rows from `activity_logs`
+- Changed the activity log backend from personal scope to organization scope for authorized admin/manager users by:
+  - replacing the `user_id = current_user` listing query with `organization_id = current_org`
+  - keeping cross-organization isolation intact
+  - preserving role gating so agents still cannot access the page
+- Enriched listed activity rows with `actor_name` in metadata, including historical rows that only had `user_id`, so organization-wide entries render with the real actor instead of generic fallback text.
+- Added consistent actor metadata at write time for:
+  - auth events
+  - system API interaction events
+  - custom events
+  - restricted-send security events
+- Expanded the activity UI to match the new scope:
+  - updated page copy from "your own events" to organization-wide activity
+  - added security category/status support
+  - added security narration for `security.restricted_send_blocked`
+  - changed the generic actor fallback from `you` to `a user` for safer cross-user wording
+- Added browser regression coverage proving an admin can see an activity event created by another user in the same organization.
+
+### Skills Applied
+
+- `spec-miner` to trace the existing activity-log pipeline, identify what was already persisted, and separate a query-scope problem from a missing-instrumentation problem
+- `fullstack-guardian` to implement the production change across backend querying, log enrichment, Vue activity rendering, translations, and browser verification
+
+### Verification
+
+- `gofmt -w internal/handlers/activity_service.go internal/handlers/activity_logs.go internal/handlers/send_restriction_policy.go internal/handlers/activity_logs_test.go internal/handlers/activity_service_unit_test.go`
+  - result: pass
+- `npx prettier --write frontend/src/views/activity/ActivityLogsView.vue frontend/src/views/activity/activity-log-narrator.ts frontend/src/views/activity/activity-log-narrator.test.ts frontend/src/i18n/locales/en.json frontend/src/i18n/locales/ar.json frontend/e2e/tests/activity/activity-logs.spec.ts`
+  - result: pass
+- `go test ./internal/handlers -run 'TestApp_(CreateActivityLog|ListActivityLogs|ActivityLogs_)'`
+  - result: pass
+- `npm --prefix frontend run test:unit -- src/views/activity/activity-log-narrator.test.ts`
+  - result: pass
+- `npm --prefix frontend run test:e2e -- e2e/tests/activity/activity-logs.spec.ts`
+  - result: pass
+  - includes new coverage for admin visibility of a manager-created activity event
+- Chrome DevTools MCP against the Vite frontend on `http://127.0.0.1:3000/settings/activity-logs`
+  - confirmed the updated organization-wide subtitle and filter/history descriptions render
+  - confirmed the page shows activity from multiple users in the same organization
+  - created a manager-owned custom event `ui.devtools_manager_visibility` through the API and filtered the admin page to it
+  - confirmed the resulting row renders as `Test Manager ran custom event ui.devtools_manager_visibility (confirm_org_scope)`
+
+### Notes
+
+- `npm --prefix frontend run typecheck` still fails because of unrelated pre-existing repo-wide TypeScript errors outside the activity-log files.
+- The Go server already running on `:8080` is still serving its older embedded frontend bundle; live UI verification of the updated frontend source was done through the Vite dev server on `:3000`, proxied to the existing backend API.
+- `summery.md` was updated in this session at the user's request.
+
+## 2026-04-05 12:04
+
+### Completed
+
+- Removed the backend admin migration feature that had been backing the deleted `/settings/migration` page.
+- Removed the backend route registration for:
+  - `POST /api/admin/migrate`
+  - `GET /api/admin/migrate/status`
+  from `cmd/whatomate/main.go`
+- Deleted the dedicated backend handler file `internal/handlers/migration_handler.go`.
+- Deleted the now-unused backend feature package `pkg/migration/migrate.go`.
+- Left the normal application/database migration infrastructure untouched.
+
+### Skills Applied
+
+- `golang-pro` for the Go route/handler/package cleanup and verification
+
+### Verification
+
+- `rg -n "admin/migrate|TriggerMigration|GetMigrationStatus|pkg/migration|migration.NewService|migrate/status" cmd internal pkg -g '!frontend/node_modules'`
+  - result: no remaining backend references
+- `gofmt -w cmd/whatomate/main.go`
+  - result: pass
+- `go test ./cmd/whatomate ./internal/handlers`
+  - result: pass
+- Temporary server validation using the current code on `http://127.0.0.1:18080`
+  - Chrome DevTools MCP against `http://127.0.0.1:18080/api/admin/migrate/status`
+  - result: backend now responds with `404 page not found`
+
+### Notes
+
+- `summery.md` was updated in this session at the user's request.
+- The running main app on `:8080` was not replaced in-place; runtime backend verification was done against a temporary server instance started from the updated code on `:18080`.
+
+## 2026-04-05 12:02
+
+### Completed
+
+- Removed the frontend `/settings/migration` page completely.
+- Deleted the dedicated migration settings view at `frontend/src/views/settings/MigrationView.vue`.
+- Removed the router entry and settings child-path registration for `/settings/migration` in `frontend/src/router/index.ts`.
+- Removed the now-unused frontend migration service types and helpers from `frontend/src/services/api.ts`.
+
+### Skills Applied
+
+- `vue-expert` for the Vue Router cleanup and dead frontend code removal
+
+### Verification
+
+- `rg -n "settings/migration|MigrationView|migrationService|MigrationOrgStatus|MigrationStatusResponse" frontend/src frontend/e2e -g '!frontend/node_modules'`
+  - result: no remaining frontend references
+- `npx prettier --write frontend/src/router/index.ts frontend/src/services/api.ts`
+  - result: pass
+- `npm run build` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend`
+  - result: pass
+- Chrome DevTools MCP against the Vite frontend on `http://127.0.0.1:3000/settings/migration`
+  - result: route now renders the app `404 Page Not Found` screen instead of a settings page
+
+### Notes
+
+- `summery.md` was updated in this session at the user's request.
+- The backend migration endpoints were left untouched; this change removes only the frontend settings route and related dead frontend code.
+
+## 2026-04-05 11:57
+
+### Completed
+
+- Standardized the remaining non-blue settings accents to the project blue token system across the settings views and related shared/settings components, including:
+  - `frontend/src/views/settings/AccountsView.vue`
+  - `frontend/src/views/settings/APIKeysView.vue`
+  - `frontend/src/views/settings/CampaignsView.vue`
+  - `frontend/src/views/settings/LeadRequestsView.vue`
+  - `frontend/src/views/settings/MigrationView.vue`
+  - `frontend/src/views/settings/TemplatesView.vue`
+  - `frontend/src/views/settings/ClosedChatsView.vue`
+  - `frontend/src/views/settings/InstancesView.vue`
+  - `frontend/src/components/whatsmeow/InstanceCard.vue`
+  - `frontend/src/components/whatsmeow/InstanceTagSettings.vue`
+  - `frontend/src/components/whatsmeow/AutoRejectSettingsPanel.vue`
+  - `frontend/src/components/whatsmeow/AutoCampaignSettingsPanel.vue`
+  - `frontend/src/components/whatsmeow/InstanceChatCloseRatingPanel.vue`
+  - `frontend/src/components/whatsmeow/InstanceAssignedChatResetPanel.vue`
+  - `frontend/src/components/whatsmeow/QRCodeModal.vue`
+  - `frontend/src/components/shared/ImportExportDialog.vue`
+- Updated settings page headers, action surfaces, badges, informational banners, and instance cards so the settings sub-routes align with the existing blue project style instead of mixed green/emerald/orange/purple accents.
+- Kept destructive error states intact where they still carry real semantic meaning instead of flattening them into the theme color.
+
+### Skills Applied
+
+- `vue-expert` for the Vue 3 settings-view and shared-component styling pass
+
+### Findings
+
+- The app running on `http://localhost:8080` is a Go binary serving an embedded frontend build, so it does not reflect source edits until the frontend is rebuilt and re-embedded into a new backend binary.
+- The only intentional non-blue settings-adjacent UI left after the sweep is:
+  - warning/error styling in `frontend/src/components/shared/ImportExportDialog.vue`
+  - the functional multicolor tag-picker options inside the instance tag settings panel
+
+### Verification
+
+- `rg -n "green-|emerald-|cyan-|teal-|violet-|purple-|indigo-|pink-|rose-|amber-|orange-|yellow-" frontend/src/views/settings frontend/src/components/whatsmeow frontend/src/components/shared/ImportExportDialog.vue -g '*.vue'`
+  - result: only the intentional warning/error styles in `ImportExportDialog.vue` remained from the color scan
+- `npx prettier --write frontend/src/components/shared/ImportExportDialog.vue frontend/src/views/settings/LeadRequestsView.vue frontend/src/views/settings/APIKeysView.vue frontend/src/views/settings/MigrationView.vue frontend/src/views/settings/CampaignsView.vue frontend/src/views/settings/TemplatesView.vue frontend/src/views/settings/AccountsView.vue frontend/src/components/whatsmeow/InstanceCard.vue`
+  - result: pass
+- `npm run build` in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend`
+  - result: pass
+- Chrome DevTools MCP against the authenticated Vite frontend on `http://127.0.0.1:3000`
+  - logged in with the local default admin from `config.toml`
+  - confirmed `/settings/accounts`, `/settings/contacts`, `/settings/closed-chats`, `/settings/canned-responses`, `/settings/campaigns`, `/settings/templates`, and `/settings/migration` all returned `0` runtime matches for hard-coded non-blue theme classes
+  - confirmed `/settings/instances` renders the updated blue settings chrome, with the remaining multicolor tag buttons being the intentional tag-color selector options
+
+### Notes
+
+- `summery.md` was updated in this session at the user's request.
+- The running embedded app on `:8080` was not rebuilt/restarted in this session; live browser verification used the Vite frontend on `:3000` so the updated source could be validated immediately against the existing backend API.
+
 ## 2026-04-05 10:21
 
 ### Completed

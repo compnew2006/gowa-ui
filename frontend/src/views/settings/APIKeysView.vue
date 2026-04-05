@@ -233,7 +233,7 @@ onMounted(() => fetchItems());
       :title="$t('apiKeys.title')"
       :subtitle="$t('apiKeys.subtitle')"
       :icon="Key"
-      icon-gradient="bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
         <Button variant="outline" size="sm" @click="openCreateDialogBase"
@@ -307,7 +307,7 @@ onMounted(() => fetchItems());
                       isExpired(key.expires_at)
                         ? 'border-destructive text-destructive'
                         : key.is_active
-                          ? 'border-green-600 text-green-600'
+                          ? 'border-primary/40 text-primary'
                           : ''
                     "
                   >
@@ -382,7 +382,7 @@ onMounted(() => fetchItems());
         <DialogHeader>
           <DialogTitle>{{ $t("apiKeys.apiKeyCreated") }}</DialogTitle>
           <DialogDescription
-            ><div class="flex items-center gap-2 text-amber-600 mt-2">
+            ><div class="mt-2 flex items-center gap-2 text-primary">
               <AlertTriangle class="h-4 w-4" /><span>{{
                 $t("apiKeys.apiKeyCreatedWarning")
               }}</span>

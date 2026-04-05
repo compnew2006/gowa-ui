@@ -7,6 +7,8 @@ import QRCodeModal from "@/components/whatsmeow/QRCodeModal.vue";
 import { DeleteConfirmDialog, PageHeader } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -815,22 +817,21 @@ async function handleAssignedChatResetSettingsUpdate(
       :title="$t('settings.instances.title')"
       :subtitle="$t('settings.instances.subtitle')"
       :icon="Smartphone"
-      icon-gradient="bg-gradient-to-br from-emerald-500 to-green-600 shadow-emerald-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      back-link="/settings"
+      :breadcrumbs="[
+        { label: $t('settings.title'), href: '/settings' },
+        { label: $t('settings.instances.title') },
+      ]"
     >
       <template #actions>
         <div class="flex gap-2">
           <RouterLink to="/settings/instances/health">
-            <Button
-              variant="outline"
-              class="border-white/10 hover:bg-white/5 text-white/80 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
-            >
+            <Button variant="outline" size="sm">
               {{ $t("settings.instances.healthDashboard") }}
             </Button>
           </RouterLink>
-          <Button
-            class="bg-emerald-600 hover:bg-emerald-700 text-white"
-            @click="createDialogOpen = true"
-          >
+          <Button size="sm" @click="createDialogOpen = true">
             <Plus class="h-4 w-4 mr-2" />
             {{ $t("settings.instances.addAccount") }}
           </Button>
@@ -838,89 +839,95 @@ async function handleAssignedChatResetSettingsUpdate(
       </template>
     </PageHeader>
 
-    <div class="flex-1 p-6 overflow-y-auto">
-      <div
-        v-if="instancesStore.loading && instancesStore.instances.length === 0"
-        class="flex justify-center items-center h-64"
-      >
-        <Loader2
-          class="h-8 w-8 text-white/20 light:text-gray-400 animate-spin"
-        />
-      </div>
+    <ScrollArea class="flex-1">
+      <div class="p-6">
+        <div class="mx-auto flex max-w-7xl flex-col gap-6">
+          <div
+            v-if="
+              instancesStore.loading && instancesStore.instances.length === 0
+            "
+            class="flex min-h-[320px] items-center justify-center rounded-[calc(var(--radius)+0.35rem)] border border-dashed border-border bg-card/70"
+            role="status"
+            aria-live="polite"
+          >
+            <div class="flex items-center gap-3 text-sm text-muted-foreground">
+              <Loader2 class="h-5 w-5 animate-spin text-primary" />
+              <span>{{ $t("common.loading") }}</span>
+            </div>
+          </div>
 
-      <div
-        v-else-if="instancesStore.instances.length === 0"
-        class="flex flex-col items-center justify-center h-64 text-center"
-      >
-        <div
-          class="h-16 w-16 bg-white/5 light:bg-gray-100 rounded-full flex items-center justify-center mb-4"
-        >
-          <Smartphone class="h-8 w-8 text-white/20 light:text-gray-400" />
+          <div
+            v-else-if="instancesStore.instances.length === 0"
+            class="rounded-[calc(var(--radius)+0.35rem)] border border-dashed border-border bg-card/80"
+          >
+            <EmptyState
+              :icon="Smartphone"
+              :title="$t('settings.instances.noAccounts')"
+              :description="$t('settings.instances.connectFirst')"
+              class="py-16"
+            >
+              <template #action>
+                <Button variant="outline" @click="createDialogOpen = true">
+                  {{ $t("settings.instances.connectFirstButton") }}
+                </Button>
+              </template>
+            </EmptyState>
+          </div>
+
+          <div
+            v-else
+            class="grid grid-cols-1 gap-6 xl:grid-cols-2 2xl:grid-cols-3"
+          >
+            <InstanceCard
+              v-for="(instance, index) in instancesStore.instances"
+              :key="instance.id"
+              :instance="instance"
+              :palette-index="index"
+              :tag-settings-saving="tagSettingsSaving[instance.id] || false"
+              :auto-sync-saving="autoSyncSaving[instance.id] || false"
+              :auto-download-incoming-media-saving="
+                autoDownloadIncomingMediaSaving[instance.id] || false
+              "
+              :auto-reject-saving="autoRejectSaving[instance.id] || false"
+              :auto-campaign-saving="autoCampaignSaving[instance.id] || false"
+              :auto-campaign-uploading="
+                autoCampaignUploading[instance.id] || false
+              "
+              :chat-close-rating-saving="
+                chatCloseRatingSaving[instance.id] || false
+              "
+              :assigned-chat-reset-saving="
+                assignedChatResetSaving[instance.id] || false
+              "
+              :organization-timezone="organizationTimezone"
+              @connect="handleConnect"
+              @disconnect="disconnectInstance"
+              @edit="openEditDialog"
+              @delete="openDeleteDialog"
+              @save-tag-settings="handleSaveTagSettings"
+              @update-auto-sync="handleAutoSyncUpdate"
+              @update-auto-download-incoming-media="
+                handleAutoDownloadIncomingMediaUpdate
+              "
+              @update-auto-reject-settings="handleAutoRejectSettingsUpdate"
+              @update-auto-campaign-settings="handleAutoCampaignSettingsUpdate"
+              @upload-auto-campaign-media="handleAutoCampaignMediaUpload"
+              @clear-auto-campaign-media="handleAutoCampaignMediaClear"
+              @update-chat-close-rating-settings="
+                handleUpdateChatCloseRatingSettings
+              "
+              @update-assigned-chat-reset-settings="
+                handleAssignedChatResetSettingsUpdate
+              "
+            />
+          </div>
         </div>
-        <h3 class="text-lg font-medium text-white light:text-gray-900">
-          {{ $t("settings.instances.noAccounts") }}
-        </h3>
-        <p class="text-white/40 max-w-sm mt-2 light:text-gray-500">
-          {{ $t("settings.instances.connectFirst") }}
-        </p>
-        <Button
-          variant="outline"
-          class="mt-6 border-white/10 hover:bg-white/5 text-emerald-400 light:border-gray-300 light:hover:bg-gray-100"
-          @click="createDialogOpen = true"
-        >
-          {{ $t("settings.instances.connectFirstButton") }}
-        </Button>
       </div>
-
-      <div v-else class="grid grid-cols-1 gap-6 md:grid-cols-2 2xl:grid-cols-3">
-        <InstanceCard
-          v-for="(instance, index) in instancesStore.instances"
-          :key="instance.id"
-          :instance="instance"
-          :palette-index="index"
-          :tag-settings-saving="tagSettingsSaving[instance.id] || false"
-          :auto-sync-saving="autoSyncSaving[instance.id] || false"
-          :auto-download-incoming-media-saving="
-            autoDownloadIncomingMediaSaving[instance.id] || false
-          "
-          :auto-reject-saving="autoRejectSaving[instance.id] || false"
-          :auto-campaign-saving="autoCampaignSaving[instance.id] || false"
-          :auto-campaign-uploading="autoCampaignUploading[instance.id] || false"
-          :chat-close-rating-saving="
-            chatCloseRatingSaving[instance.id] || false
-          "
-          :assigned-chat-reset-saving="
-            assignedChatResetSaving[instance.id] || false
-          "
-          :organization-timezone="organizationTimezone"
-          @connect="handleConnect"
-          @disconnect="disconnectInstance"
-          @edit="openEditDialog"
-          @delete="openDeleteDialog"
-          @save-tag-settings="handleSaveTagSettings"
-          @update-auto-sync="handleAutoSyncUpdate"
-          @update-auto-download-incoming-media="
-            handleAutoDownloadIncomingMediaUpdate
-          "
-          @update-auto-reject-settings="handleAutoRejectSettingsUpdate"
-          @update-auto-campaign-settings="handleAutoCampaignSettingsUpdate"
-          @upload-auto-campaign-media="handleAutoCampaignMediaUpload"
-          @clear-auto-campaign-media="handleAutoCampaignMediaClear"
-          @update-chat-close-rating-settings="
-            handleUpdateChatCloseRatingSettings
-          "
-          @update-assigned-chat-reset-settings="
-            handleAssignedChatResetSettingsUpdate
-          "
-        />
-      </div>
-    </div>
+    </ScrollArea>
 
     <!-- Create Instance Dialog -->
     <Dialog :open="createDialogOpen" @update:open="createDialogOpen = $event">
-      <DialogContent
-        class="bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900 sm:max-w-[425px]"
-      >
+      <DialogContent class="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{{
             $t("settings.instances.dialog.addAccount")
@@ -928,28 +935,23 @@ async function handleAssignedChatResetSettingsUpdate(
         </DialogHeader>
         <div class="grid gap-4 py-4">
           <div class="grid gap-2">
-            <Label htmlFor="name" class="text-white/70 light:text-gray-700">{{
+            <Label for="name">{{
               $t("settings.instances.dialog.accountName")
             }}</Label>
             <Input
               id="name"
               v-model="newInstanceName"
               :placeholder="$t('settings.instances.dialog.placeholder')"
-              class="bg-white/5 border-white/10 text-white placeholder:text-white/20 light:bg-white light:border-gray-300 light:text-gray-900 light:placeholder:text-gray-400"
             />
           </div>
         </div>
         <DialogFooter>
-          <Button
-            variant="outline"
-            @click="createDialogOpen = false"
-            class="border-white/10 hover:bg-white/5 text-white/70 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
-            >{{ $t("common.cancel") }}</Button
-          >
+          <Button variant="outline" @click="createDialogOpen = false">{{
+            $t("common.cancel")
+          }}</Button>
           <Button
             @click="handleCreate"
             :disabled="isCreating || !newInstanceName"
-            class="bg-emerald-600 hover:bg-emerald-700"
           >
             <Loader2 v-if="isCreating" class="mr-2 h-4 w-4 animate-spin" />
             {{ $t("common.create") }}
@@ -963,9 +965,7 @@ async function handleAssignedChatResetSettingsUpdate(
       :open="editDialogOpen"
       @update:open="(open) => !open && closeEditDialog()"
     >
-      <DialogContent
-        class="bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900 sm:max-w-[425px]"
-      >
+      <DialogContent class="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{{
             $t("settings.instances.dialog.editAccount")
@@ -973,30 +973,23 @@ async function handleAssignedChatResetSettingsUpdate(
         </DialogHeader>
         <div class="grid gap-4 py-4">
           <div class="grid gap-2">
-            <Label
-              htmlFor="edit-name"
-              class="text-white/70 light:text-gray-700"
-              >{{ $t("settings.instances.dialog.accountName") }}</Label
-            >
+            <Label for="edit-name">{{
+              $t("settings.instances.dialog.accountName")
+            }}</Label>
             <Input
               id="edit-name"
               v-model="editInstanceName"
               :placeholder="$t('settings.instances.dialog.placeholder')"
-              class="bg-white/5 border-white/10 text-white placeholder:text-white/20 light:bg-white light:border-gray-300 light:text-gray-900 light:placeholder:text-gray-400"
             />
           </div>
         </div>
         <DialogFooter>
-          <Button
-            variant="outline"
-            @click="closeEditDialog"
-            class="border-white/10 hover:bg-white/5 text-white/70 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
-            >{{ $t("common.cancel") }}</Button
-          >
+          <Button variant="outline" @click="closeEditDialog">{{
+            $t("common.cancel")
+          }}</Button>
           <Button
             @click="handleUpdateName"
             :disabled="isUpdatingName || !editInstanceName.trim()"
-            class="bg-emerald-600 hover:bg-emerald-700"
           >
             <Loader2 v-if="isUpdatingName" class="mr-2 h-4 w-4 animate-spin" />
             {{ $t("common.update") }}
@@ -1043,13 +1036,10 @@ async function handleAssignedChatResetSettingsUpdate(
               @update:checked="deleteChatsWithInstance = $event === true"
             />
             <div class="space-y-1">
-              <Label
-                for="delete-instance-chats"
-                class="cursor-pointer text-white light:text-gray-900"
-              >
+              <Label for="delete-instance-chats" class="cursor-pointer">
                 {{ $t("settings.instances.dialog.deleteRelatedChatsLabel") }}
               </Label>
-              <p class="text-xs text-white/60 light:text-gray-600">
+              <p class="text-xs text-muted-foreground">
                 {{ $t("settings.instances.dialog.deleteRelatedChatsHint") }}
               </p>
             </div>

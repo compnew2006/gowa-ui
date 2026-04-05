@@ -248,15 +248,21 @@ onMounted(() => {
       :title="$t('closedChats.title')"
       :subtitle="$t('closedChats.subtitle')"
       :icon="Archive"
-      icon-gradient="bg-gradient-to-br from-zinc-500 to-zinc-700 shadow-zinc-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      back-link="/settings"
+      :breadcrumbs="[
+        { label: $t('settings.title'), href: '/settings' },
+        { label: $t('closedChats.title') },
+      ]"
     />
 
-    <div class="p-6 space-y-4">
+    <div class="p-6">
+      <div class="mx-auto max-w-6xl space-y-4">
       <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-7">
         <Input
           v-model="searchQuery"
           :placeholder="$t('closedChats.searchPlaceholder')"
-          class="xl:col-span-2 bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-white light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
+          class="xl:col-span-2 bg-background"
           data-testid="closed-chats-search"
         />
         <Popover v-model:open="agentComboboxOpen">
@@ -265,7 +271,7 @@ onMounted(() => {
               variant="outline"
               role="combobox"
               :aria-expanded="agentComboboxOpen"
-              class="h-10 justify-between bg-white/[0.04] border-white/[0.1] text-white hover:bg-white/[0.08] light:bg-white light:border-gray-200 light:text-gray-900"
+              class="h-10 justify-between bg-background"
               data-testid="closed-chats-agent-filter"
             >
               <span class="truncate text-left">{{ selectedAgentName }}</span>
@@ -335,7 +341,7 @@ onMounted(() => {
         </Popover>
         <Select v-model="selectedInstanceId">
           <SelectTrigger
-            class="h-10 bg-white/[0.04] border-white/[0.1] text-white light:bg-white light:border-gray-200 light:text-gray-900"
+            class="h-10 bg-background"
             data-testid="closed-chats-instance-filter"
           >
             <SelectValue :placeholder="$t('chat.filterByInstance')" />
@@ -355,19 +361,19 @@ onMounted(() => {
           v-model="closedFrom"
           type="date"
           :placeholder="$t('closedChats.dateFrom')"
-          class="bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-white light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
+          class="bg-background"
           data-testid="closed-chats-date-from"
         />
         <Input
           v-model="closedTo"
           type="date"
           :placeholder="$t('closedChats.dateTo')"
-          class="bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-white light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
+          class="bg-background"
           data-testid="closed-chats-date-to"
         />
         <Select v-model="pageSize">
           <SelectTrigger
-            class="h-10 bg-white/[0.04] border-white/[0.1] text-white light:bg-white light:border-gray-200 light:text-gray-900"
+            class="h-10 bg-background"
             data-testid="closed-chats-page-size"
           >
             <SelectValue :placeholder="$t('closedChats.pageSize')" />
@@ -385,7 +391,7 @@ onMounted(() => {
       </div>
 
       <div class="flex items-center justify-between gap-2">
-        <p class="text-xs text-white/60 light:text-gray-500">
+        <p class="text-xs text-muted-foreground">
           {{
             $t("closedChats.resultsSummary", {
               start: pageStart,
@@ -395,7 +401,7 @@ onMounted(() => {
           }}
         </p>
         <Button
-          variant="outline"
+          size="sm"
           @click="loadClosedChats"
           :disabled="isLoading"
         >
@@ -413,64 +419,52 @@ onMounted(() => {
           data-testid="closed-chats-scroll"
         >
           <table class="w-full text-sm">
-            <thead class="bg-white/[0.04] light:bg-gray-50 sticky top-0 z-10">
+            <thead class="sticky top-0 z-10 bg-muted/60 backdrop-blur">
               <tr>
-                <th
-                  class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
-                >
+                <th class="px-4 py-3 text-left font-medium text-muted-foreground">
                   {{ $t("closedChats.contactName") }}
                 </th>
-                <th
-                  class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
-                >
+                <th class="px-4 py-3 text-left font-medium text-muted-foreground">
                   {{ $t("closedChats.closedBy") }}
                 </th>
-                <th
-                  class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
-                >
+                <th class="px-4 py-3 text-left font-medium text-muted-foreground">
                   {{ $t("closedChats.dateClosed") }}
                 </th>
-                <th
-                  class="text-right px-4 py-3 font-medium text-white/70 light:text-gray-700"
-                >
+                <th class="px-4 py-3 text-right font-medium text-muted-foreground">
                   {{ $t("closedChats.actions") }}
                 </th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="isLoading">
-                <td
-                  colspan="4"
-                  class="px-4 py-8 text-center text-white/50 light:text-gray-500"
-                >
+                <td colspan="4" class="px-4 py-8 text-center text-muted-foreground">
                   {{ $t("closedChats.loading") }}
                 </td>
               </tr>
               <tr
                 v-for="chat in contactsStore.closedChats"
                 :key="chat.id"
-                class="border-t border-white/[0.06] light:border-gray-100 hover:bg-white/[0.04] light:hover:bg-gray-50 cursor-pointer"
+                class="cursor-pointer border-t border-border/60 transition-colors hover:bg-accent/35"
                 @click="openReadOnlyChat(chat)"
               >
-                <td class="px-4 py-3 text-white light:text-gray-900">
+                <td class="px-4 py-3 text-foreground">
                   <div class="font-medium">
                     {{ chat.name || chat.profile_name || chat.phone_number }}
                   </div>
-                  <div class="text-xs text-white/50 light:text-gray-500">
+                  <div class="text-xs text-muted-foreground">
                     {{ chat.phone_number }}
                   </div>
                 </td>
-                <td class="px-4 py-3 text-white/80 light:text-gray-700">
+                <td class="px-4 py-3 text-foreground/85">
                   {{ getClosedByLabel(chat) }}
                 </td>
-                <td class="px-4 py-3 text-white/80 light:text-gray-700">
+                <td class="px-4 py-3 text-foreground/85">
                   {{ formatClosedDate(chat.closed_at || chat.updated_at) }}
                 </td>
                 <td class="px-4 py-3 text-right">
                   <Button
                     size="sm"
-                    variant="outline"
-                    class="h-7 px-2.5 bg-white/[0.04] border-white/[0.12] text-white/80 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50"
+                    class="h-8 px-3"
                     :disabled="reopeningChatId === chat.id"
                     @click.stop="reopenChat(chat)"
                   >
@@ -484,10 +478,7 @@ onMounted(() => {
                 </td>
               </tr>
               <tr v-if="!isLoading && contactsStore.closedChats.length === 0">
-                <td
-                  colspan="4"
-                  class="px-4 py-8 text-center text-white/50 light:text-gray-500"
-                >
+                <td colspan="4" class="px-4 py-8 text-center text-muted-foreground">
                   {{ $t("closedChats.empty") }}
                 </td>
               </tr>
@@ -506,10 +497,7 @@ onMounted(() => {
         >
           {{ $t("closedChats.previous") }}
         </Button>
-        <span
-          class="text-xs text-white/70 light:text-gray-600"
-          data-testid="closed-chats-page-label"
-        >
+        <span class="text-xs text-muted-foreground" data-testid="closed-chats-page-label">
           {{
             $t("closedChats.pageLabel", {
               page: currentPage,
@@ -528,6 +516,7 @@ onMounted(() => {
         >
           {{ $t("closedChats.next") }}
         </Button>
+      </div>
       </div>
     </div>
   </div>

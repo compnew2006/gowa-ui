@@ -4,6 +4,13 @@ import type { WhatsAppInstance } from "@/types/whatsmeow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Check, Loader2 } from "lucide-vue-next";
 import {
   INSTANCE_TAG_COLOR_PRESETS,
@@ -40,7 +47,7 @@ const emit = defineEmits<{
 }>();
 
 const customLabel = ref("");
-const selectedColor = ref<InstanceTagColorKey>("emerald");
+const selectedColor = ref<InstanceTagColorKey>("sky");
 const selectedDisplayMode = ref<InstanceTagDisplayMode>("name");
 
 function syncFromProps() {
@@ -118,9 +125,9 @@ function selectColor(color: InstanceTagColorKey) {
 </script>
 
 <template>
-  <div class="mt-4 border-t border-white/[0.08] pt-3 light:border-gray-200">
+  <div class="mt-1 border-t border-border/70 pt-4">
     <div class="mb-2 flex items-center justify-between gap-3">
-      <p class="text-xs font-medium text-white/70 light:text-gray-700">
+      <p class="text-xs font-medium text-foreground">
         {{ $t("instances.tags.title") }}
       </p>
       <div
@@ -139,30 +146,36 @@ function selectColor(color: InstanceTagColorKey) {
 
     <div class="grid gap-3 lg:grid-cols-2">
       <div class="space-y-1.5">
-        <Label
-          class="text-[11px] font-medium text-white/50 light:text-gray-500"
-          >{{ $t("instances.tags.customLabel") }}</Label
-        >
+        <Label class="text-[11px] font-medium text-muted-foreground">{{
+          $t("instances.tags.customLabel")
+        }}</Label>
         <Input
           v-model="customLabel"
           :placeholder="$t('instances.tags.labelPlaceholder')"
-          class="h-8 bg-white/[0.04] text-xs text-white placeholder:text-white/25 light:bg-white light:text-gray-900 light:placeholder:text-gray-400"
+          class="h-9 text-xs"
         />
       </div>
 
       <div class="space-y-1.5">
-        <Label
-          class="text-[11px] font-medium text-white/50 light:text-gray-500"
-          >{{ $t("instances.tags.showAs") }}</Label
-        >
-        <select
-          v-model="selectedDisplayMode"
-          class="h-8 w-full rounded-md border border-white/[0.12] bg-black/20 px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400 light:border-gray-300 light:bg-white light:text-gray-800"
-        >
-          <option value="custom">{{ $t("instances.tags.modeCustom") }}</option>
-          <option value="phone">{{ $t("instances.tags.modePhone") }}</option>
-          <option value="name">{{ $t("instances.tags.modeName") }}</option>
-        </select>
+        <Label class="text-[11px] font-medium text-muted-foreground">{{
+          $t("instances.tags.showAs")
+        }}</Label>
+        <Select v-model="selectedDisplayMode">
+          <SelectTrigger class="h-9 text-xs">
+            <SelectValue :placeholder="$t('instances.tags.showAs')" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="custom">{{
+              $t("instances.tags.modeCustom")
+            }}</SelectItem>
+            <SelectItem value="phone">{{
+              $t("instances.tags.modePhone")
+            }}</SelectItem>
+            <SelectItem value="name">{{
+              $t("instances.tags.modeName")
+            }}</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
 
@@ -170,20 +183,19 @@ function selectColor(color: InstanceTagColorKey) {
       class="mt-3 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between"
     >
       <div class="min-w-0 flex-1 space-y-1.5">
-        <Label
-          class="text-[11px] font-medium text-white/50 light:text-gray-500"
-          >{{ $t("instances.tags.tagColor") }}</Label
-        >
+        <Label class="text-[11px] font-medium text-muted-foreground">{{
+          $t("instances.tags.tagColor")
+        }}</Label>
         <div class="flex flex-wrap gap-1.5">
           <button
             v-for="preset in INSTANCE_TAG_COLOR_PRESETS"
             :key="preset.key"
             type="button"
-            class="flex h-6 w-6 items-center justify-center rounded-full border-2 transition-transform hover:scale-105"
+            class="flex h-6 w-6 items-center justify-center rounded-full border-2 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             :class="[
               preset.swatchClass,
               selectedColor === preset.key
-                ? 'border-white ring-2 ring-offset-0'
+                ? 'border-background shadow-sm ring-2 ring-offset-0'
                 : 'border-transparent',
               selectedColor === preset.key ? preset.ringClass : '',
             ]"
@@ -201,7 +213,7 @@ function selectColor(color: InstanceTagColorKey) {
       <Button
         size="sm"
         variant="outline"
-        class="h-8 w-full border-white/[0.1] text-xs text-white/80 hover:bg-white/[0.08] lg:w-auto lg:min-w-[180px] light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
+        class="h-9 w-full text-xs lg:w-auto lg:min-w-[180px]"
         :disabled="!hasChanges || saving"
         @click="saveSettings"
       >

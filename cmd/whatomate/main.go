@@ -305,7 +305,6 @@ func runServer(args []string) {
 	g.Before(middleware.RequestLogger(lo))
 	g.Before(middleware.Recovery(lo))
 	g.Before(middleware.CSRFProtection())
-	g.After(app.ActivityLogMiddleware())
 
 	// Setup routes
 	setupRoutes(g, app, lo, cfg.Server.BasePath, rdb, cfg)
@@ -338,12 +337,6 @@ func runServer(args []string) {
 	slaCtx, slaCancel := context.WithCancel(context.Background())
 	go slaProcessor.Start(slaCtx)
 	lo.Info("SLA processor started")
-
-	// Start activity retention worker (runs hourly, keeps 90 days).
-	activityRetentionWorker := handlers.NewActivityRetentionWorker(app, time.Hour, 90*24*time.Hour)
-	activityRetentionCtx, activityRetentionCancel := context.WithCancel(context.Background())
-	go activityRetentionWorker.Start(activityRetentionCtx)
-	lo.Info("Activity retention worker started")
 
 	// Start assigned chat reset worker (checks schedule every minute).
 	chatAssignmentResetWorker := handlers.NewChatAssignmentResetWorker(app, time.Minute)
@@ -401,11 +394,6 @@ func runServer(args []string) {
 	slaCancel()
 	slaProcessor.Stop()
 	lo.Info("SLA processor stopped")
-
-	lo.Info("Stopping activity retention worker...")
-	activityRetentionCancel()
-	activityRetentionWorker.Stop()
-	lo.Info("Activity retention worker stopped")
 
 	lo.Info("Stopping assigned chat reset worker...")
 	chatAssignmentResetCancel()
@@ -711,14 +699,10 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		g.POST("/api/auth/refresh", withRateLimit(app.RefreshToken, middleware.RateLimitOpts{
 			Redis: rdb, Log: lo, Max: cfg.RateLimit.RefreshMaxAttempts, Window: window, KeyPrefix: "refresh", TrustProxy: cfg.RateLimit.TrustProxy,
 		}))
-		g.POST("/api/public/lead-requests", withRateLimit(app.CreatePublicLeadRequest, middleware.RateLimitOpts{
-			Redis: rdb, Log: lo, Max: cfg.RateLimit.RegisterMaxAttempts, Window: window, KeyPrefix: "lead_request", TrustProxy: cfg.RateLimit.TrustProxy,
-		}))
 	} else {
 		g.POST("/api/auth/login", app.Login)
 		g.POST("/api/auth/register", app.Register)
 		g.POST("/api/auth/refresh", app.RefreshToken)
-		g.POST("/api/public/lead-requests", app.CreatePublicLeadRequest)
 	}
 	// Authenticated endpoint: generate signed registration invite for current org.
 	g.POST("/api/auth/register/invite", app.CreateRegisterInvite)
@@ -765,7 +749,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		path := string(r.RequestCtx.Path())
 		// Skip auth for public routes
 		if path == "/health" || path == "/ready" ||
-			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" || path == "/api/public/lead-requests" ||
+			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
 			path == "/api/auth/logout" || path == "/api/webhook" || path == "/ws" {
 			return r
 		}
@@ -806,10 +790,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/me/password", app.ChangePassword)
 	g.PUT("/api/me/availability", app.UpdateAvailability)
 	g.GET("/api/me/organizations", app.ListMyOrganizations)
-	g.POST("/api/activity-logs", app.CreateActivityLog)
-	g.GET("/api/activity-logs", app.ListActivityLogs)
-	g.GET("/api/lead-requests", app.ListLeadRequests)
-	g.PUT("/api/lead-requests/{id}/status", app.UpdateLeadRequestStatus)
 
 	// User Management (admin only - enforced by middleware)
 	g.GET("/api/users", app.ListUsers)
@@ -915,10 +895,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// App Config (provider & feature flags)
 	g.GET("/api/config", app.GetAppConfig)
-
-	// Admin: Data Migration (super admin only)
-	g.POST("/api/admin/migrate", app.TriggerMigration)
-	g.GET("/api/admin/migrate/status", app.GetMigrationStatus)
 
 	// Conversation Notes
 	g.GET("/api/contacts/{id}/notes", app.ListConversationNotes)

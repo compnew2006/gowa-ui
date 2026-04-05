@@ -434,9 +434,9 @@ async function confirmPublishTemplate() {
 function getStatusBadgeClass(status: string) {
   switch (status) {
     case "APPROVED":
-      return "bg-green-900 text-green-300 light:bg-green-100 light:text-green-800";
+      return "bg-primary/20 text-primary light:bg-primary/10 light:text-primary";
     case "PENDING":
-      return "bg-yellow-900 text-yellow-300 light:bg-yellow-100 light:text-yellow-800";
+      return "bg-primary/15 text-primary light:bg-primary/10 light:text-primary";
     case "REJECTED":
       return "bg-red-900 text-red-300 light:bg-red-100 light:text-red-800";
     case "DRAFT":
@@ -449,11 +449,11 @@ function getStatusBadgeClass(status: string) {
 function getCategoryBadgeClass(category: string) {
   switch (category) {
     case "UTILITY":
-      return "bg-blue-900 text-blue-300 light:bg-blue-100 light:text-blue-800";
+      return "bg-primary/20 text-primary light:bg-primary/10 light:text-primary";
     case "MARKETING":
-      return "bg-purple-900 text-purple-300 light:bg-purple-100 light:text-purple-800";
+      return "bg-primary/15 text-primary light:bg-primary/10 light:text-primary";
     case "AUTHENTICATION":
-      return "bg-orange-900 text-orange-300 light:bg-orange-100 light:text-orange-800";
+      return "bg-primary/10 text-primary light:bg-primary/10 light:text-primary";
     default:
       return "bg-gray-800 text-gray-300 light:bg-gray-100 light:text-gray-800";
   }
@@ -653,7 +653,7 @@ function parseFormatPreview(text: string, samples: any[]): PreviewPart[] {
       :title="$t('templates.title')"
       :subtitle="$t('templates.subtitle')"
       :icon="FileText"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-cyan-600 shadow-blue-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
         <Button
@@ -1053,11 +1053,11 @@ function parseFormatPreview(text: string, samples: any[]): PreviewPart[] {
             <!-- Show uploaded handle -->
             <div
               v-if="headerMediaHandle"
-              class="bg-green-950 light:bg-green-50 border border-green-800 light:border-green-200 rounded-lg p-3"
+              class="rounded-lg border border-primary/20 bg-primary/10 p-3 light:border-primary/20 light:bg-primary/10"
             >
               <div class="flex items-center gap-2">
-                <Check class="h-4 w-4 text-green-600" />
-                <span class="text-sm text-green-200 light:text-green-800">{{
+                <Check class="h-4 w-4 text-primary" />
+                <span class="text-sm text-primary">{{
                   $t("templates.mediaUploadedSuccess")
                 }}</span>
               </div>
@@ -1370,12 +1370,12 @@ function parseFormatPreview(text: string, samples: any[]): PreviewPart[] {
                   >
                     <span
                       v-if="part.type === 'sample'"
-                      class="bg-green-900 light:bg-green-100 px-1 rounded"
+                      class="rounded bg-primary/20 px-1 text-primary light:bg-primary/10"
                       >{{ part.text }}</span
                     >
                     <span
                       v-else-if="part.type === 'missing'"
-                      class="bg-yellow-900 light:bg-yellow-100 px-1 rounded"
+                      class="rounded bg-primary/10 px-1 text-primary light:bg-primary/10"
                       >{{ part.text }}</span
                     >
                     <template v-else>{{ part.text }}</template>

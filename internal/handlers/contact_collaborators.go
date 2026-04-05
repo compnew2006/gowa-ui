@@ -252,7 +252,7 @@ func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
 			Payload: map[string]any{
 				"contact_id":      contactID.String(),
 				"invited_by":      userID.String(),
-				"invited_by_name": a.ResolveActivityActorName(userID),
+				"invited_by_name": a.ResolveUserDisplayName(userID),
 			},
 		})
 		a.WSHub.BroadcastToContact(orgID, contactID, websocket.WSMessage{

@@ -24,7 +24,7 @@ func (a *App) appendClaimedChatSystemMessage(contact *models.Contact, userID uui
 		return
 	}
 
-	claimerName := strings.TrimSpace(a.ResolveActivityActorName(userID))
+	claimerName := strings.TrimSpace(a.ResolveUserDisplayName(userID))
 	if claimerName == "" {
 		claimerName = "An agent"
 	}
@@ -41,7 +41,7 @@ func (a *App) appendClosedChatSystemMessage(contact *models.Contact, userID uuid
 		return
 	}
 
-	closerName := strings.TrimSpace(a.ResolveActivityActorName(userID))
+	closerName := strings.TrimSpace(a.ResolveUserDisplayName(userID))
 	if closerName == "" {
 		closerName = "An agent"
 	}
@@ -58,7 +58,7 @@ func (a *App) appendPublicChatSystemMessage(contact *models.Contact, userID uuid
 		return
 	}
 
-	actorName := strings.TrimSpace(a.ResolveActivityActorName(userID))
+	actorName := strings.TrimSpace(a.ResolveUserDisplayName(userID))
 	if actorName == "" {
 		actorName = "An agent"
 	}
@@ -121,11 +121,11 @@ func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUser
 		return
 	}
 
-	actorName := strings.TrimSpace(a.ResolveActivityActorName(actorUserID))
+	actorName := strings.TrimSpace(a.ResolveUserDisplayName(actorUserID))
 	if actorName == "" {
 		actorName = "An employee"
 	}
-	assigneeName := strings.TrimSpace(a.ResolveActivityActorName(*assigneeUserID))
+	assigneeName := strings.TrimSpace(a.ResolveUserDisplayName(*assigneeUserID))
 	if assigneeName == "" {
 		assigneeName = "an agent"
 	}
@@ -972,7 +972,7 @@ func (a *App) notifyChatDeletedByUser(ctx context.Context, orgID, userID uuid.UU
 		return
 	}
 
-	actorName := strings.TrimSpace(a.ResolveActivityActorName(userID))
+	actorName := strings.TrimSpace(a.ResolveUserDisplayName(userID))
 	if actorName == "" {
 		actorName = "A user"
 	}

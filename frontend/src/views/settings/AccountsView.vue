@@ -314,13 +314,13 @@ function copyToClipboard(text: string, _label: string) {
 function getStatusBadgeClass(status: string) {
   switch (status) {
     case "active":
-      return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+      return "bg-primary/10 text-primary";
     case "inactive":
       return "bg-muted text-muted-foreground";
     case "error":
       return "bg-destructive/10 text-destructive";
     default:
-      return "bg-amber-500/15 text-amber-700 dark:text-amber-400";
+      return "bg-primary/10 text-primary";
   }
 }
 
@@ -333,7 +333,7 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
     <PageHeader
       :title="$t('accounts.title')"
       :icon="Phone"
-      icon-gradient="bg-gradient-to-br from-emerald-500 to-green-600 shadow-emerald-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
       back-link="/settings"
       :breadcrumbs="[
         { label: $t('settings.title'), href: '/settings' },
@@ -425,7 +425,7 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
               <div class="flex items-start justify-between">
                 <div class="flex items-start gap-4">
                   <div
-                    class="h-12 w-12 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/20"
+                    class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-sky-600 shadow-lg shadow-blue-500/20"
                   >
                     <Phone class="h-6 w-6 text-white" />
                   </div>
@@ -446,7 +446,7 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
                       <Badge
                         v-if="testResults[account.id]?.is_test_number"
                         variant="outline"
-                        class="border-amber-600 text-amber-600 light:border-amber-500 light:text-amber-700"
+                        class="border-primary/40 text-primary"
                       >
                         <TestTube2 class="h-3 w-3 mr-1" />
                         {{ $t("accounts.testNumber") }}
@@ -457,7 +457,7 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
                     <div v-if="testResults[account.id]" class="mt-2 space-y-2">
                       <div
                         v-if="testResults[account.id].success"
-                        class="flex items-center gap-2 text-green-400 light:text-green-600"
+                        class="flex items-center gap-2 text-primary"
                       >
                         <CheckCircle2 class="h-4 w-4" />
                         <span class="text-sm font-medium">{{
@@ -482,15 +482,14 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
                       <!-- Warning Message for Test Numbers -->
                       <div
                         v-if="testResults[account.id].warning"
-                        class="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2"
+                        class="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/10 p-2"
                       >
                         <AlertCircle
-                          class="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500 dark:text-amber-300"
+                          class="mt-0.5 h-4 w-4 flex-shrink-0 text-primary"
                         />
-                        <span
-                          class="text-sm text-amber-700 dark:text-amber-300"
-                          >{{ testResults[account.id].warning }}</span
-                        >
+                        <span class="text-sm text-primary">{{
+                          testResults[account.id].warning
+                        }}</span>
                       </div>
                     </div>
 
@@ -542,7 +541,7 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
                           variant="outline"
                           :class="
                             account.has_access_token
-                              ? 'border-green-600 text-green-600'
+                              ? 'border-primary/40 text-primary'
                               : 'border-destructive text-destructive'
                           "
                         >
@@ -561,8 +560,8 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
                           variant="outline"
                           :class="
                             account.has_app_secret
-                              ? 'border-green-600 text-green-600'
-                              : 'border-yellow-600 text-yellow-600'
+                              ? 'border-primary/40 text-primary'
+                              : 'border-border text-muted-foreground'
                           "
                         >
                           {{
@@ -677,7 +676,7 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
                         size="icon"
                         @click="openProfileDialog(account)"
                       >
-                        <Store class="h-4 w-4 text-emerald-500" />
+                        <Store class="h-4 w-4 text-primary" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{{
@@ -708,7 +707,7 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
           >
             <div class="py-12 text-center text-muted-foreground">
               <div
-                class="h-16 w-16 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20"
+                class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-sky-600 shadow-lg shadow-blue-500/20"
               >
                 <Phone class="h-8 w-8 text-white" />
               </div>

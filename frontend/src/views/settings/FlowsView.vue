@@ -397,7 +397,7 @@ async function syncFlows() {
 function getStatusClass(status: string): string {
   return (
     {
-      PUBLISHED: "border-green-600 text-green-600",
+      PUBLISHED: "border-primary/40 text-primary",
       DEPRECATED: "border-destructive text-destructive",
     }[status] || ""
   );
@@ -442,7 +442,7 @@ function sanitizeScreensForMeta(screens: any[]): any[] {
       :title="$t('flows.title')"
       :subtitle="$t('flows.subtitle')"
       :icon="Workflow"
-      icon-gradient="bg-gradient-to-br from-violet-500 to-purple-600 shadow-violet-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
         <Button
@@ -629,7 +629,7 @@ function sanitizeScreensForMeta(screens: any[]): any[] {
                       v-if="isFlowDraft(flow) && flow.meta_flow_id"
                       variant="ghost"
                       size="icon"
-                      class="h-8 w-8 text-green-600"
+                      class="h-8 w-8 text-primary"
                       @click="publishFlow(flow)"
                       :disabled="
                         savingToMetaFlowId === flow.id ||

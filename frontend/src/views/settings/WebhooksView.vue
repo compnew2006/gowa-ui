@@ -328,7 +328,7 @@ onMounted(() => fetchWebhooks());
       :title="$t('webhooks.title')"
       :subtitle="$t('webhooks.subtitle')"
       :icon="WebhookIcon"
-      icon-gradient="bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
         <Button variant="outline" size="sm" @click="openCreateDialog"
@@ -614,7 +614,7 @@ onMounted(() => fetchWebhooks());
             :class="[
               'p-4 rounded-lg border',
               testResult?.success
-                ? 'bg-green-500/10 border-green-500/20 text-green-500'
+                ? 'bg-primary/10 border-primary/20 text-primary'
                 : 'bg-red-500/10 border-red-500/20 text-red-500',
             ]"
           >

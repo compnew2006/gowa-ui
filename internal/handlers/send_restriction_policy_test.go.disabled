@@ -62,15 +62,6 @@ func TestApp_SendMessage_BlockedByStrictSendRestrictions(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 	assert.Contains(t, string(testutil.GetResponseBody(req)), "Message blocked by strict sending restrictions")
 	assert.Contains(t, string(testutil.GetResponseBody(req)), "POLICY_NO_INBOUND")
-
-	var logEntry models.ActivityLog
-	require.NoError(t, app.DB.
-		Where("organization_id = ? AND user_id = ? AND event_type = ?", org.ID, user.ID, "security.restricted_send_blocked").
-		Order("created_at DESC").
-		First(&logEntry).Error)
-	assert.Equal(t, "blocked", logEntry.Status)
-	assert.Equal(t, "security", logEntry.Category)
-	assert.Equal(t, "POLICY_NO_INBOUND", logEntry.Metadata["reason_code"])
 }
 
 func TestApp_SendMessage_StrictRestrictionsAutoAuthorizeFromIncomingHistory(t *testing.T) {

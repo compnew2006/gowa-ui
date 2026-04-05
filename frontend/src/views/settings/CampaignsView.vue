@@ -1391,7 +1391,7 @@ function getStatusIcon(status: string) {
 function getStatusClass(status: string): string {
   switch (status) {
     case "completed":
-      return "border-green-600 text-green-600";
+      return "border-primary/40 text-primary";
     case "running":
     case "processing":
     case "queued":
@@ -1611,7 +1611,7 @@ function getRecipientStatusClass(status: string): string {
   switch (status) {
     case "sent":
     case "delivered":
-      return "border-green-600 text-green-600";
+      return "border-primary/40 text-primary";
     case "failed":
       return "border-destructive text-destructive";
     default:
@@ -2030,7 +2030,7 @@ async function addRecipientsFromCSV() {
       :title="$t('campaigns.title')"
       :subtitle="$t('campaigns.subtitle')"
       :icon="Megaphone"
-      icon-gradient="bg-gradient-to-br from-rose-500 to-pink-600 shadow-rose-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
         <Button variant="outline" size="sm" @click="openCreateDialog">
@@ -2382,7 +2382,7 @@ async function addRecipientsFromCSV() {
                           campaign.total_recipients
                         }}</span
                       >
-                      <span class="text-green-600" title="Delivered">{{
+                      <span class="text-primary" title="Delivered">{{
                         campaign.delivered_count
                       }}</span>
                       <span class="text-blue-600" title="Read">{{
@@ -2440,7 +2440,7 @@ async function addRecipientsFromCSV() {
                       "
                       variant="ghost"
                       size="icon"
-                      class="h-8 w-8 text-green-600"
+                      class="h-8 w-8 text-primary"
                       @click="startCampaign(campaign)"
                       title="Start"
                     >
@@ -2463,7 +2463,7 @@ async function addRecipientsFromCSV() {
                       v-if="campaign.status === 'paused'"
                       variant="ghost"
                       size="icon"
-                      class="h-8 w-8 text-green-600"
+                      class="h-8 w-8 text-primary"
                       @click="startCampaign(campaign)"
                       title="Resume"
                     >
@@ -2781,7 +2781,7 @@ async function addRecipientsFromCSV() {
                 <div v-if="recipientsInput.trim()" class="space-y-2">
                   <p
                     v-if="manualInputValidation.isValid"
-                    class="text-xs text-green-600"
+                    class="text-xs text-primary"
                   >
                     {{
                       $t("campaigns.recipientsValid", {
@@ -2864,12 +2864,12 @@ async function addRecipientsFromCSV() {
               <div
                 v-if="isWhatsmeowProvider"
                 data-testid="campaign-contacts-scope-banner"
-                class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 light:border-emerald-200 light:bg-emerald-50/80"
+                class="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 light:border-primary/20 light:bg-primary/10"
               >
                 <div class="flex items-center justify-between gap-3 flex-wrap">
                   <div class="space-y-1">
                     <p
-                      class="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600 light:text-emerald-700"
+                      class="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary"
                     >
                       {{ $t("campaigns.contactsSourceScope") }}
                     </p>
@@ -2882,7 +2882,7 @@ async function addRecipientsFromCSV() {
                   </div>
                   <Badge
                     variant="outline"
-                    class="border-emerald-500/25 bg-white/70 text-emerald-700 light:border-emerald-300 light:bg-white"
+                    class="border-primary/25 bg-white/70 text-primary light:border-primary/30 light:bg-white"
                   >
                     {{ $t("campaigns.contactsSource") }}
                   </Badge>
@@ -3002,7 +3002,7 @@ async function addRecipientsFromCSV() {
 
               <div
                 v-else-if="contactsImportMissingInstance"
-                class="rounded-xl border border-dashed border-amber-300/70 bg-amber-50/80 py-8 px-4 text-center text-amber-900 light:border-amber-300 light:bg-amber-50"
+                class="rounded-xl border border-dashed border-primary/30 bg-primary/5 py-8 px-4 text-center text-primary light:border-primary/30 light:bg-primary/10"
               >
                 <Users class="h-12 w-12 mx-auto mb-2 opacity-60" />
                 <p class="font-medium">
@@ -3243,15 +3243,15 @@ async function addRecipientsFromCSV() {
                   v-if="
                     csvValidation.warnings && csvValidation.warnings.length > 0
                   "
-                  class="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3"
+                  class="rounded-lg border border-primary/20 bg-primary/10 p-3"
                 >
                   <div
-                    class="flex items-center gap-2 text-orange-600 font-medium mb-2"
+                    class="mb-2 flex items-center gap-2 font-medium text-primary"
                   >
                     <AlertTriangle class="h-4 w-4" />
                     {{ $t("campaigns.warnings") }}
                   </div>
-                  <ul class="list-disc list-inside text-sm text-orange-600">
+                  <ul class="list-disc list-inside text-sm text-primary">
                     <li
                       v-for="warning in csvValidation.warnings"
                       :key="warning"
@@ -3292,7 +3292,7 @@ async function addRecipientsFromCSV() {
                 <!-- Summary -->
                 <div class="flex flex-wrap items-center gap-4 text-sm">
                   <div class="flex items-center gap-1">
-                    <Check class="h-4 w-4 text-green-600" />
+                    <Check class="h-4 w-4 text-primary" />
                     <span
                       >{{ csvValidation.rows.filter((r) => r.isValid).length }}
                       {{ $t("campaigns.valid") }}</span
@@ -3316,7 +3316,7 @@ async function addRecipientsFromCSV() {
                         r.errors.some((e) => e.includes('Duplicate')),
                       ).length > 0
                     "
-                    class="flex items-center gap-1 text-orange-600"
+                    class="flex items-center gap-1 text-primary"
                   >
                     <Users class="h-4 w-4" />
                     <span
@@ -3368,7 +3368,7 @@ async function addRecipientsFromCSV() {
                           <td class="py-2 px-3">
                             <Check
                               v-if="row.isValid"
-                              class="h-4 w-4 text-green-600"
+                              class="h-4 w-4 text-primary"
                             />
                             <Tooltip v-else>
                               <TooltipTrigger>

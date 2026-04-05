@@ -279,7 +279,7 @@ onMounted(() => {
       :title="$t('sso.title')"
       :subtitle="$t('sso.subtitle')"
       :icon="ShieldCheck"
-      icon-gradient="bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     />
 
     <ScrollArea class="flex-1">
@@ -455,7 +455,7 @@ onMounted(() => {
               >
                 <Check
                   v-if="copiedRedirectUrl"
-                  class="h-4 w-4 text-green-500"
+                  class="h-4 w-4 text-primary"
                 />
                 <Copy v-else class="h-4 w-4" />
               </Button>

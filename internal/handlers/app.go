@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/compnew2006/whatomate/internal/config"
@@ -56,21 +57,12 @@ func (a *App) WaitForBackgroundTasks() {
 // Super admins MUST select an organization - no "all organizations" view
 func (a *App) getOrgID(r *fastglue.Request) (uuid.UUID, error) {
 	// Get user's default organization ID from JWT
-	var defaultOrgID uuid.UUID
 	orgIDVal := r.RequestCtx.UserValue("organization_id")
 	if orgIDVal == nil {
 		return uuid.Nil, errors.New("organization_id not found in context")
 	}
-	switch v := orgIDVal.(type) {
-	case uuid.UUID:
-		defaultOrgID = v
-	case string:
-		parsed, err := uuid.Parse(v)
-		if err != nil {
-			return uuid.Nil, errors.New("organization_id is not a valid UUID")
-		}
-		defaultOrgID = parsed
-	default:
+	defaultOrgID, ok := parseContextUUID(orgIDVal)
+	if !ok {
 		return uuid.Nil, errors.New("organization_id is not a valid UUID")
 	}
 
@@ -192,19 +184,30 @@ func (a *App) getOrgAndUserID(r *fastglue.Request) (orgID, userID uuid.UUID, err
 	if userIDVal == nil {
 		return uuid.Nil, uuid.Nil, errors.New("user_id not found in context")
 	}
-	switch v := userIDVal.(type) {
-	case uuid.UUID:
-		userID = v
-	case string:
-		userID, err = uuid.Parse(v)
-		if err != nil {
-			return uuid.Nil, uuid.Nil, errors.New("user_id is not a valid UUID")
-		}
-	default:
+	userID, ok := parseContextUUID(userIDVal)
+	if !ok {
 		return uuid.Nil, uuid.Nil, errors.New("user_id is not a valid UUID")
 	}
 
 	return orgID, userID, nil
+}
+
+func parseContextUUID(value any) (uuid.UUID, bool) {
+	switch typed := value.(type) {
+	case uuid.UUID:
+		if typed == uuid.Nil {
+			return uuid.Nil, false
+		}
+		return typed, true
+	case string:
+		parsed, err := uuid.Parse(strings.TrimSpace(typed))
+		if err != nil || parsed == uuid.Nil {
+			return uuid.Nil, false
+		}
+		return parsed, true
+	default:
+		return uuid.Nil, false
+	}
 }
 
 // requirePermission checks if the user has the required permission.

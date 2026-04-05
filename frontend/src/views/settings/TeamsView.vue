@@ -357,7 +357,7 @@ function getStrategyIcon(strategy: string) {
     <PageHeader
       :title="$t('teams.title')"
       :icon="Users"
-      icon-gradient="bg-gradient-to-br from-cyan-500 to-blue-600 shadow-cyan-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
       back-link="/settings"
       :breadcrumbs="breadcrumbs"
     >
@@ -471,7 +471,7 @@ function getStrategyIcon(strategy: string) {
                   <Badge
                     variant="outline"
                     :class="
-                      team.is_active ? 'border-green-600 text-green-600' : ''
+                      team.is_active ? 'border-primary/40 text-primary' : ''
                     "
                     >{{
                       team.is_active

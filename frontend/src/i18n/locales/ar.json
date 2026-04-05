@@ -170,9 +170,6 @@
     "Flow": "تدفق",
     "keywordRule": "قاعدة الكلمات المفتاحية",
     "KeywordRule": "قاعدة الكلمات المفتاحية",
-    "leadRequest": "طلب عميل محتمل",
-    "leadRequests": "طلبات العملاء المحتملين",
-    "LeadRequest": "طلب عميل محتمل",
     "media": "الوسائط",
     "Media": "الوسائط",
     "member": "عضو",
@@ -241,8 +238,6 @@
     "apiKeys": "مفاتيح API",
     "webhooks": "الويب هوك",
     "customActions": "الإجراءات المخصصة",
-    "activityLogs": "سجل النشاط",
-    "leadRequests": "طلبات العملاء المحتملين",
     "sso": "SSO",
     "skipToMain": "تخطي إلى المحتوى الرئيسي",
     "expandSidebar": "توسيع الشريط الجانبي",
@@ -716,53 +711,6 @@
     "notificationSound2": "الصوت 2",
     "notificationSoundOriginal": "الصوت الأصلي",
     "previewSound": "تشغيل"
-  },
-  "leadRequests": {
-    "title": "طلبات العملاء المحتملين",
-    "subtitle": "راجع طلبات العرض القادمة من صفحة الأسعار وحدّث حالة المتابعة.",
-    "inboxTitle": "صندوق طلبات العملاء",
-    "inboxDescription": "ابحث في الطلبات الأخيرة، وراجع التفاصيل، وحدّث حالة المتابعة.",
-    "searchPlaceholder": "ابحث في طلبات العملاء...",
-    "filterStatus": "تصفية حسب الحالة",
-    "noMatching": "لا توجد طلبات مطابقة",
-    "noMatchingDescription": "جرّب كلمة بحث أخرى أو غيّر فلتر الحالة.",
-    "emptyTitle": "لا توجد طلبات حتى الآن",
-    "emptyDescription": "ستظهر هنا طلبات العرض الجديدة القادمة من صفحة الأسعار العامة.",
-    "detailsTitle": "تفاصيل الطلب",
-    "detailsDescription": "راجع بيانات الطلب وحدّث حالة المتابعة.",
-    "noCountry": "لم يتم إدخال الدولة",
-    "noMessage": "لا توجد رسالة.",
-    "updateStatus": "تحديث الحالة",
-    "columns": {
-      "submitter": "مقدم الطلب",
-      "company": "الشركة",
-      "contact": "بيانات التواصل",
-      "requestedPlan": "الباقة المطلوبة",
-      "created": "تاريخ الإرسال"
-    },
-    "fields": {
-      "email": "البريد المهني",
-      "phoneWhatsApp": "الهاتف / واتساب",
-      "country": "الدولة",
-      "requestedPlan": "الباقة المطلوبة",
-      "source": "مسار المصدر",
-      "submittedAt": "وقت الإرسال",
-      "message": "الرسالة",
-      "status": "الحالة"
-    },
-    "status": {
-      "new": "جديد",
-      "contacted": "تم التواصل",
-      "qualified": "مؤهل",
-      "closed": "مغلق"
-    },
-    "plan": {
-      "unspecified": "غير محدد",
-      "starter": "البداية",
-      "growth": "النمو",
-      "dedicated": "بيئة خاصة للأعمال",
-      "enterprise": "مؤسسي"
-    }
   },
   "closedChats": {
     "title": "الدردشات المغلقة",
@@ -2409,70 +2357,6 @@
     "addFieldPlaceholder": "+ إضافة",
     "exampleUrlPlaceholder": "https://example.com",
     "dataPathPlaceholder": "data.path"
-  },
-  "activityLogs": {
-    "title": "سجل النشاط",
-    "subtitle": "تتبّع تسجيل الدخول والتفاعل وطلبات API في خط زمني واحد",
-    "refresh": "تحديث",
-    "logCustomEvent": "تسجيل حدث مخصص",
-    "filtersTitle": "الفلاتر",
-    "filtersDescription": "قم بتصفية أحداثك حسب الفئة والمصدر والحالة ونوع الحدث والنطاق الزمني.",
-    "applyFilters": "تطبيق الفلاتر",
-    "resetFilters": "إعادة التعيين",
-    "historyTitle": "سجل النشاط",
-    "historyDescription": "يتم عرض أحداثك أنت فقط هنا.",
-    "itemName": "أحداث النشاط",
-    "noLogsFound": "لا توجد أحداث نشاط",
-    "noLogsFoundDesc": "جرّب تغيير الفلاتر أو أنشئ حدثًا مخصصًا.",
-    "failedLoad": "فشل تحميل سجل النشاط",
-    "failedCreate": "فشل إنشاء حدث النشاط",
-    "customEventCreated": "تم إنشاء حدث نشاط مخصص",
-    "customEventTitle": "إنشاء حدث نشاط مخصص",
-    "customEventDescription": "استخدم هذا النموذج لتسجيل حدث نشاط يدوي.",
-    "submitCustomEvent": "إنشاء الحدث",
-    "columns": {
-      "timestamp": "الوقت",
-      "category": "الفئة",
-      "eventType": "نوع الحدث",
-      "action": "الإجراء",
-      "source": "المصدر",
-      "status": "الحالة",
-      "request": "الطلب",
-      "metadata": "البيانات"
-    },
-    "filters": {
-      "category": "الفئة",
-      "eventType": "نوع الحدث",
-      "eventTypePlaceholder": "مثال: auth.login",
-      "source": "المصدر",
-      "status": "الحالة",
-      "startDate": "تاريخ البداية",
-      "endDate": "تاريخ النهاية"
-    },
-    "options": {
-      "all": "الكل",
-      "auth": "المصادقة",
-      "engagement": "التفاعل",
-      "system": "النظام",
-      "custom": "مخصص"
-    },
-    "customForm": {
-      "eventType": "نوع الحدث",
-      "eventTypePlaceholder": "ui.button_click",
-      "action": "الإجراء",
-      "actionPlaceholder": "export_contacts",
-      "contactId": "معرّف جهة الاتصال",
-      "messageId": "معرّف الرسالة",
-      "optionalUuid": "UUID اختياري",
-      "metadata": "البيانات (JSON object)",
-      "metadataPlaceholder": "{\n  \"key\": \"value\"\n}"
-    },
-    "validation": {
-      "eventTypeRequired": "نوع الحدث مطلوب",
-      "actionRequired": "الإجراء مطلوب",
-      "metadataJson": "يجب أن تكون البيانات بصيغة JSON صحيحة",
-      "metadataObject": "يجب أن تكون البيانات كائن JSON"
-    }
   },
   "instances": {
     "status": {

@@ -557,7 +557,7 @@ onBeforeUnmount(() => {
       :title="$t('settings.title')"
       :subtitle="$t('settings.subtitle')"
       :icon="Settings"
-      icon-gradient="bg-gradient-to-br from-gray-500 to-gray-600 shadow-gray-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     />
     <ScrollArea class="flex-1">
       <div class="p-6 space-y-4 max-w-4xl mx-auto">

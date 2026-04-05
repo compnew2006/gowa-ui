@@ -81,10 +81,6 @@ const router = createRouter({
           // All roles can access profile
         },
         {
-          path: "activity-logs",
-          redirect: "/settings/activity-logs",
-        },
-        {
           path: "templates",
           name: "templates",
           component: () => import("@/views/settings/TemplatesView.vue"),
@@ -221,18 +217,6 @@ const router = createRouter({
           meta: { permission: "users" },
         },
         {
-          path: "settings/activity-logs",
-          name: "activity-logs",
-          component: () => import("@/views/activity/ActivityLogsView.vue"),
-          meta: { managerOrAdminOnly: true },
-        },
-        {
-          path: "settings/lead-requests",
-          name: "lead-requests",
-          component: () => import("@/views/settings/LeadRequestsView.vue"),
-          meta: { permission: "settings.general" },
-        },
-        {
           path: "settings/roles",
           name: "roles",
           component: () => import("@/views/settings/RolesView.vue"),
@@ -267,12 +251,6 @@ const router = createRouter({
           name: "custom-actions",
           component: () => import("@/views/settings/CustomActionsView.vue"),
           meta: { permission: "custom_actions" },
-        },
-        {
-          path: "settings/migration",
-          name: "migration",
-          component: () => import("@/views/settings/MigrationView.vue"),
-          meta: { permission: "settings.general" },
         },
       ],
     },
@@ -319,13 +297,10 @@ const navigationOrder = [
       { path: "/settings/tags", permission: "tags" },
       { path: "/settings/teams", permission: "teams" },
       { path: "/settings/users", permission: "users" },
-      { path: "/settings/activity-logs", permission: "settings.general" },
-      { path: "/settings/lead-requests", permission: "settings.general" },
       { path: "/settings/roles", permission: "roles" },
       { path: "/settings/api-keys", permission: "api_keys" },
       { path: "/settings/webhooks", permission: "webhooks" },
       { path: "/settings/custom-actions", permission: "custom_actions" },
-      { path: "/settings/migration", permission: "settings.general" },
       { path: "/settings/sso", permission: "settings.sso" },
     ],
   },
@@ -360,13 +335,13 @@ router.beforeEach(async (to, _from, next) => {
 
   // Check if route requires auth
   if (to.meta.requiresAuth !== false) {
-      if (!authStore.isAuthenticated) {
-        // Try to restore session from localStorage
-        const restored = await authStore.restoreSession();
-        if (!restored) {
-          return next({ name: "login", query: { redirect: to.fullPath } });
-        }
+    if (!authStore.isAuthenticated) {
+      // Try to restore session from localStorage
+      const restored = await authStore.restoreSession();
+      if (!restored) {
+        return next({ name: "login", query: { redirect: to.fullPath } });
       }
+    }
 
     // Check permission-based access
     const requiredPermission = to.meta.permission;

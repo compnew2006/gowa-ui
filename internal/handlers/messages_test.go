@@ -206,44 +206,6 @@ func TestApp_SendOutgoingMessage_TextMessage_Success(t *testing.T) {
 	assert.Equal(t, mockServer.nextMessageID, dbMsg.WhatsAppMessageID)
 }
 
-func TestApp_SendOutgoingMessage_UserAuthoredCreatesActivityLog(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
-	defer mockServer.close()
-
-	app := newMsgTestApp(t, mockServer)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	account := createTestAccount(t, app, org.ID)
-	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
-
-	ctx := testutil.TestContext(t)
-
-	req := handlers.OutgoingMessageRequest{
-		Account: account,
-		Contact: contact,
-		Type:    models.MessageTypeText,
-		Content: "Audit me",
-	}
-
-	opts := handlers.ChatbotSendOptions()
-	opts.SentByUserID = &user.ID
-
-	msg, err := app.SendOutgoingMessage(ctx, req, opts)
-	require.NoError(t, err)
-	require.NotNil(t, msg)
-
-	var log models.ActivityLog
-	require.NoError(t, app.DB.Where("user_id = ? AND message_id = ? AND event_type = ?", user.ID, msg.ID, "engagement.conversation_response").
-		Order("created_at DESC").
-		First(&log).Error)
-	assert.Equal(t, "engagement", log.Category)
-	assert.Equal(t, "send_message", log.Action)
-	assert.Equal(t, "success", log.Status)
-	assert.Equal(t, "engagement", log.Source)
-	require.NotNil(t, log.ContactID)
-	assert.Equal(t, contact.ID, *log.ContactID)
-}
-
 func TestApp_SendOutgoingMessage_TextMessage_APIError(t *testing.T) {
 	mockServer := newMockWhatsAppServer()
 	defer mockServer.close()

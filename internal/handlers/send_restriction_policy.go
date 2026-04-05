@@ -745,10 +745,6 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 
 	actorType := opts.resolvedActorType()
 	isUserSend := actorType == MessageActorUser && opts.SentByUserID != nil
-	var logUserID *uuid.UUID
-	if isUserSend {
-		logUserID = opts.SentByUserID
-	}
 	if !isUserSend && !policy.ApplyToSystem {
 		return nil
 	}
@@ -789,8 +785,6 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 		allowAssignedInstanceBypass := isContactAssignedToUser(req.Contact, *opts.SentByUserID)
 		if len(allowedInstanceIDs) == 0 {
 			if !allowAssignedInstanceBypass {
-				reason := "restricted user does not have an allowed instance configured"
-				a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
 				if !shouldEnforce {
 					return nil
 				}
@@ -803,12 +797,6 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 			outgoingInstanceID := resolveOutgoingInstanceID(req)
 			if outgoingInstanceID == nil || !containsRestrictedUUID(allowedInstanceIDs, *outgoingInstanceID) {
 				if !allowAssignedInstanceBypass {
-					requestedInstance := ""
-					if outgoingInstanceID != nil {
-						requestedInstance = outgoingInstanceID.String()
-					}
-					reason := fmt.Sprintf("instance mismatch (allowed=%s, requested=%s)", strings.Join(stringifyUUIDs(allowedInstanceIDs), ","), requestedInstance)
-					a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInstance, "blocked")
 					if !shouldEnforce {
 						return nil
 					}
@@ -822,8 +810,6 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 	}
 	targetNumber := normalizeRestrictedPhoneNumber(targetPhone)
 	if targetNumber == "" {
-		reason := "contact phone number could not be normalized"
-		a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetPhone, reason, ReasonCodePolicyNoInbound, "blocked")
 		if !shouldEnforce {
 			return nil
 		}
@@ -851,71 +837,11 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 		return nil
 	}
 
-	reason := "number is not present in user's authorized list and has no prior incoming history"
-	status := "blocked"
-	if !shouldEnforce {
-		status = "audit"
-	}
-	a.logRestrictedSendBlocked(orgID, logUserID, req.Contact, req.Type, targetNumber, reason, ReasonCodePolicyNoInbound, status)
 	if !shouldEnforce {
 		return nil
 	}
 	return &restrictedSendViolationError{
 		message:    "Message blocked by strict sending restrictions. You can only send to phone numbers that have previously sent incoming messages in your assigned chats.",
 		reasonCode: ReasonCodePolicyNoInbound,
-	}
-}
-
-func (a *App) logRestrictedSendBlocked(
-	orgID uuid.UUID,
-	userID *uuid.UUID,
-	contact *models.Contact,
-	messageType models.MessageType,
-	targetPhone,
-	reason,
-	reasonCode,
-	status string,
-) {
-	if a == nil || a.DB == nil {
-		return
-	}
-
-	metadata := models.JSONB{
-		"message_type": messageType,
-		"target_phone": NormalizeActivityText(targetPhone, 80),
-		"reason":       NormalizeActivityText(reason, 220),
-	}
-	if code := strings.TrimSpace(reasonCode); code != "" {
-		metadata["reason_code"] = code
-	}
-	normalizedStatus := strings.TrimSpace(status)
-	if normalizedStatus == "" {
-		normalizedStatus = "blocked"
-	}
-
-	entry := &models.ActivityLog{
-		OrganizationID: &orgID,
-		UserID:         userID,
-		Category:       "security",
-		EventType:      "security.restricted_send_blocked",
-		Action:         "send_message",
-		Status:         normalizedStatus,
-		Source:         "security",
-		Metadata:       metadata,
-	}
-
-	if contact != nil {
-		contactID := contact.ID
-		entry.ContactID = &contactID
-		if name := NormalizeActivityText(contact.ProfileName, 120); name != "" {
-			entry.Metadata["contact_name"] = name
-		}
-		if phone := NormalizeActivityText(contact.PhoneNumber, 80); phone != "" {
-			entry.Metadata["contact_phone"] = phone
-		}
-	}
-
-	if err := a.InsertActivity(entry); err != nil {
-		a.Log.Error("Failed to log restricted send block", "error", err, "org_id", orgID, "user_id", userID)
 	}
 }

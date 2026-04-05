@@ -324,7 +324,7 @@ function handleAttachmentSelection(event: Event) {
       :title="$t('cannedResponses.title')"
       :subtitle="$t('cannedResponses.subtitle')"
       :icon="MessageSquareText"
-      icon-gradient="bg-gradient-to-br from-teal-500 to-emerald-600 shadow-teal-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
         <Button variant="outline" size="sm" @click="openCreateDialog"
@@ -427,7 +427,7 @@ function handleAttachmentSelection(event: Event) {
                 <template #cell-status="{ item: response }">
                   <Badge
                     v-if="response.is_active"
-                    class="bg-emerald-500/20 text-emerald-400 border-transparent text-xs"
+                    class="bg-primary/10 text-primary border-transparent text-xs"
                     >{{ $t("common.active") }}</Badge
                   >
                   <Badge v-else variant="secondary" class="text-xs">{{

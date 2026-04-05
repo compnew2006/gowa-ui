@@ -219,57 +219,6 @@ func TestLogin_Success_WithRoleAndPermissions(t *testing.T) {
 	assert.NotEmpty(t, resp.Data.User.Role.Permissions)
 }
 
-func TestLogin_LogsActivityOnSuccess(t *testing.T) {
-	app := newTestApp(t)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	password := "validpassword123"
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithPassword(password))
-
-	req := testutil.NewJSONRequest(t, map[string]string{
-		"email":    user.Email,
-		"password": password,
-	})
-
-	err := app.Login(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-	// Verify activity log was created
-	var log models.ActivityLog
-	err = app.DB.Where("user_id = ? AND event_type = ?", user.ID, "auth.login").
-		Order("created_at DESC").
-		First(&log).Error
-	require.NoError(t, err)
-	assert.Equal(t, "auth", log.Category)
-	assert.Equal(t, "login", log.Action)
-	assert.Equal(t, "success", log.Status)
-}
-
-func TestLogin_LogsActivityOnFailure(t *testing.T) {
-	app := newTestApp(t)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithPassword("correctpassword"))
-
-	req := testutil.NewJSONRequest(t, map[string]string{
-		"email":    user.Email,
-		"password": "wrongpassword",
-	})
-
-	err := app.Login(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusUnauthorized, testutil.GetResponseStatusCode(req))
-
-	// Verify activity log was created
-	var log models.ActivityLog
-	err = app.DB.Where("user_id = ? AND event_type = ?", user.ID, "auth.login_failed").
-		Order("created_at DESC").
-		First(&log).Error
-	require.NoError(t, err)
-	assert.Equal(t, "auth", log.Category)
-	assert.Equal(t, "login", log.Action)
-	assert.Equal(t, "failure", log.Status)
-}
-
 // =============================================================================
 // CREATE REGISTER INVITE TESTS
 // =============================================================================
@@ -1135,32 +1084,6 @@ func TestLogout_Success_NoToken(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "logged_out", resp.Data["status"])
-}
-
-func TestLogout_LogsActivity(t *testing.T) {
-	app := newTestApp(t)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID)
-	refreshToken := testutil.GenerateTestRefreshToken(t, user, testutil.TestJWTSecret, 7*24*time.Hour)
-	seedRefreshTokenState(t, app, refreshToken, user.ID)
-
-	req := testutil.NewJSONRequest(t, map[string]string{
-		"refresh_token": refreshToken,
-	})
-
-	err := app.Logout(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-	// Verify activity log was created
-	var log models.ActivityLog
-	err = app.DB.Where("user_id = ? AND event_type = ?", user.ID, "auth.logout").
-		Order("created_at DESC").
-		First(&log).Error
-	require.NoError(t, err)
-	assert.Equal(t, "auth", log.Category)
-	assert.Equal(t, "logout", log.Action)
-	assert.Equal(t, "success", log.Status)
 }
 
 func TestLogout_ClearsAllAuthCookies(t *testing.T) {

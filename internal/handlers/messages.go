@@ -169,20 +169,6 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 		return nil, fmt.Errorf("failed to create message: %w", err)
 	}
 
-	// Audit user-authored conversation responses.
-	if opts.SentByUserID != nil && req.Contact != nil {
-		a.LogConversationResponse(
-			*opts.SentByUserID,
-			req.Contact.OrganizationID,
-			req.Contact.ID,
-			msg.ID,
-			msg.MessageType,
-			msg.Content,
-			req.Contact.ProfileName,
-			req.Contact.PhoneNumber,
-		)
-	}
-
 	// 2. Define the send function based on provider
 	var sendFn func(sendCtx context.Context) (string, error)
 
@@ -351,7 +337,7 @@ func (a *App) resolveAgentMessagePrefixName(userID uuid.UUID) string {
 		return ""
 	}
 
-	name := strings.TrimSpace(a.ResolveActivityActorName(userID))
+	name := strings.TrimSpace(a.ResolveUserDisplayName(userID))
 	if name == "" {
 		return ""
 	}

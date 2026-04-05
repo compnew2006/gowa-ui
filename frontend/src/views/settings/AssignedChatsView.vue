@@ -56,7 +56,7 @@ onMounted(loadAssignedChats);
       title="Assigned Chats"
       subtitle="Active chats that are currently assigned to agents."
       :icon="UserCheck"
-      icon-gradient="bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     />
 
     <div class="p-6 space-y-4">

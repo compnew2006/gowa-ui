@@ -27,7 +27,6 @@ func (a *App) Login(r *fastglue.Request) error {
 	var user models.User
 	if err := a.DB.Preload("Role").Where("email = ?", req.Email).First(&user).Error; err != nil {
 		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"), []byte(req.Password))
-		a.LogAuthFailure(r, req.Email, nil, nil, "user_not_found")
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid credentials", nil, "")
 	}
 
@@ -53,17 +52,11 @@ func (a *App) Login(r *fastglue.Request) error {
 
 	// Check if user is active
 	if !user.IsActive {
-		userID := user.ID
-		orgID := user.OrganizationID
-		a.LogAuthFailure(r, req.Email, &userID, &orgID, "account_disabled")
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Account is disabled", nil, "")
 	}
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		userID := user.ID
-		orgID := user.OrganizationID
-		a.LogAuthFailure(r, req.Email, &userID, &orgID, "invalid_password")
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid credentials", nil, "")
 	}
 
@@ -84,7 +77,6 @@ func (a *App) Login(r *fastglue.Request) error {
 		a.Log.Error("Failed to set auth cookies", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Internal Server Error", nil, "")
 	}
-	a.LogAuthSuccess(r, &user)
 
 	now := time.Now()
 	return r.SendEnvelope(CookieAuthResponse{
@@ -447,9 +439,6 @@ func (a *App) SwitchOrg(r *fastglue.Request) error {
 
 // Logout invalidates the user's refresh token
 func (a *App) Logout(r *fastglue.Request) error {
-	var loggedUserID *uuid.UUID
-	var loggedOrgID *uuid.UUID
-
 	refreshTokenStr := string(r.RequestCtx.Request.Header.Cookie(cookieRefreshName))
 	if refreshTokenStr == "" {
 		var req LogoutRequest
@@ -468,7 +457,7 @@ func (a *App) Logout(r *fastglue.Request) error {
 		}
 		return a.jwtSecretBytes()
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
-	
+
 	if err != nil || !token.Valid {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
 	}
@@ -478,25 +467,15 @@ func (a *App) Logout(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token claims", nil, "")
 	}
 
-	if claims.UserID != uuid.Nil {
-		u := claims.UserID
-		loggedUserID = &u
-	}
-	if claims.OrganizationID != uuid.Nil {
-		o := claims.OrganizationID
-		loggedOrgID = &o
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	deleted, _ := a.Redis.Del(ctx, refreshTokenKey(claims.ID)).Result()
-	
+
 	if deleted == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Token already revoked or not found", nil, "")
 	}
 
 	a.clearAuthCookies(r)
-	a.LogLogout(r, loggedUserID, loggedOrgID)
 
 	return r.SendEnvelope(map[string]string{"status": "logged_out"})
 }

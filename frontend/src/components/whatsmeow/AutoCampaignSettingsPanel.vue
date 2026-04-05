@@ -131,7 +131,7 @@ function formatScheduleValue(value?: string) {
   <Button
     variant="outline"
     size="sm"
-    class="h-auto min-h-9 w-full whitespace-normal border-white/10 px-3 py-2 text-center leading-4 text-white/70 hover:bg-white/5 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
+    class="h-auto min-h-9 w-full justify-center rounded-xl border-dashed bg-background/60 px-3 py-2 text-center leading-4"
     :disabled="saving || uploading"
     @click="dialogOpen = true"
   >
@@ -141,34 +141,30 @@ function formatScheduleValue(value?: string) {
   </Button>
 
   <Dialog :open="dialogOpen" @update:open="dialogOpen = $event">
-    <DialogContent
-      class="sm:max-w-[640px] bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900"
-    >
+    <DialogContent class="sm:max-w-[640px]">
       <DialogHeader>
         <DialogTitle>{{ $t("instances.auto_campaign.title") }}</DialogTitle>
-        <DialogDescription class="text-white/50 light:text-gray-500">
+        <DialogDescription class="text-muted-foreground">
           {{ $t("instances.auto_campaign.description") }}
         </DialogDescription>
       </DialogHeader>
 
       <div class="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
         <div
-          class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm space-y-2 light:border-emerald-200 light:bg-emerald-50"
+          class="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm"
         >
-          <p class="text-white/80 light:text-emerald-900">
+          <p class="text-foreground">
             {{ $t("instances.auto_campaign.eligibilityHint") }}
           </p>
-          <div
-            class="grid gap-2 md:grid-cols-2 text-xs text-white/60 light:text-emerald-800"
-          >
+          <div class="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
             <p>
-              <span class="font-medium text-white/85 light:text-emerald-950">{{
+              <span class="font-medium text-foreground">{{
                 $t("instances.auto_campaign.lastEvaluation")
               }}</span>
               {{ formatScheduleValue(schedule.lastEvaluationAt) }}
             </p>
             <p>
-              <span class="font-medium text-white/85 light:text-emerald-950">{{
+              <span class="font-medium text-foreground">{{
                 $t("instances.auto_campaign.nextEvaluation")
               }}</span>
               {{ formatScheduleValue(schedule.nextEvaluationAt) }}
@@ -177,14 +173,12 @@ function formatScheduleValue(value?: string) {
         </div>
 
         <div
-          class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3"
+          class="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4"
         >
           <div class="flex items-center justify-between gap-2">
             <div>
-              <Label class="text-white/80 light:text-gray-800">{{
-                $t("instances.auto_campaign.enable")
-              }}</Label>
-              <p class="text-xs text-white/45 light:text-gray-500">
+              <Label>{{ $t("instances.auto_campaign.enable") }}</Label>
+              <p class="text-xs text-muted-foreground">
                 {{ $t("instances.auto_campaign.enableDesc") }}
               </p>
             </div>
@@ -197,7 +191,7 @@ function formatScheduleValue(value?: string) {
             <Label>{{ $t("instances.auto_campaign.namePrefix") }}</Label>
             <Input
               v-model="localSettings.name_prefix"
-              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+              class="bg-background"
               :placeholder="$t('instances.auto_campaign.namePrefixPlaceholder')"
             />
           </div>
@@ -208,7 +202,7 @@ function formatScheduleValue(value?: string) {
               type="number"
               min="1"
               max="365"
-              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+              class="bg-background"
             />
           </div>
         </div>
@@ -221,7 +215,7 @@ function formatScheduleValue(value?: string) {
               type="number"
               min="0"
               step="1"
-              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+              class="bg-background"
             />
           </div>
           <div class="space-y-2">
@@ -231,20 +225,18 @@ function formatScheduleValue(value?: string) {
               type="number"
               min="0"
               step="1"
-              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
+              class="bg-background"
             />
           </div>
         </div>
-        <p class="text-xs text-white/45 light:text-gray-500">
+        <p class="text-xs text-muted-foreground">
           {{ $t("instances.auto_campaign.delayHint") }}
         </p>
 
         <div class="space-y-2">
           <Label>{{ $t("instances.auto_campaign.targetStatus") }}</Label>
           <Select v-model="localSettings.target_status">
-            <SelectTrigger
-              class="bg-white/5 border-white/10 light:bg-white light:border-gray-300"
-            >
+            <SelectTrigger class="bg-background">
               <SelectValue
                 :placeholder="
                   $t('common.selectPlaceholder', {
@@ -253,9 +245,7 @@ function formatScheduleValue(value?: string) {
                 "
               />
             </SelectTrigger>
-            <SelectContent
-              class="bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900"
-            >
+            <SelectContent>
               <SelectItem value="draft">{{
                 $t("instances.auto_campaign.statusDraft")
               }}</SelectItem>
@@ -276,20 +266,18 @@ function formatScheduleValue(value?: string) {
             :placeholder="$t('instances.auto_campaign.messagePlaceholder')"
             :rows="5"
           />
-          <p class="text-xs text-white/45 light:text-gray-500">
+          <p class="text-xs text-muted-foreground">
             {{ $t("instances.auto_campaign.placeholderHint") }}
           </p>
         </div>
 
         <div
-          class="rounded-lg border border-white/10 light:border-gray-200 p-3 space-y-3"
+          class="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4"
         >
           <div class="flex items-center justify-between gap-2">
             <div>
-              <Label class="text-white/80 light:text-gray-800">{{
-                $t("instances.auto_campaign.media")
-              }}</Label>
-              <p class="text-xs text-white/45 light:text-gray-500">
+              <Label>{{ $t("instances.auto_campaign.media") }}</Label>
+              <p class="text-xs text-muted-foreground">
                 {{ $t("instances.auto_campaign.mediaDesc") }}
               </p>
             </div>
@@ -305,7 +293,6 @@ function formatScheduleValue(value?: string) {
                 type="button"
                 variant="outline"
                 size="sm"
-                class="border-white/15 text-white/70 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
                 :disabled="uploading"
                 @click="triggerFilePicker"
               >
@@ -321,7 +308,7 @@ function formatScheduleValue(value?: string) {
                 type="button"
                 variant="outline"
                 size="sm"
-                class="border-red-500/40 text-red-300 light:border-red-300 light:text-red-600 light:hover:bg-red-50"
+                class="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 :disabled="uploading"
                 @click="clearMedia"
               >
@@ -330,13 +317,13 @@ function formatScheduleValue(value?: string) {
               </Button>
             </div>
           </div>
-          <p class="text-xs text-white/45 light:text-gray-500">
+          <p class="text-xs text-muted-foreground">
             {{ $t("instances.auto_campaign.mediaHint") }}
           </p>
 
           <div
             v-if="localSettings.media_local_path"
-            class="rounded-md border border-white/10 bg-white/5 p-2 text-xs text-white/70 light:border-gray-200 light:bg-gray-50 light:text-gray-700"
+            class="rounded-xl border border-border/70 bg-background/80 p-3 text-xs text-foreground"
           >
             <div class="flex items-center gap-2">
               <Paperclip class="h-3.5 w-3.5" />
@@ -344,7 +331,7 @@ function formatScheduleValue(value?: string) {
                 localSettings.media_filename || localSettings.media_local_path
               }}</span>
             </div>
-            <p class="mt-1 text-white/45 light:text-gray-500">
+            <p class="mt-1 text-muted-foreground">
               {{ localSettings.media_mime_type }}
             </p>
           </div>
@@ -352,17 +339,10 @@ function formatScheduleValue(value?: string) {
       </div>
 
       <DialogFooter class="gap-2">
-        <Button
-          variant="outline"
-          class="border-white/10 text-white/70 light:border-gray-300 light:text-gray-700"
-          @click="dialogOpen = false"
-          >{{ $t("common.cancel") }}</Button
-        >
-        <Button
-          class="bg-emerald-600 hover:bg-emerald-700"
-          :disabled="saving"
-          @click="handleSave"
-        >
+        <Button variant="outline" @click="dialogOpen = false">{{
+          $t("common.cancel")
+        }}</Button>
+        <Button :disabled="saving" @click="handleSave">
           <Loader2 v-if="saving" class="h-4 w-4 mr-2 animate-spin" />
           {{ $t("instances.auto_campaign.saveSettings") }}
         </Button>

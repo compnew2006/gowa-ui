@@ -74,7 +74,7 @@ function handleSave() {
   <Button
     variant="outline"
     size="sm"
-    class="h-auto min-h-9 w-full whitespace-normal border-white/10 px-3 py-2 text-center leading-4 text-white/70 hover:bg-white/5 light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
+    class="h-auto min-h-9 w-full justify-center rounded-xl border-dashed bg-background/60 px-3 py-2 text-center leading-4"
     :disabled="saving"
     @click="dialogOpen = true"
   >
@@ -84,24 +84,20 @@ function handleSave() {
   </Button>
 
   <Dialog :open="dialogOpen" @update:open="dialogOpen = $event">
-    <DialogContent
-      class="sm:max-w-[520px] bg-[#1a1a1c] border-white/10 text-white light:bg-white light:border-gray-200 light:text-gray-900"
-    >
+    <DialogContent class="sm:max-w-[520px]">
       <DialogHeader>
         <DialogTitle>{{
           $t("instances.assigned_chat_reset.title")
         }}</DialogTitle>
-        <DialogDescription class="text-white/50 light:text-gray-500">
+        <DialogDescription class="text-muted-foreground">
           {{ $t("instances.assigned_chat_reset.description") }}
         </DialogDescription>
       </DialogHeader>
 
       <div class="space-y-4 py-2">
         <div class="space-y-2">
-          <Label class="text-white/80 light:text-gray-800">{{
-            $t("instances.assigned_chat_reset.schedule")
-          }}</Label>
-          <p class="text-xs text-white/45 light:text-gray-500">
+          <Label>{{ $t("instances.assigned_chat_reset.schedule") }}</Label>
+          <p class="text-xs text-muted-foreground">
             {{ $t("instances.assigned_chat_reset.scheduleDesc") }}
           </p>
           <Select v-model="localSettings.mode">
@@ -130,9 +126,7 @@ function handleSave() {
         </div>
 
         <div v-if="localSettings.mode === 'custom_hour'" class="space-y-2">
-          <Label class="text-white/80 light:text-gray-800">{{
-            $t("instances.assigned_chat_reset.customHour")
-          }}</Label>
+          <Label>{{ $t("instances.assigned_chat_reset.customHour") }}</Label>
           <Select
             :model-value="String(localSettings.hour)"
             @update:model-value="
@@ -163,7 +157,7 @@ function handleSave() {
           </Select>
         </div>
 
-        <p class="text-xs text-white/45 light:text-gray-500">
+        <p class="text-xs text-muted-foreground">
           {{
             $t("instances.assigned_chat_reset.timezoneHint", {
               timezone: organizationTimezone || "UTC",
@@ -173,18 +167,10 @@ function handleSave() {
       </div>
 
       <DialogFooter class="gap-2">
-        <Button
-          variant="outline"
-          class="border-white/10 text-white/70 light:border-gray-300 light:text-gray-700"
-          @click="dialogOpen = false"
-        >
+        <Button variant="outline" @click="dialogOpen = false">
           {{ $t("common.cancel") }}
         </Button>
-        <Button
-          class="bg-emerald-600 hover:bg-emerald-700 text-white"
-          :disabled="saving"
-          @click="handleSave"
-        >
+        <Button :disabled="saving" @click="handleSave">
           <Loader2 v-if="saving" class="h-4 w-4 mr-2 animate-spin" />
           {{ $t("common.save") }}
         </Button>

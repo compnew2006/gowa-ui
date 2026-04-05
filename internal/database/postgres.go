@@ -154,9 +154,7 @@ func GetMigrationModels() []MigrationModel {
 
 		// Conversation Notes
 		{"ConversationNote", &models.ConversationNote{}},
-		{"ActivityLog", &models.ActivityLog{}},
 		{"ContactCollaborator", &models.ContactCollaborator{}},
-		{"LeadRequest", &models.LeadRequest{}},
 	}
 }
 
@@ -495,11 +493,6 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_webhooks_org_active ON webhooks(organization_id, is_active)`,
 		`CREATE INDEX IF NOT EXISTS idx_availability_logs_user_time ON user_availability_logs(user_id, started_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_availability_logs_org_time ON user_availability_logs(organization_id, started_at DESC)`,
-		`CREATE INDEX IF NOT EXISTS idx_activity_logs_org_user_created ON activity_logs(organization_id, user_id, created_at DESC)`,
-		`CREATE INDEX IF NOT EXISTS idx_activity_logs_event_type_created ON activity_logs(event_type, created_at DESC)`,
-		`CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC)`,
-		`CREATE INDEX IF NOT EXISTS idx_activity_logs_contact_id ON activity_logs(contact_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_activity_logs_message_id ON activity_logs(message_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_sso_providers_org_provider ON sso_providers(organization_id, provider)`,
 		// Teams indexes
 		`CREATE INDEX IF NOT EXISTS idx_teams_org_active ON teams(organization_id, is_active)`,

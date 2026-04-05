@@ -20,9 +20,7 @@ import {
   LineChart,
   Tags,
   Smartphone,
-  ClipboardList,
   Archive,
-  Inbox,
 } from "lucide-vue-next";
 import type { Component } from "vue";
 
@@ -205,18 +203,6 @@ export const navigationItems: NavItem[] = [
         path: "/settings/users",
         icon: Users,
         permission: "users",
-      },
-      {
-        name: "nav.activityLogs",
-        path: "/settings/activity-logs",
-        icon: ClipboardList,
-        managerOrAdminOnly: true,
-      },
-      {
-        name: "nav.leadRequests",
-        path: "/settings/lead-requests",
-        icon: Inbox,
-        permission: "settings.general",
       },
       {
         name: "nav.roles",

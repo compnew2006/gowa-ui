@@ -638,7 +638,7 @@ async function saveStrictSendingRestrictions() {
     <PageHeader
       :title="$t('users.title')"
       :icon="Users"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
       back-link="/settings"
       :breadcrumbs="breadcrumbs"
     >
@@ -815,7 +815,7 @@ async function saveStrictSendingRestrictions() {
                   <Badge
                     variant="outline"
                     :class="
-                      user.is_active ? 'border-green-600 text-green-600' : ''
+                      user.is_active ? 'border-primary/40 text-primary' : ''
                     "
                     >{{
                       user.is_active

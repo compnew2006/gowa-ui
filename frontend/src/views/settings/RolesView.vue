@@ -310,7 +310,7 @@ async function confirmDelete() {
       :title="$t('roles.title')"
       :subtitle="$t('roles.subtitle')"
       :icon="Shield"
-      icon-gradient="bg-gradient-to-br from-purple-500 to-indigo-600 shadow-purple-500/20"
+      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
       back-link="/settings"
     >
       <template #actions>

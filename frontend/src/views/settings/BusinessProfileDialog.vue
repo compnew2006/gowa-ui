@@ -235,7 +235,7 @@ async function handleFileChange(event: Event) {
         <!-- Profile Picture Preview -->
         <div class="md:col-span-2 flex items-center gap-4">
           <div
-            class="group relative h-24 w-24 rounded-full bg-secondary flex items-center justify-center overflow-hidden border border-border cursor-pointer transition-all hover:ring-2 hover:ring-emerald-500 hover:ring-offset-2 hover:ring-offset-background"
+            class="group relative h-24 w-24 rounded-full bg-secondary flex items-center justify-center overflow-hidden border border-border cursor-pointer transition-all hover:ring-2 hover:ring-primary hover:ring-offset-2 hover:ring-offset-background"
             @click="triggerFileInput"
           >
             <!-- Loading Overlay -->
