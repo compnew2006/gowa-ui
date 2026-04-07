@@ -91,7 +91,9 @@ test-results/
 .claude/settings.local.json
 .claude/*.local.json
 .agent/
+.agents/
 .kilocode/
+agent/
 .kilo/
 # Code health tool artifacts
 .desloppify/

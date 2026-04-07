@@ -420,6 +420,19 @@ export class ApiHelper {
     }
   }
 
+  // Soft Delete
+  async softDeleteContact(contactId: string): Promise<void> {
+    const response = await this.request.post(
+      `${BASE_URL}/api/contacts/${contactId}/soft-delete`,
+      {
+        headers: this.csrfHeaders,
+      }
+    );
+    if (!response.ok()) {
+      throw new Error(`Failed to soft delete contact: ${await response.text()}`);
+    }
+  }
+
   // Templates
   async createTemplate(data: {
     name: string;

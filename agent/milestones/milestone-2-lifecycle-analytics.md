@@ -1,7 +1,7 @@
 # Milestone 2: Chat Lifecycle & Activity Audit
 
 **Goal**: Enhance chat management with lifecycle states and provide a comprehensive audit trail.
-**Duration**: 2 weeks
+**Duration**: 1 week
 **Dependencies**: Milestone 1
 **Status**: Completed
 
@@ -25,5 +25,5 @@ This milestone introduces explicit chat lifecycle management (Pending, Open, Clo
 
 ---
 
-**Next Milestone**: [M3 - ACP Context & Advanced Automation](milestone-3-acp-automation.md)
+**Next Milestone**: [M3 - ACP Implementation & Context Refinement](milestone-3-acp-implementation-context.md)
 **Blockers**: None

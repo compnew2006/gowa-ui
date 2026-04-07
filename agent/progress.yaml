@@ -3,7 +3,7 @@ project:
   version: 1.0.0
   started: 2026-02-16
   status: in_progress
-  current_milestone: M4
+  current_milestone: null
   description: |
     Modern, open-source WhatsApp Business Platform supporting both Meta Cloud API and Whatsmeow.
 
@@ -54,12 +54,36 @@ milestones:
     notes: |
       Collaboration invite hardening, assignment permission validation, and shared instance-aware filtering coverage are now implemented. Full DB-backed execution still depends on external test environment variables.
 
+  - id: M5
+    name: Per-User Chat Soft Delete Validation
+    status: completed
+    progress: 100
+    started: 2026-04-07
+    completed: 2026-04-07
+    estimated_weeks: 1
+    tasks_completed: 3
+    tasks_total: 3
+    notes: |
+      ACP backfill for the shipped chat soft-delete feature is complete. Backend regression coverage, frontend/admin verification, and ACP doc sync are now in place. Remaining follow-up is optional deeper UI automation for the ChatView sidebar path plus broader DB-backed suite execution when external test environment variables are available.
+
+  - id: M6
+    name: Chat Soft Delete End-to-End Coverage
+    status: completed
+    progress: 100
+    started: 2026-04-07
+    completed: 2026-04-07
+    estimated_weeks: 1
+    tasks_completed: 2
+    tasks_total: 2
+    notes: |
+      ACP follow-up milestone for browser-level soft-delete automation is complete. The Playwright soft-delete spec now matches the shipped UI and validates cleanly in discovery mode. Full runtime execution still depends on local frontend/backend availability.
+
 tasks:
   milestone_3:
     - id: task-1
       name: Initialize ACP Context
       status: completed
-      file: agent/commands/acp.init.md
+      file: agent/tasks/task-1-initialize-acp-context.md
       estimated_hours: 1
       completed_date: 2026-02-20
       notes: |
@@ -102,12 +126,67 @@ tasks:
       notes: |
         Added backend collaborator and assignment regression tests plus shared frontend instance-access utility coverage.
 
+  milestone_5:
+    - id: task-6
+      name: Add Chat Soft Delete Regression Coverage
+      status: completed
+      started: 2026-04-07T10:32:13+02:00
+      actual_hours: 0.3
+      file: agent/tasks/task-6-add-chat-soft-delete-regression-coverage.md
+      estimated_hours: 2
+      completed_date: 2026-04-07T10:32:13+02:00
+      notes: |
+        Added active backend regression tests for chat soft-delete authorization, deletion persistence, admin notifications, contact list visibility, and message-history filtering.
+
+    - id: task-7
+      name: Verify Chat Soft Delete Frontend and Notifications
+      status: completed
+      started: 2026-04-07T10:32:13+02:00
+      actual_hours: 0.7
+      file: agent/tasks/task-7-verify-chat-soft-delete-frontend-and-notifications.md
+      estimated_hours: 2
+      completed_date: 2026-04-07T10:32:13+02:00
+      notes: |
+        Added targeted frontend verification for the contact info soft-delete action, notification bell rendering/click behavior, and locale coverage. The ChatView sidebar affordance was source-reviewed and documented as the only manual-only check in this slice.
+
+    - id: task-8
+      name: Sync ACP Docs for Chat Soft Delete
+      status: completed
+      file: agent/tasks/task-8-sync-acp-docs-for-chat-soft-delete.md
+      estimated_hours: 1
+      completed_date: 2026-04-07
+      notes: |
+        Updated ACP requirements and progress tracking to record the validated soft-delete feature as completed project history, and documented the remaining manual/environment-dependent follow-up explicitly.
+
+  milestone_6:
+    - id: task-9
+      name: Harden Soft Delete Playwright Coverage
+      status: completed
+      started: 2026-04-07T11:03:43+02:00
+      actual_hours: 0.8
+      file: agent/tasks/task-9-harden-soft-delete-playwright-coverage.md
+      estimated_hours: 2
+      completed_date: 2026-04-07T11:03:43+02:00
+      notes: |
+        Reworked the draft Playwright soft-delete spec to match the shipped sidebar inline confirmation flow, contact-panel browser confirm flow, deterministic permission scaffolding, and admin notification click-through. Local verification passed in Playwright discovery mode; full runtime execution remains blocked by unavailable local frontend/backend servers.
+
+    - id: task-10
+      name: Sync ACP Docs for Soft Delete E2E Coverage
+      status: completed
+      started: 2026-04-07T11:11:23+02:00
+      actual_hours: 0.2
+      file: agent/tasks/task-10-sync-acp-docs-for-soft-delete-e2e.md
+      estimated_hours: 1
+      completed_date: 2026-04-07T11:11:23+02:00
+      notes: |
+        Closed M6 by syncing the discovery-validated E2E outcome into ACP progress and milestone records, and documented the remaining local server dependency for full runtime execution.
+
 documentation:
   design_documents: 1
-  milestone_documents: 4
+  milestone_documents: 6
   pattern_documents: 0
-  task_documents: 5
-  last_updated: 2026-03-17
+  task_documents: 10
+  last_updated: 2026-04-07
 
 progress:
   planning: 100
@@ -117,6 +196,63 @@ progress:
   overall: 95
 
 recent_work:
+  - date: 2026-04-07
+    description: |
+      Completed Task 10 and closed M6 by syncing the soft-delete E2E verification state into ACP.
+    items:
+      - ✅ Marked the M6 soft-delete E2E slice complete in ACP tracking
+      - ✅ Updated ACP requirements to reflect milestones M1-M6 as complete
+      - ✅ Reset the current milestone pointer until the next ACP milestone is planned
+      - ⚠️ Recorded that Playwright validation was discovery-only because local frontend/backend services were unavailable
+
+  - date: 2026-04-07
+    description: |
+      Started M6 and completed Task 9 by hardening the soft-delete Playwright coverage against the shipped UI.
+    items:
+      - ✅ Added deterministic custom-role coverage for users with and without `contacts:soft_delete`
+      - ✅ Replaced the loose soft-delete draft with a sidebar-confirmation, notification-click, and contact-panel flow spec
+      - ✅ Verified the Playwright file parses and registers cleanly via `playwright test --list`
+      - ⚠️ Full runtime Playwright execution still depends on local frontend/backend availability
+
+  - date: 2026-04-07
+    description: |
+      Completed Task 8 and closed M5 by syncing ACP requirements and progress tracking for the validated soft-delete feature.
+    items:
+      - ✅ Added the per-user chat hide and admin notification capability to ACP requirements
+      - ✅ Marked the full M5 soft-delete validation slice complete in ACP progress tracking
+      - ✅ Reset the current milestone pointer until the next ACP milestone is planned
+      - ✅ Recorded the remaining manual/UI and environment-dependent follow-up explicitly
+
+  - date: 2026-04-07
+    description: |
+      Completed Task 7 by validating the shipped chat soft-delete frontend affordances and notification behavior.
+    items:
+      - ✅ Added contact panel coverage for the permission-gated soft-delete action
+      - ✅ Added notification bell coverage for `chat_deleted_by_user` rendering and click-through navigation
+      - ✅ Added locale coverage assertions for the soft-delete flow in `en`, `ar`, and `es`
+      - ✅ Source-verified the ChatView sidebar affordance and documented it as the remaining manual-only check for this task
+
+  - date: 2026-04-07
+    description: |
+      Started M5 and completed Task 6 by adding active backend regression coverage for per-user chat soft delete.
+    items:
+      - ✅ Added forbidden-path coverage for users without `contacts:soft_delete`
+      - ✅ Added happy-path coverage for deletion persistence and admin notifications
+      - ✅ Added contact-list regression coverage for hide-until-new-activity behavior
+      - ✅ Added message-history regression coverage for post-delete filtering
+      - ✅ Bootstrapped ACP milestone/task tracking for the soft-delete validation slice
+
+  - date: 2026-04-07
+    description: |
+      Re-ran ACP initialization, verified the collaboration and assignment slice against code and tests, and repaired ACP tracking drift.
+    items:
+      - ✅ ACP update check passed
+      - ✅ Reloaded key ACP docs and indexed command files
+      - ✅ Verified targeted backend collaboration and assignment tests pass
+      - ✅ Verified frontend instance-access unit coverage passes
+      - ✅ Restored the missing M3 milestone and Task 1 ACP documents
+      - ✅ Cleared the current milestone pointer because all tracked milestones are complete
+
   - date: 2026-03-17
     description: |
       Completed the M4 collaboration and assignment hardening slice with backend fixes, new regression coverage, and a shared frontend instance-access filter utility.
@@ -135,20 +271,22 @@ recent_work:
       - ✅ ACP updates checked (up to date)
       - ✅ Documentation context loaded
       - ✅ Key source files reviewed
-      - ✅ Identity documentation drift
+      - ✅ Identified documentation drift
       - ✅ Mapped existing Whatsmeow integration specs to ACP milestones/tasks
       - ✅ Reviewed current implementation status of Whatsmeow integration (100% complete)
       - ✅ Synchronized documentation with reality (inserted Chat Lifecycle & Activity Audit into requirements.md)
       - 📋 Identifying next milestone to implement
 
 next_steps:
-  - Run the new DB-backed handler tests in an environment with TEST_DATABASE_URL and TEST_REDIS_URL
-  - Add broader component-level UI coverage if future collaboration flows become more complex
-  - Keep ACP progress aligned with any follow-up collaboration permission changes
+  - Run the soft-delete Playwright spec against live local services once the frontend and backend are available
+  - Define the next ACP milestone before running `@acp.proceed` again
+  - Run the broader DB-backed handler suite in an environment with TEST_DATABASE_URL and TEST_REDIS_URL
 
 notes:
   - Project has extensive existing specs in specs/ directory.
   - Whatsmeow integration is a major feature being tracked. (100% mapped and complete)
+  - M5 backfills ACP tracking for the shipped per-user chat soft-delete feature described in specs/chat-soft-delete_design.md and is now complete.
+  - M6 tracked the remaining browser-level automation follow-up for the soft-delete feature and is now complete.
 
 current_blockers: []
 

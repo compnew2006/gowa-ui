@@ -48,6 +48,8 @@ Businesses need a reliable, cost-effective, and scalable way to manage WhatsApp 
 1. **Canned Responses**: Quick replies with placeholders and slash commands.
 2. **Analytics**: Dashboard for tracking engagement and performance.
 3. **AI Integration**: Support for OpenAI, Anthropic, and Google AI for auto-replies.
+4. **Chat Collaboration & Assignment Controls**: Invite collaborators to chats and enforce instance-aware assignment eligibility across collaboration and transfer flows.
+5. **Per-User Chat Hide & Admin Notifications**: Allow users with `contacts:soft_delete` to hide chats per-user until new activity arrives while sending admins localized, clickable notifications about the action.
 
 ---
 
@@ -77,5 +79,5 @@ Businesses need a reliable, cost-effective, and scalable way to manage WhatsApp 
 
 ---
 
-**Status**: Active implementation following ACP.
-**Last Updated**: 2026-02-20
+**Status**: Active implementation following ACP. Milestones M1-M6 are complete; the next milestone is pending planning.
+**Last Updated**: 2026-04-07

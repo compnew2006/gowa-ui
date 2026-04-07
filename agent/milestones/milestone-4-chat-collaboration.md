@@ -52,11 +52,11 @@ Current state:
 
 ## Success Criteria
 
-- [ ] Collaboration and assignment docs reference the correct design sources.
-- [ ] Instance-aware authorization rules are clearly defined for backend implementation.
-- [ ] Frontend filtering requirements are explicit enough to drive implementation.
-- [ ] Test coverage expectations are mapped to the collaboration and assignment flows.
-- [ ] Progress tracking in `agent/progress.yaml` reflects the new milestone.
+- [x] Collaboration and assignment docs reference the correct design sources.
+- [x] Instance-aware authorization rules are clearly defined for backend implementation.
+- [x] Frontend filtering requirements are explicit enough to drive implementation.
+- [x] Test coverage expectations are mapped to the collaboration and assignment flows.
+- [x] Progress tracking in `agent/progress.yaml` reflects the new milestone.
 
 ## Key Files to Create
 
@@ -78,16 +78,16 @@ agent/
 
 ## Testing Requirements
 
-- [ ] Backend permission checks are defined for invite, accept, decline, and remove paths.
-- [ ] Assignment eligibility rules are defined for both chat and transfer UIs.
-- [ ] Instance-scoped filtering expectations are captured for frontend behavior.
-- [ ] Regression coverage is explicitly tied to the two feature specs.
+- [x] Backend permission checks are defined for invite, accept, decline, and remove paths.
+- [x] Assignment eligibility rules are defined for both chat and transfer UIs.
+- [x] Instance-scoped filtering expectations are captured for frontend behavior.
+- [x] Regression coverage is explicitly tied to the two feature specs.
 
 ## Documentation Requirements
 
-- [ ] Update ACP progress tracking for the next milestone.
-- [ ] Keep the milestone linked to the two recent feature specs.
-- [ ] Preserve a clear handoff path from planning docs to implementation tasks.
+- [x] Update ACP progress tracking for the next milestone.
+- [x] Keep the milestone linked to the two recent feature specs.
+- [x] Preserve a clear handoff path from planning docs to implementation tasks.
 
 ## Risks and Mitigation
 
@@ -98,4 +98,4 @@ agent/
 
 **Next Milestone**: TBD
 **Blockers**: None
-**Notes**: M4 implementation is complete. The remaining limitation is environment-specific execution of DB-backed handler tests when `TEST_DATABASE_URL` and `TEST_REDIS_URL` are unavailable locally.
+**Notes**: M4 implementation is complete. On 2026-04-07, targeted backend and frontend regression tests for the collaboration and assignment slice passed locally. The remaining limitation is environment-specific execution of DB-backed handler tests when `TEST_DATABASE_URL` and `TEST_REDIS_URL` are unavailable locally.
