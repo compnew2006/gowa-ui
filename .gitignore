@@ -93,7 +93,6 @@ test-results/
 .agent/
 .agents/
 .kilocode/
-agent/
 .kilo/
 # Code health tool artifacts
 .desloppify/
