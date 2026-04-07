@@ -2,6 +2,16 @@
 # Common utilities for ACP scripts
 # POSIX-compliant for maximum portability
 
+# Portable in-place sed (works on both GNU and BSD/macOS sed)
+# Usage: _sed_i "expression" "file"
+_sed_i() {
+    if [ "$(uname)" = "Darwin" ]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
 # Initialize colors using tput (more reliable than ANSI codes)
 init_colors() {
     if command -v tput >/dev/null 2>&1 && [ -t 1 ]; then
@@ -30,7 +40,13 @@ calculate_checksum() {
         echo "Error: File not found: $file" >&2
         return 1
     fi
-    sha256sum "$file" 2>/dev/null | cut -d' ' -f1
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file" 2>/dev/null | cut -d' ' -f1
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" 2>/dev/null | cut -d' ' -f1
+    else
+        echo "unknown"
+    fi
 }
 
 # Get current timestamp in ISO 8601 format (UTC)
@@ -65,14 +81,28 @@ get_script_dir() {
 # Source YAML parser
 # Usage: source_yaml_parser
 source_yaml_parser() {
-    local script_dir
-    script_dir=$(get_script_dir)
-    if [ -f "${script_dir}/acp.yaml.sh" ]; then
-        . "${script_dir}/acp.yaml.sh"
-    else
-        echo "${RED}Error: acp.yaml.sh not found${NC}" >&2
-        return 1
+    # Check if already loaded (don't re-source to preserve AST_FILE)
+    if [ -n "${YAML_PARSER_LOADED:-}" ]; then
+        return 0
     fi
+    
+    # Try to find acp.yaml-parser.sh in multiple locations
+    local parser_locations=(
+        "$(dirname "${BASH_SOURCE[0]}")/acp.yaml-parser.sh"
+        "agent/scripts/acp.yaml-parser.sh"
+        "./agent/scripts/acp.yaml-parser.sh"
+        "../agent/scripts/acp.yaml-parser.sh"
+    )
+    
+    for parser_path in "${parser_locations[@]}"; do
+        if [ -f "$parser_path" ]; then
+            . "$parser_path"
+            return 0
+        fi
+    done
+    
+    echo "${RED}Error: acp.yaml-parser.sh not found${NC}" >&2
+    return 1
 }
 
 # Initialize manifest file if it doesn't exist
@@ -128,20 +158,16 @@ update_manifest_timestamp() {
     local timestamp
     timestamp=$(get_timestamp)
     
-    # Source YAML parser if not already loaded
-    if ! command -v yaml_set >/dev/null 2>&1; then
-        source_yaml_parser || return 1
-    fi
-    
-    yaml_set "$manifest" "last_updated" "$timestamp"
+    # Update timestamp using sed
+    _sed_i "s/^last_updated: .*/last_updated: $timestamp/" "$manifest"
 }
 
 # Check if package exists in manifest
-# Usage: if package_exists "package-name"; then ...
+# Usage: if package_exists "package-name" ["manifest-path"]; then ...
 # Returns: 0 if exists, 1 if not
 package_exists() {
     local package_name="$1"
-    local manifest="agent/manifest.yaml"
+    local manifest="${2:-agent/manifest.yaml}"
     
     # Source YAML parser if not already loaded
     if ! command -v yaml_has_key >/dev/null 2>&1; then
@@ -149,6 +175,247 @@ package_exists() {
     fi
     
     yaml_has_key "$manifest" "packages.${package_name}.source"
+}
+
+# ============================================================================
+# Global Manifest Functions
+# ============================================================================
+
+# Get global manifest path
+# Usage: manifest_path=$(get_global_manifest_path)
+# Returns: Path to global manifest
+get_global_manifest_path() {
+    echo "$HOME/.acp/agent/manifest.yaml"
+}
+
+# Check if global manifest exists
+# Usage: if global_manifest_exists; then ...
+# Returns: 0 if exists, 1 if not
+global_manifest_exists() {
+    local manifest_path
+    manifest_path=$(get_global_manifest_path)
+    [ -f "$manifest_path" ]
+}
+
+# Initialize global manifest if it doesn't exist
+# Usage: init_global_manifest
+init_global_manifest() {
+    local manifest_path
+    manifest_path=$(get_global_manifest_path)
+    
+    if [ -f "$manifest_path" ]; then
+        return 0
+    fi
+    
+    # Create ~/.acp directory if needed
+    mkdir -p "$HOME/.acp/projects"
+    
+    # Create manifest
+    local timestamp
+    timestamp=$(get_timestamp)
+    
+    cat > "$manifest_path" << EOF
+# Global ACP Package Manifest
+# This file tracks all globally installed ACP packages
+
+version: 1.0.0
+updated: $timestamp
+
+packages: {}
+EOF
+    
+    success "Initialized global manifest at $manifest_path"
+}
+
+# Read global manifest (returns full content)
+# Usage: content=$(read_global_manifest)
+read_global_manifest() {
+    local manifest_path
+    manifest_path=$(get_global_manifest_path)
+    
+    if [ ! -f "$manifest_path" ]; then
+        echo "Error: Global manifest not found at $manifest_path" >&2
+        return 1
+    fi
+    
+    cat "$manifest_path"
+}
+
+# Update global manifest timestamp
+# Usage: update_global_manifest_timestamp
+update_global_manifest_timestamp() {
+    local manifest_path
+    manifest_path=$(get_global_manifest_path)
+    
+    if [ ! -f "$manifest_path" ]; then
+        echo "Error: Global manifest not found" >&2
+        return 1
+    fi
+    
+    # Update timestamp using sed
+    local timestamp
+    timestamp=$(get_timestamp)
+    _sed_i "s/^updated: .*/updated: $timestamp/" "$manifest_path"
+}
+
+# Check if package exists in global manifest
+# Usage: if global_package_exists "package-name"; then ...
+# Returns: 0 if exists, 1 if not
+global_package_exists() {
+    local package_name="$1"
+    local manifest_path
+    manifest_path=$(get_global_manifest_path)
+    
+    if [ ! -f "$manifest_path" ]; then
+        return 1
+    fi
+    
+    # Check if package exists in manifest
+    grep -q "^  $package_name:" "$manifest_path"
+}
+
+# Get global package location
+# Usage: location=$(get_global_package_location "package-name")
+# Returns: Package installation path
+get_global_package_location() {
+    local package_name="$1"
+    local manifest_path
+    manifest_path=$(get_global_manifest_path)
+    
+    if [ ! -f "$manifest_path" ]; then
+        return 1
+    fi
+    
+    # Extract location using awk
+    awk -v pkg="$package_name" '
+        $0 ~ "^  " pkg ":" { in_package=1; next }
+        in_package && /^    location:/ { print $2; exit }
+        /^  [a-z]/ && in_package { exit }
+    ' "$manifest_path"
+}
+
+# Initialize global ACP infrastructure if it doesn't exist
+# This function is idempotent - safe to call multiple times
+# Usage: init_global_acp
+# Returns: 0 on success, 1 on failure
+init_global_acp() {
+    local global_dir="$HOME/.acp"
+    
+    # Check if already initialized
+    if [ -d "$global_dir/agent" ] && [ -f "$global_dir/AGENT.md" ]; then
+        return 0  # Already initialized, nothing to do
+    fi
+    
+    echo "${BLUE}Initializing global ACP infrastructure at ~/.acp/...${NC}"
+    echo ""
+    
+    # Create ~/.acp directory
+    mkdir -p "$global_dir"
+
+    # Create .gitignore for global ACP directory
+    if [ ! -f "$global_dir/.gitignore" ]; then
+        cat > "$global_dir/.gitignore" << 'GITIGNORE'
+# Project repos have their own git
+projects/
+
+# Claude Code session data
+.claude/
+
+# Common noise
+*.log
+node_modules/
+GITIGNORE
+    fi
+
+    # Get the directory where this script is located
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    # Run standard ACP installation in ~/.acp/
+    # This installs all templates, scripts, and schemas
+    if [ -f "$script_dir/acp.install.sh" ]; then
+        # Use local install script
+        (
+            cd "$global_dir" || exit 1
+            bash "$script_dir/acp.install.sh"
+        ) || {
+            echo "${RED}Error: Failed to initialize global ACP infrastructure${NC}" >&2
+            return 1
+        }
+    else
+        # Fallback: Download from repository
+        (
+            cd "$global_dir" || exit 1
+            curl -fsSL https://raw.githubusercontent.com/prmichaelsen/agent-context-protocol/mainline/agent/scripts/acp.install.sh | bash
+        ) || {
+            echo "${RED}Error: Failed to initialize global ACP infrastructure${NC}" >&2
+            return 1
+        }
+    fi
+    
+    # Create additional global directories
+    mkdir -p "$global_dir/projects"
+    
+    # Initialize global manifest if it doesn't exist
+    if [ ! -f "$global_dir/agent/manifest.yaml" ]; then
+        init_global_manifest
+    fi
+    
+    # Initialize projects registry
+    if [ ! -f "$HOME/.acp/projects.yaml" ]; then
+        init_projects_registry
+        echo "${GREEN}✓${NC} Initialized projects registry"
+    fi
+    
+    # Append global installation notes to AGENT.md
+    if [ -f "$global_dir/AGENT.md" ] && ! grep -q "## Global Installation" "$global_dir/AGENT.md"; then
+        cat >> "$global_dir/AGENT.md" << 'EOF'
+
+---
+
+## Global Installation
+
+This is a global ACP installation located at `~/.acp/`.
+
+### Purpose
+
+This installation provides:
+- **Global packages** in `~/.acp/agent/` - Packages installed with `@acp.package-install --global`
+- **Project workspace** in `~/.acp/projects/` - Optional location for package development
+- **Global manifest** in `~/.acp/agent/manifest.yaml` - Tracks globally installed packages
+- **Templates and scripts** in `~/.acp/agent/` - All ACP templates and utilities
+
+### Usage
+
+**Install packages globally**:
+```bash
+@acp.package-install --global https://github.com/user/acp-package.git
+```
+
+**Create packages**:
+```bash
+cd ~/.acp/projects
+@acp.package-create
+```
+
+**List global packages**:
+```bash
+@acp.package-list --global
+```
+
+### Discovery
+
+Agents can discover globally installed packages by reading `~/.acp/agent/manifest.yaml`. Local packages always take precedence over global packages.
+EOF
+    fi
+    
+    echo ""
+    echo "${GREEN}✓ Global ACP infrastructure initialized${NC}"
+    echo ""
+    echo "Location: $global_dir"
+    echo "Templates: $global_dir/agent/"
+    echo "Projects: $global_dir/projects/"
+    echo ""
 }
 
 # Print error message and exit
@@ -246,7 +513,7 @@ get_file_version() {
     
     if [ ! -f "$package_yaml" ]; then
         echo "0.0.0"
-        return 1
+        return 0
     fi
     
     # Use awk to parse YAML array (acp.yaml.sh doesn't support array queries)
@@ -271,6 +538,8 @@ get_file_version() {
     else
         echo "$version"
     fi
+    
+    return 0
 }
 
 # Add package to manifest
@@ -285,17 +554,45 @@ add_package_to_manifest() {
     
     local manifest="agent/manifest.yaml"
     
-    # Source YAML parser if not already loaded
-    if ! command -v yaml_set >/dev/null 2>&1; then
-        source_yaml_parser || return 1
+    # Add package metadata using direct YAML appending (new parser doesn't support yaml_set for new keys)
+    # Check if package already exists
+    if grep -q "^  ${package_name}:" "$manifest" 2>/dev/null; then
+        # Update existing package
+        _sed_i "/^  ${package_name}:/,/^  [a-z]/ {
+            s|source: .*|source: $source_url|
+            s|package_version: .*|package_version: $package_version|
+            s|commit: .*|commit: $commit_hash|
+            s|updated_at: .*|updated_at: $timestamp|
+        }" "$manifest"
+    else
+        # Add new package entry
+        # Find the packages: line and append after it
+        awk -v pkg="$package_name" -v src="$source_url" -v ver="$package_version" -v commit="$commit_hash" -v ts="$timestamp" '
+            /^packages:/ {
+                if ($2 == "{}") {
+                    # Empty packages - replace {} with just "packages:"
+                    print "packages:"
+                } else {
+                    print
+                }
+                print "  " pkg ":"
+                print "    source: " src
+                print "    package_version: " ver
+                print "    commit: " commit
+                print "    installed_at: " ts
+                print "    updated_at: " ts
+                print "    files:"
+                print "      patterns: []"
+                print "      commands: []"
+                print "      designs: []"
+                print "      scripts: []"
+                print "      files: []"
+                print "      indices: []"
+                next
+            }
+            { print }
+        ' "$manifest" > "$manifest.tmp" && mv "$manifest.tmp" "$manifest"
     fi
-    
-    # Add package metadata
-    yaml_set "$manifest" "packages.${package_name}.source" "$source_url"
-    yaml_set "$manifest" "packages.${package_name}.package_version" "$package_version"
-    yaml_set "$manifest" "packages.${package_name}.commit" "$commit_hash"
-    yaml_set "$manifest" "packages.${package_name}.installed_at" "$timestamp"
-    yaml_set "$manifest" "packages.${package_name}.updated_at" "$timestamp"
     
     # Update manifest timestamp
     update_manifest_timestamp
@@ -312,6 +609,7 @@ add_file_to_manifest() {
     local filename="$3"
     local file_version="$4"
     local file_path="$5"
+    local package_yaml_path="$6"  # Optional: path to package.yaml for experimental checking
     local timestamp
     timestamp=$(get_timestamp)
     
@@ -326,29 +624,41 @@ add_file_to_manifest() {
         checksum="unknown"
     fi
     
-    # Source YAML parser if not already loaded
-    if ! command -v yaml_append >/dev/null 2>&1; then
+    # Check if experimental (if package.yaml provided)
+    local is_experimental=""
+    if [ -n "$package_yaml_path" ] && [ -f "$package_yaml_path" ]; then
+        is_experimental=$(grep -A 1000 "^  ${file_type}:" "$package_yaml_path" 2>/dev/null | grep -A 2 "name: ${filename}" | grep "^ *experimental: true" | grep -v "^[[:space:]]*#" | head -1)
+    fi
+    
+    # Source YAML parser
+    if ! command -v yaml_parse >/dev/null 2>&1; then
         source_yaml_parser || return 1
     fi
     
-    # Create file entry (using YAML multiline format)
-    # Note: acp.yaml.sh may not support array append, so we'll use a workaround
-    # We'll append to the YAML file directly
-    local file_entry="    - name: $filename
-      version: $file_version
-      installed_at: $timestamp
-      modified: false
-      checksum: sha256:$checksum"
+    # Convert empty arrays [] to proper format first (workaround for parser limitation)
+    _sed_i "s/^      ${file_type}: \\[\\]$/      ${file_type}:/" "$manifest"
     
-    # Check if the section exists, if not create it
-    if ! grep -q "packages.${package_name}.installed.${file_type}:" "$manifest" 2>/dev/null; then
-        # Add section header
-        echo "  installed:" >> "$manifest"
-        echo "    ${file_type}:" >> "$manifest"
+    # Parse manifest
+    yaml_parse "$manifest"
+    
+    # Append object to array
+    local obj_node
+    obj_node=$(yaml_array_append_object ".packages.${package_name}.files.${file_type}")
+    
+    # Set object fields
+    yaml_object_set "$obj_node" "name" "$filename" >/dev/null
+    yaml_object_set "$obj_node" "version" "$file_version" >/dev/null
+    yaml_object_set "$obj_node" "installed_at" "$timestamp" >/dev/null
+    yaml_object_set "$obj_node" "modified" "false" >/dev/null
+    yaml_object_set "$obj_node" "checksum" "sha256:$checksum" >/dev/null
+    
+    # Add experimental field if marked
+    if [ -n "$is_experimental" ]; then
+        yaml_object_set "$obj_node" "experimental" "true" >/dev/null
     fi
     
-    # Append file entry
-    echo "$file_entry" >> "$manifest"
+    # Write back
+    yaml_write "$manifest"
     
     return 0
 }
@@ -361,7 +671,7 @@ get_commit_hash() {
     
     if [ ! -d "$repo_dir/.git" ]; then
         echo "unknown"
-        return 1
+        return 0
     fi
     
     (cd "$repo_dir" && git rev-parse HEAD 2>/dev/null) || echo "unknown"
@@ -425,8 +735,13 @@ is_file_modified() {
     fi
     
     # Calculate current checksum
+    # Map manifest key to filesystem directory (they differ for some types)
+    local file_dir="$file_type"
+    case "$file_type" in
+        indices) file_dir="index" ;;
+    esac
     local current_checksum
-    current_checksum=$(calculate_checksum "agent/${file_type}/${file_name}")
+    current_checksum=$(calculate_checksum "agent/${file_dir}/${file_name}")
     
     if [ "$stored_checksum" != "$current_checksum" ]; then
         return 0  # Modified
@@ -481,6 +796,166 @@ update_file_in_manifest() {
         { print }
     ' "$manifest" > "$temp_file"
     
+    mv "$temp_file" "$manifest"
+}
+
+# ============================================================================
+# Template File Manifest Functions
+# ============================================================================
+
+# Check if a template file was modified locally (uses target path, not agent/ path)
+# Usage: is_template_file_modified "package_name" "filename" "target_path"
+# Returns: 0 if modified, 1 if not modified
+is_template_file_modified() {
+    local package_name="$1"
+    local file_name="$2"
+    local target_path="$3"
+    local manifest="agent/manifest.yaml"
+
+    # Get stored checksum from manifest
+    local stored_checksum
+    stored_checksum=$(awk -v pkg="$package_name" -v name="$file_name" '
+        BEGIN { in_pkg=0; in_files=0; in_file=0 }
+        $0 ~ "^  " pkg ":" { in_pkg=1; next }
+        in_pkg && /^  [a-z]/ && !/^    / { in_pkg=0 }
+        in_pkg && /^      files:/ { in_files=1; next }
+        in_files && /^      [a-z]/ && !/^        / { in_files=0 }
+        in_files && /^        - name:/ {
+            if ($3 == name) { in_file=1 }
+            else { in_file=0 }
+            next
+        }
+        in_file && /^          checksum:/ {
+            gsub(/sha256:/, "", $2)
+            print $2
+            exit
+        }
+    ' "$manifest")
+
+    if [ -z "$stored_checksum" ]; then
+        warn "No checksum found in manifest for files/$file_name"
+        return 1
+    fi
+
+    # Calculate current checksum from target path
+    if [ ! -f "$target_path" ]; then
+        warn "Target file not found: $target_path"
+        return 0  # Missing = modified (deleted)
+    fi
+
+    local current_checksum
+    current_checksum=$(calculate_checksum "$target_path")
+
+    if [ "$stored_checksum" != "$current_checksum" ]; then
+        return 0  # Modified
+    else
+        return 1  # Not modified
+    fi
+}
+
+# Get target path for a template file from manifest
+# Usage: target=$(get_template_file_target "package_name" "filename")
+get_template_file_target() {
+    local package_name="$1"
+    local file_name="$2"
+    local manifest="agent/manifest.yaml"
+
+    awk -v pkg="$package_name" -v name="$file_name" '
+        BEGIN { in_pkg=0; in_files=0; in_file=0 }
+        $0 ~ "^  " pkg ":" { in_pkg=1; next }
+        in_pkg && /^  [a-z]/ && !/^    / { in_pkg=0 }
+        in_pkg && /^      files:/ { in_files=1; next }
+        in_files && /^      [a-z]/ && !/^        / { in_files=0 }
+        in_files && /^        - name:/ {
+            if ($3 == name) { in_file=1 }
+            else { in_file=0 }
+            next
+        }
+        in_file && /^          target:/ {
+            $1=""
+            gsub(/^ +/, "")
+            print
+            exit
+        }
+    ' "$manifest"
+}
+
+# Get stored variable values for a template file from manifest
+# Usage: vars=$(get_template_file_variables "package_name" "filename")
+# Returns: KEY=VALUE lines (one per line)
+get_template_file_variables() {
+    local package_name="$1"
+    local file_name="$2"
+    local manifest="agent/manifest.yaml"
+
+    awk -v pkg="$package_name" -v name="$file_name" '
+        BEGIN { in_pkg=0; in_files=0; in_file=0; in_vars=0 }
+        $0 ~ "^  " pkg ":" { in_pkg=1; next }
+        in_pkg && /^  [a-z]/ && !/^    / { in_pkg=0 }
+        in_pkg && /^      files:/ { in_files=1; next }
+        in_files && /^      [a-z]/ && !/^        / { in_files=0 }
+        in_files && /^        - name:/ {
+            if ($3 == name) { in_file=1 }
+            else { in_file=0; in_vars=0 }
+            next
+        }
+        in_file && /^          variables:/ { in_vars=1; next }
+        in_vars && /^            [A-Z]/ {
+            key=$1
+            gsub(/:$/, "", key)
+            $1=""
+            gsub(/^ +/, "")
+            print key "=" $0
+            next
+        }
+        in_vars && /^          [a-z]/ { in_vars=0 }
+        in_vars && /^        -/ { in_vars=0; in_file=0 }
+    ' "$manifest"
+}
+
+# Update template file entry in manifest
+# Usage: update_template_file_in_manifest "package_name" "filename" "new_version" "new_checksum"
+update_template_file_in_manifest() {
+    local package_name="$1"
+    local file_name="$2"
+    local new_version="$3"
+    local new_checksum="$4"
+    local timestamp
+    timestamp=$(get_timestamp)
+
+    local manifest="agent/manifest.yaml"
+
+    local temp_file
+    temp_file=$(mktemp)
+
+    awk -v pkg="$package_name" -v name="$file_name" \
+        -v ver="$new_version" -v chk="sha256:$new_checksum" -v ts="$timestamp" '
+        BEGIN { in_pkg=0; in_files=0; in_file=0 }
+        $0 ~ "^  " pkg ":" { in_pkg=1; print; next }
+        in_pkg && /^  [a-z]/ && !/^    / { in_pkg=0; print; next }
+        in_pkg && /^      files:/ { in_files=1; print; next }
+        in_files && /^      [a-z]/ && !/^        / { in_files=0; print; next }
+        in_files && /^        - name:/ {
+            if ($3 == name) { in_file=1 }
+            else { in_file=0 }
+            print
+            next
+        }
+        in_file && /^          version:/ {
+            print "          version: " ver
+            next
+        }
+        in_file && /^          checksum:/ {
+            print "          checksum: " chk
+            next
+        }
+        in_file && /^          modified:/ {
+            print "          modified: false"
+            next
+        }
+        { print }
+    ' "$manifest" > "$temp_file"
+
     mv "$temp_file" "$manifest"
 }
 
@@ -748,6 +1223,246 @@ validate_project_dependencies() {
 }
 
 # ============================================================================
+# Namespace Utilities
+# ============================================================================
+
+# Check if current directory is an ACP package
+# Usage: if is_acp_package; then ...
+# Returns: 0 if package.yaml exists, 1 otherwise
+is_acp_package() {
+    [ -f "package.yaml" ]
+}
+
+# Infer package namespace from multiple sources
+# Usage: namespace=$(infer_namespace)
+# Returns: namespace string or empty if can't infer
+# Priority: 1) package.yaml, 2) directory name, 3) git remote
+infer_namespace() {
+    local namespace=""
+    
+    # Priority 1: Read from package.yaml
+    if [ -f "package.yaml" ]; then
+        namespace=$(yaml_get "package.yaml" "name" 2>/dev/null)
+        if [ -n "$namespace" ]; then
+            echo "$namespace"
+            return 0
+        fi
+    fi
+    
+    # Priority 2: Parse from directory name (acp-{namespace})
+    local dir_name=$(basename "$PWD")
+    if [[ "$dir_name" =~ ^acp-(.+)$ ]]; then
+        namespace="${BASH_REMATCH[1]}"
+        echo "$namespace"
+        return 0
+    fi
+    
+    # Priority 3: Parse from git remote URL
+    if git remote get-url origin >/dev/null 2>&1; then
+        local remote_url=$(git remote get-url origin)
+        if [[ "$remote_url" =~ acp-([a-z0-9-]+)(\.git)?$ ]]; then
+            namespace="${BASH_REMATCH[1]}"
+            echo "$namespace"
+            return 0
+        fi
+    fi
+    
+    # Could not infer
+    return 1
+}
+
+# Validate namespace format and check reserved names
+# Usage: if validate_namespace "firebase"; then ...
+# Returns: 0 if valid, 1 if invalid
+validate_namespace() {
+    local namespace="$1"
+    
+    if [ -z "$namespace" ]; then
+        echo "${RED}Error: Namespace cannot be empty${NC}" >&2
+        return 1
+    fi
+    
+    # Check format (lowercase, alphanumeric, hyphens)
+    if ! echo "$namespace" | grep -qE '^[a-z0-9-]+$'; then
+        echo "${RED}Error: Namespace must be lowercase, alphanumeric, and hyphens only${NC}" >&2
+        return 1
+    fi
+    
+    # Check reserved names
+    case "$namespace" in
+        acp|local|core|system|global)
+            echo "${RED}Error: Namespace '$namespace' is reserved${NC}" >&2
+            return 1
+            ;;
+    esac
+    
+    return 0
+}
+
+# Get namespace for file creation (context-aware)
+# Usage: namespace=$(get_namespace_for_file)
+# Returns: package namespace or "local" for non-packages
+get_namespace_for_file() {
+    if is_acp_package; then
+        local namespace=$(infer_namespace)
+        if [ -n "$namespace" ]; then
+            echo "$namespace"
+            return 0
+        else
+            # In package but can't infer, ask user
+            read -p "Package namespace: " namespace
+            if validate_namespace "$namespace"; then
+                echo "$namespace"
+                return 0
+            else
+                return 1
+            fi
+        fi
+    else
+        # Not a package, use local namespace
+        echo "local"
+        return 0
+    fi
+}
+
+# Validate namespace consistency across sources
+# Usage: if validate_namespace_consistency; then ...
+# Returns: 0 if consistent, 1 if conflicts found
+validate_namespace_consistency() {
+    if ! is_acp_package; then
+        return 0  # Not a package, no consistency to check
+    fi
+    
+    local from_yaml=$(yaml_get "package.yaml" "name" 2>/dev/null)
+    local from_dir=$(basename "$PWD" | sed 's/^acp-//')
+    local from_remote=""
+    
+    if git remote get-url origin >/dev/null 2>&1; then
+        local remote_url=$(git remote get-url origin)
+        if [[ "$remote_url" =~ acp-([a-z0-9-]+)(\.git)?$ ]]; then
+            from_remote="${BASH_REMATCH[1]}"
+        fi
+    fi
+    
+    # Check for conflicts
+    local has_conflict=false
+    
+    if [ -n "$from_yaml" ] && [ -n "$from_dir" ] && [ "$from_yaml" != "$from_dir" ]; then
+        echo "${YELLOW}Warning: Namespace mismatch${NC}" >&2
+        echo "  package.yaml: $from_yaml" >&2
+        echo "  directory: $from_dir" >&2
+        has_conflict=true
+    fi
+    
+    if [ -n "$from_yaml" ] && [ -n "$from_remote" ] && [ "$from_yaml" != "$from_remote" ]; then
+        echo "${YELLOW}Warning: Namespace mismatch${NC}" >&2
+        echo "  package.yaml: $from_yaml" >&2
+        echo "  git remote: $from_remote" >&2
+        has_conflict=true
+    fi
+    
+    if [ "$has_conflict" = true ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# ============================================================================
+# README Update Utilities
+# ============================================================================
+
+# Update README.md contents section from package.yaml
+# Usage: update_readme_contents
+# Returns: 0 if successful, 1 if error
+update_readme_contents() {
+    local readme="README.md"
+    local package_yaml="package.yaml"
+    
+    if [ ! -f "$readme" ]; then
+        echo "${YELLOW}Warning: README.md not found${NC}" >&2
+        return 1
+    fi
+    
+    if [ ! -f "$package_yaml" ]; then
+        echo "${YELLOW}Warning: package.yaml not found${NC}" >&2
+        return 1
+    fi
+    
+    # Generate contents section
+    local contents=$(generate_contents_section)
+    
+    # Check if markers exist
+    if ! grep -q "<!-- ACP_AUTO_UPDATE_START:CONTENTS -->" "$readme"; then
+        echo "${YELLOW}Warning: README.md missing auto-update markers${NC}" >&2
+        return 1
+    fi
+    
+    # Replace section between markers using awk
+    awk -v contents="$contents" '
+        /<!-- ACP_AUTO_UPDATE_START:CONTENTS -->/ {
+            print
+            print contents
+            skip=1
+            next
+        }
+        /<!-- ACP_AUTO_UPDATE_END:CONTENTS -->/ {
+            skip=0
+        }
+        !skip
+    ' "$readme" > "${readme}.tmp"
+    
+    mv "${readme}.tmp" "$readme"
+    echo "${GREEN}✓${NC} Updated README.md contents section"
+    return 0
+}
+
+# Generate contents section from package.yaml
+# Usage: contents=$(generate_contents_section)
+# Returns: Formatted markdown content list
+generate_contents_section() {
+    local package_yaml="package.yaml"
+    
+    # Parse and format contents using awk
+    awk '
+        BEGIN { section="" }
+        
+        /^  commands:/ { section="commands"; print "### Commands"; next }
+        /^  patterns:/ { section="patterns"; print ""; print "### Patterns"; next }
+        /^  designs:/ { section="designs"; print ""; print "### Designs"; next }
+        
+        section != "" && /^    - name:/ {
+            gsub(/^    - name: /, "")
+            name = $0
+            getline
+            if (/^      version:/) {
+                getline
+                if (/^      description:/) {
+                    gsub(/^      description: /, "")
+                    desc = $0
+                    print "- `" name "` - " desc
+                } else {
+                    print "- `" name "`"
+                }
+            }
+        }
+        
+        /^[a-z]/ && !/^  / { section="" }
+    ' "$package_yaml"
+}
+
+# Add file to README contents (updates entire section)
+# Usage: add_file_to_readme "patterns" "firebase.my-pattern.md" "Description"
+add_file_to_readme() {
+    local type="$1"
+    local filename="$2"
+    local description="$3"
+    
+    # Simply update entire contents section
+    update_readme_contents
+}
+
+# ============================================================================
 # Display Functions
 # ============================================================================
 
@@ -780,4 +1495,287 @@ display_available_commands() {
     echo ""
     echo "  ${GREEN}@git.init${NC}                       - Initialize git repository with smart .gitignore"
     echo "  ${GREEN}@git.commit${NC}                     - Intelligent version-aware git commit"
+}
+
+# ============================================================================
+# Pre-Commit Hook System
+# ============================================================================
+
+# Install pre-commit hook for package validation
+# Usage: install_precommit_hook
+# Returns: 0 on success, 1 on failure
+install_precommit_hook() {
+    local hook_file=".git/hooks/pre-commit"
+    
+    # Check if .git directory exists
+    if [ ! -d ".git" ]; then
+        echo "${RED}Error: Not a git repository${NC}" >&2
+        return 1
+    fi
+    
+    # Create hooks directory if it doesn't exist
+    mkdir -p ".git/hooks"
+    
+    # Check if hook already exists
+    if [ -f "$hook_file" ]; then
+        echo "${YELLOW}⚠  Pre-commit hook already exists${NC}"
+        echo "   Backing up to pre-commit.backup"
+        cp "$hook_file" "${hook_file}.backup"
+    fi
+    
+    # Create hook from template
+    cat > "$hook_file" << 'EOF'
+#!/bin/sh
+# ACP Package Pre-Commit Hook
+# Validates package.yaml before allowing commit
+
+# Colors for output
+if command -v tput >/dev/null 2>&1 && [ -t 1 ]; then
+    RED=$(tput setaf 1)
+    GREEN=$(tput setaf 2)
+    YELLOW=$(tput setaf 3)
+    NC=$(tput sgr0)
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    NC=''
+fi
+
+# Check if package.yaml exists
+if [ ! -f "package.yaml" ]; then
+    # Not a package directory, skip validation
+    exit 0
+fi
+
+# Check if validation script exists
+if [ ! -f "agent/scripts/acp.yaml-validate.sh" ]; then
+    echo "${YELLOW}Warning: acp.yaml-validate.sh not found, skipping validation${NC}"
+    exit 0
+fi
+
+# Check if schema exists
+if [ ! -f "agent/schemas/package.schema.yaml" ]; then
+    echo "${YELLOW}Warning: package.schema.yaml not found, skipping validation${NC}"
+    exit 0
+fi
+
+# Validate package.yaml by running the script directly (not sourcing)
+echo "Validating package.yaml..."
+if ! ./agent/scripts/acp.yaml-validate.sh "package.yaml" "agent/schemas/package.schema.yaml" 2>/dev/null; then
+    echo ""
+    echo "${RED}✗ Pre-commit validation failed${NC}"
+    echo ""
+    echo "package.yaml has validation errors."
+    echo "Please fix the errors and try again."
+    echo ""
+    echo "To see detailed errors, run:"
+    echo "  ./agent/scripts/acp.yaml-validate.sh package.yaml agent/schemas/package.schema.yaml"
+    echo ""
+    exit 1
+fi
+
+echo "${GREEN}✓${NC} package.yaml is valid"
+
+# Future enhancements (documented for reference):
+# - Namespace consistency checking across all files
+# - CHANGELOG.md validation for version changes
+# - File existence verification (all files in package.yaml exist)
+# - README.md structure validation
+# - Prevent commits to non-release branches
+
+exit 0
+EOF
+    
+    # Make executable
+    chmod +x "$hook_file"
+    
+    echo "${GREEN}✓${NC} Installed pre-commit hook"
+}
+
+# ============================================================================
+# Project Registry Functions
+# ============================================================================
+
+# Get path to projects registry
+# Usage: registry_path=$(get_projects_registry_path)
+get_projects_registry_path() {
+    echo "$HOME/.acp/projects.yaml"
+}
+
+# Check if projects registry exists
+# Usage: if projects_registry_exists; then ...
+projects_registry_exists() {
+    [ -f "$(get_projects_registry_path)" ]
+}
+
+# Initialize projects registry
+# Usage: init_projects_registry
+init_projects_registry() {
+    local registry_path
+    registry_path=$(get_projects_registry_path)
+    
+    if [ -f "$registry_path" ]; then
+        return 0  # Already exists
+    fi
+    
+    # Ensure ~/.acp/ exists
+    mkdir -p "$HOME/.acp"
+    
+    # Get timestamp
+    local timestamp
+    timestamp=$(get_timestamp)
+    
+    # Create registry with timestamp
+    cat > "$registry_path" << EOF
+# ACP Project Registry
+current_project: null
+projects:
+registry_version: 1.0.0
+last_updated: ${timestamp}
+EOF
+}
+
+# Get git remote origin URL for a directory
+# Usage: origin=$(get_git_origin "/path/to/repo")
+# Returns: Git remote origin URL, or empty string if not a git repo or no origin
+get_git_origin() {
+    local dir="${1:-.}"
+    if [ -d "$dir/.git" ] || git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+        git -C "$dir" remote get-url origin 2>/dev/null || echo ""
+    else
+        echo ""
+    fi
+}
+
+# Get current git branch for a directory
+# Usage: branch=$(get_git_branch "/path/to/repo")
+# Returns: Current branch name, or empty string if not a git repo
+get_git_branch() {
+    local dir="${1:-.}"
+    if [ -d "$dir/.git" ] || git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+        git -C "$dir" branch --show-current 2>/dev/null || echo ""
+    else
+        echo ""
+    fi
+}
+
+# Register project in registry
+# Usage: register_project "project-name" "/path/to/project" "project-type" "description" ["git_origin"] ["git_branch"]
+# NOTE: Caller must source acp.yaml-parser.sh before calling this function
+# git_origin and git_branch are optional; if omitted, auto-detected from project path
+register_project() {
+    local project_name="$1"
+    local project_path="$2"
+    local project_type="$3"
+    local project_description="$4"
+    local git_origin="${5:-}"
+    local git_branch="${6:-}"
+    local registry_path
+    registry_path=$(get_projects_registry_path)
+    
+    # Initialize registry if needed
+    if ! projects_registry_exists; then
+        init_projects_registry
+    fi
+    
+    # Source YAML parser
+    source_yaml_parser
+    
+    # Get timestamp
+    local timestamp
+    timestamp=$(get_timestamp)
+    
+    # Parse registry
+    yaml_parse "$registry_path"
+    
+    # Add project entry (yaml_set now creates missing nodes!)
+    yaml_set "projects.${project_name}.path" "$project_path"
+    yaml_set "projects.${project_name}.type" "$project_type"
+    yaml_set "projects.${project_name}.description" "$project_description"
+    yaml_set "projects.${project_name}.created" "$timestamp"
+    yaml_set "projects.${project_name}.last_modified" "$timestamp"
+    yaml_set "projects.${project_name}.last_accessed" "$timestamp"
+    yaml_set "projects.${project_name}.status" "active"
+
+    # Auto-detect git origin/branch if not provided
+    local expanded_path="${project_path/#\~/$HOME}"
+    if [ -z "$git_origin" ] && [ -d "$expanded_path" ]; then
+        git_origin=$(get_git_origin "$expanded_path")
+    fi
+    if [ -z "$git_branch" ] && [ -d "$expanded_path" ]; then
+        git_branch=$(get_git_branch "$expanded_path")
+    fi
+
+    # Set git fields if available
+    if [ -n "$git_origin" ]; then
+        yaml_set "projects.${project_name}.git_origin" "$git_origin"
+    fi
+    if [ -n "$git_branch" ]; then
+        yaml_set "projects.${project_name}.git_branch" "$git_branch"
+    fi
+
+    # Set as current project if first project
+    local current
+    current=$(yaml_get "$registry_path" "current_project" 2>/dev/null || echo "")
+    current=$(echo "$current" | sed "s/^['\"]//; s/['\"]$//")
+    if [ -z "$current" ] || [ "$current" = "null" ]; then
+        yaml_set "current_project" "$project_name"
+    fi
+    
+    # Update registry timestamp
+    yaml_set "last_updated" "$timestamp"
+    
+    # Write changes
+    yaml_write "$registry_path"
+}
+
+# Check if project exists in registry
+# Usage: if project_exists "project-name"; then ...
+project_exists() {
+    local project_name="$1"
+    local registry_path
+    registry_path=$(get_projects_registry_path)
+    
+    if ! projects_registry_exists; then
+        return 1
+    fi
+    
+    grep -q "^  ${project_name}:" "$registry_path"
+}
+
+# Get current project name
+# Usage: current=$(get_current_project)
+get_current_project() {
+    local registry_path
+    registry_path=$(get_projects_registry_path)
+    
+    if ! projects_registry_exists; then
+        return 1
+    fi
+    
+    local current
+    current=$(grep "^current_project:" "$registry_path" | awk '{print $2}')
+    if [ -n "$current" ] && [ "$current" != "null" ]; then
+        echo "$current"
+    fi
+}
+
+# Get current project path
+# Usage: path=$(get_current_project_path)
+get_current_project_path() {
+    local current
+    current=$(get_current_project)
+    
+    if [ -z "$current" ]; then
+        pwd  # Fallback to current directory
+        return 0
+    fi
+    
+    local registry_path
+    registry_path=$(get_projects_registry_path)
+    local path
+    path=$(awk "/^  ${current}:/,/^  [a-z]/ {if (/^    path:/) print \$2}" "$registry_path")
+    # Expand ~ to HOME
+    echo "$path" | sed "s|^~|$HOME|"
 }

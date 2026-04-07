@@ -1553,3 +1553,83 @@
 - PostgreSQL operational backup and targeted repair
 - rollback-safe Ubuntu/systemd binary deployment
 - browser-based smoke verification with Chrome DevTools MCP
+
+
+## 2026-04-07 09:19 - full workspace deployment to VPS
+
+### Goal
+
+- Deploy the full current local project state to the production VPS as a complete source sync and binary update.
+
+### Deployment
+
+- Local source deployed from `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source revision: `07b95fc`
+- Source sync target: `/opt/whatomate-src`
+- Source sync method: full `rsync --delete`
+- Sync exclusions:
+  - `.git/`
+  - `node_modules/`
+  - `frontend/node_modules/`
+  - `frontend/dist/`
+  - `docs/node_modules/`
+  - `uploads/`
+  - `config.toml`
+  - `*.db`
+  - `tmp/`
+  - local `whatomate` binary
+- VPS binary backup created before install:
+  - `/opt/whatomate/bin/whatomate.20260407_071645.bak`
+- Native build command on VPS:
+  - `cd /opt/whatomate-src && VERSION=07b95fc GOTOOLCHAIN=go1.25.8+auto make build-prod`
+- Final installed binary:
+  - path: `/opt/whatomate/bin/whatomate`
+  - SHA256: `b5ef3f02b5321b0ab646941b9754bb8578a93e04feb9a27079d2807d91e0a462`
+  - version: `Whatomate 07b95fc (built 2026-04-07_07:17:39)`
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Verification
+
+- Systemd state:
+  - `whatomate` -> `active`
+  - `whatomate@holol-wenjaz` -> `active`
+  - `whatomate@alarkan-almthalia` -> `active`
+  - `whatomate@matbaat-ruya` -> `active`
+- Socket listeners on VPS:
+  - `127.0.0.1:18123`
+  - `127.0.0.1:18124`
+  - `127.0.0.1:18125`
+  - `127.0.0.1:18126`
+- Public HTTPS smoke:
+  - `https://ofuqalmadenah.com/` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/` -> `200`
+- Chrome DevTools MCP verification:
+  - `https://ofuqalmadenah.com/` redirected to `/login`
+  - `https://holol-wenjaz.ofuqalmadenah.com/` redirected to `/login`
+  - console messages: none on both checks
+  - network `200` for `/login` and `/api/auth/sso/providers`
+
+### Notes
+
+- The initial localhost curl probe returned `000`, but direct listener checks and public HTTPS verification both passed, so deployment health is confirmed.
+- The build emitted Vite chunk-size warnings only; build and install completed successfully.
+
+### Skills Applied
+
+- `devops-engineer`
+
+### Competencies Applied
+
+- rollback-safe VPS binary deployment
+- full-source rsync mirroring with targeted exclusions
+- Go production builds with embedded Vite frontend assets
+- systemd multi-service rollout and verification
+- browser-based smoke verification with Chrome DevTools MCP

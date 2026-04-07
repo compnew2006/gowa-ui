@@ -1,0 +1,86 @@
+# package.yaml Template
+# This file defines an ACP package for distribution
+
+name: package-name
+version: 1.0.0
+description: Package description (10-200 characters)
+author: Author Name
+license: MIT
+homepage: https://github.com/user/package-name
+repository: https://github.com/user/package-name.git
+
+# Release configuration
+release:
+  branch: main
+
+# Package contents
+# List files that will be installed when users install this package
+# Format: Each entry is an object with a 'name' field
+contents:
+  patterns:
+    - name: namespace.pattern-name.md
+      description: Pattern description
+  
+  commands:
+    - name: namespace.command-name.md
+      description: Command description
+      scripts:  # REQUIRED: Must match command frontmatter **Scripts**: field
+        - namespace.command-name.sh
+        - acp.common.sh
+        - acp.yaml-parser.sh
+  
+  designs:
+    - name: namespace.design-name.md
+      description: Design description
+  
+  scripts:
+    - name: namespace.command-name.sh
+      description: Main command script
+    - name: acp.common.sh
+      description: Shared utility functions
+      type: utility
+    - name: acp.yaml-parser.sh
+      description: YAML parsing utilities
+      type: utility
+
+  # Template source files (code, configs, project scaffolding)
+  # Installed to agent/files/ - users copy to project as needed
+  # Variable substitution: {{VARIABLE_NAME}} placeholders replaced at install time
+  files:
+    # Required configuration template
+    - name: config/tsconfig.json
+      description: TypeScript configuration for core libraries
+      target: ./
+      required: true
+
+    # Template with variable substitution
+    - name: config/package.json.template
+      description: npm package.json with subpath exports
+      target: ./
+      required: true
+      variables:
+        - PACKAGE_NAME
+        - PACKAGE_DESCRIPTION
+        - AUTHOR_NAME
+
+    # Optional source code template
+    - name: src/schemas/example.schema.ts
+      description: Example Zod schema structure for data validation
+      target: src/schemas/
+      required: false
+
+    # Experimental template
+    - name: src/experimental/feature.ts
+      description: Experimental feature template for early testing
+      target: src/experimental/
+      required: false
+      experimental: true
+
+# Compatibility requirements
+requires:
+  acp: ">=2.8.0"
+
+# Tags for package discovery
+tags:
+  - tag1
+  - tag2

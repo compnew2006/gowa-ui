@@ -2,17 +2,18 @@
 
 > **🤖 Agent Directive**: If you are reading this file, the command `@acp-status` has been invoked. Follow the steps below to execute this command.
 
-**Namespace**: acp
-**Version**: 1.0.0
-**Created**: 2026-02-16
-**Last Updated**: 2026-02-16
-**Status**: Active
+**Namespace**: acp  
+**Version**: 1.0.0  
+**Created**: 2026-02-16  
+**Last Updated**: 2026-02-16  
+**Status**: Active  
+**Scripts**: None  
 
 ---
 
-**Purpose**: Display current project status including milestone progress, current task, recent work, and next steps
-**Category**: Workflow
-**Frequency**: As Needed
+**Purpose**: Display current project status including milestone progress, current task, recent work, and next steps  
+**Category**: Workflow  
+**Frequency**: As Needed  
 
 ---
 
@@ -35,6 +36,21 @@ Unlike `@acp-init` which performs a full context load and updates documentation,
 
 ## Steps
 
+### 0. Display Command Header
+
+```
+⚡ @acp.status
+  Display current project status including milestone progress, current task, recent work, and next steps
+
+  Related:
+    @acp.init      Full context initialization at session start
+    @acp.proceed   Continue with current task
+    @acp.update    Update progress.yaml after completing work
+    @acp.sync      Sync documentation with code changes
+```
+
+This step is informational only — do not wait for user input.
+
 ### 1. Read Progress Tracking
 
 Read the `agent/progress.yaml` file to get current project state.
@@ -44,7 +60,7 @@ Read the `agent/progress.yaml` file to get current project state.
 - Extract key information: current milestone, current task, progress percentages
 - Note any errors or missing data
 
-**Expected Outcome**: Progress data loaded successfully
+**Expected Outcome**: Progress data loaded successfully  
 
 ### 2. Display Current Milestone
 
@@ -56,7 +72,7 @@ Show the current milestone information.
 - Show tasks completed vs total tasks
 - Display milestone status (not_started, in_progress, completed)
 
-**Expected Outcome**: User sees current milestone summary
+**Expected Outcome**: User sees current milestone summary  
 
 ### 3. Display Current Task
 
@@ -68,7 +84,7 @@ Show the current task being worked on.
 - Display task file path
 - Show estimated hours and completion date (if completed)
 
-**Expected Outcome**: User sees current task details
+**Expected Outcome**: User sees current task details  
 
 ### 4. Display Recent Work
 
@@ -79,7 +95,7 @@ List recent work completed.
 - Display dates and descriptions
 - Show completed items with checkmarks
 
-**Expected Outcome**: User sees what was recently accomplished
+**Expected Outcome**: User sees what was recently accomplished  
 
 ### 5. Display Next Steps
 
@@ -90,7 +106,19 @@ Show what needs to be done next.
 - Prioritize by order in the list
 - Highlight any urgent items
 
-**Expected Outcome**: User knows what to work on next
+**Expected Outcome**: User knows what to work on next  
+
+### 5.5. Display Active Sessions (Optional)
+
+Show the count of active agent sessions.
+
+**Actions**:
+- If `./agent/scripts/acp.sessions.sh` exists, run `./agent/scripts/acp.sessions.sh count`
+- Display: `"Sessions: N active"` in status output
+
+**Expected Outcome**: Session count displayed  
+
+**Note**: If `./agent/scripts/acp.sessions.sh` does not exist, omit the Sessions line.  
 
 ### 6. Display Blockers
 
@@ -101,7 +129,7 @@ Show any current blockers or issues.
 - Highlight critical blockers
 - Note if no blockers exist
 
-**Expected Outcome**: User is aware of any obstacles
+**Expected Outcome**: User is aware of any obstacles  
 
 ---
 
@@ -181,27 +209,27 @@ No status changes - read-only operation
 
 ### Example 1: Checking Status Mid-Session
 
-**Context**: You're in the middle of working and want to see where things stand
+**Context**: You're in the middle of working and want to see where things stand  
 
-**Invocation**: `@acp-status`
+**Invocation**: `@acp-status`  
 
-**Result**: Displays current milestone (M1, 40% complete), current task (task-3, in progress), recent work (completed task-2 yesterday), and next steps (finish task-3, start task-4)
+**Result**: Displays current milestone (M1, 40% complete), current task (task-3, in progress), recent work (completed task-2 yesterday), and next steps (finish task-3, start task-4)  
 
 ### Example 2: Starting a New Session
 
-**Context**: Beginning work after a break, want to see project state before diving in
+**Context**: Beginning work after a break, want to see project state before diving in  
 
-**Invocation**: `@acp-status`
+**Invocation**: `@acp-status`  
 
-**Result**: Shows you're on milestone 2, 60% through, currently on task-7, with 3 tasks completed this week and 2 blockers to address
+**Result**: Shows you're on milestone 2, 60% through, currently on task-7, with 3 tasks completed this week and 2 blockers to address  
 
 ### Example 3: Reporting to Stakeholders
 
-**Context**: Need to provide a quick status update
+**Context**: Need to provide a quick status update  
 
-**Invocation**: `@acp-status`
+**Invocation**: `@acp-status`  
 
-**Result**: Clean, formatted output showing overall progress (65%), current phase (Testing), and upcoming milestones
+**Result**: Clean, formatted output showing overall progress (65%), current phase (Testing), and upcoming milestones  
 
 ---
 
@@ -218,27 +246,27 @@ No status changes - read-only operation
 
 ### Issue 1: progress.yaml not found
 
-**Symptom**: Error message "Cannot read file: agent/progress.yaml"
+**Symptom**: Error message "Cannot read file: agent/progress.yaml"  
 
-**Cause**: Progress tracking file doesn't exist yet
+**Cause**: Progress tracking file doesn't exist yet  
 
-**Solution**: Create progress.yaml from template: `cp agent/progress.template.yaml agent/progress.yaml`, then fill in initial project information
+**Solution**: Create progress.yaml from template: `cp agent/progress.template.yaml agent/progress.yaml`, then fill in initial project information  
 
 ### Issue 2: Empty or incomplete output
 
-**Symptom**: Status shows "No data" or missing sections
+**Symptom**: Status shows "No data" or missing sections  
 
-**Cause**: progress.yaml is not properly filled out
+**Cause**: progress.yaml is not properly filled out  
 
-**Solution**: Review progress.yaml and ensure all required fields are populated (project name, current milestone, current task, etc.)
+**Solution**: Review progress.yaml and ensure all required fields are populated (project name, current milestone, current task, etc.)  
 
 ### Issue 3: Outdated information displayed
 
-**Symptom**: Status shows old task or milestone that's already completed
+**Symptom**: Status shows old task or milestone that's already completed  
 
-**Cause**: progress.yaml hasn't been updated after recent work
+**Cause**: progress.yaml hasn't been updated after recent work  
 
-**Solution**: Run `@acp-update` to refresh progress tracking, or manually update progress.yaml
+**Solution**: Run `@acp-update` to refresh progress tracking, or manually update progress.yaml  
 
 ---
 
@@ -270,11 +298,11 @@ No status changes - read-only operation
 
 ---
 
-**Namespace**: acp
-**Command**: status
-**Version**: 1.0.0
-**Created**: 2026-02-16
-**Last Updated**: 2026-02-16
-**Status**: Active
-**Compatibility**: ACP 1.0.3+
-**Author**: ACP Project
+**Namespace**: acp  
+**Command**: status  
+**Version**: 1.0.0  
+**Created**: 2026-02-16  
+**Last Updated**: 2026-02-16  
+**Status**: Active  
+**Compatibility**: ACP 1.0.3+  
+**Author**: ACP Project  

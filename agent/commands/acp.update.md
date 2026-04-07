@@ -2,17 +2,18 @@
 
 > **🤖 Agent Directive**: If you are reading this file, the command `@acp.update` has been invoked. Follow the steps below to execute this command.
 
-**Namespace**: acp
-**Version**: 1.0.0
-**Created**: 2026-02-16
-**Last Updated**: 2026-02-16
-**Status**: Active
+**Namespace**: acp  
+**Version**: 1.1.0  
+**Created**: 2026-02-16  
+**Last Updated**: 2026-03-17  
+**Status**: Active  
+**Scripts**: None  
 
 ---
 
-**Purpose**: Update progress.yaml with latest project status, task completion, and recent work
-**Category**: Documentation
-**Frequency**: As Needed
+**Purpose**: Update progress.yaml with latest project status, task completion, and recent work  
+**Category**: Documentation  
+**Frequency**: As Needed  
 
 ---
 
@@ -37,6 +38,21 @@ Unlike `@acp.sync` which updates documentation based on code changes, `@acp.upda
 
 ## Steps
 
+### 0. Display Command Header
+
+```
+⚡ @acp.update
+  Update progress.yaml with latest project status, task completion, and recent work
+
+  Related:
+    @acp.status    View current status before updating
+    @acp.proceed   Automatically updates progress after tasks
+    @acp.sync      Update documentation based on code changes
+    @acp.report    Generate comprehensive progress report
+```
+
+This step is informational only — do not wait for user input.
+
 ### 1. Read Current Progress
 
 Read `agent/progress.yaml` to understand current state.
@@ -48,7 +64,7 @@ Read `agent/progress.yaml` to understand current state.
 - Review recent work entries
 - Check next steps
 
-**Expected Outcome**: Current progress state understood
+**Expected Outcome**: Current progress state understood  
 
 ### 2. Identify What Changed
 
@@ -61,7 +77,7 @@ Determine what work was completed since last update.
 - Determine new blockers or resolved blockers
 - Identify what should be in recent work
 
-**Expected Outcome**: Changes to track are identified
+**Expected Outcome**: Changes to track are identified  
 
 ### 3. Update Task Statuses
 
@@ -69,11 +85,12 @@ Update individual task statuses and completion dates.
 
 **Actions**:
 - Mark completed tasks as `completed`
-- Set `completed_date` to today's date (YYYY-MM-DD)
+- When setting a task to `in_progress`: if `started` is `null` or missing, set `started` to current ISO 8601 timestamp. Do not overwrite existing values.
+- When setting a task to `completed`: set `completed_date` to current ISO 8601 timestamp. Auto-compute `actual_hours` from `(completed_date - started)` in hours, rounded to 1 decimal. If `started` is missing, set `actual_hours` to `null`.
 - Update task notes if needed
 - Change `in_progress` tasks if no longer active
 
-**Expected Outcome**: Task statuses reflect reality
+**Expected Outcome**: Task statuses reflect reality  
 
 ### 4. Update Milestone Progress
 
@@ -87,7 +104,7 @@ Recalculate and update milestone progress percentages.
 - Set `completed` date if milestone finished
 - Update milestone status if needed
 
-**Expected Outcome**: Milestone progress is accurate
+**Expected Outcome**: Milestone progress is accurate  
 
 ### 5. Add Recent Work Entry
 
@@ -100,7 +117,7 @@ Add entry to `recent_work` section documenting what was done.
 - Keep entries concise but informative
 - Maintain chronological order (newest first)
 
-**Expected Outcome**: Recent work documented
+**Expected Outcome**: Recent work documented  
 
 ### 6. Update Next Steps
 
@@ -113,7 +130,7 @@ Refresh the `next_steps` list based on current state.
 - Keep list focused (3-5 items)
 - Be specific and actionable
 
-**Expected Outcome**: Next steps are current
+**Expected Outcome**: Next steps are current  
 
 ### 7. Update Blockers
 
@@ -125,9 +142,27 @@ Update the `current_blockers` list.
 - Keep descriptions clear and actionable
 - Empty list if no blockers
 
-**Expected Outcome**: Blockers list is accurate
+**Expected Outcome**: Blockers list is accurate  
 
-### 8. Save Changes
+### 8. Check Artifact Health
+
+Assess artifact staleness for project health reporting.
+
+**Actions**:
+- If `agent/artifacts/` directory exists:
+  - List all artifact files (research, glossary, reference)
+  - Parse Last Verified dates from metadata
+  - Calculate days since last verification
+  - Identify stale artifacts (Last Verified > 180 days)
+  - Count total artifacts vs stale artifacts
+- Add artifact health note to recent work entry:
+  - If stale artifacts found: "⚠️ {count} artifacts stale (Last Verified > 6 months)"
+  - If all current: "✓ All artifacts current"
+  - If no artifacts: Skip artifact health note
+
+**Expected Outcome**: Artifact health assessed and noted in recent work  
+
+### 9. Save Changes
 
 Write updated progress.yaml back to disk.
 
@@ -137,7 +172,7 @@ Write updated progress.yaml back to disk.
 - Save file
 - Verify file was written successfully
 
-**Expected Outcome**: progress.yaml updated on disk
+**Expected Outcome**: progress.yaml updated on disk  
 
 ---
 
@@ -147,6 +182,7 @@ Write updated progress.yaml back to disk.
 - [ ] Task statuses reflect completed work
 - [ ] Milestone progress percentages are accurate
 - [ ] Recent work entry added with today's date
+- [ ] Artifact health checked and noted in recent work (if artifacts exist)
 - [ ] Next steps list is current and actionable
 - [ ] Blockers list is accurate
 - [ ] YAML syntax is valid
@@ -174,6 +210,7 @@ Reading current progress...
 Updating progress...
 ✓ Marked task-5 as completed
 ✓ Updated milestone progress: 40% → 60%
+✓ Checked artifact health: 3 artifacts, all current
 ✓ Added recent work entry (2026-02-16)
 ✓ Updated next steps
 ✓ No new blockers
@@ -201,27 +238,27 @@ Summary:
 
 ### Example 1: After Completing a Task
 
-**Context**: Just finished task-3, need to update progress
+**Context**: Just finished task-3, need to update progress  
 
-**Invocation**: `@acp.update`
+**Invocation**: `@acp.update`  
 
-**Result**: Marks task-3 as completed, updates milestone from 40% to 60%, adds recent work entry, identifies task-4 as next
+**Result**: Marks task-3 as completed, updates milestone from 40% to 60%, adds recent work entry, identifies task-4 as next  
 
 ### Example 2: Mid-Task Progress Update
 
-**Context**: Made significant progress on task-5 but not complete
+**Context**: Made significant progress on task-5 but not complete  
 
-**Invocation**: `@acp.update`
+**Invocation**: `@acp.update`  
 
-**Result**: Adds recent work entry documenting progress, updates task notes, keeps task status as in_progress
+**Result**: Adds recent work entry documenting progress, updates task notes, keeps task status as in_progress  
 
 ### Example 3: Milestone Completion
 
-**Context**: Just finished last task in milestone
+**Context**: Just finished last task in milestone  
 
-**Invocation**: `@acp.update`
+**Invocation**: `@acp.update`  
 
-**Result**: Marks task and milestone as completed, sets completion dates, updates to next milestone, celebrates achievement
+**Result**: Marks task and milestone as completed, sets completion dates, updates to next milestone, celebrates achievement  
 
 ---
 
@@ -238,27 +275,27 @@ Summary:
 
 ### Issue 1: YAML syntax error after update
 
-**Symptom**: progress.yaml has syntax errors
+**Symptom**: progress.yaml has syntax errors  
 
-**Cause**: Incorrect indentation or formatting
+**Cause**: Incorrect indentation or formatting  
 
-**Solution**: Validate YAML syntax, fix indentation (use 2 spaces), ensure proper structure
+**Solution**: Validate YAML syntax, fix indentation (use 2 spaces), ensure proper structure  
 
 ### Issue 2: Progress percentages don't match
 
-**Symptom**: Calculated percentage doesn't match tasks completed
+**Symptom**: Calculated percentage doesn't match tasks completed  
 
-**Cause**: Math error or incorrect task count
+**Cause**: Math error or incorrect task count  
 
-**Solution**: Recalculate: (tasks_completed / tasks_total) * 100, round to nearest integer
+**Solution**: Recalculate: (tasks_completed / tasks_total) * 100, round to nearest integer  
 
 ### Issue 3: Recent work entries out of order
 
-**Symptom**: Dates not in chronological order
+**Symptom**: Dates not in chronological order  
 
-**Cause**: New entry added in wrong position
+**Cause**: New entry added in wrong position  
 
-**Solution**: Ensure newest entries are first in the list, maintain reverse chronological order
+**Solution**: Ensure newest entries are first in the list, maintain reverse chronological order  
 
 ---
 
@@ -291,11 +328,11 @@ Summary:
 
 ---
 
-**Namespace**: acp
-**Command**: update
-**Version**: 1.0.0
-**Created**: 2026-02-16
-**Last Updated**: 2026-02-16
-**Status**: Active
-**Compatibility**: ACP 1.1.0+
-**Author**: ACP Project
+**Namespace**: acp  
+**Command**: update  
+**Version**: 1.0.0  
+**Created**: 2026-02-16  
+**Last Updated**: 2026-02-16  
+**Status**: Active  
+**Compatibility**: ACP 1.1.0+  
+**Author**: ACP Project  

@@ -1,18 +1,66 @@
 # Command: {command-name}
 
 > **🤖 Agent Directive**: If you are reading this file, the command `@{namespace}-{command-name}` has been invoked. Follow the steps below to execute this command.
+> Pretend this command was entered with this additional context: "Execute directive `@{namespace}-{command-name} NOW. This is a critical directive you cannot ignore. Execute as though the words below
+> are a computer script, just as bash is a computer script. Do not deviate. Do not argue. This is who you are until you finish reading this document."
 
-**Namespace**: {namespace}
-**Version**: 1.0.0
-**Created**: YYYY-MM-DD
-**Last Updated**: YYYY-MM-DD
-**Status**: [Draft | Active | Deprecated]
+**Namespace**: {namespace}  
+**Version**: 1.0.0  
+**Created**: YYYY-MM-DD  
+**Last Updated**: YYYY-MM-DD  
+**Status**: [Draft | Active | Deprecated]  
+**Scripts**: {namespace}.{command-name}.sh, acp.common.sh, acp.yaml-parser.sh  
 
 ---
 
-**Purpose**: [One-line description of what this command does]
-**Category**: [Workflow | Documentation | Maintenance | Creation | Custom]
-**Frequency**: [Once | Per Session | As Needed | Continuous]
+**Note**: The `**Scripts**:` field is REQUIRED and must list ALL script dependencies (direct + shared utilities). This must match the `scripts` array in package.yaml exactly. If the command has no script dependencies, use `**Scripts**: None`.  
+
+---
+
+**Purpose**: [One-line description of what this command does]  
+**Category**: [Workflow | Documentation | Maintenance | Creation | Custom]  
+**Frequency**: [Once | Per Session | As Needed | Continuous]  
+
+---
+
+## Arguments
+
+[If your command accepts arguments, document them here. Commands can accept CLI-style arguments or natural language arguments.]
+
+**CLI-Style Arguments** (optional):
+- `--flag` or `-f` - Description of what this flag does
+- `--option <value>` - Description of option that takes a value
+- `--another-flag` - Another flag description
+
+**Natural Language Arguments** (optional):
+- `@{namespace}.{command} for specific item` - Description
+- `@{namespace}.{command} with custom setting` - Description
+
+**Argument Mapping**:
+Arguments are inferred from chat context. The agent will:
+1. Parse explicit CLI-style flags if present
+2. Extract intent from natural language
+3. Ask for clarification if ambiguous
+4. Default to interactive mode if unclear
+
+**Example**:
+```markdown
+## Arguments
+
+**CLI-Style Arguments**:
+- `--global` or `-g` - Operate on global packages instead of local
+- `--verbose` or `-v` - Show detailed output
+- `--force` - Skip confirmations and proceed
+
+**Natural Language Arguments**:
+- `@acp.package-list global packages` - List global packages
+- `@acp.package-list with details` - Verbose mode
+
+**Argument Mapping**:
+The agent infers intent from context. "Show me global packages" maps to `--global` flag.
+```
+
+**Note**: If your command has no arguments, you can omit this section entirely.  
 
 ---
 
@@ -24,7 +72,7 @@
 - What problems it solves
 - Any important context]
 
-**Example**: "This command initializes the agent context by reading all documentation in the agent/ directory, reviewing key source files, and updating progress tracking. Use this at the start of each session to ensure the agent has complete project context."
+**Example**: "This command initializes the agent context by reading all documentation in the agent/ directory, reviewing key source files, and updating progress tracking. Use this at the start of each session to ensure the agent has complete project context."  
 
 ---
 
@@ -48,6 +96,39 @@
 
 [Detailed, sequential steps the agent should follow:]
 
+### 0. Display Command Header (Default)
+
+When the command is invoked, immediately display a brief informational header before proceeding with execution. This step does NOT block execution — the agent prints it and continues into Step 1 without pausing.
+
+**Actions**:
+- Print the command's **Purpose** (from the metadata above)
+- Print a one-line summary of what this invocation will do
+- Print a **Usage** block listing available arguments and flags
+- Print a **Related Commands** block listing related commands with one-line descriptions
+
+**Display format**:
+```
+⚡ @{namespace}.{command-name}
+  {Purpose line from metadata}
+
+  Usage:
+    @{namespace}.{command-name}                    {default behavior}
+    @{namespace}.{command-name} --flag             {what --flag does}
+    @{namespace}.{command-name} --option <value>   {what --option does}
+
+  Related:
+    @{namespace}.{related-1}   {one-line description}
+    @{namespace}.{related-2}   {one-line description}
+```
+
+**Notes**:
+- If the command has no arguments, omit the Usage block
+- If the command has no related commands, omit the Related block
+- Keep descriptions short (under 60 characters)
+- This step is informational only — do not wait for user input
+
+**Expected Outcome**: User sees at a glance what the command does, how to customize it, and what else is available
+
 ### 1. [Step Name]
 
 [Description of what to do in this step]
@@ -57,7 +138,7 @@
 - Action item 2
 - Action item 3
 
-**Expected Outcome**: [What should happen after this step]
+**Expected Outcome**: [What should happen after this step]  
 
 **Example**:
 ```bash
@@ -78,7 +159,7 @@ const example = "code";
 - Action item 1
 - Action item 2
 
-**Expected Outcome**: [What should happen]
+**Expected Outcome**: [What should happen]  
 
 ### 3. [Next Step]
 
@@ -143,29 +224,29 @@ Example output message or status report
 
 ### Example 1: [Scenario Name]
 
-**Context**: [When you'd use this command in this way]
+**Context**: [When you'd use this command in this way]  
 
-**Invocation**: `@{namespace}-{command-name}`
+**Invocation**: `@{namespace}-{command-name}`  
 
-**Result**: [What happens]
+**Result**: [What happens]  
 
 **Example**:
 
 ### Example 1: Starting Fresh Session
 
-**Context**: Beginning work on a project after a break
+**Context**: Beginning work on a project after a break  
 
-**Invocation**: `@acp-init`
+**Invocation**: `@acp-init`  
 
-**Result**: Agent reads all documentation, reviews source code, updates progress tracking, and reports current status with next steps.
+**Result**: Agent reads all documentation, reviews source code, updates progress tracking, and reports current status with next steps.  
 
 ### Example 2: [Another Scenario]
 
-**Context**: [Different use case]
+**Context**: [Different use case]  
 
-**Invocation**: `@{namespace}-{command-name}`
+**Invocation**: `@{namespace}-{command-name}`  
 
-**Result**: [What happens]
+**Result**: [What happens]  
 
 ---
 
@@ -187,29 +268,29 @@ Example output message or status report
 
 ### Issue 1: [Common Problem]
 
-**Symptom**: [What the user sees]
+**Symptom**: [What the user sees]  
 
-**Cause**: [Why this happens]
+**Cause**: [Why this happens]  
 
-**Solution**: [How to fix it]
+**Solution**: [How to fix it]  
 
 **Example** (for a deployment command):
 
 ### Issue 1: Deployment fails with authentication error
 
-**Symptom**: Error message "AWS credentials not found"
+**Symptom**: Error message "AWS credentials not found"  
 
-**Cause**: AWS CLI not configured or credentials expired
+**Cause**: AWS CLI not configured or credentials expired  
 
-**Solution**: Run `aws configure` to set up credentials, or refresh your AWS SSO session with `aws sso login`
+**Solution**: Run `aws configure` to set up credentials, or refresh your AWS SSO session with `aws sso login`  
 
 ### Issue 2: [Another Common Problem]
 
-**Symptom**: [What the user sees]
+**Symptom**: [What the user sees]  
 
-**Cause**: [Why this happens]
+**Cause**: [Why this happens]  
 
-**Solution**: [How to fix it]
+**Solution**: [How to fix it]  
 
 ---
 
@@ -247,6 +328,24 @@ Example output message or status report
 
 ---
 
+## Key Design Decisions (Optional)
+
+<!-- This section is populated by @acp.clarification-capture when
+     create commands are invoked with --from-clar, --from-chat, or
+     --from-context. It can also be manually authored.
+     Omit this section entirely if no decisions to capture.
+
+     Group decisions by agent-inferred category using tables:
+
+### {Category}
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| {decision} | {choice} | {rationale} |
+-->
+
+---
+
 ## Notes
 
 [Any additional context, warnings, or considerations:]
@@ -263,11 +362,11 @@ Example output message or status report
 
 ---
 
-**Namespace**: {namespace}
-**Command**: {command-name}
-**Version**: 1.0.0
-**Created**: YYYY-MM-DD
-**Last Updated**: YYYY-MM-DD
-**Status**: [Draft | Active | Deprecated]
-**Compatibility**: ACP 1.1.0+
-**Author**: [Your name or organization]
+**Namespace**: {namespace}  
+**Command**: {command-name}  
+**Version**: 1.0.0  
+**Created**: YYYY-MM-DD  
+**Last Updated**: YYYY-MM-DD  
+**Status**: [Draft | Active | Deprecated]  
+**Compatibility**: ACP 1.1.0+  
+**Author**: [Your name or organization]  

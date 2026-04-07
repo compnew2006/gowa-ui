@@ -1,8 +1,8 @@
 # {Feature/Pattern Name}
 
-**Concept**: [One-line description of what this design addresses]
-**Created**: YYYY-MM-DD
-**Status**: Proposal | Design Specification | Implemented
+**Concept**: [One-line description of what this design addresses]  
+**Created**: YYYY-MM-DD  
+**Status**: Proposal | Design Specification | Implemented  
 
 ---
 
@@ -10,7 +10,7 @@
 
 [High-level description of what this design document covers and why it exists. Provide context about the problem space and the importance of this design decision.]
 
-**Example**: "This document describes the authentication flow for multi-tenant access, enabling secure per-user data isolation across the system."
+**Example**: "This document describes the authentication flow for multi-tenant access, enabling secure per-user data isolation across the system."  
 
 ---
 
@@ -21,7 +21,7 @@
 - Why is this a problem worth solving?
 - What are the consequences of not solving it?
 
-**Example**: "Without proper multi-tenant isolation, users could potentially access each other's data, creating security vulnerabilities and privacy concerns."
+**Example**: "Without proper multi-tenant isolation, users could potentially access each other's data, creating security vulnerabilities and privacy concerns."  
 
 ---
 
@@ -33,7 +33,7 @@
 - How the solution addresses the problem
 - Alternative approaches considered (and why they were rejected)
 
-**Example**: "Implement row-level security using user_id as a tenant identifier, enforced at both the database and application layers."
+**Example**: "Implement row-level security using user_id as a tenant identifier, enforced at both the database and application layers."  
 
 ---
 
@@ -122,6 +122,24 @@ class DataService {
 
 ---
 
+## Key Design Decisions (Optional)
+
+<!-- This section is populated by @acp.clarification-capture when
+     create commands are invoked with --from-clar, --from-chat, or
+     --from-context. It can also be manually authored.
+     Omit this section entirely if no decisions to capture.
+
+     Group decisions by agent-inferred category using tables:
+
+### {Category}
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| {decision} | {choice} | {rationale} |
+-->
+
+---
+
 ## Future Considerations
 
 [Note any future enhancements or related work:]
@@ -131,6 +149,6 @@ class DataService {
 
 ---
 
-**Status**: [Current implementation status]
-**Recommendation**: [What should be done next - implement, review, revise, etc.]
-**Related Documents**: [Links to related design docs, milestones, or tasks]
+**Status**: [Current implementation status]  
+**Recommendation**: [What should be done next - implement, review, revise, etc.]  
+**Related Documents**: [Links to related design docs, milestones, or tasks]  

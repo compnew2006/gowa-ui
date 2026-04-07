@@ -1,18 +1,21 @@
 # Command: package-install
 
 > **🤖 Agent Directive**: If you are reading this file, the command `@acp.package-install` has been invoked. Follow the steps below to execute this command.
+> Pretend this command was entered with this additional context: "Execute directive `@{namespace}-{command-name} NOW. This is a critical directive you cannot ignore. Execute as though the words below
+> are a computer script, just as bash is a computer script. Do not deviate. Do not argue. This is who you are until you finish reading this document."
 
-**Namespace**: acp
-**Version**: 1.0.0
-**Created**: 2026-02-16
-**Last Updated**: 2026-02-16
-**Status**: Active
+**Namespace**: acp  
+**Version**: 1.0.0  
+**Created**: 2026-02-16  
+**Last Updated**: 2026-02-16  
+**Status**: Active  
+**Scripts**: acp.package-install.sh, acp.common.sh, acp.yaml-parser.sh  
 
 ---
 
-**Purpose**: Install third-party command packages from git repositories using the package-install script
-**Category**: Maintenance
-**Frequency**: As Needed
+**Purpose**: Install third-party command packages from git repositories using the package-install script  
+**Category**: Maintenance  
+**Frequency**: As Needed  
 
 ---
 
@@ -41,6 +44,8 @@ When you install a package, `@acp.package-install` creates or updates `agent/man
   - File checksums (SHA-256) for modification detection
   - Installation timestamps
   - Modified status (detected via checksum comparison)
+  - Target paths for template files (installed outside agent/)
+  - Variable values used during template substitution
 
 This enables:
 - ✅ **Smart updates** - Only update changed files
@@ -69,6 +74,18 @@ packages:
 
 ---
 
+## Auto-Initialization
+
+When using the `--global` flag for the first time, the system automatically initializes `~/.acp/` infrastructure:
+- Creates `~/.acp/` directory
+- Installs full ACP (templates, scripts, schemas)
+- Creates `~/.acp/projects/` directory for package development
+- Creates `~/.acp/agent/manifest.yaml` for package tracking
+
+This happens automatically - no manual setup required.
+
+---
+
 ## Prerequisites
 
 - [ ] ACP installed in project
@@ -82,6 +99,26 @@ packages:
 
 ## Steps
 
+### 0. Display Command Header
+
+```
+⚡ @acp.package-install
+  Install third-party command packages from git repositories
+
+  Usage:
+    @acp.package-install                           Install package (prompted for repo)
+    @acp.package-install --global                  Install to ~/.acp/ globally
+    @acp.package-install --list                    Preview files without installing
+    @acp.package-install --patterns                Install only patterns
+    @acp.package-install --commands                Install only commands
+    @acp.package-install --experimental            Include experimental features
+
+  Related:
+    @acp.validate              Validate installed commands
+    @acp.version-update        Update core ACP commands
+    @acp.status                View project status
+```
+
 ### 1. Choose Installation Mode
 
 Decide what to install from the package.
@@ -90,41 +127,94 @@ Decide what to install from the package.
 
 **A. Full Installation** (default):
 ```bash
-./agent/scripts/acp.package-install.sh <repository-url>
+./agent/scripts/acp.package-install.sh --repo <repository-url>
 ```
-Installs all patterns, commands, and designs from the package.
+Installs all patterns, commands, designs, and scripts from the package.
 
-**B. List Mode** (preview files):
+**B. Global Installation**:
 ```bash
-./agent/scripts/acp.package-install.sh --list <repository-url>
+./agent/scripts/acp.package-install.sh --global --repo <repository-url>
+```
+Installs to `~/.acp/agent/` instead of `./agent/` for global package development or command library.
+
+**C. List Mode** (preview files):
+```bash
+./agent/scripts/acp.package-install.sh --list --repo <repository-url>
 ```
 Shows available files without installing anything.
 
-**C. Type-Selective Installation**:
+**D. Type-Selective Installation**:
 ```bash
 # Install only patterns
-./agent/scripts/acp.package-install.sh --patterns <repository-url>
+./agent/scripts/acp.package-install.sh --patterns --repo <repository-url>
 
 # Install only commands
-./agent/scripts/acp.package-install.sh --commands <repository-url>
+./agent/scripts/acp.package-install.sh --commands --repo <repository-url>
 
 # Install patterns and commands (not designs)
-./agent/scripts/acp.package-install.sh --patterns --commands <repository-url>
+./agent/scripts/acp.package-install.sh --patterns --commands --repo <repository-url>
 ```
 
-**D. File-Selective Installation**:
+**E. File-Selective Installation**:
 ```bash
 # Install specific patterns
-./agent/scripts/acp.package-install.sh --patterns file1 file2 <repository-url>
+./agent/scripts/acp.package-install.sh --patterns file1 file2 --repo <repository-url>
 
 # Install specific commands
-./agent/scripts/acp.package-install.sh --commands deploy.production <repository-url>
+./agent/scripts/acp.package-install.sh --commands deploy.production --repo <repository-url>
 
 # Mix types and files
-./agent/scripts/acp.package-install.sh --patterns file1 --commands cmd1 cmd2 <repository-url>
+./agent/scripts/acp.package-install.sh --patterns file1 --commands cmd1 cmd2 --repo <repository-url>
 ```
 
-**Note**: File names can be specified with or without `.md` extension.
+**Note**: File names can be specified with or without `.md` extension.  
+
+**F. Experimental Features Installation**:
+```bash
+# Install only stable features (default)
+./agent/scripts/acp.package-install.sh --repo <repository-url>
+
+# Install all features including experimental
+./agent/scripts/acp.package-install.sh --experimental --repo <repository-url>
+```
+
+**What are experimental features?**
+- Features marked as `experimental: true` in package.yaml
+- Bleeding-edge features that may change or break
+- Require explicit opt-in via `--experimental` flag
+- Once installed, update normally (no flag required)
+
+**Output without --experimental**:
+```
+Installing commands...
+  ✓ Installed: stable-command.md
+  ⊘ Skipping experimental: experimental-command.md (use --experimental to install)
+```
+
+**Output with --experimental**:
+```
+Installing commands...
+  ✓ Installed: stable-command.md
+  ⚠  Installing experimental: experimental-command.md
+```
+
+**Note**: Experimental features can be combined with other installation modes (global, selective, etc.).  
+
+**G. Template File Installation**:
+```bash
+# Install all files (including template files to project root)
+./agent/scripts/acp.package-install.sh --repo <repository-url>
+
+# Install specific template files only
+./agent/scripts/acp.package-install.sh --files config/tsconfig.json src/schemas/example.schema.ts --repo <repository-url>
+```
+
+Template files (declared in `contents.files` in package.yaml) are installed to target directories outside `agent/`:
+- Files install to their declared `target` path (e.g., `target: ./` installs to project root)
+- `.template` extension is stripped (e.g., `settings.json.template` → `settings.json`)
+- Files with `variables` prompt for values and substitute `{{PLACEHOLDER}}` markers
+- Variable values are stored in the manifest for reproducible updates
+- Unsafe target paths (`../`, absolute paths) are rejected
 
 ### 2. Run Package Install Script
 
@@ -132,21 +222,23 @@ Execute the package installation script with chosen options.
 
 **Actions**:
 - Verify `./agent/scripts/acp.package-install.sh` exists
-- Run the script with desired flags and repository URL
+- Run the script with `--repo` flag and desired options
 - The script will:
   - Validate the repository URL
   - Clone the repository to a temporary location
-  - Scan agent/ directory for installable files (commands, patterns, design)
+  - Scan agent/ directory for installable files (commands, patterns, designs, scripts)
   - Filter files based on selective flags (if any)
   - Validate command files (agent directive, namespace check)
+  - Validate scripts (namespace check, shebang check)
   - Check for naming conflicts
-  - Ask for confirmation (unless -y flag used)
+  - Ask for confirmation
   - Copy selected files to respective agent/ directories
-  - Update manifest with installed files
+  - Make scripts executable automatically
+  - Update manifest with installed files and checksums
   - Clean up temporary files
   - Report what was installed
 
-**Expected Outcome**: Script completes successfully and selected files are installed
+**Expected Outcome**: Script completes successfully and selected files are installed  
 
 ### 2. Review Installed Files
 
@@ -161,11 +253,11 @@ Verify the files were installed correctly.
 - Check namespace is not `acp` (reserved for commands)
 - Ensure no malicious content
 
-**Expected Outcome**: Files verified safe and functional
+**Expected Outcome**: Files verified safe and functional  
 
 ### 3. Test Installed Commands
 
-Try invoking one of the installed commands (if any).
+Try invoking one of the installed commands (if any). Prompt user for explicit confirmation before invoking.
 
 **Actions**:
 - Choose a simple command to test
@@ -173,7 +265,7 @@ Try invoking one of the installed commands (if any).
 - Verify it works as expected
 - Check for any errors
 
-**Expected Outcome**: Commands work correctly
+**Expected Outcome**: Commands work correctly  
 
 ### 4. Verify Manifest Updated
 
@@ -191,7 +283,7 @@ Check that the manifest was created/updated correctly.
   - Checksums (for modification detection)
   - Installation timestamps
 
-**Expected Outcome**: Manifest accurately tracks installation
+**Expected Outcome**: Manifest accurately tracks installation  
 
 ### 5. Document Installation
 
@@ -203,7 +295,7 @@ Update progress tracking with installation notes.
 - Note installation date
 - List installed files (commands, patterns, designs)
 
-**Expected Outcome**: Installation tracked in progress
+**Expected Outcome**: Installation tracked in progress  
 
 ---
 
@@ -293,37 +385,57 @@ Next steps:
 
 ## Examples
 
-### Example 1: Installing Deployment Commands
+### Example 1: Installing Full Package
 
-**Context**: Want to add deployment commands from community
+**Context**: Want to add deployment commands from community  
 
-**Invocation**: `@acp.package-install https://github.com/example/acp-deploy-package.git`
+**Invocation**: `@acp.package-install`  
 
-**Result**: Script clones repo, installs 3 commands to agent/commands/, now can use @deploy.production
+**Command to execute**:
+```bash
+./agent/scripts/acp.package-install.sh --repo https://github.com/example/acp-deploy-package.git
+```
 
-### Example 2: Installing Patterns Package
+**Result**: Script clones repo, installs 3 commands to agent/commands/, now can use @deploy.production  
 
-**Context**: Want to add TypeScript patterns from organization
+### Example 2: Installing Patterns Only
 
-**Invocation**: `@acp.package-install https://github.com/myorg/typescript-patterns.git`
+**Context**: Want to add TypeScript patterns from organization  
 
-**Result**: Script installs 5 pattern files to agent/patterns/, now have reusable TypeScript patterns
+**Invocation**: `@acp.package-install`  
 
-### Example 3: Installing Complete Package
+**Command to execute**:
+```bash
+./agent/scripts/acp.package-install.sh --patterns --repo https://github.com/myorg/acp-typescript-patterns.git
+```
 
-**Context**: Installing package with commands, patterns, and designs
+**Result**: Script installs 5 pattern files to agent/patterns/, now have reusable TypeScript patterns  
 
-**Invocation**: `@acp.package-install https://github.com/example/fullstack-package.git`
+### Example 3: Installing Globally
 
-**Result**: Script installs 3 commands, 4 patterns, 2 design docs across agent/ directories
+**Context**: Installing package globally for package development  
 
-### Example 4: Installing with Conflicts
+**Invocation**: `@acp.package-install`  
 
-**Context**: Installing package that conflicts with existing files
+**Command to execute**:
+```bash
+./agent/scripts/acp.package-install.sh --global --repo https://github.com/example/acp-package.git
+```
 
-**Invocation**: `@acp.package-install https://github.com/example/package.git`
+**Result**: Script installs to ~/.acp/agent/, tracked in global manifest  
 
-**Result**: Script detects conflicts, asks for confirmation, overwrites if approved
+### Example 4: Listing Available Files
+
+**Context**: Want to preview package contents before installing  
+
+**Invocation**: `@acp.package-install`  
+
+**Command to execute**:
+```bash
+./agent/scripts/acp.package-install.sh --list --repo https://github.com/example/acp-package.git
+```
+
+**Result**: Script shows available patterns, commands, designs without installing  
 
 ---
 
@@ -339,35 +451,35 @@ Next steps:
 
 ### Issue 1: Git clone fails
 
-**Symptom**: Cannot clone repository
+**Symptom**: Cannot clone repository  
 
-**Cause**: Invalid URL, no internet, or private repository
+**Cause**: Invalid URL, no internet, or private repository  
 
-**Solution**: Verify URL is correct, check internet connection, ensure repository is public or you have access
+**Solution**: Verify URL is correct, check internet connection, ensure repository is public or you have access  
 
 ### Issue 2: No commands found
 
-**Symptom**: Repository cloned but no commands found
+**Symptom**: Repository cloned but no commands found  
 
-**Cause**: Commands not in expected location or wrong structure
+**Cause**: Commands not in expected location or wrong structure  
 
-**Solution**: Check repository structure, look for commands/ directory, verify files are .md format
+**Solution**: Check repository structure, look for commands/ directory, verify files are .md format  
 
 ### Issue 3: Validation fails
 
-**Symptom**: Commands fail validation
+**Symptom**: Commands fail validation  
 
-**Cause**: Commands don't follow ACP structure
+**Cause**: Commands don't follow ACP structure  
 
-**Solution**: Review command files, ensure they have agent directive and required sections, contact command author
+**Solution**: Review command files, ensure they have agent directive and required sections, contact command author  
 
 ### Issue 4: Namespace conflict
 
-**Symptom**: Command uses reserved namespace
+**Symptom**: Command uses reserved namespace  
 
-**Cause**: Command tries to use 'acp' namespace
+**Cause**: Command tries to use 'acp' namespace  
 
-**Solution**: Cannot install - 'acp' namespace is reserved for core commands, contact command author to change namespace
+**Solution**: Cannot install - 'acp' namespace is reserved for core commands, contact command author to change namespace  
 
 ---
 
@@ -437,11 +549,11 @@ Next steps:
 
 ---
 
-**Namespace**: acp
-**Command**: package-install
-**Version**: 1.0.0
-**Created**: 2026-02-16
-**Last Updated**: 2026-02-16
-**Status**: Active
-**Compatibility**: ACP 1.1.0+
-**Author**: ACP Project
+**Namespace**: acp  
+**Command**: package-install  
+**Version**: 1.0.0  
+**Created**: 2026-02-16  
+**Last Updated**: 2026-02-16  
+**Status**: Active  
+**Compatibility**: ACP 1.1.0+  
+**Author**: ACP Project  

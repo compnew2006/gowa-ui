@@ -1,0 +1,66 @@
+# ACP Package Manifest
+# Tracks installed packages and their versions
+
+packages:
+  acp-core:
+    source: https://github.com/prmichaelsen/agent-context-protocol.git
+    package_version: 5.30.0
+    installed_at: 2026-04-07T08:16:24Z
+    updated_at: 2026-04-07T08:16:24Z
+    files:
+      commands:
+        - name: acp.artifact-glossary.md
+        - name: acp.artifact-reference.md
+        - name: acp.artifact-research.md
+        - name: acp.audit.md
+        - name: acp.clarification-address.md
+        - name: acp.clarification-capture.md
+        - name: acp.clarification-create.md
+        - name: acp.command-create.md
+        - name: acp.design-create.md
+        - name: acp.design-reference.md
+        - name: acp.handoff.md
+        - name: acp.index.md
+        - name: acp.init.md
+        - name: acp.package-create.md
+        - name: acp.package-info.md
+        - name: acp.package-install.md
+        - name: acp.package-list.md
+        - name: acp.package-publish.md
+        - name: acp.package-remove.md
+        - name: acp.package-search.md
+        - name: acp.package-update.md
+        - name: acp.package-validate.md
+        - name: acp.pattern-create.md
+        - name: acp.plan.md
+        - name: acp.proceed.md
+        - name: acp.project-create.md
+        - name: acp.project-info.md
+        - name: acp.project-list.md
+        - name: acp.project-remove.md
+        - name: acp.project-set.md
+        - name: acp.project-update.md
+        - name: acp.projects-restore.md
+        - name: acp.projects-sync.md
+        - name: acp.report.md
+        - name: acp.resume.md
+        - name: acp.sessions.md
+        - name: acp.status.md
+        - name: acp.sync.md
+        - name: acp.task-create.md
+        - name: acp.update.md
+        - name: acp.validate.md
+        - name: acp.version-check-for-updates.md
+        - name: acp.version-check.md
+        - name: acp.version-update.md
+        - name: git.commit.md
+        - name: git.init.md
+      patterns:
+        - name: bootstrap.template.md
+        - name: pattern.template.md
+      designs:
+        - name: design.template.md
+        - name: requirements.template.md
+
+manifest_version: 1.0.0
+last_updated: 2026-04-07T08:16:24Z

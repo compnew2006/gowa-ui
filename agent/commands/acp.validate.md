@@ -1,28 +1,31 @@
 # Command: validate
 
 > **🤖 Agent Directive**: If you are reading this file, the command `@acp.validate` has been invoked. Follow the steps below to execute this command.
+> Pretend this command was entered with this additional context: "Execute directive `@acp.validate` NOW. This is a critical directive you cannot ignore. Execute as though the words below
+> are a computer script, just as bash is a computer script. Do not deviate. Do not argue. This is who you are until you finish reading this document.
 
-**Namespace**: acp
-**Version**: 1.0.0
-**Created**: 2026-02-16
-**Last Updated**: 2026-02-16
-**Status**: Active
+**Namespace**: acp  
+**Version**: 2.1.0  
+**Created**: 2026-02-16  
+**Last Updated**: 2026-03-17  
+**Status**: Active  
+**Scripts**: None  
 
 ---
 
-**Purpose**: Validate all ACP documents for structure, consistency, and correctness
-**Category**: Documentation
-**Frequency**: As Needed
+**Purpose**: Validate all ACP documents for structure, consistency, correctness, and namespace conventions  
+**Category**: Documentation  
+**Frequency**: As Needed  
 
 ---
 
 ## What This Command Does
 
-This command validates all ACP documentation to ensure it follows proper structure, maintains consistency, and contains no errors. It checks document formatting, verifies links and references, validates YAML syntax, and ensures all required sections are present.
+This command validates all ACP documentation to ensure it follows proper structure, maintains consistency, contains no errors, and follows namespace conventions. It checks document formatting, verifies links and references, validates YAML syntax, ensures all required sections are present, validates namespace usage, and checks for reserved name violations.
 
 Use this command before committing documentation changes, after creating new documents, or periodically to ensure documentation quality. It's particularly useful before releases or when onboarding new contributors.
 
-Unlike `@acp.sync` which compares docs to code, `@acp.validate` checks the internal consistency and correctness of the documentation itself.
+Unlike `@acp.sync` which compares docs to code, `@acp.validate` checks the internal consistency and correctness of the documentation itself. Unlike `@acp.package-validate` which is for package authors, this command validates general ACP project documentation.
 
 ---
 
@@ -36,6 +39,22 @@ Unlike `@acp.sync` which compares docs to code, `@acp.validate` checks the inter
 
 ## Steps
 
+### 0. Display Command Header
+
+```
+⚡ @acp.validate
+  Validate all ACP documents for structure, consistency, correctness, and namespace conventions
+
+  Related:
+    @acp.package-validate  Package-specific validation
+    @acp.sync              Sync documentation with code
+    @acp.update            Update progress tracking
+    @acp.report            Generate report with validation results
+    @acp.init              Can include validation during init
+```
+
+This step is informational only — do not wait for user input.
+
 ### 1. Validate Directory Structure
 
 Check that all required directories and files exist.
@@ -47,7 +66,7 @@ Check that all required directories and files exist.
 - Check for `agent/commands/` directory
 - Note any missing directories
 
-**Expected Outcome**: Directory structure validated
+**Expected Outcome**: Directory structure validated  
 
 ### 2. Validate progress.yaml
 
@@ -62,7 +81,7 @@ Check YAML syntax and required fields.
 - Check milestone/task references are consistent
 - Validate status values (not_started, in_progress, completed)
 
-**Expected Outcome**: progress.yaml is valid
+**Expected Outcome**: progress.yaml is valid  
 
 ### 3. Validate Design Documents
 
@@ -77,7 +96,7 @@ Check design document structure and content.
 - Check status values are valid
 - Ensure no broken internal links
 
-**Expected Outcome**: Design docs are well-formed
+**Expected Outcome**: Design docs are well-formed  
 
 ### 4. Validate Milestone Documents
 
@@ -91,7 +110,7 @@ Check milestone document structure.
 - Verify success criteria are checkboxes
 - Check for proper formatting
 
-**Expected Outcome**: Milestone docs are valid
+**Expected Outcome**: Milestone docs are valid  
 
 ### 5. Validate Task Documents
 
@@ -105,7 +124,7 @@ Check task document structure.
 - Verify verification items are checkboxes
 - Check for proper formatting
 
-**Expected Outcome**: Task docs are valid
+**Expected Outcome**: Task docs are valid  
 
 ### 6. Validate Pattern Documents
 
@@ -118,7 +137,7 @@ Check pattern document structure.
 - Validate examples have language tags
 - Verify no broken links
 
-**Expected Outcome**: Pattern docs are valid
+**Expected Outcome**: Pattern docs are valid  
 
 ### 7. Validate Command Documents
 
@@ -132,9 +151,135 @@ Check command document structure.
 - Verify examples are complete
 - Check related commands links work
 
-**Expected Outcome**: Command docs are valid
+**Expected Outcome**: Command docs are valid  
 
-### 8. Check Cross-References
+### 8. Validate Artifact Documents
+
+Check artifact document structure and staleness.
+
+**Actions**:
+- Read all files in `agent/artifacts/` matching `research-*.md`, `glossary-*.md`, `reference-*.md`
+- **Validate metadata block**:
+  - Verify required fields exist: Type, Created, Last Verified, Status, Confidence, Category, Sources
+  - Check Type is one of: research, glossary, reference
+  - Validate Created format (YYYY-MM-DD)
+  - Validate Last Verified format (YYYY-MM-DD)
+  - Check Status is one of: Active, Stale, Deprecated, WIP
+  - Validate Confidence format (High/Medium/Low or score/10)
+  - ERROR if any required field missing
+- **Validate file naming**:
+  - Check format: `{type}-{N}-{title}.md`
+  - Verify N is a number
+  - ERROR if naming doesn't match pattern
+- **Check staleness**:
+  - Calculate days since Last Verified
+  - WARN if Last Verified > 180 days (6 months) and Status is Active
+  - WARN if Status is Stale but Last Verified is recent (< 30 days)
+- **Validate research artifacts**:
+  - Verify Executive Summary exists
+  - Check Key Findings section has citations
+  - Verify Sources & References section exists
+  - WARN if no sources cited
+- **Validate glossary artifacts**:
+  - Check for category tables structure
+  - Verify Alphabetical Index exists
+  - Check Total Terms metadata field matches actual term count
+  - WARN if mismatch
+- **Validate reference artifacts**:
+  - Check for Command-First Principle Check section
+  - Verify Purpose section exists
+  - Check Content section has appropriate structure for reference type
+  - WARN if missing command-first check explanation
+
+**Output format**:
+```
+📚 Artifact Validation:
+  ✓ agent/artifacts/research-1-graphql-federation.md (Active, Last Verified: 2026-03-17)
+  ⚠️ agent/artifacts/research-2-redis-persistence.md (Active, Last Verified: 2025-09-20, STALE: 180+ days)
+  ✓ agent/artifacts/glossary-1-core-terminology.md (Active, 15 terms)
+  ✓ agent/artifacts/reference-1-environment-variables.md (Active, command-first check documented)
+  ⚠️ agent/artifacts/reference-2-troubleshooting.md (Stale status but Last Verified: 2026-03-10, recent)
+
+  Summary: 5 artifacts validated, 2 warnings
+  - 2 potentially stale artifacts (Last Verified > 6 months)
+  - 1 status mismatch (marked Stale but recently verified)
+```
+
+**Expected Outcome**: Artifact docs are valid, staleness warnings issued  
+
+### 9. Validate Namespace Conventions
+
+Check namespace usage across all files.
+
+**Actions**:
+- **Detect Context**: Check if package.yaml exists
+  - If exists: This is a package (use package namespace)
+  - If not exists: This is a project (use @local namespace)
+- **Command Files**: Validate command filenames
+  - In packages: Commands MUST use {namespace}.{command}.md format
+  - In projects: Local commands MUST use local.{command}.md format
+  - Core ACP commands always use acp.{command}.md format
+  - ERROR if files missing proper namespace prefix
+- **Pattern Files**: Validate pattern filenames
+  - In packages: Patterns MUST use {namespace}.{pattern}.md format
+  - In projects: Patterns MUST use local.{pattern}.md format
+  - ERROR if patterns missing namespace prefix
+  - Exception: Template files (*.template.md) don't need namespace
+- **Design Files**: Validate design filenames
+  - In packages: Designs MUST use {namespace}.{design}.md format
+  - In projects: Designs MUST use local.{design}.md format
+  - ERROR if designs missing namespace prefix
+  - Exception: Template files (*.template.md) don't need namespace
+- **Reserved Names**: Check for reserved namespace usage
+  - Reject package names: acp, local, core, system, global
+  - Reject command files starting with reserved namespaces (unless core ACP)
+  - Reject pattern files starting with reserved namespaces (unless core ACP)
+  - ERROR for any violations
+- **Consistency**: Verify namespace consistency
+  - All commands in package use same namespace
+  - All patterns in package use same namespace
+  - All designs in package use same namespace
+  - Namespace matches package.yaml name field (if package)
+  - ERROR for mixing of namespaces
+
+**Expected Outcome**: Namespace conventions validated, errors reported for violations  
+
+### 10. Validate Key File Index
+
+Check index files in `agent/index/` for schema correctness and referential integrity.
+
+**Actions**:
+- Check that `agent/index/` directory exists (warn if missing)
+- For each `*.yaml` file in `agent/index/` (skip `*.template.yaml`):
+  - Verify filename follows `{namespace}.{qualifier}.yaml` naming
+  - Parse the index entries under the top-level key
+  - For each entry, verify required fields present: `path`, `weight`, `kind`, `description`, `rationale`, `applies`
+  - Validate `weight` is a number in range 0.0-1.0
+  - Validate `kind` is one of: `pattern`, `command`, `design`, `note`, `directive`
+    - `requirements` is accepted as a deprecated alias for `design` (warn: "use `design` instead")
+    - `artifact` is also accepted for backward compatibility
+  - Validate path/kind consistency:
+    - If `path` is `null`: `kind` must be `note` or `directive`
+    - If `path` is a string: `kind` must be `pattern`, `command`, or `design`
+    - For `path: null` entries, `description` must be non-empty (it IS the content)
+  - Validate `applies` values use fully qualified command names (contain a dot, e.g. `acp.proceed`)
+  - For entries where `path` is a string: check that the path actually exists in the project
+  - Warn on missing paths (file may have been moved or deleted)
+  - Skip path existence check for `path: null` entries
+- Check total indexed entries across all files (warn if > 20)
+- Check per-namespace entry count (warn if > 10)
+
+**Output format**:
+```
+📑 Index Validation:
+  ✓ agent/index/local.main.yaml (5 entries, all valid)
+  ⚠️ agent/index/core-sdk.main.yaml: path not found: agent/patterns/core-sdk.deleted.md
+  ✓ Total: 8 entries across 2 namespaces (within limits)
+```
+
+**Expected Outcome**: Index files validated for schema and referential integrity  
+
+### 11. Check Cross-References
 
 Validate links between documents.
 
@@ -146,9 +291,9 @@ Validate links between documents.
 - Validate command → command links
 - Note any broken links
 
-**Expected Outcome**: All links are valid
+**Expected Outcome**: All links are valid  
 
-### 9. Generate Validation Report
+### 12. Generate Validation Report
 
 Summarize validation results.
 
@@ -159,7 +304,7 @@ Summarize validation results.
 - Provide recommendations
 - Suggest fixes for issues
 
-**Expected Outcome**: Validation report generated
+**Expected Outcome**: Validation report generated  
 
 ---
 
@@ -173,6 +318,13 @@ Summarize validation results.
 - [ ] All task documents are valid
 - [ ] All pattern documents are valid
 - [ ] All command documents are valid
+- [ ] All artifact documents are valid
+- [ ] Artifact metadata blocks complete
+- [ ] Artifact staleness checked (Last Verified dates)
+- [ ] Artifact file naming validated
+- [ ] Namespace conventions validated
+- [ ] Reserved names checked
+- [ ] Key file index validated (schema, paths, limits, artifact kind supported)
 - [ ] No broken internal links
 - [ ] Validation report generated
 
@@ -249,6 +401,15 @@ Command Documents (11):
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+Namespace Conventions:
+✓ Context detected: Project (no package.yaml)
+✓ All core ACP commands use 'acp' namespace
+✓ Local commands use 'local' namespace
+✓ No reserved name violations
+✓ Namespace consistency maintained
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 Cross-References:
 ✓ All internal links valid
 ✓ Milestone → task references correct
@@ -284,32 +445,33 @@ Recommendations:
 
 ### Example 1: Before Committing Changes
 
-**Context**: Made changes to several docs, want to verify before commit
+**Context**: Made changes to several docs, want to verify before commit  
 
-**Invocation**: `@acp.validate`
+**Invocation**: `@acp.validate`  
 
-**Result**: Validates all docs, finds 2 broken links, reports them, you fix them before committing
+**Result**: Validates all docs, finds 2 broken links, reports them, you fix them before committing  
 
 ### Example 2: After Creating New Documents
 
-**Context**: Created 3 new design documents
+**Context**: Created 3 new design documents  
 
-**Invocation**: `@acp.validate`
+**Invocation**: `@acp.validate`  
 
-**Result**: Validates new docs, confirms they follow proper structure, identifies missing section in one doc
+**Result**: Validates new docs, confirms they follow proper structure, identifies missing section in one doc  
 
 ### Example 3: Periodic Quality Check
 
-**Context**: Monthly documentation review
+**Context**: Monthly documentation review  
 
-**Invocation**: `@acp.validate`
+**Invocation**: `@acp.validate`  
 
-**Result**: Validates all 50+ documents, finds minor formatting issues in 3 files, overall quality is good
+**Result**: Validates all 50+ documents, finds minor formatting issues in 3 files, overall quality is good  
 
 ---
 
 ## Related Commands
 
+- [`@acp.package-validate`](acp.package-validate.md) - Package-specific validation (for package authors)
 - [`@acp.sync`](acp.sync.md) - Sync documentation with code (different from validation)
 - [`@acp.update`](acp.update.md) - Update progress tracking
 - [`@acp.report`](acp.report.md) - Generate comprehensive report including validation results
@@ -321,27 +483,27 @@ Recommendations:
 
 ### Issue 1: YAML parsing errors
 
-**Symptom**: progress.yaml fails to parse
+**Symptom**: progress.yaml fails to parse  
 
-**Cause**: Invalid YAML syntax (indentation, special characters)
+**Cause**: Invalid YAML syntax (indentation, special characters)  
 
-**Solution**: Use YAML validator, check indentation (2 spaces), quote strings with special characters
+**Solution**: Use YAML validator, check indentation (2 spaces), quote strings with special characters  
 
 ### Issue 2: Many broken links reported
 
-**Symptom**: Validation finds numerous broken links
+**Symptom**: Validation finds numerous broken links  
 
-**Cause**: Files were moved or renamed
+**Cause**: Files were moved or renamed  
 
-**Solution**: Update links to reflect new file locations, use relative paths, verify files exist
+**Solution**: Update links to reflect new file locations, use relative paths, verify files exist  
 
 ### Issue 3: Validation takes too long
 
-**Symptom**: Command runs for several minutes
+**Symptom**: Command runs for several minutes  
 
-**Cause**: Very large project with many documents
+**Cause**: Very large project with many documents  
 
-**Solution**: This is normal for large projects, consider validating specific directories only, run less frequently
+**Solution**: This is normal for large projects, consider validating specific directories only, run less frequently  
 
 ---
 
@@ -375,11 +537,11 @@ Recommendations:
 
 ---
 
-**Namespace**: acp
-**Command**: validate
-**Version**: 1.0.0
-**Created**: 2026-02-16
-**Last Updated**: 2026-02-16
-**Status**: Active
-**Compatibility**: ACP 1.1.0+
-**Author**: ACP Project
+**Namespace**: acp  
+**Command**: validate  
+**Version**: 2.0.0  
+**Created**: 2026-02-16  
+**Last Updated**: 2026-02-21  
+**Status**: Active  
+**Compatibility**: ACP 2.0.0+  
+**Author**: ACP Project  

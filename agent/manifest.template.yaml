@@ -1,0 +1,13 @@
+# agent/manifest.template.yaml
+# Template for ACP package manifest
+# This file tracks installed ACP packages and their versions
+
+# Installed packages
+# Each package entry tracks source, version, and installed files
+packages: {}
+
+# Manifest format version (for future compatibility)
+manifest_version: 1.0.0
+
+# Last time manifest was updated
+last_updated: null

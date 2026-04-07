@@ -1380,3 +1380,56 @@ Updated: 2026-04-06 20:13:00 UTC
 - PostgreSQL backup-first remediation
 - Ubuntu/systemd deployment and binary rollback hygiene
 - Chrome DevTools MCP verification
+
+
+## Full Workspace Deployment
+
+Updated: 2026-04-07 07:19:00 UTC
+
+- Deployment scope: full current local workspace sync and production binary rollout
+- Local source path: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source revision deployed: `07b95fc`
+- Source sync target: `/opt/whatomate-src`
+- Source sync method: `rsync --delete`
+- Sync exclusions:
+  - `.git/`
+  - `node_modules/`
+  - `frontend/node_modules/`
+  - `frontend/dist/`
+  - `docs/node_modules/`
+  - `uploads/`
+  - `config.toml`
+  - `*.db`
+  - `tmp/`
+  - local `whatomate` binary
+- VPS binary backup created before install:
+  - `/opt/whatomate/bin/whatomate.20260407_071645.bak`
+- Native build command on VPS:
+  - `cd /opt/whatomate-src && VERSION=07b95fc GOTOOLCHAIN=go1.25.8+auto make build-prod`
+- Final installed binary:
+  - path: `/opt/whatomate/bin/whatomate`
+  - SHA256: `b5ef3f02b5321b0ab646941b9754bb8578a93e04feb9a27079d2807d91e0a462`
+  - version: `Whatomate 07b95fc (built 2026-04-07_07:17:39)`
+- Services restarted:
+  - `whatomate`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+- Verification:
+  - systemd services all `active`
+  - listeners present on `127.0.0.1:18123-18126`
+  - public HTTPS smoke returned `200` for all four production hostnames
+  - Chrome DevTools MCP checks on `https://ofuqalmadenah.com/` and `https://holol-wenjaz.ofuqalmadenah.com/` both redirected to `/login` with no console errors
+- Build note:
+  - Vite emitted chunk-size warnings only; build completed successfully
+
+### Skills Applied
+
+- `devops-engineer`
+
+### Competencies Applied
+
+- rollback-safe Ubuntu/systemd deployment
+- rsync-based source mirroring
+- Go + Vite production build orchestration
+- post-deploy browser verification with MCP tooling
