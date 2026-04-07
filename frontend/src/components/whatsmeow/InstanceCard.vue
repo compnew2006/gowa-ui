@@ -50,6 +50,7 @@ import {
   QrCode,
   Pencil,
 } from "lucide-vue-next";
+import { toast } from "vue-sonner";
 
 const { t } = useI18n();
 
@@ -229,6 +230,38 @@ function formatUptime(totalSeconds?: number) {
     return `${hours}h ${minutes}m`;
   }
   return `${minutes}m`;
+}
+
+function handleAutoRejectToggle(enabled: boolean) {
+  const nextSettings = {
+    ...cloneAutoRejectSettings(autoRejectSettings.value),
+    enabled,
+  };
+
+  if (
+    nextSettings.enabled &&
+    nextSettings.mode === "with_message" &&
+    !nextSettings.message.trim()
+  ) {
+    toast.error(t("instances.auto_reject.validation.messageRequired"));
+    return;
+  }
+
+  emit("update-auto-reject-settings", props.instance.id, nextSettings);
+}
+
+function handleAutoCampaignToggle(enabled: boolean) {
+  const nextSettings = {
+    ...cloneAutoCampaignSettings(autoCampaignSettings.value),
+    enabled,
+  };
+
+  if (nextSettings.enabled && !nextSettings.message.trim()) {
+    toast.error(t("instances.auto_campaign.validation.messageRequired"));
+    return;
+  }
+
+  emit("update-auto-campaign-settings", props.instance.id, nextSettings);
 }
 </script>
 
@@ -418,15 +451,10 @@ function formatUptime(totalSeconds?: number) {
                 class="h-3.5 w-3.5 animate-spin text-muted-foreground"
               />
               <Switch
+                data-testid="instance-auto-reject-toggle"
                 :checked="autoRejectSettings.enabled"
                 :disabled="autoRejectSaving"
-                @update:checked="
-                  (enabled) =>
-                    emit('update-auto-reject-settings', instance.id, {
-                      ...cloneAutoRejectSettings(autoRejectSettings),
-                      enabled,
-                    })
-                "
+                @update:checked="handleAutoRejectToggle"
               />
             </div>
           </div>
@@ -468,15 +496,10 @@ function formatUptime(totalSeconds?: number) {
                 class="h-3.5 w-3.5 animate-spin text-muted-foreground"
               />
               <Switch
+                data-testid="instance-auto-campaign-toggle"
                 :checked="autoCampaignSettings.enabled"
                 :disabled="autoCampaignSaving"
-                @update:checked="
-                  (enabled) =>
-                    emit('update-auto-campaign-settings', instance.id, {
-                      ...cloneAutoCampaignSettings(autoCampaignSettings),
-                      enabled,
-                    })
-                "
+                @update:checked="handleAutoCampaignToggle"
               />
             </div>
           </div>

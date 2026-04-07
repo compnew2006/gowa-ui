@@ -965,6 +965,8 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 			"new_message_alerts":  true,
 			"campaign_updates":    false,
 			"notification_sound":  "notification",
+			"theme_mode":          "dark",
+			"theme_preset":        "ocean-breeze",
 		}
 
 		req := testutil.NewJSONRequest(t, reqBody)
@@ -988,6 +990,8 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 		assert.Equal(t, true, resp.Data.Settings["new_message_alerts"])
 		assert.Equal(t, false, resp.Data.Settings["campaign_updates"])
 		assert.Equal(t, "notification", resp.Data.Settings["notification_sound"])
+		assert.Equal(t, "dark", resp.Data.Settings["theme_mode"])
+		assert.Equal(t, "ocean-breeze", resp.Data.Settings["theme_preset"])
 	})
 
 	t.Run("settings persist in database", func(t *testing.T) {
@@ -1003,6 +1007,8 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 			"new_message_alerts":  true,
 			"campaign_updates":    true,
 			"notification_sound":  "notification1",
+			"theme_mode":          "system",
+			"theme_preset":        "twitter",
 		}
 
 		req := testutil.NewJSONRequest(t, reqBody)
@@ -1019,6 +1025,8 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 		assert.Equal(t, true, dbUser.Settings["new_message_alerts"])
 		assert.Equal(t, true, dbUser.Settings["campaign_updates"])
 		assert.Equal(t, "notification1", dbUser.Settings["notification_sound"])
+		assert.Equal(t, "system", dbUser.Settings["theme_mode"])
+		assert.Equal(t, "twitter", dbUser.Settings["theme_preset"])
 	})
 
 	t.Run("update overwrites previous settings", func(t *testing.T) {
@@ -1035,6 +1043,8 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 			"new_message_alerts":  true,
 			"campaign_updates":    true,
 			"notification_sound":  "notification1",
+			"theme_mode":          "light",
+			"theme_preset":        "twitter",
 		}
 		req1 := testutil.NewJSONRequest(t, reqBody1)
 		testutil.SetAuthContext(req1, org.ID, user.ID)
@@ -1048,6 +1058,8 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 			"new_message_alerts":  false,
 			"campaign_updates":    false,
 			"notification_sound":  "notification2",
+			"theme_mode":          "dark",
+			"theme_preset":        "ocean-breeze",
 		}
 		req2 := testutil.NewJSONRequest(t, reqBody2)
 		testutil.SetAuthContext(req2, org.ID, user.ID)
@@ -1067,6 +1079,8 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 		assert.Equal(t, false, resp.Data.Settings["new_message_alerts"])
 		assert.Equal(t, false, resp.Data.Settings["campaign_updates"])
 		assert.Equal(t, "notification2", resp.Data.Settings["notification_sound"])
+		assert.Equal(t, "dark", resp.Data.Settings["theme_mode"])
+		assert.Equal(t, "ocean-breeze", resp.Data.Settings["theme_preset"])
 	})
 
 	t.Run("invalid notification sound falls back to notification1", func(t *testing.T) {
@@ -1100,6 +1114,87 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "notification1", resp.Data.Settings["notification_sound"])
+	})
+
+	t.Run("invalid theme settings fall back to defaults", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		user := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("settings-invalid-theme")),
+		)
+
+		reqBody := map[string]interface{}{
+			"theme_mode":   "night-mode",
+			"theme_preset": "forest",
+		}
+
+		req := testutil.NewJSONRequest(t, reqBody)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+
+		err := app.UpdateCurrentUserSettings(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Settings map[string]interface{} `json:"settings"`
+			} `json:"data"`
+		}
+		err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+		require.NoError(t, err)
+
+		assert.Equal(t, "system", resp.Data.Settings["theme_mode"])
+		assert.Equal(t, "twitter", resp.Data.Settings["theme_preset"])
+	})
+
+	t.Run("accepts additional theme presets", func(t *testing.T) {
+		t.Parallel()
+
+		testCases := []struct {
+			name           string
+			preset         string
+			expectedPreset string
+		}{
+			{name: "soft-pop", preset: "soft-pop", expectedPreset: "soft-pop"},
+			{name: "legacy caffeine", preset: "caffeine", expectedPreset: "soft-pop"},
+			{name: "amber-minimal", preset: "amber-minimal", expectedPreset: "amber-minimal"},
+		}
+
+		for _, tc := range testCases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				app := newTestApp(t)
+				org := testutil.CreateTestOrganization(t, app.DB)
+				user := testutil.CreateTestUser(t, app.DB, org.ID,
+					testutil.WithEmail(testutil.UniqueEmail("settings-"+tc.name+"-theme")),
+				)
+
+				reqBody := map[string]interface{}{
+					"theme_mode":   "light",
+					"theme_preset": tc.preset,
+				}
+
+				req := testutil.NewJSONRequest(t, reqBody)
+				testutil.SetAuthContext(req, org.ID, user.ID)
+
+				err := app.UpdateCurrentUserSettings(req)
+				require.NoError(t, err)
+				assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+				var resp struct {
+					Data struct {
+						Settings map[string]interface{} `json:"settings"`
+					} `json:"data"`
+				}
+				err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+				require.NoError(t, err)
+
+				assert.Equal(t, "light", resp.Data.Settings["theme_mode"])
+				assert.Equal(t, tc.expectedPreset, resp.Data.Settings["theme_preset"])
+			})
+		}
 	})
 
 	t.Run("unauthorized without user_id", func(t *testing.T) {

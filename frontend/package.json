@@ -21,7 +21,14 @@
     "test:report": "playwright show-report"
   },
   "dependencies": {
+    "@fontsource/dm-sans": "^5.2.7",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/lora": "^5.2.6",
     "@fontsource/open-sans": "^5.2.7",
+    "@fontsource/source-serif-4": "^5.2.9",
+    "@fontsource/space-mono": "^5.2.9",
     "@radix-icons/vue": "^1.0.0",
     "@tanstack/vue-query": "^5.17.0",
     "@vee-validate/zod": "^4.15.1",

@@ -50,6 +50,8 @@ func main() {
 		runWorker(os.Args[2:])
 	case "crypto-migrate":
 		runCryptoMigrate(os.Args[2:])
+	case "inbound-media-reconcile":
+		runInboundMediaReconcile(os.Args[2:])
 	case "version":
 		fmt.Printf("Whatomate %s (built %s)\n", Version, BuildTime)
 	case "help", "-h", "--help":
@@ -71,6 +73,7 @@ Commands:
   server    Start the API server (with optional embedded workers)
   worker    Start background workers only (no API server)
   crypto-migrate  Upgrade encrypted secrets from enc:/enc2: to enc3:
+  inbound-media-reconcile  Reconcile stale queued inbound-media rows
   version   Show version information
   help      Show this help message
 
@@ -89,6 +92,14 @@ Crypto Migration Options:
   -batch-size int      Number of rows per batch (default 500)
   -include-enc2        Upgrade enc2 payloads in addition to enc (default true)
 
+Inbound Media Reconcile Options:
+  -config string            Path to config file (default "config.toml")
+  -instance-id string       Limit reconciliation to a single WhatsApp instance UUID
+  -older-than duration      Only reconcile queued rows older than this age (default 15m)
+  -limit int                Limit number of rows to reconcile (default 0 = all eligible)
+  -apply                    Apply updates; default is dry-run
+  -allow-active-queue       Bypass queue-idle safety checks
+
 Examples:
   whatomate server                     # API + 1 embedded worker
   whatomate server -workers 0          # API only (no workers)
@@ -96,6 +107,7 @@ Examples:
   whatomate server -migrate            # Run migrations and start server
   whatomate worker -workers 4          # 4 workers only (no API)
   whatomate crypto-migrate -dry-run    # Scan for legacy encrypted secrets
+  whatomate inbound-media-reconcile -config config.toml -apply
 
 Deployment Scenarios:
   All-in-one:    whatomate server
@@ -628,6 +640,92 @@ func runCryptoMigrate(args []string) {
 	}
 
 	lo.Info("Crypto migration completed", "updated", totalUpdated, "failed", totalFailed, "dry_run", *dryRun)
+}
+
+// ============================================================================
+// INBOUND MEDIA RECONCILE COMMAND
+// ============================================================================
+
+func runInboundMediaReconcile(args []string) {
+	reconcileFlags := flag.NewFlagSet("inbound-media-reconcile", flag.ExitOnError)
+	configPath := reconcileFlags.String("config", "config.toml", "Path to config file")
+	instanceIDText := reconcileFlags.String("instance-id", "", "Limit reconciliation to a single WhatsApp instance UUID")
+	olderThan := reconcileFlags.Duration("older-than", 15*time.Minute, "Only reconcile queued rows older than this age")
+	limit := reconcileFlags.Int("limit", 0, "Limit number of rows to reconcile (0 = all eligible)")
+	apply := reconcileFlags.Bool("apply", false, "Apply updates; default is dry-run")
+	allowActiveQueue := reconcileFlags.Bool("allow-active-queue", false, "Bypass queue-idle safety checks")
+	_ = reconcileFlags.Parse(args)
+
+	lo := logf.New(logf.Opts{
+		EnableColor:     true,
+		Level:           logf.InfoLevel,
+		EnableCaller:    true,
+		TimestampFormat: "2006-01-02 15:04:05",
+		DefaultFields:   []any{"app", "whatomate-inbound-media-reconcile"},
+	})
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		lo.Fatal("Failed to load config", "error", err)
+	}
+	if err := config.ValidateDatabaseCredentials(cfg); err != nil {
+		lo.Fatal("Invalid database configuration", "error", err)
+	}
+	if cfg.WhatsApp.Provider != "whatsmeow" {
+		lo.Fatal("Inbound media reconciliation is only supported for whatsmeow provider", "provider", cfg.WhatsApp.Provider)
+	}
+
+	db, err := database.NewPostgres(&cfg.Database, cfg.App.Debug)
+	if err != nil {
+		lo.Fatal("Failed to connect to database", "error", err)
+	}
+	lo.Info("Connected to PostgreSQL")
+
+	rdb, err := database.NewRedis(&cfg.Redis)
+	if err != nil {
+		lo.Fatal("Failed to connect to Redis", "error", err)
+	}
+	lo.Info("Connected to Redis")
+
+	var instanceID *uuid.UUID
+	if trimmed := strings.TrimSpace(*instanceIDText); trimmed != "" {
+		parsedID, parseErr := uuid.Parse(trimmed)
+		if parseErr != nil {
+			lo.Fatal("Invalid instance-id", "error", parseErr, "value", trimmed)
+		}
+		instanceID = &parsedID
+	}
+
+	summary, err := whatsmeow.ReconcileStaleQueuedInboundMedia(
+		context.Background(),
+		db,
+		rdb,
+		whatsmeow.InboundMediaReconcileOptions{
+			InstanceID:       instanceID,
+			OlderThan:        *olderThan,
+			Limit:            *limit,
+			Apply:            *apply,
+			AllowActiveQueue: *allowActiveQueue,
+		},
+		lo,
+	)
+	if err != nil {
+		lo.Fatal("Inbound media reconciliation failed", "error", err)
+	}
+
+	lo.Info(
+		"Inbound media reconciliation completed",
+		"dry_run", summary.DryRun,
+		"cutoff", summary.Cutoff.Format(time.RFC3339),
+		"queue_pending", summary.QueuePending,
+		"queue_lag", summary.QueueLag,
+		"active_pending_ids", summary.ActivePendingIDs,
+		"skipped_active_queued", summary.SkippedActiveQueued,
+		"total_queued", summary.TotalQueued,
+		"eligible_queued", summary.EligibleQueued,
+		"updated", summary.Updated,
+		"sample_ids", strings.Join(summary.SampleIDs, ","),
+	)
 }
 
 // ============================================================================

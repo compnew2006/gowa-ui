@@ -1,4 +1,12 @@
+## [2026-04-05] Issue: MkDocs Config Value 'docs_dir' Error
+
+- **The Trap:** Setting `docs_dir: .` in `mkdocs.yml` to keep all files in a single flat directory for simplicity.
+- **The Reality:** MkDocs 1.6+ and the `mkdocs-static-i18n` plugin (with `docs_structure: folder`) often fail to resolve this because they expect a dedicated sub-directory for source files, or they collide with the configuration file itself when scanning the root.
+- **The Fix:** Created a dedicated `docs/` subdirectory inside `docs/wiki/`, moved all markdown source folders (`en/`, `ar/`) into it, and updated `mkdocs.yml` to `docs_dir: docs`.
+- **The Law:** Always separate your `mkdocs.yml` from your Markdown source files by placing the latter in a `docs/` subdirectory; never use `docs_dir: .` for production-grade, multi-plugin documentation projects.
+
 ## 2026-03-17 00:00 Issue: Assignment permissions ignored chat.assign
+
 
 - The Trap: Assuming contact assignment was controlled by `contacts:write` and role names, so `chat.assign:write` changes in `/settings/roles` would work.
 - The Reality: The backend and frontend checked different permission keys, so role changes did not grant assignment; instance restrictions were also not enforced on assignments.

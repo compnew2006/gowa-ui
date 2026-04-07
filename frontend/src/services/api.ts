@@ -7,6 +7,8 @@ import type {
   Permission,
   UserSettings,
   ChatBackgroundSettings,
+  ThemeMode,
+  ThemePreset,
 } from "@/types/auth";
 
 function normalizeBasePath(value: unknown): string {
@@ -206,6 +208,8 @@ export const usersService = {
     new_message_alerts?: boolean;
     campaign_updates?: boolean;
     notification_sound?: "notification1" | "notification2" | "notification";
+    theme_mode?: ThemeMode;
+    theme_preset?: ThemePreset;
     chat_background?: ChatBackgroundSettings | null;
   }) => api.put<CurrentUserSettingsResponse>("/me/settings", data),
   uploadChatBackground: (file: File) => {

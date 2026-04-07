@@ -1,17 +1,31 @@
 <script setup lang="ts">
-import { ref, onErrorCaptured } from 'vue'
+import { ref, onErrorCaptured, watch } from 'vue'
 import { RouterView } from 'vue-router'
 import { Toaster } from 'vue-sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useColorMode } from '@/composables/useColorMode'
+import { useAuthStore } from '@/stores/auth'
 import { AlertCircle, RefreshCw } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 
 // Initialize color mode early
-const { colorMode } = useColorMode()
+const { resolvedColorMode, hydrateFromUserSettings, initializeAppearance } = useColorMode()
+const authStore = useAuthStore()
 
 const hasError = ref(false)
 const errorInfo = ref<string | null>(null)
+
+initializeAppearance()
+
+watch(
+  () => authStore.user?.settings,
+  (settings) => {
+    if (authStore.user) {
+      hydrateFromUserSettings(settings)
+    }
+  },
+  { immediate: true }
+)
 
 onErrorCaptured((err) => {
   console.error('Captured global error:', err)
@@ -49,7 +63,7 @@ function reloadPage() {
         </div>
       </div>
       <RouterView v-else />
-      <Toaster position="top-right" richColors :theme="colorMode" />
+      <Toaster position="top-right" richColors :theme="resolvedColorMode" />
     </div>
   </TooltipProvider>
 </template>

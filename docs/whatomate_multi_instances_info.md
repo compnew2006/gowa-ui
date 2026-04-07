@@ -1262,3 +1262,121 @@ Updated: 2026-04-05 12:32:57 UTC
 
 - `make build-prod` initially failed on the VPS because `frontend/node_modules` was stale while `package.json` and `package-lock.json` had changed; the `Makefile` now refreshes frontend dependencies when those files are newer than the cached install.
 - `npm ci` reported `2 high severity vulnerabilities` in frontend dependencies during the VPS build; they were not remediated as part of this deployment.
+
+## Deployment Update
+
+Updated: 2026-04-06 19:32:00 UTC
+
+- Deployment scope: targeted production hotfix for `holol-wenjaz.ofuqalmadenah.com/settings/instances`
+- Root cause: the quick `Auto campaign` card switch sent an immediate `PUT /api/instances/:id` update even when the campaign message was blank; the backend correctly rejected that invalid payload with `400 Bad Request`
+- Frontend fix: `frontend/src/components/whatsmeow/InstanceCard.vue` now blocks invalid quick-enable actions for:
+  - `Auto campaign` when the message is empty
+  - `Call auto-reject` when reply mode is `with_message` and the message is empty
+- Browser-only note: the reported `blob:` CSP violations tied to `Browser Control` injected scripts were not reproduced in a clean browser session after deployment and are not emitted by the Whatomate frontend bundle
+
+### Deployment Details
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Source update method: targeted copy of `frontend/src/components/whatsmeow/InstanceCard.vue` to `/opt/whatomate-src/frontend/src/components/whatsmeow/InstanceCard.vue`
+- Source revision reference: `dbac523` (working tree dirty)
+- Native build command on VPS: `cd /opt/whatomate-src && make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Backup binaries created before install:
+  - `/opt/whatomate/bin/whatomate.20260406_191957.bak`
+  - `/opt/whatomate/bin/whatomate.20260406_192006.bak`
+- Installed binary SHA256: `7f4afac3f96d28046db7c87f59df0ddab5439f827a5c0182e26e42b0bd04fa95`
+- Installed binary version output: `Whatomate dev (built 2026-04-06_19:25:28)`
+
+### Services Restarted
+
+- `whatomate@holol-wenjaz`
+- `whatomate`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- Systemd state:
+  - `whatomate`: `active`
+  - `whatomate@holol-wenjaz`: `active`
+  - `whatomate@alarkan-almthalia`: `active`
+  - `whatomate@matbaat-ruya`: `active`
+- HTTPS smoke after restart settling:
+  - `https://ofuqalmadenah.com/` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/` -> `200`
+- Chrome DevTools MCP verification on `https://holol-wenjaz.ofuqalmadenah.com/settings/instances`:
+  - page loaded successfully in an authenticated session
+  - clicking the `Auto campaign` quick switch with an empty message showed the validation toast instead of sending a failing update
+  - network capture showed no `PUT /api/instances/...` request after the blocked click
+  - console output contained only accessibility issues; no app CSP/blob script violations were present
+
+### Skills Applied
+
+- `debugging-wizard` (root-cause isolation for the production `400`)
+- `vue-expert` (minimal Vue guard implementation and regression coverage)
+- `devops-engineer` (backup, VPS build/install, staged restart, browser verification)
+
+### Competencies Applied
+
+- Vue 3 event-flow debugging
+- backend/frontend contract validation
+- production-safe binary rollout on Ubuntu/systemd
+- authenticated browser verification with MCP tooling
+
+
+## Inbound Media Reconcile Repair
+
+Updated: 2026-04-06 20:13:00 UTC
+
+- Deployment scope: add and run a safe production repair command for stale inbound-media queue rows on `holol-wenjaz`
+- Tenant instance ID: `4a997817-192a-478c-b526-ddf5d70dc3b7`
+- Command added: `whatomate inbound-media-reconcile`
+- Safety behavior:
+  - requires Redis consumer group `inbound-media-workers` on stream `whatomate:inbound_media`
+  - refuses reconciliation when queue lag is positive or unknown
+  - loads pending stream payloads and excludes active `message_id` values from cleanup
+  - only reconciles `queued` inbound-media rows older than the configured threshold
+- Source sync method: targeted copy of backend files to `/opt/whatomate-src`
+- VPS binary backups created before installs:
+  - `/opt/whatomate/bin/whatomate.20260406_200711.bak`
+  - `/opt/whatomate/bin/whatomate.20260406_201130.bak`
+- Valid database backup created before cleanup:
+  - `/root/db_backups/inbound_media_reconcile_holol_wenjaz_20260406_201018`
+- Final installed binary:
+  - path: `/opt/whatomate/bin/whatomate`
+  - SHA256: `d1cb45018447624f9b5b21a154b96ca4d35cf72004922f2b9f6c1e27f8650855`
+  - version: `Whatomate dev (built 2026-04-06_20:11:45)`
+- Dry-run before apply:
+  - `total_queued=2732`
+  - `active_pending_ids=1354`
+  - `eligible_queued=1378`
+- Apply result:
+  - `updated=1378`
+  - `skipped_active_queued=1349`
+- Post-cleanup verification:
+  - queued rows with empty `media_url`: `1345`
+  - failed inbound-media rows: `1505`
+  - Redis DB `1` consumer group: `pending=1345`, `lag=0`
+  - follow-up dry-run: `eligible_queued=0`
+- Specific row note:
+  - `53b94398-9b32-4ea0-b7c7-0ba2bead1aed` remains `queued` because it is still part of the live pending backlog, so the reconcile command correctly protected it from forced failure
+- Chrome DevTools MCP smoke check:
+  - `https://holol-wenjaz.ofuqalmadenah.com/` redirected to `/login`
+  - console output: none
+  - network `200`: `/login`, `/api/auth/sso/providers`
+
+### Skills Applied
+
+- `debugging-wizard`
+- `golang-pro`
+- `devops-engineer`
+
+### Competencies Applied
+
+- Redis Streams backlog triage and safe exclusion logic
+- Go production repair-command implementation
+- PostgreSQL backup-first remediation
+- Ubuntu/systemd deployment and binary rollback hygiene
+- Chrome DevTools MCP verification

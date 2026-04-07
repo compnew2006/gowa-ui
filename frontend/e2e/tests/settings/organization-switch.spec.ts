@@ -152,6 +152,7 @@ test.describe("Organization Switching (Super Admin)", () => {
     });
 
     await page.evaluate(() => {
+      localStorage.removeItem("layout.sidebarPinnedClosed");
       localStorage.removeItem("layout.sidebarPinnedOpen");
     });
     await page.reload();

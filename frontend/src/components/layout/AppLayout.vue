@@ -7,7 +7,7 @@ import { useConfigStore } from "@/stores/config";
 import { localeDirectionManager } from "@/i18n/locale-direction";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageSquare, Menu, X } from "lucide-vue-next";
+import { MessageSquare, Menu, Pin, PinOff, X } from "lucide-vue-next";
 import { wsService } from "@/services/websocket";
 import { authService } from "@/services/api";
 import OrganizationSwitcher from "./OrganizationSwitcher.vue";
@@ -20,6 +20,9 @@ const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const configStore = useConfigStore();
+const SIDEBAR_PINNED_STORAGE_KEY = "layout.sidebarPinnedClosed";
+const LEGACY_SIDEBAR_PINNED_OPEN_STORAGE_KEY = "layout.sidebarPinnedOpen";
+const pinnedClosed = ref(false);
 const hasDesktopHover = ref(false);
 const hasDesktopFocusWithin = ref(false);
 const sidebarOverlayOpenState = ref({
@@ -35,12 +38,16 @@ const hasDesktopOverlayOpen = computed(
 );
 const isDesktopSidebarExpanded = computed(
   () =>
-    hasDesktopHover.value ||
-    hasDesktopFocusWithin.value ||
-    hasDesktopOverlayOpen.value,
+    !pinnedClosed.value &&
+    (hasDesktopHover.value ||
+      hasDesktopFocusWithin.value ||
+      hasDesktopOverlayOpen.value),
 );
 const isSidebarExpanded = computed(
   () => isMobileMenuOpen.value || isDesktopSidebarExpanded.value,
+);
+const showDesktopSidebarPinToggle = computed(
+  () => pinnedClosed.value || isDesktopSidebarExpanded.value,
 );
 const mainContentOffsetClass = computed(() =>
   isRTL.value ? "md:pr-16" : "md:pl-16",
@@ -66,6 +73,14 @@ const isManagerOrAdminUser = computed(
 
 // Connect WebSocket on mount using short-lived WS token
 onMounted(() => {
+  try {
+    pinnedClosed.value =
+      window.localStorage.getItem(SIDEBAR_PINNED_STORAGE_KEY) === "true";
+    window.localStorage.removeItem(LEGACY_SIDEBAR_PINNED_OPEN_STORAGE_KEY);
+  } catch {
+    pinnedClosed.value = false;
+  }
+
   if (authStore.isAuthenticated) {
     // Load app config (provider & feature flags)
     configStore.fetchConfig();
@@ -173,6 +188,10 @@ const navigation = computed(() => {
 });
 
 const handleDesktopSidebarMouseEnter = () => {
+  if (pinnedClosed.value) {
+    return;
+  }
+
   hasDesktopHover.value = true;
 };
 
@@ -181,6 +200,10 @@ const handleDesktopSidebarMouseLeave = () => {
 };
 
 const handleDesktopSidebarFocusIn = () => {
+  if (pinnedClosed.value) {
+    return;
+  }
+
   hasDesktopFocusWithin.value = true;
 };
 
@@ -203,6 +226,29 @@ const handleSidebarOverlayOpenChange = (
     ...sidebarOverlayOpenState.value,
     [key]: open,
   };
+};
+
+const persistSidebarPinState = (nextValue: boolean) => {
+  try {
+    window.localStorage.setItem(SIDEBAR_PINNED_STORAGE_KEY, String(nextValue));
+  } catch {
+    // Ignore storage failures and keep the preference in memory.
+  }
+};
+
+const toggleSidebarPin = () => {
+  pinnedClosed.value = !pinnedClosed.value;
+
+  if (pinnedClosed.value) {
+    hasDesktopHover.value = false;
+    hasDesktopFocusWithin.value = false;
+    sidebarOverlayOpenState.value = {
+      organization: false,
+      userMenu: false,
+    };
+  }
+
+  persistSidebarPinState(pinnedClosed.value);
 };
 
 const handleLogout = async () => {
@@ -253,6 +299,7 @@ const handleLogout = async () => {
     <aside
       data-testid="app-sidebar"
       :data-sidebar-state="isSidebarExpanded ? 'expanded' : 'collapsed'"
+      :data-sidebar-pinned="pinnedClosed ? 'true' : 'false'"
       :class="[
         'group/sidebar fixed inset-y-0 z-40 flex flex-col overflow-hidden border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-300 ease-out',
         desktopSidebarPositionClass,
@@ -271,10 +318,15 @@ const handleLogout = async () => {
         class="relative hidden h-12 items-center border-b border-sidebar-border px-3 md:flex"
       >
         <RouterLink
+          v-if="!pinnedClosed"
           to="/"
           :class="[
             'flex min-w-0 items-center gap-2 overflow-hidden',
-            isSidebarExpanded ? '' : 'mx-auto',
+            isDesktopSidebarExpanded
+              ? isRTL
+                ? 'pl-10'
+                : 'pr-10'
+              : 'mx-auto',
           ]"
         >
           <div
@@ -291,6 +343,32 @@ const handleLogout = async () => {
             Whatomate
           </span>
         </RouterLink>
+        <Button
+          variant="ghost"
+          size="icon"
+          data-testid="sidebar-pin-toggle"
+          :class="[
+            'absolute inline-flex h-7 w-7 text-sidebar-foreground/60 transition-opacity duration-200 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+            pinnedClosed
+              ? 'left-1/2 -translate-x-1/2'
+              : isRTL
+                ? 'left-2'
+                : 'right-2',
+            showDesktopSidebarPinToggle
+              ? 'opacity-100'
+              : 'pointer-events-none opacity-0',
+          ]"
+          :aria-label="
+            pinnedClosed ? $t('nav.unpinSidebar') : $t('nav.pinSidebar')
+          "
+          :aria-hidden="!showDesktopSidebarPinToggle"
+          :aria-pressed="pinnedClosed"
+          :tabindex="showDesktopSidebarPinToggle ? 0 : -1"
+          @click="toggleSidebarPin"
+        >
+          <PinOff v-if="pinnedClosed" class="h-3.5 w-3.5" />
+          <Pin v-else class="h-3.5 w-3.5" />
+        </Button>
       </div>
       <!-- Mobile logo spacer -->
       <div class="h-12 md:hidden" />

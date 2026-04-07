@@ -84,6 +84,8 @@ type UserSettingsRequest struct {
 	NewMessageAlerts   *bool                           `json:"new_message_alerts"`
 	CampaignUpdates    *bool                           `json:"campaign_updates"`
 	NotificationSound  *string                         `json:"notification_sound"`
+	ThemeMode          *string                         `json:"theme_mode"`
+	ThemePreset        *string                         `json:"theme_preset"`
 	ChatBackground     OptionalUserChatBackgroundField `json:"chat_background"`
 }
 
@@ -129,6 +131,14 @@ const (
 	notificationSound1          = "notification1"
 	notificationSound2          = "notification2"
 	notificationSound           = "notification"
+	themeModeLight              = "light"
+	themeModeDark               = "dark"
+	themeModeSystem             = "system"
+	themePresetTwitter          = "twitter"
+	themePresetOceanBreeze      = "ocean-breeze"
+	themePresetSoftPop          = "soft-pop"
+	themePresetCaffeineLegacy   = "caffeine"
+	themePresetAmberMinimal     = "amber-minimal"
 	maxChatBackgroundUploadSize = 5 << 20
 	chatBackgroundKindPreset    = "preset"
 	chatBackgroundKindCustom    = "custom"
@@ -153,6 +163,36 @@ func normalizeNotificationSound(raw string) string {
 		fallthrough
 	default:
 		return notificationSound1
+	}
+}
+
+func normalizeThemeMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case themeModeLight:
+		return themeModeLight
+	case themeModeDark:
+		return themeModeDark
+	case themeModeSystem:
+		fallthrough
+	default:
+		return themeModeSystem
+	}
+}
+
+func normalizeThemePreset(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case themePresetCaffeineLegacy:
+		return themePresetSoftPop
+	case themePresetSoftPop:
+		return themePresetSoftPop
+	case themePresetAmberMinimal:
+		return themePresetAmberMinimal
+	case themePresetOceanBreeze:
+		return themePresetOceanBreeze
+	case themePresetTwitter:
+		fallthrough
+	default:
+		return themePresetTwitter
 	}
 }
 
@@ -936,6 +976,12 @@ func (a *App) UpdateCurrentUserSettings(r *fastglue.Request) error {
 	}
 	if req.NotificationSound != nil {
 		user.Settings["notification_sound"] = normalizeNotificationSound(*req.NotificationSound)
+	}
+	if req.ThemeMode != nil {
+		user.Settings["theme_mode"] = normalizeThemeMode(*req.ThemeMode)
+	}
+	if req.ThemePreset != nil {
+		user.Settings["theme_preset"] = normalizeThemePreset(*req.ThemePreset)
 	}
 
 	if req.ChatBackground.Set {

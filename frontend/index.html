@@ -9,13 +9,24 @@
     <script>
       (function () {
         var mode = localStorage.getItem("color-mode") || "system";
+        var preset = localStorage.getItem("theme-preset") || "twitter";
+        if (preset === "caffeine") {
+          preset = "soft-pop";
+        }
         var isDark =
           mode === "dark" ||
           (mode === "system" &&
             window.matchMedia("(prefers-color-scheme: dark)").matches);
-        document.documentElement.classList.toggle("dark", isDark);
-        document.documentElement.classList.toggle("light", !isDark);
-        document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+        var root = document.documentElement;
+        root.classList.toggle("dark", isDark);
+        root.classList.toggle("light", !isDark);
+        root.dataset.themePreset =
+          preset === "ocean-breeze" ||
+          preset === "soft-pop" ||
+          preset === "amber-minimal"
+            ? preset
+            : "twitter";
+        root.style.colorScheme = isDark ? "dark" : "light";
       })();
     </script>
   </head>

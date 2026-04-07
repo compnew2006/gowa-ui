@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## 2026-04-05
+
+### Fixed
+- **MkDocs Configuration**: Fixed `docs_dir` configuration error in `docs/wiki/mkdocs.yml` by restructuring the documentation directory.
+- Moved markdown source files from `docs/wiki/` into a dedicated `docs/wiki/docs/` directory to comply with standard MkDocs 1.6+ expectations and `mkdocs-static-i18n` plugin requirements.
+
+
 ## 2026-04-02
 
 ### Added

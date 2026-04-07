@@ -1,5 +1,165 @@
 # Session Summary
 
+## 2026-04-06 00:18
+
+### Completed
+
+- Replaced the `caffeine` appearance preset with `soft-pop` while keeping `amber-minimal` available as a separate fourth style.
+- Updated the shared theme registry, bootstrap allowlist, and backend normalization so the public preset set is now:
+  - `twitter`
+  - `ocean-breeze`
+  - `soft-pop`
+  - `amber-minimal`
+- Added a compatibility migration path so any existing saved or localStorage value of `caffeine` now resolves to `soft-pop` instead of falling back to `twitter`.
+- Replaced the old Caffeine token blocks in `frontend/src/assets/index.css` with the Soft Pop light/dark palette, spacing, radius, shadow, and font values from the tweakcn theme source.
+- Added local `Space Mono` font delivery for the new preset and restored the Amber Minimal font packages that were still required by the existing preset.
+- Updated frontend and backend tests to cover the new preset and the legacy `caffeine` migration behavior.
+
+### Verification
+
+- `npx vitest run src/composables/useColorMode.test.ts src/views/settings/SettingsView.test.ts`
+  - result: pass
+- `go test ./internal/handlers -run TestApp_UpdateCurrentUserSettings`
+  - result: pass
+- `npm run build` in `frontend`
+  - result: pass
+- `npm run typecheck` in `frontend`
+  - result: fails only on the same unrelated pre-existing repo issues outside the appearance preset files
+- Chrome DevTools MCP
+  - opened `http://127.0.0.1:3000/settings`
+  - confirmed the Appearance tab now shows `Soft Pop` and still keeps `Amber Minimal`
+  - previewed `Soft Pop` and verified:
+    - `<html data-theme-preset="soft-pop">`
+    - body font switches to `DM Sans`
+    - `--radius` resolves to `1rem`
+    - `--primary` resolves to `79 70 229`
+    - `--font-mono` resolves to `Space Mono`
+  - saved the appearance change and confirmed the browser sent:
+    - `PUT /api/me/settings`
+    - request body: `{"theme_mode":"light","theme_preset":"soft-pop"}`
+  - observed the live local backend on `:8080` still respond with `theme_preset: "twitter"`, which indicates the browser is still talking to a stale backend process that has not been restarted with the latest settings-handler code
+
+### Notes
+
+- `caffeine` is now treated as a legacy alias only. Existing saved values and localStorage entries are normalized to `soft-pop` on both frontend and backend instead of falling back to the default theme.
+- The latest `npm run typecheck` output still points at unrelated files such as `CreateContactDialog.test.ts`, `use-toast.ts`, `contacts.ts`, `roles.ts`, `ChatView.vue`, `AgentTransfersView.vue`, `ChatbotFlowBuilderView.vue`, `DashboardView.vue`, and `TeamsView.vue`; the Soft Pop swap did not introduce new typecheck failures.
+
+## 2026-04-05 21:18
+
+### Completed
+
+- Extended the per-user theme preset system with a fourth style: `amber-minimal`.
+- Added `amber-minimal` to the shared frontend preset registry, localStorage bootstrap allowlist, and backend `/me/settings` normalization so it behaves like the existing presets end to end.
+- Added the light and dark Amber Minimal token sets to `frontend/src/assets/index.css` using converted RGB channel values so the preset remains compatible with the app’s existing `rgb(var(--token) / <alpha-value>)` Tailwind setup.
+- Added the theme’s local font stack support:
+  - `@fontsource/inter`
+  - `@fontsource/source-serif-4`
+  - `@fontsource/jetbrains-mono`
+- Updated the appearance copy and tests so the new preset is selectable and explicitly covered in both frontend and backend verification.
+
+### Verification
+
+- `npx vitest run src/composables/useColorMode.test.ts src/views/settings/SettingsView.test.ts`
+  - result: pass
+- `go test ./internal/handlers -run TestApp_UpdateCurrentUserSettings`
+  - result: pass
+- `npm run build` in `frontend`
+  - result: pass
+- `npm run typecheck` in `frontend`
+  - result: fails on pre-existing unrelated repo issues outside the appearance preset files
+- Chrome DevTools MCP
+  - opened `http://127.0.0.1:3000/settings`
+  - confirmed the Appearance tab shows the new `Amber Minimal` preset card
+  - previewed `Amber Minimal` and verified:
+    - `<html data-theme-preset="amber-minimal">`
+    - `body` font switches to `Inter`
+    - `--radius` resolves to `0.375rem`
+    - `--primary` resolves to `245 158 11`
+  - saved the appearance change and confirmed the browser sent:
+    - `PUT /api/me/settings`
+    - request body: `{"theme_mode":"light","theme_preset":"amber-minimal"}`
+  - observed the live local backend on `:8080` respond with `theme_preset: "twitter"`, which indicates the dev server is still proxying to a stale backend process that does not include the newest preset normalization yet
+
+### Notes
+
+- The Amber Minimal source theme from tweakcn uses `oklch(...)` tokens, but the current frontend theme system expects raw RGB triples. The final CSS values were converted before integration so alpha-aware Tailwind utilities continue to work without refactoring the existing token model.
+- Because the local backend process serving browser requests has not been restarted with the updated code, live persistence for the newest presets can still fall back to `twitter` during manual browser testing. The repository code and backend tests already accept `amber-minimal`.
+- The latest `npm run typecheck` output still points at unrelated files such as `CreateContactDialog.test.ts`, `use-toast.ts`, `contacts.ts`, `roles.ts`, `ChatView.vue`, `AgentTransfersView.vue`, `ChatbotFlowBuilderView.vue`, `DashboardView.vue`, and `TeamsView.vue`; none of the Amber Minimal theme files introduced new typecheck failures.
+
+## 2026-04-05 20:46
+
+### Completed
+
+- Added per-user appearance settings so users can choose both:
+  - `theme_mode`: `light`, `dark`, or `system`
+  - `theme_preset`: `twitter` or `ocean-breeze`
+- Introduced a shared frontend appearance registry and expanded the global appearance composable so the app now manages:
+  - DOM theme application on `<html>`
+  - localStorage bootstrap via `color-mode` and `theme-preset`
+  - temporary preview vs persisted appearance state
+  - hydration from authenticated user settings
+- Reworked the frontend theme token layer in `frontend/src/assets/index.css` to support both Twitter and Ocean Breeze presets, each with light and dark variants, without changing the existing Tailwind token model.
+- Added Ocean Breeze font delivery through local package imports:
+  - `@fontsource/dm-sans`
+  - `@fontsource/lora`
+  - `@fontsource/ibm-plex-mono`
+- Added a new Appearance tab to `frontend/src/views/settings/SettingsView.vue` with:
+  - mode selection
+  - preset selection cards
+  - instant preview
+  - explicit save
+  - rollback of unsaved preview on route leave/unmount
+- Kept the existing header quick theme switcher and wired it into the same appearance state and `/me/settings` persistence flow.
+- Extended the `/me/settings` backend handler and user-settings types to persist `theme_mode` and `theme_preset`, with normalization defaults:
+  - invalid mode -> `system`
+  - invalid preset -> `twitter`
+- Added coverage for the new behavior:
+  - frontend composable tests
+  - settings appearance flow tests
+  - backend handler tests
+
+### Skills Applied
+
+- `vue-expert` for the Vue 3 appearance state, settings UX, and unit coverage
+- `fullstack-guardian` for the frontend/backend user-settings flow and persistence design
+- `golang-pro` for the Go handler and test updates
+
+### Verification
+
+- `go test ./internal/handlers -run TestApp_UpdateCurrentUserSettings`
+  - result: pass
+- `npx vitest run src/composables/useColorMode.test.ts src/views/settings/SettingsView.test.ts`
+  - result: pass
+- `npm run test:unit` in `frontend`
+  - result: pass (`23` files, `116` tests)
+- `npm run build` in `frontend`
+  - result: pass
+- Chrome DevTools MCP against `http://127.0.0.1:3000`
+  - logged in as `admin@test.com`
+  - opened `/settings`
+  - confirmed the new Appearance tab renders
+  - previewed `light + ocean-breeze` and verified:
+    - `<html data-theme-preset="ocean-breeze">`
+    - `class="light"`
+    - body font switches to `DM Sans`
+  - saved the appearance change and confirmed the success toast
+  - reloaded `/settings` and verified the saved appearance persisted in both DOM state and localStorage
+  - used the header quick theme switcher to change mode to `dark` and then `system`
+  - emulated browser `prefers-color-scheme` changes and confirmed system mode flips between `.light` and `.dark`
+  - opened `/chat` and confirmed the Ocean Breeze preset and dark-mode typography/background tokens were active on a high-traffic page
+
+### Notes
+
+- `npm run typecheck` still fails because of unrelated pre-existing repo-wide TypeScript issues outside this feature area. The earlier output included files such as:
+  - `frontend/src/stores/contacts.ts`
+  - `frontend/src/stores/roles.ts`
+  - `frontend/src/views/chat/ChatView.vue`
+  - `frontend/src/views/chatbot/AgentTransfersView.vue`
+  - `frontend/src/views/chatbot/ChatbotFlowBuilderView.vue`
+  - `frontend/src/views/dashboard/DashboardView.vue`
+  - `frontend/src/views/settings/TeamsView.vue`
+- Browser console still shows pre-existing Vue `data-testid` warnings from the chat status dialogs plus one form-field accessibility warning; these were not introduced by the appearance feature.
+
 ## 2026-04-05 12:32
 
 ### Completed
@@ -1186,3 +1346,210 @@
 ### Notes
 
 - `http://localhost:8080/settings/instances` was still serving older frontend assets during verification, so the live backend-served page continued to show the old 3-column layout until the frontend bundle is reloaded/redeployed
+
+## 2026-04-06 21:30 - Production fix for instances auto-campaign 400
+
+### Goal
+
+- Fix the production `400 Bad Request` on `https://holol-wenjaz.ofuqalmadenah.com/settings/instances` when the quick `Auto campaign` switch is toggled while the campaign message is still empty.
+
+### Root Cause
+
+- `frontend/src/components/whatsmeow/InstanceCard.vue` emitted an immediate `update-auto-campaign-settings` event from the card switch without validating the required message field.
+- The backend correctly rejected that payload because enabled auto-campaign settings require a non-empty message.
+- The same quick-toggle pattern existed for `Call auto-reject` when reply mode is `with_message` and the reply text is empty.
+- The reported `blob:` CSP violations with `Browser Control` script names were not reproduced in a clean browser session and appear to come from injected browser tooling rather than the Whatomate app bundle.
+
+### What Changed
+
+- added guarded quick-toggle handlers in `frontend/src/components/whatsmeow/InstanceCard.vue`
+- blocked quick enable for:
+  - `Auto campaign` when the message is blank
+  - `Call auto-reject` when mode is `with_message` and the reply text is blank
+- surfaced the existing localized validation toasts instead of letting the invalid request reach the backend
+- added focused regression coverage in `frontend/src/components/whatsmeow/InstanceCard.test.ts`
+
+### Verification
+
+- `frontend`: `npx vitest run src/components/whatsmeow/InstanceCard.test.ts src/lib/instance-auto-campaign.test.ts` ✅
+- `frontend`: `npm run typecheck` was attempted, but the repo already has unrelated pre-existing TypeScript errors outside this change set ❗
+- VPS backup created before install:
+  - `/opt/whatomate/bin/whatomate.20260406_191957.bak`
+  - `/opt/whatomate/bin/whatomate.20260406_192006.bak`
+- VPS build/install:
+  - binary SHA256: `7f4afac3f96d28046db7c87f59df0ddab5439f827a5c0182e26e42b0bd04fa95`
+  - version: `Whatomate dev (built 2026-04-06_19:25:28)`
+- service health after rollout:
+  - `whatomate` -> `active`
+  - `whatomate@holol-wenjaz` -> `active`
+  - `whatomate@alarkan-almthalia` -> `active`
+  - `whatomate@matbaat-ruya` -> `active`
+- HTTPS smoke after restart settling:
+  - `https://ofuqalmadenah.com/` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/` -> `200`
+- Chrome DevTools MCP on production `https://holol-wenjaz.ofuqalmadenah.com/settings/instances` ✅
+  - authenticated into the tenant using a short-lived test cookie session
+  - clicked the `Auto campaign` quick switch while the message was empty
+  - saw the validation toast: `Campaign message is required when auto campaign is enabled.`
+  - observed no `PUT /api/instances/...` network request after the click
+  - console showed only accessibility issues, not app CSP/blob-script errors
+
+### Skills Applied
+
+- `debugging-wizard`
+- `vue-expert`
+- `devops-engineer`
+
+## 2026-04-06 21:47 - holol-wenjaz inbound media recovery triage
+
+### Goal
+
+- Fix the real production cause behind `GET /api/media/:message_id 404` for inbound media on `https://holol-wenjaz.ofuqalmadenah.com`.
+- Separate actual app defects from browser-extension CSP noise.
+
+### Root Cause
+
+- The repeated `blob:` CSP violations came from injected browser-control tooling, not from Whatomate. A clean Chrome DevTools MCP session on `https://holol-wenjaz.ofuqalmadenah.com/chat` redirected to `/login` with no console errors.
+- The real production defect was filesystem permissions for inbound media persistence on the `holol-wenjaz` tenant:
+  - missing path: `/opt/whatomate/instances/holol-wenjaz/uploads`
+  - service user: `whatomate:whatomate`
+  - parent instance dir owner: `root:root`
+- The specific broken media row `53b94398-9b32-4ea0-b7c7-0ba2bead1aed` failed at `2026-04-06 19:30:04 UTC` with:
+  - `create media directory: mkdir /opt/whatomate/instances/holol-wenjaz/uploads: permission denied`
+- The corresponding Redis inbound-media job was `1775503804475-0`. It is no longer present in `whatomate:inbound_media` and not present in `whatomate:inbound_media:dlq`, so that job payload is no longer recoverable from Redis.
+
+### What Changed
+
+- created `/opt/whatomate/instances/holol-wenjaz/uploads`
+- set owner/group to `whatomate:whatomate`
+- set mode to `0750`
+- restarted only `whatomate@holol-wenjaz`
+- stored a pre-change production snapshot at `/root/ops_backups/media_perm_fix_20260406_214006/state.txt`
+
+### Verification
+
+- server filesystem after fix:
+  - `/opt/whatomate/instances/holol-wenjaz/uploads` -> `drwxr-x--- whatomate:whatomate`
+- service health:
+  - `whatomate@holol-wenjaz` -> `active`
+- clean browser check via Chrome DevTools MCP:
+  - `https://holol-wenjaz.ofuqalmadenah.com/chat` redirected to `/login`
+  - console messages: none
+- queue state after investigation:
+  - `XLEN whatomate:inbound_media` -> `3013`
+  - `XLEN whatomate:inbound_media:dlq` -> `0`
+  - `XINFO GROUPS whatomate:inbound_media` showed `lag=0`, `pending=0`, `entries-read=3013`
+- tenant DB state for inbound media rows with empty `media_url` on instance `4a997817-192a-478c-b526-ddf5d70dc3b7`:
+  - `queued` -> `2798`
+  - `failed` -> `86`
+
+### Outcome
+
+- The production write-permission defect is fixed for future inbound media on `holol-wenjaz`.
+- The specific already-broken media message `53b94398-9b32-4ea0-b7c7-0ba2bead1aed` cannot be repaired from Redis now because its recovery payload is gone.
+- There is also a broader historical inconsistency: thousands of tenant rows remain marked `queued` even though the Redis consumer group reports the stream fully read with no pending entries. That needs a separate code/data repair path if you want old missing media reconciled.
+
+### Skills Applied
+
+- `debugging-wizard`
+- `devops-engineer`
+
+
+## 2026-04-06 22:13 - holol-wenjaz inbound media stale-queue reconciliation
+
+### Goal
+
+- Build a safe production repair path for stale `queued` inbound-media rows without touching live Redis pending jobs.
+- Run the one-time cleanup on `holol-wenjaz` only after code deployment, binary backup, and database backup.
+
+### What Changed
+
+- Added the `inbound-media-reconcile` admin subcommand to `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/cmd/whatomate/main.go`.
+- Added `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/inbound_media_reconcile.go` to:
+  - require the Redis consumer group to exist
+  - refuse reconciliation when stream lag is positive or unknown
+  - read pending stream entries and map them back to `message_id`
+  - exclude those active pending message IDs from reconciliation
+  - mark only stale queued rows older than the threshold as `failed`
+- Added regression coverage in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/inbound_media_reconcile_test.go`.
+- Hardened the scratch metadata field with `gorm:"type:jsonb"` so the admin command no longer emits the prior non-fatal JSONB schema warning.
+
+### Deployment
+
+- Source sync method: targeted copy of:
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/inbound_media_reconcile.go`
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/inbound_media_reconcile_test.go`
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/cmd/whatomate/main.go`
+- VPS binary backups created before installs:
+  - `/opt/whatomate/bin/whatomate.20260406_200711.bak`
+  - `/opt/whatomate/bin/whatomate.20260406_201130.bak`
+- Final installed binary:
+  - path: `/opt/whatomate/bin/whatomate`
+  - SHA256: `d1cb45018447624f9b5b21a154b96ca4d35cf72004922f2b9f6c1e27f8650855`
+  - version: `Whatomate dev (built 2026-04-06_20:11:45)`
+- Service restarts were required for the first command rollout and remained healthy. The final cosmetic command-only rebuild was installed without another restart.
+
+### Production Execution
+
+- Dry-run before apply on `4a997817-192a-478c-b526-ddf5d70dc3b7`:
+  - `total_queued=2732`
+  - `active_pending_ids=1354`
+  - `skipped_active_queued=1354`
+  - `eligible_queued=1378`
+- Database backup created before cleanup:
+  - `/root/db_backups/inbound_media_reconcile_holol_wenjaz_20260406_201018`
+  - `queued_older_than_15m.jsonl` lines: `2727`
+- Apply run:
+  - `total_queued=2727`
+  - `active_pending_ids=1349`
+  - `skipped_active_queued=1349`
+  - `eligible_queued=1378`
+  - `updated=1378`
+- Post-cleanup dry-run:
+  - `total_queued=1345`
+  - `active_pending_ids=1345`
+  - `eligible_queued=0`
+
+### Verification
+
+- Local validation before deploy:
+  - `go test ./pkg/whatsmeow ./cmd/whatomate` -> passed
+  - `go run ./cmd/whatomate inbound-media-reconcile -h` -> passed
+- Post-cleanup database state on tenant DB `whatomate_holol_wenjaz`:
+  - queued inbound media with empty `media_url`: `1345`
+  - failed inbound media rows: `1505`
+- Remaining queued rows now exactly match Redis live pending work:
+  - `XINFO GROUPS whatomate:inbound_media` on Redis DB `1` -> `pending=1345`, `lag=0`
+- Specific message `53b94398-9b32-4ea0-b7c7-0ba2bead1aed` remains `queued`, with the original permission-denied `last_error`, because it is still part of the active pending backlog and was deliberately not force-failed.
+- Chrome DevTools MCP smoke check after the work:
+  - loaded `https://holol-wenjaz.ofuqalmadenah.com/`
+  - redirected to `/login` as expected for an unauthenticated session
+  - console messages: none
+  - network `200`: `/login`, `/api/auth/sso/providers`
+- Systemd state after rollout:
+  - `whatomate` -> `active`
+  - `whatomate@holol-wenjaz` -> `active`
+  - `whatomate@alarkan-almthalia` -> `active`
+  - `whatomate@matbaat-ruya` -> `active`
+
+### Outcome
+
+- The stale queued backlog now has a safe reconciliation path in the codebase.
+- The one-time cleanup removed all stale queued rows older than the threshold while preserving live in-flight pending jobs.
+- `holol-wenjaz` no longer has stale eligible queued inbound-media rows; only the active Redis-backed backlog remains.
+
+### Skills Applied
+
+- `debugging-wizard`
+- `golang-pro`
+- `devops-engineer`
+
+### Competencies Applied
+
+- Redis Streams consumer-group safety analysis
+- Go CLI/admin tooling design
+- PostgreSQL operational backup and targeted repair
+- rollback-safe Ubuntu/systemd binary deployment
+- browser-based smoke verification with Chrome DevTools MCP

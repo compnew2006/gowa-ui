@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { RouterLink } from "vue-router";
+import { RouterLink, onBeforeRouteLeave } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +25,7 @@ import {
   Bell,
   Loader2,
   Globe,
+  Palette,
   MessageSquare,
   Play,
   Archive,
@@ -32,10 +33,14 @@ import {
   LayoutGrid,
   Upload,
   CheckCircle2,
+  MoonStar,
+  SunMedium,
+  MonitorSmartphone,
 } from "lucide-vue-next";
 import { usersService, organizationService } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
+import { useColorMode } from "@/composables/useColorMode";
 import {
   ChatSidebarUnifier,
   type ChatSidebarViewMode,
@@ -53,19 +58,54 @@ import {
   validateChatBackgroundFile,
   type ChatBackgroundEditorMode,
 } from "@/lib/chat-backgrounds";
-import type { ChatBackgroundSettings, UserSettings } from "@/types/auth";
+import {
+  THEME_PRESET_OPTIONS,
+  getAppearanceFromSettings,
+  normalizeColorMode,
+  type AppearanceSettings,
+} from "@/lib/theme-presets";
+import type {
+  ChatBackgroundSettings,
+  UserSettings,
+  ThemePreset,
+} from "@/types/auth";
 
 const { t } = useI18n();
 const authStore = useAuthStore();
 const configStore = useConfigStore();
+const {
+  persistedColorMode,
+  persistedThemePreset,
+  previewAppearance,
+  restorePersistedAppearance,
+  hydrateFromUserSettings,
+} = useColorMode();
 
 type NotificationSoundKey = "notification1" | "notification2" | "notification";
 const DEFAULT_NOTIFICATION_SOUND: NotificationSoundKey = "notification1";
 
+const activeSettingsTab = ref("general");
 const isSubmitting = ref(false);
 const isLoading = ref(true);
 const isPreviewPlaying = ref(false);
 let previewAudio: HTMLAudioElement | null = null;
+
+const themePresetOptions = THEME_PRESET_OPTIONS;
+const appearanceSettings = ref<AppearanceSettings>({
+  theme_mode: persistedColorMode.value,
+  theme_preset: persistedThemePreset.value,
+});
+const savedAppearanceSettings = ref<AppearanceSettings>({
+  theme_mode: persistedColorMode.value,
+  theme_preset: persistedThemePreset.value,
+});
+const isAppearanceDirty = computed(
+  () =>
+    appearanceSettings.value.theme_mode !==
+      savedAppearanceSettings.value.theme_mode ||
+    appearanceSettings.value.theme_preset !==
+      savedAppearanceSettings.value.theme_preset,
+);
 
 function normalizeNotificationSound(value: unknown): NotificationSoundKey {
   if (value === "notification2") return "notification2";
@@ -124,6 +164,40 @@ async function previewNotificationSound() {
   }
 
   isPreviewPlaying.value = false;
+}
+
+function syncAppearanceSettings(value?: Partial<UserSettings> | null) {
+  const nextAppearance = value
+    ? getAppearanceFromSettings(value)
+    : {
+        theme_mode: persistedColorMode.value,
+        theme_preset: persistedThemePreset.value,
+      };
+
+  savedAppearanceSettings.value = { ...nextAppearance };
+  appearanceSettings.value = { ...nextAppearance };
+}
+
+function previewDraftAppearance() {
+  previewAppearance(
+    appearanceSettings.value.theme_mode,
+    appearanceSettings.value.theme_preset,
+  );
+}
+
+function selectAppearanceMode(mode: string) {
+  appearanceSettings.value.theme_mode = normalizeColorMode(mode);
+  previewDraftAppearance();
+}
+
+function selectThemePreset(preset: ThemePreset) {
+  appearanceSettings.value.theme_preset = preset;
+  previewDraftAppearance();
+}
+
+function revertAppearancePreview() {
+  appearanceSettings.value = { ...savedAppearanceSettings.value };
+  restorePersistedAppearance();
 }
 
 // General Settings
@@ -352,6 +426,19 @@ try {
   // Ignore localStorage errors
 }
 
+watch(
+  [persistedColorMode, persistedThemePreset],
+  ([themeMode, themePreset]) => {
+    if (!isAppearanceDirty.value) {
+      syncAppearanceSettings({
+        theme_mode: themeMode,
+        theme_preset: themePreset,
+      });
+    }
+  },
+  { immediate: true },
+);
+
 onMounted(async () => {
   chatSettings.value.show_print_buttons = configStore.showPrintButtons;
   chatSettings.value.show_download_buttons = configStore.showDownloadButtons;
@@ -384,6 +471,10 @@ onMounted(async () => {
         ),
       };
     }
+    if (authStore.user) {
+      hydrateFromUserSettings(user.settings);
+    }
+    syncAppearanceSettings(user.settings);
     syncChatBackgroundState(user.settings?.chat_background);
   } catch (error) {
     console.error("Failed to load settings:", error);
@@ -404,6 +495,33 @@ async function saveGeneralSettings() {
     toast.success(t("settings.generalSaved"));
   } catch (error) {
     toast.error(t("common.failedSave", { resource: t("resources.settings") }));
+  } finally {
+    isSubmitting.value = false;
+  }
+}
+
+async function saveAppearanceSettings() {
+  isSubmitting.value = true;
+  try {
+    const response = await usersService.updateSettings({
+      theme_mode: appearanceSettings.value.theme_mode,
+      theme_preset: appearanceSettings.value.theme_preset,
+    });
+    const payload = unwrapResponse<{
+      message: string;
+      settings: UserSettings;
+    }>(response);
+
+    authStore.replaceUserSettings(payload.settings);
+    hydrateFromUserSettings(payload.settings);
+    syncAppearanceSettings(payload.settings);
+
+    toast.success(t("settings.appearanceSaved"));
+  } catch (error) {
+    revertAppearancePreview();
+    toast.error(
+      getErrorMessage(error, t("settings.appearanceSaveFailed")),
+    );
   } finally {
     isSubmitting.value = false;
   }
@@ -542,12 +660,21 @@ async function saveChatSettings() {
 }
 
 onBeforeUnmount(() => {
+  if (isAppearanceDirty.value) {
+    revertAppearancePreview();
+  }
   if (previewAudio) {
     previewAudio.pause();
     previewAudio = null;
   }
   isPreviewPlaying.value = false;
   clearStagedChatBackgroundSelection();
+});
+
+onBeforeRouteLeave(() => {
+  if (isAppearanceDirty.value) {
+    revertAppearancePreview();
+  }
 });
 </script>
 
@@ -561,9 +688,9 @@ onBeforeUnmount(() => {
     />
     <ScrollArea class="flex-1">
       <div class="p-6 space-y-4 max-w-4xl mx-auto">
-        <Tabs default-value="general" class="w-full">
+        <Tabs v-model="activeSettingsTab" class="w-full">
           <TabsList
-            class="mb-6 grid w-full grid-cols-3 rounded-full border border-border bg-accent/70 p-1"
+            class="mb-6 grid w-full grid-cols-2 gap-1 rounded-full border border-border bg-accent/70 p-1 sm:grid-cols-4"
           >
             <TabsTrigger
               value="general"
@@ -571,6 +698,14 @@ onBeforeUnmount(() => {
             >
               <Settings class="h-4 w-4 mr-2" />
               {{ $t("settings.general") }}
+            </TabsTrigger>
+            <TabsTrigger
+              value="appearance"
+              class="text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              data-testid="settings-tab-appearance"
+            >
+              <Palette class="h-4 w-4 mr-2" />
+              {{ $t("settings.appearance") }}
             </TabsTrigger>
             <TabsTrigger
               value="chat"
@@ -708,6 +843,198 @@ onBeforeUnmount(() => {
                     class="shadow-sm"
                     @click="saveGeneralSettings"
                     :disabled="isSubmitting"
+                  >
+                    <Loader2
+                      v-if="isSubmitting"
+                      class="mr-2 h-4 w-4 animate-spin"
+                    />
+                    {{ $t("settings.save") }}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="appearance">
+            <div
+              class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 shadow-sm"
+            >
+              <div class="p-6 pb-3">
+                <h3 class="text-lg font-semibold text-foreground">
+                  {{ $t("settings.appearance") }}
+                </h3>
+                <p class="text-sm text-muted-foreground">
+                  {{ $t("settings.appearanceDesc") }}
+                </p>
+              </div>
+              <div class="space-y-5 p-6 pt-3">
+                <div class="space-y-3">
+                  <div class="space-y-1">
+                    <Label class="text-foreground/80">{{
+                      $t("settings.themeMode")
+                    }}</Label>
+                    <p class="text-xs text-muted-foreground">
+                      {{ $t("settings.themeModeDesc") }}
+                    </p>
+                  </div>
+                  <div class="grid gap-2 sm:grid-cols-3">
+                    <button
+                      type="button"
+                      class="flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      :class="
+                        appearanceSettings.theme_mode === 'light'
+                          ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                          : 'border-border bg-background text-muted-foreground'
+                      "
+                      data-testid="appearance-mode-light"
+                      @click="selectAppearanceMode('light')"
+                    >
+                      <div
+                        class="rounded-full bg-background/80 p-2 shadow-sm"
+                      >
+                        <SunMedium class="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p class="text-sm font-medium text-foreground">
+                          {{ $t("settings.lightMode") }}
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      class="flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      :class="
+                        appearanceSettings.theme_mode === 'dark'
+                          ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                          : 'border-border bg-background text-muted-foreground'
+                      "
+                      data-testid="appearance-mode-dark"
+                      @click="selectAppearanceMode('dark')"
+                    >
+                      <div
+                        class="rounded-full bg-background/80 p-2 shadow-sm"
+                      >
+                        <MoonStar class="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p class="text-sm font-medium text-foreground">
+                          {{ $t("settings.darkMode") }}
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      class="flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      :class="
+                        appearanceSettings.theme_mode === 'system'
+                          ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                          : 'border-border bg-background text-muted-foreground'
+                      "
+                      data-testid="appearance-mode-system"
+                      @click="selectAppearanceMode('system')"
+                    >
+                      <div
+                        class="rounded-full bg-background/80 p-2 shadow-sm"
+                      >
+                        <MonitorSmartphone class="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p class="text-sm font-medium text-foreground">
+                          {{ $t("settings.systemTheme") }}
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <Separator class="bg-border" />
+
+                <div class="space-y-3">
+                  <div class="space-y-1">
+                    <Label class="text-foreground/80">{{
+                      $t("settings.themePreset")
+                    }}</Label>
+                    <p class="text-xs text-muted-foreground">
+                      {{ $t("settings.themePresetDesc") }}
+                    </p>
+                  </div>
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <button
+                      v-for="option in themePresetOptions"
+                      :key="option.id"
+                      type="button"
+                      class="group overflow-hidden rounded-[calc(var(--radius)+0.2rem)] border bg-card text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                      :class="
+                        appearanceSettings.theme_preset === option.id
+                          ? 'border-primary shadow-sm ring-1 ring-primary/35'
+                          : 'border-border'
+                      "
+                      :data-testid="`appearance-preset-${option.id}`"
+                      @click="selectThemePreset(option.id)"
+                    >
+                      <div
+                        class="flex min-h-[132px] items-end justify-between border-b border-black/5 px-4 py-4"
+                        :style="{ background: option.previewBackground }"
+                      >
+                        <div class="space-y-2">
+                          <div
+                            class="h-3 w-16 rounded-full"
+                            :style="{ backgroundColor: option.previewAccent }"
+                          />
+                          <div class="h-3 w-24 rounded-full bg-white/65" />
+                          <div class="h-3 w-20 rounded-full bg-white/45" />
+                        </div>
+                        <div
+                          class="rounded-full px-3 py-1 text-xs font-semibold shadow-sm"
+                          :style="{
+                            backgroundColor: option.previewAccent,
+                            color: 'rgb(255 255 255)',
+                          }"
+                        >
+                          {{ $t(option.labelKey) }}
+                        </div>
+                      </div>
+                      <div class="flex items-start justify-between gap-3 p-4">
+                        <div>
+                          <p class="text-sm font-semibold text-foreground">
+                            {{ $t(option.labelKey) }}
+                          </p>
+                          <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                            {{ $t(option.descriptionKey) }}
+                          </p>
+                        </div>
+                        <CheckCircle2
+                          v-if="appearanceSettings.theme_preset === option.id"
+                          class="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                        />
+                      </div>
+                    </button>
+                  </div>
+                  <p
+                    class="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+                  >
+                    {{ $t("settings.appearancePreviewHint") }}
+                  </p>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="border-input bg-input text-foreground hover:bg-accent"
+                    :disabled="isSubmitting || !isAppearanceDirty"
+                    data-testid="settings-appearance-revert"
+                    @click="revertAppearancePreview"
+                  >
+                    {{ $t("common.cancel") }}
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    class="shadow-sm"
+                    :disabled="isSubmitting || !isAppearanceDirty"
+                    data-testid="settings-appearance-save"
+                    @click="saveAppearanceSettings"
                   >
                     <Loader2
                       v-if="isSubmitting"

@@ -6,11 +6,20 @@ export interface ChatBackgroundSettings {
   custom_mime_type?: "image/jpeg" | "image/png" | "image/webp";
 }
 
+export type ThemeMode = "light" | "dark" | "system";
+export type ThemePreset =
+  | "twitter"
+  | "ocean-breeze"
+  | "soft-pop"
+  | "amber-minimal";
+
 export interface UserSettings {
   email_notifications?: boolean;
   new_message_alerts?: boolean;
   campaign_updates?: boolean;
   notification_sound?: "notification1" | "notification2" | "notification";
+  theme_mode?: ThemeMode;
+  theme_preset?: ThemePreset;
   chat_background?: ChatBackgroundSettings;
   send_restrictions?: {
     enabled?: boolean;
