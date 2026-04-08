@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
+import { useLicenseStore } from "@/stores/license";
 
 // Permission-based route meta type
 declare module "vue-router" {
@@ -40,6 +41,12 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
+      path: "/activate",
+      name: "activate",
+      component: () => import("@/views/public/ActivateLicenseView.vue"),
+      meta: { requiresAuth: false },
+    },
+    {
       path: "/pricing",
       alias: ["/plans", "/offer"],
       name: "marketing-redirect",
@@ -51,6 +58,11 @@ const router = createRouter({
       component: () => import("@/components/layout/AppLayout.vue"),
       meta: { requiresAuth: true },
       children: [
+        {
+          path: "license-cleanup",
+          name: "license-cleanup",
+          component: () => import("@/views/settings/LicenseCleanupView.vue"),
+        },
         {
           path: "",
           redirect: "/chat",
@@ -247,6 +259,12 @@ const router = createRouter({
           meta: { permission: "settings.sso" },
         },
         {
+          path: "settings/license",
+          name: "license-settings",
+          component: () => import("@/views/settings/LicenseSettingsView.vue"),
+          meta: { adminOnly: true },
+        },
+        {
           path: "settings/custom-actions",
           name: "custom-actions",
           component: () => import("@/views/settings/CustomActionsView.vue"),
@@ -275,9 +293,9 @@ const navigationOrder = [
       { path: "/chatbot/keywords", permission: "chatbot.keywords" },
       { path: "/chatbot/flows", permission: "flows.chatbot" },
       { path: "/chatbot/ai", permission: "chatbot.ai" },
+      { path: "/chatbot/transfers", permission: "transfers" },
     ],
   },
-  { path: "/chatbot/transfers", permission: "transfers" },
   { path: "/analytics/agents", permission: "analytics.agents" },
   { path: "/analytics/meta-insights", permission: "analytics" },
   { path: "/templates", permission: "templates" },
@@ -306,6 +324,38 @@ const navigationOrder = [
   },
 ];
 
+function normalizedRoleName(
+  authStore: ReturnType<typeof useAuthStore>,
+): string {
+  return String(authStore.userRole || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+}
+
+function isAdminUser(authStore: ReturnType<typeof useAuthStore>): boolean {
+  const roleName = normalizedRoleName(authStore);
+  return (
+    authStore.user?.is_super_admin === true ||
+    roleName === "admin" ||
+    roleName === "super_admin" ||
+    roleName === "super-admin"
+  );
+}
+
+function isManagerOrAdminUser(
+  authStore: ReturnType<typeof useAuthStore>,
+): boolean {
+  const roleName = normalizedRoleName(authStore);
+  return (
+    authStore.user?.is_super_admin === true ||
+    roleName === "admin" ||
+    roleName === "manager" ||
+    roleName === "super_admin" ||
+    roleName === "super-admin"
+  );
+}
+
 // Find the first accessible route for the user
 function getFirstAccessibleRoute(
   authStore: ReturnType<typeof useAuthStore>,
@@ -332,6 +382,24 @@ function getFirstAccessibleRoute(
 // Navigation guard
 router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore();
+  const licenseStore = useLicenseStore();
+
+  try {
+    await licenseStore.fetchBootstrap();
+  } catch {
+    if (to.name !== "activate") {
+      return next({ name: "activate" });
+    }
+  }
+
+  const allowWhileLocked =
+    to.name === "activate" ||
+    to.name === "license-settings" ||
+    to.name === "sso-callback";
+
+  if (licenseStore.isLocked && !allowWhileLocked) {
+    return next({ name: "activate", query: { redirect: to.fullPath } });
+  }
 
   // Check if route requires auth
   if (to.meta.requiresAuth !== false) {
@@ -358,12 +426,36 @@ router.beforeEach(async (to, _from, next) => {
     }
   } else {
     // Redirect to appropriate page if already logged in
+    if (authStore.isAuthenticated && to.name === "activate") {
+      if (isAdminUser(authStore)) {
+        return next({ name: "license-settings" });
+      }
+      return next({ path: getFirstAccessibleRoute(authStore) });
+    }
+
     if (
+      !licenseStore.isLocked &&
       authStore.isAuthenticated &&
       (to.name === "login" || to.name === "register")
     ) {
+      if (licenseStore.showQuotaOverage) {
+        return next({ name: "license-cleanup" });
+      }
       return next({ path: getFirstAccessibleRoute(authStore) });
     }
+  }
+
+  const allowWhileOverage =
+    to.name === "activate" ||
+    to.name === "license-cleanup" ||
+    to.name === "sso-callback";
+
+  if (
+    licenseStore.showQuotaOverage &&
+    authStore.isAuthenticated &&
+    !allowWhileOverage
+  ) {
+    return next({ name: "license-cleanup", query: { redirect: to.fullPath } });
   }
 
   // Provider-based access: block Meta-only routes when using whatsmeow
@@ -376,21 +468,13 @@ router.beforeEach(async (to, _from, next) => {
 
   // Role-based access: block admin-only routes for non-admins
   if (to.meta.adminOnly) {
-    const isAdmin =
-      authStore.user?.is_super_admin === true ||
-      (authStore.userRole || "").toLowerCase() === "admin";
-    if (!isAdmin) {
+    if (!isAdminUser(authStore)) {
       return next({ path: getFirstAccessibleRoute(authStore) });
     }
   }
 
   if (to.meta.managerOrAdminOnly) {
-    const roleName = (authStore.userRole || "").toLowerCase();
-    const isManagerOrAdmin =
-      authStore.user?.is_super_admin === true ||
-      roleName === "admin" ||
-      roleName === "manager";
-    if (!isManagerOrAdmin) {
+    if (!isManagerOrAdminUser(authStore)) {
       return next({ path: getFirstAccessibleRoute(authStore) });
     }
   }

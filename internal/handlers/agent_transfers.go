@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -11,8 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+var errTransferAssigneeInstanceAccess = errors.New("transfer assignee does not have instance access")
 
 // agentTransferRow represents a flat row result from the JOINed query
 type agentTransferRow struct {
@@ -20,7 +24,7 @@ type agentTransferRow struct {
 	ID                    uuid.UUID             `gorm:"column:id"`
 	OrganizationID        uuid.UUID             `gorm:"column:organization_id"`
 	ContactID             uuid.UUID             `gorm:"column:contact_id"`
-	WhatsAppAccount       string                `gorm:"column:whatsapp_account"`
+	WhatsAppAccount       string                `gorm:"column:whats_app_account"`
 	PhoneNumber           string                `gorm:"column:phone_number"`
 	Status                models.TransferStatus `gorm:"column:status"`
 	Source                models.TransferSource `gorm:"column:source"`
@@ -96,6 +100,28 @@ type AgentTransferResponse struct {
 	EscalatedAt           *string `json:"escalated_at,omitempty"`
 	PickedUpAt            *string `json:"picked_up_at,omitempty"`
 	ExpiresAt             *string `json:"expires_at,omitempty"`
+}
+
+func applyTransferRestrictedInstanceVisibilityFilter(query *gorm.DB, restrictedInstanceIDs []uuid.UUID) *gorm.DB {
+	if query == nil || len(restrictedInstanceIDs) == 0 {
+		return query
+	}
+	return query.Where("contacts.instance_id IN ?", restrictedInstanceIDs)
+}
+
+func (a *App) validateTransferAssigneeAccess(orgID uuid.UUID, agentID *uuid.UUID, contact *models.Contact) error {
+	if a == nil || agentID == nil || contact == nil {
+		return nil
+	}
+
+	allowed, err := a.canUserSeeContactInstance(orgID, *agentID, contact)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return errTransferAssigneeInstanceAccess
+	}
+	return nil
 }
 
 // ListAgentTransfers lists agent transfers for the organization
@@ -206,6 +232,13 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 		}
 	}
 
+	restrictedInstanceIDs, err := a.getRestrictedInstancesForUser(orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance visibility for transfers", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch transfers", nil, "")
+	}
+	query = applyTransferRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+
 	// Filter based on permissions
 	if !hasFullAccess {
 		// Users without full access see their assigned transfers + unassigned in their team queues + general queue
@@ -221,6 +254,10 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	// Get total count before pagination (for frontend to know if more exist)
 	var totalCount int64
 	countQuery := a.DB.Table("agent_transfers").Where("agent_transfers.organization_id = ?", orgID)
+	if len(restrictedInstanceIDs) > 0 {
+		countQuery = countQuery.Joins("JOIN contacts ON contacts.id = agent_transfers.contact_id")
+		countQuery = applyTransferRestrictedInstanceVisibilityFilter(countQuery, restrictedInstanceIDs)
+	}
 	if status != "" {
 		countQuery = countQuery.Where("agent_transfers.status = ?", status)
 	}
@@ -250,9 +287,13 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 
 	// Get queue counts
 	var generalQueueCount int64
-	a.DB.Model(&models.AgentTransfer{}).
-		Where("organization_id = ? AND status = ? AND agent_id IS NULL AND team_id IS NULL", orgID, models.TransferStatusActive).
-		Count(&generalQueueCount)
+	generalQueueQuery := a.DB.Model(&models.AgentTransfer{}).
+		Where("organization_id = ? AND status = ? AND agent_id IS NULL AND team_id IS NULL", orgID, models.TransferStatusActive)
+	if len(restrictedInstanceIDs) > 0 {
+		generalQueueQuery = generalQueueQuery.Joins("JOIN contacts ON contacts.id = agent_transfers.contact_id")
+		generalQueueQuery = applyTransferRestrictedInstanceVisibilityFilter(generalQueueQuery, restrictedInstanceIDs)
+	}
+	generalQueueQuery.Count(&generalQueueCount)
 
 	// Get team queue counts (filtered by user's teams for non-admin)
 	type TeamQueueCount struct {
@@ -263,6 +304,10 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	teamCountQuery := a.DB.Model(&models.AgentTransfer{}).
 		Select("team_id, COUNT(*) as count").
 		Where("organization_id = ? AND status = ? AND agent_id IS NULL AND team_id IS NOT NULL", orgID, models.TransferStatusActive)
+	if len(restrictedInstanceIDs) > 0 {
+		teamCountQuery = teamCountQuery.Joins("JOIN contacts ON contacts.id = agent_transfers.contact_id")
+		teamCountQuery = applyTransferRestrictedInstanceVisibilityFilter(teamCountQuery, restrictedInstanceIDs)
+	}
 
 	// Filter team counts by user's team membership for users without full access
 	if !hasFullAccess && len(userTeamIDs) > 0 {
@@ -391,6 +436,9 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if !a.HasPermission(userID, models.ResourceTransfers, models.ActionWrite, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to create transfers", nil, "")
+	}
 
 	var req CreateAgentTransferRequest
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
@@ -470,6 +518,14 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		// If agent is not available, falls through to queue (agentID remains nil)
 	}
 	// Otherwise, agentID remains nil (goes to queue)
+
+	if err := a.validateTransferAssigneeAccess(orgID, agentID, contact); err != nil {
+		if errors.Is(err, errTransferAssigneeInstanceAccess) {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Assignee does not have access to this WhatsApp account", nil, "")
+		}
+		a.Log.Error("Failed to validate assignee instance access", "error", err, "agent_id", agentID, "contact_id", contact.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate assignee access", nil, "")
+	}
 
 	// Determine source
 	source := req.Source
@@ -633,6 +689,11 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 	transfer, err := findByIDAndOrg[models.AgentTransfer](a.DB, r, transferID, orgID, "Transfer")
 	if err != nil {
 		return nil
+	}
+	if transfer.AgentID != nil && *transfer.AgentID == userID {
+		// Assigned agents can resume their own transfers.
+	} else if !a.HasPermission(userID, models.ResourceTransfers, models.ActionWrite, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to resume transfers", nil, "")
 	}
 
 	if transfer.Status != models.TransferStatusActive {
@@ -895,6 +956,12 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 		userTeamIDs = append(userTeamIDs, m.TeamID)
 	}
 
+	restrictedInstanceIDs, err := a.getRestrictedInstancesForUser(orgID, userID)
+	if err != nil {
+		a.Log.Error("Failed to resolve restricted instance visibility for transfer pickup", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to pick transfer", nil, "")
+	}
+
 	// Use transaction with FOR UPDATE lock to prevent race conditions
 	tx := a.DB.Begin()
 	defer func() {
@@ -907,6 +974,10 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 	query := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 		Where("organization_id = ? AND status = ? AND agent_id IS NULL", orgID, models.TransferStatusActive).
 		Order("transferred_at ASC")
+	if len(restrictedInstanceIDs) > 0 {
+		query = query.Joins("JOIN contacts ON contacts.id = agent_transfers.contact_id")
+		query = applyTransferRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	}
 
 	if teamIDStr != "" {
 		// Pick from specific team
@@ -1185,13 +1256,31 @@ func (a *App) saveAndFinalizeTransfer(transfer *models.AgentTransfer, account *m
 		a.UpdateSLAOnPickup(transfer)
 	}
 
+	if account != nil {
+		if err := a.validateTransferAssigneeAccess(account.OrganizationID, transfer.AgentID, contact); err != nil {
+			if errors.Is(err, errTransferAssigneeInstanceAccess) {
+				a.Log.Warn("Transfer auto-assignment is not allowed for contact instance; falling back to queue",
+					"contact_id", contact.ID,
+					"agent_id", transfer.AgentID,
+					"transfer_id", transfer.ID,
+				)
+				transfer.AgentID = nil
+				transfer.SLA.PickedUpAt = nil
+				transfer.SLA.Breached = false
+				transfer.SLA.BreachedAt = nil
+			} else {
+				return err
+			}
+		}
+	}
+
 	if err := a.DB.Create(transfer).Error; err != nil {
 		return err
 	}
 
 	// Update contact assignment if agent assigned
 	if transfer.AgentID != nil {
-		a.DB.Model(contact).Update("assigned_user_id", transfer.AgentID)
+		a.DB.Model(contact).Updates(chatAssignmentUpdates(transfer.AgentID))
 	}
 
 	// End any active chatbot session

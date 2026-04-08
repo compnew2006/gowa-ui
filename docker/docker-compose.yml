@@ -16,6 +16,8 @@ services:
     volumes:
       - ./uploads:/app/uploads:rw
       - ./config.toml:/app/config.toml:ro
+      - /etc/machine-id:/host/etc/machine-id:ro
+      - /sys/class/dmi/id/product_uuid:/host/sys/class/dmi/id/product_uuid:ro
     command: ["server", "-migrate", "-config", "/app/config.toml"]
 
   # PostgreSQL database

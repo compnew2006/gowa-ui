@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Whatomate License Studio</title>
+    <link rel="stylesheet" href="/assets/studio.css" />
+  </head>
+  <body>
+    <div class="studio-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Vendor-Only License Studio</p>
+          <h1>Issue, verify, and track offline licenses locally.</h1>
+          <p class="hero-copy">
+            This private console never stores the signing key or its path. The
+            browser uploads the key file for a single request, the server signs
+            in memory, then discards it.
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="meta-card">
+            <span>Registry</span>
+            <strong id="registry-path">-</strong>
+          </div>
+          <div class="meta-card">
+            <span>Key ring</span>
+            <strong id="keyring-path">-</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="summary-grid">
+        <article class="summary-card">
+          <span>Total</span>
+          <strong id="summary-total">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>Trials</span>
+          <strong id="summary-trials">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>Paid</span>
+          <strong id="summary-paid">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>Active</span>
+          <strong id="summary-active">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>Expired</span>
+          <strong id="summary-expired">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>Lifetime</span>
+          <strong id="summary-lifetime">0</strong>
+        </article>
+      </section>
+
+      <nav class="tabs" aria-label="License Studio Tabs">
+        <button class="tab is-active" data-tab-target="generate-panel" type="button">
+          Generate
+        </button>
+        <button class="tab" data-tab-target="verify-panel" type="button">
+          Verify
+        </button>
+        <button class="tab" data-tab-target="registry-panel" type="button">
+          Registry
+        </button>
+      </nav>
+
+      <p id="app-message" class="app-message" hidden></p>
+
+      <section id="generate-panel" class="panel is-active" aria-labelledby="generate-tab">
+        <div class="panel-grid">
+          <form id="issue-form" class="card form-card">
+            <div class="card-head">
+              <div>
+                <p class="eyebrow">Issue License</p>
+                <h2>Generate a security key</h2>
+              </div>
+              <span class="pill" id="known-kids-pill">Known KIDs: -</span>
+            </div>
+
+            <label class="field">
+              <span>HWID</span>
+              <textarea
+                id="issue-hwid"
+                name="hwid"
+                rows="3"
+                placeholder="Paste the full HWID from the customer activation page"
+                required
+              ></textarea>
+            </label>
+
+            <div class="field-grid two">
+              <label class="field">
+                <span>KID</span>
+                <input id="issue-kid" name="kid" list="known-kids" value="vendor-1" />
+                <datalist id="known-kids"></datalist>
+              </label>
+              <label class="field">
+                <span>Tier</span>
+                <input id="issue-tier" name="tier" value="starter" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Private Key File</span>
+              <input id="issue-private-key" name="private_key_file" type="file" required />
+              <small>The private key file is read for this request only and never stored.</small>
+            </label>
+
+            <div class="field">
+              <span>License Mode</span>
+              <div class="segmented" role="radiogroup" aria-label="License Mode">
+                <label class="segment is-selected">
+                  <input type="radio" name="license_mode" value="paid" checked />
+                  <span>Paid</span>
+                </label>
+                <label class="segment">
+                  <input type="radio" name="license_mode" value="trial" />
+                  <span>Trial</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field-grid two">
+              <label class="field" id="duration-field">
+                <span>Duration</span>
+                <input
+                  id="issue-duration"
+                  name="duration"
+                  value="365d"
+                  placeholder="365d, 55d, 120 days, or lifetime"
+                />
+                <small>Use any positive number of days like <code>55d</code> or type <code>lifetime</code>.</small>
+              </label>
+              <label class="field hidden" id="trial-field">
+                <span>Trial</span>
+                <select id="issue-trial" name="trial">
+                  <option value="">Select a trial</option>
+                  <option value="7d">7 days</option>
+                  <option value="14d">14 days</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field-grid four">
+              <label class="field">
+                <span>Orgs</span>
+                <input id="issue-orgs" name="orgs" type="number" min="0" value="1" />
+              </label>
+              <label class="field">
+                <span>Users</span>
+                <input id="issue-users" name="users" type="number" min="0" value="5" />
+              </label>
+              <label class="field">
+                <span>WA Endpoints</span>
+                <input id="issue-wa-endpoints" name="wa_endpoints" type="number" min="0" value="5" />
+              </label>
+              <label class="field">
+                <span>Workers</span>
+                <input id="issue-workers" name="workers" type="number" min="0" value="2" />
+              </label>
+            </div>
+
+            <button class="primary-button" type="submit">Generate</button>
+          </form>
+
+          <section class="card output-card">
+            <div class="card-head">
+              <div>
+                <p class="eyebrow">Generated Output</p>
+                <h2>Security Key</h2>
+              </div>
+              <button id="copy-token-button" class="secondary-button" type="button">
+                Copy
+              </button>
+            </div>
+            <textarea
+              id="generated-token"
+              rows="12"
+              readonly
+              placeholder="Generated token appears here"
+            ></textarea>
+            <dl class="meta-grid" id="generated-meta">
+              <div>
+                <dt>License ID</dt>
+                <dd id="meta-license-id">-</dd>
+              </div>
+              <div>
+                <dt>Family ID</dt>
+                <dd id="meta-family-id">-</dd>
+              </div>
+              <div>
+                <dt>Kind</dt>
+                <dd id="meta-kind">-</dd>
+              </div>
+              <div>
+                <dt>Expires</dt>
+                <dd id="meta-expiry">-</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+      </section>
+
+      <section id="verify-panel" class="panel">
+        <div class="panel-grid verify-grid">
+          <section class="card form-card">
+            <div class="card-head">
+              <div>
+                <p class="eyebrow">Verify Token</p>
+                <h2>Check if a token is valid</h2>
+              </div>
+            </div>
+            <label class="field">
+              <span>Security Key</span>
+              <textarea
+                id="verify-token"
+                rows="12"
+                placeholder="Paste a generated token"
+              ></textarea>
+            </label>
+            <button id="verify-button" class="primary-button" type="button">Verify</button>
+          </section>
+
+          <section class="card verify-result-card">
+            <div class="card-head">
+              <div>
+                <p class="eyebrow">Verification Result</p>
+                <h2 id="verify-status-title">No token checked yet</h2>
+              </div>
+              <span id="verify-status-pill" class="pill">Waiting</span>
+            </div>
+            <p id="verify-message" class="hero-copy">
+              Use the Verify tab to check whether a token is valid and whether it
+              already exists in the local registry.
+            </p>
+            <pre id="verify-json" class="json-block">{}</pre>
+          </section>
+        </div>
+      </section>
+
+      <section id="registry-panel" class="panel">
+        <section class="card registry-card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Local Registry</p>
+              <h2>Issued licenses</h2>
+            </div>
+            <button id="refresh-registry-button" class="secondary-button" type="button">
+              Refresh
+            </button>
+          </div>
+
+          <div class="field-grid four compact">
+            <label class="field">
+              <span>HWID</span>
+              <input id="filter-hwid" placeholder="Search HWID" />
+            </label>
+            <label class="field">
+              <span>Tier</span>
+              <input id="filter-tier" placeholder="starter" />
+            </label>
+            <label class="field">
+              <span>Kind</span>
+              <select id="filter-kind">
+                <option value="">All</option>
+                <option value="trial">Trial</option>
+                <option value="paid">Paid</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Status</span>
+              <select id="filter-status">
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="expired">Expired</option>
+                <option value="lifetime">Lifetime</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="table-wrap">
+            <table class="registry-table">
+              <thead>
+                <tr>
+                  <th>HWID</th>
+                  <th>Tier</th>
+                  <th>Kind</th>
+                  <th>Duration</th>
+                  <th>Quota</th>
+                  <th>Issued</th>
+                  <th>Expires</th>
+                  <th>Status</th>
+                  <th>Token</th>
+                </tr>
+              </thead>
+              <tbody id="registry-body">
+                <tr>
+                  <td colspan="9" class="empty-state">No licenses issued yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </div>
+
+    <script src="/assets/studio.js" defer></script>
+  </body>
+</html>

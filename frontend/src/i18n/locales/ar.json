@@ -227,6 +227,7 @@
     "metaInsights": "رؤى ميتا",
     "templates": "القوالب",
     "campaigns": "الحملات",
+    "license": "الترخيص",
     "closedChats": "الدردشات المغلقة",
     "general": "عام",
     "accounts": "الحسابات",
@@ -2552,6 +2553,115 @@
       "reconnectFailed": "فشل في إعادة إنشاء رمز QR",
       "pairingCodeGenerated": "تم إنشاء رمز الاقتران. أدخله في الأجهزة المرتبطة في واتساب.",
       "pairingCodeFailed": "فشل في طلب رمز الاقتران"
+    }
+  },
+  "licenseSettings": {
+    "title": "الترخيص",
+    "subtitle": "أدر التفعيل دون اتصال، والحصص، وحالة التجديد لهذا النشر.",
+    "actions": {
+      "refresh": "تحديث",
+      "refreshStatus": "تحديث الحالة",
+      "copyHwid": "نسخ HWID",
+      "activateLicense": "تفعيل الترخيص"
+    },
+    "status": {
+      "active": "نشط",
+      "grace": "فترة سماح",
+      "locked": "مقفل",
+      "activationRequired": "التفعيل مطلوب",
+      "unknown": "غير معروف",
+      "licensed": "مرخّص",
+      "quotaOverage": "تجاوز الحصة"
+    },
+    "licenseKind": {
+      "trial": "تجريبي",
+      "paid": "مدفوع"
+    },
+  "duration": {
+    "lifetime": "مدى الحياة",
+    "oneDay": "يوم واحد",
+    "days": "{count} يوم",
+    "noExpiry": "لا تنتهي",
+    "unavailable": "غير متاح"
+  },
+    "summary": {
+      "paused": "تم إيقاف الاستخدام الطبيعي للتطبيق حتى يعود هذا النشر إلى حدود الحصة المسموح بها.",
+      "grace": "هذا الترخيص ضمن فترة السماح ويجب تجديده قبل الموعد النهائي.",
+      "expiresToday": "ينتهي هذا الترخيص اليوم.",
+      "expiresInOneDay": "ينتهي هذا الترخيص خلال يوم واحد.",
+      "expiresInDays": "ينتهي هذا الترخيص خلال {count} يوم.",
+      "healthy": "هذا النشر مرخّص ويعمل بشكل طبيعي."
+    },
+    "sections": {
+      "deploymentStatus": "حالة النشر",
+      "overview": "نظرة عامة على الترخيص",
+      "currentOrgUsage": "الاستخدام الحالي للمؤسسات",
+      "serverIdentity": "هوية الخادم",
+      "activation": "تفعيل أو تجديد"
+    },
+    "descriptions": {
+      "orgUsage": "راجع استخدام كل مؤسسة مقارنةً بالحدود المرخّصة.",
+      "serverIdentity": "انسخ HWID وأرسله إلى المورّد للحصول على مفتاح أمان موقّع لهذا المضيف تحديداً.",
+      "activation": "ألصق مفتاح الأمان الموقّع دون اتصال لتفعيل الترخيص الحالي أو تجديده أو استبداله."
+    },
+    "alerts": {
+      "graceTitle": "فترة السماح",
+      "graceDescription": "جدّد قبل {deadline} لتجنب القفل الكامل.",
+      "quotaTitle": "تجاوز الحصة",
+      "quotaDescription": "يتجاوز هذا النشر الحصة المرخّصة. احذف عدداً كافياً من المؤسسات أو المستخدمين أو نقاط نهاية واتساب لاستئناف الاستخدام الطبيعي للتطبيق.",
+      "expiryTitle": "الترخيص سينتهي قريباً"
+    },
+  "quota": {
+    "organizations": "المؤسسات",
+    "usersPerOrg": "المستخدمون / المؤسسة",
+    "whatsAppEndpointsPerOrg": "نقاط واتساب / المؤسسة",
+    "subscriptionDays": "أيام الاشتراك",
+    "overBy": "تجاوز بمقدار {count}",
+    "withinCapacity": "ضمن السعة المرخّصة"
+  },
+    "organizationUsage": {
+      "summary": "{users} مستخدم، {endpoints} نقطة نهاية"
+    },
+    "banner": {
+      "titleGrace": "فترة سماح الترخيص",
+      "titleQuotaOverage": "تجاوز حصة الترخيص",
+      "titleExpiry": "انتهاء الترخيص يقترب",
+      "titleActive": "الترخيص نشط",
+      "theGraceDeadline": "موعد نهاية فترة السماح",
+      "messageGrace": "جدّد قبل {deadline} لتجنب القفل الكامل.",
+      "messageQuotaOverage": "هذا النشر يتجاوز الحصة المرخّصة الجديدة. تم إيقاف Whatomate حتى يتم حذف عدد كافٍ من المؤسسات أو المستخدمين أو نقاط نهاية واتساب.",
+      "messageExpiringSoon": "سينتهي هذا الترخيص قريبًا.",
+      "messageExpiresToday": "ينتهي هذا الترخيص اليوم.",
+      "messageActiveWithDaysRemaining": "هذا الترخيص نشط ويتبقى له {count} يوم.",
+      "messageActive": "هذا الترخيص نشط.",
+      "messageExpiresInDays": "ينتهي هذا الترخيص خلال {count} يوم.",
+      "remainingExpiresToday": "ينتهي اليوم",
+      "remainingOneDay": "يوم واحد متبقٍ",
+      "remainingDays": "متبقي {count} يوم",
+      "resolveOverage": "معالجة التجاوز",
+      "manageLicense": "إدارة الترخيص"
+    },
+    "fields": {
+      "hwid": "HWID",
+      "securityKey": "مفتاح الأمان",
+      "shortIdValue": "المعرّف المختصر: {value}"
+    },
+    "placeholders": {
+      "pending": "قيد الانتظار...",
+      "deadline": "الموعد النهائي",
+      "securityKey": "ألصق رمز الترخيص الموقّع دون اتصال"
+    },
+    "errors": {
+      "activationBlocked": "تم حظر التفعيل"
+    },
+    "toast": {
+      "failedToLoadStatus": "فشل تحميل حالة الترخيص",
+      "hwidUnavailable": "HWID غير متاح بعد",
+      "hwidCopied": "تم نسخ HWID",
+      "failedToCopyHwid": "فشل نسخ HWID",
+      "pasteSecurityKey": "ألصق مفتاح الأمان أولاً",
+      "activationSuccess": "تم تفعيل الترخيص بنجاح",
+      "activationFailed": "فشل تفعيل مفتاح الأمان"
     }
   },
   "marketingRedirect": {

@@ -1,25 +1,35 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
+import { useLicenseStore } from "@/stores/license";
 import { localeDirectionManager } from "@/i18n/locale-direction";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageSquare, Menu, Pin, PinOff, X } from "lucide-vue-next";
+import { Badge } from "@/components/ui/badge";
+import {
+  MessageSquare,
+  Menu,
+  Pin,
+  PinOff,
+  ShieldAlert,
+  X,
+} from "lucide-vue-next";
 import { wsService } from "@/services/websocket";
 import { authService } from "@/services/api";
 import OrganizationSwitcher from "./OrganizationSwitcher.vue";
 import UserMenu from "./UserMenu.vue";
 import { navigationItems } from "./navigation";
 
-const { locale } = useI18n(); // Enable $t() in template
+const { locale, t } = useI18n(); // Enable localized banner strings in template
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const configStore = useConfigStore();
+const licenseStore = useLicenseStore();
 const SIDEBAR_PINNED_STORAGE_KEY = "layout.sidebarPinnedClosed";
 const LEGACY_SIDEBAR_PINNED_OPEN_STORAGE_KEY = "layout.sidebarPinnedOpen";
 const pinnedClosed = ref(false);
@@ -60,15 +70,193 @@ const mobileSidebarClosedClass = computed(() =>
     ? "translate-x-full md:translate-x-0"
     : "-translate-x-full md:translate-x-0",
 );
+const normalizedRoleName = computed(() =>
+  String(authStore.userRole || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_"),
+);
 const isAdminUser = computed(
   () =>
     authStore.user?.is_super_admin === true ||
-    (authStore.userRole || "").toLowerCase() === "admin",
+    normalizedRoleName.value === "admin" ||
+    normalizedRoleName.value === "super_admin" ||
+    normalizedRoleName.value === "super-admin",
 );
 const isManagerOrAdminUser = computed(
   () =>
     authStore.user?.is_super_admin === true ||
-    ["admin", "manager"].includes((authStore.userRole || "").toLowerCase()),
+    ["admin", "manager", "super_admin", "super-admin"].includes(
+      normalizedRoleName.value,
+    ),
+);
+const licenseBannerDismissed = ref(false);
+const canSeeLicenseBanner = computed(() => isAdminUser.value);
+const licenseBannerStorageKey = computed(() =>
+  authStore.user?.id ? `license.banner.dismissed.${authStore.user.id}` : "",
+);
+const showLicenseBanner = computed(() => {
+  if (!canSeeLicenseBanner.value || licenseBannerDismissed.value) {
+    return false;
+  }
+  return licenseStore.loaded && licenseStore.state.enabled;
+});
+const bannerVariant = computed(() => {
+  if (licenseStore.isGrace || licenseStore.showQuotaOverage) {
+    return "warning";
+  }
+  return "info";
+});
+const bannerPanelClass = computed(() => {
+  if (bannerVariant.value === "warning") {
+    return "border-yellow-500/50 bg-yellow-50 text-yellow-800 dark:border-yellow-500/30 dark:bg-yellow-950 dark:text-yellow-200";
+  }
+  return "border-blue-500/50 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-950 dark:text-blue-200";
+});
+const bannerTitle = computed(() => {
+  if (licenseStore.isGrace) {
+    return t("licenseSettings.banner.titleGrace");
+  }
+  if (licenseStore.showQuotaOverage) {
+    return t("licenseSettings.banner.titleQuotaOverage");
+  }
+  if (licenseStore.showExpiryWarning) {
+    return t("licenseSettings.banner.titleExpiry");
+  }
+  return t("licenseSettings.banner.titleActive");
+});
+const bannerMessage = computed(() => {
+  if (licenseStore.isGrace) {
+    return t("licenseSettings.banner.messageGrace", {
+      deadline:
+        licenseStore.state.grace_deadline ||
+        t("licenseSettings.banner.theGraceDeadline"),
+    });
+  }
+  if (licenseStore.showQuotaOverage) {
+    return t("licenseSettings.banner.messageQuotaOverage");
+  }
+  if (licenseStore.daysUntilExpiry === null) {
+    return t("licenseSettings.banner.messageExpiringSoon");
+  }
+  if (licenseStore.daysUntilExpiry === 0) {
+    return t("licenseSettings.banner.messageExpiresToday");
+  }
+  if (!licenseStore.showExpiryWarning) {
+    if (
+      licenseStore.state.expires_at &&
+      licenseStore.daysUntilExpiry !== null
+    ) {
+      return t("licenseSettings.banner.messageActiveWithDaysRemaining", {
+        count: licenseStore.daysUntilExpiry,
+      });
+    }
+    return t("licenseSettings.banner.messageActive");
+  }
+  return t("licenseSettings.banner.messageExpiresInDays", {
+    count: licenseStore.daysUntilExpiry,
+  });
+});
+const bannerLicenseMetaLabel = computed(() => {
+  if (!licenseStore.state.license_kind) {
+    return "";
+  }
+  const licenseKindLabel =
+    licenseStore.state.license_kind === "trial"
+      ? t("licenseSettings.licenseKind.trial")
+      : licenseStore.state.license_kind === "paid"
+        ? t("licenseSettings.licenseKind.paid")
+        : licenseStore.state.license_kind;
+
+  let durationLabel = licenseStore.state.duration_label || "";
+  const normalizedDuration = durationLabel.trim().toLowerCase();
+  if (normalizedDuration === "lifetime") {
+    durationLabel = t("licenseSettings.duration.lifetime");
+  } else {
+    const dayMatch = normalizedDuration.match(/^(\d+)d$/);
+    if (dayMatch) {
+      const dayCount = Number(dayMatch[1]);
+      durationLabel =
+        dayCount === 1
+          ? t("licenseSettings.duration.oneDay")
+          : t("licenseSettings.duration.days", { count: dayCount });
+    }
+  }
+
+  if (durationLabel) {
+    return `${licenseKindLabel} • ${durationLabel}`;
+  }
+  return licenseKindLabel;
+});
+const bannerRemainingLabel = computed(() => {
+  if (!licenseStore.state.expires_at) {
+    return t("licenseSettings.duration.lifetime");
+  }
+
+  if (licenseStore.daysUntilExpiry === null) {
+    return "";
+  }
+
+  if (licenseStore.daysUntilExpiry <= 0) {
+    return t("licenseSettings.banner.remainingExpiresToday");
+  }
+
+  if (licenseStore.daysUntilExpiry === 1) {
+    return t("licenseSettings.banner.remainingOneDay");
+  }
+
+  return t("licenseSettings.banner.remainingDays", {
+    count: licenseStore.daysUntilExpiry,
+  });
+});
+const bannerActionTo = computed(() =>
+  licenseStore.showQuotaOverage ? "/license-cleanup" : "/settings/license",
+);
+const bannerActionLabel = computed(() =>
+  licenseStore.showQuotaOverage
+    ? t("licenseSettings.banner.resolveOverage")
+    : t("licenseSettings.banner.manageLicense"),
+);
+
+function syncBannerDismissedState() {
+  if (typeof window === "undefined") {
+    licenseBannerDismissed.value = false;
+    return;
+  }
+
+  const storageKey = licenseBannerStorageKey.value;
+  licenseBannerDismissed.value =
+    storageKey !== "" && window.sessionStorage.getItem(storageKey) === "true";
+}
+
+function dismissLicenseBanner() {
+  licenseBannerDismissed.value = true;
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const storageKey = licenseBannerStorageKey.value;
+  if (storageKey) {
+    window.sessionStorage.setItem(storageKey, "true");
+  }
+}
+
+watch(
+  () => [licenseStore.isLocked, licenseStore.showQuotaOverage],
+  ([locked, overage]) => {
+    if (locked || overage) {
+      wsService.disconnect();
+    }
+  },
+);
+
+watch(
+  () => licenseBannerStorageKey.value,
+  () => {
+    syncBannerDismissedState();
+  },
+  { immediate: true },
 );
 
 // Connect WebSocket on mount using short-lived WS token
@@ -85,14 +273,16 @@ onMounted(() => {
     // Load app config (provider & feature flags)
     configStore.fetchConfig();
 
-    wsService.connect(async () => {
-      try {
-        const resp = await authService.getWSToken();
-        return resp.data.data.token;
-      } catch {
-        return null;
-      }
-    });
+    if (!licenseStore.showQuotaOverage) {
+      wsService.connect(async () => {
+        try {
+          const resp = await authService.getWSToken();
+          return resp.data.data.token;
+        } catch {
+          return null;
+        }
+      });
+    }
   }
 });
 
@@ -322,11 +512,7 @@ const handleLogout = async () => {
           to="/"
           :class="[
             'flex min-w-0 items-center gap-2 overflow-hidden',
-            isDesktopSidebarExpanded
-              ? isRTL
-                ? 'pl-10'
-                : 'pr-10'
-              : 'mx-auto',
+            isDesktopSidebarExpanded ? (isRTL ? 'pl-10' : 'pr-10') : 'mx-auto',
           ]"
         >
           <div
@@ -468,6 +654,51 @@ const handleLogout = async () => {
       ]"
       role="main"
     >
+      <div
+        v-if="showLicenseBanner"
+        class="border-b border-border/70 bg-background/80 px-4 py-3 backdrop-blur-sm md:px-6"
+      >
+        <div
+          :class="[
+            'mx-auto flex max-w-6xl items-center gap-3 overflow-hidden rounded-lg border px-4 py-2 text-xs sm:text-sm',
+            bannerPanelClass,
+          ]"
+        >
+          <ShieldAlert class="h-4 w-4 shrink-0" />
+          <div
+            class="min-w-0 flex flex-1 items-center gap-2 overflow-hidden whitespace-nowrap"
+          >
+            <span class="shrink-0 font-medium">{{ bannerTitle }}</span>
+            <Badge v-if="licenseStore.state.tier" variant="outline">
+              {{ licenseStore.state.tier }}
+            </Badge>
+            <Badge v-if="bannerLicenseMetaLabel" variant="outline">
+              {{ bannerLicenseMetaLabel }}
+            </Badge>
+            <Badge v-if="bannerRemainingLabel" variant="outline">
+              {{ bannerRemainingLabel }}
+            </Badge>
+            <span class="min-w-0 truncate text-current/90">
+              {{ bannerMessage }}
+            </span>
+          </div>
+          <RouterLink
+            :to="bannerActionTo"
+            class="shrink-0 font-medium text-primary whitespace-nowrap underline-offset-4 hover:underline"
+          >
+            {{ bannerActionLabel }}
+          </RouterLink>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-7 w-7 shrink-0 text-current/70 hover:text-current"
+            aria-label="Hide license banner"
+            @click="dismissLicenseBanner"
+          >
+            <X class="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
       <RouterView />
     </main>
   </div>

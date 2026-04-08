@@ -30,6 +30,7 @@ func TestNewPostgres_Success(t *testing.T) {
 		Password:        "testpass",
 		Name:            "testdb",
 		SSLMode:         "disable",
+		LogSQL:          false,
 		MaxOpenConns:    25,
 		MaxIdleConns:    5,
 		ConnMaxLifetime: 300,
@@ -66,7 +67,7 @@ func TestNewPostgres_Success(t *testing.T) {
 		cfg.Name,
 		cfg.SSLMode,
 	), capturedDSN)
-	assert.Equal(t, logger.Info, capturedLevel)
+	assert.Equal(t, logger.Silent, capturedLevel)
 
 	pool, err := db.DB()
 	require.NoError(t, err)
@@ -96,6 +97,7 @@ func TestNewPostgres_InvalidConfig(t *testing.T) {
 				Password:        "testpass",
 				Name:            "testdb",
 				SSLMode:         "disable",
+				LogSQL:          false,
 				MaxOpenConns:    25,
 				MaxIdleConns:    5,
 				ConnMaxLifetime: 300,
@@ -111,6 +113,7 @@ func TestNewPostgres_InvalidConfig(t *testing.T) {
 				Password:        "testpass",
 				Name:            "testdb",
 				SSLMode:         "disable",
+				LogSQL:          false,
 				MaxOpenConns:    25,
 				MaxIdleConns:    5,
 				ConnMaxLifetime: 300,
@@ -139,6 +142,7 @@ func TestNewPostgres_ConnectorFailure(t *testing.T) {
 		Password:        "testpass",
 		Name:            "testdb",
 		SSLMode:         "disable",
+		LogSQL:          false,
 		MaxOpenConns:    25,
 		MaxIdleConns:    5,
 		ConnMaxLifetime: 300,
@@ -149,6 +153,44 @@ func TestNewPostgres_ConnectorFailure(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "failed to connect to database")
+}
+
+func TestNewPostgres_LogSQLEnabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.DatabaseConfig{
+		Host:            "localhost",
+		Port:            5432,
+		User:            "testuser",
+		Password:        "testpass",
+		Name:            "testdb",
+		SSLMode:         "disable",
+		LogSQL:          true,
+		MaxOpenConns:    25,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: 300,
+	}
+
+	sqlDB, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	gormDB, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB,
+	}), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	require.NoError(t, err)
+
+	var capturedLevel logger.LogLevel
+
+	_, err = newPostgresWithConnector(cfg, true, func(_ string, logLevel logger.LogLevel) (*gorm.DB, error) {
+		capturedLevel = logLevel
+		return gormDB, nil
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, logger.Info, capturedLevel)
 }
 
 // TestGetMigrationModels tests that all expected models are included

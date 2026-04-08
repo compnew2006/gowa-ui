@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
@@ -513,6 +514,9 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 	}
 	if err := validatePasswordStrength(req.Password); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "password")
+	}
+	if !a.checkQuotaOrRespond(r, license.ResourceUsers, orgID) {
+		return nil
 	}
 
 	// Determine role

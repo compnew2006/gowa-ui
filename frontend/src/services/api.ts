@@ -65,6 +65,14 @@ export const api: AxiosInstance = axios.create({
   },
 });
 
+type LicenseLockedHandler = (error: AxiosError) => void;
+
+let licenseLockedHandler: LicenseLockedHandler | null = null;
+
+export function setLicenseLockedHandler(handler: LicenseLockedHandler | null) {
+  licenseLockedHandler = handler;
+}
+
 type JsonRecord = Record<string, unknown>;
 
 export interface CurrentUserSettingsResponse {
@@ -123,6 +131,11 @@ api.interceptors.response.use(
 
     // Skip token refresh logic for auth endpoints
     const isAuthEndpoint = originalRequest?.url?.startsWith("/auth/");
+
+    if (error.response?.status === 423) {
+      licenseLockedHandler?.(error);
+      return Promise.reject(error);
+    }
 
     // Handle 401 errors - try to refresh token (but not for auth endpoints)
     if (
@@ -244,6 +257,7 @@ export const apiKeysService = {
 
 export const accountsService = {
   list: () => api.get("/accounts"),
+  delete: (id: string) => api.delete(`/accounts/${id}`),
 };
 
 export const contactsService = {

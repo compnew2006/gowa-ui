@@ -41,6 +41,17 @@ func (a *App) wsUpgrader() websocket.FastHTTPUpgrader {
 // Authentication is performed via message-based auth after the upgrade:
 // the client must send {"type":"auth","payload":{"token":"<jwt>"}} within 5 seconds.
 func (a *App) WebSocketHandler(r *fastglue.Request) error {
+	if a.License != nil && a.License.IsLocked() {
+		return r.SendErrorEnvelope(fasthttp.StatusLocked, "A valid license is required to open WebSocket connections", nil, "")
+	}
+	if a.License != nil && a.License.RequiresQuotaCleanup() {
+		return r.SendErrorEnvelope(fasthttp.StatusLocked, "License quota overage requires cleanup before WebSocket connections can resume", map[string]any{
+			"code":         "license_quota_overage",
+			"cleanup_url":  "/license-cleanup",
+			"activate_url": "/activate",
+		}, "")
+	}
+
 	// Require a valid token in the HTTP handshake request before upgrade to
 	// prevent unauthenticated connection exhaustion.
 	tokenString, err := wsTokenFromRequest(r)

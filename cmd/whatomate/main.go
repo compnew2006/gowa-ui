@@ -16,6 +16,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/database"
 	"github.com/compnew2006/whatomate/internal/frontend"
 	"github.com/compnew2006/whatomate/internal/handlers"
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/middleware"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/websocket"
@@ -159,6 +160,9 @@ func runServer(args []string) {
 	if err := config.ValidateWebhookVerifyToken(cfg); err != nil {
 		lo.Fatal("Invalid WhatsApp configuration", "error", err)
 	}
+	if err := config.ValidateLicenseConfig(cfg); err != nil {
+		lo.Fatal("Invalid license configuration", "error", err)
+	}
 	if err := config.ValidateDatabaseCredentials(cfg); err != nil {
 		lo.Fatal("Invalid database configuration", "error", err)
 	}
@@ -284,6 +288,14 @@ func runServer(args []string) {
 		HTTPClient:       httpClient,
 	}
 
+	licenseService, err := license.NewService(cfg, db, rdb, lo)
+	if err != nil {
+		lo.Fatal("Failed to initialize license service", "error", err)
+	}
+	app.License = licenseService
+	licenseCtx, licenseCancel := context.WithCancel(context.Background())
+	licenseService.Start(licenseCtx)
+
 	// Wire MessageProvider based on configured provider
 	switch cfg.WhatsApp.Provider {
 	case "whatsmeow":
@@ -316,6 +328,15 @@ func runServer(args []string) {
 	g.Before(middleware.SecurityHeaders())
 	g.Before(middleware.RequestLogger(lo))
 	g.Before(middleware.Recovery(lo))
+	g.Before(func(r *fastglue.Request) *fastglue.Request {
+		if string(r.RequestCtx.Method()) == "OPTIONS" {
+			return r
+		}
+		if app.LicenseBlocksRequest(string(r.RequestCtx.Method()), string(r.RequestCtx.Path())) {
+			return app.SendLicenseBlocked(r)
+		}
+		return r
+	})
 	g.Before(middleware.CSRFProtection())
 
 	// Setup routes
@@ -366,11 +387,18 @@ func runServer(args []string) {
 	var workers []*worker.Worker
 	var workerCancel context.CancelFunc
 	if *numWorkers > 0 {
+		state := licenseService.CurrentState()
+		if state.LicenseID != "" && state.MaxWorkers > 0 && *numWorkers > state.MaxWorkers {
+			lo.Warn("Requested embedded workers exceed licensed maximum; capping worker count",
+				"requested", *numWorkers,
+				"licensed_max", state.MaxWorkers)
+			*numWorkers = state.MaxWorkers
+		}
 		var workerCtx context.Context
 		workerCtx, workerCancel = context.WithCancel(context.Background())
 
 		for i := 0; i < *numWorkers; i++ {
-			w, err := worker.New(cfg, db, rdb, lo, app.MessageProvider)
+			w, err := worker.New(cfg, db, rdb, lo, app.MessageProvider, licenseService)
 			if err != nil {
 				lo.Fatal("Failed to create worker", "error", err, "worker_num", i+1)
 			}
@@ -400,6 +428,8 @@ func runServer(args []string) {
 	lo.Info("Stopping campaign stats subscriber...")
 	app.StopCampaignStatsSubscriber()
 	lo.Info("Campaign stats subscriber stopped")
+
+	licenseCancel()
 
 	// Stop SLA processor
 	lo.Info("Stopping SLA processor...")
@@ -470,6 +500,9 @@ func runWorker(args []string) {
 	if err := config.ValidateDefaultAdmin(cfg); err != nil {
 		lo.Fatal("Invalid default admin configuration", "error", err)
 	}
+	if err := config.ValidateLicenseConfig(cfg); err != nil {
+		lo.Fatal("Invalid license configuration", "error", err)
+	}
 
 	// Set log level based on environment
 	if cfg.App.Environment == "production" {
@@ -531,6 +564,22 @@ func runWorker(args []string) {
 		lo.Info("Worker MessageProvider set to meta")
 	}
 
+	licenseService, err := license.NewService(cfg, db, rdb, lo)
+	if err != nil {
+		lo.Fatal("Failed to initialize license service", "error", err)
+	}
+	licenseCtx, licenseCancel := context.WithCancel(context.Background())
+	defer licenseCancel()
+	licenseService.Start(licenseCtx)
+
+	state := licenseService.CurrentState()
+	if state.LicenseID != "" && state.MaxWorkers > 0 && *workerCount > state.MaxWorkers {
+		lo.Warn("Requested workers exceed licensed maximum; capping worker count",
+			"requested", *workerCount,
+			"licensed_max", state.MaxWorkers)
+		*workerCount = state.MaxWorkers
+	}
+
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -544,7 +593,7 @@ func runWorker(args []string) {
 	errCh := make(chan error, *workerCount)
 
 	for i := 0; i < *workerCount; i++ {
-		w, err := worker.New(cfg, db, rdb, lo, messageProvider)
+		w, err := worker.New(cfg, db, rdb, lo, messageProvider, licenseService)
 		if err != nil {
 			lo.Fatal("Failed to create worker", "error", err, "worker_num", i+1)
 		}
@@ -777,6 +826,8 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Health check
 	g.GET("/health", app.HealthCheck)
 	g.GET("/ready", app.ReadyCheck)
+	g.GET("/api/license/bootstrap", app.GetLicenseBootstrap)
+	g.POST("/api/license/activate", app.ActivateLicense)
 
 	// Auth routes (public, optionally rate-limited)
 	if cfg.RateLimit.Enabled {
@@ -847,6 +898,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		path := string(r.RequestCtx.Path())
 		// Skip auth for public routes
 		if path == "/health" || path == "/ready" ||
+			path == "/api/license/bootstrap" || path == "/api/license/activate" ||
 			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
 			path == "/api/auth/logout" || path == "/api/webhook" || path == "/ws" {
 			return r

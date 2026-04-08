@@ -207,6 +207,9 @@ const canShowAddContact = computed(
 const canRevokeMessages = computed(() =>
   authStore.hasPermission("chat", "delete"),
 );
+const canManageTransfers = computed(() =>
+  authStore.hasPermission("transfers", "write"),
+);
 const isRTL = computed(() =>
   localeDirectionManager.isRTL(String(locale.value)),
 );
@@ -4559,7 +4562,7 @@ async function sendMediaMessage() {
               </TooltipTrigger>
               <TooltipContent>Close Chat</TooltipContent>
             </Tooltip>
-            <Tooltip v-if="!activeTransferId">
+            <Tooltip v-if="canManageTransfers && !activeTransferId">
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"
@@ -4573,7 +4576,7 @@ async function sendMediaMessage() {
               </TooltipTrigger>
               <TooltipContent>{{ $t("chat.transferToAgent") }}</TooltipContent>
             </Tooltip>
-            <Tooltip v-if="activeTransferId">
+            <Tooltip v-if="canManageTransfers && activeTransferId">
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"

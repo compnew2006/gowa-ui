@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/database"
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/nyaruka/phonenumbers"
@@ -420,6 +421,9 @@ func (a *App) CreateOrganization(r *fastglue.Request) error {
 	if req.Name == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Organization name is required", nil, "")
 	}
+	if !a.checkQuotaOrRespond(r, license.ResourceOrganizations, uuid.Nil) {
+		return nil
+	}
 
 	// Start transaction
 	tx := a.DB.Begin()
@@ -707,6 +711,9 @@ func (a *App) AddOrganizationMember(r *fastglue.Request) error {
 		Count(&existingCount)
 	if existingCount > 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "User is already a member of this organization", nil, "")
+	}
+	if !a.checkQuotaOrRespond(r, license.ResourceUsers, orgID) {
+		return nil
 	}
 
 	// Determine role

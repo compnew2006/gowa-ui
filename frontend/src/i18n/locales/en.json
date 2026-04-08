@@ -227,6 +227,7 @@
     "metaInsights": "Meta Insights",
     "templates": "Templates",
     "campaigns": "Campaigns",
+    "license": "License",
     "closedChats": "Closed Chats",
     "general": "General",
     "accounts": "Accounts",
@@ -2577,6 +2578,115 @@
       "reconnectFailed": "Failed to regenerate QR code",
       "pairingCodeGenerated": "Pairing code generated. Enter it in WhatsApp linked devices.",
       "pairingCodeFailed": "Failed to request pairing code"
+    }
+  },
+  "licenseSettings": {
+    "title": "License",
+    "subtitle": "Manage offline activation, quotas, and renewal status for this deployment.",
+    "actions": {
+      "refresh": "Refresh",
+      "refreshStatus": "Refresh status",
+      "copyHwid": "Copy HWID",
+      "activateLicense": "Activate license"
+    },
+    "status": {
+      "active": "Active",
+      "grace": "Grace",
+      "locked": "Locked",
+      "activationRequired": "Activation Required",
+      "unknown": "Unknown",
+      "licensed": "Licensed",
+      "quotaOverage": "Quota overage"
+    },
+    "licenseKind": {
+      "trial": "Trial",
+      "paid": "Paid"
+    },
+  "duration": {
+    "lifetime": "Lifetime",
+    "oneDay": "1 day",
+    "days": "{count} days",
+    "noExpiry": "Does not expire",
+    "unavailable": "Unavailable"
+  },
+    "summary": {
+      "paused": "Normal app usage is paused until the deployment is back within quota.",
+      "grace": "This license is in grace period and must be renewed before the deadline.",
+      "expiresToday": "This license expires today.",
+      "expiresInOneDay": "This license expires in 1 day.",
+      "expiresInDays": "This license expires in {count} days.",
+      "healthy": "This deployment is licensed and operating normally."
+    },
+    "sections": {
+      "deploymentStatus": "Deployment status",
+      "overview": "License overview",
+      "currentOrgUsage": "Current organization usage",
+      "serverIdentity": "Server identity",
+      "activation": "Activate or renew"
+    },
+    "descriptions": {
+      "orgUsage": "Review per-organization usage against the licensed limits.",
+      "serverIdentity": "Copy the HWID and send it to the vendor to get a signed security key for this specific host.",
+      "activation": "Paste the signed offline security key to activate, renew, or replace the current license."
+    },
+    "alerts": {
+      "graceTitle": "Grace period",
+      "graceDescription": "Renew before {deadline} to avoid a hard lock.",
+      "quotaTitle": "Quota overage",
+      "quotaDescription": "This deployment exceeds the licensed quota. Delete enough organizations, users, or WhatsApp endpoints to resume normal app usage.",
+      "expiryTitle": "License expires soon"
+    },
+  "quota": {
+    "organizations": "Organizations",
+    "usersPerOrg": "Users / Org",
+    "whatsAppEndpointsPerOrg": "WA Endpoints / Org",
+    "subscriptionDays": "Subscription Days",
+    "overBy": "Over by {count}",
+    "withinCapacity": "Within licensed capacity"
+  },
+    "organizationUsage": {
+      "summary": "{users} users, {endpoints} endpoints"
+    },
+    "banner": {
+      "titleGrace": "License grace period",
+      "titleQuotaOverage": "License quota overage",
+      "titleExpiry": "License expiry approaching",
+      "titleActive": "License active",
+      "theGraceDeadline": "the grace deadline",
+      "messageGrace": "Renew before {deadline} to avoid a hard lock.",
+      "messageQuotaOverage": "This deployment is above the newly licensed quota. Whatomate is paused until enough organizations, users, or WhatsApp endpoints are deleted.",
+      "messageExpiringSoon": "This license expires soon.",
+      "messageExpiresToday": "This license expires today.",
+      "messageActiveWithDaysRemaining": "This license is active with {count} days remaining.",
+      "messageActive": "This license is active.",
+      "messageExpiresInDays": "This license expires in {count} days.",
+      "remainingExpiresToday": "Expires today",
+      "remainingOneDay": "1 day left",
+      "remainingDays": "{count} days left",
+      "resolveOverage": "Resolve overage",
+      "manageLicense": "Manage license"
+    },
+    "fields": {
+      "hwid": "HWID",
+      "securityKey": "Security Key",
+      "shortIdValue": "Short ID: {value}"
+    },
+    "placeholders": {
+      "pending": "Pending...",
+      "deadline": "the deadline",
+      "securityKey": "Paste the signed offline license token"
+    },
+    "errors": {
+      "activationBlocked": "Activation blocked"
+    },
+    "toast": {
+      "failedToLoadStatus": "Failed to load the license status",
+      "hwidUnavailable": "HWID is not available yet",
+      "hwidCopied": "HWID copied",
+      "failedToCopyHwid": "Failed to copy HWID",
+      "pasteSecurityKey": "Paste the security key first",
+      "activationSuccess": "License activated successfully",
+      "activationFailed": "Failed to activate the security key"
     }
   },
   "marketingRedirect": {

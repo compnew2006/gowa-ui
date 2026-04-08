@@ -98,6 +98,12 @@ const selectedTeamFilter = ref<string>("all");
 const isAdminOrManager = computed(() =>
   authStore.hasPermission("transfers", "write"),
 );
+const canResumeTransfers = computed(() =>
+  authStore.hasPermission("transfers", "write"),
+);
+const canPickTransfers = computed(() =>
+  authStore.hasPermission("transfers", "pickup"),
+);
 const currentUserId = computed(() => authStore.user?.id);
 
 function canAgentHandleTransfer(
@@ -386,7 +392,7 @@ function formatTimeRemaining(deadline: string | undefined): string {
       :icon="UserX"
       icon-gradient="bg-gradient-to-br from-red-500 to-orange-600 shadow-red-500/20"
     >
-      <template v-if="!isAdminOrManager" #actions>
+      <template v-if="!isAdminOrManager && canPickTransfers" #actions>
         <div class="flex items-center gap-4">
           <div class="text-sm text-white/50 light:text-gray-500">
             <Users class="h-4 w-4 inline mr-1" />
@@ -481,7 +487,7 @@ function formatTimeRemaining(deadline: string | undefined): string {
                       </Badge>
                     </TableCell>
                     <TableCell class="text-right space-x-2">
-                      <Tooltip>
+                      <Tooltip v-if="canResumeTransfers">
                         <TooltipTrigger asChild>
                           <Button
                             size="sm"

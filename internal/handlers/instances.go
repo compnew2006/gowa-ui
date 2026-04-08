@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	waManager "github.com/compnew2006/whatomate/pkg/whatsmeow"
@@ -134,6 +135,9 @@ func (a *App) CreateInstance(r *fastglue.Request) error {
 	name := normalizeInstanceName(req.Name)
 	if name == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Name is required", nil, "name")
+	}
+	if !a.checkQuotaOrRespond(r, license.ResourceEndpoints, orgID) {
+		return nil
 	}
 
 	settings := waManager.EnsureInstanceSettingsDefaults(req.Settings)

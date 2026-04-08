@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/compnew2006/whatomate/internal/crypto"
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
@@ -104,6 +105,9 @@ func (a *App) CreateAccount(r *fastglue.Request) error {
 	webhookVerifyToken := req.WebhookVerifyToken
 	if webhookVerifyToken == "" {
 		webhookVerifyToken = generateVerifyToken()
+	}
+	if !a.checkQuotaOrRespond(r, license.ResourceEndpoints, orgID) {
+		return nil
 	}
 
 	// Set default API version

@@ -81,6 +81,11 @@ type JobHandler interface {
 	HandleContactRepairJob(ctx context.Context, job *ContactRepairJob) error
 }
 
+// ReadinessGate lets consumers pause before dequeuing the next job.
+type ReadinessGate interface {
+	WaitUntilOperational(ctx context.Context) error
+}
+
 // Consumer defines the interface for consuming jobs from the queue
 type Consumer interface {
 	// Consume starts consuming jobs from the queue

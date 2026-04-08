@@ -11,6 +11,19 @@ debug = true
 encryption_key = ""  # AES-256 key for encrypting secrets at rest. Required for storing/updating account secrets; required in production.
 allow_legacy_encryption = true  # Set false after running crypto-migrate to reject enc:/enc2: payloads.
 
+[license]
+enabled = false
+public_key = ""  # Development-only override. Production builds should embed a key ring and leave this empty unless allow_unsafe_public_key_override=true.
+public_key_kid = ""
+allow_unsafe_public_key_override = false
+fingerprint_sources = ["/etc/machine-id", "/sys/class/dmi/id/product_uuid"]
+host_machine_id_path = ""  # In Docker on Linux, mount the host machine-id and set this to the mounted path, e.g. "/host/etc/machine-id".
+# For Docker on Linux, also point fingerprint_sources at the mounted host paths instead of the container defaults:
+# fingerprint_sources = ["/host/etc/machine-id", "/host/sys/class/dmi/id/product_uuid"]
+rollback_tolerance_seconds = 900
+grace_period_days = 7
+enforce_on_workers = true
+
 [server]
 host = "0.0.0.0"
 port = 8080
@@ -27,6 +40,7 @@ user = "change-me"
 password = "change-me"
 name = "whatomate"
 ssl_mode = "disable"
+log_sql = false  # Set true only when you explicitly want raw GORM SQL query logs in the terminal.
 max_open_conns = 25
 max_idle_conns = 5
 conn_max_lifetime = 300

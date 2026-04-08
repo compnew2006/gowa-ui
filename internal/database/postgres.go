@@ -60,6 +60,7 @@ func NewPostgres(cfg *config.DatabaseConfig, debug bool) (*gorm.DB, error) {
 }
 
 func newPostgresWithConnector(cfg *config.DatabaseConfig, debug bool, connector postgresConnector) (*gorm.DB, error) {
+	_ = debug
 	dsn, err := buildPostgresDSN(cfg)
 	if err != nil {
 		return nil, err
@@ -69,7 +70,7 @@ func newPostgresWithConnector(cfg *config.DatabaseConfig, debug bool, connector 
 	}
 
 	logLevel := logger.Silent
-	if debug {
+	if cfg.LogSQL {
 		logLevel = logger.Info
 	}
 
@@ -109,6 +110,8 @@ func GetMigrationModels() []MigrationModel {
 		{"Team", &models.Team{}},
 		{"TeamMember", &models.TeamMember{}},
 		{"APIKey", &models.APIKey{}},
+		{"LicenseRecord", &models.LicenseRecord{}},
+		{"LicenseEvent", &models.LicenseEvent{}},
 		{"SSOProvider", &models.SSOProvider{}},
 		{"Webhook", &models.Webhook{}},
 		{"CustomAction", &models.CustomAction{}},

@@ -24,12 +24,17 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   function clearAuth() {
+    const currentUserId = user.value?.id;
     user.value = null;
 
     // Clean up localStorage (including legacy token keys)
     localStorage.removeItem("user");
     localStorage.removeItem("auth_token");
     localStorage.removeItem("refresh_token");
+
+    if (currentUserId) {
+      sessionStorage.removeItem(`license.banner.dismissed.${currentUserId}`);
+    }
   }
 
   async function restoreSession(): Promise<boolean> {

@@ -26,6 +26,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 	assert.Equal(t, 5432, cfg.Database.Port)
 	assert.Equal(t, "disable", cfg.Database.SSLMode)
+	assert.False(t, cfg.Database.LogSQL)
 	assert.Equal(t, 25, cfg.Database.MaxOpenConns)
 	assert.Equal(t, 5, cfg.Database.MaxIdleConns)
 	assert.Equal(t, 300, cfg.Database.ConnMaxLifetime)

@@ -13,6 +13,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/contactutil"
 	"github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/handlers"
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/templateutil"
@@ -35,6 +36,7 @@ type Worker struct {
 	Consumer        *queue.RedisConsumer
 	InboundConsumer *queue.RedisConsumer
 	Publisher       *queue.Publisher
+	License         *license.Service
 }
 
 // Ensure Worker implements JobHandler interface
@@ -45,7 +47,7 @@ type inboundMediaJobProcessor interface {
 }
 
 // New creates a new Worker instance
-func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, messageProvider provider.MessageProvider) (*Worker, error) {
+func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, messageProvider provider.MessageProvider, licenseService *license.Service) (*Worker, error) {
 	consumer, err := queue.NewRedisConsumer(rdb, log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consumer: %w", err)
@@ -67,6 +69,7 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, me
 		Consumer:        consumer,
 		InboundConsumer: inboundConsumer,
 		Publisher:       publisher,
+		License:         licenseService,
 	}, nil
 }
 
@@ -118,6 +121,14 @@ func (w *Worker) Run(ctx context.Context) error {
 
 	w.Log.Info("Worker stopped")
 	return nil
+}
+
+// WaitUntilOperational pauses queue consumption while the runtime is license-locked.
+func (w *Worker) WaitUntilOperational(ctx context.Context) error {
+	if w.License == nil {
+		return nil
+	}
+	return w.License.WaitUntilOperational(ctx)
 }
 
 // HandleRecipientJob processes a single recipient message job

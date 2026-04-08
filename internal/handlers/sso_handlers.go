@@ -9,6 +9,7 @@ import (
 	"time"
 
 	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
@@ -255,6 +256,10 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 			IsAvailable:    true,
 			SSOProvider:    provider,
 			SSOProviderID:  userInfo.ID,
+		}
+		if !a.checkQuotaOrRespond(r, license.ResourceUsers, orgID) {
+			a.redirectWithError(r, "Licensed user quota exceeded for this organization")
+			return nil
 		}
 
 		if err := a.DB.Create(&user).Error; err != nil {

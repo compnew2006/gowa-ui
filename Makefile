@@ -8,9 +8,20 @@ GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 BINARY_NAME=whatomate
 BINARY_PATH=./cmd/whatomate
+LICENSE_VENDOR_BINARY=whatomate-license-vendor
+LICENSE_VENDOR_PATH=./cmd/whatomate-license-vendor
+LICENSE_ADMIN_BINARY=whatomate-license-admin
+LICENSE_ADMIN_PATH=./cmd/whatomate-license-admin
+LICENSE_ISSUE_BINARY=whatomate-license-issue
+LICENSE_ISSUE_PATH=./cmd/whatomate-license-issue
+LICENSE_STUDIO_BINARY=whatomate-license-studio
+LICENSE_STUDIO_PATH=./cmd/whatomate-license-studio
+VENDOR_TOOLS_DIR=bin/vendor-tools
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
-LDFLAGS=-ldflags "-s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
+LICENSE_KEY_RING_JSON?=[]
+GO_LDFLAGS=-s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X github.com/compnew2006/whatomate/internal/license.EmbeddedPublicKeyRingJSON=$(LICENSE_KEY_RING_JSON)
+LDFLAGS=-ldflags "$(GO_LDFLAGS)"
 AIR_PACKAGE=github.com/air-verse/air@latest
 AIR_BIN=$(shell sh -c 'if [ -n "$$GOBIN" ]; then printf "%s/air" "$$GOBIN"; else printf "%s/bin/air" "$$(go env GOPATH)"; fi')
 
@@ -22,6 +33,21 @@ all: build
 # Build the backend (development - without frontend)
 build:
 	$(GOBUILD) -o $(BINARY_NAME) $(BINARY_PATH)
+
+build-license-tools:
+	@mkdir -p $(VENDOR_TOOLS_DIR)
+	$(GOBUILD) -o $(VENDOR_TOOLS_DIR)/$(LICENSE_VENDOR_BINARY) $(LICENSE_VENDOR_PATH)
+	$(GOBUILD) -o $(VENDOR_TOOLS_DIR)/$(LICENSE_ADMIN_BINARY) $(LICENSE_ADMIN_PATH)
+	$(GOBUILD) -o $(VENDOR_TOOLS_DIR)/$(LICENSE_ISSUE_BINARY) $(LICENSE_ISSUE_PATH)
+	$(GOBUILD) -o $(VENDOR_TOOLS_DIR)/$(LICENSE_STUDIO_BINARY) $(LICENSE_STUDIO_PATH)
+
+build-license-issue:
+	@mkdir -p $(VENDOR_TOOLS_DIR)
+	$(GOBUILD) -o $(VENDOR_TOOLS_DIR)/$(LICENSE_ISSUE_BINARY) $(LICENSE_ISSUE_PATH)
+
+build-license-studio:
+	@mkdir -p $(VENDOR_TOOLS_DIR)
+	$(GOBUILD) -o $(VENDOR_TOOLS_DIR)/$(LICENSE_STUDIO_BINARY) $(LICENSE_STUDIO_PATH)
 
 # Build production binary with embedded frontend
 build-prod: frontend-build embed-frontend
@@ -85,6 +111,7 @@ test-coverage:
 clean:
 	rm -f $(BINARY_NAME)
 	rm -f coverage.out coverage.html
+	rm -rf $(VENDOR_TOOLS_DIR)
 
 # Download dependencies
 deps:
@@ -172,6 +199,9 @@ help:
 	@echo ""
 	@echo "Production:"
 	@echo "  build-prod     - Build single binary with embedded frontend"
+	@echo "  build-license-tools - Build private vendor license utilities into bin/vendor-tools"
+	@echo "  build-license-issue - Build the dedicated private issuer into bin/vendor-tools"
+	@echo "  build-license-studio - Build the private localhost GUI studio into bin/vendor-tools"
 	@echo ""
 	@echo "Development:"
 	@echo "  build          - Build the backend binary (without frontend)"

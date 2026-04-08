@@ -135,7 +135,23 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 	// Get or create contact (always do this for all incoming messages)
 	contact, isNewContact, _ := contactutil.GetOrCreateContact(a.DB, account.OrganizationID, msg.From, profileName)
 
-	// Dispatch webhook if new contact was created
+	payload := a.parseIncomingMessagePayload(account, msg)
+
+	// Save incoming message to messages table (always, even if chatbot is disabled).
+	savedIncomingMessage := a.saveIncomingMessage(account, contact, msg.ID, payload.MessageType, payload.MessageText, payload.MediaInfo, payload.ReplyToWAMID)
+	if savedIncomingMessage == nil {
+		return
+	}
+
+	if a.licenseBlocksValueDelivery() {
+		a.Log.Info("License is locked; suppressing outbound webhook/chatbot processing for inbound message",
+			"contact_id", contact.ID,
+			"organization_id", account.OrganizationID,
+		)
+		return
+	}
+
+	// Dispatch webhook if new contact was created after ingest has completed.
 	if isNewContact {
 		a.DispatchWebhook(account.OrganizationID, models.WebhookEventContactCreated, ContactEventData{
 			ContactID:       contact.ID.String(),
@@ -143,14 +159,6 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 			ContactName:     contact.ProfileName,
 			WhatsAppAccount: account.Name,
 		})
-	}
-
-	payload := a.parseIncomingMessagePayload(account, msg)
-
-	// Save incoming message to messages table (always, even if chatbot is disabled).
-	savedIncomingMessage := a.saveIncomingMessage(account, contact, msg.ID, payload.MessageType, payload.MessageText, payload.MediaInfo, payload.ReplyToWAMID)
-	if savedIncomingMessage == nil {
-		return
 	}
 
 	// Clear chatbot tracking since client has replied
@@ -2450,8 +2458,8 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 
 	a.Log.Info("Saved incoming message", "message_id", message.ID, "contact_id", contact.ID, "media_url", message.MediaURL)
 
-	// Broadcast new message via WebSocket
-	if a.WSHub != nil {
+	// Broadcast new message via WebSocket unless the runtime is license-locked.
+	if a.WSHub != nil && !a.licenseBlocksValueDelivery() {
 		var assignedUserIDStr string
 		if contact.AssignedUserID != nil {
 			assignedUserIDStr = contact.AssignedUserID.String()
@@ -2501,17 +2509,18 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 		})
 	}
 
-	// Dispatch webhook for incoming message
-	a.DispatchWebhook(account.OrganizationID, models.WebhookEventMessageIncoming, MessageEventData{
-		MessageID:       message.ID.String(),
-		ContactID:       contact.ID.String(),
-		ContactPhone:    contact.PhoneNumber,
-		ContactName:     contact.ProfileName,
-		MessageType:     models.MessageType(msgType),
-		Content:         content,
-		WhatsAppAccount: account.Name,
-		Direction:       models.DirectionIncoming,
-	})
+	if !a.licenseBlocksValueDelivery() {
+		a.DispatchWebhook(account.OrganizationID, models.WebhookEventMessageIncoming, MessageEventData{
+			MessageID:       message.ID.String(),
+			ContactID:       contact.ID.String(),
+			ContactPhone:    contact.PhoneNumber,
+			ContactName:     contact.ProfileName,
+			MessageType:     models.MessageType(msgType),
+			Content:         content,
+			WhatsAppAccount: account.Name,
+			Direction:       models.DirectionIncoming,
+		})
+	}
 
 	return &message
 }

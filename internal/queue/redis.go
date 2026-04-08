@@ -294,6 +294,17 @@ func (c *RedisConsumer) Consume(ctx context.Context, handler JobHandler) error {
 		default:
 		}
 
+		if gate, ok := handler.(ReadinessGate); ok {
+			if err := gate.WaitUntilOperational(ctx); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				c.log.Warn("Consumer readiness gate blocked job dequeue", "stream", c.streamName, "group", c.consumerGroup, "error", err)
+				time.Sleep(time.Second)
+				continue
+			}
+		}
+
 		if time.Since(lastPendingClaim) >= PendingClaimInterval {
 			if err := c.claimPendingMessages(ctx, handler); err != nil {
 				c.log.Warn("Failed periodic pending-claim cycle", "stream", c.streamName, "group", c.consumerGroup, "error", err)

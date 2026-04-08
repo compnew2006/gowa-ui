@@ -24,7 +24,43 @@
     "chat": "Chat",
     "contacts": "Contactos",
     "analytics": "Analíticas",
-    "settings": "Configuración"
+    "settings": "Configuración",
+    "license": "Licencia"
+  },
+  "licenseSettings": {
+    "licenseKind": {
+      "trial": "Prueba",
+      "paid": "De pago"
+    },
+  "duration": {
+    "lifetime": "Vitalicia",
+    "oneDay": "1 día",
+    "days": "{count} días",
+    "noExpiry": "No vence",
+    "unavailable": "No disponible"
+  },
+  "quota": {
+    "subscriptionDays": "Días de suscripción"
+  },
+  "banner": {
+      "titleGrace": "Periodo de gracia de la licencia",
+      "titleQuotaOverage": "Exceso de cuota de licencia",
+      "titleExpiry": "La licencia está por vencer",
+      "titleActive": "Licencia activa",
+      "theGraceDeadline": "la fecha límite del periodo de gracia",
+      "messageGrace": "Renueva antes de {deadline} para evitar un bloqueo total.",
+      "messageQuotaOverage": "Esta implementación supera la nueva cuota licenciada. Whatomate está en pausa hasta que se eliminen suficientes organizaciones, usuarios o endpoints de WhatsApp.",
+      "messageExpiringSoon": "Esta licencia vence pronto.",
+      "messageExpiresToday": "Esta licencia vence hoy.",
+      "messageActiveWithDaysRemaining": "Esta licencia está activa y le quedan {count} días.",
+      "messageActive": "Esta licencia está activa.",
+      "messageExpiresInDays": "Esta licencia vence en {count} días.",
+      "remainingExpiresToday": "Vence hoy",
+      "remainingOneDay": "Queda 1 día",
+      "remainingDays": "Quedan {count} días",
+      "resolveOverage": "Resolver exceso",
+      "manageLicense": "Administrar licencia"
+    }
   },
   "settings": {
     "title": "Configuración",

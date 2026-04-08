@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/middleware"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/golang-jwt/jwt/v5"
@@ -147,6 +148,9 @@ func (a *App) Register(r *fastglue.Request) error {
 	var org models.Organization
 	if err := a.DB.Where("id = ?", inviteOrgID).First(&org).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Organization not found", nil, "")
+	}
+	if !a.checkQuotaOrRespond(r, license.ResourceUsers, inviteOrgID) {
+		return nil
 	}
 
 	// Get the org's default role

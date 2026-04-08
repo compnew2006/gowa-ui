@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/compnew2006/whatomate/internal/config"
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/provider"
@@ -42,6 +43,8 @@ type App struct {
 	WhatsmeowContactResolver WhatsmeowContactResolver
 	// WhatsmeowQueue is the per-instance message queue for whatsmeow rate limiting
 	WhatsmeowQueue *whatsmeow.QueueManager
+	// License enforces host-bound activation and runtime quotas.
+	License *license.Service
 	// wg tracks background goroutines for graceful shutdown
 	wg sync.WaitGroup
 }

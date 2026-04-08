@@ -21,6 +21,7 @@ import {
   Tags,
   Smartphone,
   Archive,
+  ShieldAlert,
 } from "lucide-vue-next";
 import type { Component } from "vue";
 
@@ -58,6 +59,7 @@ export const navigationItems: NavItem[] = [
       "chatbot.keywords",
       "flows.chatbot",
       "chatbot.ai",
+      "transfers",
     ],
     children: [
       {
@@ -84,13 +86,13 @@ export const navigationItems: NavItem[] = [
         icon: Sparkles,
         permission: "chatbot.ai",
       },
+      {
+        name: "nav.transfers",
+        path: "/chatbot/transfers",
+        icon: UserX,
+        permission: "transfers",
+      },
     ],
-  },
-  {
-    name: "nav.transfers",
-    path: "/chatbot/transfers",
-    icon: UserX,
-    permission: "transfers",
   },
   {
     name: "nav.agentAnalytics",
@@ -233,6 +235,12 @@ export const navigationItems: NavItem[] = [
         path: "/settings/sso",
         icon: ShieldCheck,
         permission: "settings.sso",
+      },
+      {
+        name: "nav.license",
+        path: "/settings/license",
+        icon: ShieldAlert,
+        adminOnly: true,
       },
     ],
   },

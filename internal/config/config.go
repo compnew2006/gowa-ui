@@ -14,6 +14,7 @@ var envTopLevelSections = []string{
 	"rate_limit",
 	"whatsmeow",
 	"whatsapp",
+	"license",
 	"database",
 	"storage",
 	"server",
@@ -38,6 +39,7 @@ type Config struct {
 	DefaultAdmin DefaultAdminConfig `koanf:"default_admin"`
 	RateLimit    RateLimitConfig    `koanf:"rate_limit"`
 	Cookie       CookieConfig       `koanf:"cookie"`
+	License      LicenseConfig      `koanf:"license"`
 }
 
 type AppConfig struct {
@@ -65,6 +67,7 @@ type DatabaseConfig struct {
 	Password        string `koanf:"password"`
 	Name            string `koanf:"name"`
 	SSLMode         string `koanf:"ssl_mode"`
+	LogSQL          bool   `koanf:"log_sql"`
 	MaxOpenConns    int    `koanf:"max_open_conns"`
 	MaxIdleConns    int    `koanf:"max_idle_conns"`
 	ConnMaxLifetime int    `koanf:"conn_max_lifetime"`
@@ -148,6 +151,18 @@ type RateLimitConfig struct {
 	TrustProxy          bool `koanf:"trust_proxy"`
 	OutboundPerUserPS   int  `koanf:"outbound_per_user_per_second"`
 	OutboundPerIPPS     int  `koanf:"outbound_per_ip_per_second"`
+}
+
+type LicenseConfig struct {
+	Enabled                      bool     `koanf:"enabled"`
+	PublicKey                    string   `koanf:"public_key"`
+	PublicKeyKID                 string   `koanf:"public_key_kid"`
+	AllowUnsafePublicKeyOverride bool     `koanf:"allow_unsafe_public_key_override"`
+	FingerprintSources           []string `koanf:"fingerprint_sources"`
+	HostMachineIDPath            string   `koanf:"host_machine_id_path"`
+	RollbackToleranceSeconds     int      `koanf:"rollback_tolerance_seconds"`
+	GracePeriodDays              int      `koanf:"grace_period_days"`
+	EnforceOnWorkers             *bool    `koanf:"enforce_on_workers"`
 }
 
 // Load loads configuration from file and environment variables
@@ -354,6 +369,22 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.RateLimit.OutboundPerIPPS == 0 {
 		cfg.RateLimit.OutboundPerIPPS = 15
+	}
+	if cfg.License.RollbackToleranceSeconds == 0 {
+		cfg.License.RollbackToleranceSeconds = 900
+	}
+	if cfg.License.GracePeriodDays == 0 {
+		cfg.License.GracePeriodDays = 7
+	}
+	if len(cfg.License.FingerprintSources) == 0 {
+		cfg.License.FingerprintSources = []string{
+			"/etc/machine-id",
+			"/sys/class/dmi/id/product_uuid",
+		}
+	}
+	if cfg.License.EnforceOnWorkers == nil {
+		enforceOnWorkers := true
+		cfg.License.EnforceOnWorkers = &enforceOnWorkers
 	}
 }
 

@@ -61,6 +61,9 @@ const maxConcurrentWebhooks = 10
 
 // DispatchWebhook sends an event to all matching webhooks for the organization
 func (a *App) DispatchWebhook(orgID uuid.UUID, eventType models.WebhookEvent, data interface{}) {
+	if a.licenseBlocksValueDelivery() {
+		return
+	}
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
