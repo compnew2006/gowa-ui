@@ -2,7 +2,6 @@ import { useContactsStore } from "@/stores/contacts";
 import { useTransfersStore } from "@/stores/transfers";
 import { useAuthStore } from "@/stores/auth";
 import { useNotesStore } from "@/stores/notes";
-import { contactsService } from "@/services/api";
 import { maybeAutoDownloadIncomingMedia } from "@/lib/incoming_media_autodownload";
 import { toast } from "vue-sonner";
 import router from "@/router";
@@ -210,6 +209,10 @@ class WebSocketService {
     payloadAssignedUserId?: string;
     payloadStatus?: string;
     localAssignedUserId?: string;
+    fetchLatestContact?: () => Promise<{
+      assigned_user_id?: string;
+      status?: string;
+    } | null>;
   }): Promise<boolean> {
     const {
       contactId,
@@ -219,6 +222,7 @@ class WebSocketService {
       payloadAssignedUserId,
       payloadStatus,
       localAssignedUserId,
+      fetchLatestContact,
     } = options;
 
     if (!contactId || !currentUserId) return false;
@@ -259,8 +263,7 @@ class WebSocketService {
     }
 
     try {
-      const response = await contactsService.get(contactId);
-      const contact = response.data?.data || response.data;
+      const contact = await fetchLatestContact?.();
       const latestAssignedUserId =
         typeof contact?.assigned_user_id === "string" &&
         contact.assigned_user_id.trim() !== ""
@@ -446,6 +449,21 @@ class WebSocketService {
     const knownContact = contactId
       ? store.contacts.find((contact) => contact.id === contactId)
       : undefined;
+    let unknownContactFetchPromise: Promise<
+      Awaited<ReturnType<typeof store.fetchContact>>
+    > | null = null;
+    const ensureLatestUnknownContact = () => {
+      if (knownContact) {
+        return Promise.resolve(knownContact);
+      }
+      if (!contactId) {
+        return Promise.resolve(null);
+      }
+      if (!unknownContactFetchPromise) {
+        unknownContactFetchPromise = store.fetchContact(contactId);
+      }
+      return unknownContactFetchPromise;
+    };
 
     const incomingMessage = {
       id: payload.id,
@@ -529,6 +547,7 @@ class WebSocketService {
             payloadAssignedUserId: normalizedAssignedUserId,
             payloadStatus: normalizedContactStatus,
             localAssignedUserId: knownAssignedUserId,
+            fetchLatestContact: ensureLatestUnknownContact,
           })
         : false;
 
@@ -556,7 +575,7 @@ class WebSocketService {
     // Avoid full list refetch on every message; it can evict already-loaded rows when pagination is active.
     // If this message belongs to a contact not present in the store, fetch just that contact.
     if (contactId && !knownContact) {
-      void store.fetchContact(contactId);
+      void ensureLatestUnknownContact();
     }
   }
 

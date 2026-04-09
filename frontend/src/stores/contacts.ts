@@ -21,6 +21,7 @@ const unsupportedMessageBody = "[Unsupported message type]";
 const deletedMessageBody = "(This message was deleted)";
 const legacyDeletedMessageBody = "This message was deleted";
 const syntheticPlaceholderCompanionWindowMs = 3000;
+const contactFetchCooldownMs = 1500;
 
 interface ContactsListPayload {
   contacts: Contact[];
@@ -332,6 +333,11 @@ export const useContactsStore = defineStore("contacts", () => {
   const selectedChatTypes = ref<ChatTypeFilter[]>([]);
   const replyingTo = ref<Message | null>(null);
   const accountFilter = ref<string | null>(null);
+  const inFlightContactFetches = new Map<string, Promise<Contact | null>>();
+  const recentContactFetches = new Map<
+    string,
+    { at: number; result: Contact | null }
+  >();
 
   // Contacts pagination
   const contactsPage = ref(1);
@@ -878,18 +884,55 @@ export const useContactsStore = defineStore("contacts", () => {
   }
 
   async function fetchContact(id: string) {
-    try {
-      const response = await contactsService.get(id);
-      const data = normalizeContact(unwrapResponse<Contact>(response));
-      upsertContact(data);
-      if (currentContact.value?.id === id) {
-        currentContact.value = data;
+    const normalizedID = id.trim();
+    if (!normalizedID) return null;
+
+    const existingRequest = inFlightContactFetches.get(normalizedID);
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const recentFetch = recentContactFetches.get(normalizedID);
+    if (recentFetch && Date.now() - recentFetch.at < contactFetchCooldownMs) {
+      if (recentFetch.result) {
+        if (currentContact.value?.id === normalizedID) {
+          return currentContact.value;
+        }
+        return (
+          contacts.value.find((contact) => contact.id === normalizedID) ??
+          recentFetch.result
+        );
       }
-      return data;
-    } catch (error) {
-      console.error("Failed to fetch contact:", error);
       return null;
     }
+
+    const request = (async () => {
+      try {
+        const response = await contactsService.get(normalizedID);
+        const data = normalizeContact(unwrapResponse<Contact>(response));
+        upsertContact(data);
+        if (currentContact.value?.id === normalizedID) {
+          currentContact.value = data;
+        }
+        recentContactFetches.set(normalizedID, {
+          at: Date.now(),
+          result: data,
+        });
+        return data;
+      } catch (error) {
+        console.error("Failed to fetch contact:", error);
+        recentContactFetches.set(normalizedID, {
+          at: Date.now(),
+          result: null,
+        });
+        return null;
+      } finally {
+        inFlightContactFetches.delete(normalizedID);
+      }
+    })();
+
+    inFlightContactFetches.set(normalizedID, request);
+    return request;
   }
 
   async function fetchClosedChats(params?: {

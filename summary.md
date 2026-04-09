@@ -343,3 +343,75 @@
 - Local dev note:
   - the running Go app embeds `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/frontend/dist`
   - rebuilding only `frontend/dist` is not enough for `go run`; syncing `frontend/dist` into `internal/frontend/dist` is required unless `make build-prod` already performs that step
+
+## 2026-04-09 IP-Specific Access Failure
+
+- Investigated report that Whatomate was "not working" from IP `188.49.112.176`
+- Verified the application stack itself was healthy on the VPS:
+  - `whatomate.service` = `active`
+  - `whatomate@holol-wenjaz.service` = `active`
+  - `whatomate@alarkan-almthalia.service` = `active`
+  - `whatomate@matbaat-ruya.service` = `active`
+  - `nginx.service` = `active`
+- Verified local nginx routing was healthy:
+  - `ofuqalmadenah.com` -> `301`
+  - `holol-wenjaz.ofuqalmadenah.com` -> `301`
+  - `alarkan-almthalia.ofuqalmadenah.com` -> `301`
+  - `matbaat-ruya.ofuqalmadenah.com` -> `301`
+- Root cause was IP-specific, not service downtime:
+  - Fail2Ban jail `nginx-limit-req` had banned `188.49.112.176`
+  - nftables also contained that IP
+- Evidence from logs:
+  - Fail2Ban ban on `2026-04-09 07:25:39 UTC`
+  - incremental ban raised to `2h`, expiring `2026-04-09 09:25:39 UTC`
+  - nginx error log showed repeated `api_limit` violations for:
+    - `GET /api/contacts/1ae280ea-1ccd-4972-980e-d89208959fd3`
+  - access log showed many duplicate `/api/contacts/...` requests from chat pages in the same second
+- Action taken:
+  - unbanned IP `188.49.112.176` using:
+    - `fail2ban-client set nginx-limit-req unbanip 188.49.112.176`
+  - verified after unban:
+    - `Currently banned: 0` in `nginx-limit-req`
+    - no nftables match remained for the IP
+- Operational conclusion:
+  - Whatomate was up
+  - the user IP had been temporarily blocked because the client exceeded nginx API rate limits and Fail2Ban escalated that to a firewall ban
+
+## 2026-04-09 Contact Fetch Rate-Limit Root Cause
+
+- Cleared current Fail2Ban bans across the active jails checked on the VPS:
+  - `sshd`
+  - `nginx-limit-req`
+  - `nginx-http-auth`
+  - `nginx-botsearch`
+  - `nginx-proxy`
+- Verified all of those jails now report:
+  - `Currently banned: 0`
+  - empty `Banned IP list`
+- Investigated why normal chat usage could still trigger the `nginx-limit-req` jail.
+- Root cause in frontend realtime flow:
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/services/websocket.ts`
+    - one incoming websocket event for an unknown contact could trigger the same contact fetch twice in the same tab
+    - first through notification-eligibility resolution
+    - then again through the "unknown contact" refresh path at the end of the handler
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/stores/contacts.ts`
+    - `fetchContact(id)` had no in-flight dedupe and no short cooldown cache, so repeated calls for the same contact immediately hit `/api/contacts/:id`
+  - multiple open tabs multiply that traffic because each tab maintains its own websocket/store lifecycle
+- Local fix implemented but not deployed to VPS:
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/stores/contacts.ts`
+    - added in-flight request dedupe for `fetchContact(id)`
+    - added a 1.5s short cooldown result cache to suppress immediate repeat fetches
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/services/websocket.ts`
+    - unified unknown-contact fetches inside `handleNewMessage()` so the notification logic and tail refresh share the same promise instead of issuing separate requests
+- Regression coverage added locally:
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/stores/contacts.test.ts`
+    - concurrent same-id `fetchContact()` calls resolve from one API request
+    - immediate repeat `fetchContact()` reuses the cooldown result
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/services/websocket.test.ts`
+    - unknown incoming contact now triggers only one `fetchContact()` during a websocket message event
+- Local verification:
+  - `cd /Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend && npx vitest run src/stores/contacts.test.ts src/services/websocket.test.ts`
+  - `cd /Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend && npm run build`
+- Deployment status:
+  - started a source sync toward `/opt/whatomate-src` but stopped on request before any build, install, or service restart
+  - verified production binary and running services were left unchanged

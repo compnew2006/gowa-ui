@@ -155,4 +155,51 @@ describe("useContactsStore", () => {
     expect(store.assignedChats).toHaveLength(1);
     expect(store.assignedChats[0].id).toBe("contact-1");
   });
+
+  it("deduplicates concurrent fetchContact calls for the same id", async () => {
+    setAuthenticatedUser("agent");
+    const store = useContactsStore();
+    const fetchedContact = makeContact({ id: "contact-fetch" });
+
+    let resolveRequest: ((value: unknown) => void) | null = null;
+    mocks.contactsService.get.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+
+    const firstRequest = store.fetchContact("contact-fetch");
+    const secondRequest = store.fetchContact("contact-fetch");
+
+    expect(mocks.contactsService.get).toHaveBeenCalledTimes(1);
+    expect(mocks.contactsService.get).toHaveBeenCalledWith("contact-fetch");
+
+    resolveRequest?.({ data: { data: fetchedContact } });
+
+    await expect(firstRequest).resolves.toEqual(
+      expect.objectContaining({ id: "contact-fetch" }),
+    );
+    await expect(secondRequest).resolves.toEqual(
+      expect.objectContaining({ id: "contact-fetch" }),
+    );
+  });
+
+  it("reuses a recent fetchContact result during the cooldown window", async () => {
+    setAuthenticatedUser("agent");
+    const store = useContactsStore();
+    const fetchedContact = makeContact({ id: "contact-cached" });
+
+    mocks.contactsService.get.mockResolvedValueOnce({
+      data: { data: fetchedContact },
+    });
+
+    await expect(store.fetchContact("contact-cached")).resolves.toEqual(
+      expect.objectContaining({ id: "contact-cached" }),
+    );
+    await expect(store.fetchContact("contact-cached")).resolves.toEqual(
+      expect.objectContaining({ id: "contact-cached" }),
+    );
+
+    expect(mocks.contactsService.get).toHaveBeenCalledTimes(1);
+  });
 });

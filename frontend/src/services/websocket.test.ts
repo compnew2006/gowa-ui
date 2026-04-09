@@ -129,4 +129,55 @@ describe('websocket message_media_updated', () => {
     }))
     expect(fetchContact).toHaveBeenCalledWith('contact-99')
   })
+
+  it('deduplicates unknown-contact fetches during a single incoming message event', async () => {
+    const fetchContact = vi.fn().mockResolvedValue({
+      id: 'contact-42',
+      assigned_user_id: 'agent-1',
+      status: 'open',
+    })
+    const addMessage = vi.fn(() => true)
+
+    vi.mocked(useContactsStore).mockReturnValue({
+      currentContact: null,
+      contacts: [],
+      addMessage,
+      fetchContact,
+      patchContact: vi.fn(),
+      messages: [],
+    } as unknown as ReturnType<typeof useContactsStore>)
+    vi.mocked(useAuthStore).mockReturnValue({
+      user: {
+        id: 'agent-1',
+        role: {
+          name: 'agent',
+        },
+        is_super_admin: false,
+      },
+      userSettings: {
+        new_message_alerts: false,
+      },
+    } as unknown as ReturnType<typeof useAuthStore>)
+
+    ;(wsService as any).handleMessage(JSON.stringify({
+      type: 'new_message',
+      payload: {
+        id: 'message-42',
+        contact_id: 'contact-42',
+        direction: 'incoming',
+        content: { body: 'hello' },
+        message_type: 'text',
+        status: 'received',
+        created_at: '2026-03-03T10:00:00.000Z',
+        updated_at: '2026-03-03T10:00:00.000Z',
+      },
+    }))
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(addMessage).toHaveBeenCalledTimes(1)
+    expect(fetchContact).toHaveBeenCalledTimes(1)
+    expect(fetchContact).toHaveBeenCalledWith('contact-42')
+  })
 })
