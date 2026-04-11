@@ -21,6 +21,7 @@ type SendCannedResponseRequest struct {
 
 // SendCannedResponse sends a canned response as one or more outbound messages (text + attachments).
 func (a *App) SendCannedResponse(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -42,7 +43,7 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 	}
 
 	var cannedResponse models.CannedResponse
-	if err := a.DB.Where("id = ? AND organization_id = ?", cannedResponseID, orgID).
+	if err := requestDB.Where("id = ? AND organization_id = ?", cannedResponseID, orgID).
 		First(&cannedResponse).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Canned response not found", nil, "")
 	}
@@ -52,7 +53,7 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
-	contactQuery := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	contactQuery := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		contactQuery = applyAgentVisibleChatAccessFilter(contactQuery, userID)
 	}
@@ -99,7 +100,7 @@ func (a *App) SendCannedResponse(r *fastglue.Request) error {
 		replyToID, parseErr := uuid.Parse(req.ReplyToMessageID)
 		if parseErr == nil {
 			var replyTo models.Message
-			if err := a.DB.Where("id = ? AND contact_id = ?", replyToID, contactID).First(&replyTo).Error; err == nil {
+			if err := requestDB.Where("id = ? AND contact_id = ?", replyToID, contactID).First(&replyTo).Error; err == nil {
 				replyToMessage = &replyTo
 			}
 		}

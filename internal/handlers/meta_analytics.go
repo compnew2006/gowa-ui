@@ -42,6 +42,7 @@ type MetaAnalyticsResponse struct {
 
 // GetMetaAnalytics fetches Meta WhatsApp analytics with Redis caching
 func (a *App) GetMetaAnalytics(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -128,13 +129,13 @@ func (a *App) GetMetaAnalytics(r *fastglue.Request) error {
 	if accountID != "" {
 		// Specific account
 		var account models.WhatsAppAccount
-		if err := a.DB.Where("id = ? AND organization_id = ?", accountID, orgID).First(&account).Error; err != nil {
+		if err := requestDB.Where("id = ? AND organization_id = ?", accountID, orgID).First(&account).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Account not found", nil, "")
 		}
 		accounts = append(accounts, account)
 	} else {
 		// All accounts for the organization
-		if err := a.DB.Where("organization_id = ?", orgID).Find(&accounts).Error; err != nil {
+		if err := requestDB.Where("organization_id = ?", orgID).Find(&accounts).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch accounts", nil, "")
 		}
 	}
@@ -196,7 +197,7 @@ func (a *App) GetMetaAnalytics(r *fastglue.Request) error {
 			// If no template IDs provided, fetch from database
 			if len(req.TemplateIDs) == 0 {
 				var templates []models.Template
-				if err := a.DB.Select("meta_template_id").
+				if err := requestDB.Select("meta_template_id").
 					Where("organization_id = ? AND whats_app_account = ? AND meta_template_id != '' AND meta_template_id IS NOT NULL",
 						orgID, account.Name).
 					Find(&templates).Error; err == nil {
@@ -300,7 +301,7 @@ func (a *App) GetMetaAnalytics(r *fastglue.Request) error {
 			// Fetch template names from database
 			if len(templateIDs) > 0 {
 				var templates []models.Template
-				if err := a.DB.Select("meta_template_id, name, display_name").
+				if err := requestDB.Select("meta_template_id, name, display_name").
 					Where("organization_id = ? AND meta_template_id IN ?", orgID, templateIDs).
 					Find(&templates).Error; err == nil {
 					for _, t := range templates {
@@ -344,6 +345,7 @@ func (a *App) GetMetaAnalytics(r *fastglue.Request) error {
 
 // ListMetaAccountsForAnalytics lists WhatsApp accounts available for analytics
 func (a *App) ListMetaAccountsForAnalytics(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -361,7 +363,7 @@ func (a *App) ListMetaAccountsForAnalytics(r *fastglue.Request) error {
 	}
 
 	var accounts []models.WhatsAppAccount
-	if err := a.DB.Select("id, name, phone_id").Where("organization_id = ?", orgID).Find(&accounts).Error; err != nil {
+	if err := requestDB.Select("id, name, phone_id").Where("organization_id = ?", orgID).Find(&accounts).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch accounts", nil, "")
 	}
 

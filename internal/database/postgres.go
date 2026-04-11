@@ -103,6 +103,7 @@ func GetMigrationModels() []MigrationModel {
 	return []MigrationModel{
 		// Core models
 		{"Organization", &models.Organization{}},
+		{"OrganizationConfig", &models.OrganizationConfig{}},
 		{"Permission", &models.Permission{}},
 		{"CustomRole", &models.CustomRole{}},
 		{"User", &models.User{}},
@@ -175,6 +176,9 @@ func AutoMigrate(db *gorm.DB) error {
 		if err := db.AutoMigrate(m.Model); err != nil {
 			return err
 		}
+	}
+	if err := BackfillOrganizationConfigs(db); err != nil {
+		return err
 	}
 	return nil
 }
@@ -257,6 +261,11 @@ func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) 
 		return err
 	}
 	currentStep++
+
+	if err := BackfillOrganizationConfigs(silentDB); err != nil {
+		fmt.Printf("\n  \033[31m✗ Failed to backfill organization configs\033[0m\n\n")
+		return err
+	}
 
 	// Seed default widgets for all organizations
 	printProgress(currentStep, totalSteps)
@@ -642,6 +651,38 @@ func MigrateUserOrganizations(db *gorm.DB) error {
 		FROM users u
 		LEFT JOIN user_organizations uo ON uo.user_id = u.id AND uo.organization_id = u.organization_id AND uo.deleted_at IS NULL
 		WHERE uo.id IS NULL AND u.deleted_at IS NULL
+	`).Error
+}
+
+// BackfillOrganizationConfigs ensures every organization has a config row.
+func BackfillOrganizationConfigs(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+	return db.Exec(`
+		INSERT INTO organization_configs (
+			id,
+			organization_id,
+			worker_count,
+			max_queue_size,
+			max_whatsapp_instances,
+			created_at,
+			updated_at
+		)
+		SELECT
+			gen_random_uuid(),
+			o.id,
+			0,
+			0,
+			0,
+			NOW(),
+			NOW()
+		FROM organizations o
+		LEFT JOIN organization_configs oc
+			ON oc.organization_id = o.id
+			AND oc.deleted_at IS NULL
+		WHERE o.deleted_at IS NULL
+			AND oc.id IS NULL
 	`).Error
 }
 

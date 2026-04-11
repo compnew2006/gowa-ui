@@ -910,6 +910,7 @@ type SendTemplateMessageRequest struct {
 
 // SendTemplateMessage sends a template message to a contact or phone number
 func (a *App) SendTemplateMessage(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -937,13 +938,13 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		if err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid template_id", nil, "")
 		}
-		t, err := findByIDAndOrg[models.Template](a.DB, r, templateID, orgID, "Template")
+		t, err := findByIDAndOrg[models.Template](requestDB, r, templateID, orgID, "Template")
 		if err != nil {
 			return nil
 		}
 		template = *t
 	} else {
-		if err := a.DB.Where("name = ? AND organization_id = ?", req.TemplateName, orgID).First(&template).Error; err != nil {
+		if err := requestDB.Where("name = ? AND organization_id = ?", req.TemplateName, orgID).First(&template).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Template not found", nil, "")
 		}
 	}
@@ -961,7 +962,7 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		if err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid contact_id", nil, "")
 		}
-		c, err := findByIDAndOrg[models.Contact](a.DB, r, cID, orgID, "Contact")
+		c, err := findByIDAndOrg[models.Contact](requestDB, r, cID, orgID, "Contact")
 		if err != nil {
 			return nil
 		}
@@ -970,7 +971,7 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		// Find or create contact from phone number
 		phoneNumber := req.PhoneNumber
 		var c models.Contact
-		err := a.DB.Where("phone_number = ? AND organization_id = ?", phoneNumber, orgID).First(&c).Error
+		err := requestDB.Where("phone_number = ? AND organization_id = ?", phoneNumber, orgID).First(&c).Error
 		if err != nil {
 			// Contact not found, create new one
 			c = models.Contact{
@@ -978,7 +979,7 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 				OrganizationID: orgID,
 				PhoneNumber:    phoneNumber,
 			}
-			if err := a.DB.Create(&c).Error; err != nil {
+			if err := requestDB.Create(&c).Error; err != nil {
 				a.Log.Error("Failed to create contact", "error", err, "phone", phoneNumber)
 				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create contact", nil, "")
 			}

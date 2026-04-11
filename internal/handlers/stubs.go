@@ -16,6 +16,7 @@ import (
 // POST /api/messages/read
 // Body: { "message_ids": ["uuid1", "uuid2"] }
 func (a *App) MarkMessageRead(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, _, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -44,7 +45,7 @@ func (a *App) MarkMessageRead(r *fastglue.Request) error {
 		}
 
 		var message models.Message
-		if err := a.DB.Where("id = ? AND organization_id = ?", msgID, orgID).First(&message).Error; err != nil {
+		if err := requestDB.Where("id = ? AND organization_id = ?", msgID, orgID).First(&message).Error; err != nil {
 			errs = append(errs, fmt.Sprintf("message %s not found", idStr))
 			continue
 		}
@@ -68,7 +69,7 @@ func (a *App) MarkMessageRead(r *fastglue.Request) error {
 		} else if a.WhatsApp != nil {
 			// Meta path: resolve account and call MarkMessageRead
 			var account models.WhatsAppAccount
-			if err := a.DB.Where("name = ? AND organization_id = ?", message.WhatsAppAccount, orgID).First(&account).Error; err == nil {
+			if err := requestDB.Where("name = ? AND organization_id = ?", message.WhatsAppAccount, orgID).First(&account).Error; err == nil {
 				waAccount := a.toWhatsAppAccount(&account)
 				if err := a.WhatsApp.MarkMessageRead(ctx, waAccount, message.WhatsAppMessageID); err != nil {
 					a.Log.Error("Failed to mark message read via Meta", "error", err, "message_id", msgID)
@@ -77,9 +78,10 @@ func (a *App) MarkMessageRead(r *fastglue.Request) error {
 				}
 			}
 		}
+		requestDB.
 
-		// Update message status in DB
-		a.DB.Model(&models.Message{}).Where("id = ?", msgID).Update("status", models.MessageStatusRead)
+			// Update message status in DB
+			Model(&models.Message{}).Where("id = ?", msgID).Update("status", models.MessageStatusRead)
 
 		// Broadcast status update
 		if a.WSHub != nil {

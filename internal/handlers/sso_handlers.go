@@ -19,9 +19,12 @@ import (
 
 // GetPublicSSOProviders returns enabled SSO providers for login page (public, no auth)
 func (a *App) GetPublicSSOProviders(r *fastglue.Request) error {
-	// Get all enabled SSO providers.
+	requestDB :=
+		// Get all enabled SSO providers.
+		a.requestDB(r)
+
 	var providers []models.SSOProvider
-	if err := a.DB.Preload("Organization").Where("is_enabled = ?", true).Find(&providers).Error; err != nil {
+	if err := requestDB.Preload("Organization").Where("is_enabled = ?", true).Find(&providers).Error; err != nil {
 		a.Log.Error("Failed to fetch SSO providers", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch providers", nil, "")
 	}
@@ -62,6 +65,7 @@ func (a *App) GetPublicSSOProviders(r *fastglue.Request) error {
 
 // InitSSO initiates OAuth flow for a provider
 func (a *App) InitSSO(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	provider := r.RequestCtx.UserValue("provider").(string)
 	orgSlug := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("org")))
 
@@ -75,15 +79,15 @@ func (a *App) InitSSO(r *fastglue.Request) error {
 	var ssoConfig models.SSOProvider
 	if orgSlug != "" {
 		var org models.Organization
-		if err := a.DB.Select("id").Where("slug = ?", orgSlug).First(&org).Error; err != nil {
+		if err := requestDB.Select("id").Where("slug = ?", orgSlug).First(&org).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "SSO provider not configured or disabled", nil, "")
 		}
-		if err := a.DB.Where("provider = ? AND is_enabled = ? AND organization_id = ?", provider, true, org.ID).First(&ssoConfig).Error; err != nil {
+		if err := requestDB.Where("provider = ? AND is_enabled = ? AND organization_id = ?", provider, true, org.ID).First(&ssoConfig).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "SSO provider not configured or disabled", nil, "")
 		}
 	} else {
 		var configs []models.SSOProvider
-		if err := a.DB.Where("provider = ? AND is_enabled = ?", provider, true).Limit(2).Find(&configs).Error; err != nil {
+		if err := requestDB.Where("provider = ? AND is_enabled = ?", provider, true).Limit(2).Find(&configs).Error; err != nil {
 			a.Log.Error("Failed to fetch SSO provider", "error", err, "provider", provider)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO", nil, "")
 		}
@@ -131,6 +135,7 @@ func (a *App) InitSSO(r *fastglue.Request) error {
 
 // CallbackSSO handles OAuth callback
 func (a *App) CallbackSSO(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	provider := r.RequestCtx.UserValue("provider").(string)
 	code := string(r.RequestCtx.QueryArgs().Peek("code"))
 	stateNonce := string(r.RequestCtx.QueryArgs().Peek("state"))
@@ -180,7 +185,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 
 	// Get SSO provider config
 	var ssoConfig models.SSOProvider
-	if err := a.DB.Where("organization_id = ? AND provider = ?", orgID, provider).First(&ssoConfig).Error; err != nil {
+	if err := requestDB.Where("organization_id = ? AND provider = ?", orgID, provider).First(&ssoConfig).Error; err != nil {
 		a.redirectWithError(r, "SSO provider not configured")
 		return nil
 	}
@@ -226,7 +231,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 
 	// Find user by email (across all orgs, like regular login)
 	var user models.User
-	if err := a.DB.Where("email = ?", userInfo.Email).First(&user).Error; err != nil {
+	if err := requestDB.Where("email = ?", userInfo.Email).First(&user).Error; err != nil {
 		// User doesn't exist - check if auto-create is enabled
 		if !ssoConfig.AllowAutoCreate {
 			a.redirectWithError(r, "User not found. Contact your administrator.")
@@ -241,7 +246,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 
 		// Look up the CustomRole by name for this organization
 		var customRole models.CustomRole
-		if err := a.DB.Where("organization_id = ? AND name = ?", orgID, roleName).First(&customRole).Error; err != nil {
+		if err := requestDB.Where("organization_id = ? AND name = ?", orgID, roleName).First(&customRole).Error; err != nil {
 			a.Log.Error("Failed to find role for SSO user", "error", err, "role_name", roleName)
 			a.redirectWithError(r, "Failed to create user account: role not found")
 			return nil
@@ -262,7 +267,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 			return nil
 		}
 
-		if err := a.DB.Create(&user).Error; err != nil {
+		if err := requestDB.Create(&user).Error; err != nil {
 			a.Log.Error("Failed to create SSO user", "error", err, "email", userInfo.Email)
 			a.redirectWithError(r, "Failed to create user account")
 			return nil
@@ -275,7 +280,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 			RoleID:         &customRole.ID,
 			IsDefault:      true,
 		}
-		if err := a.DB.Create(&userOrg).Error; err != nil {
+		if err := requestDB.Create(&userOrg).Error; err != nil {
 			a.Log.Error("Failed to create user organization entry for SSO user", "error", err)
 			// Non-fatal: user was already created
 		}
@@ -286,7 +291,8 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 		if user.SSOProvider == "" {
 			user.SSOProvider = provider
 			user.SSOProviderID = userInfo.ID
-			a.DB.Save(&user)
+			requestDB.
+				Save(&user)
 		}
 
 		// Check if user is active
@@ -328,6 +334,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 
 // GetSSOSettings returns all SSO provider configs for the organization (admin only)
 func (a *App) GetSSOSettings(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -337,7 +344,7 @@ func (a *App) GetSSOSettings(r *fastglue.Request) error {
 	}
 
 	var providers []models.SSOProvider
-	if err := a.DB.Where("organization_id = ?", orgID).Find(&providers).Error; err != nil {
+	if err := requestDB.Where("organization_id = ?", orgID).Find(&providers).Error; err != nil {
 		a.Log.Error("Failed to fetch SSO providers", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch SSO settings", nil, "")
 	}
@@ -364,6 +371,7 @@ func (a *App) GetSSOSettings(r *fastglue.Request) error {
 
 // UpdateSSOProvider creates or updates an SSO provider config (admin only)
 func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -401,7 +409,7 @@ func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
 
 	// Find or create SSO provider config
 	var ssoConfig models.SSOProvider
-	err = a.DB.Where("organization_id = ? AND provider = ?", orgID, provider).First(&ssoConfig).Error
+	err = requestDB.Where("organization_id = ? AND provider = ?", orgID, provider).First(&ssoConfig).Error
 
 	if err != nil {
 		// Create new
@@ -432,7 +440,7 @@ func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
 	ssoConfig.TokenURL = req.TokenURL
 	ssoConfig.UserInfoURL = req.UserInfoURL
 
-	if err := a.DB.Save(&ssoConfig).Error; err != nil {
+	if err := requestDB.Save(&ssoConfig).Error; err != nil {
 		a.Log.Error("Failed to save SSO provider", "error", err, "provider", provider)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save SSO settings", nil, "")
 	}
@@ -453,6 +461,7 @@ func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
 
 // DeleteSSOProvider removes an SSO provider config (admin only)
 func (a *App) DeleteSSOProvider(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -463,7 +472,7 @@ func (a *App) DeleteSSOProvider(r *fastglue.Request) error {
 
 	provider := r.RequestCtx.UserValue("provider").(string)
 
-	result := a.DB.Where("organization_id = ? AND provider = ?", orgID, provider).Delete(&models.SSOProvider{})
+	result := requestDB.Where("organization_id = ? AND provider = ?", orgID, provider).Delete(&models.SSOProvider{})
 	if result.Error != nil {
 		a.Log.Error("Failed to delete SSO provider", "error", result.Error, "provider", provider)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete SSO provider", nil, "")

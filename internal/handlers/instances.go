@@ -119,6 +119,7 @@ func (a *App) requireInstanceDeletePermission(r *fastglue.Request, userID uuid.U
 
 // CreateInstance creates a new WhatsApp instance
 func (a *App) CreateInstance(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -163,7 +164,7 @@ func (a *App) CreateInstance(r *fastglue.Request) error {
 		Status:          models.InstanceStatusDisconnected,
 	}
 
-	if err := a.DB.Create(&instance).Error; err != nil {
+	if err := requestDB.Create(&instance).Error; err != nil {
 		a.Log.Error("Failed to create instance", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create instance", nil, "")
 	}
@@ -173,6 +174,7 @@ func (a *App) CreateInstance(r *fastglue.Request) error {
 
 // ListInstances returns all instances for the organization
 func (a *App) ListInstances(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -181,7 +183,7 @@ func (a *App) ListInstances(r *fastglue.Request) error {
 		return nil
 	}
 
-	query := a.DB.Where("organization_id = ?", orgID)
+	query := requestDB.Where("organization_id = ?", orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for list", "error", err, "org_id", orgID, "user_id", userID)
@@ -203,6 +205,7 @@ func (a *App) ListInstances(r *fastglue.Request) error {
 
 // GetInstance returns a single instance
 func (a *App) GetInstance(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -217,7 +220,7 @@ func (a *App) GetInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
-	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", id, orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for read", "error", err, "org_id", orgID, "user_id", userID)
@@ -240,6 +243,7 @@ func (a *App) GetInstance(r *fastglue.Request) error {
 
 // UpdateInstance updates an instance
 func (a *App) UpdateInstance(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -259,7 +263,7 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
 	}
 
-	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", id, orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for update", "error", err, "org_id", orgID, "user_id", userID)
@@ -311,7 +315,7 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 	}
 
 	if len(updates) > 0 {
-		if err := a.DB.Model(&instance).Updates(updates).Error; err != nil {
+		if err := requestDB.Model(&instance).Updates(updates).Error; err != nil {
 			a.Log.Error("Failed to update instance", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update instance", nil, "")
 		}
@@ -324,6 +328,7 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 
 // DeleteInstance logs out/unlinks an instance and then deletes it.
 func (a *App) DeleteInstance(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -343,7 +348,7 @@ func (a *App) DeleteInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
-	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", id, orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for delete", "error", err, "org_id", orgID, "user_id", userID)
@@ -380,6 +385,7 @@ func (a *App) DeleteInstance(r *fastglue.Request) error {
 
 // ConnectInstance initiates connection (and QR generation) for an instance
 func (a *App) ConnectInstance(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -394,7 +400,7 @@ func (a *App) ConnectInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
-	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", id, orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for connect", "error", err, "org_id", orgID, "user_id", userID)
@@ -436,6 +442,7 @@ func (a *App) ConnectInstance(r *fastglue.Request) error {
 
 // DisconnectInstance disconnects an instance
 func (a *App) DisconnectInstance(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -450,7 +457,7 @@ func (a *App) DisconnectInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
-	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", id, orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for disconnect", "error", err, "org_id", orgID, "user_id", userID)
@@ -483,6 +490,7 @@ func (a *App) DisconnectInstance(r *fastglue.Request) error {
 
 // ReconnectInstance reconnects an instance
 func (a *App) ReconnectInstance(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -497,7 +505,7 @@ func (a *App) ReconnectInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
-	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", id, orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for reconnect", "error", err, "org_id", orgID, "user_id", userID)
@@ -543,6 +551,7 @@ func (a *App) ReconnectInstance(r *fastglue.Request) error {
 
 // GetInstanceQRCodeSnapshot returns the latest cached QR code (if still valid) for an instance.
 func (a *App) GetInstanceQRCodeSnapshot(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -557,7 +566,7 @@ func (a *App) GetInstanceQRCodeSnapshot(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
-	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", id, orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for qr snapshot", "error", err, "org_id", orgID, "user_id", userID)
@@ -598,6 +607,7 @@ func (a *App) GetInstanceQRCodeSnapshot(r *fastglue.Request) error {
 
 // PairPhoneInstance requests a phone linking code for an unpaired instance.
 func (a *App) PairPhoneInstance(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -612,7 +622,7 @@ func (a *App) PairPhoneInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
-	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", id, orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for pairing", "error", err, "org_id", orgID, "user_id", userID)
@@ -683,6 +693,7 @@ func (a *App) PairPhoneInstance(r *fastglue.Request) error {
 
 // GetInstanceHealth returns runtime health metrics for an instance.
 func (a *App) GetInstanceHealth(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -697,7 +708,7 @@ func (a *App) GetInstanceHealth(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID", nil, "")
 	}
 
-	query := a.DB.Where("id = ? AND organization_id = ?", id, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", id, orgID)
 	query, err = a.scopeInstancesQueryToUserRestriction(query, orgID, userID)
 	if err != nil {
 		a.Log.Error("Failed to resolve restricted instance for health", "error", err, "org_id", orgID, "user_id", userID)

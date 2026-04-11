@@ -54,6 +54,7 @@ func (a *App) requireTemplatePermission(r *fastglue.Request, userID uuid.UUID, a
 
 // ListTemplates returns all templates for the organization
 func (a *App) ListTemplates(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -70,7 +71,7 @@ func (a *App) ListTemplates(r *fastglue.Request) error {
 	category := string(r.RequestCtx.QueryArgs().Peek("category"))
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 
-	query := a.DB.Where("organization_id = ?", orgID)
+	query := requestDB.Where("organization_id = ?", orgID)
 
 	if accountName != "" {
 		query = query.Where("whats_app_account = ?", accountName)
@@ -110,6 +111,7 @@ func (a *App) ListTemplates(r *fastglue.Request) error {
 
 // CreateTemplate creates a new message template
 func (a *App) CreateTemplate(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -138,7 +140,7 @@ func (a *App) CreateTemplate(r *fastglue.Request) error {
 
 	// Check if template with same name exists for this account
 	var existingTemplate models.Template
-	if err := a.DB.Where("organization_id = ? AND whats_app_account = ? AND name = ?", orgID, req.WhatsAppAccount, templateName).First(&existingTemplate).Error; err == nil {
+	if err := requestDB.Where("organization_id = ? AND whats_app_account = ? AND name = ?", orgID, req.WhatsAppAccount, templateName).First(&existingTemplate).Error; err == nil {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Template with this name already exists", nil, "")
 	}
 
@@ -163,7 +165,7 @@ func (a *App) CreateTemplate(r *fastglue.Request) error {
 		SampleValues:    convertToJSONBArray(req.SampleValues),
 	}
 
-	if err := a.DB.Create(&template).Error; err != nil {
+	if err := requestDB.Create(&template).Error; err != nil {
 		a.Log.Error("Failed to create template", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create template", nil, "")
 	}
@@ -173,6 +175,7 @@ func (a *App) CreateTemplate(r *fastglue.Request) error {
 
 // GetTemplate returns a single template
 func (a *App) GetTemplate(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -186,7 +189,7 @@ func (a *App) GetTemplate(r *fastglue.Request) error {
 		return nil
 	}
 
-	template, err := findByIDAndOrg[models.Template](a.DB, r, id, orgID, "Template")
+	template, err := findByIDAndOrg[models.Template](requestDB, r, id, orgID, "Template")
 	if err != nil {
 		return nil
 	}
@@ -196,6 +199,7 @@ func (a *App) GetTemplate(r *fastglue.Request) error {
 
 // UpdateTemplate updates a message template
 func (a *App) UpdateTemplate(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -209,7 +213,7 @@ func (a *App) UpdateTemplate(r *fastglue.Request) error {
 		return nil
 	}
 
-	template, err := findByIDAndOrg[models.Template](a.DB, r, id, orgID, "Template")
+	template, err := findByIDAndOrg[models.Template](requestDB, r, id, orgID, "Template")
 	if err != nil {
 		return nil
 	}
@@ -249,7 +253,7 @@ func (a *App) UpdateTemplate(r *fastglue.Request) error {
 		template.SampleValues = convertToJSONBArray(req.SampleValues)
 	}
 
-	if err := a.DB.Save(template).Error; err != nil {
+	if err := requestDB.Save(template).Error; err != nil {
 		a.Log.Error("Failed to update template", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update template", nil, "")
 	}
@@ -259,6 +263,7 @@ func (a *App) UpdateTemplate(r *fastglue.Request) error {
 
 // DeleteTemplate deletes a message template
 func (a *App) DeleteTemplate(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -272,7 +277,7 @@ func (a *App) DeleteTemplate(r *fastglue.Request) error {
 		return nil
 	}
 
-	template, err := findByIDAndOrg[models.Template](a.DB, r, id, orgID, "Template")
+	template, err := findByIDAndOrg[models.Template](requestDB, r, id, orgID, "Template")
 	if err != nil {
 		return nil
 	}
@@ -285,7 +290,7 @@ func (a *App) DeleteTemplate(r *fastglue.Request) error {
 		}
 	}
 
-	if err := a.DB.Delete(template).Error; err != nil {
+	if err := requestDB.Delete(template).Error; err != nil {
 		a.Log.Error("Failed to delete template", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete template", nil, "")
 	}
@@ -295,6 +300,7 @@ func (a *App) DeleteTemplate(r *fastglue.Request) error {
 
 // SubmitTemplate submits a template to Meta for approval
 func (a *App) SubmitTemplate(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -308,7 +314,7 @@ func (a *App) SubmitTemplate(r *fastglue.Request) error {
 		return nil
 	}
 
-	template, err := findByIDAndOrg[models.Template](a.DB, r, id, orgID, "Template")
+	template, err := findByIDAndOrg[models.Template](requestDB, r, id, orgID, "Template")
 	if err != nil {
 		return nil
 	}
@@ -343,7 +349,7 @@ func (a *App) SubmitTemplate(r *fastglue.Request) error {
 	}
 	template.Status = "PENDING"
 
-	if err := a.DB.Save(template).Error; err != nil {
+	if err := requestDB.Save(template).Error; err != nil {
 		a.Log.Error("Failed to update template after submission", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Template submitted but failed to update local record", nil, "")
 	}
@@ -379,6 +385,7 @@ func (a *App) submitTemplateToMeta(account *models.WhatsAppAccount, template *mo
 
 // SyncTemplates syncs templates from Meta API
 func (a *App) SyncTemplates(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -451,11 +458,12 @@ func (a *App) SyncTemplates(r *fastglue.Request) error {
 
 		// Upsert (including soft-deleted templates to restore them)
 		existing := models.Template{}
-		if err := a.DB.Unscoped().Where("organization_id = ? AND whats_app_account = ? AND name = ? AND language = ?",
+		if err := requestDB.Unscoped().Where("organization_id = ? AND whats_app_account = ? AND name = ? AND language = ?",
 			orgID, account.Name, template.Name, template.Language).First(&existing).Error; err == nil {
 			// Update existing and restore if soft-deleted (explicitly set deleted_at to NULL)
 			template.ID = existing.ID
-			a.DB.Unscoped().Model(&template).Updates(map[string]interface{}{
+			requestDB.
+				Unscoped().Model(&template).Updates(map[string]interface{}{
 				"meta_template_id": template.MetaTemplateID,
 				"display_name":     template.DisplayName,
 				"category":         template.Category,
@@ -468,8 +476,9 @@ func (a *App) SyncTemplates(r *fastglue.Request) error {
 				"deleted_at":       nil, // Restore soft-deleted template
 			})
 		} else {
-			// Create new
-			a.DB.Create(&template)
+			requestDB.
+				// Create new
+				Create(&template)
 		}
 		synced++
 	}

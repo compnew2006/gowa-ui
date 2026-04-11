@@ -50,8 +50,9 @@ type updateCollaboratorStatusRequest struct {
 }
 
 func (a *App) loadContactForCollaboration(r *fastglue.Request, orgID, userID, contactID uuid.UUID) (*models.Contact, error) {
+	requestDB := a.requestDB(r)
 	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
@@ -75,6 +76,7 @@ func (a *App) loadContactForCollaboration(r *fastglue.Request, orgID, userID, co
 
 // ListContactCollaborators lists collaborators for a contact.
 func (a *App) ListContactCollaborators(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -96,7 +98,7 @@ func (a *App) ListContactCollaborators(r *fastglue.Request) error {
 	}
 
 	var rows []contactCollaboratorRow
-	query := a.DB.Table("contact_collaborators").
+	query := requestDB.Table("contact_collaborators").
 		Select("contact_collaborators.id, contact_collaborators.contact_id, contact_collaborators.user_id, contact_collaborators.role, contact_collaborators.status, contact_collaborators.invited_by_user_id, contact_collaborators.created_at, contact_collaborators.accepted_at, users.full_name as user_name, invited_by.full_name as invited_by_name").
 		Joins("LEFT JOIN users ON users.id = contact_collaborators.user_id").
 		Joins("LEFT JOIN users AS invited_by ON invited_by.id = contact_collaborators.invited_by_user_id").
@@ -134,6 +136,7 @@ func (a *App) ListContactCollaborators(r *fastglue.Request) error {
 
 // InviteContactCollaborator invites a user to collaborate on a contact.
 func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -180,7 +183,7 @@ func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
 	}
 
 	var invitee models.User
-	if err := a.DB.Where("id = ? AND organization_id = ?", inviteUserID, orgID).First(&invitee).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", inviteUserID, orgID).First(&invitee).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User not found", nil, "")
 	}
 	if !invitee.IsActive {
@@ -198,7 +201,7 @@ func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
 	}
 
 	var collaborator models.ContactCollaborator
-	err = a.DB.Where("organization_id = ? AND contact_id = ? AND user_id = ? AND deleted_at IS NULL", orgID, contactID, inviteUserID).
+	err = requestDB.Where("organization_id = ? AND contact_id = ? AND user_id = ? AND deleted_at IS NULL", orgID, contactID, inviteUserID).
 		First(&collaborator).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		a.Log.Error("Failed to lookup collaborator", "error", err, "contact_id", contactID, "user_id", inviteUserID)
@@ -215,7 +218,7 @@ func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
 			Status:          models.CollaboratorStatusInvited,
 			InvitedByUserID: userID,
 		}
-		if err := a.DB.Create(&collaborator).Error; err != nil {
+		if err := requestDB.Create(&collaborator).Error; err != nil {
 			a.Log.Error("Failed to create collaborator invite", "error", err, "contact_id", contactID, "user_id", inviteUserID)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to invite collaborator", nil, "")
 		}
@@ -234,7 +237,7 @@ func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
 			"accepted_at":        nil,
 			"declined_at":        nil,
 		}
-		if err := a.DB.Model(&collaborator).Updates(updates).Error; err != nil {
+		if err := requestDB.Model(&collaborator).Updates(updates).Error; err != nil {
 			a.Log.Error("Failed to update collaborator invite", "error", err, "contact_id", contactID, "user_id", inviteUserID)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to invite collaborator", nil, "")
 		}
@@ -268,6 +271,7 @@ func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
 
 // AcceptContactCollaborator accepts a collaboration invite for the current user.
 func (a *App) AcceptContactCollaborator(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -297,7 +301,7 @@ func (a *App) AcceptContactCollaborator(r *fastglue.Request) error {
 	}
 
 	var collaborator models.ContactCollaborator
-	if err := a.DB.Where("organization_id = ? AND contact_id = ? AND user_id = ? AND deleted_at IS NULL", orgID, contactID, userID).
+	if err := requestDB.Where("organization_id = ? AND contact_id = ? AND user_id = ? AND deleted_at IS NULL", orgID, contactID, userID).
 		First(&collaborator).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Invite not found", nil, "")
@@ -312,7 +316,7 @@ func (a *App) AcceptContactCollaborator(r *fastglue.Request) error {
 	}
 
 	now := time.Now().UTC()
-	if err := a.DB.Model(&collaborator).Updates(map[string]any{
+	if err := requestDB.Model(&collaborator).Updates(map[string]any{
 		"status":      models.CollaboratorStatusAccepted,
 		"accepted_at": &now,
 		"declined_at": nil,
@@ -340,6 +344,7 @@ func (a *App) AcceptContactCollaborator(r *fastglue.Request) error {
 
 // DeclineContactCollaborator declines a collaboration invite for the current user.
 func (a *App) DeclineContactCollaborator(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -357,7 +362,7 @@ func (a *App) DeclineContactCollaborator(r *fastglue.Request) error {
 	}
 
 	var collaborator models.ContactCollaborator
-	if err := a.DB.Where("organization_id = ? AND contact_id = ? AND user_id = ? AND deleted_at IS NULL", orgID, contactID, userID).
+	if err := requestDB.Where("organization_id = ? AND contact_id = ? AND user_id = ? AND deleted_at IS NULL", orgID, contactID, userID).
 		First(&collaborator).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Invite not found", nil, "")
@@ -372,7 +377,7 @@ func (a *App) DeclineContactCollaborator(r *fastglue.Request) error {
 	}
 
 	now := time.Now().UTC()
-	if err := a.DB.Model(&collaborator).Updates(map[string]any{
+	if err := requestDB.Model(&collaborator).Updates(map[string]any{
 		"status":      models.CollaboratorStatusDeclined,
 		"declined_at": &now,
 	}).Error; err != nil {
@@ -394,6 +399,7 @@ func (a *App) DeclineContactCollaborator(r *fastglue.Request) error {
 
 // RemoveContactCollaborator removes a collaborator from a contact.
 func (a *App) RemoveContactCollaborator(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -423,7 +429,7 @@ func (a *App) RemoveContactCollaborator(r *fastglue.Request) error {
 	}
 
 	var collaborator models.ContactCollaborator
-	if err := a.DB.Where("organization_id = ? AND contact_id = ? AND user_id = ? AND deleted_at IS NULL", orgID, contactID, collabUserID).
+	if err := requestDB.Where("organization_id = ? AND contact_id = ? AND user_id = ? AND deleted_at IS NULL", orgID, contactID, collabUserID).
 		First(&collaborator).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Collaborator not found", nil, "")
@@ -431,7 +437,7 @@ func (a *App) RemoveContactCollaborator(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to remove collaborator", nil, "")
 	}
 
-	if err := a.DB.Delete(&collaborator).Error; err != nil {
+	if err := requestDB.Delete(&collaborator).Error; err != nil {
 		a.Log.Error("Failed to remove collaborator", "error", err, "contact_id", contactID, "user_id", collabUserID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to remove collaborator", nil, "")
 	}

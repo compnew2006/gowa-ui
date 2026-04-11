@@ -146,6 +146,7 @@ func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUser
 // AssignContact assigns a contact to a user (agent)
 // Only users with assignment permission can assign contacts
 func (a *App) AssignContact(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -167,7 +168,7 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 	}
 
 	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	contact, err := findByIDAndOrg[models.Contact](requestDB, r, contactID, orgID, "Contact")
 	if err != nil {
 		return nil
 	}
@@ -186,7 +187,7 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 	// If assigning to a user, verify they exist in the same org
 	if req.UserID != nil {
 		var user models.User
-		if err := a.DB.Where("id = ? AND organization_id = ?", req.UserID, orgID).First(&user).Error; err != nil {
+		if err := requestDB.Where("id = ? AND organization_id = ?", req.UserID, orgID).First(&user).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User not found", nil, "")
 		}
 	}
@@ -198,12 +199,12 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 	}
 
 	// Update contact assignment + lifecycle status
-	if err := a.DB.Model(contact).Updates(chatAssignmentUpdates(req.UserID)).Error; err != nil {
+	if err := requestDB.Model(contact).Updates(chatAssignmentUpdates(req.UserID)).Error; err != nil {
 		a.Log.Error("Failed to assign contact", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to assign contact", nil, "")
 	}
 
-	if err := a.DB.Where("id = ?", contact.ID).First(contact).Error; err != nil {
+	if err := requestDB.Where("id = ?", contact.ID).First(contact).Error; err != nil {
 		a.Log.Error("Failed to reload contact after assignment", "error", err, "contact_id", contact.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to assign contact", nil, "")
 	}
@@ -225,6 +226,7 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 
 // ClaimChat claims a pending chat for the current user.
 func (a *App) ClaimChat(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -242,7 +244,7 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat not found", nil, "")
 	}
 
@@ -254,17 +256,17 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Chat is already assigned to another user", nil, "")
 	}
 	if status != models.ChatStatusPending && contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
-		_ = a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
+		_ = requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
 		a.appendClaimedChatSystemMessage(&contact, userID)
 		return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 	}
 
-	if err := a.DB.Model(&contact).Updates(chatAssignmentUpdates(&userID)).Error; err != nil {
+	if err := requestDB.Model(&contact).Updates(chatAssignmentUpdates(&userID)).Error; err != nil {
 		a.Log.Error("Failed to claim chat", "error", err, "chat_id", contactID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to claim chat", nil, "")
 	}
 
-	if err := a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
+	if err := requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 
@@ -276,6 +278,7 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 
 // CloseChat marks a chat as closed.
 func (a *App) CloseChat(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -293,13 +296,13 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat not found", nil, "")
 	}
 
 	status := normalizeContactStatus(&contact)
 	if status == models.ChatStatusClosed {
-		_ = a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
+		_ = requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
 		return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 	}
 
@@ -307,12 +310,12 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Only the assigned user can close this chat", nil, "")
 	}
 
-	if err := a.DB.Model(&contact).Updates(closeChatUpdates(userID, contact.AssignedUserID)).Error; err != nil {
+	if err := requestDB.Model(&contact).Updates(closeChatUpdates(userID, contact.AssignedUserID)).Error; err != nil {
 		a.Log.Error("Failed to close chat", "error", err, "chat_id", contactID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chat", nil, "")
 	}
 
-	if err := a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
+	if err := requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 
@@ -325,6 +328,7 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 
 // ReopenChat reopens a closed chat and moves it back to pending unassigned queue.
 func (a *App) ReopenChat(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -342,7 +346,7 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat not found", nil, "")
 	}
 
@@ -350,12 +354,12 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Only closed chats can be reopened", nil, "")
 	}
 
-	if err := a.DB.Model(&contact).Updates(reopenChatUpdates()).Error; err != nil {
+	if err := requestDB.Model(&contact).Updates(reopenChatUpdates()).Error; err != nil {
 		a.Log.Error("Failed to reopen chat", "error", err, "chat_id", contactID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to reopen chat", nil, "")
 	}
 
-	if err := a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
+	if err := requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
@@ -369,6 +373,7 @@ type SetChatPublicRequest struct {
 
 // SetChatPublic toggles public visibility for a chat so all agents can access it.
 func (a *App) SetChatPublic(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -391,21 +396,21 @@ func (a *App) SetChatPublic(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat not found", nil, "")
 	}
 
 	if contact.IsPublic == req.IsPublic {
-		_ = a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
+		_ = requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
 		return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 	}
 
-	if err := a.DB.Model(&contact).Update("is_public", req.IsPublic).Error; err != nil {
+	if err := requestDB.Model(&contact).Update("is_public", req.IsPublic).Error; err != nil {
 		a.Log.Error("Failed to update chat public visibility", "error", err, "chat_id", contactID, "user_id", userID, "is_public", req.IsPublic)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update chat visibility", nil, "")
 	}
 
-	if err := a.DB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
+	if err := requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 
@@ -427,6 +432,7 @@ type ContactSessionDataResponse struct {
 // GetContactSessionData returns session data and panel configuration for a contact
 // Used by the contact info panel in the chat view
 func (a *App) GetContactSessionData(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -438,7 +444,7 @@ func (a *App) GetContactSessionData(r *fastglue.Request) error {
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
@@ -453,7 +459,7 @@ func (a *App) GetContactSessionData(r *fastglue.Request) error {
 
 	// Get the most recent completed or active session for this contact
 	var session models.ChatbotSession
-	err = a.DB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
+	err = requestDB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
 		Where("status IN ?", []models.SessionStatus{models.SessionStatusActive, models.SessionStatusCompleted}).
 		Order("created_at DESC").
 		First(&session).Error
@@ -524,6 +530,7 @@ type UpdateContactTagsRequest struct {
 
 // UpdateContactTags updates the tags on a contact
 func (a *App) UpdateContactTags(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -545,7 +552,7 @@ func (a *App) UpdateContactTags(r *fastglue.Request) error {
 	}
 
 	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	contact, err := findByIDAndOrg[models.Contact](requestDB, r, contactID, orgID, "Contact")
 	if err != nil {
 		return nil
 	}
@@ -557,13 +564,13 @@ func (a *App) UpdateContactTags(r *fastglue.Request) error {
 	}
 
 	// Update contact tags
-	if err := a.DB.Model(contact).Update("tags", tagsArray).Error; err != nil {
+	if err := requestDB.Model(contact).Update("tags", tagsArray).Error; err != nil {
 		a.Log.Error("Failed to update contact tags", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update contact tags", nil, "")
 	}
 
 	// Reload contact to get updated tags
-	if err := a.DB.First(contact, contactID).Error; err != nil {
+	if err := requestDB.First(contact, contactID).Error; err != nil {
 		a.Log.Error("Failed to reload contact", "error", err)
 	}
 
@@ -596,6 +603,7 @@ type CreateContactRequest struct {
 
 // CreateContact creates a new contact or restores a soft-deleted one
 func (a *App) CreateContact(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -668,7 +676,7 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 
 	// Check if contact exists (including soft-deleted)
 	var existingContact models.Contact
-	existingQuery := a.DB.Unscoped().Where("organization_id = ? AND phone_number = ?", orgID, normalizedPhone)
+	existingQuery := requestDB.Unscoped().Where("organization_id = ? AND phone_number = ?", orgID, normalizedPhone)
 	if resolvedInstanceID != nil {
 		existingQuery = existingQuery.Where("instance_id = ?", *resolvedInstanceID)
 	} else {
@@ -677,8 +685,9 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 	if err := existingQuery.First(&existingContact).Error; err == nil {
 		// Contact exists
 		if existingContact.DeletedAt.Valid {
-			// Restore soft-deleted contact
-			a.DB.Unscoped().Model(&existingContact).Update("deleted_at", nil)
+			requestDB.
+				// Restore soft-deleted contact
+				Unscoped().Model(&existingContact).Update("deleted_at", nil)
 			existingContact.DeletedAt.Valid = false
 			// Update fields
 			updates := map[string]any{}
@@ -707,10 +716,12 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 				updates["metadata"] = models.JSONB(req.Metadata)
 			}
 			if len(updates) > 0 {
-				a.DB.Model(&existingContact).Updates(updates)
+				requestDB.
+					Model(&existingContact).Updates(updates)
 			}
-			// Reload contact
-			a.DB.First(&existingContact, existingContact.ID)
+			requestDB.
+				// Reload contact
+				First(&existingContact, existingContact.ID)
 			if startChat {
 				a.broadcastContactLifecycleUpdate(orgID, &existingContact, false)
 			}
@@ -750,7 +761,7 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 		contact.Metadata = models.JSONB(req.Metadata)
 	}
 
-	if err := a.DB.Create(&contact).Error; err != nil {
+	if err := requestDB.Create(&contact).Error; err != nil {
 		a.Log.Error("Failed to create contact", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create contact", nil, "")
 	}
@@ -774,6 +785,7 @@ type UpdateContactRequest struct {
 
 // UpdateContact updates an existing contact
 func (a *App) UpdateContact(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -795,7 +807,7 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 	}
 
 	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	contact, err := findByIDAndOrg[models.Contact](requestDB, r, contactID, orgID, "Contact")
 	if err != nil {
 		return nil
 	}
@@ -835,7 +847,7 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 	if req.AssignedUserID != nil {
 		// Verify user exists in same org
 		var user models.User
-		if err := a.DB.Where("id = ? AND organization_id = ?", req.AssignedUserID, orgID).First(&user).Error; err != nil {
+		if err := requestDB.Where("id = ? AND organization_id = ?", req.AssignedUserID, orgID).First(&user).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Assigned user not found", nil, "")
 		}
 		for key, value := range chatAssignmentUpdates(req.AssignedUserID) {
@@ -847,13 +859,14 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No fields to update", nil, "")
 	}
 
-	if err := a.DB.Model(contact).Updates(updates).Error; err != nil {
+	if err := requestDB.Model(contact).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update contact", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update contact", nil, "")
 	}
+	requestDB.
 
-	// Reload contact
-	a.DB.First(contact, contactID)
+		// Reload contact
+		First(contact, contactID)
 
 	if req.AssignedUserID != nil {
 		notifyAssignee := false
@@ -868,6 +881,7 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 
 // DeleteContact soft-deletes a contact while preserving conversation history.
 func (a *App) DeleteContact(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -884,12 +898,12 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 	}
 
 	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	contact, err := findByIDAndOrg[models.Contact](requestDB, r, contactID, orgID, "Contact")
 	if err != nil {
 		return nil
 	}
 
-	if err := a.DB.Delete(contact).Error; err != nil {
+	if err := requestDB.Delete(contact).Error; err != nil {
 		a.Log.Error("Failed to delete contact", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete contact", nil, "")
 	}
@@ -901,6 +915,7 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 
 // SoftDeleteContactForUser hides a chat for the current user without deleting data.
 func (a *App) SoftDeleteContactForUser(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -915,14 +930,14 @@ func (a *App) SoftDeleteContactForUser(r *fastglue.Request) error {
 		return nil
 	}
 
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	contact, err := findByIDAndOrg[models.Contact](requestDB, r, contactID, orgID, "Contact")
 	if err != nil {
 		return nil
 	}
 
 	if normalizeContactStatus(contact) != models.ChatStatusClosed {
 		closedAt := time.Now().UTC()
-		if err := a.DB.Model(contact).Updates(closeChatUpdatesForSoftDelete(userID, closedAt)).Error; err != nil {
+		if err := requestDB.Model(contact).Updates(closeChatUpdatesForSoftDelete(userID, closedAt)).Error; err != nil {
 			a.Log.Error("Failed to close chat on soft delete", "error", err, "contact_id", contact.ID, "user_id", userID)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chat", nil, "")
 		}

@@ -67,6 +67,7 @@ type statusGroupResponse struct {
 
 // ListStatuses returns active WhatsApp statuses grouped by sender per instance.
 func (a *App) ListStatuses(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -81,7 +82,7 @@ func (a *App) ListStatuses(r *fastglue.Request) error {
 	instanceFilter := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("instance_id")))
 	now := time.Now().UTC()
 
-	query := a.DB.
+	query := requestDB.
 		Where("organization_id = ? AND expires_at > ? AND status_type IN ?", orgID, now, []string{
 			string(models.WhatsAppStatusTypeText),
 			string(models.WhatsAppStatusTypeImage),
@@ -113,6 +114,7 @@ func (a *App) ListStatuses(r *fastglue.Request) error {
 
 // SendStatus publishes a status update (text, image, or video) for an instance.
 func (a *App) SendStatus(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -136,7 +138,7 @@ func (a *App) SendStatus(r *fastglue.Request) error {
 	}
 
 	var instance models.WhatsAppInstance
-	if err := a.DB.Where("id = ? AND organization_id = ?", instanceID, orgID).First(&instance).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", instanceID, orgID).First(&instance).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
 	}
 
@@ -237,7 +239,7 @@ func (a *App) SendStatus(r *fastglue.Request) error {
 		status.Font = font.String()
 	}
 
-	if err := a.DB.Create(&status).Error; err != nil {
+	if err := requestDB.Create(&status).Error; err != nil {
 		a.Log.Error("Failed to persist outgoing status", "error", err, "instance_id", instance.ID, "wa_message_id", waMessageID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Status sent but failed to persist record", nil, "")
 	}
@@ -248,6 +250,7 @@ func (a *App) SendStatus(r *fastglue.Request) error {
 
 // MarkStatusSeen marks a status as seen and forwards read receipt to WhatsApp.
 func (a *App) MarkStatusSeen(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -271,7 +274,7 @@ func (a *App) MarkStatusSeen(r *fastglue.Request) error {
 	}
 
 	var status models.WhatsAppStatus
-	if err := a.DB.Where("id = ? AND organization_id = ?", statusID, orgID).First(&status).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", statusID, orgID).First(&status).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Status not found", nil, "")
 	}
 	if status.ExpiresAt.Before(time.Now().UTC()) {
@@ -297,7 +300,7 @@ func (a *App) MarkStatusSeen(r *fastglue.Request) error {
 	}
 
 	seenAt := time.Now().UTC()
-	if err := a.DB.Model(&models.WhatsAppStatus{}).Where("id = ?", status.ID).Update("seen_at", seenAt).Error; err != nil {
+	if err := requestDB.Model(&models.WhatsAppStatus{}).Where("id = ?", status.ID).Update("seen_at", seenAt).Error; err != nil {
 		a.Log.Warn("Failed to update status seen timestamp", "error", err, "status_id", status.ID)
 	}
 
@@ -309,6 +312,7 @@ func (a *App) MarkStatusSeen(r *fastglue.Request) error {
 
 // ReplyToStatus sends a direct reply message to the owner of a status.
 func (a *App) ReplyToStatus(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -332,7 +336,7 @@ func (a *App) ReplyToStatus(r *fastglue.Request) error {
 	}
 
 	var status models.WhatsAppStatus
-	if err := a.DB.Where("id = ? AND organization_id = ?", statusID, orgID).First(&status).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", statusID, orgID).First(&status).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Status not found", nil, "")
 	}
 	if status.ExpiresAt.Before(time.Now().UTC()) {
@@ -400,6 +404,7 @@ func (a *App) ReplyToStatus(r *fastglue.Request) error {
 
 // ServeStatusMedia serves media files attached to status records.
 func (a *App) ServeStatusMedia(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -420,7 +425,7 @@ func (a *App) ServeStatusMedia(r *fastglue.Request) error {
 	}
 
 	var status models.WhatsAppStatus
-	if err := a.DB.Where("id = ? AND organization_id = ?", statusID, orgID).First(&status).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", statusID, orgID).First(&status).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Status not found", nil, "")
 	}
 

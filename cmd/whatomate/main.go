@@ -918,6 +918,31 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		return r
 	})
 
+	g.Before(func(r *fastglue.Request) *fastglue.Request {
+		if string(r.RequestCtx.Method()) == "OPTIONS" {
+			return r
+		}
+
+		path := string(r.RequestCtx.Path())
+		if path == "/health" || path == "/ready" ||
+			path == "/api/license/bootstrap" || path == "/api/license/activate" ||
+			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
+			path == "/api/auth/logout" || path == "/api/webhook" || path == "/ws" {
+			return r
+		}
+		if len(path) >= 13 && path[:13] == "/api/auth/sso" {
+			return r
+		}
+		if len(path) >= 28 && path[:28] == "/api/custom-actions/redirect" {
+			return r
+		}
+		if len(path) > 4 && path[:4] == "/api" {
+			return middleware.TenantScope(app.DB)(r)
+		}
+
+		return r
+	})
+
 	// Role-based access control middleware
 	g.Before(func(r *fastglue.Request) *fastglue.Request {
 		method := string(r.RequestCtx.Method())

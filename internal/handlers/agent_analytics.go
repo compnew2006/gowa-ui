@@ -188,6 +188,7 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 
 // GetAgentDetails returns detailed analytics for a specific agent
 func (a *App) GetAgentDetails(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -227,7 +228,7 @@ func (a *App) GetAgentDetails(r *fastglue.Request) error {
 	}
 
 	// Verify agent exists
-	_, err = findByIDAndOrg[models.User](a.DB, r, agentID, orgID, "Agent")
+	_, err = findByIDAndOrg[models.User](requestDB, r, agentID, orgID, "Agent")
 	if err != nil {
 		return nil
 	}

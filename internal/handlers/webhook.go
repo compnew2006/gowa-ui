@@ -17,6 +17,7 @@ import (
 
 // WebhookVerify handles Meta's webhook verification challenge
 func (a *App) WebhookVerify(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	mode := string(r.RequestCtx.QueryArgs().Peek("hub.mode"))
 	token := string(r.RequestCtx.QueryArgs().Peek("hub.verify_token"))
 	challenge := string(r.RequestCtx.QueryArgs().Peek("hub.challenge"))
@@ -36,7 +37,7 @@ func (a *App) WebhookVerify(r *fastglue.Request) error {
 
 	// Then check against tokens stored in WhatsApp accounts
 	var account models.WhatsAppAccount
-	result := a.DB.Where("webhook_verify_token = ?", token).First(&account)
+	result := requestDB.Where("webhook_verify_token = ?", token).First(&account)
 	if result.Error == nil {
 		a.Log.Info("Webhook verified successfully (account token)", "account", account.Name)
 		r.RequestCtx.SetStatusCode(fasthttp.StatusOK)

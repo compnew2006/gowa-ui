@@ -81,6 +81,7 @@ func runMigrations(db *gorm.DB) error {
 	return db.AutoMigrate(
 		// Core models
 		&models.Organization{},
+		&models.OrganizationConfig{},
 		&models.Permission{},
 		&models.CustomRole{},
 		&models.User{},
@@ -177,6 +178,7 @@ func cleanupTables(db *gorm.DB) {
 		"user_availability_logs",
 		"user_organizations",
 		"users",
+		"organization_configs",
 		"organizations",
 	}
 
@@ -225,6 +227,7 @@ func TruncateTables(db *gorm.DB) {
 		"user_availability_logs",
 		"user_organizations",
 		"users",
+		"organization_configs",
 		"organizations",
 	}
 

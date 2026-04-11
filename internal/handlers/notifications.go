@@ -13,6 +13,7 @@ import (
 
 // ListNotifications returns instance notifications for the current organization.
 func (a *App) ListNotifications(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -24,7 +25,7 @@ func (a *App) ListNotifications(r *fastglue.Request) error {
 		isAdmin = perms.IsSuperAdmin || strings.EqualFold(strings.TrimSpace(perms.RoleName), "admin")
 	}
 
-	query := a.DB.
+	query := requestDB.
 		Where("organization_id = ?", orgID).
 		Preload("Instance").
 		Order("created_at DESC")
@@ -46,6 +47,7 @@ func (a *App) ListNotifications(r *fastglue.Request) error {
 
 // DismissNotification marks a notification as dismissed.
 func (a *App) DismissNotification(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -58,7 +60,7 @@ func (a *App) DismissNotification(r *fastglue.Request) error {
 	}
 
 	var notification models.InstanceNotification
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&notification).Error; err != nil {
+	if err := requestDB.Where("id = ? AND organization_id = ?", id, orgID).First(&notification).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Notification not found", nil, "")
 		}
@@ -76,7 +78,7 @@ func (a *App) DismissNotification(r *fastglue.Request) error {
 	}
 
 	if !notification.IsDismissed {
-		if err := a.DB.Model(&notification).Update("is_dismissed", true).Error; err != nil {
+		if err := requestDB.Model(&notification).Update("is_dismissed", true).Error; err != nil {
 			a.Log.Error("Failed to dismiss notification", "error", err, "notification_id", id)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to dismiss notification", nil, "")
 		}

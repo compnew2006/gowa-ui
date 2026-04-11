@@ -56,6 +56,7 @@ type AccountResponse struct {
 
 // ListAccounts returns all WhatsApp accounts for the organization
 func (a *App) ListAccounts(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -65,7 +66,7 @@ func (a *App) ListAccounts(r *fastglue.Request) error {
 	}
 
 	var accounts []models.WhatsAppAccount
-	if err := a.DB.Where("organization_id = ?", orgID).Order("created_at DESC").Find(&accounts).Error; err != nil {
+	if err := requestDB.Where("organization_id = ?", orgID).Order("created_at DESC").Find(&accounts).Error; err != nil {
 		a.Log.Error("Failed to list accounts", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list accounts", nil, "")
 	}
@@ -83,6 +84,7 @@ func (a *App) ListAccounts(r *fastglue.Request) error {
 
 // CreateAccount creates a new WhatsApp account
 func (a *App) CreateAccount(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -152,17 +154,19 @@ func (a *App) CreateAccount(r *fastglue.Request) error {
 
 	// If this is set as default, unset other defaults
 	if req.IsDefaultIncoming {
-		a.DB.Model(&models.WhatsAppAccount{}).
+		requestDB.
+			Model(&models.WhatsAppAccount{}).
 			Where("organization_id = ? AND is_default_incoming = ?", orgID, true).
 			Update("is_default_incoming", false)
 	}
 	if req.IsDefaultOutgoing {
-		a.DB.Model(&models.WhatsAppAccount{}).
+		requestDB.
+			Model(&models.WhatsAppAccount{}).
 			Where("organization_id = ? AND is_default_outgoing = ?", orgID, true).
 			Update("is_default_outgoing", false)
 	}
 
-	if err := a.DB.Create(&account).Error; err != nil {
+	if err := requestDB.Create(&account).Error; err != nil {
 		a.Log.Error("Failed to create account", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create account", nil, "")
 	}
@@ -172,6 +176,7 @@ func (a *App) CreateAccount(r *fastglue.Request) error {
 
 // GetAccount returns a single WhatsApp account
 func (a *App) GetAccount(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -185,7 +190,7 @@ func (a *App) GetAccount(r *fastglue.Request) error {
 		return nil
 	}
 
-	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
+	account, err := findByIDAndOrg[models.WhatsAppAccount](requestDB, r, id, orgID, "Account")
 	if err != nil {
 		return nil
 	}
@@ -195,6 +200,7 @@ func (a *App) GetAccount(r *fastglue.Request) error {
 
 // UpdateAccount updates a WhatsApp account
 func (a *App) UpdateAccount(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -266,19 +272,21 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 
 	// Handle default flags
 	if req.IsDefaultIncoming && !account.IsDefaultIncoming {
-		a.DB.Model(&models.WhatsAppAccount{}).
+		requestDB.
+			Model(&models.WhatsAppAccount{}).
 			Where("organization_id = ? AND is_default_incoming = ?", orgID, true).
 			Update("is_default_incoming", false)
 	}
 	if req.IsDefaultOutgoing && !account.IsDefaultOutgoing {
-		a.DB.Model(&models.WhatsAppAccount{}).
+		requestDB.
+			Model(&models.WhatsAppAccount{}).
 			Where("organization_id = ? AND is_default_outgoing = ?", orgID, true).
 			Update("is_default_outgoing", false)
 	}
 	account.IsDefaultIncoming = req.IsDefaultIncoming
 	account.IsDefaultOutgoing = req.IsDefaultOutgoing
 
-	if err := a.DB.Save(account).Error; err != nil {
+	if err := requestDB.Save(account).Error; err != nil {
 		a.Log.Error("Failed to update account", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update account", nil, "")
 	}
@@ -291,6 +299,7 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 
 // DeleteAccount deletes a WhatsApp account
 func (a *App) DeleteAccount(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -310,7 +319,7 @@ func (a *App) DeleteAccount(r *fastglue.Request) error {
 	}
 
 	// Get account first for cache invalidation
-	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
+	account, err := findByIDAndOrg[models.WhatsAppAccount](requestDB, r, id, orgID, "Account")
 	if err != nil {
 		return nil
 	}

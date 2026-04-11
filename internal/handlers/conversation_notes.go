@@ -28,6 +28,7 @@ type ConversationNoteResponse struct {
 
 // ListConversationNotes returns paginated notes for a contact (latest at bottom).
 func (a *App) ListConversationNotes(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -45,7 +46,7 @@ func (a *App) ListConversationNotes(r *fastglue.Request) error {
 	pg := parsePaginationWithDefaults(r, 30, 100)
 	limit := pg.Limit
 
-	query := a.DB.Where("organization_id = ? AND contact_id = ?", orgID, contactID)
+	query := requestDB.Where("organization_id = ? AND contact_id = ?", orgID, contactID)
 
 	// Get total count
 	var total int64
@@ -57,7 +58,7 @@ func (a *App) ListConversationNotes(r *fastglue.Request) error {
 		beforeID, err := uuid.Parse(beforeIDStr)
 		if err == nil {
 			var beforeNote models.ConversationNote
-			if err := a.DB.Where("id = ?", beforeID).First(&beforeNote).Error; err == nil {
+			if err := requestDB.Where("id = ?", beforeID).First(&beforeNote).Error; err == nil {
 				query = query.Where("created_at < ?", beforeNote.CreatedAt)
 			}
 		}
@@ -93,6 +94,7 @@ func (a *App) ListConversationNotes(r *fastglue.Request) error {
 
 // CreateConversationNote creates a new note on a contact.
 func (a *App) CreateConversationNote(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -123,7 +125,7 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
 		Content:        req.Content,
 	}
 
-	if err := a.DB.Create(&note).Error; err != nil {
+	if err := requestDB.Create(&note).Error; err != nil {
 		a.Log.Error("Failed to create conversation note", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError,
 			"Failed to create note", nil, "")
@@ -131,7 +133,8 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
 
 	// Load the creator relation for the response
 	var user models.User
-	a.DB.First(&user, "id = ?", userID)
+	requestDB.
+		First(&user, "id = ?", userID)
 	note.CreatedBy = &user
 
 	resp := noteToResponse(note)
@@ -149,6 +152,7 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
 
 // UpdateConversationNote updates an existing note (creator only).
 func (a *App) UpdateConversationNote(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -168,7 +172,7 @@ func (a *App) UpdateConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	note, err := findByIDAndOrg[models.ConversationNote](a.DB, r, noteID, orgID, "Note")
+	note, err := findByIDAndOrg[models.ConversationNote](requestDB, r, noteID, orgID, "Note")
 	if err != nil {
 		return nil
 	}
@@ -188,7 +192,7 @@ func (a *App) UpdateConversationNote(r *fastglue.Request) error {
 	}
 
 	note.Content = req.Content
-	if err := a.DB.Save(note).Error; err != nil {
+	if err := requestDB.Save(note).Error; err != nil {
 		a.Log.Error("Failed to update conversation note", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError,
 			"Failed to update note", nil, "")
@@ -196,7 +200,8 @@ func (a *App) UpdateConversationNote(r *fastglue.Request) error {
 
 	// Load the creator relation for the response
 	var user models.User
-	a.DB.First(&user, "id = ?", note.CreatedByID)
+	requestDB.
+		First(&user, "id = ?", note.CreatedByID)
 	note.CreatedBy = &user
 
 	resp := noteToResponse(*note)
@@ -214,6 +219,7 @@ func (a *App) UpdateConversationNote(r *fastglue.Request) error {
 
 // DeleteConversationNote deletes a note (creator only).
 func (a *App) DeleteConversationNote(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -233,7 +239,7 @@ func (a *App) DeleteConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	note, err := findByIDAndOrg[models.ConversationNote](a.DB, r, noteID, orgID, "Note")
+	note, err := findByIDAndOrg[models.ConversationNote](requestDB, r, noteID, orgID, "Note")
 	if err != nil {
 		return nil
 	}
@@ -245,7 +251,7 @@ func (a *App) DeleteConversationNote(r *fastglue.Request) error {
 
 	contactID := note.ContactID
 
-	if err := a.DB.Delete(note).Error; err != nil {
+	if err := requestDB.Delete(note).Error; err != nil {
 		a.Log.Error("Failed to delete conversation note", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError,
 			"Failed to delete note", nil, "")

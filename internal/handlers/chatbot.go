@@ -116,6 +116,7 @@ func (a *App) authorizeChatbotRequest(r *fastglue.Request, action string) (uuid.
 
 // GetChatbotSettings returns chatbot settings and stats
 func (a *App) GetChatbotSettings(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
 	if !ok {
 		return nil
@@ -123,7 +124,7 @@ func (a *App) GetChatbotSettings(r *fastglue.Request) error {
 
 	// Get or create default settings
 	var settings models.ChatbotSettings
-	result := a.DB.Where("organization_id = ? AND whats_app_account = ?", orgID, "").First(&settings)
+	result := requestDB.Where("organization_id = ? AND whats_app_account = ?", orgID, "").First(&settings)
 	if result.Error != nil {
 		// Return default settings if none exist
 		settings = models.ChatbotSettings{
@@ -213,6 +214,7 @@ func (a *App) GetChatbotSettings(r *fastglue.Request) error {
 
 // UpdateChatbotSettings updates chatbot settings
 func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
 	if !ok {
 		return nil
@@ -262,7 +264,7 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 	// Get or create settings
 	var settings models.ChatbotSettings
 	isNew := false
-	result := a.DB.Where("organization_id = ? AND whats_app_account = ?", orgID, "").First(&settings)
+	result := requestDB.Where("organization_id = ? AND whats_app_account = ?", orgID, "").First(&settings)
 	if result.Error != nil {
 		// Create new settings
 		isNew = true
@@ -398,7 +400,7 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 		settings.ClientInactivity.AutoCloseMessage = *req.ClientAutoCloseMessage
 	}
 
-	if err := a.DB.Save(&settings).Error; err != nil {
+	if err := requestDB.Save(&settings).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save settings", nil, "")
 	}
 
@@ -418,7 +420,7 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 			zeroOverrides["assign_to_same_agent"] = false
 		}
 		if len(zeroOverrides) > 0 {
-			if err := a.DB.Model(&settings).Updates(zeroOverrides).Error; err != nil {
+			if err := requestDB.Model(&settings).Updates(zeroOverrides).Error; err != nil {
 				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save settings", nil, "")
 			}
 		}
@@ -435,6 +437,7 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 
 // ListKeywordRules lists all keyword rules for the organization
 func (a *App) ListKeywordRules(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
 	if !ok {
 		return nil
@@ -443,7 +446,7 @@ func (a *App) ListKeywordRules(r *fastglue.Request) error {
 	pg := parsePagination(r)
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 
-	query := a.DB.Model(&models.KeywordRule{}).Where("organization_id = ?", orgID)
+	query := requestDB.Model(&models.KeywordRule{}).Where("organization_id = ?", orgID)
 
 	// Apply search filter - search by name or keywords
 	if search != "" {
@@ -487,6 +490,7 @@ func (a *App) ListKeywordRules(r *fastglue.Request) error {
 
 // CreateKeywordRule creates a new keyword rule
 func (a *App) CreateKeywordRule(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
 	if !ok {
 		return nil
@@ -533,7 +537,7 @@ func (a *App) CreateKeywordRule(r *fastglue.Request) error {
 		IsEnabled:       req.Enabled,
 	}
 
-	if err := a.DB.Create(&rule).Error; err != nil {
+	if err := requestDB.Create(&rule).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create keyword rule", nil, "")
 	}
 
@@ -548,6 +552,7 @@ func (a *App) CreateKeywordRule(r *fastglue.Request) error {
 
 // GetKeywordRule gets a single keyword rule
 func (a *App) GetKeywordRule(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
 	if !ok {
 		return nil
@@ -558,7 +563,7 @@ func (a *App) GetKeywordRule(r *fastglue.Request) error {
 		return nil
 	}
 
-	rule, err := findByIDAndOrg[models.KeywordRule](a.DB, r, id, orgID, "Keyword rule")
+	rule, err := findByIDAndOrg[models.KeywordRule](requestDB, r, id, orgID, "Keyword rule")
 	if err != nil {
 		return nil
 	}
@@ -581,6 +586,7 @@ func (a *App) GetKeywordRule(r *fastglue.Request) error {
 
 // UpdateKeywordRule updates a keyword rule
 func (a *App) UpdateKeywordRule(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
 	if !ok {
 		return nil
@@ -591,7 +597,7 @@ func (a *App) UpdateKeywordRule(r *fastglue.Request) error {
 		return nil
 	}
 
-	rule, err := findByIDAndOrg[models.KeywordRule](a.DB, r, id, orgID, "Keyword rule")
+	rule, err := findByIDAndOrg[models.KeywordRule](requestDB, r, id, orgID, "Keyword rule")
 	if err != nil {
 		return nil
 	}
@@ -633,7 +639,7 @@ func (a *App) UpdateKeywordRule(r *fastglue.Request) error {
 		rule.IsEnabled = *req.Enabled
 	}
 
-	if err := a.DB.Save(rule).Error; err != nil {
+	if err := requestDB.Save(rule).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update keyword rule", nil, "")
 	}
 
@@ -647,6 +653,7 @@ func (a *App) UpdateKeywordRule(r *fastglue.Request) error {
 
 // DeleteKeywordRule deletes a keyword rule
 func (a *App) DeleteKeywordRule(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionDelete)
 	if !ok {
 		return nil
@@ -657,7 +664,7 @@ func (a *App) DeleteKeywordRule(r *fastglue.Request) error {
 		return nil
 	}
 
-	result := a.DB.Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.KeywordRule{})
+	result := requestDB.Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.KeywordRule{})
 	if result.Error != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete keyword rule", nil, "")
 	}
@@ -675,6 +682,7 @@ func (a *App) DeleteKeywordRule(r *fastglue.Request) error {
 
 // ListChatbotFlows lists all chatbot flows
 func (a *App) ListChatbotFlows(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -687,7 +695,7 @@ func (a *App) ListChatbotFlows(r *fastglue.Request) error {
 	pg := parsePagination(r)
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 
-	query := a.DB.Model(&models.ChatbotFlow{}).Where("organization_id = ?", orgID)
+	query := requestDB.Model(&models.ChatbotFlow{}).Where("organization_id = ?", orgID)
 
 	// Apply search filter - search by name, description, or trigger keywords
 	if search != "" {
@@ -773,6 +781,7 @@ func validateChatbotAPIConfig(apiConfig map[string]interface{}) error {
 
 // CreateChatbotFlow creates a new chatbot flow
 func (a *App) CreateChatbotFlow(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -804,7 +813,7 @@ func (a *App) CreateChatbotFlow(r *fastglue.Request) error {
 	}
 
 	// Use transaction for flow + steps
-	tx := a.DB.Begin()
+	tx := requestDB.Begin()
 
 	flowID := uuid.New()
 	flow := models.ChatbotFlow{
@@ -886,6 +895,7 @@ func (a *App) CreateChatbotFlow(r *fastglue.Request) error {
 
 // GetChatbotFlow gets a single chatbot flow with steps
 func (a *App) GetChatbotFlow(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -901,7 +911,7 @@ func (a *App) GetChatbotFlow(r *fastglue.Request) error {
 	}
 
 	var flow models.ChatbotFlow
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).
+	if err := requestDB.Where("id = ? AND organization_id = ?", id, orgID).
 		Preload("Steps", func(db *gorm.DB) *gorm.DB {
 			return db.Order("step_order ASC")
 		}).
@@ -914,6 +924,7 @@ func (a *App) GetChatbotFlow(r *fastglue.Request) error {
 
 // UpdateChatbotFlow updates a chatbot flow
 func (a *App) UpdateChatbotFlow(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -928,7 +939,7 @@ func (a *App) UpdateChatbotFlow(r *fastglue.Request) error {
 		return nil
 	}
 
-	flow, err := findByIDAndOrg[models.ChatbotFlow](a.DB, r, id, orgID, "Flow")
+	flow, err := findByIDAndOrg[models.ChatbotFlow](requestDB, r, id, orgID, "Flow")
 	if err != nil {
 		return nil
 	}
@@ -950,7 +961,7 @@ func (a *App) UpdateChatbotFlow(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
 	}
 
-	tx := a.DB.Begin()
+	tx := requestDB.Begin()
 
 	if req.Name != nil {
 		flow.Name = *req.Name
@@ -1053,6 +1064,7 @@ func (a *App) UpdateChatbotFlow(r *fastglue.Request) error {
 
 // DeleteChatbotFlow deletes a chatbot flow
 func (a *App) DeleteChatbotFlow(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -1068,7 +1080,7 @@ func (a *App) DeleteChatbotFlow(r *fastglue.Request) error {
 	}
 
 	// Delete flow and steps in transaction
-	tx := a.DB.Begin()
+	tx := requestDB.Begin()
 
 	// Delete steps first
 	if err := tx.Where("flow_id = ?", id).Delete(&models.ChatbotFlowStep{}).Error; err != nil {
@@ -1099,6 +1111,7 @@ func (a *App) DeleteChatbotFlow(r *fastglue.Request) error {
 
 // ListAIContexts lists all AI contexts
 func (a *App) ListAIContexts(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
 	if !ok {
 		return nil
@@ -1107,7 +1120,7 @@ func (a *App) ListAIContexts(r *fastglue.Request) error {
 	pg := parsePagination(r)
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 
-	query := a.DB.Model(&models.AIContext{}).Where("organization_id = ?", orgID)
+	query := requestDB.Model(&models.AIContext{}).Where("organization_id = ?", orgID)
 
 	// Apply search filter - search by name, static content, or trigger keywords
 	if search != "" {
@@ -1148,6 +1161,7 @@ func (a *App) ListAIContexts(r *fastglue.Request) error {
 
 // CreateAIContext creates a new AI context
 func (a *App) CreateAIContext(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
 	if !ok {
 		return nil
@@ -1184,7 +1198,7 @@ func (a *App) CreateAIContext(r *fastglue.Request) error {
 		IsEnabled:       req.Enabled,
 	}
 
-	if err := a.DB.Create(&ctx).Error; err != nil {
+	if err := requestDB.Create(&ctx).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create AI context", nil, "")
 	}
 
@@ -1199,6 +1213,7 @@ func (a *App) CreateAIContext(r *fastglue.Request) error {
 
 // GetAIContext gets a single AI context
 func (a *App) GetAIContext(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
 	if !ok {
 		return nil
@@ -1209,7 +1224,7 @@ func (a *App) GetAIContext(r *fastglue.Request) error {
 		return nil
 	}
 
-	aiCtx, err := findByIDAndOrg[models.AIContext](a.DB, r, id, orgID, "AI context")
+	aiCtx, err := findByIDAndOrg[models.AIContext](requestDB, r, id, orgID, "AI context")
 	if err != nil {
 		return nil
 	}
@@ -1219,6 +1234,7 @@ func (a *App) GetAIContext(r *fastglue.Request) error {
 
 // UpdateAIContext updates an AI context
 func (a *App) UpdateAIContext(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionWrite)
 	if !ok {
 		return nil
@@ -1229,7 +1245,7 @@ func (a *App) UpdateAIContext(r *fastglue.Request) error {
 		return nil
 	}
 
-	aiCtx, err := findByIDAndOrg[models.AIContext](a.DB, r, id, orgID, "AI context")
+	aiCtx, err := findByIDAndOrg[models.AIContext](requestDB, r, id, orgID, "AI context")
 	if err != nil {
 		return nil
 	}
@@ -1266,7 +1282,7 @@ func (a *App) UpdateAIContext(r *fastglue.Request) error {
 		aiCtx.IsEnabled = *req.Enabled
 	}
 
-	if err := a.DB.Save(aiCtx).Error; err != nil {
+	if err := requestDB.Save(aiCtx).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update AI context", nil, "")
 	}
 
@@ -1280,6 +1296,7 @@ func (a *App) UpdateAIContext(r *fastglue.Request) error {
 
 // DeleteAIContext deletes an AI context
 func (a *App) DeleteAIContext(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionDelete)
 	if !ok {
 		return nil
@@ -1290,7 +1307,7 @@ func (a *App) DeleteAIContext(r *fastglue.Request) error {
 		return nil
 	}
 
-	result := a.DB.Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.AIContext{})
+	result := requestDB.Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.AIContext{})
 	if result.Error != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete AI context", nil, "")
 	}
@@ -1308,6 +1325,7 @@ func (a *App) DeleteAIContext(r *fastglue.Request) error {
 
 // ListChatbotSessions lists chatbot sessions
 func (a *App) ListChatbotSessions(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
 	if !ok {
 		return nil
@@ -1315,7 +1333,7 @@ func (a *App) ListChatbotSessions(r *fastglue.Request) error {
 
 	status := string(r.RequestCtx.QueryArgs().Peek("status"))
 
-	query := a.DB.Where("organization_id = ?", orgID).
+	query := requestDB.Where("organization_id = ?", orgID).
 		Preload("Contact").
 		Order("last_activity_at DESC")
 
@@ -1335,6 +1353,7 @@ func (a *App) ListChatbotSessions(r *fastglue.Request) error {
 
 // GetChatbotSession gets a single chatbot session with messages
 func (a *App) GetChatbotSession(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, ok := a.authorizeChatbotRequest(r, models.ActionRead)
 	if !ok {
 		return nil
@@ -1346,7 +1365,7 @@ func (a *App) GetChatbotSession(r *fastglue.Request) error {
 	}
 
 	var session models.ChatbotSession
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).
+	if err := requestDB.Where("id = ? AND organization_id = ?", id, orgID).
 		Preload("Contact").
 		Preload("Messages").
 		First(&session).Error; err != nil {

@@ -74,6 +74,7 @@ func (a *App) requireCampaignPermission(r *fastglue.Request, userID uuid.UUID, a
 
 // ListCampaigns implements campaign listing
 func (a *App) ListCampaigns(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -89,7 +90,7 @@ func (a *App) ListCampaigns(r *fastglue.Request) error {
 	whatsappAccount := string(r.RequestCtx.QueryArgs().Peek("whatsapp_account"))
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 
-	baseQuery := a.DB.Where("organization_id = ?", orgID)
+	baseQuery := requestDB.Where("organization_id = ?", orgID)
 
 	if search != "" {
 		baseQuery = baseQuery.Where("name ILIKE ?", "%"+search+"%")
@@ -161,6 +162,7 @@ func (a *App) ListCampaigns(r *fastglue.Request) error {
 
 // CreateCampaign implements campaign creation
 func (a *App) CreateCampaign(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -216,7 +218,7 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 		CreatedBy:       userID,
 	}
 
-	if err := a.DB.Create(&campaign).Error; err != nil {
+	if err := requestDB.Create(&campaign).Error; err != nil {
 		a.Log.Error("Failed to create campaign", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create campaign", nil, "")
 	}
@@ -247,6 +249,7 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 
 // GetCampaign implements getting a single campaign
 func (a *App) GetCampaign(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -261,7 +264,7 @@ func (a *App) GetCampaign(r *fastglue.Request) error {
 	}
 
 	var campaign models.BulkMessageCampaign
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).
+	if err := requestDB.Where("id = ? AND organization_id = ?", id, orgID).
 		Preload("Template").
 		First(&campaign).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Campaign not found", nil, "")
@@ -297,6 +300,7 @@ func (a *App) GetCampaign(r *fastglue.Request) error {
 
 // UpdateCampaign implements campaign update
 func (a *App) UpdateCampaign(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -310,7 +314,7 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 		return nil
 	}
 
-	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, id, orgID, "Campaign")
+	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, id, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}
@@ -364,7 +368,7 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 
 	if a.isWhatsmeowProvider() && strings.TrimSpace(req.BodyContent) != "" {
 		trimmedBody := strings.TrimSpace(req.BodyContent)
-		if err := a.DB.Model(&models.Template{}).
+		if err := requestDB.Model(&models.Template{}).
 			Where("id = ? AND organization_id = ?", campaign.TemplateID, orgID).
 			Update("body_content", trimmedBody).Error; err != nil {
 			a.Log.Error("Failed to update campaign message body", "error", err, "campaign_id", campaign.ID)
@@ -372,13 +376,14 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 		}
 	}
 
-	if err := a.DB.Model(campaign).Updates(updates).Error; err != nil {
+	if err := requestDB.Model(campaign).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update campaign", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update campaign", nil, "")
 	}
+	requestDB.
 
-	// Reload campaign
-	a.DB.Where("id = ?", id).Preload("Template").First(campaign)
+		// Reload campaign
+		Where("id = ?", id).Preload("Template").First(campaign)
 
 	response := CampaignResponse{
 		ID:                  campaign.ID,
@@ -595,6 +600,7 @@ func (a *App) countInboundPolicyViolationsForRecipients(orgID uuid.UUID, recipie
 
 // DeleteCampaign implements campaign deletion
 func (a *App) DeleteCampaign(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -608,7 +614,7 @@ func (a *App) DeleteCampaign(r *fastglue.Request) error {
 		return nil
 	}
 
-	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, id, orgID, "Campaign")
+	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, id, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}
@@ -619,13 +625,13 @@ func (a *App) DeleteCampaign(r *fastglue.Request) error {
 	}
 
 	// Delete recipients first
-	if err := a.DB.Where("campaign_id = ?", id).Delete(&models.BulkMessageRecipient{}).Error; err != nil {
+	if err := requestDB.Where("campaign_id = ?", id).Delete(&models.BulkMessageRecipient{}).Error; err != nil {
 		a.Log.Error("Failed to delete campaign recipients", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete campaign", nil, "")
 	}
 
 	// Delete campaign
-	if err := a.DB.Delete(campaign).Error; err != nil {
+	if err := requestDB.Delete(campaign).Error; err != nil {
 		a.Log.Error("Failed to delete campaign", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete campaign", nil, "")
 	}
@@ -639,6 +645,7 @@ func (a *App) DeleteCampaign(r *fastglue.Request) error {
 
 // StartCampaign implements starting a campaign
 func (a *App) StartCampaign(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -652,7 +659,7 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 		return nil
 	}
 
-	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, id, orgID, "Campaign")
+	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, id, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}
@@ -674,7 +681,7 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 
 	// Get all pending recipients
 	var recipients []models.BulkMessageRecipient
-	if err := a.DB.Where("campaign_id = ? AND status = ?", id, models.MessageStatusPending).Find(&recipients).Error; err != nil {
+	if err := requestDB.Where("campaign_id = ? AND status = ?", id, models.MessageStatusPending).Find(&recipients).Error; err != nil {
 		a.Log.Error("Failed to load recipients", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load recipients", nil, "")
 	}
@@ -697,7 +704,7 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 	// Validate template still exists
 	if campaign.TemplateID != uuid.Nil {
 		var template models.Template
-		if err := a.DB.Where("id = ? AND organization_id = ?", campaign.TemplateID, orgID).First(&template).Error; err != nil {
+		if err := requestDB.Where("id = ? AND organization_id = ?", campaign.TemplateID, orgID).First(&template).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign template no longer exists", nil, "")
 		}
 	}
@@ -709,7 +716,7 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 		"started_at": now,
 	}
 
-	if err := a.DB.Model(campaign).Updates(updates).Error; err != nil {
+	if err := requestDB.Model(campaign).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to start campaign", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to start campaign", nil, "")
 	}
@@ -731,8 +738,9 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 
 	if err := a.Queue.EnqueueRecipients(r.RequestCtx, jobs); err != nil {
 		a.Log.Error("Failed to enqueue recipients", "error", err)
-		// Revert status on failure
-		a.DB.Model(campaign).Update("status", models.CampaignStatusDraft)
+		requestDB.
+			// Revert status on failure
+			Model(campaign).Update("status", models.CampaignStatusDraft)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to queue recipients", nil, "")
 	}
 
@@ -746,6 +754,7 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 
 // PauseCampaign implements pausing a campaign
 func (a *App) PauseCampaign(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -759,7 +768,7 @@ func (a *App) PauseCampaign(r *fastglue.Request) error {
 		return nil
 	}
 
-	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, id, orgID, "Campaign")
+	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, id, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}
@@ -768,7 +777,7 @@ func (a *App) PauseCampaign(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign is not running", nil, "")
 	}
 
-	if err := a.DB.Model(campaign).Update("status", models.CampaignStatusPaused).Error; err != nil {
+	if err := requestDB.Model(campaign).Update("status", models.CampaignStatusPaused).Error; err != nil {
 		a.Log.Error("Failed to pause campaign", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to pause campaign", nil, "")
 	}
@@ -783,6 +792,7 @@ func (a *App) PauseCampaign(r *fastglue.Request) error {
 
 // CancelCampaign implements cancelling a campaign
 func (a *App) CancelCampaign(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -796,7 +806,7 @@ func (a *App) CancelCampaign(r *fastglue.Request) error {
 		return nil
 	}
 
-	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, id, orgID, "Campaign")
+	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, id, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}
@@ -805,7 +815,7 @@ func (a *App) CancelCampaign(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign already finished", nil, "")
 	}
 
-	if err := a.DB.Model(campaign).Update("status", models.CampaignStatusCancelled).Error; err != nil {
+	if err := requestDB.Model(campaign).Update("status", models.CampaignStatusCancelled).Error; err != nil {
 		a.Log.Error("Failed to cancel campaign", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to cancel campaign", nil, "")
 	}
@@ -820,6 +830,7 @@ func (a *App) CancelCampaign(r *fastglue.Request) error {
 
 // RetryFailed retries sending to all failed recipients
 func (a *App) RetryFailed(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -833,7 +844,7 @@ func (a *App) RetryFailed(r *fastglue.Request) error {
 		return nil
 	}
 
-	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, id, orgID, "Campaign")
+	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, id, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}
@@ -845,7 +856,7 @@ func (a *App) RetryFailed(r *fastglue.Request) error {
 
 	// Get failed recipients
 	var failedRecipients []models.BulkMessageRecipient
-	if err := a.DB.Where("campaign_id = ? AND status = ?", id, models.MessageStatusFailed).Find(&failedRecipients).Error; err != nil {
+	if err := requestDB.Where("campaign_id = ? AND status = ?", id, models.MessageStatusFailed).Find(&failedRecipients).Error; err != nil {
 		a.Log.Error("Failed to load failed recipients", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load failed recipients", nil, "")
 	}
@@ -855,7 +866,7 @@ func (a *App) RetryFailed(r *fastglue.Request) error {
 	}
 
 	// Reset failed recipients to pending
-	if err := a.DB.Model(&models.BulkMessageRecipient{}).
+	if err := requestDB.Model(&models.BulkMessageRecipient{}).
 		Where("campaign_id = ? AND status = ?", id, models.MessageStatusFailed).
 		Updates(map[string]interface{}{
 			"status":        models.MessageStatusPending,
@@ -866,7 +877,7 @@ func (a *App) RetryFailed(r *fastglue.Request) error {
 	}
 
 	// Reset failed messages in messages table to pending
-	if err := a.DB.Model(&models.Message{}).
+	if err := requestDB.Model(&models.Message{}).
 		Where("metadata->>'campaign_id' = ? AND status = ?", id.String(), models.MessageStatusFailed).
 		Updates(map[string]interface{}{
 			"status":        models.MessageStatusPending,
@@ -879,7 +890,7 @@ func (a *App) RetryFailed(r *fastglue.Request) error {
 	a.recalculateCampaignStats(id)
 
 	// Update campaign status to processing
-	if err := a.DB.Model(campaign).Update("status", models.CampaignStatusProcessing).Error; err != nil {
+	if err := requestDB.Model(campaign).Update("status", models.CampaignStatusProcessing).Error; err != nil {
 		a.Log.Error("Failed to update campaign status", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update campaign", nil, "")
 	}
@@ -915,6 +926,7 @@ func (a *App) RetryFailed(r *fastglue.Request) error {
 
 // ImportRecipients implements adding recipients to a campaign
 func (a *App) ImportRecipients(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -928,7 +940,7 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 		return nil
 	}
 
-	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, id, orgID, "Campaign")
+	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, id, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}
@@ -989,7 +1001,7 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No valid recipients to import", nil, "")
 	}
 
-	result := a.DB.Clauses(clause.OnConflict{
+	result := requestDB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "campaign_id"}, {Name: "phone_normalized"}},
 		DoNothing: true,
 	}).Create(&recipients)
@@ -1001,8 +1013,10 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 
 	// Update total recipients count
 	var totalCount int64
-	a.DB.Model(&models.BulkMessageRecipient{}).Where("campaign_id = ?", id).Count(&totalCount)
-	a.DB.Model(campaign).Update("total_recipients", totalCount)
+	requestDB.
+		Model(&models.BulkMessageRecipient{}).Where("campaign_id = ?", id).Count(&totalCount)
+	requestDB.
+		Model(campaign).Update("total_recipients", totalCount)
 
 	a.Log.Info("Recipients added to campaign", "campaign_id", id, "count", len(req.Recipients))
 
@@ -1015,6 +1029,7 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 
 // GetCampaignRecipients implements listing campaign recipients
 func (a *App) GetCampaignRecipients(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -1029,13 +1044,13 @@ func (a *App) GetCampaignRecipients(r *fastglue.Request) error {
 	}
 
 	// Verify campaign belongs to org
-	_, err = findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, id, orgID, "Campaign")
+	_, err = findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, id, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}
 
 	var recipients []models.BulkMessageRecipient
-	if err := a.DB.Where("campaign_id = ?", id).Order("created_at ASC").Find(&recipients).Error; err != nil {
+	if err := requestDB.Where("campaign_id = ?", id).Order("created_at ASC").Find(&recipients).Error; err != nil {
 		a.Log.Error("Failed to list recipients", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list recipients", nil, "")
 	}
@@ -1055,6 +1070,7 @@ func (a *App) GetCampaignRecipients(r *fastglue.Request) error {
 
 // DeleteCampaignRecipient deletes a single recipient from a campaign
 func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -1074,7 +1090,7 @@ func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
 	}
 
 	// Verify campaign belongs to org and is in draft status
-	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, campaignUUID, orgID, "Campaign")
+	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, campaignUUID, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}
@@ -1084,7 +1100,7 @@ func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
 	}
 
 	// Verify recipient belongs to campaign and delete
-	result := a.DB.Where("id = ? AND campaign_id = ?", recipientUUID, campaignUUID).Delete(&models.BulkMessageRecipient{})
+	result := requestDB.Where("id = ? AND campaign_id = ?", recipientUUID, campaignUUID).Delete(&models.BulkMessageRecipient{})
 	if result.Error != nil {
 		a.Log.Error("Failed to delete recipient", "error", result.Error)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete recipient", nil, "")
@@ -1093,9 +1109,10 @@ func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
 	if result.RowsAffected == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Recipient not found", nil, "")
 	}
+	requestDB.
 
-	// Update campaign recipient count
-	a.DB.Model(campaign).Update("total_recipients", gorm.Expr("total_recipients - 1"))
+		// Update campaign recipient count
+		Model(campaign).Update("total_recipients", gorm.Expr("total_recipients - 1"))
 
 	return r.SendEnvelope(map[string]interface{}{
 		"message": "Recipient deleted successfully",
@@ -1104,6 +1121,7 @@ func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
 
 // UploadCampaignMedia uploads media for a campaign's template header
 func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -1119,7 +1137,7 @@ func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
 
 	// Get campaign with template
 	var campaign models.BulkMessageCampaign
-	if err := a.DB.Where("id = ? AND organization_id = ?", campaignUUID, orgID).
+	if err := requestDB.Where("id = ? AND organization_id = ?", campaignUUID, orgID).
 		Preload("Template").
 		First(&campaign).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Campaign not found", nil, "")
@@ -1213,7 +1231,7 @@ func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
 		"header_media_mime_type":  mimeType,
 		"header_media_local_path": localPath,
 	}
-	if err := a.DB.Model(&campaign).Updates(updates).Error; err != nil {
+	if err := requestDB.Model(&campaign).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update campaign with media info", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save media info", nil, "")
 	}
@@ -1261,7 +1279,10 @@ func (a *App) saveCampaignMedia(campaignID string, data []byte, mimeType string)
 
 // ServeCampaignMedia serves campaign media files for preview
 func (a *App) ServeCampaignMedia(r *fastglue.Request) error {
-	// Get auth context
+	requestDB :=
+		// Get auth context
+		a.requestDB(r)
+
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -1277,7 +1298,7 @@ func (a *App) ServeCampaignMedia(r *fastglue.Request) error {
 	}
 
 	// Find campaign and verify access
-	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](a.DB, r, campaignUUID, orgID, "Campaign")
+	campaign, err := findByIDAndOrg[models.BulkMessageCampaign](requestDB, r, campaignUUID, orgID, "Campaign")
 	if err != nil {
 		return nil
 	}

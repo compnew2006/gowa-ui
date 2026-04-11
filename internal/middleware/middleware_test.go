@@ -4,7 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/compnew2006/whatomate/internal/middleware"
+	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -12,6 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 const testJWTSecret = "unit-test-signing-value-1234567890"
@@ -42,6 +47,28 @@ func generateTestToken(t *testing.T, userID, orgID uuid.UUID, email string, role
 	tokenString, err := token.SignedString([]byte(testJWTSecret))
 	require.NoError(t, err)
 	return tokenString
+}
+
+type tenantScopedRecord struct {
+	ID             uuid.UUID `gorm:"type:uuid;default:gen_random_uuid()"`
+	OrganizationID uuid.UUID `gorm:"type:uuid"`
+}
+
+func newMockGormDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
+	t.Helper()
+
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB,
+	}), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	require.NoError(t, err)
+
+	return db, mock
 }
 
 func TestCORS(t *testing.T) {
@@ -248,10 +275,99 @@ func TestRecovery(t *testing.T) {
 	// to wrap handlers, not to be tested in isolation.
 }
 
+func TestTenantScope(t *testing.T) {
+	t.Parallel()
+
+	t.Run("stores scoped db for default organization", func(t *testing.T) {
+		t.Parallel()
+
+		db, mock := newMockGormDB(t)
+		req := newTestRequest()
+		orgID := uuid.New()
+		recordID := uuid.New()
+		req.RequestCtx.SetUserValue(middleware.ContextKeyOrganizationID, orgID)
+
+		result := middleware.TenantScope(db)(req)
+		require.NotNil(t, result)
+
+		storedOrgID, ok := result.RequestCtx.UserValue(middleware.ContextKeyOrganizationID).(uuid.UUID)
+		require.True(t, ok)
+		assert.Equal(t, orgID, storedOrgID)
+
+		scopedDB, ok := tenant.GetScopedDB(result)
+		require.True(t, ok)
+		require.NotNil(t, scopedDB)
+
+		mock.ExpectQuery(`SELECT .*FROM "tenant_scoped_records".*organization_id`).
+			WithArgs(recordID, orgID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id"}))
+
+		var records []tenantScopedRecord
+		err := scopedDB.Model(&tenantScopedRecord{}).
+			Where("id = ?", recordID).
+			Find(&records).Error
+		require.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("honors membership-based organization override", func(t *testing.T) {
+		t.Parallel()
+
+		db, mock := newMockGormDB(t)
+		req := newTestRequest()
+		defaultOrgID := uuid.New()
+		overrideOrgID := uuid.New()
+		userID := uuid.New()
+
+		req.RequestCtx.SetUserValue(middleware.ContextKeyOrganizationID, defaultOrgID)
+		req.RequestCtx.SetUserValue(middleware.ContextKeyUserID, userID)
+		req.RequestCtx.Request.Header.Set("X-Organization-ID", overrideOrgID.String())
+
+		mock.ExpectQuery(`SELECT count\(\*\) FROM "user_organizations"`).
+			WithArgs(userID, overrideOrgID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		result := middleware.TenantScope(db)(req)
+		require.NotNil(t, result)
+
+		storedOrgID, ok := result.RequestCtx.UserValue(middleware.ContextKeyOrganizationID).(uuid.UUID)
+		require.True(t, ok)
+		assert.Equal(t, overrideOrgID, storedOrgID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("honors super-admin organization override", func(t *testing.T) {
+		t.Parallel()
+
+		db, mock := newMockGormDB(t)
+		req := newTestRequest()
+		defaultOrgID := uuid.New()
+		overrideOrgID := uuid.New()
+
+		req.RequestCtx.SetUserValue(middleware.ContextKeyOrganizationID, defaultOrgID)
+		req.RequestCtx.SetUserValue(middleware.ContextKeyUserID, uuid.New())
+		req.RequestCtx.SetUserValue(middleware.ContextKeyIsSuperAdmin, true)
+		req.RequestCtx.Request.Header.Set("X-Organization-ID", overrideOrgID.String())
+
+		mock.ExpectQuery(`SELECT count\(\*\) FROM "organizations"`).
+			WithArgs(overrideOrgID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		result := middleware.TenantScope(db)(req)
+		require.NotNil(t, result)
+
+		storedOrgID, ok := result.RequestCtx.UserValue(middleware.ContextKeyOrganizationID).(uuid.UUID)
+		require.True(t, ok)
+		assert.Equal(t, overrideOrgID, storedOrgID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
 func TestSecurityHeaders(t *testing.T) {
 	t.Parallel()
 
 	req := newTestRequest()
+	req.RequestCtx.Request.SetRequestURI("/api/health")
 	securityHeadersMiddleware := middleware.SecurityHeaders()
 	result := securityHeadersMiddleware(req)
 

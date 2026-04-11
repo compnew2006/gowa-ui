@@ -58,6 +58,7 @@ type sendTypingPresenceRequest struct {
 // SendMessage sends a message to a contact
 // Agents can only send messages to their assigned contacts
 func (a *App) SendMessage(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -75,7 +76,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
@@ -122,7 +123,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		replyToID, err := uuid.Parse(req.ReplyToMessageID)
 		if err == nil {
 			var replyTo models.Message
-			if err := a.DB.Where("id = ? AND contact_id = ?", replyToID, contactID).First(&replyTo).Error; err == nil {
+			if err := requestDB.Where("id = ? AND contact_id = ?", replyToID, contactID).First(&replyTo).Error; err == nil {
 				replyToMessage = &replyTo
 			}
 		}
@@ -212,6 +213,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 // SendTypingPresence sends live typing presence (composing/paused) for chat compose UX.
 // This endpoint is best-effort and returns success even when typing presence is skipped.
 func (a *App) SendTypingPresence(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -239,7 +241,7 @@ func (a *App) SendTypingPresence(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
@@ -349,7 +351,8 @@ func (a *App) resolveWhatsAppAccountByID(
 	id uuid.UUID,
 	orgID uuid.UUID,
 ) (*models.WhatsAppAccount, error) {
-	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
+	requestDB := a.requestDB(r)
+	account, err := findByIDAndOrg[models.WhatsAppAccount](requestDB, r, id, orgID, "Account")
 	if err != nil {
 		return nil, err
 	}
@@ -369,6 +372,7 @@ func truncateString(s string, maxLen int) string {
 
 // SendMediaMessage sends a media message (image, document, video, audio) to a contact
 func (a *App) SendMediaMessage(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -440,7 +444,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
@@ -608,6 +612,7 @@ type SendReactionRequest struct {
 
 // SendReaction sends a reaction to a message
 func (a *App) SendReaction(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -632,7 +637,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
@@ -642,7 +647,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 	// Get message
 	var message models.Message
-	if err := a.DB.Where("id = ? AND contact_id = ?", messageID, contactID).First(&message).Error; err != nil {
+	if err := requestDB.Where("id = ? AND contact_id = ?", messageID, contactID).First(&message).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
 	}
 
@@ -710,7 +715,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 	// Update metadata
 	metadata["reactions"] = newReactions
-	if err := a.DB.Model(&message).Update("metadata", metadata).Error; err != nil {
+	if err := requestDB.Model(&message).Update("metadata", metadata).Error; err != nil {
 		a.Log.Error("Failed to update message reactions", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update reaction", nil, "")
 	}
@@ -738,6 +743,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 // RevokeMessage revokes an outgoing message from WhatsApp and marks it deleted locally.
 func (a *App) RevokeMessage(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -757,7 +763,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	contactQuery := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	contactQuery := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		contactQuery = applyAgentVisibleChatAccessFilter(contactQuery, userID)
 	}
@@ -766,7 +772,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 	}
 
 	var message models.Message
-	if err := a.DB.Where("id = ? AND contact_id = ? AND organization_id = ?", messageID, contactID, orgID).First(&message).Error; err != nil {
+	if err := requestDB.Where("id = ? AND contact_id = ? AND organization_id = ?", messageID, contactID, orgID).First(&message).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
 	}
 
@@ -799,7 +805,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 	content := appendDeletedMessageCaption(message.Content)
 	updatedAt := time.Now()
 
-	if err := a.DB.Model(&models.Message{}).
+	if err := requestDB.Model(&models.Message{}).
 		Where("id = ?", message.ID).
 		Updates(map[string]any{
 			"content":    content,
@@ -810,7 +816,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update message state", nil, "")
 	}
 
-	_ = a.DB.Model(&models.Contact{}).
+	_ = requestDB.Model(&models.Contact{}).
 		Where("id = ? AND organization_id = ? AND (last_message_at IS NULL OR last_message_at <= ?)", contact.ID, orgID, message.CreatedAt).
 		Update("last_message_preview", content).Error
 

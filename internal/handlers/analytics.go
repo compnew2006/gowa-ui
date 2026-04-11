@@ -32,6 +32,7 @@ type RecentMessageResponse struct {
 
 // GetDashboardStats returns dashboard statistics for the organization
 func (a *App) GetDashboardStats(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -66,11 +67,12 @@ func (a *App) GetDashboardStats(r *fastglue.Request) error {
 
 	// Get message counts for the selected period
 	var previousPeriodMessages, currentPeriodMessages int64
-	a.DB.Model(&models.Message{}).
+	requestDB.
+		Model(&models.Message{}).
 		Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, previousPeriodStart, previousPeriodEnd).
 		Count(&previousPeriodMessages)
-
-	a.DB.Model(&models.Message{}).
+	requestDB.
+		Model(&models.Message{}).
 		Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, periodStart, periodEnd).
 		Count(&currentPeriodMessages)
 
@@ -78,11 +80,12 @@ func (a *App) GetDashboardStats(r *fastglue.Request) error {
 
 	// Get contact counts for the selected period
 	var previousPeriodContacts, currentPeriodContacts int64
-	a.DB.Model(&models.Contact{}).
+	requestDB.
+		Model(&models.Contact{}).
 		Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, previousPeriodStart, previousPeriodEnd).
 		Count(&previousPeriodContacts)
-
-	a.DB.Model(&models.Contact{}).
+	requestDB.
+		Model(&models.Contact{}).
 		Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, periodStart, periodEnd).
 		Count(&currentPeriodContacts)
 
@@ -90,11 +93,12 @@ func (a *App) GetDashboardStats(r *fastglue.Request) error {
 
 	// Get chatbot session counts for the selected period
 	var previousPeriodSessions, currentPeriodSessions int64
-	a.DB.Model(&models.ChatbotSession{}).
+	requestDB.
+		Model(&models.ChatbotSession{}).
 		Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, previousPeriodStart, previousPeriodEnd).
 		Count(&previousPeriodSessions)
-
-	a.DB.Model(&models.ChatbotSession{}).
+	requestDB.
+		Model(&models.ChatbotSession{}).
 		Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, periodStart, periodEnd).
 		Count(&currentPeriodSessions)
 
@@ -102,11 +106,12 @@ func (a *App) GetDashboardStats(r *fastglue.Request) error {
 
 	// Get campaign counts for the selected period
 	var previousPeriodCampaigns, currentPeriodCampaigns int64
-	a.DB.Model(&models.BulkMessageCampaign{}).
+	requestDB.
+		Model(&models.BulkMessageCampaign{}).
 		Where("organization_id = ? AND status IN ('completed', 'processing') AND created_at >= ? AND created_at <= ?", orgID, previousPeriodStart, previousPeriodEnd).
 		Count(&previousPeriodCampaigns)
-
-	a.DB.Model(&models.BulkMessageCampaign{}).
+	requestDB.
+		Model(&models.BulkMessageCampaign{}).
 		Where("organization_id = ? AND status IN ('completed', 'processing') AND created_at >= ? AND created_at <= ?", orgID, periodStart, periodEnd).
 		Count(&currentPeriodCampaigns)
 
@@ -125,7 +130,8 @@ func (a *App) GetDashboardStats(r *fastglue.Request) error {
 
 	// Get recent messages
 	var messages []models.Message
-	a.DB.Where("organization_id = ?", orgID).
+	requestDB.
+		Where("organization_id = ?", orgID).
 		Preload("Contact").
 		Order("created_at DESC").
 		Limit(5).

@@ -456,6 +456,7 @@ func (a *App) enqueueDirectContactRepair(contact *models.Contact, conversationID
 // ListContacts returns all contacts for the organization
 // Users without contacts:read permission see pending queue + contacts assigned to them
 func (a *App) ListContacts(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -463,7 +464,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 
 	ctx, cancel := context.WithTimeout(r.RequestCtx, 5*time.Second)
 	defer cancel()
-	ctxDB := a.DB.WithContext(ctx)
+	ctxDB := requestDB.WithContext(ctx)
 
 	// Pagination
 	pg := parsePaginationWithDefaults(r, 50, 500)
@@ -864,13 +865,14 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 // GetContact returns a single contact.
 // Agent-role users stay scoped to visible chats (pending queue, public chats, and their own assignments).
 func (a *App) GetContact(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	ctx, cancel := context.WithTimeout(r.RequestCtx, 5*time.Second)
 	defer cancel()
-	ctxDB := a.DB.WithContext(ctx)
+	ctxDB := requestDB.WithContext(ctx)
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return nil
@@ -987,13 +989,14 @@ func (a *App) GetContact(r *fastglue.Request) error {
 // Agent-role users stay scoped to visible chats (pending queue, public chats, and their own assignments).
 // Supports cursor-based pagination with before_id for loading older messages.
 func (a *App) GetMessages(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	ctx, cancel := context.WithTimeout(r.RequestCtx, 5*time.Second)
 	defer cancel()
-	ctxDB := a.DB.WithContext(ctx)
+	ctxDB := requestDB.WithContext(ctx)
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return nil
@@ -1067,7 +1070,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 			if settings.AgentAssignment.CurrentConversationOnly {
 				// Find the most recent session for this contact
 				var session models.ChatbotSession
-				if err := a.DB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
+				if err := requestDB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
 					Order("started_at DESC").First(&session).Error; err == nil {
 					// Filter messages to only those from this session onwards
 					msgQuery = msgQuery.Where("created_at >= ?", session.StartedAt)
@@ -1086,7 +1089,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		if err == nil {
 			// Get the created_at of the before_id message
 			var beforeMsg models.Message
-			if err := a.DB.Where("id = ?", beforeID).First(&beforeMsg).Error; err == nil {
+			if err := requestDB.Where("id = ?", beforeID).First(&beforeMsg).Error; err == nil {
 				msgQuery = msgQuery.Where("created_at < ?", beforeMsg.CreatedAt)
 			}
 		}

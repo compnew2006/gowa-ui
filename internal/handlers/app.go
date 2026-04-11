@@ -10,6 +10,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/queue"
+	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
@@ -59,41 +60,7 @@ func (a *App) WaitForBackgroundTasks() {
 // Super admins can override the org by passing X-Organization-ID header
 // Super admins MUST select an organization - no "all organizations" view
 func (a *App) getOrgID(r *fastglue.Request) (uuid.UUID, error) {
-	// Get user's default organization ID from JWT
-	orgIDVal := r.RequestCtx.UserValue("organization_id")
-	if orgIDVal == nil {
-		return uuid.Nil, errors.New("organization_id not found in context")
-	}
-	defaultOrgID, ok := parseContextUUID(orgIDVal)
-	if !ok {
-		return uuid.Nil, errors.New("organization_id is not a valid UUID")
-	}
-
-	// Check for X-Organization-ID header to switch organizations
-	userID, _ := r.RequestCtx.UserValue("user_id").(uuid.UUID)
-	overrideOrgID := string(r.RequestCtx.Request.Header.Peek("X-Organization-ID"))
-	if overrideOrgID != "" {
-		parsedOrgID, err := uuid.Parse(overrideOrgID)
-		if err == nil && parsedOrgID != defaultOrgID {
-			if a.IsSuperAdmin(userID) {
-				// Super admins can access any org
-				var count int64
-				if err := a.DB.Table("organizations").Where("id = ? AND deleted_at IS NULL", parsedOrgID).Count(&count).Error; err == nil && count > 0 {
-					return parsedOrgID, nil
-				}
-			} else {
-				// Non-super-admins can switch if they have membership
-				var count int64
-				if err := a.DB.Table("user_organizations").
-					Where("user_id = ? AND organization_id = ? AND deleted_at IS NULL", userID, parsedOrgID).
-					Count(&count).Error; err == nil && count > 0 {
-					return parsedOrgID, nil
-				}
-			}
-		}
-	}
-
-	return defaultOrgID, nil
+	return tenant.ResolveOrganizationID(r, a.DB)
 }
 
 // HealthCheck returns server health status
@@ -211,6 +178,19 @@ func parseContextUUID(value any) (uuid.UUID, bool) {
 	default:
 		return uuid.Nil, false
 	}
+}
+
+func (a *App) requestDB(r *fastglue.Request) *gorm.DB {
+	if db, ok := tenant.GetScopedDB(r); ok && db != nil {
+		return db
+	}
+
+	orgID, err := a.getOrgID(r)
+	if err != nil {
+		return a.DB
+	}
+
+	return tenant.ScopedDB(a.DB, orgID)
 }
 
 // requirePermission checks if the user has the required permission.

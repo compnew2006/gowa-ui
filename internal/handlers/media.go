@@ -204,7 +204,10 @@ func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 // ServeMedia serves media files from local storage
 // Only authorized users who have access to the message can view the media
 func (a *App) ServeMedia(r *fastglue.Request) error {
-	// Get auth context
+	requestDB :=
+		// Get auth context
+		a.requestDB(r)
+
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -225,7 +228,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	}
 
 	// Find the message and verify access
-	message, err := findByIDAndOrg[models.Message](a.DB, r, messageID, orgID, "Message")
+	message, err := findByIDAndOrg[models.Message](requestDB, r, messageID, orgID, "Message")
 	if err != nil {
 		return nil
 	}
@@ -234,17 +237,18 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	// Active team transfers remain a fallback for the transfer workflow.
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		var contact models.Contact
-		contactQuery := a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID)
+		contactQuery := requestDB.Where("id = ? AND organization_id = ?", message.ContactID, orgID)
 		contactQuery = applyAgentVisibleChatAccessFilter(contactQuery, userID)
 		if err := contactQuery.First(&contact).Error; err != nil {
 			// Not directly assigned — check team membership via active transfer
 			var transfer models.AgentTransfer
-			if err := a.DB.Where("contact_id = ? AND organization_id = ? AND status = ? AND team_id IS NOT NULL",
+			if err := requestDB.Where("contact_id = ? AND organization_id = ? AND status = ? AND team_id IS NOT NULL",
 				message.ContactID, orgID, models.TransferStatusActive).First(&transfer).Error; err != nil {
 				return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
 			}
 			var count int64
-			a.DB.Model(&models.TeamMember{}).Where("team_id = ? AND user_id = ?", transfer.TeamID, userID).Count(&count)
+			requestDB.
+				Model(&models.TeamMember{}).Where("team_id = ? AND user_id = ?", transfer.TeamID, userID).Count(&count)
 			if count == 0 {
 				return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
 			}

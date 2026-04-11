@@ -1,11 +1,13 @@
 package models_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm/schema"
 )
 
 func TestJSONB_Value(t *testing.T) {
@@ -317,4 +319,33 @@ func TestJSONBArray_Scan(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOrganizationSchema_HasConfigRelation(t *testing.T) {
+	t.Parallel()
+
+	s, err := schema.Parse(&models.Organization{}, &sync.Map{}, schema.NamingStrategy{})
+	require.NoError(t, err)
+
+	rel, ok := s.Relationships.Relations["Config"]
+	require.True(t, ok, "Organization schema should expose the Config relation")
+	require.NotNil(t, rel.FieldSchema)
+
+	assert.Equal(t, "OrganizationConfig", rel.FieldSchema.Name)
+	assert.Equal(t, "organization_configs", rel.FieldSchema.Table)
+	require.NotEmpty(t, rel.References)
+	assert.Equal(t, "OrganizationID", rel.References[0].ForeignKey.Name)
+}
+
+func TestOrganizationConfigSchema_UsesExpectedColumnNames(t *testing.T) {
+	t.Parallel()
+
+	s, err := schema.Parse(&models.OrganizationConfig{}, &sync.Map{}, schema.NamingStrategy{})
+	require.NoError(t, err)
+
+	require.NotNil(t, s.LookUpField("OrganizationID"))
+	assert.Equal(t, "organization_id", s.LookUpField("OrganizationID").DBName)
+	assert.Equal(t, "worker_count", s.LookUpField("WorkerCount").DBName)
+	assert.Equal(t, "max_queue_size", s.LookUpField("MaxQueueSize").DBName)
+	assert.Equal(t, "max_whatsapp_instances", s.LookUpField("MaxWhatsAppInstances").DBName)
 }

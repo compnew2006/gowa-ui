@@ -8,6 +8,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -635,13 +636,13 @@ func (a *App) IsSuperAdmin(userID uuid.UUID) bool {
 // ScopedQuery returns a gorm query scoped to the organization
 // Always filters by organization - uuid.Nil is not allowed
 func (a *App) ScopedQuery(userID, orgID uuid.UUID) *gorm.DB {
-	return a.DB.Where("organization_id = ?", orgID)
+	return tenant.ScopedDB(a.DB, orgID)
 }
 
 // ScopeToOrg adds organization scoping to an existing query
 // Always filters by organization - uuid.Nil is not allowed
 func (a *App) ScopeToOrg(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
-	return query.Where("organization_id = ?", orgID)
+	return tenant.ScopedDB(query, orgID)
 }
 
 // GetRolePermissionsCached retrieves role permissions from cache or database.

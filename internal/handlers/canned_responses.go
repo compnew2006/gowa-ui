@@ -36,6 +36,7 @@ type CannedResponseResponse struct {
 
 // ListCannedResponses returns all canned responses for the organization
 func (a *App) ListCannedResponses(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -52,7 +53,7 @@ func (a *App) ListCannedResponses(r *fastglue.Request) error {
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 	activeOnly := string(r.RequestCtx.QueryArgs().Peek("active_only"))
 
-	query := a.DB.Where("organization_id = ?", orgID)
+	query := requestDB.Where("organization_id = ?", orgID)
 
 	// By default show all, but allow filtering to active only (for chat picker)
 	if activeOnly == "true" {
@@ -94,6 +95,7 @@ func (a *App) ListCannedResponses(r *fastglue.Request) error {
 
 // CreateCannedResponse creates a new canned response
 func (a *App) CreateCannedResponse(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -121,7 +123,7 @@ func (a *App) CreateCannedResponse(r *fastglue.Request) error {
 
 	// Check for duplicate name
 	var existing models.CannedResponse
-	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, name).
+	if err := requestDB.Where("organization_id = ? AND name = ?", orgID, name).
 		First(&existing).Error; err == nil {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict,
 			"Canned response with this name already exists", nil, "")
@@ -148,7 +150,7 @@ func (a *App) CreateCannedResponse(r *fastglue.Request) error {
 		CreatedByID:    userID,
 	}
 
-	if err := a.DB.Create(&cannedResponse).Error; err != nil {
+	if err := requestDB.Create(&cannedResponse).Error; err != nil {
 		a.cleanupCannedResponseAttachments(attachments)
 		a.Log.Error("Failed to create canned response", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError,
@@ -160,6 +162,7 @@ func (a *App) CreateCannedResponse(r *fastglue.Request) error {
 
 // GetCannedResponse returns a single canned response
 func (a *App) GetCannedResponse(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -175,7 +178,7 @@ func (a *App) GetCannedResponse(r *fastglue.Request) error {
 	}
 
 	var cannedResponse models.CannedResponse
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).
+	if err := requestDB.Where("id = ? AND organization_id = ?", id, orgID).
 		First(&cannedResponse).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound,
 			"Canned response not found", nil, "")
@@ -186,6 +189,7 @@ func (a *App) GetCannedResponse(r *fastglue.Request) error {
 
 // UpdateCannedResponse updates an existing canned response
 func (a *App) UpdateCannedResponse(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -201,7 +205,7 @@ func (a *App) UpdateCannedResponse(r *fastglue.Request) error {
 	}
 
 	var cannedResponse models.CannedResponse
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).
+	if err := requestDB.Where("id = ? AND organization_id = ?", id, orgID).
 		First(&cannedResponse).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound,
 			"Canned response not found", nil, "")
@@ -220,7 +224,7 @@ func (a *App) UpdateCannedResponse(r *fastglue.Request) error {
 	updatedName := strings.TrimSpace(req.Name)
 	if updatedName != "" && updatedName != cannedResponse.Name {
 		var duplicate models.CannedResponse
-		if err := a.DB.Where("organization_id = ? AND name = ? AND id <> ?", orgID, updatedName, id).
+		if err := requestDB.Where("organization_id = ? AND name = ? AND id <> ?", orgID, updatedName, id).
 			First(&duplicate).Error; err == nil {
 			return r.SendErrorEnvelope(fasthttp.StatusConflict,
 				"Canned response with this name already exists", nil, "")
@@ -252,7 +256,7 @@ func (a *App) UpdateCannedResponse(r *fastglue.Request) error {
 		cannedResponse.IsActive = *req.IsActive
 	}
 
-	if err := a.DB.Save(&cannedResponse).Error; err != nil {
+	if err := requestDB.Save(&cannedResponse).Error; err != nil {
 		a.Log.Error("Failed to update canned response", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError,
 			"Failed to update canned response", nil, "")
@@ -266,6 +270,7 @@ func (a *App) UpdateCannedResponse(r *fastglue.Request) error {
 
 // DeleteCannedResponse deletes a canned response
 func (a *App) DeleteCannedResponse(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -281,14 +286,14 @@ func (a *App) DeleteCannedResponse(r *fastglue.Request) error {
 	}
 
 	var cannedResponse models.CannedResponse
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).
+	if err := requestDB.Where("id = ? AND organization_id = ?", id, orgID).
 		First(&cannedResponse).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound,
 			"Canned response not found", nil, "")
 	}
 
 	attachments := cannedResponse.Attachments
-	if err := a.DB.Delete(&cannedResponse).Error; err != nil {
+	if err := requestDB.Delete(&cannedResponse).Error; err != nil {
 		a.Log.Error("Failed to delete canned response", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError,
 			"Failed to delete canned response", nil, "")
@@ -300,6 +305,7 @@ func (a *App) DeleteCannedResponse(r *fastglue.Request) error {
 
 // IncrementCannedResponseUsage increments the usage counter
 func (a *App) IncrementCannedResponseUsage(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -314,7 +320,7 @@ func (a *App) IncrementCannedResponseUsage(r *fastglue.Request) error {
 		return nil
 	}
 
-	if err := a.DB.Model(&models.CannedResponse{}).
+	if err := requestDB.Model(&models.CannedResponse{}).
 		Where("id = ? AND organization_id = ?", id, orgID).
 		UpdateColumn("usage_count", gorm.Expr("usage_count + 1")).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError,

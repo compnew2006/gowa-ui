@@ -205,6 +205,7 @@ func TestGetMigrationModels(t *testing.T) {
 	// Test that core models are present
 	coreModels := map[string]bool{
 		"Organization":        false,
+		"OrganizationConfig":  false,
 		"User":                false,
 		"Permission":          false,
 		"CustomRole":          false,
@@ -821,6 +822,40 @@ func TestApplyPreMigrationFixes(t *testing.T) {
 
 		err = applyPreMigrationFixes(gormDB)
 		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestBackfillOrganizationConfigs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil database", func(t *testing.T) {
+		t.Parallel()
+
+		err := BackfillOrganizationConfigs(nil)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "database connection is nil")
+	})
+
+	t.Run("executes insert for missing configs", func(t *testing.T) {
+		t.Parallel()
+
+		sqlDB, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer sqlDB.Close()
+
+		db, err := gorm.Open(postgres.New(postgres.Config{
+			Conn: sqlDB,
+		}), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Silent),
+		})
+		require.NoError(t, err)
+
+		mock.ExpectExec(`INSERT INTO organization_configs`).
+			WillReturnResult(sqlmock.NewResult(0, 2))
+
+		err = BackfillOrganizationConfigs(db)
+		require.NoError(t, err)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }

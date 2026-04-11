@@ -67,6 +67,7 @@ type ToastConfig struct {
 
 // ListCustomActions returns all custom actions for the organization
 func (a *App) ListCustomActions(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -78,7 +79,7 @@ func (a *App) ListCustomActions(r *fastglue.Request) error {
 	pg := parsePagination(r)
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 
-	query := a.DB.Model(&models.CustomAction{}).Where("organization_id = ?", orgID)
+	query := requestDB.Model(&models.CustomAction{}).Where("organization_id = ?", orgID)
 
 	// Apply search filter - search by name (case-insensitive)
 	if search != "" {
@@ -111,6 +112,7 @@ func (a *App) ListCustomActions(r *fastglue.Request) error {
 
 // GetCustomAction returns a single custom action by ID
 func (a *App) GetCustomAction(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -124,7 +126,7 @@ func (a *App) GetCustomAction(r *fastglue.Request) error {
 		return nil
 	}
 
-	action, err := findByIDAndOrg[models.CustomAction](a.DB, r, actionID, orgID, "Custom action")
+	action, err := findByIDAndOrg[models.CustomAction](requestDB, r, actionID, orgID, "Custom action")
 	if err != nil {
 		return nil
 	}
@@ -134,6 +136,7 @@ func (a *App) GetCustomAction(r *fastglue.Request) error {
 
 // CreateCustomAction creates a new custom action
 func (a *App) CreateCustomAction(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -173,7 +176,7 @@ func (a *App) CreateCustomAction(r *fastglue.Request) error {
 		DisplayOrder:   req.DisplayOrder,
 	}
 
-	if err := a.DB.Create(&action).Error; err != nil {
+	if err := requestDB.Create(&action).Error; err != nil {
 		a.Log.Error("Failed to create custom action", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create custom action", nil, "")
 	}
@@ -184,6 +187,7 @@ func (a *App) CreateCustomAction(r *fastglue.Request) error {
 
 // UpdateCustomAction updates an existing custom action
 func (a *App) UpdateCustomAction(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -197,7 +201,7 @@ func (a *App) UpdateCustomAction(r *fastglue.Request) error {
 		return nil
 	}
 
-	action, err := findByIDAndOrg[models.CustomAction](a.DB, r, actionID, orgID, "Custom action")
+	action, err := findByIDAndOrg[models.CustomAction](requestDB, r, actionID, orgID, "Custom action")
 	if err != nil {
 		return nil
 	}
@@ -235,13 +239,14 @@ func (a *App) UpdateCustomAction(r *fastglue.Request) error {
 	updates["is_active"] = req.IsActive
 	updates["display_order"] = req.DisplayOrder
 
-	if err := a.DB.Model(action).Updates(updates).Error; err != nil {
+	if err := requestDB.Model(action).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update custom action", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update custom action", nil, "")
 	}
+	requestDB.
 
-	// Reload to get updated values
-	a.DB.First(action, actionID)
+		// Reload to get updated values
+		First(action, actionID)
 
 	a.Log.Info("Custom action updated", "action_id", action.ID)
 	return r.SendEnvelope(customActionToResponse(*action))
@@ -249,6 +254,7 @@ func (a *App) UpdateCustomAction(r *fastglue.Request) error {
 
 // DeleteCustomAction deletes a custom action
 func (a *App) DeleteCustomAction(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -262,7 +268,7 @@ func (a *App) DeleteCustomAction(r *fastglue.Request) error {
 		return nil
 	}
 
-	result := a.DB.Where("id = ? AND organization_id = ?", actionID, orgID).Delete(&models.CustomAction{})
+	result := requestDB.Where("id = ? AND organization_id = ?", actionID, orgID).Delete(&models.CustomAction{})
 	if result.Error != nil {
 		a.Log.Error("Failed to delete custom action", "error", result.Error)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete custom action", nil, "")
@@ -277,6 +283,7 @@ func (a *App) DeleteCustomAction(r *fastglue.Request) error {
 
 // ExecuteCustomAction executes a custom action with the given context
 func (a *App) ExecuteCustomAction(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -297,7 +304,7 @@ func (a *App) ExecuteCustomAction(r *fastglue.Request) error {
 	}
 
 	// Get the action
-	action, err := findByIDAndOrg[models.CustomAction](a.DB, r, actionID, orgID, "Custom action")
+	action, err := findByIDAndOrg[models.CustomAction](requestDB, r, actionID, orgID, "Custom action")
 	if err != nil {
 		return nil
 	}
@@ -312,18 +319,20 @@ func (a *App) ExecuteCustomAction(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid contact ID", nil, "")
 	}
 
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	contact, err := findByIDAndOrg[models.Contact](requestDB, r, contactID, orgID, "Contact")
 	if err != nil {
 		return nil
 	}
 
 	// Get user details
 	var user models.User
-	a.DB.First(&user, userID)
+	requestDB.
+		First(&user, userID)
 
 	// Get organization details
 	var org models.Organization
-	a.DB.First(&org, orgID)
+	requestDB.
+		First(&org, orgID)
 
 	// Build context for variable replacement
 	context := buildActionContext(*contact, user, org)

@@ -244,6 +244,7 @@ var staticDisplayTypes = map[string]bool{
 
 // ListWidgets returns all widgets for the user (their own + shared)
 func (a *App) ListWidgets(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -256,7 +257,7 @@ func (a *App) ListWidgets(r *fastglue.Request) error {
 
 	// Get user's own widgets + shared widgets from org
 	var widgets []models.Widget
-	if err := a.DB.Where(
+	if err := requestDB.Where(
 		"organization_id = ? AND (user_id = ? OR is_shared = true)",
 		orgID, userID,
 	).Order("display_order ASC, created_at ASC").Find(&widgets).Error; err != nil {
@@ -277,6 +278,7 @@ func (a *App) ListWidgets(r *fastglue.Request) error {
 
 // GetWidget returns a single widget
 func (a *App) GetWidget(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -293,7 +295,7 @@ func (a *App) GetWidget(r *fastglue.Request) error {
 	}
 
 	var widget models.Widget
-	if err := a.DB.Where(
+	if err := requestDB.Where(
 		"id = ? AND organization_id = ? AND (user_id = ? OR is_shared = true)",
 		id, orgID, userID,
 	).First(&widget).Error; err != nil {
@@ -305,6 +307,7 @@ func (a *App) GetWidget(r *fastglue.Request) error {
 
 // CreateWidget creates a new widget
 func (a *App) CreateWidget(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -370,7 +373,8 @@ func (a *App) CreateWidget(r *fastglue.Request) error {
 
 	// Get max display order
 	var maxOrder int
-	a.DB.Model(&models.Widget{}).
+	requestDB.
+		Model(&models.Widget{}).
 		Where("organization_id = ? AND user_id = ?", orgID, userID).
 		Select("COALESCE(MAX(display_order), 0)").
 		Scan(&maxOrder)
@@ -463,7 +467,7 @@ func (a *App) CreateWidget(r *fastglue.Request) error {
 		IsShared:       isShared,
 	}
 
-	if err := a.DB.Create(&widget).Error; err != nil {
+	if err := requestDB.Create(&widget).Error; err != nil {
 		a.Log.Error("Failed to create widget", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create widget", nil, "")
 	}
@@ -473,6 +477,7 @@ func (a *App) CreateWidget(r *fastglue.Request) error {
 
 // UpdateWidget updates a widget
 func (a *App) UpdateWidget(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -489,7 +494,7 @@ func (a *App) UpdateWidget(r *fastglue.Request) error {
 	}
 
 	// Find the widget - must belong to same organization
-	widget, err := findByIDAndOrg[models.Widget](a.DB, r, id, orgID, "Widget")
+	widget, err := findByIDAndOrg[models.Widget](requestDB, r, id, orgID, "Widget")
 	if err != nil {
 		return nil
 	}
@@ -603,7 +608,7 @@ func (a *App) UpdateWidget(r *fastglue.Request) error {
 		widget.GridH = *req.GridH
 	}
 
-	if err := a.DB.Save(widget).Error; err != nil {
+	if err := requestDB.Save(widget).Error; err != nil {
 		a.Log.Error("Failed to update widget", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update widget", nil, "")
 	}
@@ -613,6 +618,7 @@ func (a *App) UpdateWidget(r *fastglue.Request) error {
 
 // DeleteWidget deletes a widget
 func (a *App) DeleteWidget(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -629,7 +635,7 @@ func (a *App) DeleteWidget(r *fastglue.Request) error {
 	}
 
 	// Find the widget - must belong to same organization
-	widget, err := findByIDAndOrg[models.Widget](a.DB, r, id, orgID, "Widget")
+	widget, err := findByIDAndOrg[models.Widget](requestDB, r, id, orgID, "Widget")
 	if err != nil {
 		return nil
 	}
@@ -639,7 +645,7 @@ func (a *App) DeleteWidget(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Only the widget owner can delete this widget", nil, "")
 	}
 
-	if err := a.DB.Delete(widget).Error; err != nil {
+	if err := requestDB.Delete(widget).Error; err != nil {
 		a.Log.Error("Failed to delete widget", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete widget", nil, "")
 	}
@@ -649,6 +655,7 @@ func (a *App) DeleteWidget(r *fastglue.Request) error {
 
 // SaveWidgetLayout bulk saves grid positions for all widgets
 func (a *App) SaveWidgetLayout(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -675,7 +682,7 @@ func (a *App) SaveWidgetLayout(r *fastglue.Request) error {
 	}
 
 	// Update all widgets in a transaction
-	err = a.DB.Transaction(func(tx *gorm.DB) error {
+	err = requestDB.Transaction(func(tx *gorm.DB) error {
 		for i, item := range req.Layout {
 			result := tx.Model(&models.Widget{}).
 				Where("id = ? AND organization_id = ? AND (user_id = ? OR is_shared = true)", item.ID, orgID, userID).
@@ -866,6 +873,7 @@ func validateWidgetGroupByField(dataSource, field string) error {
 
 // GetWidgetData executes the widget query and returns the data
 func (a *App) GetWidgetData(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -885,7 +893,7 @@ func (a *App) GetWidgetData(r *fastglue.Request) error {
 
 	// Get the widget
 	var widget models.Widget
-	if err := a.DB.Where(
+	if err := requestDB.Where(
 		"id = ? AND organization_id = ? AND (user_id = ? OR is_shared = true)",
 		id, orgID, userID,
 	).First(&widget).Error; err != nil {
@@ -905,6 +913,7 @@ func (a *App) GetWidgetData(r *fastglue.Request) error {
 
 // GetAllWidgetsData returns data for all user's widgets in a single request
 func (a *App) GetAllWidgetsData(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -919,7 +928,7 @@ func (a *App) GetAllWidgetsData(r *fastglue.Request) error {
 
 	// Get user's widgets
 	var widgets []models.Widget
-	if err := a.DB.Where(
+	if err := requestDB.Where(
 		"organization_id = ? AND (user_id = ? OR is_shared = true)",
 		orgID, userID,
 	).Order("display_order ASC").Find(&widgets).Error; err != nil {

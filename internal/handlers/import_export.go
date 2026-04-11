@@ -173,6 +173,7 @@ type ExportRequest struct {
 
 // ExportData handles generic data export
 func (a *App) ExportData(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -213,7 +214,7 @@ func (a *App) ExportData(r *fastglue.Request) error {
 	}
 
 	// Build query
-	query := a.DB.Model(config.Model).Where("organization_id = ?", orgID)
+	query := requestDB.Model(config.Model).Where("organization_id = ?", orgID)
 
 	// Apply filters
 	if search, ok := req.Filters["search"]; ok && search != "" {
@@ -355,6 +356,7 @@ type ImportDataRequest struct {
 
 // ImportData handles generic data import
 func (a *App) ImportData(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -542,7 +544,7 @@ func (a *App) ImportData(r *fastglue.Request) error {
 			modelType := reflect.TypeOf(config.Model).Elem()
 			existing = reflect.New(modelType).Interface()
 
-			err := a.DB.Where("organization_id = ? AND "+config.UniqueColumn+" = ?", orgID, uniqueVal).First(existing).Error
+			err := requestDB.Where("organization_id = ? AND "+config.UniqueColumn+" = ?", orgID, uniqueVal).First(existing).Error
 			if err == nil {
 				// Record exists
 				if updateOnDup {
@@ -550,7 +552,7 @@ func (a *App) ImportData(r *fastglue.Request) error {
 					delete(recordMap, "organization_id")
 					delete(recordMap, config.UniqueColumn)
 					if len(recordMap) > 0 {
-						if err := a.DB.Model(existing).Updates(recordMap).Error; err != nil {
+						if err := requestDB.Model(existing).Updates(recordMap).Error; err != nil {
 							errors++
 							errorMessages = append(errorMessages, fmt.Sprintf("Row %d: failed to update", rowNum))
 						} else {
@@ -568,7 +570,7 @@ func (a *App) ImportData(r *fastglue.Request) error {
 
 		// Run BeforeCreate hook if defined
 		if config.BeforeCreate != nil {
-			if err := config.BeforeCreate(a.DB, orgID, recordMap); err != nil {
+			if err := config.BeforeCreate(requestDB, orgID, recordMap); err != nil {
 				errors++
 				errorMessages = append(errorMessages, fmt.Sprintf("Row %d: %s", rowNum, err.Error()))
 				continue
@@ -604,7 +606,7 @@ func (a *App) ImportData(r *fastglue.Request) error {
 
 		// Use GORM to create the populated struct - this handles PostgreSQL properly
 		newRecord := newRecordVal.Addr().Interface()
-		if err := a.DB.Create(newRecord).Error; err != nil {
+		if err := requestDB.Create(newRecord).Error; err != nil {
 			errors++
 			errorMessages = append(errorMessages, fmt.Sprintf("Row %d: failed to create - %s", rowNum, err.Error()))
 			continue

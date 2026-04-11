@@ -21,6 +21,7 @@ const maxAutoCampaignMediaUploadSize = 16 << 20 // 16MB
 
 // UploadInstanceAutoCampaignMedia uploads a media file used by per-instance auto campaigns.
 func (a *App) UploadInstanceAutoCampaignMedia(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	if !a.isWhatsmeowProvider() {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Auto campaign media is only available for Whatsmeow provider", nil, "")
 	}
@@ -35,7 +36,7 @@ func (a *App) UploadInstanceAutoCampaignMedia(r *fastglue.Request) error {
 		return nil
 	}
 
-	instance, err := findByIDAndOrg[models.WhatsAppInstance](a.DB, r, instanceID, orgID, "Instance")
+	instance, err := findByIDAndOrg[models.WhatsAppInstance](requestDB, r, instanceID, orgID, "Instance")
 	if err != nil {
 		return nil
 	}

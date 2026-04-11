@@ -50,6 +50,7 @@ func generateAPIKey() (string, error) {
 
 // ListAPIKeys returns all API keys for the organization
 func (a *App) ListAPIKeys(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -62,7 +63,7 @@ func (a *App) ListAPIKeys(r *fastglue.Request) error {
 	pg := parsePagination(r)
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 
-	query := a.DB.Model(&models.APIKey{}).Where("organization_id = ?", orgID)
+	query := requestDB.Model(&models.APIKey{}).Where("organization_id = ?", orgID)
 
 	// Apply search filter - search by name or key prefix (case-insensitive)
 	if search != "" {
@@ -103,6 +104,7 @@ func (a *App) ListAPIKeys(r *fastglue.Request) error {
 
 // CreateAPIKey creates a new API key
 func (a *App) CreateAPIKey(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -159,7 +161,7 @@ func (a *App) CreateAPIKey(r *fastglue.Request) error {
 		IsActive:       true,
 	}
 
-	if err := a.DB.Create(&apiKey).Error; err != nil {
+	if err := requestDB.Create(&apiKey).Error; err != nil {
 		a.Log.Error("Failed to create API key", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create API key", nil, "")
 	}
@@ -177,6 +179,7 @@ func (a *App) CreateAPIKey(r *fastglue.Request) error {
 
 // DeleteAPIKey revokes an API key
 func (a *App) DeleteAPIKey(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -191,7 +194,7 @@ func (a *App) DeleteAPIKey(r *fastglue.Request) error {
 		return nil
 	}
 
-	result := a.DB.Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.APIKey{})
+	result := requestDB.Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.APIKey{})
 	if result.Error != nil {
 		a.Log.Error("Failed to delete API key", "error", result.Error)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete API key", nil, "")

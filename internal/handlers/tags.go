@@ -82,6 +82,7 @@ func (a *App) ListTags(r *fastglue.Request) error {
 
 // CreateTag creates a new tag
 func (a *App) CreateTag(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -110,7 +111,7 @@ func (a *App) CreateTag(r *fastglue.Request) error {
 
 	// Check for duplicate name
 	var existing models.Tag
-	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, req.Name).First(&existing).Error; err == nil {
+	if err := requestDB.Where("organization_id = ? AND name = ?", orgID, req.Name).First(&existing).Error; err == nil {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Tag with this name already exists", nil, "")
 	}
 
@@ -120,7 +121,7 @@ func (a *App) CreateTag(r *fastglue.Request) error {
 		Color:          req.Color,
 	}
 
-	if err := a.DB.Create(&tag).Error; err != nil {
+	if err := requestDB.Create(&tag).Error; err != nil {
 		a.Log.Error("Failed to create tag", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create tag", nil, "")
 	}
@@ -133,6 +134,7 @@ func (a *App) CreateTag(r *fastglue.Request) error {
 
 // UpdateTag updates an existing tag
 func (a *App) UpdateTag(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -150,7 +152,7 @@ func (a *App) UpdateTag(r *fastglue.Request) error {
 	}
 
 	var tag models.Tag
-	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, tagName).First(&tag).Error; err != nil {
+	if err := requestDB.Where("organization_id = ? AND name = ?", orgID, tagName).First(&tag).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Tag not found", nil, "")
 	}
 
@@ -170,7 +172,7 @@ func (a *App) UpdateTag(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "name must be at most 50 characters", nil, "")
 		}
 		var existing models.Tag
-		if err := a.DB.Where("organization_id = ? AND name = ?", orgID, req.Name).First(&existing).Error; err == nil {
+		if err := requestDB.Where("organization_id = ? AND name = ?", orgID, req.Name).First(&existing).Error; err == nil {
 			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Tag with this name already exists", nil, "")
 		}
 	}
@@ -180,7 +182,7 @@ func (a *App) UpdateTag(r *fastglue.Request) error {
 		// Update contacts that use this tag
 		// Note: Tags are stored as JSONB array of strings in contacts
 		// This requires a raw SQL update
-		if err := a.DB.Exec(`
+		if err := requestDB.Exec(`
 			UPDATE contacts
 			SET tags = (
 				SELECT jsonb_agg(
@@ -196,7 +198,7 @@ func (a *App) UpdateTag(r *fastglue.Request) error {
 		}
 
 		// Delete old tag
-		if err := a.DB.Delete(&tag).Error; err != nil {
+		if err := requestDB.Delete(&tag).Error; err != nil {
 			a.Log.Error("Failed to delete old tag", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update tag", nil, "")
 		}
@@ -211,7 +213,7 @@ func (a *App) UpdateTag(r *fastglue.Request) error {
 			newTag.Color = tag.Color
 		}
 
-		if err := a.DB.Create(&newTag).Error; err != nil {
+		if err := requestDB.Create(&newTag).Error; err != nil {
 			a.Log.Error("Failed to create renamed tag", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update tag", nil, "")
 		}
@@ -224,7 +226,7 @@ func (a *App) UpdateTag(r *fastglue.Request) error {
 
 	// Just updating color - use Updates for composite primary key
 	if req.Color != "" && req.Color != tag.Color {
-		if err := a.DB.Model(&models.Tag{}).
+		if err := requestDB.Model(&models.Tag{}).
 			Where("organization_id = ? AND name = ?", orgID, tagName).
 			Update("color", req.Color).Error; err != nil {
 			a.Log.Error("Failed to update tag", "error", err)
@@ -237,7 +239,7 @@ func (a *App) UpdateTag(r *fastglue.Request) error {
 	}
 
 	// Reload tag to get updated timestamp
-	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, tagName).First(&tag).Error; err != nil {
+	if err := requestDB.Where("organization_id = ? AND name = ?", orgID, tagName).First(&tag).Error; err != nil {
 		a.Log.Error("Failed to reload tag", "error", err)
 	}
 
@@ -246,6 +248,7 @@ func (a *App) UpdateTag(r *fastglue.Request) error {
 
 // DeleteTag deletes a tag
 func (a *App) DeleteTag(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -263,12 +266,12 @@ func (a *App) DeleteTag(r *fastglue.Request) error {
 	}
 
 	var tag models.Tag
-	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, tagName).First(&tag).Error; err != nil {
+	if err := requestDB.Where("organization_id = ? AND name = ?", orgID, tagName).First(&tag).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Tag not found", nil, "")
 	}
 
 	// Remove tag from all contacts that have it
-	if err := a.DB.Exec(`
+	if err := requestDB.Exec(`
 		UPDATE contacts
 		SET tags = (
 			SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
@@ -282,7 +285,7 @@ func (a *App) DeleteTag(r *fastglue.Request) error {
 		// Continue anyway - tag deletion will still work
 	}
 
-	if err := a.DB.Delete(&tag).Error; err != nil {
+	if err := requestDB.Delete(&tag).Error; err != nil {
 		a.Log.Error("Failed to delete tag", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete tag", nil, "")
 	}

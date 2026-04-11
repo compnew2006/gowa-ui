@@ -19,6 +19,7 @@ import (
 
 // Login authenticates a user and returns tokens
 func (a *App) Login(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	var req LoginRequest
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
@@ -26,7 +27,7 @@ func (a *App) Login(r *fastglue.Request) error {
 
 	// Find user by email with role preloaded
 	var user models.User
-	if err := a.DB.Preload("Role").Where("email = ?", req.Email).First(&user).Error; err != nil {
+	if err := requestDB.Preload("Role").Where("email = ?", req.Email).First(&user).Error; err != nil {
 		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"), []byte(req.Password))
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid credentials", nil, "")
 	}
@@ -126,6 +127,7 @@ func (a *App) CreateRegisterInvite(r *fastglue.Request) error {
 
 // Register creates a new user in an existing organization
 func (a *App) Register(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	var req RegisterRequest
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
@@ -146,7 +148,7 @@ func (a *App) Register(r *fastglue.Request) error {
 
 	// Validate the organization exists
 	var org models.Organization
-	if err := a.DB.Where("id = ?", inviteOrgID).First(&org).Error; err != nil {
+	if err := requestDB.Where("id = ?", inviteOrgID).First(&org).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Organization not found", nil, "")
 	}
 	if !a.checkQuotaOrRespond(r, license.ResourceUsers, inviteOrgID) {
@@ -155,8 +157,8 @@ func (a *App) Register(r *fastglue.Request) error {
 
 	// Get the org's default role
 	var defaultRole models.CustomRole
-	if err := a.DB.Where("organization_id = ? AND is_default = ?", inviteOrgID, true).First(&defaultRole).Error; err != nil {
-		if err := a.DB.Where("organization_id = ? AND name = ? AND is_system = ?", inviteOrgID, "agent", true).First(&defaultRole).Error; err != nil {
+	if err := requestDB.Where("organization_id = ? AND is_default = ?", inviteOrgID, true).First(&defaultRole).Error; err != nil {
+		if err := requestDB.Where("organization_id = ? AND name = ? AND is_system = ?", inviteOrgID, "agent", true).First(&defaultRole).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to find default role", nil, "")
 		}
 	}
@@ -173,7 +175,7 @@ func (a *App) Register(r *fastglue.Request) error {
 
 	// If email already exists, do not validate password or mutate membership.
 	var existingUser models.User
-	if err := a.DB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
+	if err := requestDB.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
 		return sendRegistrationAck()
 	}
 
@@ -181,7 +183,7 @@ func (a *App) Register(r *fastglue.Request) error {
 	if hashErr != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create account", nil, "")
 	}
-	tx := a.DB.Begin()
+	tx := requestDB.Begin()
 
 	user := models.User{
 		OrganizationID: inviteOrgID,
@@ -217,6 +219,7 @@ func (a *App) Register(r *fastglue.Request) error {
 
 // RefreshToken refreshes access token using refresh token with rotation.
 func (a *App) RefreshToken(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	refreshTokenStr := string(r.RequestCtx.Request.Header.Cookie(cookieRefreshName))
 	if refreshTokenStr == "" {
 		var req RefreshRequest
@@ -254,7 +257,7 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 	}
 
 	var user models.User
-	if err := a.DB.Where("id = ?", claims.UserID).First(&user).Error; err != nil {
+	if err := requestDB.Where("id = ?", claims.UserID).First(&user).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "User not found", nil, "")
 	}
 
@@ -363,6 +366,7 @@ func (a *App) populateUserRolePermissions(user *models.User) error {
 
 // SwitchOrg generates new tokens for a different organization the user belongs to
 func (a *App) SwitchOrg(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	userID, ok := r.RequestCtx.UserValue("user_id").(uuid.UUID)
 	if !ok {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -378,18 +382,18 @@ func (a *App) SwitchOrg(r *fastglue.Request) error {
 	}
 
 	var org models.Organization
-	if err := a.DB.Where("id = ?", req.OrganizationID).First(&org).Error; err != nil {
+	if err := requestDB.Where("id = ?", req.OrganizationID).First(&org).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Organization not found", nil, "")
 	}
 
 	var user models.User
-	if err := a.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+	if err := requestDB.Where("id = ?", userID).First(&user).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "User not found", nil, "")
 	}
 
 	if !user.IsSuperAdmin {
 		var userOrg models.UserOrganization
-		if err := a.DB.Where("user_id = ? AND organization_id = ?", userID, req.OrganizationID).First(&userOrg).Error; err != nil {
+		if err := requestDB.Where("user_id = ? AND organization_id = ?", userID, req.OrganizationID).First(&userOrg).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You are not a member of this organization", nil, "")
 		}
 		if userOrg.RoleID != nil {
@@ -401,7 +405,7 @@ func (a *App) SwitchOrg(r *fastglue.Request) error {
 
 	if user.RoleID != nil {
 		var role models.CustomRole
-		if err := a.DB.Where("id = ?", *user.RoleID).First(&role).Error; err == nil {
+		if err := requestDB.Where("id = ?", *user.RoleID).First(&role).Error; err == nil {
 			user.Role = &role
 			cachedPerms, err := a.GetRolePermissionsCached(*user.RoleID)
 			if err == nil {

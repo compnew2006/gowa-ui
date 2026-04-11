@@ -92,9 +92,10 @@ type Organization struct {
 	Settings JSONB  `gorm:"type:jsonb;default:'{}'" json:"settings"`
 
 	// Relations
-	Users             []User             `gorm:"foreignKey:OrganizationID" json:"users,omitempty"`
-	UserOrganizations []UserOrganization `gorm:"foreignKey:OrganizationID" json:"user_organizations,omitempty"`
-	WhatsAppAccounts  []WhatsAppAccount  `gorm:"foreignKey:OrganizationID" json:"whatsapp_accounts,omitempty"`
+	Users             []User              `gorm:"foreignKey:OrganizationID" json:"users,omitempty"`
+	UserOrganizations []UserOrganization  `gorm:"foreignKey:OrganizationID" json:"user_organizations,omitempty"`
+	WhatsAppAccounts  []WhatsAppAccount   `gorm:"foreignKey:OrganizationID" json:"whatsapp_accounts,omitempty"`
+	Config            *OrganizationConfig `gorm:"foreignKey:OrganizationID" json:"config,omitempty"`
 }
 
 func (Organization) TableName() string {
@@ -221,35 +222,35 @@ func (APIKey) TableName() string {
 
 // LicenseRecord stores the active host-bound license and its verified entitlements.
 type LicenseRecord struct {
-	ID                           uint       `gorm:"primaryKey" json:"id"`
-	CreatedAt                    time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt                    time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
-	ActivationToken              string     `gorm:"type:text;not null" json:"-"`
-	LicenseFamilyID              string     `gorm:"size:128;not null;index" json:"license_family_id"`
-	LicenseID                    string     `gorm:"size:128;not null;index" json:"license_id"`
-	Revision                     uint64     `gorm:"not null" json:"revision"`
-	KeyID                        string     `gorm:"size:128;not null" json:"key_id"`
-	Issuer                       string     `gorm:"size:255;not null" json:"issuer"`
-	Audience                     string     `gorm:"size:255;not null" json:"audience"`
-	Product                      string     `gorm:"size:100;not null" json:"product"`
-	HWIDFull                     string     `gorm:"type:text;not null" json:"hwid_full"`
-	HWIDHash                     string     `gorm:"size:64;not null;index" json:"hwid_hash"`
-	Tier                         string     `gorm:"size:64;not null" json:"tier"`
-	LicenseKind                  string     `gorm:"size:16;not null" json:"license_kind"`
-	TrialDays                    int        `gorm:"not null;default:0" json:"trial_days"`
-	MaxOrganizations             int        `gorm:"not null" json:"max_organizations"`
-	MaxUsersPerOrg               int        `gorm:"not null" json:"max_users_per_org"`
-	MaxWhatsAppEndpointsPerOrg   int        `gorm:"not null" json:"max_whatsapp_endpoints_per_org"`
-	MaxWorkers                   int        `gorm:"not null" json:"max_workers"`
-	Status                       string     `gorm:"size:20;not null;index" json:"status"`
-	Overages                     JSONB      `gorm:"type:jsonb;default:'{}'" json:"overages"`
-	IssuedAt                     time.Time  `gorm:"not null" json:"issued_at"`
-	NotBefore                    time.Time  `gorm:"not null" json:"not_before"`
-	ExpiresAt                    *time.Time `json:"expires_at,omitempty"`
-	GraceDeadline                *time.Time `json:"grace_deadline,omitempty"`
-	LastSeenAt                   time.Time  `gorm:"not null" json:"last_seen_at"`
-	ActivatedAt                  time.Time  `gorm:"not null" json:"activated_at"`
-	IntegrityHMAC                string     `gorm:"size:128;not null" json:"-"`
+	ID                         uint       `gorm:"primaryKey" json:"id"`
+	CreatedAt                  time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt                  time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	ActivationToken            string     `gorm:"type:text;not null" json:"-"`
+	LicenseFamilyID            string     `gorm:"size:128;not null;index" json:"license_family_id"`
+	LicenseID                  string     `gorm:"size:128;not null;index" json:"license_id"`
+	Revision                   uint64     `gorm:"not null" json:"revision"`
+	KeyID                      string     `gorm:"size:128;not null" json:"key_id"`
+	Issuer                     string     `gorm:"size:255;not null" json:"issuer"`
+	Audience                   string     `gorm:"size:255;not null" json:"audience"`
+	Product                    string     `gorm:"size:100;not null" json:"product"`
+	HWIDFull                   string     `gorm:"type:text;not null" json:"hwid_full"`
+	HWIDHash                   string     `gorm:"size:64;not null;index" json:"hwid_hash"`
+	Tier                       string     `gorm:"size:64;not null" json:"tier"`
+	LicenseKind                string     `gorm:"size:16;not null" json:"license_kind"`
+	TrialDays                  int        `gorm:"not null;default:0" json:"trial_days"`
+	MaxOrganizations           int        `gorm:"not null" json:"max_organizations"`
+	MaxUsersPerOrg             int        `gorm:"not null" json:"max_users_per_org"`
+	MaxWhatsAppEndpointsPerOrg int        `gorm:"not null" json:"max_whatsapp_endpoints_per_org"`
+	MaxWorkers                 int        `gorm:"not null" json:"max_workers"`
+	Status                     string     `gorm:"size:20;not null;index" json:"status"`
+	Overages                   JSONB      `gorm:"type:jsonb;default:'{}'" json:"overages"`
+	IssuedAt                   time.Time  `gorm:"not null" json:"issued_at"`
+	NotBefore                  time.Time  `gorm:"not null" json:"not_before"`
+	ExpiresAt                  *time.Time `json:"expires_at,omitempty"`
+	GraceDeadline              *time.Time `json:"grace_deadline,omitempty"`
+	LastSeenAt                 time.Time  `gorm:"not null" json:"last_seen_at"`
+	ActivatedAt                time.Time  `gorm:"not null" json:"activated_at"`
+	IntegrityHMAC              string     `gorm:"size:128;not null" json:"-"`
 }
 
 func (LicenseRecord) TableName() string {

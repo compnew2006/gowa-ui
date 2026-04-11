@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
@@ -455,6 +456,21 @@ func OrganizationContext(db *gorm.DB) fastglue.FastMiddleware {
 		r.RequestCtx.SetUserValue(ContextKeyUser, &user)
 		r.RequestCtx.SetUserValue(ContextKeyOrganization, &org)
 
+		return r
+	}
+}
+
+// TenantScope resolves the effective organization and stores a scoped DB clone in the request context.
+func TenantScope(db *gorm.DB) fastglue.FastMiddleware {
+	return func(r *fastglue.Request) *fastglue.Request {
+		orgID, err := tenant.ResolveOrganizationID(r, db)
+		if err != nil {
+			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+			return nil
+		}
+
+		r.RequestCtx.SetUserValue(ContextKeyOrganizationID, orgID)
+		tenant.SetScopedDB(r, tenant.ScopedDB(db, orgID))
 		return r
 	}
 }
