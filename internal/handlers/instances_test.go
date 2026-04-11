@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
+	waManager "github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+	waClient "go.mau.fi/whatsmeow"
 )
 
 func createTestInstance(t *testing.T, app *handlers.App, orgID uuid.UUID, name string) *models.WhatsAppInstance {
@@ -182,6 +185,41 @@ func TestApp_UpdateInstance_DuplicateNameConflict(t *testing.T) {
 	var refreshed models.WhatsAppInstance
 	require.NoError(t, app.DB.First(&refreshed, "id = ?", second.ID).Error)
 	assert.Equal(t, "Support", refreshed.Name)
+}
+
+func TestApp_UpdateInstance_ReindexesConnectedRuntimeKey(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createInstanceManagerUser(t, app, org.ID, "instance-manager-reindex")
+	instance := createTestInstance(t, app, org.ID, "Sales")
+
+	manager := waManager.NewConnectionManager(app.DB, nil, app.Log, &config.WhatsmeowConfig{}, nil, "./uploads")
+	app.WhatsmeowManager = manager
+
+	client := &waClient.Client{}
+	require.NoError(t, manager.RegisterInstanceClient(*instance, client))
+	assert.Same(t, client, manager.GetClient(instance.ID))
+	assert.Same(t, client, manager.GetClientByKey(waManager.NewInstanceKey(org.ID, "Sales")))
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"name": " Growth ",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", instance.ID.String())
+
+	err := app.UpdateInstance(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var updated models.WhatsAppInstance
+	require.NoError(t, app.DB.First(&updated, "id = ?", instance.ID).Error)
+	assert.Equal(t, "Growth", updated.Name)
+
+	assert.Nil(t, manager.GetClientByKey(waManager.NewInstanceKey(org.ID, "Sales")))
+	assert.Same(t, client, manager.GetClientByKey(waManager.NewInstanceKey(org.ID, "Growth")))
+	assert.Same(t, client, manager.GetClient(instance.ID))
 }
 
 func TestApp_ListInstances_RestrictedUserOnlySeesAllowedInstance(t *testing.T) {

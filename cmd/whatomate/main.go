@@ -240,6 +240,9 @@ func runServer(args []string) {
 
 	// Auto-connect linked sessions and reconnect active instances in background.
 	if cfg.WhatsApp.Provider == "whatsmeow" {
+		whatsmeowManager.StartHealthMonitor(context.Background())
+		defer whatsmeowManager.StopHealthMonitor()
+
 		// Reconcile stale transient states before serving API traffic.
 		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := whatsmeowManager.ReconcileStartupStatuses(reconcileCtx); err != nil {
@@ -541,6 +544,8 @@ func runWorker(args []string) {
 		whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
 		whatsmeowQueue := queue.NewRedisQueue(rdb, lo)
 		whatsmeowManager.SetInboundMediaQueue(whatsmeowQueue)
+		whatsmeowManager.StartHealthMonitor(context.Background())
+		defer whatsmeowManager.StopHealthMonitor()
 		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := whatsmeowManager.ReconcileStartupStatuses(reconcileCtx); err != nil {
 			lo.Warn("Failed to reconcile stale instance statuses on startup", "error", err)

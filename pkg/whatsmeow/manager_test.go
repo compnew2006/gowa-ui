@@ -22,8 +22,8 @@ func TestNewConnectionManager(t *testing.T) {
 		t.Errorf("Expected MaxInstancesPerOrg to be 5, got %d", cm.cfg.MaxInstancesPerOrg)
 	}
 
-	if cm.clients == nil {
-		t.Fatal("Expected clients map to be initialized")
+	if cm.pool == nil {
+		t.Fatal("Expected connection pool to be initialized")
 	}
 }
 

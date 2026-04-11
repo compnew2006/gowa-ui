@@ -107,6 +107,8 @@ type WhatsmeowConfig struct {
 	InboundMediaAsyncRetryDelayMs    int    `koanf:"inbound_media_async_retry_delay_ms"`
 	InboundMediaAsyncRetryMaxDelayMs int    `koanf:"inbound_media_async_retry_max_delay_ms"`
 	Identity                         string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")
+	HealthMonitorIntervalSeconds     int    `koanf:"health_monitor_interval_seconds"`
+	ReconnectTimeoutSeconds          int    `koanf:"reconnect_timeout_seconds"`
 	TypingIndicatorEnabled           bool   `koanf:"typing_indicator_enabled"`
 	TypingMinDelayMs                 int    `koanf:"typing_min_delay_ms"`
 	TypingMaxDelayMs                 int    `koanf:"typing_max_delay_ms"`
@@ -314,6 +316,12 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Whatsmeow.InboundMediaAsyncRetryMaxDelayMs == 0 {
 		cfg.Whatsmeow.InboundMediaAsyncRetryMaxDelayMs = 60000
+	}
+	if cfg.Whatsmeow.HealthMonitorIntervalSeconds == 0 {
+		cfg.Whatsmeow.HealthMonitorIntervalSeconds = 30
+	}
+	if cfg.Whatsmeow.ReconnectTimeoutSeconds == 0 {
+		cfg.Whatsmeow.ReconnectTimeoutSeconds = 45
 	}
 	if !cfg.Whatsmeow.TypingIndicatorEnabled {
 		// Default to enabled to improve human-like direct chat sends unless explicitly disabled in config.
