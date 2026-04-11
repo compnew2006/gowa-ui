@@ -56,6 +56,7 @@ type ConnectionManager struct {
 	healthMonitorMu     sync.Mutex
 	healthMonitorCancel context.CancelFunc
 	healthMonitorDone   chan struct{}
+	mediaService      *MediaService
 }
 
 type inboundMediaJobEnqueuer interface {
@@ -99,6 +100,14 @@ func (cm *ConnectionManager) SetInboundMediaQueue(q inboundMediaJobEnqueuer) {
 		return
 	}
 	cm.inboundMediaQueue = q
+}
+
+// SetMediaService configures the zero-disk inbound media pipeline.
+func (cm *ConnectionManager) SetMediaService(service *MediaService) {
+	if cm == nil {
+		return
+	}
+	cm.mediaService = service
 }
 
 // Connect initializes and connects a WhatsApp instance.

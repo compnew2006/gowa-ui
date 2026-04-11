@@ -54,26 +54,29 @@ func (cm *ConnectionManager) ProcessInboundMediaRecoveryJob(ctx context.Context,
 	if strings.TrimSpace(message.MediaURL) != "" {
 		return nil
 	}
+	if cm.mediaService == nil {
+		return queue.NewPermanentError(fmt.Errorf("media service is not configured"))
+	}
 
 	downloadable, msgType, err := decodeInboundMediaPayload(job)
 	if err != nil {
 		return queue.NewPermanentError(err)
 	}
 
-	client := cm.GetClient(job.InstanceID)
-	if client == nil {
-		return fmt.Errorf("whatsmeow client is unavailable for instance %s", job.InstanceID)
-	}
-
 	maxAttempts, baseBackoff, maxBackoff := cm.inboundMediaAsyncRetrySettings()
 	var (
-		data            []byte
+		handled         *HandledMedia
 		lastFailureText = strings.TrimSpace(job.LastError)
 	)
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		data, err = client.Download(ctx, downloadable)
-		if err == nil && len(data) > 0 {
+		handled, err = cm.mediaService.handleDownloadable(ctx, job.InstanceID, &incomingDownloadableDescriptor{
+			MessageType:  msgType,
+			MimeType:     strings.TrimSpace(job.MimeType),
+			Filename:     strings.TrimSpace(job.FallbackFilename),
+			Downloadable: downloadable,
+		})
+		if err == nil && handled != nil {
 			break
 		}
 
@@ -99,7 +102,7 @@ func (cm *ConnectionManager) ProcessInboundMediaRecoveryJob(ctx context.Context,
 			continue
 		}
 
-		lastFailureText = "inbound media download returned empty data"
+		lastFailureText = "inbound media handler returned no result"
 		if attempt >= maxAttempts {
 			cm.markInboundMediaRecoveryFailed(ctx, &message, lastFailureText)
 			return nil
@@ -116,21 +119,11 @@ func (cm *ConnectionManager) ProcessInboundMediaRecoveryJob(ctx context.Context,
 		}
 	}
 
-	resolvedMimeType := strings.TrimSpace(job.MimeType)
-	if resolvedMimeType == "" {
-		resolvedMimeType = strings.TrimSpace(message.MediaMimeType)
-	}
-	resolvedFilename := strings.TrimSpace(job.FallbackFilename)
-	if resolvedFilename == "" {
-		resolvedFilename = strings.TrimSpace(message.MediaFilename)
+	if handled == nil {
+		return fmt.Errorf("inbound media recovery completed without handled media result")
 	}
 
-	relPath, err := cm.persistInboundMedia(data, msgType, resolvedMimeType, resolvedFilename)
-	if err != nil {
-		return fmt.Errorf("failed to persist recovered inbound media: %w", err)
-	}
-
-	if err := cm.applyInboundMediaRecoverySuccess(ctx, &message, relPath, resolvedMimeType, resolvedFilename); err != nil {
+	if err := cm.applyInboundMediaRecoverySuccess(ctx, &message, handled); err != nil {
 		return err
 	}
 
@@ -216,12 +209,13 @@ func decodeInboundMediaPayload(job *queue.InboundMediaJob) (waClient.Downloadabl
 func (cm *ConnectionManager) applyInboundMediaRecoverySuccess(
 	ctx context.Context,
 	message *models.Message,
-	mediaURL string,
-	mimeType string,
-	filename string,
+	handled *HandledMedia,
 ) error {
 	if message == nil {
 		return fmt.Errorf("message is nil")
+	}
+	if handled == nil {
+		return fmt.Errorf("handled media is nil")
 	}
 
 	nextMetadata := cloneJSONBMap(message.Metadata)
@@ -238,9 +232,10 @@ func (cm *ConnectionManager) applyInboundMediaRecoverySuccess(
 		Model(&models.Message{}).
 		Where("id = ?", message.ID).
 		Updates(map[string]any{
-			"media_url":       mediaURL,
-			"media_mime_type": mimeType,
-			"media_filename":  filename,
+			"media_asset_id":  handled.MediaAssetID,
+			"media_url":       buildMessageMediaURL(message.ID),
+			"media_mime_type": coalesceMediaValue(handled.MimeType, message.MediaMimeType),
+			"media_filename":  coalesceMediaValue(handled.Filename, message.MediaFilename),
 			"metadata":        nextMetadata,
 			"error_message":   "",
 			"updated_at":      now,
@@ -248,9 +243,10 @@ func (cm *ConnectionManager) applyInboundMediaRecoverySuccess(
 		return fmt.Errorf("failed to update recovered inbound media message: %w", err)
 	}
 
-	message.MediaURL = mediaURL
-	message.MediaMimeType = mimeType
-	message.MediaFilename = filename
+	message.MediaAssetID = &handled.MediaAssetID
+	message.MediaURL = buildMessageMediaURL(message.ID)
+	message.MediaMimeType = coalesceMediaValue(handled.MimeType, message.MediaMimeType)
+	message.MediaFilename = coalesceMediaValue(handled.Filename, message.MediaFilename)
 	message.Metadata = nextMetadata
 	message.ErrorMessage = ""
 	message.UpdatedAt = now

@@ -120,6 +120,7 @@ func GetMigrationModels() []MigrationModel {
 		{"WhatsAppInstance", &models.WhatsAppInstance{}},
 		{"InstanceNotification", &models.InstanceNotification{}},
 		{"Contact", &models.Contact{}},
+		{"MediaAsset", &models.MediaAsset{}},
 		{"ContactUserDeletion", &models.ContactUserDeletion{}},
 		{"Tag", &models.Tag{}},
 		{"Message", &models.Message{}},

@@ -240,7 +240,7 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 	cm.scheduleContactAvatarRefresh(instanceID, contact)
 
-	msgType, content, mediaURL, mimeType, filename, mediaRetryArtifact := cm.extractMessageContentWithMediaRetryArtifact(ctx, client, evt.Message)
+	msgType, content, mimeType, filename, downloadable := cm.extractMessageContentMetadata(ctx, client, evt.Message)
 	if msgType == models.MessageTypeIgnore {
 		return nil, nil
 	}
@@ -360,8 +360,38 @@ func (cm *ConnectionManager) persistParsedMessage(
 		}
 	}
 
+	messageID := uuid.New()
+	mediaURL := ""
+	var mediaAssetID *uuid.UUID
+	var mediaRetryArtifact *inboundMediaRetryArtifact
+	if downloadable != nil {
+		if cm.mediaService == nil {
+			lastErr := "media service is not configured"
+			if client == nil {
+				lastErr = waClient.ErrClientIsNil.Error()
+			}
+			mediaRetryArtifact = cm.buildInboundMediaRetryArtifact(msgType, downloadable, mimeType, filename, lastErr)
+		} else {
+			handledMedia, mediaErr := cm.mediaService.HandleIncomingMedia(WithMediaInstanceID(ctx, instanceID), evt)
+			if mediaErr != nil {
+				cm.logger.Warn(
+					"Inline inbound media handling failed",
+					"instance_id", instanceID,
+					"wa_message_id", waMessageID,
+					"error", mediaErr,
+				)
+				mediaRetryArtifact = cm.buildInboundMediaRetryArtifact(msgType, downloadable, mimeType, filename, mediaErr.Error())
+			} else if handledMedia != nil {
+				mediaAssetID = &handledMedia.MediaAssetID
+				mediaURL = buildMessageMediaURL(messageID)
+				mimeType = coalesceMediaValue(handledMedia.MimeType, mimeType)
+				filename = coalesceMediaValue(handledMedia.Filename, filename)
+			}
+		}
+	}
+
 	message := models.Message{
-		BaseModel:         models.BaseModel{CreatedAt: createdAt},
+		BaseModel:         models.BaseModel{ID: messageID, CreatedAt: createdAt},
 		OrganizationID:    orgID,
 		InstanceID:        &instanceID,
 		WhatsAppAccount:   myAccount,
@@ -371,6 +401,7 @@ func (cm *ConnectionManager) persistParsedMessage(
 		Direction:         direction,
 		MessageType:       msgType,
 		Content:           content,
+		MediaAssetID:      mediaAssetID,
 		MediaURL:          mediaURL,
 		MediaMimeType:     mimeType,
 		MediaFilename:     filename,
@@ -530,6 +561,10 @@ func (cm *ConnectionManager) enqueueInboundMediaRecovery(ctx context.Context, me
 	}
 
 	return nil
+}
+
+func buildMessageMediaURL(messageID uuid.UUID) string {
+	return "/api/media/" + messageID.String()
 }
 
 func (cm *ConnectionManager) reconcilePendingOutgoingMessage(

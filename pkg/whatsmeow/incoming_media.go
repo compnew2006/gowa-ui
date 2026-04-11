@@ -49,6 +49,14 @@ type inboundMediaDownloader interface {
 	Download(ctx context.Context, msg waClient.DownloadableMessage) ([]byte, error)
 }
 
+type incomingDownloadableDescriptor struct {
+	MessageType  models.MessageType
+	Content      string
+	MimeType     string
+	Filename     string
+	Downloadable waClient.DownloadableMessage
+}
+
 // extractMessageContentWithMedia extracts message content and persists inbound media locally.
 // It handles wrapped message formats (ephemeral/view-once/document-with-caption) and populates media_url.
 func (cm *ConnectionManager) extractMessageContentWithMedia(ctx context.Context, client *waClient.Client, msg *waE2E.Message) (models.MessageType, string, string, string, string) {
@@ -98,47 +106,121 @@ func (cm *ConnectionManager) extractMessageContentWithMediaRetryArtifact(
 	if msgType, content, ok := cm.extractTextualIncomingMessage(ctx, client, unwrapped); ok {
 		return msgType, content, "", "", "", nil
 	}
-	if img := unwrapped.ImageMessage; img != nil {
-		caption := img.GetCaption()
+	if descriptor, ok := describeIncomingDownloadable(unwrapped); ok {
+		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(
+			ctx,
+			client,
+			descriptor.Downloadable,
+			descriptor.MessageType,
+			descriptor.MimeType,
+			descriptor.Filename,
+		)
+		return descriptor.MessageType, descriptor.Content, mediaURL, descriptor.MimeType, descriptor.Filename, artifact
+	}
+
+	// Default
+	return models.MessageTypeText, "[Unsupported message type]", "", "", "", nil
+}
+
+func (cm *ConnectionManager) extractMessageContentMetadata(
+	ctx context.Context,
+	client *waClient.Client,
+	msg *waE2E.Message,
+) (models.MessageType, string, string, string, waClient.DownloadableMessage) {
+	if isIncomingRevokeMessage(msg) {
+		return models.MessageTypeText, deletedMessageCaption, "", "", nil
+	}
+	if msg != nil && (msg.SenderKeyDistributionMessage != nil || msg.FastRatchetKeySenderKeyDistributionMessage != nil) {
+		return models.MessageTypeIgnore, "", "", "", nil
+	}
+
+	unwrapped := unwrapIncomingMessage(msg)
+	if unwrapped == nil {
+		return models.MessageTypeText, "", "", "", nil
+	}
+	if unwrapped.GetSenderKeyDistributionMessage() != nil || unwrapped.GetFastRatchetKeySenderKeyDistributionMessage() != nil {
+		return models.MessageTypeIgnore, "", "", "", nil
+	}
+
+	if protocol := unwrapped.GetProtocolMessage(); protocol != nil &&
+		protocol.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT &&
+		protocol.GetEditedMessage() != nil {
+		return cm.extractMessageContentMetadata(ctx, client, protocol.GetEditedMessage())
+	}
+	if protocol := unwrapped.GetProtocolMessage(); protocol != nil {
+		if msgType, content, handled := protocolMessageContent(protocol); handled {
+			return msgType, content, "", "", nil
+		}
+	}
+	if unwrapped.GetAlbumMessage() != nil {
+		return models.MessageTypeIgnore, "", "", "", nil
+	}
+
+	if msgType, content, ok := cm.extractTextualIncomingMessage(ctx, client, unwrapped); ok {
+		return msgType, content, "", "", nil
+	}
+
+	if descriptor, ok := describeIncomingDownloadable(unwrapped); ok {
+		return descriptor.MessageType, descriptor.Content, descriptor.MimeType, descriptor.Filename, descriptor.Downloadable
+	}
+
+	return models.MessageTypeText, "[Unsupported message type]", "", "", nil
+}
+
+func describeIncomingDownloadable(msg *waE2E.Message) (*incomingDownloadableDescriptor, bool) {
+	if msg == nil {
+		return nil, false
+	}
+
+	if img := msg.GetImageMessage(); img != nil {
 		mimeType := sanitizeMimeType(img.GetMimetype(), "image/jpeg")
-		filename := defaultMediaFilename("image", mimeType, "image.jpg")
-		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, img, models.MessageTypeImage, mimeType, filename)
-		return models.MessageTypeImage, caption, mediaURL, mimeType, filename, artifact
+		return &incomingDownloadableDescriptor{
+			MessageType:  models.MessageTypeImage,
+			Content:      img.GetCaption(),
+			MimeType:     mimeType,
+			Filename:     defaultMediaFilename("image", mimeType, "image.jpg"),
+			Downloadable: img,
+		}, true
 	}
-
-	if sticker := unwrapped.StickerMessage; sticker != nil {
+	if sticker := msg.GetStickerMessage(); sticker != nil {
 		mimeType := sanitizeMimeType(sticker.GetMimetype(), "image/webp")
-		filename := defaultMediaFilename("sticker", mimeType, "sticker.webp")
-		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, sticker, models.MessageTypeSticker, mimeType, filename)
-		return models.MessageTypeSticker, "", mediaURL, mimeType, filename, artifact
+		return &incomingDownloadableDescriptor{
+			MessageType:  models.MessageTypeSticker,
+			MimeType:     mimeType,
+			Filename:     defaultMediaFilename("sticker", mimeType, "sticker.webp"),
+			Downloadable: sticker,
+		}, true
 	}
-
-	if vid := unwrapped.VideoMessage; vid != nil {
-		caption := vid.GetCaption()
+	if vid := msg.GetVideoMessage(); vid != nil {
 		mimeType := sanitizeMimeType(vid.GetMimetype(), "video/mp4")
-		filename := defaultMediaFilename("video", mimeType, "video.mp4")
-		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, vid, models.MessageTypeVideo, mimeType, filename)
-		return models.MessageTypeVideo, caption, mediaURL, mimeType, filename, artifact
+		return &incomingDownloadableDescriptor{
+			MessageType:  models.MessageTypeVideo,
+			Content:      vid.GetCaption(),
+			MimeType:     mimeType,
+			Filename:     defaultMediaFilename("video", mimeType, "video.mp4"),
+			Downloadable: vid,
+		}, true
 	}
-
-	// PTV (video notes) is delivered as a separate field but behaves like video media.
-	if ptv := unwrapped.PtvMessage; ptv != nil {
-		caption := ptv.GetCaption()
+	if ptv := msg.GetPtvMessage(); ptv != nil {
 		mimeType := sanitizeMimeType(ptv.GetMimetype(), "video/mp4")
-		filename := defaultMediaFilename("video-note", mimeType, "video.mp4")
-		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, ptv, models.MessageTypeVideo, mimeType, filename)
-		return models.MessageTypeVideo, caption, mediaURL, mimeType, filename, artifact
+		return &incomingDownloadableDescriptor{
+			MessageType:  models.MessageTypeVideo,
+			Content:      ptv.GetCaption(),
+			MimeType:     mimeType,
+			Filename:     defaultMediaFilename("video-note", mimeType, "video.mp4"),
+			Downloadable: ptv,
+		}, true
 	}
-
-	if aud := unwrapped.AudioMessage; aud != nil {
+	if aud := msg.GetAudioMessage(); aud != nil {
 		mimeType := sanitizeMimeType(aud.GetMimetype(), "audio/ogg")
-		filename := defaultMediaFilename("audio", mimeType, "audio.ogg")
-		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, aud, models.MessageTypeAudio, mimeType, filename)
-		return models.MessageTypeAudio, "", mediaURL, mimeType, filename, artifact
+		return &incomingDownloadableDescriptor{
+			MessageType:  models.MessageTypeAudio,
+			MimeType:     mimeType,
+			Filename:     defaultMediaFilename("audio", mimeType, "audio.ogg"),
+			Downloadable: aud,
+		}, true
 	}
-
-	if doc := unwrapped.DocumentMessage; doc != nil {
-		caption := doc.GetCaption()
+	if doc := msg.GetDocumentMessage(); doc != nil {
 		filename := sanitizeIncomingFilename(doc.GetFileName())
 		mimeFallback := mimeTypeFromFilename(filename)
 		mimeType := sanitizeMimeType(doc.GetMimetype(), mimeFallback)
@@ -148,12 +230,16 @@ func (cm *ConnectionManager) extractMessageContentWithMediaRetryArtifact(
 		if filename == "" {
 			filename = defaultMediaFilename("document", mimeType, "document.bin")
 		}
-		mediaURL, artifact := cm.downloadAndPersistIncomingMedia(ctx, client, doc, models.MessageTypeDocument, mimeType, filename)
-		return models.MessageTypeDocument, caption, mediaURL, mimeType, filename, artifact
+		return &incomingDownloadableDescriptor{
+			MessageType:  models.MessageTypeDocument,
+			Content:      doc.GetCaption(),
+			MimeType:     mimeType,
+			Filename:     filename,
+			Downloadable: doc,
+		}, true
 	}
 
-	// Default
-	return models.MessageTypeText, "[Unsupported message type]", "", "", "", nil
+	return nil, false
 }
 
 func (cm *ConnectionManager) extractTextualIncomingMessage(ctx context.Context, client *waClient.Client, msg *waE2E.Message) (models.MessageType, string, bool) {

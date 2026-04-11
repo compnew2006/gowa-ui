@@ -1,5 +1,26 @@
 # MEMORY.md
 
+## 2026-04-10 22:10
+
+### Work Summary
+- Implemented a zero-disk inbound WhatsMeow media pipeline that streams decrypted media directly into S3-compatible object storage using `io.Pipe`, with no temp files and no `[]byte` media buffering in the application layer.
+- Added native WhatsApp `FileSha256` deduplication through the new `MediaAsset` model and linked inbound `Message` rows via `MediaAssetID`.
+- Reworked inbound async media recovery to reuse the same streaming/object-storage path and added a retention worker that marks expired media, appends the retention note, and deletes shared objects only when all referencing messages have expired.
+
+### Architectural Decisions
+- Introduced a narrow `ObjectStorage` seam for inbound media and media serving so the WhatsMeow pipeline, HTTP handler, and retention worker share one storage contract without disturbing existing local-storage flows outside this scope.
+- Kept the public message/media API stable by continuing to populate `media_url`, `media_mime_type`, and `media_filename`, while changing the backing implementation to object storage plus `/api/media/{message_id}` streaming.
+- Soft-deleted fully expired `media_assets` rows and taught dedup recovery to restore them on reappearance, avoiding unique-hash collisions after retention-driven physical object deletion.
+
+### Current Project State
+- Focused Go verification passes:
+  - `go test ./pkg/whatsmeow -run 'TestMediaService_|TestPersistParsedMessage_' -count=1`
+  - `go test ./internal/handlers -run 'TestMediaRetentionWorker_|TestServeMedia_StreamsFromObjectStorage|TestSensitiveRBAC_ServeMedia_ForbiddenWithoutPermission' -count=1`
+- Browser verification was completed with Chrome DevTools against a temporary `/api/media/...` contract harness, confirming streamed `200` responses and `Content-Type` behavior.
+- Full repo-wide `go test ./... -run '^$'` remains blocked by pre-existing unrelated issues:
+  - `internal/frontend/embed.go` expects missing `dist` assets
+  - `tmp_encrypt.go` and `tmp_arabic.go` both define `main`
+
 ## 2026-04-02 19:08
 
 ### Work Summary

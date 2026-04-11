@@ -398,6 +398,19 @@ func (Contact) TableName() string {
 	return "contacts"
 }
 
+// MediaAsset represents a deduplicated inbound media object stored in object storage.
+type MediaAsset struct {
+	BaseModel
+	FileHash string `gorm:"size:64;uniqueIndex;not null" json:"file_hash"`
+	S3Key    string `gorm:"size:512;not null" json:"s3_key"`
+	MimeType string `gorm:"size:255;not null" json:"mime_type"`
+	Size     int64  `gorm:"not null" json:"size"`
+}
+
+func (MediaAsset) TableName() string {
+	return "media_assets"
+}
+
 // ContactUserDeletion tracks per-user soft deletion timestamps for chats.
 // This is not a GORM soft-delete model; deleted_at represents the user's hide time.
 type ContactUserDeletion struct {
@@ -442,9 +455,11 @@ type Message struct {
 	Direction         Direction     `gorm:"size:10;not null" json:"direction"`
 	MessageType       MessageType   `gorm:"size:20;not null" json:"message_type"`
 	Content           string        `gorm:"type:text" json:"content"`
+	MediaAssetID      *uuid.UUID    `gorm:"type:uuid;index" json:"media_asset_id,omitempty"`
 	MediaURL          string        `gorm:"type:text" json:"media_url"`
 	MediaMimeType     string        `gorm:"size:100" json:"media_mime_type"`
 	MediaFilename     string        `gorm:"size:255" json:"media_filename"`
+	MediaDeletedAt    *time.Time    `gorm:"type:timestamptz" json:"media_deleted_at,omitempty"`
 	TemplateName      string        `gorm:"size:255" json:"template_name"`
 	TemplateParams    JSONB         `gorm:"type:jsonb" json:"template_params"`
 	InteractiveData   JSONB         `gorm:"type:jsonb" json:"interactive_data"`
@@ -460,6 +475,7 @@ type Message struct {
 	Organization   *Organization     `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 	Instance       *WhatsAppInstance `gorm:"foreignKey:InstanceID" json:"instance,omitempty"`
 	Contact        *Contact          `gorm:"foreignKey:ContactID" json:"contact,omitempty"`
+	MediaAsset     *MediaAsset       `gorm:"foreignKey:MediaAssetID" json:"media_asset,omitempty"`
 	ReplyToMessage *Message          `gorm:"foreignKey:ReplyToMessageID" json:"reply_to_message,omitempty"`
 	SentByUser     *User             `gorm:"foreignKey:SentByUserID" json:"sent_by_user,omitempty"`
 }

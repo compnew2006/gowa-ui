@@ -10,6 +10,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/queue"
+	objectstorage "github.com/compnew2006/whatomate/internal/storage"
 	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/provider"
@@ -33,6 +34,7 @@ type App struct {
 	WhatsApp          *whatsapp.Client
 	WhatsmeowStore    *sqlstore.Container
 	WhatsmeowManager  *whatsmeow.ConnectionManager
+	ObjectStorage     objectstorage.ObjectStorage
 	WSHub             *websocket.Hub
 	Queue             queue.Queue
 	CampaignSubCancel context.CancelFunc

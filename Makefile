@@ -59,6 +59,7 @@ build-prod: frontend-build embed-frontend
 # Copy frontend build to embed directory
 embed-frontend:
 	@echo "Copying frontend build to embed directory..."
+	@mkdir -p internal/frontend/dist
 	@rm -rf internal/frontend/dist/*
 	@cp -r frontend/dist/* internal/frontend/dist/
 	@echo "Frontend embedded successfully"
