@@ -81,11 +81,11 @@ Commands:
 Server Options:
   -config string    Path to config file (default "config.toml")
   -migrate          Run database migrations on startup
-  -workers int      Number of embedded workers (0 to disable) (default 1)
+  -workers int      Global campaign worker budget for embedded scaling (0 to disable workers) (default 1)
 
 Worker Options:
   -config string    Path to config file (default "config.toml")
-  -workers int      Number of workers to run (default 1)
+  -workers int      Global campaign worker budget for scaling (default 1)
 
 Crypto Migration Options:
   -config string       Path to config file (default "config.toml")
@@ -102,11 +102,11 @@ Inbound Media Reconcile Options:
   -allow-active-queue       Bypass queue-idle safety checks
 
 Examples:
-  whatomate server                     # API + 1 embedded worker
+  whatomate server                     # API + dynamic embedded workers
   whatomate server -workers 0          # API only (no workers)
-  whatomate server -workers 4          # API + 4 embedded workers
+  whatomate server -workers 4          # API + campaign worker budget 4
   whatomate server -migrate            # Run migrations and start server
-  whatomate worker -workers 4          # 4 workers only (no API)
+  whatomate worker -workers 4          # campaign worker budget 4 (no API)
   whatomate crypto-migrate -dry-run    # Scan for legacy encrypted secrets
   whatomate inbound-media-reconcile -config config.toml -apply
 
@@ -384,8 +384,14 @@ func runServer(args []string) {
 	lo.Info("Instance auto campaign worker started")
 
 	// Start embedded workers
-	var workers []*worker.Worker
-	var workerCancel context.CancelFunc
+	var (
+		inboundWorker       *worker.Worker
+		inboundWorkerCancel context.CancelFunc
+		inboundWorkerDone   chan error
+		workerScaler        *worker.WorkerScaler
+		workerScalerCancel  context.CancelFunc
+		workerScalerDone    chan error
+	)
 	if *numWorkers > 0 {
 		state := licenseService.CurrentState()
 		if state.LicenseID != "" && state.MaxWorkers > 0 && *numWorkers > state.MaxWorkers {
@@ -394,25 +400,39 @@ func runServer(args []string) {
 				"licensed_max", state.MaxWorkers)
 			*numWorkers = state.MaxWorkers
 		}
-		var workerCtx context.Context
-		workerCtx, workerCancel = context.WithCancel(context.Background())
-
-		for i := 0; i < *numWorkers; i++ {
-			w, err := worker.New(cfg, db, rdb, lo, app.MessageProvider, licenseService)
-			if err != nil {
-				lo.Fatal("Failed to create worker", "error", err, "worker_num", i+1)
-			}
-			workers = append(workers, w)
-
-			workerNum := i + 1
-			go func() {
-				lo.Info("Worker started", "worker_num", workerNum)
-				if err := w.Run(workerCtx); err != nil && err != context.Canceled {
-					lo.Error("Worker error", "error", err, "worker_num", workerNum)
-				}
-			}()
+		inboundWorker, err = worker.New(cfg, db, rdb, lo, app.MessageProvider, licenseService, worker.WorkerOptions{
+			EnableCampaignConsumer: false,
+			EnableInboundMedia:     true,
+		})
+		if err != nil {
+			lo.Fatal("Failed to create inbound media worker", "error", err)
 		}
-		lo.Info("Embedded workers started", "count", *numWorkers)
+		var inboundCtx context.Context
+		inboundCtx, inboundWorkerCancel = context.WithCancel(context.Background())
+		inboundWorkerDone = make(chan error, 1)
+		go func() {
+			lo.Info("Inbound media worker started")
+			err := inboundWorker.Run(inboundCtx)
+			if err != nil && err != context.Canceled {
+				lo.Error("Inbound media worker error", "error", err)
+			}
+			inboundWorkerDone <- err
+		}()
+
+		workerScaler = worker.NewWorkerScaler(cfg, db, rdb, lo, app.MessageProvider, licenseService, *numWorkers)
+		var scalerCtx context.Context
+		scalerCtx, workerScalerCancel = context.WithCancel(context.Background())
+		workerScalerDone = make(chan error, 1)
+		go func() {
+			lo.Info("Worker scaler started", "budget", *numWorkers)
+			err := workerScaler.Start(scalerCtx)
+			if err != nil && err != context.Canceled {
+				lo.Error("Worker scaler error", "error", err)
+			}
+			workerScalerDone <- err
+		}()
+
+		lo.Info("Embedded worker runtime started", "campaign_worker_budget", *numWorkers)
 	} else {
 		lo.Info("Embedded workers disabled, run workers separately")
 	}
@@ -448,13 +468,27 @@ func runServer(args []string) {
 	lo.Info("Instance auto campaign worker stopped")
 
 	// Stop workers first
-	if workerCancel != nil {
-		lo.Info("Stopping workers...", "count", len(workers))
-		workerCancel()
-		for _, w := range workers {
-			_ = w.Close()
+	if workerScalerCancel != nil {
+		lo.Info("Stopping worker scaler...")
+		workerScalerCancel()
+		if workerScaler != nil {
+			workerScaler.Stop()
 		}
-		lo.Info("Workers stopped")
+		if workerScalerDone != nil {
+			<-workerScalerDone
+		}
+		lo.Info("Worker scaler stopped")
+	}
+	if inboundWorkerCancel != nil {
+		lo.Info("Stopping inbound media worker...")
+		inboundWorkerCancel()
+		if inboundWorkerDone != nil {
+			<-inboundWorkerDone
+		}
+		if inboundWorker != nil {
+			_ = inboundWorker.Close()
+		}
+		lo.Info("Inbound media worker stopped")
 	}
 
 	// Then stop server
@@ -588,24 +622,37 @@ func runWorker(args []string) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	// Create and run workers
-	workers := make([]*worker.Worker, *workerCount)
-	errCh := make(chan error, *workerCount)
+	var (
+		inboundWorker *worker.Worker
+		workerScaler  *worker.WorkerScaler
+		errCh         = make(chan error, 2)
+	)
 
-	for i := 0; i < *workerCount; i++ {
-		w, err := worker.New(cfg, db, rdb, lo, messageProvider, licenseService)
+	if *workerCount > 0 {
+		inboundWorker, err = worker.New(cfg, db, rdb, lo, messageProvider, licenseService, worker.WorkerOptions{
+			EnableCampaignConsumer: false,
+			EnableInboundMedia:     true,
+		})
 		if err != nil {
-			lo.Fatal("Failed to create worker", "error", err, "worker_num", i+1)
+			lo.Fatal("Failed to create inbound media worker", "error", err)
 		}
-		workers[i] = w
 
-		go func(workerNum int) {
-			lo.Info("Worker started", "worker_num", workerNum)
-			errCh <- w.Run(ctx)
-		}(i + 1)
+		workerScaler = worker.NewWorkerScaler(cfg, db, rdb, lo, messageProvider, licenseService, *workerCount)
+
+		go func() {
+			lo.Info("Inbound media worker started")
+			errCh <- inboundWorker.Run(ctx)
+		}()
+
+		go func() {
+			lo.Info("Worker scaler started", "budget", *workerCount)
+			errCh <- workerScaler.Start(ctx)
+		}()
+
+		lo.Info("Dynamic worker runtime started", "campaign_worker_budget", *workerCount)
+	} else {
+		lo.Info("Workers disabled", "campaign_worker_budget", *workerCount)
 	}
-
-	lo.Info("Workers started", "count", *workerCount)
 
 	// Wait for shutdown signal or error
 	select {
@@ -621,11 +668,12 @@ func runWorker(args []string) {
 
 	// Cleanup
 	lo.Info("Shutting down workers...")
-	for _, w := range workers {
-		if w != nil {
-			if err := w.Close(); err != nil {
-				lo.Error("Error closing worker", "error", err)
-			}
+	if workerScaler != nil {
+		workerScaler.Stop()
+	}
+	if inboundWorker != nil {
+		if err := inboundWorker.Close(); err != nil {
+			lo.Error("Error closing inbound worker", "error", err)
 		}
 	}
 	lo.Info("Workers stopped")

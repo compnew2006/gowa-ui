@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodha/logf"
 )
@@ -45,6 +46,30 @@ const (
 	MaxDeliveryAttempts = int64(5)
 )
 
+// CampaignStreamName returns the tenant-scoped campaign stream name.
+func CampaignStreamName(orgID uuid.UUID) string {
+	if orgID == uuid.Nil {
+		return StreamName
+	}
+	return StreamName + ":" + orgID.String()
+}
+
+// CampaignConsumerGroup returns the tenant-scoped consumer group name.
+func CampaignConsumerGroup(orgID uuid.UUID) string {
+	if orgID == uuid.Nil {
+		return ConsumerGroup
+	}
+	return ConsumerGroup + ":" + orgID.String()
+}
+
+// CampaignDeadLetterStreamName returns the tenant-scoped dead-letter stream name.
+func CampaignDeadLetterStreamName(orgID uuid.UUID) string {
+	if orgID == uuid.Nil {
+		return DeadLetterStreamName
+	}
+	return CampaignStreamName(orgID) + ":dlq"
+}
+
 // RedisQueue implements the Queue interface using Redis Streams.
 type RedisQueue struct {
 	client *redis.Client
@@ -61,6 +86,12 @@ func NewRedisQueue(client *redis.Client, log logf.Logger) *RedisQueue {
 
 // EnqueueRecipient adds a single recipient job to the queue.
 func (q *RedisQueue) EnqueueRecipient(ctx context.Context, job *RecipientJob) error {
+	if job == nil {
+		return fmt.Errorf("recipient job is nil")
+	}
+	if job.OrganizationID == uuid.Nil {
+		return fmt.Errorf("recipient job missing organization_id")
+	}
 	if job.EnqueuedAt.IsZero() {
 		job.EnqueuedAt = time.Now()
 	}
@@ -71,7 +102,7 @@ func (q *RedisQueue) EnqueueRecipient(ctx context.Context, job *RecipientJob) er
 	}
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: StreamName,
+		Stream: CampaignStreamName(job.OrganizationID),
 		Values: map[string]interface{}{
 			"type":    string(JobTypeRecipient),
 			"payload": string(payload),
@@ -92,24 +123,38 @@ func (q *RedisQueue) EnqueueRecipients(ctx context.Context, jobs []*RecipientJob
 
 	pipe := q.client.Pipeline()
 	now := time.Now()
+	grouped := make(map[uuid.UUID][]*RecipientJob)
 
 	for _, job := range jobs {
+		if job == nil {
+			return fmt.Errorf("recipient job is nil")
+		}
+		if job.OrganizationID == uuid.Nil {
+			return fmt.Errorf("recipient job missing organization_id")
+		}
 		if job.EnqueuedAt.IsZero() {
 			job.EnqueuedAt = now
 		}
 
-		payload, err := json.Marshal(job)
-		if err != nil {
-			return fmt.Errorf("failed to marshal recipient job: %w", err)
-		}
+		grouped[job.OrganizationID] = append(grouped[job.OrganizationID], job)
+	}
 
-		pipe.XAdd(ctx, &redis.XAddArgs{
-			Stream: StreamName,
-			Values: map[string]interface{}{
-				"type":    string(JobTypeRecipient),
-				"payload": string(payload),
-			},
-		})
+	for orgID, orgJobs := range grouped {
+		streamName := CampaignStreamName(orgID)
+		for _, job := range orgJobs {
+			payload, err := json.Marshal(job)
+			if err != nil {
+				return fmt.Errorf("failed to marshal recipient job: %w", err)
+			}
+
+			pipe.XAdd(ctx, &redis.XAddArgs{
+				Stream: streamName,
+				Values: map[string]interface{}{
+					"type":    string(JobTypeRecipient),
+					"payload": string(payload),
+				},
+			})
+		}
 	}
 
 	_, err := pipe.Exec(ctx)
@@ -148,6 +193,12 @@ func (q *RedisQueue) EnqueueInboundMedia(ctx context.Context, job *InboundMediaJ
 
 // EnqueueContactRepair adds a single direct-contact repair job to the queue.
 func (q *RedisQueue) EnqueueContactRepair(ctx context.Context, job *ContactRepairJob) error {
+	if job == nil {
+		return fmt.Errorf("contact repair job is nil")
+	}
+	if job.OrganizationID == uuid.Nil {
+		return fmt.Errorf("contact repair job missing organization_id")
+	}
 	if job.EnqueuedAt.IsZero() {
 		job.EnqueuedAt = time.Now()
 	}
@@ -158,7 +209,7 @@ func (q *RedisQueue) EnqueueContactRepair(ctx context.Context, job *ContactRepai
 	}
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: StreamName,
+		Stream: CampaignStreamName(job.OrganizationID),
 		Values: map[string]interface{}{
 			"type":    string(JobTypeContactRepair),
 			"payload": string(payload),
@@ -267,6 +318,18 @@ func NewRedisConsumer(client *redis.Client, log logf.Logger) (*RedisConsumer, er
 	})
 }
 
+// NewOrganizationRedisConsumer creates a tenant-scoped consumer for campaign jobs.
+func NewOrganizationRedisConsumer(client *redis.Client, log logf.Logger, orgID uuid.UUID) (*RedisConsumer, error) {
+	if orgID == uuid.Nil {
+		return nil, fmt.Errorf("organization id is required")
+	}
+	return newRedisConsumer(client, log, consumerOptions{
+		streamName:           CampaignStreamName(orgID),
+		consumerGroup:        CampaignConsumerGroup(orgID),
+		deadLetterStreamName: CampaignDeadLetterStreamName(orgID),
+	})
+}
+
 // NewRedisInboundMediaConsumer creates a consumer for inbound-media recovery jobs.
 func NewRedisInboundMediaConsumer(client *redis.Client, log logf.Logger) (*RedisConsumer, error) {
 	return newRedisConsumer(client, log, consumerOptions{
@@ -343,8 +406,8 @@ func (c *RedisConsumer) Consume(ctx context.Context, handler JobHandler) error {
 					continue
 				}
 
-				if err := c.client.XAck(ctx, c.streamName, c.consumerGroup, msg.ID).Err(); err != nil {
-					c.log.Error("Failed to ACK message", "stream", c.streamName, "group", c.consumerGroup, "error", err, "message_id", msg.ID)
+				if err := c.ackAndDelete(ctx, msg.ID); err != nil {
+					c.log.Error("Failed to ACK processed message", "stream", c.streamName, "group", c.consumerGroup, "error", err, "message_id", msg.ID)
 				}
 			}
 		}
@@ -402,7 +465,7 @@ func (c *RedisConsumer) claimPendingMessages(ctx context.Context, handler JobHan
 				continue
 			}
 
-			if err := c.client.XAck(ctx, c.streamName, c.consumerGroup, msg.ID).Err(); err != nil {
+			if err := c.ackAndDelete(ctx, msg.ID); err != nil {
 				c.log.Error("Failed to ACK claimed message", "stream", c.streamName, "group", c.consumerGroup, "error", err, "message_id", msg.ID)
 			}
 		}
@@ -500,6 +563,16 @@ func (c *RedisConsumer) moveToDeadLetter(ctx context.Context, msg redis.XMessage
 	}
 
 	c.log.Warn("Message moved to dead-letter stream", "stream", c.streamName, "dlq_stream", c.deadLetterStreamName, "message_id", msg.ID, "reason", reason, "attempts", attempts)
+	return nil
+}
+
+func (c *RedisConsumer) ackAndDelete(ctx context.Context, messageID string) error {
+	if err := c.client.XAck(ctx, c.streamName, c.consumerGroup, messageID).Err(); err != nil {
+		return fmt.Errorf("ack message %s: %w", messageID, err)
+	}
+	if err := c.client.XDel(ctx, c.streamName, messageID).Err(); err != nil {
+		c.log.Warn("Failed to delete processed message from stream", "stream", c.streamName, "group", c.consumerGroup, "message_id", messageID, "error", err)
+	}
 	return nil
 }
 

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/test/testutil"
-	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -29,15 +29,19 @@ func skipIfNoRedis(t *testing.T) *redis.Client {
 	return client
 }
 
-// cleanStream deletes the Redis stream used by tests so each test starts fresh.
-func cleanStream(t *testing.T, client *redis.Client) {
+// cleanCampaignStream deletes the org-scoped campaign stream used by tests.
+func cleanCampaignStream(t *testing.T, client *redis.Client, orgID uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
-	client.Del(ctx, queue.StreamName)
+	streamName := queue.CampaignStreamName(orgID)
+	groupName := queue.CampaignConsumerGroup(orgID)
+	deadLetterStream := queue.CampaignDeadLetterStreamName(orgID)
+	client.Del(ctx, streamName)
+	client.Del(ctx, deadLetterStream)
 	t.Cleanup(func() {
-		client.Del(ctx, queue.StreamName)
-		// Also clean up the consumer group; ignore errors if it doesn't exist.
-		client.XGroupDestroy(ctx, queue.StreamName, queue.ConsumerGroup)
+		client.Del(ctx, streamName)
+		client.Del(ctx, deadLetterStream)
+		client.XGroupDestroy(ctx, streamName, groupName)
 	})
 }
 
@@ -66,6 +70,12 @@ func makeRecipientJob() *queue.RecipientJob {
 	}
 }
 
+func makeRecipientJobForOrg(orgID uuid.UUID) *queue.RecipientJob {
+	job := makeRecipientJob()
+	job.OrganizationID = orgID
+	return job
+}
+
 // makeInboundMediaJob creates an InboundMediaJob with random IDs for testing.
 func makeInboundMediaJob() *queue.InboundMediaJob {
 	return &queue.InboundMediaJob{
@@ -79,6 +89,14 @@ func makeInboundMediaJob() *queue.InboundMediaJob {
 		FallbackFilename:   "test.pdf",
 		MediaPayloadBase64: "dGVzdA==",
 		LastError:          "hash of media ciphertext doesn't match",
+	}
+}
+
+func makeContactRepairJob(orgID uuid.UUID) *queue.ContactRepairJob {
+	return &queue.ContactRepairJob{
+		ContactID:      uuid.New(),
+		OrganizationID: orgID,
+		ConversationID: "201234567890@s.whatsapp.net",
 	}
 }
 
@@ -154,18 +172,18 @@ func TestNewRedisQueue(t *testing.T) {
 
 func TestEnqueueRecipient_Single(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContext(t)
 
 	q := queue.NewRedisQueue(client, log)
 	job := makeRecipientJob()
+	cleanCampaignStream(t, client, job.OrganizationID)
 
 	err := q.EnqueueRecipient(ctx, job)
 	require.NoError(t, err)
 
 	// Verify the job landed in the stream.
-	msgs, err := client.XRange(ctx, queue.StreamName, "-", "+").Result()
+	msgs, err := client.XRange(ctx, queue.CampaignStreamName(job.OrganizationID), "-", "+").Result()
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 
@@ -181,12 +199,12 @@ func TestEnqueueRecipient_Single(t *testing.T) {
 
 func TestEnqueueRecipient_SetsEnqueuedAt(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContext(t)
 
 	q := queue.NewRedisQueue(client, log)
 	job := makeRecipientJob()
+	cleanCampaignStream(t, client, job.OrganizationID)
 	// Leave EnqueuedAt as zero so the queue sets it.
 	assert.True(t, job.EnqueuedAt.IsZero())
 
@@ -199,12 +217,12 @@ func TestEnqueueRecipient_SetsEnqueuedAt(t *testing.T) {
 
 func TestEnqueueRecipient_PreservesExistingEnqueuedAt(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContext(t)
 
 	q := queue.NewRedisQueue(client, log)
 	job := makeRecipientJob()
+	cleanCampaignStream(t, client, job.OrganizationID)
 	fixedTime := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	job.EnqueuedAt = fixedTime
 
@@ -215,7 +233,7 @@ func TestEnqueueRecipient_PreservesExistingEnqueuedAt(t *testing.T) {
 	assert.Equal(t, fixedTime, job.EnqueuedAt)
 
 	// Verify in Redis payload as well.
-	msgs, err := client.XRange(ctx, queue.StreamName, "-", "+").Result()
+	msgs, err := client.XRange(ctx, queue.CampaignStreamName(job.OrganizationID), "-", "+").Result()
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 
@@ -229,22 +247,23 @@ func TestEnqueueRecipient_PreservesExistingEnqueuedAt(t *testing.T) {
 
 func TestEnqueueRecipients_Batch(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContext(t)
 
 	q := queue.NewRedisQueue(client, log)
+	orgID := uuid.New()
+	cleanCampaignStream(t, client, orgID)
 
 	jobs := make([]*queue.RecipientJob, 5)
 	for i := range jobs {
-		jobs[i] = makeRecipientJob()
+		jobs[i] = makeRecipientJobForOrg(orgID)
 	}
 
 	err := q.EnqueueRecipients(ctx, jobs)
 	require.NoError(t, err)
 
 	// All 5 jobs should be in the stream.
-	msgs, err := client.XRange(ctx, queue.StreamName, "-", "+").Result()
+	msgs, err := client.XRange(ctx, queue.CampaignStreamName(orgID), "-", "+").Result()
 	require.NoError(t, err)
 	assert.Len(t, msgs, 5)
 
@@ -256,9 +275,10 @@ func TestEnqueueRecipients_Batch(t *testing.T) {
 
 func TestEnqueueRecipients_Empty(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContext(t)
+	orgID := uuid.New()
+	cleanCampaignStream(t, client, orgID)
 
 	q := queue.NewRedisQueue(client, log)
 
@@ -266,20 +286,21 @@ func TestEnqueueRecipients_Empty(t *testing.T) {
 	err := q.EnqueueRecipients(ctx, []*queue.RecipientJob{})
 	require.NoError(t, err)
 
-	msgs, err := client.XRange(ctx, queue.StreamName, "-", "+").Result()
+	msgs, err := client.XRange(ctx, queue.CampaignStreamName(orgID), "-", "+").Result()
 	require.NoError(t, err)
 	assert.Empty(t, msgs)
 }
 
 func TestEnqueueRecipients_SetsEnqueuedAt(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContext(t)
+	orgID := uuid.New()
+	cleanCampaignStream(t, client, orgID)
 
 	q := queue.NewRedisQueue(client, log)
 
-	jobs := []*queue.RecipientJob{makeRecipientJob(), makeRecipientJob()}
+	jobs := []*queue.RecipientJob{makeRecipientJobForOrg(orgID), makeRecipientJobForOrg(orgID)}
 	for _, j := range jobs {
 		assert.True(t, j.EnqueuedAt.IsZero())
 	}
@@ -291,6 +312,48 @@ func TestEnqueueRecipients_SetsEnqueuedAt(t *testing.T) {
 	for _, j := range jobs {
 		assert.False(t, j.EnqueuedAt.IsZero())
 	}
+}
+
+func TestEnqueueContactRepair_UsesOrganizationStream(t *testing.T) {
+	client := skipIfNoRedis(t)
+	log := testutil.NopLogger()
+	ctx := testutil.TestContext(t)
+	orgID := uuid.New()
+	cleanCampaignStream(t, client, orgID)
+
+	q := queue.NewRedisQueue(client, log)
+	job := makeContactRepairJob(orgID)
+
+	err := q.EnqueueContactRepair(ctx, job)
+	require.NoError(t, err)
+
+	msgs, err := client.XRange(ctx, queue.CampaignStreamName(orgID), "-", "+").Result()
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, string(queue.JobTypeContactRepair), msgs[0].Values["type"])
+}
+
+func TestCampaignStreams_IsolatedPerOrganization(t *testing.T) {
+	t.Parallel()
+
+	client := setupMiniRedis(t)
+	log := testutil.NopLogger()
+	ctx := context.Background()
+	orgA := uuid.New()
+	orgB := uuid.New()
+
+	q := queue.NewRedisQueue(client, log)
+	require.NoError(t, q.EnqueueRecipient(ctx, makeRecipientJobForOrg(orgA)))
+	require.NoError(t, q.EnqueueRecipient(ctx, makeRecipientJobForOrg(orgA)))
+	require.NoError(t, q.EnqueueRecipient(ctx, makeRecipientJobForOrg(orgB)))
+
+	depthA, err := client.XLen(ctx, queue.CampaignStreamName(orgA)).Result()
+	require.NoError(t, err)
+	depthB, err := client.XLen(ctx, queue.CampaignStreamName(orgB)).Result()
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(2), depthA)
+	assert.Equal(t, int64(1), depthB)
 }
 
 func TestEnqueueInboundMedia_Single(t *testing.T) {
@@ -326,10 +389,11 @@ func TestEnqueueInboundMedia_Single(t *testing.T) {
 
 func TestNewRedisConsumer(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
+	orgID := uuid.New()
+	cleanCampaignStream(t, client, orgID)
 
-	consumer, err := queue.NewRedisConsumer(client, log)
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, orgID)
 	require.NoError(t, err)
 	require.NotNil(t, consumer)
 
@@ -339,7 +403,6 @@ func TestNewRedisConsumer(t *testing.T) {
 
 func TestConsume_ProcessesJob(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContextWithTimeout(t, 10*time.Second)
 
@@ -347,11 +410,12 @@ func TestConsume_ProcessesJob(t *testing.T) {
 
 	// Enqueue a job first.
 	job := makeRecipientJob()
+	cleanCampaignStream(t, client, job.OrganizationID)
 	err := q.EnqueueRecipient(ctx, job)
 	require.NoError(t, err)
 
 	// Create consumer.
-	consumer, err := queue.NewRedisConsumer(client, log)
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, job.OrganizationID)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 
@@ -380,13 +444,52 @@ func TestConsume_ProcessesJob(t *testing.T) {
 	assert.Equal(t, job.RecipientName, received[0].RecipientName)
 }
 
-func TestConsume_EmptyQueue(t *testing.T) {
+func TestConsume_RemovesProcessedMessageFromStream(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContextWithTimeout(t, 10*time.Second)
 
-	consumer, err := queue.NewRedisConsumer(client, log)
+	q := queue.NewRedisQueue(client, log)
+	job := makeRecipientJob()
+	cleanCampaignStream(t, client, job.OrganizationID)
+
+	err := q.EnqueueRecipient(ctx, job)
+	require.NoError(t, err)
+
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, job.OrganizationID)
+	require.NoError(t, err)
+	defer func() { _ = consumer.Close() }()
+
+	handler := &mockHandler{}
+	consumeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		_ = consumer.Consume(consumeCtx, handler)
+	}()
+
+	testutil.AssertEventually(t, func() bool {
+		return len(handler.getJobs()) == 1
+	}, 8*time.Second, "handler should process the queued message")
+
+	testutil.AssertEventually(t, func() bool {
+		depth, depthErr := client.XLen(ctx, queue.CampaignStreamName(job.OrganizationID)).Result()
+		return depthErr == nil && depth == 0
+	}, 8*time.Second, "processed message should be removed from the org stream")
+
+	pending, err := client.XPending(ctx, queue.CampaignStreamName(job.OrganizationID), queue.CampaignConsumerGroup(job.OrganizationID)).Result()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), pending.Count)
+}
+
+func TestConsume_EmptyQueue(t *testing.T) {
+	client := skipIfNoRedis(t)
+	log := testutil.NopLogger()
+	ctx := testutil.TestContextWithTimeout(t, 10*time.Second)
+	orgID := uuid.New()
+	cleanCampaignStream(t, client, orgID)
+
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, orgID)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 
@@ -406,21 +509,22 @@ func TestConsume_EmptyQueue(t *testing.T) {
 
 func TestConsume_MultipleJobs(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContextWithTimeout(t, 15*time.Second)
 
 	q := queue.NewRedisQueue(client, log)
+	orgID := uuid.New()
+	cleanCampaignStream(t, client, orgID)
 
 	// Enqueue 3 jobs.
 	jobs := make([]*queue.RecipientJob, 3)
 	for i := range jobs {
-		jobs[i] = makeRecipientJob()
+		jobs[i] = makeRecipientJobForOrg(orgID)
 	}
 	err := q.EnqueueRecipients(ctx, jobs)
 	require.NoError(t, err)
 
-	consumer, err := queue.NewRedisConsumer(client, log)
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, orgID)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 
@@ -454,18 +558,18 @@ func TestConsume_MultipleJobs(t *testing.T) {
 
 func TestConsume_PermanentFailureMovesToDLQ(t *testing.T) {
 	client := skipIfNoRedis(t)
-	cleanStream(t, client)
 	log := testutil.NopLogger()
 	ctx := testutil.TestContextWithTimeout(t, 15*time.Second)
+	orgID := uuid.New()
+	cleanCampaignStream(t, client, orgID)
 
-	client.Del(ctx, queue.DeadLetterStreamName)
-	t.Cleanup(func() {
-		client.Del(ctx, queue.DeadLetterStreamName)
-	})
+	dlqStream := queue.CampaignDeadLetterStreamName(orgID)
+	streamName := queue.CampaignStreamName(orgID)
+	groupName := queue.CampaignConsumerGroup(orgID)
 
 	// Push a malformed job type that cannot be processed and should be dead-lettered.
 	_, err := client.XAdd(ctx, &redis.XAddArgs{
-		Stream: queue.StreamName,
+		Stream: streamName,
 		Values: map[string]interface{}{
 			"type":    "unknown_job_type",
 			"payload": "{}",
@@ -473,7 +577,7 @@ func TestConsume_PermanentFailureMovesToDLQ(t *testing.T) {
 	}).Result()
 	require.NoError(t, err)
 
-	consumer, err := queue.NewRedisConsumer(client, log)
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, orgID)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 
@@ -486,14 +590,14 @@ func TestConsume_PermanentFailureMovesToDLQ(t *testing.T) {
 	}()
 
 	testutil.AssertEventually(t, func() bool {
-		msgs, dlqErr := client.XRange(ctx, queue.DeadLetterStreamName, "-", "+").Result()
+		msgs, dlqErr := client.XRange(ctx, dlqStream, "-", "+").Result()
 		return dlqErr == nil && len(msgs) >= 1
 	}, 10*time.Second, "invalid job should be moved to dead-letter stream")
 
 	cancel()
 
 	// Invalid message should not remain pending indefinitely.
-	pending, err := client.XPending(ctx, queue.StreamName, queue.ConsumerGroup).Result()
+	pending, err := client.XPending(ctx, streamName, groupName).Result()
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), pending.Count)
 }
@@ -860,6 +964,7 @@ func TestJobType_Values(t *testing.T) {
 func TestStreamNames(t *testing.T) {
 	t.Parallel()
 
+	orgID := uuid.New()
 	tests := []struct {
 		name  string
 		value string
@@ -867,6 +972,9 @@ func TestStreamNames(t *testing.T) {
 		{"StreamName", queue.StreamName},
 		{"ConsumerGroup", queue.ConsumerGroup},
 		{"DeadLetterStreamName", queue.DeadLetterStreamName},
+		{"CampaignStreamName", queue.CampaignStreamName(orgID)},
+		{"CampaignConsumerGroup", queue.CampaignConsumerGroup(orgID)},
+		{"CampaignDeadLetterStreamName", queue.CampaignDeadLetterStreamName(orgID)},
 		{"InboundMediaStreamName", queue.InboundMediaStreamName},
 		{"InboundMediaConsumerGroup", queue.InboundMediaConsumerGroup},
 		{"InboundMediaDeadLetterStreamName", queue.InboundMediaDeadLetterStreamName},
@@ -882,8 +990,10 @@ func TestStreamNames(t *testing.T) {
 func TestDeadLetterStreamName_Derived(t *testing.T) {
 	t.Parallel()
 
+	orgID := uuid.New()
 	// DeadLetterStreamName should be StreamName + ":dlq"
 	assert.Equal(t, queue.StreamName+":dlq", queue.DeadLetterStreamName)
+	assert.Equal(t, queue.CampaignStreamName(orgID)+":dlq", queue.CampaignDeadLetterStreamName(orgID))
 	assert.Equal(t, queue.InboundMediaStreamName+":dlq", queue.InboundMediaDeadLetterStreamName)
 }
 
@@ -948,7 +1058,7 @@ func TestRedisQueue_WithMiniRedis_EnqueueRecipient(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the job landed in the stream.
-	msgs, err := client.XRange(ctx, queue.StreamName, "-", "+").Result()
+	msgs, err := client.XRange(ctx, queue.CampaignStreamName(job.OrganizationID), "-", "+").Result()
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 
@@ -970,17 +1080,18 @@ func TestRedisQueue_WithMiniRedis_EnqueueRecipients_Batch(t *testing.T) {
 	ctx := context.Background()
 
 	q := queue.NewRedisQueue(client, log)
+	orgID := uuid.New()
 
 	jobs := make([]*queue.RecipientJob, 5)
 	for i := range jobs {
-		jobs[i] = makeRecipientJob()
+		jobs[i] = makeRecipientJobForOrg(orgID)
 	}
 
 	err := q.EnqueueRecipients(ctx, jobs)
 	require.NoError(t, err)
 
 	// All 5 jobs should be in the stream.
-	msgs, err := client.XRange(ctx, queue.StreamName, "-", "+").Result()
+	msgs, err := client.XRange(ctx, queue.CampaignStreamName(orgID), "-", "+").Result()
 	require.NoError(t, err)
 	assert.Len(t, msgs, 5)
 
@@ -1002,7 +1113,7 @@ func TestRedisQueue_WithMiniRedis_EnqueueRecipients_Empty(t *testing.T) {
 	err := q.EnqueueRecipients(ctx, []*queue.RecipientJob{})
 	require.NoError(t, err)
 
-	msgs, err := client.XRange(ctx, queue.StreamName, "-", "+").Result()
+	msgs, err := client.XRange(ctx, queue.CampaignStreamName(uuid.New()), "-", "+").Result()
 	require.NoError(t, err)
 	assert.Empty(t, msgs)
 }
@@ -1049,7 +1160,7 @@ func TestRedisConsumer_WithMiniRedis_Consume_ProcessesJob(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create consumer.
-	consumer, err := queue.NewRedisConsumer(client, log)
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, job.OrganizationID)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 
@@ -1084,16 +1195,17 @@ func TestRedisConsumer_WithMiniRedis_Consume_MultipleJobs(t *testing.T) {
 	defer cancel()
 
 	q := queue.NewRedisQueue(client, log)
+	orgID := uuid.New()
 
 	// Enqueue 3 jobs.
 	jobs := make([]*queue.RecipientJob, 3)
 	for i := range jobs {
-		jobs[i] = makeRecipientJob()
+		jobs[i] = makeRecipientJobForOrg(orgID)
 	}
 	err := q.EnqueueRecipients(ctx, jobs)
 	require.NoError(t, err)
 
-	consumer, err := queue.NewRedisConsumer(client, log)
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, orgID)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 
@@ -1131,9 +1243,14 @@ func TestRedisConsumer_WithMiniRedis_PermanentFailureMovesToDLQ(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	orgID := uuid.New()
+	streamName := queue.CampaignStreamName(orgID)
+	groupName := queue.CampaignConsumerGroup(orgID)
+	deadLetterStream := queue.CampaignDeadLetterStreamName(orgID)
+
 	// Push a malformed job type that cannot be processed and should be dead-lettered.
 	_, err := client.XAdd(ctx, &redis.XAddArgs{
-		Stream: queue.StreamName,
+		Stream: streamName,
 		Values: map[string]interface{}{
 			"type":    "unknown_job_type",
 			"payload": "{}",
@@ -1141,7 +1258,7 @@ func TestRedisConsumer_WithMiniRedis_PermanentFailureMovesToDLQ(t *testing.T) {
 	}).Result()
 	require.NoError(t, err)
 
-	consumer, err := queue.NewRedisConsumer(client, log)
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, orgID)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 
@@ -1154,14 +1271,14 @@ func TestRedisConsumer_WithMiniRedis_PermanentFailureMovesToDLQ(t *testing.T) {
 	}()
 
 	testutil.AssertEventually(t, func() bool {
-		msgs, dlqErr := client.XRange(ctx, queue.DeadLetterStreamName, "-", "+").Result()
+		msgs, dlqErr := client.XRange(ctx, deadLetterStream, "-", "+").Result()
 		return dlqErr == nil && len(msgs) >= 1
 	}, 8*time.Second, "invalid job should be moved to dead-letter stream")
 
 	consumeCancel()
 
 	// Invalid message should not remain pending indefinitely.
-	pending, err := client.XPending(ctx, queue.StreamName, queue.ConsumerGroup).Result()
+	pending, err := client.XPending(ctx, streamName, groupName).Result()
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), pending.Count)
 }
@@ -1217,8 +1334,9 @@ func TestRedisQueue_WithMiniRedis_Close(t *testing.T) {
 func TestRedisConsumer_WithMiniRedis_Close(t *testing.T) {
 	client := setupMiniRedis(t)
 	log := testutil.NopLogger()
+	orgID := uuid.New()
 
-	consumer, err := queue.NewRedisConsumer(client, log)
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, orgID)
 	require.NoError(t, err)
 
 	err = consumer.Close()
