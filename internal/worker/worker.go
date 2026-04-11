@@ -39,6 +39,13 @@ type Worker struct {
 	License         *license.Service
 }
 
+// WorkerOptions configures which consumers a worker should start.
+type WorkerOptions struct {
+	CampaignOrganizationID uuid.UUID
+	EnableCampaignConsumer bool
+	EnableInboundMedia     bool
+}
+
 // Ensure Worker implements JobHandler interface
 var _ queue.JobHandler = (*Worker)(nil)
 
@@ -47,11 +54,33 @@ type inboundMediaJobProcessor interface {
 }
 
 // New creates a new Worker instance
-func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, messageProvider provider.MessageProvider, licenseService *license.Service) (*Worker, error) {
-	consumer := queue.NewTenantCampaignConsumer(rdb, log)
-	inboundConsumer, err := queue.NewRedisInboundMediaConsumer(rdb, log)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create inbound-media consumer: %w", err)
+func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, messageProvider provider.MessageProvider, licenseService *license.Service, opts WorkerOptions) (*Worker, error) {
+	if !opts.EnableCampaignConsumer && !opts.EnableInboundMedia {
+		opts.EnableCampaignConsumer = true
+		opts.EnableInboundMedia = true
+	}
+
+	var (
+		consumer        *queue.RedisConsumer
+		inboundConsumer *queue.RedisConsumer
+		err             error
+	)
+
+	if opts.EnableCampaignConsumer {
+		if opts.CampaignOrganizationID != uuid.Nil {
+			consumer, err = queue.NewOrganizationRedisConsumer(rdb, log, opts.CampaignOrganizationID)
+		} else {
+			consumer, err = queue.NewRedisConsumer(rdb, log)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to create consumer: %w", err)
+		}
+	}
+	if opts.EnableInboundMedia {
+		inboundConsumer, err = queue.NewRedisInboundMediaConsumer(rdb, log)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create inbound-media consumer: %w", err)
+		}
 	}
 
 	publisher := queue.NewPublisher(rdb, log)
