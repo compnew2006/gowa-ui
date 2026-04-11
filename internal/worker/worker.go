@@ -33,8 +33,8 @@ type Worker struct {
 	Log             logf.Logger
 	WhatsApp        *whatsapp.Client
 	MessageProvider provider.MessageProvider
-	Consumer        *queue.RedisConsumer
-	InboundConsumer *queue.RedisConsumer
+	Consumer        queue.Consumer
+	InboundConsumer queue.Consumer
 	Publisher       *queue.Publisher
 	License         *license.Service
 }
@@ -48,10 +48,7 @@ type inboundMediaJobProcessor interface {
 
 // New creates a new Worker instance
 func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, messageProvider provider.MessageProvider, licenseService *license.Service) (*Worker, error) {
-	consumer, err := queue.NewRedisConsumer(rdb, log)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create consumer: %w", err)
-	}
+	consumer := queue.NewTenantCampaignConsumer(rdb, log)
 	inboundConsumer, err := queue.NewRedisInboundMediaConsumer(rdb, log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create inbound-media consumer: %w", err)
@@ -83,7 +80,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	errCh := make(chan error, 2)
 
-	startConsumer := func(name string, consumer *queue.RedisConsumer) {
+	startConsumer := func(name string, consumer queue.Consumer) {
 		if consumer == nil {
 			return
 		}
