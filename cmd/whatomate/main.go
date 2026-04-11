@@ -51,6 +51,8 @@ func main() {
 		runWorker(os.Args[2:])
 	case "crypto-migrate":
 		runCryptoMigrate(os.Args[2:])
+	case "queue-migrate-campaigns":
+		runQueueMigrateCampaigns(os.Args[2:])
 	case "inbound-media-reconcile":
 		runInboundMediaReconcile(os.Args[2:])
 	case "version":
@@ -74,6 +76,7 @@ Commands:
   server    Start the API server (with optional embedded workers)
   worker    Start background workers only (no API server)
   crypto-migrate  Upgrade encrypted secrets from enc:/enc2: to enc3:
+  queue-migrate-campaigns  Redistribute legacy global campaign jobs into tenant streams
   inbound-media-reconcile  Reconcile stale queued inbound-media rows
   version   Show version information
   help      Show this help message
@@ -93,6 +96,12 @@ Crypto Migration Options:
   -batch-size int      Number of rows per batch (default 500)
   -include-enc2        Upgrade enc2 payloads in addition to enc (default true)
 
+Queue Campaign Migration Options:
+  -config string       Path to config file (default "config.toml")
+  -apply               Apply the migration; default is dry-run
+  -batch-size int      Number of Redis stream entries per batch (default 100)
+  -lock-ttl duration   TTL for the migration lock (default 5m)
+
 Inbound Media Reconcile Options:
   -config string            Path to config file (default "config.toml")
   -instance-id string       Limit reconciliation to a single WhatsApp instance UUID
@@ -108,6 +117,7 @@ Examples:
   whatomate server -migrate            # Run migrations and start server
   whatomate worker -workers 4          # 4 workers only (no API)
   whatomate crypto-migrate -dry-run    # Scan for legacy encrypted secrets
+  whatomate queue-migrate-campaigns -config config.toml -apply
   whatomate inbound-media-reconcile -config config.toml -apply
 
 Deployment Scenarios:
@@ -220,7 +230,7 @@ func runServer(args []string) {
 	lo.Info("Connected to Redis")
 
 	// Initialize job queue
-	jobQueue := queue.NewRedisQueue(rdb, lo)
+	jobQueue := queue.NewTenantQueueManager(rdb, lo)
 	lo.Info("Job queue initialized")
 
 	// Initialize Fastglue
@@ -539,7 +549,7 @@ func runWorker(args []string) {
 		}
 
 		whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
-		whatsmeowQueue := queue.NewRedisQueue(rdb, lo)
+		whatsmeowQueue := queue.NewTenantQueueManager(rdb, lo)
 		whatsmeowManager.SetInboundMediaQueue(whatsmeowQueue)
 		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := whatsmeowManager.ReconcileStartupStatuses(reconcileCtx); err != nil {
@@ -689,6 +699,60 @@ func runCryptoMigrate(args []string) {
 	}
 
 	lo.Info("Crypto migration completed", "updated", totalUpdated, "failed", totalFailed, "dry_run", *dryRun)
+}
+
+// ============================================================================
+// QUEUE CAMPAIGN MIGRATION COMMAND
+// ============================================================================
+
+func runQueueMigrateCampaigns(args []string) {
+	migrateFlags := flag.NewFlagSet("queue-migrate-campaigns", flag.ExitOnError)
+	configPath := migrateFlags.String("config", "config.toml", "Path to config file")
+	apply := migrateFlags.Bool("apply", false, "Apply the migration; default is dry-run")
+	batchSize := migrateFlags.Int64("batch-size", 100, "Number of Redis stream entries per batch")
+	lockTTL := migrateFlags.Duration("lock-ttl", 5*time.Minute, "TTL for the migration lock")
+	_ = migrateFlags.Parse(args)
+
+	lo := logf.New(logf.Opts{
+		EnableColor:     true,
+		Level:           logf.InfoLevel,
+		EnableCaller:    true,
+		TimestampFormat: "2006-01-02 15:04:05",
+		DefaultFields:   []any{"app", "whatomate-queue-migrate-campaigns"},
+	})
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		lo.Fatal("Failed to load config", "error", err)
+	}
+
+	rdb, err := database.NewRedis(&cfg.Redis)
+	if err != nil {
+		lo.Fatal("Failed to connect to Redis", "error", err)
+	}
+
+	summary, err := queue.MigrateLegacyCampaignStream(context.Background(), rdb, lo, queue.CampaignMigrationOptions{
+		Apply:     *apply,
+		BatchSize: *batchSize,
+		LockTTL:   *lockTTL,
+	})
+	if err != nil {
+		lo.Fatal("Campaign queue migration failed", "error", err)
+	}
+
+	lo.Info("Campaign queue migration completed",
+		"dry_run", summary.DryRun,
+		"legacy_stream_exists", summary.LegacyStreamExists,
+		"legacy_group_found", summary.ConsumerGroupFound,
+		"temporary_group_used", summary.TemporaryGroupUsed,
+		"unread", summary.Unread,
+		"pending", summary.Pending,
+		"migrated", summary.Migrated,
+		"invalid", summary.Invalid,
+		"skipped", summary.Skipped,
+		"invalid_samples", summary.InvalidMessageIDs,
+		"migrated_samples", summary.MigratedMessageIDs,
+	)
 }
 
 // ============================================================================
