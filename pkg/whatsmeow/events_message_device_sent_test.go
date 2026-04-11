@@ -44,9 +44,9 @@ func TestHandleMessage_PersistsDeviceSentFromMeAsOutgoing(t *testing.T) {
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
-	cm.clients[instance.ID] = &waClient.Client{
+	require.NoError(t, cm.RegisterInstanceClient(instance, &waClient.Client{
 		Store: &store.Device{ID: &myJID},
-	}
+	}))
 
 	chatJID, err := types.ParseJID("15550001234@s.whatsapp.net")
 	require.NoError(t, err)
@@ -112,9 +112,9 @@ func TestHandleMessage_SkipsFromMeWithoutDeviceSentMetadata(t *testing.T) {
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
-	cm.clients[instance.ID] = &waClient.Client{
+	require.NoError(t, cm.RegisterInstanceClient(instance, &waClient.Client{
 		Store: &store.Device{ID: &myJID},
-	}
+	}))
 
 	chatJID, err := types.ParseJID("15550008888@s.whatsapp.net")
 	require.NoError(t, err)
@@ -165,9 +165,9 @@ func TestHandleMessage_PersistsGroupFromMeWithoutDeviceSentMetadata(t *testing.T
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
-	cm.clients[instance.ID] = &waClient.Client{
+	require.NoError(t, cm.RegisterInstanceClient(instance, &waClient.Client{
 		Store: &store.Device{ID: &myJID},
-	}
+	}))
 
 	groupJID, err := types.ParseJID("120363123456789012@g.us")
 	require.NoError(t, err)
@@ -229,9 +229,9 @@ func TestHandleMessage_ReconcilesPendingOutgoingGroupMessageWithoutDeviceSentMet
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
-	cm.clients[instance.ID] = &waClient.Client{
+	require.NoError(t, cm.RegisterInstanceClient(instance, &waClient.Client{
 		Store: &store.Device{ID: &myJID},
-	}
+	}))
 
 	groupJID, err := types.ParseJID("120363999999999999@g.us")
 	require.NoError(t, err)

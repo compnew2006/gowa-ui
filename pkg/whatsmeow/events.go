@@ -106,6 +106,12 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if err := cm.clearInstanceSendBlock(context.Background(), instanceID); err != nil {
 			cm.logger.Warn("Failed to clear send block on pair success", "error", err, "instance_id", instanceID)
 		}
+		if client := cm.GetClient(instanceID); client != nil {
+			cm.syncRuntimeEntry(instanceID, client, phoneNumber)
+		}
+		if cm.pool != nil {
+			cm.pool.markConnected(instanceID, phoneNumber)
+		}
 		cm.MarkConnected(instanceID)
 		cm.broadcastInstanceConnected(orgID, instanceID, phoneNumber)
 		cm.logger.Info("Instance paired successfully", "component", "whatsmeow", "event", "pair_success", "instance_id", instanceID, "jid", jid)
@@ -130,6 +136,13 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if err := cm.clearInstanceSendBlock(context.Background(), instanceID); err != nil {
 			cm.logger.Warn("Failed to clear send block on connect", "error", err, "instance_id", instanceID)
 		}
+		if client := cm.GetClient(instanceID); client != nil {
+			phoneNumber = cm.connectedPhoneNumber(phoneNumber, client)
+			cm.syncRuntimeEntry(instanceID, client, phoneNumber)
+		}
+		if cm.pool != nil {
+			cm.pool.markConnected(instanceID, phoneNumber)
+		}
 		cm.MarkConnected(instanceID)
 		cm.broadcastInstanceConnected(orgID, instanceID, phoneNumber)
 		cm.logger.Info("Instance connected", "component", "whatsmeow", "event", "connected", "instance_id", instanceID)
@@ -140,6 +153,9 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusDisconnected); err != nil {
 			cm.logger.Error("Failed to update status on disconnect", "error", err)
 			cm.MarkError(instanceID)
+		}
+		if cm.pool != nil {
+			cm.pool.markDisconnected(instanceID)
 		}
 		cm.MarkDisconnected(instanceID)
 
@@ -169,6 +185,9 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusBanned); err != nil {
 			cm.logger.Error("Failed to update status on ban", "error", err)
 			cm.MarkError(instanceID)
+		}
+		if cm.pool != nil {
+			cm.pool.removeInstance(instanceID)
 		}
 		cm.MarkDisconnected(instanceID)
 
@@ -213,6 +232,9 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusLoggedOut); err != nil {
 			cm.logger.Error("Failed to update status on logout", "error", err)
 			cm.MarkError(instanceID)
+		}
+		if cm.pool != nil {
+			cm.pool.removeInstance(instanceID)
 		}
 		cm.MarkDisconnected(instanceID)
 

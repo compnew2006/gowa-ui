@@ -321,6 +321,13 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 		}
 	}
 
+	if req.Name != nil && a.WhatsmeowManager != nil {
+		if err := a.WhatsmeowManager.ReindexInstance(instance); err != nil {
+			a.Log.Error("Failed to reindex instance runtime connection", "error", err, "instance_id", instance.ID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to refresh runtime connection", nil, "")
+		}
+	}
+
 	instance.Settings = waManager.EnsureInstanceSettingsDefaults(instance.Settings)
 
 	return r.SendEnvelope(instance)

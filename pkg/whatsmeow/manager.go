@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -22,26 +23,39 @@ import (
 	"gorm.io/gorm"
 )
 
-// ConnectionManager manages whatsmeow clients for multiple instances
+const (
+	orgAutoConnectBootstrapSettingsKey = "whatsmeow_auto_connect_bootstrap_done"
+	defaultHealthMonitorInterval       = 30 * time.Second
+	defaultReconnectTimeout            = 45 * time.Second
+	baseReconnectBackoff               = 5 * time.Second
+	maxReconnectBackoff                = 5 * time.Minute
+)
+
+// ConnectionManager manages whatsmeow clients for multiple instances.
 type ConnectionManager struct {
-	db              *gorm.DB
-	store           *sqlstore.Container
-	clients         map[uuid.UUID]*whatsmeow.Client
-	clientsMu       sync.RWMutex
-	metrics         sync.Map // map[uuid.UUID]*instanceMetrics
-	avatarSync      sync.Map // map[uuid.UUID]struct{}
-	activeCallsMu   sync.Mutex
-	activeCallIDs   map[uuid.UUID]map[string]struct{}
-	logger          logf.Logger
-	cfg             *config.WhatsmeowConfig
-	hub             *websocket.Hub
-	connectFn       func(context.Context, uuid.UUID) error
+	db    *gorm.DB
+	store *sqlstore.Container
+	pool  *ConnectionPool
+
+	metrics       sync.Map // map[uuid.UUID]*instanceMetrics
+	avatarSync    sync.Map // map[uuid.UUID]struct{}
+	activeCallsMu sync.Mutex
+	activeCallIDs map[uuid.UUID]map[string]struct{}
+	logger        logf.Logger
+	cfg           *config.WhatsmeowConfig
+	hub           *websocket.Hub
+	connectFn     func(context.Context, uuid.UUID) error
+
 	qrCodesMu       sync.RWMutex
 	qrCodes         map[uuid.UUID]cachedQRCode
 	typingIndicator *typingIndicatorPlanner
 	// mediaStoragePath is the local root directory where inbound media is persisted.
 	mediaStoragePath  string
 	inboundMediaQueue inboundMediaJobEnqueuer
+
+	healthMonitorMu     sync.Mutex
+	healthMonitorCancel context.CancelFunc
+	healthMonitorDone   chan struct{}
 }
 
 type inboundMediaJobEnqueuer interface {
@@ -54,17 +68,16 @@ type cachedQRCode struct {
 	receivedAt time.Time
 }
 
-const orgAutoConnectBootstrapSettingsKey = "whatsmeow_auto_connect_bootstrap_done"
-
-// NewConnectionManager creates a new ConnectionManager
+// NewConnectionManager creates a new ConnectionManager.
 func NewConnectionManager(db *gorm.DB, store *sqlstore.Container, logger logf.Logger, cfg *config.WhatsmeowConfig, hub *websocket.Hub, mediaStoragePath string) *ConnectionManager {
 	if mediaStoragePath == "" {
 		mediaStoragePath = "./uploads"
 	}
+
 	cm := &ConnectionManager{
 		db:               db,
 		store:            store,
-		clients:          make(map[uuid.UUID]*whatsmeow.Client),
+		pool:             NewConnectionPool(),
 		logger:           logger,
 		cfg:              cfg,
 		hub:              hub,
@@ -88,160 +101,42 @@ func (cm *ConnectionManager) SetInboundMediaQueue(q inboundMediaJobEnqueuer) {
 	cm.inboundMediaQueue = q
 }
 
-// Connect initializes and connects a WhatsApp instance
+// Connect initializes and connects a WhatsApp instance.
 // If the instance is already connected, it returns nil immediately.
 func (cm *ConnectionManager) Connect(ctx context.Context, instanceID uuid.UUID) error {
-	// 1. Load instance from DB
-	var instance models.WhatsAppInstance
-	if err := cm.db.WithContext(ctx).First(&instance, "id = ?", instanceID).Error; err != nil {
+	instance, err := cm.loadInstance(ctx, instanceID)
+	if err != nil {
 		return fmt.Errorf("failed to load instance: %w", err)
 	}
 
-	cm.clientsMu.Lock()
-	defer cm.clientsMu.Unlock()
+	entry, err := cm.ensurePoolEntry(ctx, instance)
+	if err != nil {
+		return err
+	}
 
-	// 2. Reuse existing client when available.
-	if existingClient, ok := cm.clients[instanceID]; ok {
-		if existingClient.IsConnected() {
-			newStatus := models.InstanceStatusConnecting
-			if existingClient.Store != nil && existingClient.Store.ID != nil {
-				newStatus = models.InstanceStatusConnected
-				cm.ClearCachedQRCode(instanceID)
-			}
+	entry.connectMu.Lock()
+	defer entry.connectMu.Unlock()
 
-			if err := cm.updateInstanceStatus(ctx, instanceID, newStatus); err != nil {
-				cm.logger.Error("Failed to update instance status", "component", "whatsmeow", "event", "status_update_error", "error", err)
-			}
-			if newStatus == models.InstanceStatusConnected {
-				cm.MarkConnected(instanceID)
-				cm.broadcastInstanceConnected(instance.OrganizationID, instanceID, instance.PhoneNumber)
-			}
+	if existingClient := entry.client(); existingClient != nil {
+		return cm.connectExistingClient(ctx, instance, existingClient)
+	}
 
-			cm.logger.Debug("Instance already connected", "component", "whatsmeow", "event", "connect_skip", "instance_id", instanceID, "status", newStatus)
-			return nil
-		}
+	return cm.connectNewClient(ctx, instance, entry)
+}
 
-		if err := existingClient.Connect(); err != nil {
-			return fmt.Errorf("failed to reconnect existing client: %w", err)
-		}
-
-		newStatus := models.InstanceStatusConnecting
-		if existingClient.Store != nil && existingClient.Store.ID != nil {
-			newStatus = models.InstanceStatusConnected
-			cm.ClearCachedQRCode(instanceID)
-		}
-
-		if err := cm.updateInstanceStatus(ctx, instanceID, newStatus); err != nil {
-			cm.logger.Error("Failed to update instance status", "component", "whatsmeow", "event", "status_update_error", "error", err)
-		}
-		if newStatus == models.InstanceStatusConnected {
-			cm.MarkConnected(instanceID)
-			cm.broadcastInstanceConnected(instance.OrganizationID, instanceID, instance.PhoneNumber)
-		}
-
-		cm.logger.Info("Instance reconnected using existing client", "component", "whatsmeow", "event", "reconnect_existing_client", "instance_id", instanceID, "status", newStatus)
+// Disconnect disconnects a WhatsApp instance.
+func (cm *ConnectionManager) Disconnect(ctx context.Context, instanceID uuid.UUID) error {
+	if cm == nil || cm.pool == nil {
+		return nil
+	}
+	if cm.pool.entry(instanceID) == nil {
 		return nil
 	}
 
-	// 3. Load or create device in store
-	var deviceStore *store.Device
-	var err error
-
-	if instance.JID != "" {
-		var jid types.JID
-		jid, err = types.ParseJID(instance.JID)
-		if err != nil {
-			return fmt.Errorf("invalid JID in database: %w", err)
-		}
-
-		deviceStore, err = cm.store.GetDevice(ctx, jid)
-		if err != nil {
-			return fmt.Errorf("failed to get device from store: %w", err)
-		}
-		if deviceStore == nil {
-			cm.logger.Warn(
-				"No stored device found for persisted JID, resetting instance identity for fresh pairing",
-				"component", "whatsmeow",
-				"event", "stale_device_identity",
-				"instance_id", instanceID,
-				"jid", instance.JID,
-			)
-			if clearErr := cm.updateInstanceIdentity(ctx, instanceID, "", ""); clearErr != nil {
-				return fmt.Errorf("failed to reset stale instance identity: %w", clearErr)
-			}
-			instance.JID = ""
-			instance.PhoneNumber = ""
-			deviceStore = cm.store.NewDevice()
-		}
-	} else {
-		// New device (not paired yet)
-		deviceStore = cm.store.NewDevice()
+	client := cm.pool.removeInstance(instanceID)
+	if client != nil {
+		client.Disconnect()
 	}
-
-	if deviceStore == nil {
-		return fmt.Errorf("device store is nil (should not happen)")
-	}
-
-	// 4. Create whatsmeow client
-	// Use a sub-logger for whatsmeow
-	clientLog := newClientLogger(waLog.Stdout("Client", "DEBUG", true))
-	client := whatsmeow.NewClient(deviceStore, clientLog)
-	identityPrefix := ""
-	if cm.cfg != nil {
-		identityPrefix = cm.cfg.Identity
-	}
-	linkedDeviceName := buildLinkedDeviceName(identityPrefix, instance.Name, instance.ID)
-	client.GetClientPayload = func() *waWa6.ClientPayload {
-		payload := deviceStore.GetClientPayload()
-		applyLinkedDeviceName(payload, linkedDeviceName)
-		return payload
-	}
-
-	// 5. Register event handler
-	// handleEvent will be defined in events.go (same package)
-	client.AddEventHandler(func(evt interface{}) {
-		cm.handleEvent(evt, instanceID, instance.OrganizationID)
-	})
-
-	// 6. Connect
-	if err := client.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to WhatsApp: %w", err)
-	}
-
-	// 7. Store client
-	cm.clients[instanceID] = client
-
-	// 8. Update status to connecting (or connected if already logged in)
-	newStatus := models.InstanceStatusConnecting
-	if client.IsConnected() && client.Store != nil && client.Store.ID != nil {
-		newStatus = models.InstanceStatusConnected
-	}
-
-	if err := cm.updateInstanceStatus(ctx, instanceID, newStatus); err != nil {
-		cm.logger.Error("Failed to update instance status", "component", "whatsmeow", "event", "status_update_error", "error", err)
-	}
-	if newStatus == models.InstanceStatusConnected {
-		cm.ClearCachedQRCode(instanceID)
-		cm.MarkConnected(instanceID)
-		cm.broadcastInstanceConnected(instance.OrganizationID, instanceID, instance.PhoneNumber)
-	}
-
-	cm.logger.Info("Instance connected", "component", "whatsmeow", "event", "connected", "instance_id", instanceID, "status", newStatus)
-	return nil
-}
-
-// Disconnect disconnects a WhatsApp instance
-func (cm *ConnectionManager) Disconnect(ctx context.Context, instanceID uuid.UUID) error {
-	cm.clientsMu.Lock()
-	defer cm.clientsMu.Unlock()
-
-	client, ok := cm.clients[instanceID]
-	if !ok {
-		return nil // Already disconnected
-	}
-
-	client.Disconnect()
-	delete(cm.clients, instanceID)
 	cm.clearActiveCalls(instanceID)
 	cm.ClearCachedQRCode(instanceID)
 
@@ -265,10 +160,8 @@ func (cm *ConnectionManager) Logout(ctx context.Context, instanceID uuid.UUID) e
 	}
 
 	var logoutErr error
-
-	cm.clientsMu.Lock()
-	client, ok := cm.clients[instanceID]
-	if ok && client != nil {
+	client := cm.pool.removeInstance(instanceID)
+	if client != nil {
 		if err := client.Logout(ctx); err != nil {
 			logoutErr = err
 			cm.logger.Warn("Failed graceful WhatsApp logout; forcing local cleanup", "component", "whatsmeow", "event", "logout_force_cleanup", "instance_id", instanceID, "error", err)
@@ -280,8 +173,6 @@ func (cm *ConnectionManager) Logout(ctx context.Context, instanceID uuid.UUID) e
 			}
 		}
 	}
-	delete(cm.clients, instanceID)
-	cm.clientsMu.Unlock()
 	cm.clearActiveCalls(instanceID)
 	cm.ClearCachedQRCode(instanceID)
 
@@ -316,14 +207,100 @@ func (cm *ConnectionManager) Logout(ctx context.Context, instanceID uuid.UUID) e
 	return nil
 }
 
-// GetClient returns the whatsmeow client for an instance if connected
+// GetClient returns the whatsmeow client for an instance if connected.
 func (cm *ConnectionManager) GetClient(instanceID uuid.UUID) *whatsmeow.Client {
-	cm.clientsMu.RLock()
-	defer cm.clientsMu.RUnlock()
-	return cm.clients[instanceID]
+	if cm == nil || cm.pool == nil {
+		return nil
+	}
+	return cm.pool.GetClient(instanceID)
 }
 
-// updateInstanceStatus updates the status of an instance in the database
+// GetClientByKey returns the runtime client bound to the tenant/account key.
+func (cm *ConnectionManager) GetClientByKey(key InstanceKey) *whatsmeow.Client {
+	if cm == nil || cm.pool == nil {
+		return nil
+	}
+	return cm.pool.GetClientByKey(key)
+}
+
+// RegisterInstanceClient registers a runtime client inside the tenant-aware pool.
+func (cm *ConnectionManager) RegisterInstanceClient(instance models.WhatsAppInstance, client *whatsmeow.Client) error {
+	if cm == nil || cm.pool == nil {
+		return fmt.Errorf("connection pool is not initialized")
+	}
+	if err := cm.pool.RegisterInstanceClient(instance, client); err != nil {
+		return err
+	}
+	if client != nil && client.IsConnected() {
+		cm.pool.markConnected(instance.ID, cm.connectedPhoneNumber(instance.PhoneNumber, client))
+	}
+	return nil
+}
+
+// ReindexInstance updates the runtime tenant/account key after instance metadata changes.
+func (cm *ConnectionManager) ReindexInstance(instance models.WhatsAppInstance) error {
+	if cm == nil || cm.pool == nil {
+		return nil
+	}
+	if cm.pool.entry(instance.ID) == nil {
+		return nil
+	}
+
+	_, err := cm.ensurePoolEntry(context.Background(), instance)
+	return err
+}
+
+// StartHealthMonitor launches the runtime reconnect worker for managed instances.
+func (cm *ConnectionManager) StartHealthMonitor(ctx context.Context) {
+	if cm == nil {
+		return
+	}
+
+	cm.healthMonitorMu.Lock()
+	defer cm.healthMonitorMu.Unlock()
+
+	if cm.healthMonitorCancel != nil {
+		return
+	}
+
+	baseCtx := context.Background()
+	if ctx != nil {
+		baseCtx = ctx
+	}
+
+	monitorCtx, cancel := context.WithCancel(baseCtx)
+	done := make(chan struct{})
+	cm.healthMonitorCancel = cancel
+	cm.healthMonitorDone = done
+
+	go func() {
+		defer close(done)
+		cm.healthMonitor(monitorCtx)
+	}()
+}
+
+// StopHealthMonitor stops the runtime reconnect worker.
+func (cm *ConnectionManager) StopHealthMonitor() {
+	if cm == nil {
+		return
+	}
+
+	cm.healthMonitorMu.Lock()
+	cancel := cm.healthMonitorCancel
+	done := cm.healthMonitorDone
+	cm.healthMonitorCancel = nil
+	cm.healthMonitorDone = nil
+	cm.healthMonitorMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
+}
+
+// updateInstanceStatus updates the status of an instance in the database.
 func (cm *ConnectionManager) updateInstanceStatus(ctx context.Context, instanceID uuid.UUID, status models.InstanceStatus) error {
 	return cm.db.WithContext(ctx).Model(&models.WhatsAppInstance{}).
 		Where("id = ?", instanceID).
@@ -372,7 +349,7 @@ func (cm *ConnectionManager) ReconcileStartupStatuses(ctx context.Context) error
 	return nil
 }
 
-// ReconnectAll reconnects all instances marked as connected in the DB
+// ReconnectAll reconnects all instances marked as connected in the DB.
 // This should be called at startup.
 func (cm *ConnectionManager) ReconnectAll(ctx context.Context) error {
 	if err := cm.ReconcileStartupStatuses(ctx); err != nil {
@@ -397,13 +374,13 @@ func (cm *ConnectionManager) ReconnectAll(ctx context.Context) error {
 			if statusErr := cm.updateInstanceStatus(ctx, instance.ID, models.InstanceStatusDisconnected); statusErr != nil {
 				cm.logger.Error("Failed to set reconnect-failed instance status", "component", "whatsmeow", "event", "reconnect_status_update_error", "instance_id", instance.ID, "error", statusErr)
 			}
-			// Don't stop on single failure
+			// Don't stop on single failure.
 		}
 	}
 	return nil
 }
 
-// AutoConnectLinkedInstancesOnFirstRun auto-connects linked instances (jid != ”)
+// AutoConnectLinkedInstancesOnFirstRun auto-connects linked instances (jid != "")
 // for organizations that haven't completed the first-run bootstrap yet.
 func (cm *ConnectionManager) AutoConnectLinkedInstancesOnFirstRun(ctx context.Context) error {
 	if cm.db == nil {
@@ -493,4 +470,323 @@ func (cm *ConnectionManager) markOrgAutoConnectBootstrapDone(ctx context.Context
 		Model(&models.Organization{}).
 		Where("id = ?", orgID).
 		Update("settings", org.Settings).Error
+}
+
+func (cm *ConnectionManager) loadInstance(ctx context.Context, instanceID uuid.UUID) (models.WhatsAppInstance, error) {
+	var instance models.WhatsAppInstance
+	if err := cm.db.WithContext(ctx).First(&instance, "id = ?", instanceID).Error; err != nil {
+		return models.WhatsAppInstance{}, err
+	}
+	return instance, nil
+}
+
+func (cm *ConnectionManager) ensurePoolEntry(ctx context.Context, instance models.WhatsAppInstance) (*connectionEntry, error) {
+	if cm.pool == nil {
+		return nil, fmt.Errorf("connection pool is not initialized")
+	}
+
+	for attempts := 0; attempts < 2; attempts++ {
+		entry, conflictID, err := cm.pool.ensureEntry(instance)
+		if err != nil {
+			return nil, err
+		}
+		if conflictID == uuid.Nil {
+			return entry, nil
+		}
+
+		resolved, resolveErr := cm.resolvePoolConflict(ctx, conflictID)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if !resolved {
+			key := NewInstanceKey(instance.OrganizationID, instance.Name)
+			return nil, fmt.Errorf("instance key %q for organization %s is already owned by instance %s", key.AccountName, key.OrganizationID, conflictID)
+		}
+	}
+
+	key := NewInstanceKey(instance.OrganizationID, instance.Name)
+	return nil, fmt.Errorf("failed to resolve runtime connection key %q for organization %s", key.AccountName, key.OrganizationID)
+}
+
+func (cm *ConnectionManager) resolvePoolConflict(ctx context.Context, conflictID uuid.UUID) (bool, error) {
+	if cm.pool == nil {
+		return false, fmt.Errorf("connection pool is not initialized")
+	}
+
+	var conflictInstance models.WhatsAppInstance
+	err := cm.db.WithContext(ctx).
+		Select("id", "organization_id", "name", "phone_number").
+		Where("id = ?", conflictID).
+		First(&conflictInstance).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			client := cm.pool.removeInstance(conflictID)
+			if client != nil {
+				client.Disconnect()
+			}
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to inspect conflicting instance %s: %w", conflictID, err)
+	}
+
+	if err := cm.pool.ReindexInstance(conflictInstance); err != nil {
+		return false, fmt.Errorf("failed to reindex conflicting instance %s: %w", conflictID, err)
+	}
+
+	return true, nil
+}
+
+func (cm *ConnectionManager) connectExistingClient(ctx context.Context, instance models.WhatsAppInstance, client *whatsmeow.Client) error {
+	if client.IsConnected() {
+		cm.syncRuntimeEntry(instance.ID, client, instance.PhoneNumber)
+		cm.markInstanceConnectionState(ctx, instance, client)
+		cm.logger.Debug("Instance already connected", "component", "whatsmeow", "event", "connect_skip", "instance_id", instance.ID)
+		return nil
+	}
+
+	if err := client.Connect(); err != nil {
+		cm.pool.markDisconnected(instance.ID)
+		return fmt.Errorf("failed to reconnect existing client: %w", err)
+	}
+
+	cm.syncRuntimeEntry(instance.ID, client, instance.PhoneNumber)
+	cm.markInstanceConnectionState(ctx, instance, client)
+	cm.logger.Info("Instance reconnected using existing client", "component", "whatsmeow", "event", "reconnect_existing_client", "instance_id", instance.ID)
+	return nil
+}
+
+func (cm *ConnectionManager) connectNewClient(ctx context.Context, instance models.WhatsAppInstance, entry *connectionEntry) error {
+	deviceStore, err := cm.resolveDeviceStore(ctx, &instance)
+	if err != nil {
+		return err
+	}
+	if deviceStore == nil {
+		return fmt.Errorf("device store is nil (should not happen)")
+	}
+
+	client := cm.newClient(instance, deviceStore)
+	if err := client.Connect(); err != nil {
+		cm.pool.removeInstance(instance.ID)
+		return fmt.Errorf("failed to connect to WhatsApp: %w", err)
+	}
+
+	entry.attachClient(client, instance.PhoneNumber)
+	cm.syncRuntimeEntry(instance.ID, client, instance.PhoneNumber)
+	cm.markInstanceConnectionState(ctx, instance, client)
+
+	cm.logger.Info("Instance connected", "component", "whatsmeow", "event", "connected", "instance_id", instance.ID)
+	return nil
+}
+
+func (cm *ConnectionManager) resolveDeviceStore(ctx context.Context, instance *models.WhatsAppInstance) (*store.Device, error) {
+	if instance == nil {
+		return nil, fmt.Errorf("instance is nil")
+	}
+
+	var deviceStore *store.Device
+	var err error
+
+	if instance.JID != "" {
+		var jid types.JID
+		jid, err = types.ParseJID(instance.JID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JID in database: %w", err)
+		}
+
+		deviceStore, err = cm.store.GetDevice(ctx, jid)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get device from store: %w", err)
+		}
+		if deviceStore == nil {
+			cm.logger.Warn(
+				"No stored device found for persisted JID, resetting instance identity for fresh pairing",
+				"component", "whatsmeow",
+				"event", "stale_device_identity",
+				"instance_id", instance.ID,
+				"jid", instance.JID,
+			)
+			if clearErr := cm.updateInstanceIdentity(ctx, instance.ID, "", ""); clearErr != nil {
+				return nil, fmt.Errorf("failed to reset stale instance identity: %w", clearErr)
+			}
+			instance.JID = ""
+			instance.PhoneNumber = ""
+			deviceStore = cm.store.NewDevice()
+		}
+	} else {
+		// New device (not paired yet).
+		deviceStore = cm.store.NewDevice()
+	}
+
+	return deviceStore, nil
+}
+
+func (cm *ConnectionManager) newClient(instance models.WhatsAppInstance, deviceStore *store.Device) *whatsmeow.Client {
+	clientLog := newClientLogger(waLog.Stdout("Client", "DEBUG", true))
+	client := whatsmeow.NewClient(deviceStore, clientLog)
+	identityPrefix := ""
+	if cm.cfg != nil {
+		identityPrefix = cm.cfg.Identity
+	}
+	linkedDeviceName := buildLinkedDeviceName(identityPrefix, instance.Name, instance.ID)
+	client.GetClientPayload = func() *waWa6.ClientPayload {
+		payload := deviceStore.GetClientPayload()
+		applyLinkedDeviceName(payload, linkedDeviceName)
+		return payload
+	}
+
+	client.AddEventHandler(func(evt interface{}) {
+		cm.handleEvent(evt, instance.ID, instance.OrganizationID)
+	})
+
+	return client
+}
+
+func (cm *ConnectionManager) syncRuntimeEntry(instanceID uuid.UUID, client *whatsmeow.Client, phoneNumber string) {
+	if cm.pool == nil {
+		return
+	}
+	entry := cm.pool.entry(instanceID)
+	if entry == nil {
+		return
+	}
+	entry.attachClient(client, phoneNumber)
+}
+
+func (cm *ConnectionManager) markInstanceConnectionState(ctx context.Context, instance models.WhatsAppInstance, client *whatsmeow.Client) {
+	newStatus := models.InstanceStatusConnecting
+	phoneNumber := cm.connectedPhoneNumber(instance.PhoneNumber, client)
+	if client != nil && client.Store != nil && client.Store.ID != nil {
+		newStatus = models.InstanceStatusConnected
+		cm.ClearCachedQRCode(instance.ID)
+	}
+
+	if err := cm.updateInstanceStatus(ctx, instance.ID, newStatus); err != nil {
+		cm.logger.Error("Failed to update instance status", "component", "whatsmeow", "event", "status_update_error", "instance_id", instance.ID, "error", err)
+	}
+
+	if newStatus == models.InstanceStatusConnected {
+		cm.pool.markConnected(instance.ID, phoneNumber)
+		cm.MarkConnected(instance.ID)
+		cm.broadcastInstanceConnected(instance.OrganizationID, instance.ID, phoneNumber)
+	}
+}
+
+func (cm *ConnectionManager) connectedPhoneNumber(current string, client *whatsmeow.Client) string {
+	phoneNumber := strings.TrimSpace(current)
+	if client != nil && client.Store != nil && client.Store.ID != nil {
+		if candidate := strings.TrimSpace(client.Store.ID.User); candidate != "" {
+			phoneNumber = candidate
+		}
+	}
+	return phoneNumber
+}
+
+func (cm *ConnectionManager) healthMonitor(ctx context.Context) {
+	cm.runHealthMonitorPass(ctx)
+
+	ticker := time.NewTicker(cm.healthMonitorInterval())
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cm.runHealthMonitorPass(ctx)
+		}
+	}
+}
+
+func (cm *ConnectionManager) runHealthMonitorPass(ctx context.Context) {
+	if cm == nil || cm.pool == nil || cm.db == nil {
+		return
+	}
+
+	connectInstance := cm.connectFn
+	if connectInstance == nil {
+		connectInstance = cm.Connect
+	}
+
+	for _, entry := range cm.pool.snapshotEntries() {
+		if entry == nil {
+			continue
+		}
+
+		instance, err := cm.loadInstance(ctx, entry.InstanceID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				client := cm.pool.removeInstance(entry.InstanceID)
+				if client != nil {
+					client.Disconnect()
+				}
+				continue
+			}
+			cm.logger.Warn("Health monitor failed to load instance", "component", "whatsmeow", "event", "health_monitor_load_error", "instance_id", entry.InstanceID, "error", err)
+			continue
+		}
+
+		if err := cm.ReindexInstance(instance); err != nil {
+			cm.logger.Warn("Health monitor failed to reindex instance", "component", "whatsmeow", "event", "health_monitor_reindex_error", "instance_id", instance.ID, "error", err)
+			continue
+		}
+
+		client := entry.client()
+		if !cm.shouldHealthMonitorReconnect(instance, client) {
+			if instance.Status == models.InstanceStatusLoggedOut || instance.Status == models.InstanceStatusBanned || (strings.TrimSpace(instance.JID) == "" && (client == nil || !client.IsConnected())) {
+				removedClient := cm.pool.removeInstance(instance.ID)
+				if removedClient != nil && removedClient != client {
+					removedClient.Disconnect()
+				}
+			}
+			continue
+		}
+
+		if client == nil {
+			continue
+		}
+		if client.IsConnected() {
+			cm.pool.markConnected(instance.ID, cm.connectedPhoneNumber(instance.PhoneNumber, client))
+			continue
+		}
+		if !entry.beginReconnect(time.Now().UTC(), baseReconnectBackoff, maxReconnectBackoff) {
+			continue
+		}
+
+		reconnectCtx, cancel := context.WithTimeout(ctx, cm.reconnectTimeout())
+		err = connectInstance(reconnectCtx, instance.ID)
+		cancel()
+		entry.finishReconnect(err, instance.PhoneNumber)
+		if err != nil {
+			cm.logger.Warn("Health monitor reconnect failed", "component", "whatsmeow", "event", "health_monitor_reconnect_failed", "instance_id", instance.ID, "error", err)
+		}
+	}
+}
+
+func (cm *ConnectionManager) shouldHealthMonitorReconnect(instance models.WhatsAppInstance, client *whatsmeow.Client) bool {
+	if client == nil {
+		return false
+	}
+	if strings.TrimSpace(instance.JID) == "" {
+		return false
+	}
+	switch instance.Status {
+	case models.InstanceStatusLoggedOut, models.InstanceStatusBanned:
+		return false
+	default:
+		return true
+	}
+}
+
+func (cm *ConnectionManager) healthMonitorInterval() time.Duration {
+	if cm != nil && cm.cfg != nil && cm.cfg.HealthMonitorIntervalSeconds > 0 {
+		return time.Duration(cm.cfg.HealthMonitorIntervalSeconds) * time.Second
+	}
+	return defaultHealthMonitorInterval
+}
+
+func (cm *ConnectionManager) reconnectTimeout() time.Duration {
+	if cm != nil && cm.cfg != nil && cm.cfg.ReconnectTimeoutSeconds > 0 {
+		return time.Duration(cm.cfg.ReconnectTimeoutSeconds) * time.Second
+	}
+	return defaultReconnectTimeout
 }

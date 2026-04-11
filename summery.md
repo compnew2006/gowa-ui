@@ -1,4 +1,4 @@
-# Prompt1 Session Summary
+# Prompt 1 Session Summary
 
 ## Scope
 - Phase 1 only: database foundation and tenant isolation.
@@ -90,7 +90,7 @@
 
 ---
 
-# Prompt2 Session Summary
+# Prompt 2 Session Summary
 
 ## Task
 - Implement Phase 2 tenant-aware campaign queue refactoring for Whatomate using Redis Streams, including tenant queue routing, tenant-aware campaign consumption, and an explicit legacy campaign stream migration command.
@@ -175,3 +175,128 @@
 - `go test ./cmd/whatomate -run '^$' -count=1` is blocked by a pre-existing asset issue in `internal/frontend/embed.go`:
   - `pattern all:dist: no matching files found`
   - this is unrelated to the queue refactor itself.
+
+---
+
+# Prompt 3 Session Summary
+
+## Applied Skills
+- `golang-pro`: concurrent runtime registry, reconnect lifecycle, race-safe tests
+- `architecture-guardian`: strangler-style refactor behind the existing `ConnectionManager` façade
+
+## Audit Findings
+- `whatsmeow.Client` was not a global singleton.
+- Runtime clients were previously tracked in `pkg/whatsmeow/manager.go` with `map[uuid.UUID]*whatsmeow.Client` guarded by `sync.RWMutex`.
+- There was no long-lived background health monitor for dropped runtime sessions.
+- Startup reconnect existed in `cmd/whatomate/main.go`, but disconnect events only updated status and did not trigger ongoing recovery.
+
+## Implemented Changes
+- Added `pkg/whatsmeow/pool.go` with:
+  - `InstanceKey { OrganizationID, AccountName }`
+  - `ConnectionPool` using `sync.Map` for `byKey` and `byInstanceID`
+  - per-entry reconnect guards, failure counters, and key reindexing support
+- Refactored `pkg/whatsmeow/manager.go` to:
+  - replace the old `clients` map with the new pool
+  - preserve `Connect`, `Disconnect`, `Logout`, and `GetClient`
+  - add `GetClientByKey`, `RegisterInstanceClient`, `ReindexInstance`
+  - add explicit `StartHealthMonitor` / `StopHealthMonitor`
+  - add bounded reconnect behavior with monitor interval + reconnect timeout config
+- Updated `pkg/whatsmeow/events.go` so:
+  - transient disconnects stay managed for reconnect attempts
+  - `logged_out` and `banned` states evict runtime entries from the pool
+  - connect/pair success events refresh pool state
+- Updated `internal/handlers/instances.go` so instance rename reindexes the runtime key after DB update.
+- Updated `cmd/whatomate/main.go` so server and worker flows start the health monitor when `whatsmeow` is the selected provider.
+- Added config knobs in `internal/config/config.go` and `config.example.toml`:
+  - `health_monitor_interval_seconds`
+  - `reconnect_timeout_seconds`
+
+## Verification
+- Passed: `go test ./pkg/whatsmeow/...`
+- Passed: `go test ./internal/handlers -run 'TestApp_UpdateInstance_(DuplicateNameConflict|ReindexesConnectedRuntimeKey)$' -count=1`
+- Passed: `go test -race ./pkg/whatsmeow`
+- Passed: `go test -race ./internal/handlers -run 'TestApp_UpdateInstance_(DuplicateNameConflict|ReindexesConnectedRuntimeKey)$' -count=1`
+
+## Full Regression Blockers
+- `go test ./...` is still blocked by pre-existing repository issues unrelated to this change:
+  - missing embedded frontend build output for `internal/frontend/embed.go` (`all:dist`)
+  - duplicate temporary root binaries in `tmp_encrypt.go` and `tmp_arabic.go`
+  - pre-existing failures in `internal/license` and `internal/middleware`
+- Browser smoke could not be completed in this worktree:
+  - frontend build is blocked because `frontend/node_modules` does not contain `vite`
+  - browser MCP sessions were unavailable because the local browser profile was already locked by another process
+
+---
+
+# Prompt 4 Session Summary
+
+## Audit summary
+
+- `cmd/whatomate/main.go` initialized campaign workers statically from the CLI `-workers` flag via fixed `for` loops.
+- There was no tenant-aware scaler, no Redis `XLEN` polling per organization stream, and no per-tenant circuit breaker tied to WhatsApp connectivity.
+- Queue consumers had a global readiness gate for licensing, but not a tenant-scoped freeze to stop allocation and consumption when a tenant lost WhatsApp connectivity.
+- Outbound safety checks existed in send policy and whatsmeow event handling, but they did not prevent worker-allocation storms at the scheduler level.
+
+## Files changed
+
+- `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-prompt4/cmd/whatomate/main.go`
+- `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-prompt4/internal/queue/redis.go`
+- `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-prompt4/internal/queue/queue_test.go`
+- `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-prompt4/internal/worker/worker.go`
+- `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-prompt4/internal/worker/organization_worker_config.go`
+- `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-prompt4/internal/worker/scaler.go`
+- `/Users/noiemany/Downloads/whatomate_GOWA/whatomate-prompt4/internal/worker/scaler_test.go`
+
+## Implemented changes
+
+- Added tenant-scoped Redis stream helpers and org-scoped campaign consumer construction.
+- Routed `RecipientJob` and `ContactRepairJob` into per-organization campaign streams.
+- Added typed `OrganizationWorkerConfig` loading from `organizations.settings`.
+- Refactored worker construction with explicit `WorkerOptions` so inbound-media and tenant campaign consumption can be started independently.
+- Replaced static campaign worker startup with:
+  - one global inbound-media worker
+  - one `WorkerScaler` managing tenant-scoped campaign workers dynamically
+- Added tenant runtime registry, scale-up/scale-down orchestration, global worker budget allocation, and freeze/unfreeze logic.
+- Added tenant circuit breaker rules:
+  - freeze when tenant has no connected/unblocked WhatsApp instance
+  - freeze after repeated worker start failures
+  - require one healthy interval before resuming workers
+- Fixed stream-depth correctness for scaler operation by deleting successfully processed stream entries after `XACK`, so `XLEN` reflects outstanding work instead of cumulative history.
+
+## Tests run
+
+- `go test ./internal/queue ./internal/worker`
+- `go test ./cmd/whatomate ./internal/queue ./internal/worker ./pkg/whatsmeow/...`
+- `go test -race ./internal/queue ./internal/worker`
+
+## Browser/API smoke validation
+
+- Browser validation used Chrome DevTools against `http://127.0.0.1:18080/health`.
+- Confirmed health response:
+  - `{"status":"success","data":{"service":"whatomate","status":"ok"}}`
+- Confirmed the app routed to the login screen successfully in the local browser session.
+
+## Runtime smoke validation
+
+- Started a local server against isolated smoke-test resources:
+  - PostgreSQL database: `whatomate_prompt4`
+  - Redis DB: `15`
+  - server address: `127.0.0.1:18080`
+- Verified frozen-tenant behavior:
+  - seeded a contact-repair job into `whatomate:campaigns:e02eb507-48c9-4ae6-b263-0117b3d6b97a`
+  - with no WhatsApp instance present, the scaler logged `Tenant worker allocation frozen`
+  - stream depth stayed at `XLEN=1`
+  - target contact phone number remained unchanged as `old-number`
+- Verified recovery behavior:
+  - inserted a connected WhatsApp instance for the same organization
+  - after one healthy scaler interval, logs showed `Tenant worker allocation resumed`
+  - a tenant-scoped worker started and consumed the org stream
+  - stream depth dropped to `XLEN=0`
+  - target contact phone number was updated to `20123456789`
+
+## Remaining risks and follow-ups
+
+- The current scaler keeps frozen/runtime state in memory only; process restart clears freeze history and healthy timers.
+- Budget allocation is heuristic and fair by backlog ratio, but there is no weighted priority or starvation-prevention policy beyond preserving active workers first.
+- Smoke validation used a real tenant-scoped `contact_repair` job to prove dynamic allocation and recovery. It did not execute an end-to-end WhatsApp campaign send against a real provider session.
+- There is no dedicated UI surface yet for scaler state, tenant freeze reason, or active worker counts. Operational visibility still depends on logs.
