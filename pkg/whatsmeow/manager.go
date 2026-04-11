@@ -42,6 +42,7 @@ type ConnectionManager struct {
 	// mediaStoragePath is the local root directory where inbound media is persisted.
 	mediaStoragePath  string
 	inboundMediaQueue inboundMediaJobEnqueuer
+	mediaService      *MediaService
 }
 
 type inboundMediaJobEnqueuer interface {
@@ -86,6 +87,14 @@ func (cm *ConnectionManager) SetInboundMediaQueue(q inboundMediaJobEnqueuer) {
 		return
 	}
 	cm.inboundMediaQueue = q
+}
+
+// SetMediaService configures the zero-disk inbound media pipeline.
+func (cm *ConnectionManager) SetMediaService(service *MediaService) {
+	if cm == nil {
+		return
+	}
+	cm.mediaService = service
 }
 
 // Connect initializes and connects a WhatsApp instance

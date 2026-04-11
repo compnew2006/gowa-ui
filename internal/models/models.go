@@ -221,35 +221,35 @@ func (APIKey) TableName() string {
 
 // LicenseRecord stores the active host-bound license and its verified entitlements.
 type LicenseRecord struct {
-	ID                           uint       `gorm:"primaryKey" json:"id"`
-	CreatedAt                    time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt                    time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
-	ActivationToken              string     `gorm:"type:text;not null" json:"-"`
-	LicenseFamilyID              string     `gorm:"size:128;not null;index" json:"license_family_id"`
-	LicenseID                    string     `gorm:"size:128;not null;index" json:"license_id"`
-	Revision                     uint64     `gorm:"not null" json:"revision"`
-	KeyID                        string     `gorm:"size:128;not null" json:"key_id"`
-	Issuer                       string     `gorm:"size:255;not null" json:"issuer"`
-	Audience                     string     `gorm:"size:255;not null" json:"audience"`
-	Product                      string     `gorm:"size:100;not null" json:"product"`
-	HWIDFull                     string     `gorm:"type:text;not null" json:"hwid_full"`
-	HWIDHash                     string     `gorm:"size:64;not null;index" json:"hwid_hash"`
-	Tier                         string     `gorm:"size:64;not null" json:"tier"`
-	LicenseKind                  string     `gorm:"size:16;not null" json:"license_kind"`
-	TrialDays                    int        `gorm:"not null;default:0" json:"trial_days"`
-	MaxOrganizations             int        `gorm:"not null" json:"max_organizations"`
-	MaxUsersPerOrg               int        `gorm:"not null" json:"max_users_per_org"`
-	MaxWhatsAppEndpointsPerOrg   int        `gorm:"not null" json:"max_whatsapp_endpoints_per_org"`
-	MaxWorkers                   int        `gorm:"not null" json:"max_workers"`
-	Status                       string     `gorm:"size:20;not null;index" json:"status"`
-	Overages                     JSONB      `gorm:"type:jsonb;default:'{}'" json:"overages"`
-	IssuedAt                     time.Time  `gorm:"not null" json:"issued_at"`
-	NotBefore                    time.Time  `gorm:"not null" json:"not_before"`
-	ExpiresAt                    *time.Time `json:"expires_at,omitempty"`
-	GraceDeadline                *time.Time `json:"grace_deadline,omitempty"`
-	LastSeenAt                   time.Time  `gorm:"not null" json:"last_seen_at"`
-	ActivatedAt                  time.Time  `gorm:"not null" json:"activated_at"`
-	IntegrityHMAC                string     `gorm:"size:128;not null" json:"-"`
+	ID                         uint       `gorm:"primaryKey" json:"id"`
+	CreatedAt                  time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt                  time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	ActivationToken            string     `gorm:"type:text;not null" json:"-"`
+	LicenseFamilyID            string     `gorm:"size:128;not null;index" json:"license_family_id"`
+	LicenseID                  string     `gorm:"size:128;not null;index" json:"license_id"`
+	Revision                   uint64     `gorm:"not null" json:"revision"`
+	KeyID                      string     `gorm:"size:128;not null" json:"key_id"`
+	Issuer                     string     `gorm:"size:255;not null" json:"issuer"`
+	Audience                   string     `gorm:"size:255;not null" json:"audience"`
+	Product                    string     `gorm:"size:100;not null" json:"product"`
+	HWIDFull                   string     `gorm:"type:text;not null" json:"hwid_full"`
+	HWIDHash                   string     `gorm:"size:64;not null;index" json:"hwid_hash"`
+	Tier                       string     `gorm:"size:64;not null" json:"tier"`
+	LicenseKind                string     `gorm:"size:16;not null" json:"license_kind"`
+	TrialDays                  int        `gorm:"not null;default:0" json:"trial_days"`
+	MaxOrganizations           int        `gorm:"not null" json:"max_organizations"`
+	MaxUsersPerOrg             int        `gorm:"not null" json:"max_users_per_org"`
+	MaxWhatsAppEndpointsPerOrg int        `gorm:"not null" json:"max_whatsapp_endpoints_per_org"`
+	MaxWorkers                 int        `gorm:"not null" json:"max_workers"`
+	Status                     string     `gorm:"size:20;not null;index" json:"status"`
+	Overages                   JSONB      `gorm:"type:jsonb;default:'{}'" json:"overages"`
+	IssuedAt                   time.Time  `gorm:"not null" json:"issued_at"`
+	NotBefore                  time.Time  `gorm:"not null" json:"not_before"`
+	ExpiresAt                  *time.Time `json:"expires_at,omitempty"`
+	GraceDeadline              *time.Time `json:"grace_deadline,omitempty"`
+	LastSeenAt                 time.Time  `gorm:"not null" json:"last_seen_at"`
+	ActivatedAt                time.Time  `gorm:"not null" json:"activated_at"`
+	IntegrityHMAC              string     `gorm:"size:128;not null" json:"-"`
 }
 
 func (LicenseRecord) TableName() string {
@@ -397,6 +397,19 @@ func (Contact) TableName() string {
 	return "contacts"
 }
 
+// MediaAsset represents a deduplicated inbound media object stored in object storage.
+type MediaAsset struct {
+	BaseModel
+	FileHash string `gorm:"size:64;uniqueIndex;not null" json:"file_hash"`
+	S3Key    string `gorm:"size:512;not null" json:"s3_key"`
+	MimeType string `gorm:"size:255;not null" json:"mime_type"`
+	Size     int64  `gorm:"not null" json:"size"`
+}
+
+func (MediaAsset) TableName() string {
+	return "media_assets"
+}
+
 // ContactUserDeletion tracks per-user soft deletion timestamps for chats.
 // This is not a GORM soft-delete model; deleted_at represents the user's hide time.
 type ContactUserDeletion struct {
@@ -441,9 +454,11 @@ type Message struct {
 	Direction         Direction     `gorm:"size:10;not null" json:"direction"`
 	MessageType       MessageType   `gorm:"size:20;not null" json:"message_type"`
 	Content           string        `gorm:"type:text" json:"content"`
+	MediaAssetID      *uuid.UUID    `gorm:"type:uuid;index" json:"media_asset_id,omitempty"`
 	MediaURL          string        `gorm:"type:text" json:"media_url"`
 	MediaMimeType     string        `gorm:"size:100" json:"media_mime_type"`
 	MediaFilename     string        `gorm:"size:255" json:"media_filename"`
+	MediaDeletedAt    *time.Time    `gorm:"type:timestamptz" json:"media_deleted_at,omitempty"`
 	TemplateName      string        `gorm:"size:255" json:"template_name"`
 	TemplateParams    JSONB         `gorm:"type:jsonb" json:"template_params"`
 	InteractiveData   JSONB         `gorm:"type:jsonb" json:"interactive_data"`
@@ -459,6 +474,7 @@ type Message struct {
 	Organization   *Organization     `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 	Instance       *WhatsAppInstance `gorm:"foreignKey:InstanceID" json:"instance,omitempty"`
 	Contact        *Contact          `gorm:"foreignKey:ContactID" json:"contact,omitempty"`
+	MediaAsset     *MediaAsset       `gorm:"foreignKey:MediaAssetID" json:"media_asset,omitempty"`
 	ReplyToMessage *Message          `gorm:"foreignKey:ReplyToMessageID" json:"reply_to_message,omitempty"`
 	SentByUser     *User             `gorm:"foreignKey:SentByUserID" json:"sent_by_user,omitempty"`
 }

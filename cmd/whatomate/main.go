@@ -19,6 +19,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/middleware"
 	"github.com/compnew2006/whatomate/internal/queue"
+	objectstorage "github.com/compnew2006/whatomate/internal/storage"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/internal/worker"
 	"github.com/compnew2006/whatomate/pkg/provider"
@@ -219,6 +220,11 @@ func runServer(args []string) {
 	}
 	lo.Info("Connected to Redis")
 
+	storedObjects, err := objectstorage.NewObjectStorage(&cfg.Storage)
+	if err != nil {
+		lo.Fatal("Failed to initialize object storage", "error", err)
+	}
+
 	// Initialize job queue
 	jobQueue := queue.NewRedisQueue(rdb, lo)
 	lo.Info("Job queue initialized")
@@ -237,6 +243,7 @@ func runServer(args []string) {
 	// Initialize whatsmeow manager
 	whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, wsHub, cfg.Storage.LocalPath)
 	whatsmeowManager.SetInboundMediaQueue(jobQueue)
+	whatsmeowManager.SetMediaService(whatsmeow.NewMediaService(db, storedObjects, lo, whatsmeowManager.GetClient))
 
 	// Auto-connect linked sessions and reconnect active instances in background.
 	if cfg.WhatsApp.Provider == "whatsmeow" {
@@ -284,6 +291,7 @@ func runServer(args []string) {
 		WSHub:            wsHub,
 		WhatsmeowStore:   storeContainer,
 		WhatsmeowManager: whatsmeowManager,
+		ObjectStorage:    storedObjects,
 		Queue:            jobQueue,
 		HTTPClient:       httpClient,
 	}
@@ -383,6 +391,11 @@ func runServer(args []string) {
 	go instanceAutoCampaignWorker.Start(instanceAutoCampaignCtx)
 	lo.Info("Instance auto campaign worker started")
 
+	mediaRetentionWorker := handlers.NewMediaRetentionWorker(app, 24*time.Hour)
+	mediaRetentionCtx, mediaRetentionCancel := context.WithCancel(context.Background())
+	go mediaRetentionWorker.Start(mediaRetentionCtx)
+	lo.Info("Media retention worker started")
+
 	// Start embedded workers
 	var workers []*worker.Worker
 	var workerCancel context.CancelFunc
@@ -446,6 +459,11 @@ func runServer(args []string) {
 	instanceAutoCampaignCancel()
 	instanceAutoCampaignWorker.Stop()
 	lo.Info("Instance auto campaign worker stopped")
+
+	lo.Info("Stopping media retention worker...")
+	mediaRetentionCancel()
+	mediaRetentionWorker.Stop()
+	lo.Info("Media retention worker stopped")
 
 	// Stop workers first
 	if workerCancel != nil {
@@ -527,6 +545,14 @@ func runWorker(args []string) {
 	}
 	lo.Info("Connected to Redis")
 
+	storedObjects, err := objectstorage.NewObjectStorage(&cfg.Storage)
+	if err != nil {
+		lo.Fatal("Failed to initialize object storage", "error", err)
+	}
+	if cfg.WhatsApp.Provider == "whatsmeow" && storedObjects == nil {
+		lo.Fatal("Whatsmeow inbound media requires storage.type=s3")
+	}
+
 	var messageProvider provider.MessageProvider
 	if cfg.WhatsApp.Provider == "whatsmeow" {
 		sqlDB, err := db.DB()
@@ -541,6 +567,7 @@ func runWorker(args []string) {
 		whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
 		whatsmeowQueue := queue.NewRedisQueue(rdb, lo)
 		whatsmeowManager.SetInboundMediaQueue(whatsmeowQueue)
+		whatsmeowManager.SetMediaService(whatsmeow.NewMediaService(db, storedObjects, lo, whatsmeowManager.GetClient))
 		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := whatsmeowManager.ReconcileStartupStatuses(reconcileCtx); err != nil {
 			lo.Warn("Failed to reconcile stale instance statuses on startup", "error", err)

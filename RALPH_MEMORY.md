@@ -1,3 +1,10 @@
+## 2026-04-10 22:10 Issue: Streaming media dedup can deadlock or resurrect a deleted hash incorrectly
+
+- The Trap: Assuming `io.Pipe` automatically tears down both sides on upload failure, and assuming a hash that once existed can simply be inserted again after retention cleanup.
+- The Reality: If the uploader returns first and the reader side is not closed with the upload error, the downloader goroutine can block forever on the pipe writer. Separately, if retention deletes the S3 object but the `media_assets.file_hash` uniqueness constraint remains, naive re-insert logic races into duplicate-key failures or links new messages to a purged asset.
+- The Fix: Explicitly cancel the streaming context, propagate errors with `CloseWithError` on both sides of the pipe, and reload-or-restore soft-deleted `media_assets` rows when a known hash reappears after retention cleanup.
+- The Law: In duplex streaming pipelines, treat both the producer and consumer as failure sources that must actively unblock each other, and never design dedup keys without a lifecycle plan for post-retention resurrection.
+
 ## [2026-04-05] Issue: MkDocs Config Value 'docs_dir' Error
 
 - **The Trap:** Setting `docs_dir: .` in `mkdocs.yml` to keep all files in a single flat directory for simplicity.
@@ -110,3 +117,10 @@
 - The Reality: `/pricing`, `/plans`, and `/offer` are stable public entry URLs and part of the lead-capture boundary, so hard deletion would create broken links and a brittle migration.
 - The Fix: Replaced the routes with a configurable sidecar-handoff view, removed the old page content, and generalized lead-source validation while keeping lead storage/admin handling in the monolith.
 - The Law: When moving public pages to a sidecar, preserve the public URLs first and migrate ownership through a redirect or proxy seam instead of a hard delete.
+
+## 2026-04-10 22:15 Issue: Production build failures due to missing internal/frontend/dist
+
+- The Trap: Assuming the internal/frontend/dist directory exists or will be auto-created by cp -r when copying frontend assets.
+- The Reality: The Makefile used rm -rf internal/frontend/dist/* and then cp -r frontend/dist/* internal/frontend/dist/. If dist was missing from the repository (e.g., ignored and deleted), cp would fail as it needs a pre-existing destination directory for a wild-card glob copy.
+- The Fix: Updated the Makefile's embed-frontend target to explicitly run mkdir -p internal/frontend/dist before clearing and copying.
+- The Law: Always ensure the destination directory exists (using mkdir -p) before performing wildcard copies or relative directory synchronization in build scripts.

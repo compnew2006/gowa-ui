@@ -1,5 +1,19 @@
 # CHANGELOG.md
 
+## 2026-04-10
+
+### Added
+- Added zero-disk inbound WhatsMeow media streaming with native-hash deduplication via `MediaAsset`, `MediaService`, MinIO-backed object storage, and a new daily media retention worker.
+- Added focused backend regression coverage for the media streaming pipeline, retention cleanup logic, and streamed `/api/media/{message_id}` responses.
+
+### Changed
+- Migrated inbound WhatsMeow media persistence away from local files to object storage-backed streaming, while keeping the existing API payload shape (`media_url`, `media_mime_type`, `media_filename`) stable.
+- Updated media serving to stream from object storage and return `410 Gone` for messages whose media was purged by retention rules.
+
+### Fixed
+- Fixed concurrent first-write dedup handling so competing uploads for the same WhatsApp native hash resolve to one shared `media_assets` row instead of racing into duplicate persistence paths.
+- Fixed `Makefile` production build script (`build-prod`) to ensure `internal/frontend/dist` directory is correctly created before attempting to embed frontend assets.
+
 ## 2026-04-05
 
 ### Fixed

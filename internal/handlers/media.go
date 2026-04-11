@@ -224,10 +224,12 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid message ID", nil, "")
 	}
 
-	// Find the message and verify access
-	message, err := findByIDAndOrg[models.Message](a.DB, r, messageID, orgID, "Message")
-	if err != nil {
-		return nil
+	var message models.Message
+	if err := a.DB.WithContext(r.RequestCtx).
+		Preload("MediaAsset").
+		Where("id = ? AND organization_id = ?", messageID, orgID).
+		First(&message).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
 	}
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
@@ -252,11 +254,39 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	}
 
 	// Check if message has media
-	if message.MediaURL == "" {
+	if message.MediaDeletedAt != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusGone, "Media expired", nil, "")
+	}
+	if message.MediaAssetID == nil || message.MediaAsset == nil || strings.TrimSpace(message.MediaAsset.S3Key) == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "No media found", nil, "")
 	}
+	if a.ObjectStorage == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Media storage is not configured", nil, "")
+	}
 
-	return a.serveLocalMediaFile(r, message.MediaURL, message.MediaMimeType)
+	reader, objectInfo, err := a.ObjectStorage.GetObject(r.RequestCtx, message.MediaAsset.S3Key)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Media not found", nil, "")
+	}
+
+	contentType := strings.TrimSpace(message.MediaAsset.MimeType)
+	if contentType == "" {
+		contentType = strings.TrimSpace(message.MediaMimeType)
+	}
+	if contentType == "" {
+		contentType = strings.TrimSpace(objectInfo.ContentType)
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	r.RequestCtx.SetStatusCode(fasthttp.StatusOK)
+	r.RequestCtx.Response.Header.SetContentType(contentType)
+	if filename := strings.TrimSpace(message.MediaFilename); filename != "" {
+		r.RequestCtx.Response.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+	}
+	r.RequestCtx.SetBodyStream(reader, int(objectInfo.Size))
+	return nil
 }
 
 func (a *App) serveLocalMediaFile(r *fastglue.Request, relativePath, mimeHint string) error {
