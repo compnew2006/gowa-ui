@@ -476,12 +476,12 @@ func (c *RedisConsumer) claimPendingMessages(ctx context.Context, handler JobHan
 
 // processMessage processes a single message from the stream.
 func (c *RedisConsumer) processMessage(ctx context.Context, msg redis.XMessage, handler JobHandler) error {
-	jobType, ok := msg.Values["type"].(string)
+	jobType, ok := streamStringValue(msg.Values["type"])
 	if !ok {
 		return newPermanentProcessError(fmt.Errorf("invalid message: missing type"))
 	}
 
-	payload, ok := msg.Values["payload"].(string)
+	payload, ok := streamStringValue(msg.Values["payload"])
 	if !ok {
 		return newPermanentProcessError(fmt.Errorf("invalid message: missing payload"))
 	}
@@ -564,6 +564,18 @@ func (c *RedisConsumer) moveToDeadLetter(ctx context.Context, msg redis.XMessage
 
 	c.log.Warn("Message moved to dead-letter stream", "stream", c.streamName, "dlq_stream", c.deadLetterStreamName, "message_id", msg.ID, "reason", reason, "attempts", attempts)
 	return nil
+}
+
+func streamStringValue(value interface{}) (string, bool) {
+	switch v := value.(type) {
+	case string:
+		return v, strings.TrimSpace(v) != ""
+	case []byte:
+		text := string(v)
+		return text, strings.TrimSpace(text) != ""
+	default:
+		return "", false
+	}
 }
 
 func (c *RedisConsumer) ackAndDelete(ctx context.Context, messageID string) error {
