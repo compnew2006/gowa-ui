@@ -230,7 +230,7 @@ func runServer(args []string) {
 	lo.Info("Connected to Redis")
 
 	// Initialize job queue
-	jobQueue := queue.NewTenantQueueManager(rdb, lo)
+	jobQueue := queue.NewRedisQueue(rdb, lo)
 	lo.Info("Job queue initialized")
 
 	// Initialize Fastglue
@@ -586,7 +586,7 @@ func runWorker(args []string) {
 		}
 
 		whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
-		whatsmeowQueue := queue.NewTenantQueueManager(rdb, lo)
+		whatsmeowQueue := queue.NewRedisQueue(rdb, lo)
 		whatsmeowManager.SetInboundMediaQueue(whatsmeowQueue)
 		whatsmeowManager.StartHealthMonitor(context.Background())
 		defer whatsmeowManager.StopHealthMonitor()
