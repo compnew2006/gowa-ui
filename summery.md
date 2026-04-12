@@ -361,3 +361,60 @@
 - Full repo-wide `go test ./... -run '^$'` is still blocked by pre-existing unrelated issues:
   - `internal/frontend/embed.go` references missing `dist` assets
   - `tmp_encrypt.go` and `tmp_arabic.go` both define `main`
+
+## Session Summary - 2026-04-12
+
+### Task
+
+- Deploy the current project to the VPS as the production main build and verify public access.
+
+### Skills Applied
+
+- `devops-engineer`
+- `debugging-wizard`
+- `golang-pro`
+
+### What Happened
+
+- The VPS was not actually fronted by Caddy in production. `nginx` was still the active ingress on ports `80` and `443`, while `caddy` was failed because those ports were already in use.
+- The current local `main` commit `a2b0e3a` could be built, but it crashed all Whatomate services on startup because campaign-only scaler workers stored a disabled inbound consumer as a typed-nil interface.
+- I restored the previous working binary immediately to recover production, then patched the regression locally and rebuilt a production-safe hotfix binary.
+
+### Fix Applied
+
+- Updated `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/worker/worker.go` so disabled consumers remain true `nil` interfaces.
+- Added regression coverage in `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/worker/worker_test.go`.
+- Verified locally with `go test ./internal/worker`.
+- Deployed the hotfix build to the VPS with version `a2b0e3a-hotfix-worker-nil`.
+
+### Production Result
+
+- Final binary: `/opt/whatomate/bin/whatomate`
+- SHA256: `e4815db7326aa5bbf65bea17fc6d46f8f9acb5722b9fa390df9cb33c4d75583d`
+- Version: `Whatomate a2b0e3a-hotfix-worker-nil (built 2026-04-12_00:19:08)`
+- Binary backups created during rollout:
+  - `/opt/whatomate/bin/whatomate.20260412_000603.bak`
+  - `/opt/whatomate/bin/whatomate.20260412_001919.bak`
+- Services verified active:
+  - `whatomate`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+- Localhost ports verified:
+  - `18123` -> `200`
+  - `18124` -> `200`
+  - `18125` -> `200`
+  - `18126` -> `200`
+- Public HTTPS verified:
+  - `https://ofuqalmadenah.com/` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/` -> `200`
+- Chrome DevTools MCP verification:
+  - `https://ofuqalmadenah.com/` redirected to `/login` with no console messages
+  - `https://holol-wenjaz.ofuqalmadenah.com/` redirected to `/login` with no console messages
+
+### Notes
+
+- No new `public.key` or license config override was needed because licensing is currently disabled in the active production configs.
+- `nginx` remains the live reverse proxy. `caddy` is still failed because `nginx` already binds `80/443`.

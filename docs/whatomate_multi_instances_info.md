@@ -1433,3 +1433,60 @@ Updated: 2026-04-07 07:19:00 UTC
 - rsync-based source mirroring
 - Go + Vite production build orchestration
 - post-deploy browser verification with MCP tooling
+
+## Production Deployment - 2026-04-12
+
+Updated: 2026-04-12 00:21 UTC
+
+- Deployment target: `31.97.192.53`
+- Local source path: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Requested source baseline: local `main` at `a2b0e3a`
+- Production-safe deployed build: `a2b0e3a-hotfix-worker-nil`
+- Why the hotfix was required:
+  - current `main` crashed every instance during startup with `panic: runtime error: invalid memory address or nil pointer dereference`
+  - root cause: `internal/worker/worker.go` stored disabled Redis consumers as typed-nil interfaces, so scaler-managed campaign workers still attempted `Consume()` on a nil `*queue.RedisConsumer`
+- Local code changes applied before final rollout:
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/worker/worker.go`
+  - `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/worker/worker_test.go`
+- Local verification before redeploy:
+  - `go test ./internal/worker`
+- VPS binary backups created during the rollout:
+  - `/opt/whatomate/bin/whatomate.20260412_000603.bak`
+  - `/opt/whatomate/bin/whatomate.20260412_001919.bak`
+- Final installed binary:
+  - path: `/opt/whatomate/bin/whatomate`
+  - SHA256: `e4815db7326aa5bbf65bea17fc6d46f8f9acb5722b9fa390df9cb33c4d75583d`
+  - version: `Whatomate a2b0e3a-hotfix-worker-nil (built 2026-04-12_00:19:08)`
+- Build command used on VPS:
+  - `cd /opt/whatomate-src && VERSION=a2b0e3a-hotfix-worker-nil GOTOOLCHAIN=go1.25.8+auto make build-prod`
+- Config/public-key decision:
+  - no new `public.key` or license config override was needed
+  - active production configs currently have licensing disabled
+  - the binary was built with a valid default embedded key ring (`[]`) so startup remains safe when licensing is off
+- Runtime verification on VPS:
+  - `whatomate`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, and `whatomate@matbaat-ruya` are all `active`
+  - localhost smoke checks returned `200` for ports `18123`, `18124`, `18125`, and `18126`
+- Public verification:
+  - `https://ofuqalmadenah.com/` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/` -> `200`
+  - Chrome DevTools MCP checks on `https://ofuqalmadenah.com/` and `https://holol-wenjaz.ofuqalmadenah.com/` both redirected to `/login` with no console errors
+- Reverse proxy state discovered during deployment:
+  - live public traffic is still served by `nginx`, not `caddy`
+  - `nginx` is active and its syntax test is clean
+  - `caddy` is failed because `nginx` already owns ports `80` and `443`
+  - I did not switch the ingress layer during this rollout to avoid unnecessary production blast radius
+
+### Skills Applied
+
+- `devops-engineer`
+- `debugging-wizard`
+- `golang-pro`
+
+### Competencies Applied
+
+- rollback-safe Ubuntu/systemd production deployment
+- root-cause analysis of Go interface-nil regressions
+- low-blast-radius hotfix delivery under active outage conditions
+- browser and HTTP verification against live multi-instance domains

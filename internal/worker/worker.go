@@ -61,26 +61,30 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, me
 	}
 
 	var (
-		consumer        *queue.RedisConsumer
-		inboundConsumer *queue.RedisConsumer
+		consumer        queue.Consumer
+		inboundConsumer queue.Consumer
 		err             error
 	)
 
 	if opts.EnableCampaignConsumer {
+		var redisConsumer *queue.RedisConsumer
 		if opts.CampaignOrganizationID != uuid.Nil {
-			consumer, err = queue.NewOrganizationRedisConsumer(rdb, log, opts.CampaignOrganizationID)
+			redisConsumer, err = queue.NewOrganizationRedisConsumer(rdb, log, opts.CampaignOrganizationID)
 		} else {
-			consumer, err = queue.NewRedisConsumer(rdb, log)
+			redisConsumer, err = queue.NewRedisConsumer(rdb, log)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to create consumer: %w", err)
 		}
+		consumer = redisConsumer
 	}
 	if opts.EnableInboundMedia {
-		inboundConsumer, err = queue.NewRedisInboundMediaConsumer(rdb, log)
+		var redisConsumer *queue.RedisConsumer
+		redisConsumer, err = queue.NewRedisInboundMediaConsumer(rdb, log)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create inbound-media consumer: %w", err)
 		}
+		inboundConsumer = redisConsumer
 	}
 
 	publisher := queue.NewPublisher(rdb, log)
