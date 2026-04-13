@@ -17,6 +17,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // UserRequest represents the request body for creating/updating a user.
@@ -77,6 +78,21 @@ type RoleInfo struct {
 	Description string           `json:"description"`
 	IsSystem    bool             `json:"is_system"`
 	Permissions []PermissionInfo `json:"permissions"`
+}
+
+func buildUsersListBaseQuery(requestDB *gorm.DB, orgID uuid.UUID, search string) *gorm.DB {
+	const joinClause = "JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL"
+
+	query := requestDB.Session(&gorm.Session{}).
+		Model(&models.User{}).
+		Joins(joinClause, orgID).
+		Where("users.deleted_at IS NULL")
+
+	if search != "" {
+		query = query.Where("users.full_name ILIKE ? OR users.email ILIKE ?", "%"+search+"%", "%"+search+"%")
+	}
+
+	return query
 }
 
 // UserSettingsRequest represents notification/settings preferences
@@ -380,21 +396,14 @@ func (a *App) ListUsers(r *fastglue.Request) error {
 	pg := parsePagination(r)
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 
-	// Query users via user_organizations to include cross-org members.
-	joinClause := "JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL"
-
-	countQuery := requestDB.Joins(joinClause, orgID).Where("users.deleted_at IS NULL")
-	dataQuery := requestDB.Joins(joinClause, orgID).Where("users.deleted_at IS NULL")
-	if search != "" {
-		countQuery = countQuery.Where("users.full_name ILIKE ? OR users.email ILIKE ?", "%"+search+"%", "%"+search+"%")
-		dataQuery = dataQuery.Where("users.full_name ILIKE ? OR users.email ILIKE ?", "%"+search+"%", "%"+search+"%")
+	var total int64
+	if err := buildUsersListBaseQuery(requestDB, orgID, search).Count(&total).Error; err != nil {
+		a.Log.Error("Failed to count users", "error", err, "organization_id", orgID, "search", search)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list users", nil, "")
 	}
 
-	var total int64
-	countQuery.Model(&models.User{}).Count(&total)
-
 	var users []models.User
-	if err := pg.Apply(dataQuery.Order("users.created_at DESC")).
+	if err := pg.Apply(buildUsersListBaseQuery(requestDB, orgID, search).Order("users.created_at DESC")).
 		Find(&users).Error; err != nil {
 		a.Log.Error("Failed to list users", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list users", nil, "")
@@ -407,10 +416,13 @@ func (a *App) ListUsers(r *fastglue.Request) error {
 	}
 	var orgMemberships []models.UserOrganization
 	if len(userIDs) > 0 {
-		requestDB.
+		if err := requestDB.Session(&gorm.Session{}).
 			Where("user_id IN ? AND organization_id = ?", userIDs, orgID).
 			Preload("Role").
-			Find(&orgMemberships)
+			Find(&orgMemberships).Error; err != nil {
+			a.Log.Error("Failed to load organization memberships for user list", "error", err, "organization_id", orgID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list users", nil, "")
+		}
 	}
 	orgRoleMap := make(map[uuid.UUID]*models.CustomRole, len(orgMemberships))
 	for _, m := range orgMemberships {
@@ -427,8 +439,14 @@ func (a *App) ListUsers(r *fastglue.Request) error {
 			OrganizationID uuid.UUID
 		}
 		var homeOrgs []idOrg
-		requestDB.
-			Model(&models.User{}).Select("id, organization_id").Where("id IN ?", userIDs).Find(&homeOrgs)
+		if err := requestDB.Session(&gorm.Session{}).
+			Model(&models.User{}).
+			Select("id, organization_id").
+			Where("id IN ?", userIDs).
+			Find(&homeOrgs).Error; err != nil {
+			a.Log.Error("Failed to load home organizations for user list", "error", err, "organization_id", orgID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list users", nil, "")
+		}
 		for _, ho := range homeOrgs {
 			homeOrgMap[ho.ID] = ho.OrganizationID
 		}
@@ -500,6 +518,7 @@ func (a *App) GetUser(r *fastglue.Request) error {
 // CreateUser creates a new user (admin only)
 func (a *App) CreateUser(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
+	writeDB := a.DB
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -567,7 +586,7 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 	var softDeleted models.User
 	if err := requestDB.Unscoped().Where("email = ? AND deleted_at IS NOT NULL", req.Email).First(&softDeleted).Error; err == nil {
 		// Restore the soft-deleted user with new details
-		if err := requestDB.Unscoped().Model(&softDeleted).Updates(map[string]interface{}{
+		if err := writeDB.Unscoped().Model(&softDeleted).Updates(map[string]interface{}{
 			"deleted_at":      nil,
 			"organization_id": orgID,
 			"password_hash":   string(hashedPassword),
@@ -583,14 +602,14 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 		// Restore or create UserOrganization entry
 		var existingOrg models.UserOrganization
 		if err := requestDB.Unscoped().Where("user_id = ? AND organization_id = ?", softDeleted.ID, orgID).First(&existingOrg).Error; err == nil {
-			requestDB.
+			writeDB.
 				Unscoped().Model(&existingOrg).Updates(map[string]interface{}{
 				"deleted_at": nil,
 				"role_id":    roleID,
 				"is_default": true,
 			})
 		} else {
-			requestDB.
+			writeDB.
 				Create(&models.UserOrganization{
 					UserID:         softDeleted.ID,
 					OrganizationID: orgID,
@@ -626,7 +645,7 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 		IsSuperAdmin:   isSuperAdmin,
 	}
 
-	if err := requestDB.Create(&user).Error; err != nil {
+	if err := writeDB.Create(&user).Error; err != nil {
 		a.Log.Error("Failed to create user", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create user", nil, "")
 	}
@@ -638,14 +657,13 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 		RoleID:         roleID,
 		IsDefault:      true,
 	}
-	if err := requestDB.Create(&userOrg).Error; err != nil {
+	if err := writeDB.Create(&userOrg).Error; err != nil {
 		a.Log.Error("Failed to create user organization entry", "error", err)
 		// Non-fatal: user was already created
 	}
-	requestDB.
 
-		// Load role for response
-		Preload("Role").First(&user, user.ID)
+	// Load role for response
+	requestDB.Preload("Role").First(&user, user.ID)
 
 	return r.SendEnvelope(userToResponse(user))
 }

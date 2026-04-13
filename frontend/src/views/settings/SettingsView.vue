@@ -83,12 +83,35 @@ const {
 
 type NotificationSoundKey = "notification1" | "notification2" | "notification";
 const DEFAULT_NOTIFICATION_SOUND: NotificationSoundKey = "notification1";
+const MAX_UPLOADS_CLEANUP_RETENTION_DAYS = 3650;
+const DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR = 3;
 
 const activeSettingsTab = ref("general");
 const isSubmitting = ref(false);
+const isUploadsCleanupSubmitting = ref(false);
+const isUploadsCleanupRunning = ref(false);
 const isLoading = ref(true);
 const isPreviewPlaying = ref(false);
 let previewAudio: HTMLAudioElement | null = null;
+
+const canViewGeneralSettings = computed(() =>
+  authStore.hasPermission("settings.general", "read"),
+);
+const canEditGeneralSettings = computed(() =>
+  authStore.hasPermission("settings.general", "write"),
+);
+const canViewUploadsCleanup = computed(
+  () =>
+    authStore.hasPermission("settings.uploads_cleanup", "read") ||
+    authStore.hasPermission("settings.uploads_cleanup", "write") ||
+    authStore.hasPermission("settings.uploads_cleanup", "execute"),
+);
+const canEditUploadsCleanup = computed(() =>
+  authStore.hasPermission("settings.uploads_cleanup", "write"),
+);
+const canRunUploadsCleanup = computed(() =>
+  authStore.hasPermission("settings.uploads_cleanup", "execute"),
+);
 
 const themePresetOptions = THEME_PRESET_OPTIONS;
 const appearanceSettings = ref<AppearanceSettings>({
@@ -200,13 +223,128 @@ function revertAppearancePreview() {
   restorePersistedAppearance();
 }
 
+interface GeneralSettingsForm {
+  organization_name: string;
+  default_timezone: string;
+  date_format: string;
+  mask_phone_numbers: boolean;
+}
+
 // General Settings
-const generalSettings = ref({
+const generalSettings = ref<GeneralSettingsForm>({
   organization_name: "My Organization",
   default_timezone: "UTC",
   date_format: "YYYY-MM-DD",
   mask_phone_numbers: false,
 });
+
+function parseUploadsCleanupRetentionDaysInput(value: unknown): number | null {
+  if (typeof value === "number") {
+    if (
+      !Number.isInteger(value) ||
+      value < 0 ||
+      value > MAX_UPLOADS_CLEANUP_RETENTION_DAYS
+    ) {
+      return null;
+    }
+
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed === "") return 0;
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 0 ||
+    parsed > MAX_UPLOADS_CLEANUP_RETENTION_DAYS
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function parseUploadsCleanupScheduleHourInput(value: unknown): number | null {
+  if (typeof value === "number") {
+    if (!Number.isInteger(value) || value < 0 || value > 23) {
+      return null;
+    }
+
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR;
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 23) {
+    return null;
+  }
+
+  return parsed;
+}
+
+interface UploadsCleanupSettingsForm {
+  retention_days: string | number;
+  schedule_hour: string | number;
+  timezone: string;
+}
+
+const uploadsCleanupSettings = ref<UploadsCleanupSettingsForm>({
+  retention_days: "0",
+  schedule_hour: String(DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR),
+  timezone: "UTC",
+});
+
+const uploadsCleanupScheduleLabel = computed(() => {
+  const parsedHour = parseUploadsCleanupScheduleHourInput(
+    uploadsCleanupSettings.value.schedule_hour,
+  );
+  const hour =
+    parsedHour === null ? DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR : parsedHour;
+  return `${String(hour).padStart(2, "0")}:00`;
+});
+
+function buildUploadsCleanupPayload() {
+  const retentionDays = parseUploadsCleanupRetentionDaysInput(
+    uploadsCleanupSettings.value.retention_days,
+  );
+  if (retentionDays === null) {
+    toast.error(t("settings.uploadsCleanupRetentionDaysInvalid"));
+    return null;
+  }
+
+  const scheduleHour = parseUploadsCleanupScheduleHourInput(
+    uploadsCleanupSettings.value.schedule_hour,
+  );
+  if (scheduleHour === null) {
+    toast.error(t("settings.uploadsCleanupScheduleHourInvalid"));
+    return null;
+  }
+
+  return {
+    uploads_cleanup_retention_days: retentionDays,
+    uploads_cleanup_schedule_hour: scheduleHour,
+  };
+}
 
 interface NotificationSettings {
   email_notifications: boolean;
@@ -451,12 +589,30 @@ onMounted(async () => {
     // Organization settings
     const orgData = orgResponse.data.data || orgResponse.data;
     if (orgData) {
-      generalSettings.value = {
-        organization_name: orgData.name || "My Organization",
-        default_timezone: orgData.settings?.timezone || "UTC",
-        date_format: orgData.settings?.date_format || "YYYY-MM-DD",
-        mask_phone_numbers: orgData.settings?.mask_phone_numbers || false,
-      };
+      if (canViewGeneralSettings.value) {
+        generalSettings.value = {
+          organization_name: orgData.name || "My Organization",
+          default_timezone: orgData.settings?.timezone || "UTC",
+          date_format: orgData.settings?.date_format || "YYYY-MM-DD",
+          mask_phone_numbers: orgData.settings?.mask_phone_numbers || false,
+        };
+      }
+
+      if (canViewUploadsCleanup.value) {
+        uploadsCleanupSettings.value = {
+          retention_days: String(
+            orgData.settings?.uploads_cleanup_retention_days ?? 0,
+          ),
+          schedule_hour: String(
+            orgData.settings?.uploads_cleanup_schedule_hour ??
+              DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR,
+          ),
+          timezone:
+            orgData.settings?.timezone ||
+            generalSettings.value.default_timezone ||
+            "UTC",
+        };
+      }
     }
 
     // User notification settings
@@ -484,6 +640,10 @@ onMounted(async () => {
 });
 
 async function saveGeneralSettings() {
+  if (!canEditGeneralSettings.value) {
+    return;
+  }
+
   isSubmitting.value = true;
   try {
     await organizationService.updateSettings({
@@ -492,11 +652,90 @@ async function saveGeneralSettings() {
       date_format: generalSettings.value.date_format,
       mask_phone_numbers: generalSettings.value.mask_phone_numbers,
     });
+    uploadsCleanupSettings.value.timezone =
+      generalSettings.value.default_timezone;
     toast.success(t("settings.generalSaved"));
   } catch (error) {
-    toast.error(t("common.failedSave", { resource: t("resources.settings") }));
+    toast.error(
+      getErrorMessage(
+        error,
+        t("common.failedSave", { resource: t("resources.settings") }),
+      ),
+    );
   } finally {
     isSubmitting.value = false;
+  }
+}
+
+async function saveUploadsCleanupSettings() {
+  if (!canEditUploadsCleanup.value) {
+    return;
+  }
+
+  const payload = buildUploadsCleanupPayload();
+  if (!payload) {
+    return;
+  }
+
+  isUploadsCleanupSubmitting.value = true;
+  try {
+    await organizationService.updateSettings(payload);
+    uploadsCleanupSettings.value.schedule_hour = String(
+      payload.uploads_cleanup_schedule_hour,
+    );
+    uploadsCleanupSettings.value.retention_days = String(
+      payload.uploads_cleanup_retention_days,
+    );
+    toast.success(t("settings.uploadsCleanupSaved"));
+  } catch (error) {
+    toast.error(getErrorMessage(error, t("settings.uploadsCleanupSaveFailed")));
+  } finally {
+    isUploadsCleanupSubmitting.value = false;
+  }
+}
+
+async function runUploadsCleanupNow() {
+  let payload: {
+    uploads_cleanup_retention_days: number;
+    uploads_cleanup_schedule_hour: number;
+  } | null = null;
+
+  if (canEditUploadsCleanup.value) {
+    payload = buildUploadsCleanupPayload();
+    if (!payload) {
+      return;
+    }
+  }
+
+  isUploadsCleanupRunning.value = true;
+  try {
+    if (payload) {
+      await organizationService.updateSettings(payload);
+      uploadsCleanupSettings.value.schedule_hour = String(
+        payload.uploads_cleanup_schedule_hour,
+      );
+      uploadsCleanupSettings.value.retention_days = String(
+        payload.uploads_cleanup_retention_days,
+      );
+    }
+
+    const response = await organizationService.runUploadsCleanupNow();
+    const result = unwrapResponse<{
+      message: string;
+      deleted_files: number;
+      retention_days: number;
+    }>(response);
+    toast.success(
+      result.message ||
+        t("settings.uploadsCleanupRunSuccess", {
+          count: result.deleted_files,
+          days: result.retention_days,
+        }),
+    );
+  } catch (error) {
+    toast.error(getErrorMessage(error, t("settings.uploadsCleanupRunFailed")));
+  } finally {
+    isUploadsCleanupRunning.value = false;
   }
 }
 
@@ -519,9 +758,7 @@ async function saveAppearanceSettings() {
     toast.success(t("settings.appearanceSaved"));
   } catch (error) {
     revertAppearancePreview();
-    toast.error(
-      getErrorMessage(error, t("settings.appearanceSaveFailed")),
-    );
+    toast.error(getErrorMessage(error, t("settings.appearanceSaveFailed")));
   } finally {
     isSubmitting.value = false;
   }
@@ -725,131 +962,250 @@ onBeforeRouteLeave(() => {
 
           <!-- General Settings Tab -->
           <TabsContent value="general">
-            <div
-              class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 shadow-sm"
-            >
-              <div class="p-6 pb-3">
-                <h3 class="text-lg font-semibold text-foreground">
-                  {{ $t("settings.generalSettings") }}
-                </h3>
-                <p class="text-sm text-muted-foreground">
-                  {{ $t("settings.generalSettingsDesc") }}
-                </p>
-              </div>
-              <div class="p-6 pt-3 space-y-4">
-                <div class="space-y-2">
-                  <Label for="org_name" class="text-foreground/80">{{
-                    $t("settings.organizationName")
-                  }}</Label>
-                  <Input
-                    id="org_name"
-                    v-model="generalSettings.organization_name"
-                    :placeholder="$t('settings.organizationPlaceholder')"
-                  />
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                  <div class="space-y-2">
-                    <Label for="timezone" class="text-foreground/80">{{
-                      $t("settings.defaultTimezone")
-                    }}</Label>
-                    <Select v-model="generalSettings.default_timezone">
-                      <SelectTrigger
-                        class="border-input bg-input text-foreground"
-                      >
-                        <SelectValue
-                          :placeholder="$t('settings.selectTimezone')"
-                        />
-                      </SelectTrigger>
-                      <SelectContent
-                        class="border-border bg-popover text-popover-foreground"
-                      >
-                        <SelectItem
-                          v-for="option in timezoneOptions"
-                          :key="option.value"
-                          :value="option.value"
-                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
-                        >
-                          {{ option.label }}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div class="space-y-2">
-                    <Label for="date_format" class="text-foreground/80">{{
-                      $t("settings.dateFormat")
-                    }}</Label>
-                    <Select v-model="generalSettings.date_format">
-                      <SelectTrigger
-                        class="border-input bg-input text-foreground"
-                      >
-                        <SelectValue
-                          :placeholder="$t('settings.selectFormat')"
-                        />
-                      </SelectTrigger>
-                      <SelectContent
-                        class="border-border bg-popover text-popover-foreground"
-                      >
-                        <SelectItem
-                          value="YYYY-MM-DD"
-                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
-                          >YYYY-MM-DD</SelectItem
-                        >
-                        <SelectItem
-                          value="DD/MM/YYYY"
-                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
-                          >DD/MM/YYYY</SelectItem
-                        >
-                        <SelectItem
-                          value="MM/DD/YYYY"
-                          class="text-foreground/80 focus:bg-accent focus:text-foreground"
-                          >MM/DD/YYYY</SelectItem
-                        >
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div class="space-y-2">
-                  <Label class="text-foreground/80">
-                    <Globe class="h-4 w-4 inline mr-1" />
-                    {{ $t("settings.language") }}
-                  </Label>
-                  <LanguageSwitcher class="max-w-xs" />
-                  <p class="text-xs text-muted-foreground">
-                    {{ $t("settings.languageDesc") }}
+            <div class="space-y-6">
+              <div
+                v-if="canViewGeneralSettings"
+                class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 shadow-sm"
+              >
+                <div class="p-6 pb-3">
+                  <h3 class="text-lg font-semibold text-foreground">
+                    {{ $t("settings.generalSettings") }}
+                  </h3>
+                  <p class="text-sm text-muted-foreground">
+                    {{ $t("settings.generalSettingsDesc") }}
                   </p>
                 </div>
-                <Separator class="bg-border" />
-                <div class="flex items-center justify-between">
-                  <div>
-                    <p class="font-medium text-foreground">
-                      {{ $t("settings.maskPhoneNumbers") }}
-                    </p>
-                    <p class="text-sm text-muted-foreground">
-                      {{ $t("settings.maskPhoneNumbersDesc") }}
+                <div class="p-6 pt-3 space-y-4">
+                  <div class="space-y-2">
+                    <Label for="org_name" class="text-foreground/80">{{
+                      $t("settings.organizationName")
+                    }}</Label>
+                    <Input
+                      id="org_name"
+                      v-model="generalSettings.organization_name"
+                      :placeholder="$t('settings.organizationPlaceholder')"
+                    />
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                      <Label for="timezone" class="text-foreground/80">{{
+                        $t("settings.defaultTimezone")
+                      }}</Label>
+                      <Select v-model="generalSettings.default_timezone">
+                        <SelectTrigger
+                          class="border-input bg-input text-foreground"
+                        >
+                          <SelectValue
+                            :placeholder="$t('settings.selectTimezone')"
+                          />
+                        </SelectTrigger>
+                        <SelectContent
+                          class="border-border bg-popover text-popover-foreground"
+                        >
+                          <SelectItem
+                            v-for="option in timezoneOptions"
+                            :key="option.value"
+                            :value="option.value"
+                            class="text-foreground/80 focus:bg-accent focus:text-foreground"
+                          >
+                            {{ option.label }}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div class="space-y-2">
+                      <Label for="date_format" class="text-foreground/80">{{
+                        $t("settings.dateFormat")
+                      }}</Label>
+                      <Select v-model="generalSettings.date_format">
+                        <SelectTrigger
+                          class="border-input bg-input text-foreground"
+                        >
+                          <SelectValue
+                            :placeholder="$t('settings.selectFormat')"
+                          />
+                        </SelectTrigger>
+                        <SelectContent
+                          class="border-border bg-popover text-popover-foreground"
+                        >
+                          <SelectItem
+                            value="YYYY-MM-DD"
+                            class="text-foreground/80 focus:bg-accent focus:text-foreground"
+                            >YYYY-MM-DD</SelectItem
+                          >
+                          <SelectItem
+                            value="DD/MM/YYYY"
+                            class="text-foreground/80 focus:bg-accent focus:text-foreground"
+                            >DD/MM/YYYY</SelectItem
+                          >
+                          <SelectItem
+                            value="MM/DD/YYYY"
+                            class="text-foreground/80 focus:bg-accent focus:text-foreground"
+                            >MM/DD/YYYY</SelectItem
+                          >
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div class="space-y-2">
+                    <Label class="text-foreground/80">
+                      <Globe class="h-4 w-4 inline mr-1" />
+                      {{ $t("settings.language") }}
+                    </Label>
+                    <LanguageSwitcher class="max-w-xs" />
+                    <p class="text-xs text-muted-foreground">
+                      {{ $t("settings.languageDesc") }}
                     </p>
                   </div>
-                  <Switch
-                    :checked="generalSettings.mask_phone_numbers"
-                    @update:checked="
-                      generalSettings.mask_phone_numbers = $event
-                    "
-                  />
-                </div>
-                <Separator class="bg-border" />
-                <div class="flex justify-end">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    class="shadow-sm"
-                    @click="saveGeneralSettings"
-                    :disabled="isSubmitting"
-                  >
-                    <Loader2
-                      v-if="isSubmitting"
-                      class="mr-2 h-4 w-4 animate-spin"
+                  <Separator class="bg-border" />
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="font-medium text-foreground">
+                        {{ $t("settings.maskPhoneNumbers") }}
+                      </p>
+                      <p class="text-sm text-muted-foreground">
+                        {{ $t("settings.maskPhoneNumbersDesc") }}
+                      </p>
+                    </div>
+                    <Switch
+                      :checked="generalSettings.mask_phone_numbers"
+                      @update:checked="
+                        generalSettings.mask_phone_numbers = $event
+                      "
                     />
-                    {{ $t("settings.save") }}
-                  </Button>
+                  </div>
+                  <Separator class="bg-border" />
+                  <div class="flex justify-end">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      class="shadow-sm"
+                      @click="saveGeneralSettings"
+                      :disabled="isSubmitting || !canEditGeneralSettings"
+                      data-testid="settings-general-save"
+                    >
+                      <Loader2
+                        v-if="isSubmitting"
+                        class="mr-2 h-4 w-4 animate-spin"
+                      />
+                      {{ $t("settings.save") }}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="canViewUploadsCleanup"
+                class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 shadow-sm"
+              >
+                <div class="p-6 pb-3">
+                  <h3 class="text-lg font-semibold text-foreground">
+                    {{ $t("settings.uploadsCleanupTitle") }}
+                  </h3>
+                  <p class="text-sm text-muted-foreground">
+                    {{ $t("settings.uploadsCleanupDesc") }}
+                  </p>
+                </div>
+                <div class="p-6 pt-3 space-y-4">
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <div class="space-y-2 max-w-xs">
+                      <Label
+                        for="uploads_cleanup_retention_days"
+                        class="text-foreground/80"
+                      >
+                        {{ $t("settings.uploadsCleanupRetentionDays") }}
+                      </Label>
+                      <Input
+                        id="uploads_cleanup_retention_days"
+                        v-model="uploadsCleanupSettings.retention_days"
+                        type="number"
+                        min="0"
+                        :max="String(MAX_UPLOADS_CLEANUP_RETENTION_DAYS)"
+                        step="1"
+                        :disabled="!canEditUploadsCleanup"
+                        data-testid="uploads-cleanup-retention-days-input"
+                      />
+                      <p class="text-xs text-muted-foreground">
+                        {{ $t("settings.uploadsCleanupRetentionDaysDesc") }}
+                      </p>
+                    </div>
+                    <div class="space-y-2 max-w-xs">
+                      <Label
+                        for="uploads_cleanup_schedule_hour"
+                        class="text-foreground/80"
+                      >
+                        {{ $t("settings.uploadsCleanupScheduleHour") }}
+                      </Label>
+                      <Input
+                        id="uploads_cleanup_schedule_hour"
+                        v-model="uploadsCleanupSettings.schedule_hour"
+                        type="number"
+                        min="0"
+                        max="23"
+                        step="1"
+                        :disabled="!canEditUploadsCleanup"
+                        data-testid="uploads-cleanup-schedule-hour-input"
+                      />
+                      <p class="text-xs text-muted-foreground">
+                        {{
+                          $t("settings.uploadsCleanupScheduleHourDesc", {
+                            time: uploadsCleanupScheduleLabel,
+                          })
+                        }}
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    class="rounded-xl border border-border/60 bg-background/70 p-4"
+                  >
+                    <p class="text-sm font-medium text-foreground">
+                      {{ $t("settings.uploadsCleanupTimezone") }}
+                    </p>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                      {{
+                        $t("settings.uploadsCleanupTimezoneDesc", {
+                          timezone: uploadsCleanupSettings.timezone,
+                          time: uploadsCleanupScheduleLabel,
+                        })
+                      }}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap justify-end gap-2">
+                    <Button
+                      v-if="canRunUploadsCleanup"
+                      variant="outline"
+                      size="sm"
+                      class="shadow-sm"
+                      @click="runUploadsCleanupNow"
+                      :disabled="
+                        isUploadsCleanupRunning || isUploadsCleanupSubmitting
+                      "
+                      data-testid="uploads-cleanup-run-now"
+                    >
+                      <Loader2
+                        v-if="isUploadsCleanupRunning"
+                        class="mr-2 h-4 w-4 animate-spin"
+                      />
+                      {{ $t("settings.uploadsCleanupRunNow") }}
+                    </Button>
+                    <Button
+                      v-if="canEditUploadsCleanup"
+                      variant="default"
+                      size="sm"
+                      class="shadow-sm"
+                      @click="saveUploadsCleanupSettings"
+                      :disabled="
+                        isUploadsCleanupSubmitting || isUploadsCleanupRunning
+                      "
+                      data-testid="uploads-cleanup-save"
+                    >
+                      <Loader2
+                        v-if="isUploadsCleanupSubmitting"
+                        class="mr-2 h-4 w-4 animate-spin"
+                      />
+                      {{ $t("settings.save") }}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -889,9 +1245,7 @@ onBeforeRouteLeave(() => {
                       data-testid="appearance-mode-light"
                       @click="selectAppearanceMode('light')"
                     >
-                      <div
-                        class="rounded-full bg-background/80 p-2 shadow-sm"
-                      >
+                      <div class="rounded-full bg-background/80 p-2 shadow-sm">
                         <SunMedium class="h-4 w-4" />
                       </div>
                       <div>
@@ -911,9 +1265,7 @@ onBeforeRouteLeave(() => {
                       data-testid="appearance-mode-dark"
                       @click="selectAppearanceMode('dark')"
                     >
-                      <div
-                        class="rounded-full bg-background/80 p-2 shadow-sm"
-                      >
+                      <div class="rounded-full bg-background/80 p-2 shadow-sm">
                         <MoonStar class="h-4 w-4" />
                       </div>
                       <div>
@@ -933,9 +1285,7 @@ onBeforeRouteLeave(() => {
                       data-testid="appearance-mode-system"
                       @click="selectAppearanceMode('system')"
                     >
-                      <div
-                        class="rounded-full bg-background/80 p-2 shadow-sm"
-                      >
+                      <div class="rounded-full bg-background/80 p-2 shadow-sm">
                         <MonitorSmartphone class="h-4 w-4" />
                       </div>
                       <div>
@@ -999,7 +1349,9 @@ onBeforeRouteLeave(() => {
                           <p class="text-sm font-semibold text-foreground">
                             {{ $t(option.labelKey) }}
                           </p>
-                          <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                          <p
+                            class="mt-1 text-xs leading-5 text-muted-foreground"
+                          >
                             {{ $t(option.descriptionKey) }}
                           </p>
                         </div>

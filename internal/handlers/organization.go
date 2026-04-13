@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -13,19 +14,22 @@ import (
 	"github.com/nyaruka/phonenumbers"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // OrganizationSettings represents the settings structure
 type OrganizationSettings struct {
-	MaskPhoneNumbers           bool       `json:"mask_phone_numbers"`
-	StrictSendingRestrictions  bool       `json:"strict_sending_restrictions_enabled"`
-	OutboundMode               string     `json:"outbound_mode"`
-	StrictSendingApplyToSystem bool       `json:"strict_sending_apply_to_system"`
-	CampaignDraftOnly          bool       `json:"campaign_draft_only"`
-	StrictRolloutMode          string     `json:"strict_rollout_mode"`
-	StrictRolloutEnforceAt     *time.Time `json:"strict_rollout_enforce_at,omitempty"`
-	Timezone                   string     `json:"timezone"`
-	DateFormat                 string     `json:"date_format"`
+	MaskPhoneNumbers            bool       `json:"mask_phone_numbers"`
+	StrictSendingRestrictions   bool       `json:"strict_sending_restrictions_enabled"`
+	UploadsCleanupRetentionDays int        `json:"uploads_cleanup_retention_days"`
+	UploadsCleanupScheduleHour  int        `json:"uploads_cleanup_schedule_hour"`
+	OutboundMode                string     `json:"outbound_mode"`
+	StrictSendingApplyToSystem  bool       `json:"strict_sending_apply_to_system"`
+	CampaignDraftOnly           bool       `json:"campaign_draft_only"`
+	StrictRolloutMode           string     `json:"strict_rollout_mode"`
+	StrictRolloutEnforceAt      *time.Time `json:"strict_rollout_enforce_at,omitempty"`
+	Timezone                    string     `json:"timezone"`
+	DateFormat                  string     `json:"date_format"`
 }
 
 // GetOrganizationSettings returns the organization settings
@@ -36,44 +40,57 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
-	if err := a.requirePermission(r, userID, models.ResourceSettingsGeneral, models.ActionRead); err != nil {
-		return nil
+	canReadGeneral := a.HasPermission(userID, models.ResourceSettingsGeneral, models.ActionRead, orgID)
+	canReadUploadsCleanup := a.canAccessUploadsCleanupSettings(userID, orgID)
+	if !canReadGeneral && !canReadUploadsCleanup {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
 	}
 
+	loadDB := requestDB.Session(&gorm.Session{NewDB: true})
 	var org models.Organization
-	if err := requestDB.Where("id = ?", orgID).First(&org).Error; err != nil {
+	if err := loadDB.Where("id = ?", orgID).First(&org).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Organization not found", nil, "")
 	}
 
 	// Parse settings from JSONB
 	settings := OrganizationSettings{
-		MaskPhoneNumbers:           false,
-		StrictSendingRestrictions:  false,
-		OutboundMode:               organizationOutboundModeMixed,
-		StrictSendingApplyToSystem: true,
-		CampaignDraftOnly:          false,
-		StrictRolloutMode:          organizationStrictRolloutModeEnforce,
-		Timezone:                   "UTC",
-		DateFormat:                 "YYYY-MM-DD",
+		MaskPhoneNumbers:            false,
+		StrictSendingRestrictions:   false,
+		UploadsCleanupRetentionDays: defaultUploadsCleanupRetentionDays,
+		UploadsCleanupScheduleHour:  defaultUploadsCleanupScheduleHour,
+		OutboundMode:                organizationOutboundModeMixed,
+		StrictSendingApplyToSystem:  true,
+		CampaignDraftOnly:           false,
+		StrictRolloutMode:           organizationStrictRolloutModeEnforce,
+		Timezone:                    "UTC",
+		DateFormat:                  "YYYY-MM-DD",
 	}
 
 	if org.Settings != nil {
-		if v, ok := org.Settings["mask_phone_numbers"].(bool); ok {
-			settings.MaskPhoneNumbers = v
+		if canReadGeneral {
+			if v, ok := org.Settings["mask_phone_numbers"].(bool); ok {
+				settings.MaskPhoneNumbers = v
+			}
+			if v, ok := org.Settings[organizationSettingStrictSendingRestrictionsEnabled].(bool); ok {
+				settings.StrictSendingRestrictions = v
+			}
+			settings.OutboundMode = normalizeOutboundMode(parseOrganizationStringSetting(org.Settings, organizationSettingOutboundMode, settings.OutboundMode))
+			settings.StrictSendingApplyToSystem = parseOrganizationBoolSetting(org.Settings, organizationSettingStrictSendingApplyToSystem, settings.StrictSendingApplyToSystem)
+			settings.CampaignDraftOnly = parseOrganizationBoolSetting(org.Settings, organizationSettingCampaignDraftOnly, settings.CampaignDraftOnly)
+			settings.StrictRolloutMode = normalizeRolloutMode(parseOrganizationStringSetting(org.Settings, organizationSettingStrictRolloutMode, settings.StrictRolloutMode))
+			settings.StrictRolloutEnforceAt = parseOrganizationTimeSetting(org.Settings, organizationSettingStrictRolloutEnforceAt)
+			if v, ok := org.Settings["timezone"].(string); ok && v != "" {
+				settings.Timezone = v
+			}
+			if v, ok := org.Settings["date_format"].(string); ok && v != "" {
+				settings.DateFormat = v
+			}
 		}
-		if v, ok := org.Settings[organizationSettingStrictSendingRestrictionsEnabled].(bool); ok {
-			settings.StrictSendingRestrictions = v
-		}
-		settings.OutboundMode = normalizeOutboundMode(parseOrganizationStringSetting(org.Settings, organizationSettingOutboundMode, settings.OutboundMode))
-		settings.StrictSendingApplyToSystem = parseOrganizationBoolSetting(org.Settings, organizationSettingStrictSendingApplyToSystem, settings.StrictSendingApplyToSystem)
-		settings.CampaignDraftOnly = parseOrganizationBoolSetting(org.Settings, organizationSettingCampaignDraftOnly, settings.CampaignDraftOnly)
-		settings.StrictRolloutMode = normalizeRolloutMode(parseOrganizationStringSetting(org.Settings, organizationSettingStrictRolloutMode, settings.StrictRolloutMode))
-		settings.StrictRolloutEnforceAt = parseOrganizationTimeSetting(org.Settings, organizationSettingStrictRolloutEnforceAt)
-		if v, ok := org.Settings["timezone"].(string); ok && v != "" {
-			settings.Timezone = v
-		}
-		if v, ok := org.Settings["date_format"].(string); ok && v != "" {
-			settings.DateFormat = v
+
+		if canReadUploadsCleanup {
+			settings.UploadsCleanupRetentionDays = parseUploadsCleanupRetentionDays(org.Settings)
+			settings.UploadsCleanupScheduleHour = parseUploadsCleanupScheduleHour(org.Settings)
+			settings.Timezone = parseOrganizationTimezone(org.Settings)
 		}
 	}
 
@@ -91,25 +108,44 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
-	if err := a.requirePermission(r, userID, models.ResourceSettingsGeneral, models.ActionWrite); err != nil {
-		return nil
-	}
-
 	var req struct {
-		MaskPhoneNumbers           *bool   `json:"mask_phone_numbers"`
-		StrictSendingRestrictions  *bool   `json:"strict_sending_restrictions_enabled"`
-		OutboundMode               *string `json:"outbound_mode"`
-		StrictSendingApplyToSystem *bool   `json:"strict_sending_apply_to_system"`
-		CampaignDraftOnly          *bool   `json:"campaign_draft_only"`
-		StrictRolloutMode          *string `json:"strict_rollout_mode"`
-		StrictRolloutEnforceAt     *string `json:"strict_rollout_enforce_at"`
-		Timezone                   *string `json:"timezone"`
-		DateFormat                 *string `json:"date_format"`
-		Name                       *string `json:"name"`
+		MaskPhoneNumbers            *bool   `json:"mask_phone_numbers"`
+		StrictSendingRestrictions   *bool   `json:"strict_sending_restrictions_enabled"`
+		UploadsCleanupRetentionDays *int    `json:"uploads_cleanup_retention_days"`
+		UploadsCleanupScheduleHour  *int    `json:"uploads_cleanup_schedule_hour"`
+		OutboundMode                *string `json:"outbound_mode"`
+		StrictSendingApplyToSystem  *bool   `json:"strict_sending_apply_to_system"`
+		CampaignDraftOnly           *bool   `json:"campaign_draft_only"`
+		StrictRolloutMode           *string `json:"strict_rollout_mode"`
+		StrictRolloutEnforceAt      *string `json:"strict_rollout_enforce_at"`
+		Timezone                    *string `json:"timezone"`
+		DateFormat                  *string `json:"date_format"`
+		Name                        *string `json:"name"`
 	}
 
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	}
+
+	wantsGeneralSettingsUpdate := req.MaskPhoneNumbers != nil ||
+		req.StrictSendingRestrictions != nil ||
+		req.OutboundMode != nil ||
+		req.StrictSendingApplyToSystem != nil ||
+		req.CampaignDraftOnly != nil ||
+		req.StrictRolloutMode != nil ||
+		req.StrictRolloutEnforceAt != nil ||
+		req.Timezone != nil ||
+		req.DateFormat != nil ||
+		req.Name != nil
+	wantsUploadsCleanupUpdate := req.UploadsCleanupRetentionDays != nil || req.UploadsCleanupScheduleHour != nil
+
+	if wantsGeneralSettingsUpdate {
+		if err := a.requirePermission(r, userID, models.ResourceSettingsGeneral, models.ActionWrite); err != nil {
+			return nil
+		}
+	}
+	if wantsUploadsCleanupUpdate && !a.canWriteUploadsCleanupSettings(userID, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
 	}
 
 	if req.OutboundMode != nil {
@@ -133,6 +169,26 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 			}
 		}
 	}
+	if req.UploadsCleanupRetentionDays != nil {
+		if *req.UploadsCleanupRetentionDays < 0 || *req.UploadsCleanupRetentionDays > maxUploadsCleanupRetentionDays {
+			return r.SendErrorEnvelope(
+				fasthttp.StatusBadRequest,
+				fmt.Sprintf("uploads_cleanup_retention_days must be between 0 and %d", maxUploadsCleanupRetentionDays),
+				nil,
+				"uploads_cleanup_retention_days",
+			)
+		}
+	}
+	if req.UploadsCleanupScheduleHour != nil {
+		if *req.UploadsCleanupScheduleHour < 0 || *req.UploadsCleanupScheduleHour > 23 {
+			return r.SendErrorEnvelope(
+				fasthttp.StatusBadRequest,
+				"uploads_cleanup_schedule_hour must be between 0 and 23",
+				nil,
+				"uploads_cleanup_schedule_hour",
+			)
+		}
+	}
 
 	var org models.Organization
 	if err := requestDB.Where("id = ?", orgID).First(&org).Error; err != nil {
@@ -149,6 +205,12 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	}
 	if req.StrictSendingRestrictions != nil {
 		org.Settings[organizationSettingStrictSendingRestrictionsEnabled] = *req.StrictSendingRestrictions
+	}
+	if req.UploadsCleanupRetentionDays != nil {
+		org.Settings[organizationSettingUploadsCleanupRetentionDays] = normalizeUploadsCleanupRetentionDays(*req.UploadsCleanupRetentionDays)
+	}
+	if req.UploadsCleanupScheduleHour != nil {
+		org.Settings[organizationSettingUploadsCleanupScheduleHour] = normalizeUploadsCleanupScheduleHour(*req.UploadsCleanupScheduleHour)
 	}
 	if req.OutboundMode != nil {
 		org.Settings[organizationSettingOutboundMode] = normalizeOutboundMode(*req.OutboundMode)
@@ -188,7 +250,8 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 		org.Name = *req.Name
 	}
 
-	if err := requestDB.Save(&org).Error; err != nil {
+	saveDB := requestDB.Session(&gorm.Session{NewDB: true})
+	if err := saveDB.Save(&org).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
 	}
 

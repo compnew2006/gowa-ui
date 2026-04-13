@@ -46,47 +46,48 @@ func (RolePermission) TableName() string {
 
 // PermissionResource constants for available resources
 const (
-	ResourceUsers           = "users"
-	ResourceTeams           = "teams"
-	ResourceRoles           = "roles"
-	ResourceSettingsGeneral = "settings.general"
-	ResourceSettingsChatbot = "settings.chatbot"
-	ResourceSettingsSSO     = "settings.sso"
-	ResourceAccounts        = "accounts"
-	ResourceTemplates       = "templates"
-	ResourceFlowsWhatsApp   = "flows.whatsapp"
-	ResourceFlowsChatbot    = "flows.chatbot"
-	ResourceCampaigns       = "campaigns"
-	ResourceChatbotKeywords = "chatbot.keywords"
-	ResourceChatbotAI       = "chatbot.ai"
-	ResourceChat            = "chat"
-	ResourceChatAssign      = "chat.assign"
-	ResourceChatCollaborators = "chat.collaborators"
-	ResourceContacts        = "contacts"
-	ResourceTags            = "tags"
-	ResourceAnalytics       = "analytics"
-	ResourceAnalyticsAgents = "analytics.agents"
-	ResourceTransfers       = "transfers"
-	ResourceWebhooks        = "webhooks"
-	ResourceAPIKeys         = "api_keys"
-	ResourceCannedResponses = "canned_responses"
-	ResourceCustomActions   = "custom_actions"
-	ResourceOrganizations   = "organizations"
+	ResourceUsers                  = "users"
+	ResourceTeams                  = "teams"
+	ResourceRoles                  = "roles"
+	ResourceSettingsGeneral        = "settings.general"
+	ResourceSettingsChatbot        = "settings.chatbot"
+	ResourceSettingsSSO            = "settings.sso"
+	ResourceSettingsUploadsCleanup = "settings.uploads_cleanup"
+	ResourceAccounts               = "accounts"
+	ResourceTemplates              = "templates"
+	ResourceFlowsWhatsApp          = "flows.whatsapp"
+	ResourceFlowsChatbot           = "flows.chatbot"
+	ResourceCampaigns              = "campaigns"
+	ResourceChatbotKeywords        = "chatbot.keywords"
+	ResourceChatbotAI              = "chatbot.ai"
+	ResourceChat                   = "chat"
+	ResourceChatAssign             = "chat.assign"
+	ResourceChatCollaborators      = "chat.collaborators"
+	ResourceContacts               = "contacts"
+	ResourceTags                   = "tags"
+	ResourceAnalytics              = "analytics"
+	ResourceAnalyticsAgents        = "analytics.agents"
+	ResourceTransfers              = "transfers"
+	ResourceWebhooks               = "webhooks"
+	ResourceAPIKeys                = "api_keys"
+	ResourceCannedResponses        = "canned_responses"
+	ResourceCustomActions          = "custom_actions"
+	ResourceOrganizations          = "organizations"
 )
 
 // PermissionAction constants for available actions
 const (
-	ActionRead    = "read"
-	ActionWrite   = "write"
-	ActionDelete  = "delete"
+	ActionRead       = "read"
+	ActionWrite      = "write"
+	ActionDelete     = "delete"
 	ActionSoftDelete = "soft_delete"
-	ActionSync    = "sync"
-	ActionExecute = "execute"
-	ActionImport  = "import"
-	ActionExport  = "export"
-	ActionPickup  = "pickup"
-	ActionAssign  = "assign"
-	ActionPrefix  = "prefix"
+	ActionSync       = "sync"
+	ActionExecute    = "execute"
+	ActionImport     = "import"
+	ActionExport     = "export"
+	ActionPickup     = "pickup"
+	ActionAssign     = "assign"
+	ActionPrefix     = "prefix"
 )
 
 // DefaultPermissions returns the list of all available permissions to seed
@@ -114,6 +115,9 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceSettingsChatbot, Action: ActionWrite, Description: "Edit chatbot settings"},
 		{Resource: ResourceSettingsSSO, Action: ActionRead, Description: "View SSO settings"},
 		{Resource: ResourceSettingsSSO, Action: ActionWrite, Description: "Edit SSO settings"},
+		{Resource: ResourceSettingsUploadsCleanup, Action: ActionRead, Description: "View uploads cleanup settings"},
+		{Resource: ResourceSettingsUploadsCleanup, Action: ActionWrite, Description: "Edit uploads cleanup settings"},
+		{Resource: ResourceSettingsUploadsCleanup, Action: ActionExecute, Description: "Run uploads cleanup immediately"},
 
 		// Accounts
 		{Resource: ResourceAccounts, Action: ActionRead, Description: "View WhatsApp accounts"},
@@ -160,13 +164,13 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceChatCollaborators, Action: ActionRead, Description: "View chat collaborators"},
 		{Resource: ResourceChatCollaborators, Action: ActionWrite, Description: "Invite and manage chat collaborators"},
 
-	// Contacts
-	{Resource: ResourceContacts, Action: ActionRead, Description: "View contacts"},
-	{Resource: ResourceContacts, Action: ActionWrite, Description: "Create and edit contacts"},
-	{Resource: ResourceContacts, Action: ActionDelete, Description: "Delete contacts"},
-	{Resource: ResourceContacts, Action: ActionSoftDelete, Description: "Soft delete chats"},
-	{Resource: ResourceContacts, Action: ActionImport, Description: "Import contacts"},
-	{Resource: ResourceContacts, Action: ActionExport, Description: "Export contacts"},
+		// Contacts
+		{Resource: ResourceContacts, Action: ActionRead, Description: "View contacts"},
+		{Resource: ResourceContacts, Action: ActionWrite, Description: "Create and edit contacts"},
+		{Resource: ResourceContacts, Action: ActionDelete, Description: "Delete contacts"},
+		{Resource: ResourceContacts, Action: ActionSoftDelete, Description: "Soft delete chats"},
+		{Resource: ResourceContacts, Action: ActionImport, Description: "Import contacts"},
+		{Resource: ResourceContacts, Action: ActionExport, Description: "Export contacts"},
 
 		// Tags
 		{Resource: ResourceTags, Action: ActionRead, Description: "View tags"},

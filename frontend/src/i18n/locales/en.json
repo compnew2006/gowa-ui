@@ -704,6 +704,21 @@
     "selectFormat": "Select format",
     "organizationName": "Organization Name",
     "organizationPlaceholder": "Your Organization",
+    "uploadsCleanupRetentionDays": "Uploads Cleanup Retention (days)",
+    "uploadsCleanupRetentionDaysDesc": "Automatically delete transient uploaded files older than this many days. Set 0 to disable cleanup.",
+    "uploadsCleanupRetentionDaysInvalid": "Uploads cleanup retention must be a whole number between 0 and 3650.",
+    "uploadsCleanupTitle": "Uploads Cleanup",
+    "uploadsCleanupDesc": "Run local uploads cleanup on a fixed daily schedule and trigger it manually when needed.",
+    "uploadsCleanupScheduleHour": "Daily Cleanup Hour",
+    "uploadsCleanupScheduleHourDesc": "The worker runs once each day after {time} in the organization's timezone.",
+    "uploadsCleanupScheduleHourInvalid": "Uploads cleanup hour must be a whole number between 0 and 23.",
+    "uploadsCleanupTimezone": "Organization Timezone",
+    "uploadsCleanupTimezoneDesc": "Scheduled cleanup currently runs at {time} using the {timezone} timezone.",
+    "uploadsCleanupSaved": "Uploads cleanup settings saved",
+    "uploadsCleanupSaveFailed": "Failed to save uploads cleanup settings",
+    "uploadsCleanupRunNow": "Run Cleanup Now",
+    "uploadsCleanupRunSuccess": "Uploads cleanup completed. Deleted {count} file(s) using a retention of {days} day(s).",
+    "uploadsCleanupRunFailed": "Failed to run uploads cleanup",
     "maskPhoneNumbers": "Mask Phone Numbers",
     "maskPhoneNumbersDesc": "Hide phone numbers showing only last 4 digits",
     "strictSendingRestrictions": "Strict Sending Restrictions",
@@ -902,6 +917,31 @@
     "updateRoleDesc": "Update the role name, description, and permissions.",
     "createRoleDesc": "Create a new role with custom permissions.",
     "roleNameRequired": "Role name is required"
+  },
+  "permissionsUi": {
+    "resources": {
+      "settingsUploadsCleanup": "Uploads Cleanup"
+    },
+    "actions": {
+      "read": "View",
+      "write": "Create/Edit",
+      "delete": "Delete",
+      "sync": "Sync",
+      "execute": "Run",
+      "import": "Import",
+      "export": "Export",
+      "softDelete": "Soft Delete",
+      "pickup": "Pick Up",
+      "assign": "Assign",
+      "prefix": "Prefix Agent Name"
+    },
+    "descriptions": {
+      "settingsUploadsCleanup": {
+        "read": "View uploads cleanup schedule and retention settings.",
+        "write": "Edit uploads cleanup retention and fixed daily run time.",
+        "execute": "Run uploads cleanup immediately using the configured retention."
+      }
+    }
   },
   "teams": {
     "title": "Teams",
@@ -2592,6 +2632,7 @@
     "status": {
       "active": "Active",
       "grace": "Grace",
+      "disabled": "Disabled",
       "locked": "Locked",
       "activationRequired": "Activation Required",
       "unknown": "Unknown",
@@ -2602,14 +2643,17 @@
       "trial": "Trial",
       "paid": "Paid"
     },
-  "duration": {
-    "lifetime": "Lifetime",
-    "oneDay": "1 day",
-    "days": "{count} days",
-    "noExpiry": "Does not expire",
-    "unavailable": "Unavailable"
-  },
+    "duration": {
+      "lifetime": "Lifetime",
+      "oneDay": "1 day",
+      "days": "{count} days",
+      "disabled": "Disabled",
+      "disabledDescription": "License duration is not enforced while licensing is disabled.",
+      "noExpiry": "Does not expire",
+      "unavailable": "Unavailable"
+    },
     "summary": {
+      "disabled": "Licensing is disabled for this deployment. License checks are not currently enforced.",
       "paused": "Normal app usage is paused until the deployment is back within quota.",
       "grace": "This license is in grace period and must be renewed before the deadline.",
       "expiresToday": "This license expires today.",
@@ -2636,14 +2680,16 @@
       "quotaDescription": "This deployment exceeds the licensed quota. Delete enough organizations, users, or WhatsApp endpoints to resume normal app usage.",
       "expiryTitle": "License expires soon"
     },
-  "quota": {
-    "organizations": "Organizations",
-    "usersPerOrg": "Users / Org",
-    "whatsAppEndpointsPerOrg": "WA Endpoints / Org",
-    "subscriptionDays": "Subscription Days",
-    "overBy": "Over by {count}",
-    "withinCapacity": "Within licensed capacity"
-  },
+    "quota": {
+      "organizations": "Organizations",
+      "usersPerOrg": "Users / Org",
+      "whatsAppEndpointsPerOrg": "WA Endpoints / Org",
+      "subscriptionDays": "Subscription Days",
+      "notEnforced": "Limit not enforced while licensing is disabled",
+      "notEnforcedShort": "Off",
+      "overBy": "Over by {count}",
+      "withinCapacity": "Within licensed capacity"
+    },
     "organizationUsage": {
       "summary": "{users} users, {endpoints} endpoints"
     },

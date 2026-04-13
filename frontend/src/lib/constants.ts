@@ -51,6 +51,7 @@ export const RESOURCE_LABELS: Record<string, string> = {
   "settings.general": "General Settings",
   "settings.chatbot": "Chatbot Settings",
   "settings.sso": "SSO Settings",
+  "settings.uploads_cleanup": "Uploads Cleanup",
   accounts: "WhatsApp Accounts",
   templates: "Templates",
   "flows.whatsapp": "WhatsApp Flows",

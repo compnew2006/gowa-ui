@@ -131,6 +131,7 @@ export const navigationItems: NavItem[] = [
     permission: "settings.general",
     childPermissions: [
       "settings.general",
+      "settings.uploads_cleanup",
       "settings.chatbot",
       "accounts",
       "contacts",

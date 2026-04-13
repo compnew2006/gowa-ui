@@ -682,6 +682,21 @@
     "selectFormat": "اختر التنسيق",
     "organizationName": "اسم المؤسسة",
     "organizationPlaceholder": "مؤسستك",
+    "uploadsCleanupRetentionDays": "مدة الاحتفاظ بتنظيف المرفوعات (بالأيام)",
+    "uploadsCleanupRetentionDaysDesc": "احذف ملفات الرفع المؤقتة الأقدم من هذا العدد من الأيام تلقائياً. استخدم 0 لتعطيل التنظيف.",
+    "uploadsCleanupRetentionDaysInvalid": "يجب أن تكون مدة الاحتفاظ لتنظيف المرفوعات رقماً صحيحاً بين 0 و 3650.",
+    "uploadsCleanupTitle": "تنظيف المرفوعات",
+    "uploadsCleanupDesc": "شغّل تنظيف ملفات الرفع المحلية بموعد يومي ثابت مع إمكانية تشغيله يدويًا عند الحاجة.",
+    "uploadsCleanupScheduleHour": "ساعة التشغيل اليومية",
+    "uploadsCleanupScheduleHourDesc": "يعمل العامل مرة واحدة يوميًا بعد الساعة {time} بحسب المنطقة الزمنية للمؤسسة.",
+    "uploadsCleanupScheduleHourInvalid": "يجب أن تكون ساعة تنظيف المرفوعات رقمًا صحيحًا بين 0 و 23.",
+    "uploadsCleanupTimezone": "المنطقة الزمنية للمؤسسة",
+    "uploadsCleanupTimezoneDesc": "سيعمل التنظيف المجدول حاليًا عند {time} باستخدام المنطقة الزمنية {timezone}.",
+    "uploadsCleanupSaved": "تم حفظ إعدادات تنظيف المرفوعات",
+    "uploadsCleanupSaveFailed": "فشل حفظ إعدادات تنظيف المرفوعات",
+    "uploadsCleanupRunNow": "تشغيل التنظيف الآن",
+    "uploadsCleanupRunSuccess": "اكتمل تنظيف المرفوعات. تم حذف {count} ملف/ملفات باستخدام مدة احتفاظ قدرها {days} يومًا.",
+    "uploadsCleanupRunFailed": "فشل تشغيل تنظيف المرفوعات",
     "maskPhoneNumbers": "إخفاء أرقام الهواتف",
     "maskPhoneNumbersDesc": "إخفاء أرقام الهواتف مع إظهار آخر 4 أرقام فقط",
     "strictSendingRestrictions": "قيود إرسال صارمة",
@@ -880,6 +895,31 @@
     "updateRoleDesc": "تحديث اسم الدور ووصفه وصلاحياته.",
     "createRoleDesc": "إنشاء دور جديد بصلاحيات مخصصة.",
     "roleNameRequired": "اسم الدور مطلوب"
+  },
+  "permissionsUi": {
+    "resources": {
+      "settingsUploadsCleanup": "تنظيف المرفوعات"
+    },
+    "actions": {
+      "read": "عرض",
+      "write": "إنشاء/تعديل",
+      "delete": "حذف",
+      "sync": "مزامنة",
+      "execute": "تشغيل",
+      "import": "استيراد",
+      "export": "تصدير",
+      "softDelete": "حذف لين",
+      "pickup": "استلام",
+      "assign": "تعيين",
+      "prefix": "إضافة اسم الوكيل كبادئة"
+    },
+    "descriptions": {
+      "settingsUploadsCleanup": {
+        "read": "عرض جدول تنظيف المرفوعات وإعدادات مدة الاحتفاظ.",
+        "write": "تعديل مدة الاحتفاظ ووقت التشغيل اليومي الثابت لتنظيف المرفوعات.",
+        "execute": "تشغيل تنظيف المرفوعات فورًا باستخدام مدة الاحتفاظ المضبوطة."
+      }
+    }
   },
   "teams": {
     "title": "الفرق",
@@ -2567,6 +2607,7 @@
     "status": {
       "active": "نشط",
       "grace": "فترة سماح",
+      "disabled": "معطّل",
       "locked": "مقفل",
       "activationRequired": "التفعيل مطلوب",
       "unknown": "غير معروف",
@@ -2577,14 +2618,17 @@
       "trial": "تجريبي",
       "paid": "مدفوع"
     },
-  "duration": {
-    "lifetime": "مدى الحياة",
-    "oneDay": "يوم واحد",
-    "days": "{count} يوم",
-    "noExpiry": "لا تنتهي",
-    "unavailable": "غير متاح"
-  },
+    "duration": {
+      "lifetime": "مدى الحياة",
+      "oneDay": "يوم واحد",
+      "days": "{count} يوم",
+      "disabled": "معطّل",
+      "disabledDescription": "لا يتم فرض مدة الترخيص عندما يكون نظام الترخيص معطلاً.",
+      "noExpiry": "لا تنتهي",
+      "unavailable": "غير متاح"
+    },
     "summary": {
+      "disabled": "نظام الترخيص معطّل لهذا النشر حالياً، لذلك لا يتم فرض فحوصات الترخيص.",
       "paused": "تم إيقاف الاستخدام الطبيعي للتطبيق حتى يعود هذا النشر إلى حدود الحصة المسموح بها.",
       "grace": "هذا الترخيص ضمن فترة السماح ويجب تجديده قبل الموعد النهائي.",
       "expiresToday": "ينتهي هذا الترخيص اليوم.",
@@ -2611,14 +2655,16 @@
       "quotaDescription": "يتجاوز هذا النشر الحصة المرخّصة. احذف عدداً كافياً من المؤسسات أو المستخدمين أو نقاط نهاية واتساب لاستئناف الاستخدام الطبيعي للتطبيق.",
       "expiryTitle": "الترخيص سينتهي قريباً"
     },
-  "quota": {
-    "organizations": "المؤسسات",
-    "usersPerOrg": "المستخدمون / المؤسسة",
-    "whatsAppEndpointsPerOrg": "نقاط واتساب / المؤسسة",
-    "subscriptionDays": "أيام الاشتراك",
-    "overBy": "تجاوز بمقدار {count}",
-    "withinCapacity": "ضمن السعة المرخّصة"
-  },
+    "quota": {
+      "organizations": "المؤسسات",
+      "usersPerOrg": "المستخدمون / المؤسسة",
+      "whatsAppEndpointsPerOrg": "نقاط واتساب / المؤسسة",
+      "subscriptionDays": "أيام الاشتراك",
+      "notEnforced": "لا يتم فرض الحد عندما يكون نظام الترخيص معطلاً",
+      "notEnforcedShort": "معطّل",
+      "overBy": "تجاوز بمقدار {count}",
+      "withinCapacity": "ضمن السعة المرخّصة"
+    },
     "organizationUsage": {
       "summary": "{users} مستخدم، {endpoints} نقطة نهاية"
     },

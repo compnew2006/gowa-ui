@@ -8,6 +8,7 @@ declare module "vue-router" {
   interface RouteMeta {
     requiresAuth?: boolean;
     permission?: string; // Resource permission required (e.g., 'analytics', 'chat')
+    permissionsAny?: string[];
     metaOnly?: boolean; // Route only available when provider is "meta"
     adminOnly?: boolean; // Route only available for admin/super-admin users
     managerOrAdminOnly?: boolean; // Route only available for manager/admin/super-admin users
@@ -172,7 +173,9 @@ const router = createRouter({
           path: "settings",
           name: "settings",
           component: () => import("@/views/settings/SettingsView.vue"),
-          meta: { permission: "settings.general" },
+          meta: {
+            permissionsAny: ["settings.general", "settings.uploads_cleanup"],
+          },
         },
         {
           path: "settings/chatbot",
@@ -306,6 +309,7 @@ const navigationOrder = [
     permission: "settings.general",
     childPaths: [
       { path: "/settings", permission: "settings.general" },
+      { path: "/settings", permission: "settings.uploads_cleanup" },
       { path: "/settings/chatbot", permission: "settings.chatbot" },
       { path: "/settings/instances", permission: "accounts" },
       { path: "/settings/accounts", permission: "accounts" },
@@ -412,6 +416,21 @@ router.beforeEach(async (to, _from, next) => {
     }
 
     // Check permission-based access
+    const requiredPermissionsAny = to.meta.permissionsAny;
+    if (requiredPermissionsAny?.length) {
+      const hasAnyRequiredPermission = requiredPermissionsAny.some(
+        (permission) => authStore.hasPermission(permission, "read"),
+      );
+      if (!hasAnyRequiredPermission) {
+        const fallback = getFirstAccessibleRoute(authStore);
+        console.warn(`Access denied to ${to.path}. Redirecting to ${fallback}`);
+        if (fallback === to.path) {
+          return next({ name: "profile" });
+        }
+        return next({ path: fallback });
+      }
+    }
+
     const requiredPermission = to.meta.permission;
     if (requiredPermission) {
       if (!authStore.hasPermission(requiredPermission, "read")) {
