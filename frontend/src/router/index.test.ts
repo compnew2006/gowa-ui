@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const authStore = {
   isAuthenticated: true,
   restoreSession: vi.fn(async () => true),
-  hasPermission: vi.fn(() => true),
+  hasPermission: vi.fn<(resource: string, action?: string) => boolean>(
+    () => true,
+  ),
   user: null as any,
   userRole: "admin",
 };
@@ -73,5 +75,17 @@ describe("router license route", () => {
     await router.isReady();
 
     expect(router.currentRoute.value.name).toBe("license-cleanup");
+  });
+
+  it("allows users with uploads cleanup permission to access /settings", async () => {
+    const { default: router } = await import("./index");
+    authStore.hasPermission.mockImplementation(
+      (permission: string) => permission === "settings.uploads_cleanup",
+    );
+
+    await router.push("/settings");
+    await router.isReady();
+
+    expect(router.currentRoute.value.path).toBe("/settings");
   });
 });

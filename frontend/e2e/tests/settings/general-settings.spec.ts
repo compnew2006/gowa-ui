@@ -41,6 +41,14 @@ test.describe("General Tab", () => {
     await expect(settingsPage.orgNameInput).toBeVisible();
   });
 
+  test("should have uploads cleanup retention days field", async () => {
+    await expect(settingsPage.uploadsCleanupRetentionInput).toBeVisible();
+  });
+
+  test("should have uploads cleanup schedule hour field", async () => {
+    await expect(settingsPage.uploadsCleanupScheduleHourInput).toBeVisible();
+  });
+
   test("should have timezone selector", async () => {
     await expect(settingsPage.timezoneSelect).toBeVisible();
   });
@@ -94,6 +102,26 @@ test.describe("General Tab", () => {
     await settingsPage.fillOrgName("Test Organization");
     await settingsPage.saveGeneralSettings();
     await settingsPage.expectToast(/saved|success/i);
+  });
+
+  test("should save uploads cleanup retention days without a fatal error", async ({
+    page,
+  }) => {
+    await settingsPage.fillUploadsCleanupRetentionDays("6");
+    await settingsPage.fillUploadsCleanupScheduleHour("4");
+    await settingsPage.saveUploadsCleanupSettings();
+
+    await settingsPage.expectToast(/saved|success/i);
+    await expect(settingsPage.uploadsCleanupRetentionInput).toHaveValue("6");
+    await expect(settingsPage.uploadsCleanupScheduleHourInput).toHaveValue("4");
+    await expect(page.getByText("Something went wrong")).toHaveCount(0);
+  });
+
+  test("should run uploads cleanup immediately", async ({ page }) => {
+    await settingsPage.runUploadsCleanupNow();
+
+    await settingsPage.expectToast(/cleanup completed|saved|success/i);
+    await expect(page.getByText("Something went wrong")).toHaveCount(0);
   });
 });
 

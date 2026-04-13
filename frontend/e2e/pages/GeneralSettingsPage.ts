@@ -10,6 +10,10 @@ export class GeneralSettingsPage extends BasePage {
   readonly chatTab: Locator;
   readonly notificationsTab: Locator;
   readonly orgNameInput: Locator;
+  readonly uploadsCleanupRetentionInput: Locator;
+  readonly uploadsCleanupScheduleHourInput: Locator;
+  readonly uploadsCleanupSaveButton: Locator;
+  readonly uploadsCleanupRunNowButton: Locator;
   readonly timezoneSelect: Locator;
   readonly dateFormatSelect: Locator;
   readonly saveButton: Locator;
@@ -21,6 +25,16 @@ export class GeneralSettingsPage extends BasePage {
     this.chatTab = page.getByRole("tab", { name: /Chat/i });
     this.notificationsTab = page.getByRole("tab", { name: /Notifications/i });
     this.orgNameInput = page.locator("input#org_name");
+    this.uploadsCleanupRetentionInput = page.getByTestId(
+      "uploads-cleanup-retention-days-input",
+    );
+    this.uploadsCleanupScheduleHourInput = page.getByTestId(
+      "uploads-cleanup-schedule-hour-input",
+    );
+    this.uploadsCleanupSaveButton = page.getByTestId("uploads-cleanup-save");
+    this.uploadsCleanupRunNowButton = page.getByTestId(
+      "uploads-cleanup-run-now",
+    );
     // Use label-based selectors for comboboxes
     this.timezoneSelect = page
       .locator("label")
@@ -82,6 +96,14 @@ export class GeneralSettingsPage extends BasePage {
     await this.orgNameInput.fill(name);
   }
 
+  async fillUploadsCleanupRetentionDays(value: string) {
+    await this.uploadsCleanupRetentionInput.fill(value);
+  }
+
+  async fillUploadsCleanupScheduleHour(value: string) {
+    await this.uploadsCleanupScheduleHourInput.fill(value);
+  }
+
   async selectTimezone(value: string) {
     await this.timezoneSelect.click();
     await this.page
@@ -104,6 +126,14 @@ export class GeneralSettingsPage extends BasePage {
 
   async saveGeneralSettings() {
     await this.saveButton.first().click();
+  }
+
+  async runUploadsCleanupNow() {
+    await this.uploadsCleanupRunNowButton.click();
+  }
+
+  async saveUploadsCleanupSettings() {
+    await this.uploadsCleanupSaveButton.click();
   }
 
   // Notification settings helpers

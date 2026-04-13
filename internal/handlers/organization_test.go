@@ -6,6 +6,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,8 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 	org.Settings = models.JSONB{
 		"mask_phone_numbers":                  true,
 		"strict_sending_restrictions_enabled": true,
+		"uploads_cleanup_retention_days":      5,
+		"uploads_cleanup_schedule_hour":       4,
 		"timezone":                            "Asia/Kolkata",
 		"date_format":                         "DD/MM/YYYY",
 		"assigned_chat_reset_enabled":         true,
@@ -56,6 +59,8 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 
 	assert.Equal(t, true, resp.Data.Settings["mask_phone_numbers"])
 	assert.Equal(t, true, resp.Data.Settings["strict_sending_restrictions_enabled"])
+	assert.Equal(t, float64(5), resp.Data.Settings["uploads_cleanup_retention_days"])
+	assert.Equal(t, float64(4), resp.Data.Settings["uploads_cleanup_schedule_hour"])
 	assert.Equal(t, "Asia/Kolkata", resp.Data.Settings["timezone"])
 	assert.Equal(t, "DD/MM/YYYY", resp.Data.Settings["date_format"])
 	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_enabled")
@@ -94,6 +99,8 @@ func TestApp_GetOrganizationSettings_Defaults(t *testing.T) {
 
 	assert.Equal(t, false, resp.Data.Settings["mask_phone_numbers"])
 	assert.Equal(t, false, resp.Data.Settings["strict_sending_restrictions_enabled"])
+	assert.Equal(t, float64(0), resp.Data.Settings["uploads_cleanup_retention_days"])
+	assert.Equal(t, float64(3), resp.Data.Settings["uploads_cleanup_schedule_hour"])
 	assert.Equal(t, "UTC", resp.Data.Settings["timezone"])
 	assert.Equal(t, "YYYY-MM-DD", resp.Data.Settings["date_format"])
 	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_enabled")
@@ -141,6 +148,8 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"mask_phone_numbers":                  maskEnabled,
 		"strict_sending_restrictions_enabled": true,
+		"uploads_cleanup_retention_days":      7,
+		"uploads_cleanup_schedule_hour":       6,
 		"timezone":                            timezone,
 		"date_format":                         dateFormat,
 		"name":                                newName,
@@ -167,12 +176,47 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	assert.Equal(t, newName, updatedOrg.Name)
 	assert.Equal(t, true, updatedOrg.Settings["mask_phone_numbers"])
 	assert.Equal(t, true, updatedOrg.Settings["strict_sending_restrictions_enabled"])
+	assert.EqualValues(t, 7, updatedOrg.Settings["uploads_cleanup_retention_days"])
+	assert.EqualValues(t, 6, updatedOrg.Settings["uploads_cleanup_schedule_hour"])
 	assert.Equal(t, "America/New_York", updatedOrg.Settings["timezone"])
 	assert.Equal(t, "MM/DD/YYYY", updatedOrg.Settings["date_format"])
 	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_enabled")
 	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_mode")
 	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_hour")
 	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_last_date")
+}
+
+func TestApp_UpdateOrganizationSettings_SuccessWithScopedDB(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("update-settings-scoped")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"mask_phone_numbers":             false,
+		"uploads_cleanup_retention_days": 5,
+		"uploads_cleanup_schedule_hour":  8,
+		"timezone":                       "UTC",
+		"date_format":                    "YYYY-MM-DD",
+		"name":                           "Scoped Org",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	tenant.SetScopedDB(req, tenant.ScopedDB(app.DB, org.ID))
+
+	err := app.UpdateOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var updatedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&updatedOrg).Error)
+	assert.Equal(t, "Scoped Org", updatedOrg.Name)
+	assert.EqualValues(t, 5, updatedOrg.Settings["uploads_cleanup_retention_days"])
+	assert.EqualValues(t, 8, updatedOrg.Settings["uploads_cleanup_schedule_hour"])
 }
 
 func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
@@ -188,12 +232,14 @@ func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
 
 	// Set initial settings
 	org.Settings = models.JSONB{
-		"mask_phone_numbers":          false,
-		"timezone":                    "UTC",
-		"date_format":                 "YYYY-MM-DD",
-		"assigned_chat_reset_enabled": false,
-		"assigned_chat_reset_mode":    "custom_hour",
-		"assigned_chat_reset_hour":    8,
+		"mask_phone_numbers":             false,
+		"uploads_cleanup_retention_days": 14,
+		"uploads_cleanup_schedule_hour":  10,
+		"timezone":                       "UTC",
+		"date_format":                    "YYYY-MM-DD",
+		"assigned_chat_reset_enabled":    false,
+		"assigned_chat_reset_mode":       "custom_hour",
+		"assigned_chat_reset_hour":       8,
 	}
 	require.NoError(t, app.DB.Save(org).Error)
 	originalName := org.Name
@@ -214,6 +260,8 @@ func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
 
 	assert.Equal(t, originalName, updatedOrg.Name)
 	assert.Equal(t, false, updatedOrg.Settings["mask_phone_numbers"])
+	assert.EqualValues(t, 14, updatedOrg.Settings["uploads_cleanup_retention_days"])
+	assert.EqualValues(t, 10, updatedOrg.Settings["uploads_cleanup_schedule_hour"])
 	assert.Equal(t, "Europe/London", updatedOrg.Settings["timezone"])
 	assert.Equal(t, "YYYY-MM-DD", updatedOrg.Settings["date_format"])
 	assert.NotContains(t, updatedOrg.Settings, "assigned_chat_reset_enabled")
@@ -398,6 +446,140 @@ func TestApp_UpdateOrganizationSettings_InvalidJSON(t *testing.T) {
 	err := app.UpdateOrganizationSettings(req)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_UpdateOrganizationSettings_InvalidUploadsCleanupRetentionDays(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("invalid-uploads-retention")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"uploads_cleanup_retention_days": -1,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.UpdateOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_UpdateOrganizationSettings_InvalidUploadsCleanupScheduleHour(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("invalid-uploads-hour")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"uploads_cleanup_schedule_hour": 24,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.UpdateOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_GetOrganizationSettings_SuccessWithUploadsCleanupPermissionOnly(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "cleanup-reader", []string{
+		"settings.uploads_cleanup:read",
+	})
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("cleanup-reader")),
+		testutil.WithRoleID(&role.ID),
+	)
+
+	org.Settings = models.JSONB{
+		"mask_phone_numbers":             true,
+		"uploads_cleanup_retention_days": 9,
+		"uploads_cleanup_schedule_hour":  5,
+		"timezone":                       "Europe/Cairo",
+	}
+	require.NoError(t, app.DB.Save(org).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.GetOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Settings map[string]any `json:"settings"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, float64(9), resp.Data.Settings["uploads_cleanup_retention_days"])
+	assert.Equal(t, float64(5), resp.Data.Settings["uploads_cleanup_schedule_hour"])
+	assert.Equal(t, "Europe/Cairo", resp.Data.Settings["timezone"])
+	assert.Equal(t, false, resp.Data.Settings["mask_phone_numbers"])
+}
+
+func TestApp_UpdateOrganizationSettings_UploadsCleanupPermissionOnly(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "cleanup-writer", []string{
+		"settings.uploads_cleanup:write",
+	})
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("cleanup-writer")),
+		testutil.WithRoleID(&role.ID),
+	)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"uploads_cleanup_retention_days": 12,
+		"uploads_cleanup_schedule_hour":  7,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.UpdateOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var updatedOrg models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&updatedOrg).Error)
+	assert.EqualValues(t, 12, updatedOrg.Settings["uploads_cleanup_retention_days"])
+	assert.EqualValues(t, 7, updatedOrg.Settings["uploads_cleanup_schedule_hour"])
+}
+
+func TestApp_UpdateOrganizationSettings_RejectsUploadsCleanupWithoutPermission(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "general-writer", []string{
+		"settings.general:write",
+	})
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("general-writer")),
+		testutil.WithRoleID(&role.ID),
+	)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"uploads_cleanup_retention_days": 4,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.UpdateOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 }
 
 // --- GetCurrentOrganization Tests ---

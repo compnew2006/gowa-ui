@@ -2,6 +2,14 @@ import { APIRequestContext } from "@playwright/test";
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 const E2E_TEST_PASSWORD = "Password123!";
+const E2E_ADMIN_EMAIL =
+  process.env.E2E_ADMIN_EMAIL ||
+  process.env.E2E_SUPERADMIN_EMAIL ||
+  "admin@test.com";
+const E2E_ADMIN_PASSWORD =
+  process.env.E2E_ADMIN_PASSWORD ||
+  process.env.E2E_SUPERADMIN_PASSWORD ||
+  E2E_TEST_PASSWORD;
 
 export interface Permission {
   id: string;
@@ -74,7 +82,7 @@ export class ApiHelper {
   }
 
   async loginAsAdmin(): Promise<void> {
-    await this.login("admin@test.com", E2E_TEST_PASSWORD);
+    await this.login(E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD);
   }
 
   // Register a user into an existing organization
@@ -426,10 +434,12 @@ export class ApiHelper {
       `${BASE_URL}/api/contacts/${contactId}/soft-delete`,
       {
         headers: this.csrfHeaders,
-      }
+      },
     );
     if (!response.ok()) {
-      throw new Error(`Failed to soft delete contact: ${await response.text()}`);
+      throw new Error(
+        `Failed to soft delete contact: ${await response.text()}`,
+      );
     }
   }
 
