@@ -100,4 +100,26 @@ describe("useLicenseStore", () => {
     expect(store.state.reason).toBe("time_rollback");
     expect(store.state.hwid_full).toBe("server-hwid");
   });
+
+  it("exposes disabled licensing state without marking the deployment as locked", () => {
+    const store = useLicenseStore();
+
+    store.setState({
+      enabled: false,
+      status: "disabled",
+      locked: false,
+      hwid_full: "server-hwid",
+      hwid_short: "server-short",
+      hwid_hash: "server-hash",
+      max_organizations: 0,
+      max_users_per_org: 0,
+      max_whatsapp_endpoints_per_org: 0,
+      max_workers: 0,
+      expiring_soon: false,
+      quota_overages: {},
+    });
+
+    expect(store.isDisabled).toBe(true);
+    expect(store.isLocked).toBe(false);
+  });
 });

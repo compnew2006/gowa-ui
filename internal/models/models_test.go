@@ -7,6 +7,8 @@ import (
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
 
@@ -348,4 +350,20 @@ func TestOrganizationConfigSchema_UsesExpectedColumnNames(t *testing.T) {
 	assert.Equal(t, "worker_count", s.LookUpField("WorkerCount").DBName)
 	assert.Equal(t, "max_queue_size", s.LookUpField("MaxQueueSize").DBName)
 	assert.Equal(t, "max_whatsapp_instances", s.LookUpField("MaxWhatsAppInstances").DBName)
+}
+
+func TestCustomJSONTypes_AutoMigrateOnSQLite(t *testing.T) {
+	t.Parallel()
+
+	type jsonHolder struct {
+		ID       uint
+		Metadata models.JSONB
+		Items    models.JSONBArray
+		Keywords models.StringArray
+	}
+
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+
+	require.NoError(t, db.AutoMigrate(&jsonHolder{}))
 }

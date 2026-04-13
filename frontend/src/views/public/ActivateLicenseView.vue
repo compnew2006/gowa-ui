@@ -49,6 +49,27 @@ onMounted(() => {
   void loadBootstrap();
 });
 
+function getQuotaLimitLabel(limit: number) {
+  if (licenseStore.isDisabled || limit <= 0) {
+    return "Not enforced";
+  }
+  return String(limit);
+}
+
+function getQuotaUsageLabel(
+  limit: number,
+  overQuota: boolean,
+  overage: number,
+) {
+  if (licenseStore.isDisabled || limit <= 0) {
+    return "Licensing is disabled for this deployment";
+  }
+  if (overQuota) {
+    return `Over by ${overage}`;
+  }
+  return "Within licensed capacity";
+}
+
 async function handleActivationSubmit() {
   await submitActivation({
     onSuccess: async () => {
@@ -180,7 +201,9 @@ async function handleActivationSubmit() {
                     {{ item.label }}
                   </CardDescription>
                   <CardTitle class="text-2xl">
-                    {{ item.usage.current }}/{{ item.usage.limit || 0 }}
+                    {{ item.usage.current }}/{{
+                      getQuotaLimitLabel(item.usage.limit)
+                    }}
                   </CardTitle>
                 </CardHeader>
                 <CardContent class="space-y-3 pt-0">
@@ -198,9 +221,11 @@ async function handleActivationSubmit() {
                     "
                   >
                     {{
-                      item.usage.over_quota
-                        ? `Over by ${item.usage.overage}`
-                        : "Within licensed capacity"
+                      getQuotaUsageLabel(
+                        item.usage.limit,
+                        item.usage.over_quota,
+                        item.usage.overage,
+                      )
                     }}
                   </p>
                 </CardContent>

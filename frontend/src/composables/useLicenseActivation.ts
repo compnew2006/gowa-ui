@@ -51,6 +51,8 @@ export function useLicenseActivation() {
         return "success";
       case "grace":
         return "warning";
+      case "disabled":
+        return "secondary";
       case "locked":
       case "unlicensed":
         return "destructive";
@@ -65,6 +67,8 @@ export function useLicenseActivation() {
         return t("licenseSettings.status.active");
       case "grace":
         return t("licenseSettings.status.grace");
+      case "disabled":
+        return t("licenseSettings.status.disabled");
       case "locked":
         return t("licenseSettings.status.locked");
       case "unlicensed":

@@ -3,6 +3,8 @@ package handlers_test
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -81,4 +83,81 @@ func TestServeMedia_StreamsFromObjectStorage(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 	assert.Equal(t, "application/pdf", string(req.RequestCtx.Response.Header.ContentType()))
 	assert.Equal(t, 1, storage.getCalls)
+}
+
+func TestServeMedia_StreamsLegacyLocalMedia(t *testing.T) {
+	app := newTestApp(t)
+	testutil.TruncateTables(app.DB)
+
+	tempDir := t.TempDir()
+	app.Config.Storage.LocalPath = tempDir
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "chat-reader", []string{"chat:read"})
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	relativePath := filepath.Join("documents", "legacy-report.pdf")
+	fullPath := filepath.Join(tempDir, relativePath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o750))
+	require.NoError(t, os.WriteFile(fullPath, []byte("legacy-pdf"), 0o600))
+
+	message := models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       contact.ID,
+		WhatsAppAccount: "whatsmeow",
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeDocument,
+		Content:         "Legacy document",
+		MediaURL:        relativePath,
+		MediaMimeType:   "application/pdf",
+		MediaFilename:   "legacy-report.pdf",
+		Status:          models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(&message).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.ServeMedia(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	assert.Equal(t, "application/pdf", string(req.RequestCtx.Response.Header.ContentType()))
+	assert.Equal(t, `inline; filename="legacy-report.pdf"`, string(req.RequestCtx.Response.Header.Peek("Content-Disposition")))
+	assert.Equal(t, "legacy-pdf", string(req.RequestCtx.Response.Body()))
+}
+
+func TestServeMedia_ReturnsNotFoundForMissingLegacyLocalMedia(t *testing.T) {
+	app := newTestApp(t)
+	testutil.TruncateTables(app.DB)
+
+	app.Config.Storage.LocalPath = t.TempDir()
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "chat-reader", []string{"chat:read"})
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	message := models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       contact.ID,
+		WhatsAppAccount: "whatsmeow",
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeDocument,
+		Content:         "Missing legacy document",
+		MediaURL:        filepath.Join("documents", "missing.pdf"),
+		MediaMimeType:   "application/pdf",
+		MediaFilename:   "missing.pdf",
+		Status:          models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(&message).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.ServeMedia(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
 }

@@ -1196,9 +1196,6 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 			Direction:       m.Direction,
 			MessageType:     m.MessageType,
 			Content:         content,
-			MediaURL:        m.MediaURL,
-			MediaMimeType:   m.MediaMimeType,
-			MediaFilename:   m.MediaFilename,
 			Metadata:        m.Metadata,
 			InteractiveData: m.InteractiveData,
 			Status:          m.Status,
@@ -1208,6 +1205,11 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 			WhatsAppAccount: m.WhatsAppAccount,
 			CreatedAt:       m.CreatedAt,
 			UpdatedAt:       m.UpdatedAt,
+		}
+		if messageHasVisibleMedia(&m) {
+			msgResp.MediaURL = m.MediaURL
+			msgResp.MediaMimeType = m.MediaMimeType
+			msgResp.MediaFilename = m.MediaFilename
 		}
 
 		if m.InstanceID != nil {
@@ -1231,14 +1233,16 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 					replyContent = MaskPhoneNumbersInText(replyContent)
 				}
 				msgResp.ReplyToMessage = &ReplyPreview{
-					ID:            m.ReplyToMessage.ID.String(),
-					Content:       map[string]string{"body": replyContent},
-					MessageType:   m.ReplyToMessage.MessageType,
-					Direction:     m.ReplyToMessage.Direction,
-					SenderPhone:   replySenderPhone,
-					MediaURL:      m.ReplyToMessage.MediaURL,
-					MediaMimeType: m.ReplyToMessage.MediaMimeType,
-					MediaFilename: m.ReplyToMessage.MediaFilename,
+					ID:          m.ReplyToMessage.ID.String(),
+					Content:     map[string]string{"body": replyContent},
+					MessageType: m.ReplyToMessage.MessageType,
+					Direction:   m.ReplyToMessage.Direction,
+					SenderPhone: replySenderPhone,
+				}
+				if messageHasVisibleMedia(m.ReplyToMessage) {
+					msgResp.ReplyToMessage.MediaURL = m.ReplyToMessage.MediaURL
+					msgResp.ReplyToMessage.MediaMimeType = m.ReplyToMessage.MediaMimeType
+					msgResp.ReplyToMessage.MediaFilename = m.ReplyToMessage.MediaFilename
 				}
 			}
 

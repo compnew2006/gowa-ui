@@ -180,4 +180,56 @@ describe('websocket message_media_updated', () => {
     expect(fetchContact).toHaveBeenCalledTimes(1)
     expect(fetchContact).toHaveBeenCalledWith('contact-42')
   })
+
+  it('skips unknown-contact fetches for restricted users when the message instance is out of scope', async () => {
+    const fetchContact = vi.fn()
+    const addMessage = vi.fn(() => true)
+
+    vi.mocked(useContactsStore).mockReturnValue({
+      currentContact: null,
+      contacts: [],
+      addMessage,
+      fetchContact,
+      patchContact: vi.fn(),
+      messages: [],
+    } as unknown as ReturnType<typeof useContactsStore>)
+    vi.mocked(useAuthStore).mockReturnValue({
+      user: {
+        id: 'agent-1',
+        role: {
+          name: 'agent',
+        },
+        is_super_admin: false,
+        settings: {
+          send_restrictions: {
+            allowed_instance_ids: ['instance-a'],
+          },
+        },
+      },
+      userSettings: {
+        new_message_alerts: false,
+      },
+    } as unknown as ReturnType<typeof useAuthStore>)
+
+    ;(wsService as any).handleMessage(JSON.stringify({
+      type: 'new_message',
+      payload: {
+        id: 'message-99',
+        contact_id: 'contact-99',
+        instance_id: 'instance-b',
+        direction: 'incoming',
+        content: { body: 'blocked' },
+        message_type: 'text',
+        status: 'received',
+        created_at: '2026-03-03T10:00:00.000Z',
+        updated_at: '2026-03-03T10:00:00.000Z',
+      },
+    }))
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(addMessage).toHaveBeenCalledTimes(1)
+    expect(fetchContact).not.toHaveBeenCalled()
+  })
 })

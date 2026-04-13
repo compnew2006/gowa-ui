@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // AssignContactRequest represents the request to assign a contact to a user
@@ -101,6 +102,25 @@ func (a *App) canUserSeeContactInstance(orgID, userID uuid.UUID, contact *models
 	}
 
 	return containsRestrictedUUID(allowedInstanceIDs, *contact.InstanceID), nil
+}
+
+func (a *App) buildLifecycleContactQuery(
+	requestDB *gorm.DB,
+	orgID, userID, contactID uuid.UUID,
+) (*gorm.DB, error) {
+	query := requestDB.Session(&gorm.Session{}).
+		Model(&models.Contact{}).
+		Where("contacts.id = ? AND contacts.organization_id = ?", contactID, orgID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
+	}
+
+	restrictedInstanceIDs, err := a.getRestrictedInstancesForUser(orgID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs), nil
 }
 
 func (a *App) canEmitChatAssignmentSystemMessage(userID, orgID uuid.UUID) bool {
@@ -244,7 +264,12 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	if err := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+	query, scopeErr := a.buildLifecycleContactQuery(requestDB, orgID, userID, contactID)
+	if scopeErr != nil {
+		a.Log.Error("Failed to resolve restricted instance for claim", "error", scopeErr, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to claim chat", nil, "")
+	}
+	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat not found", nil, "")
 	}
 
@@ -256,17 +281,19 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Chat is already assigned to another user", nil, "")
 	}
 	if status != models.ChatStatusPending && contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
-		_ = requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
+		_ = requestDB.Session(&gorm.Session{}).Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
 		a.appendClaimedChatSystemMessage(&contact, userID)
 		return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 	}
 
-	if err := requestDB.Model(&contact).Updates(chatAssignmentUpdates(&userID)).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(chatAssignmentUpdates(&userID)).Error; err != nil {
 		a.Log.Error("Failed to claim chat", "error", err, "chat_id", contactID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to claim chat", nil, "")
 	}
 
-	if err := requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 
@@ -296,13 +323,18 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	if err := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+	query, scopeErr := a.buildLifecycleContactQuery(requestDB, orgID, userID, contactID)
+	if scopeErr != nil {
+		a.Log.Error("Failed to resolve restricted instance for close", "error", scopeErr, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chat", nil, "")
+	}
+	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat not found", nil, "")
 	}
 
 	status := normalizeContactStatus(&contact)
 	if status == models.ChatStatusClosed {
-		_ = requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
+		_ = requestDB.Session(&gorm.Session{}).Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
 		return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 	}
 
@@ -310,12 +342,14 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Only the assigned user can close this chat", nil, "")
 	}
 
-	if err := requestDB.Model(&contact).Updates(closeChatUpdates(userID, contact.AssignedUserID)).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(closeChatUpdates(userID, contact.AssignedUserID)).Error; err != nil {
 		a.Log.Error("Failed to close chat", "error", err, "chat_id", contactID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chat", nil, "")
 	}
 
-	if err := requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 
@@ -346,7 +380,12 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	if err := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+	query, scopeErr := a.buildLifecycleContactQuery(requestDB, orgID, userID, contactID)
+	if scopeErr != nil {
+		a.Log.Error("Failed to resolve restricted instance for reopen", "error", scopeErr, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to reopen chat", nil, "")
+	}
+	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat not found", nil, "")
 	}
 
@@ -354,12 +393,14 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Only closed chats can be reopened", nil, "")
 	}
 
-	if err := requestDB.Model(&contact).Updates(reopenChatUpdates()).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Updates(reopenChatUpdates()).Error; err != nil {
 		a.Log.Error("Failed to reopen chat", "error", err, "chat_id", contactID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to reopen chat", nil, "")
 	}
 
-	if err := requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
@@ -396,21 +437,28 @@ func (a *App) SetChatPublic(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	if err := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+	query, scopeErr := a.buildLifecycleContactQuery(requestDB, orgID, userID, contactID)
+	if scopeErr != nil {
+		a.Log.Error("Failed to resolve restricted instance for visibility update", "error", scopeErr, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update chat visibility", nil, "")
+	}
+	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Chat not found", nil, "")
 	}
 
 	if contact.IsPublic == req.IsPublic {
-		_ = requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
+		_ = requestDB.Session(&gorm.Session{}).Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error
 		return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 	}
 
-	if err := requestDB.Model(&contact).Update("is_public", req.IsPublic).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Model(&models.Contact{}).
+		Where("id = ?", contact.ID).
+		Update("is_public", req.IsPublic).Error; err != nil {
 		a.Log.Error("Failed to update chat public visibility", "error", err, "chat_id", contactID, "user_id", userID, "is_public", req.IsPublic)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update chat visibility", nil, "")
 	}
 
-	if err := requestDB.Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Preload("ClosedByUser").Where("id = ?", contactID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 

@@ -1310,6 +1310,33 @@ func TestAuthCookies_SecurityAttributes(t *testing.T) {
 	assert.True(t, refreshCookie.HTTPOnly(), "Refresh cookie should be HTTPOnly")
 }
 
+func TestAuthCookies_ClearLegacyVariantsOnLogin(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	email := testutil.UniqueEmail("cookie-legacy")
+	password := "password123"
+	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword(password))
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"email":    email,
+		"password": password,
+	})
+	req.RequestCtx.Request.SetHost("ofuqalmadenah.com")
+
+	err := app.Login(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	accessCookies := getAllCookieDetails(req, "whm_access")
+	require.NotEmpty(t, accessCookies)
+	assert.True(t, hasCookieVariant(accessCookies, "/api", false))
+	assert.True(t, hasCookieVariant(accessCookies, "/", true))
+
+	legacyCookies := getAllCookieDetails(req, "whm_token")
+	require.NotEmpty(t, legacyCookies)
+	assert.True(t, hasCookieVariant(legacyCookies, "/", true))
+}
+
 func TestLogout_CookiesCleared(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
@@ -1363,4 +1390,44 @@ func getCookieDetails(req *fastglue.Request, name string) *fasthttp.Cookie {
 		}
 	})
 	return found
+}
+
+func getAllCookieDetails(req *fastglue.Request, name string) []*fasthttp.Cookie {
+	var found []*fasthttp.Cookie
+	req.RequestCtx.Response.Header.VisitAllCookie(func(key, val []byte) {
+		c := fasthttp.AcquireCookie()
+		defer fasthttp.ReleaseCookie(c)
+		if err := c.ParseBytes(val); err != nil || string(c.Key()) != name {
+			return
+		}
+
+		foundCopy := fasthttp.AcquireCookie()
+		foundCopy.SetKeyBytes(c.Key())
+		foundCopy.SetValueBytes(c.Value())
+		foundCopy.SetHTTPOnly(c.HTTPOnly())
+		foundCopy.SetSecure(c.Secure())
+		foundCopy.SetPathBytes(c.Path())
+		foundCopy.SetDomainBytes(c.Domain())
+		foundCopy.SetExpire(c.Expire())
+		found = append(found, foundCopy)
+	})
+	return found
+}
+
+func hasCookieVariant(cookies []*fasthttp.Cookie, path string, expectEmptyValue bool) bool {
+	for _, cookie := range cookies {
+		if string(cookie.Path()) != path {
+			continue
+		}
+		if expectEmptyValue {
+			if len(cookie.Value()) == 0 {
+				return true
+			}
+			continue
+		}
+		if len(cookie.Value()) > 0 {
+			return true
+		}
+	}
+	return false
 }

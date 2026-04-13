@@ -57,9 +57,14 @@ const showAwayWarning = ref(false);
 const awayWarningTransferCount = ref(0);
 const isRTL = computed(() => localeDirectionManager.isRTL(locale.value));
 const isExpanded = computed(() => props.expanded ?? !props.collapsed);
+const canReadTransfers = computed(
+  () =>
+    authStore.hasPermission("transfers", "read") ||
+    authStore.hasPermission("transfers", "write"),
+);
 
 const handleAvailabilityChange = async (checked: boolean) => {
-  if (!checked) {
+  if (!checked && canReadTransfers.value) {
     isCheckingTransfers.value = true;
     try {
       const response = await chatbotService.listTransfers({ status: "active" });

@@ -121,6 +121,7 @@ export const useLicenseStore = defineStore("license", () => {
 
   const status = computed(() => state.value.status);
   const isLocked = computed(() => Boolean(state.value.locked));
+  const isDisabled = computed(() => status.value === "disabled");
   const isActive = computed(
     () => status.value === "active" || status.value === "grace",
   );
@@ -217,6 +218,7 @@ export const useLicenseStore = defineStore("license", () => {
     error,
     status,
     isLocked,
+    isDisabled,
     isActive,
     isGrace,
     isTrial,
