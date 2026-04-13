@@ -8,10 +8,26 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 // JSONB is a custom type for PostgreSQL JSONB columns
 type JSONB map[string]interface{}
+
+func (JSONB) GormDataType() string {
+	return "json"
+}
+
+func (JSONB) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
+	switch db.Dialector.Name() {
+	case "postgres":
+		return "JSONB"
+	case "mysql", "sqlite":
+		return "JSON"
+	default:
+		return "JSON"
+	}
+}
 
 func (j JSONB) Value() (driver.Value, error) {
 	if j == nil {
@@ -35,6 +51,21 @@ func (j *JSONB) Scan(value interface{}) error {
 // JSONBArray is a custom type for JSONB arrays
 type JSONBArray []interface{}
 
+func (JSONBArray) GormDataType() string {
+	return "json"
+}
+
+func (JSONBArray) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
+	switch db.Dialector.Name() {
+	case "postgres":
+		return "JSONB"
+	case "mysql", "sqlite":
+		return "JSON"
+	default:
+		return "JSON"
+	}
+}
+
 func (j JSONBArray) Value() (driver.Value, error) {
 	if j == nil {
 		return nil, nil
@@ -56,6 +87,21 @@ func (j *JSONBArray) Scan(value interface{}) error {
 
 // StringArray is a custom type for PostgreSQL text[] columns
 type StringArray []string
+
+func (StringArray) GormDataType() string {
+	return "json"
+}
+
+func (StringArray) GormDBDataType(db *gorm.DB, _ *schema.Field) string {
+	switch db.Dialector.Name() {
+	case "postgres":
+		return "JSONB"
+	case "mysql", "sqlite":
+		return "JSON"
+	default:
+		return "JSON"
+	}
+}
 
 func (s StringArray) Value() (driver.Value, error) {
 	if s == nil {

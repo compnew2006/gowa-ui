@@ -43,7 +43,7 @@ async function globalSetup() {
   // This user has IsSuperAdmin=true and can create users in any org
   const defaultAdmin = {
     email: process.env.E2E_SUPERADMIN_EMAIL || "admin@admin.com",
-    password: process.env.E2E_SUPERADMIN_PASSWORD || "admin",
+    password: process.env.E2E_SUPERADMIN_PASSWORD || "adminpassword12",
   };
 
   let csrfToken: string | null = null;

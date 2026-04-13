@@ -760,6 +760,9 @@ func SeedSystemRolesForAllOrgs(db *gorm.DB) error {
 	if err := BackfillSystemContactSoftDeletePermission(db); err != nil {
 		return fmt.Errorf("failed to backfill system contact soft delete permission: %w", err)
 	}
+	if err := BackfillAdminUploadsCleanupPermissions(db); err != nil {
+		return fmt.Errorf("failed to backfill admin uploads cleanup permissions: %w", err)
+	}
 
 	// Migrate existing users from old role column to new role_id
 	if err := MigrateExistingUserRoles(db); err != nil {
@@ -955,6 +958,63 @@ func BackfillSystemContactSoftDeletePermission(db *gorm.DB) error {
 			permission.ID,
 		).Error; err != nil {
 			return fmt.Errorf("failed to backfill role %s: %w", role.ID, err)
+		}
+	}
+
+	return nil
+}
+
+// BackfillAdminUploadsCleanupPermissions ensures existing system admin roles
+// include uploads cleanup permissions added after the original role seed.
+// This is idempotent and does not change manager/agent roles.
+func BackfillAdminUploadsCleanupPermissions(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+
+	requiredPermissions := []struct {
+		resource string
+		action   string
+	}{
+		{resource: models.ResourceSettingsUploadsCleanup, action: models.ActionRead},
+		{resource: models.ResourceSettingsUploadsCleanup, action: models.ActionWrite},
+		{resource: models.ResourceSettingsUploadsCleanup, action: models.ActionExecute},
+	}
+
+	permissions := make([]models.Permission, 0, len(requiredPermissions))
+	for _, required := range requiredPermissions {
+		var permission models.Permission
+		if err := db.Where("resource = ? AND action = ?", required.resource, required.action).
+			First(&permission).Error; err != nil {
+			return fmt.Errorf("failed to resolve %s:%s permission: %w", required.resource, required.action, err)
+		}
+		permissions = append(permissions, permission)
+	}
+
+	var adminRoles []models.CustomRole
+	if err := db.Where("is_system = ? AND LOWER(name) = ?", true, "admin").Find(&adminRoles).Error; err != nil {
+		return fmt.Errorf("failed to list admin roles: %w", err)
+	}
+
+	for _, role := range adminRoles {
+		for _, permission := range permissions {
+			var count int64
+			if err := db.Table("role_permissions").
+				Where("custom_role_id = ? AND permission_id = ?", role.ID, permission.ID).
+				Count(&count).Error; err != nil {
+				return fmt.Errorf("failed to inspect admin role permissions: %w", err)
+			}
+			if count > 0 {
+				continue
+			}
+
+			if err := db.Exec(
+				"INSERT INTO role_permissions (custom_role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+				role.ID,
+				permission.ID,
+			).Error; err != nil {
+				return fmt.Errorf("failed to backfill admin role %s: %w", role.ID, err)
+			}
 		}
 	}
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import type { PermissionGroup } from "@/stores/roles";
+
+const { t, te } = useI18n();
 
 const props = defineProps<{
   permissionGroups: PermissionGroup[];
@@ -22,24 +25,53 @@ const emit = defineEmits<{
 }>();
 
 // Action labels for better display
-const actionLabels: Record<string, string> = {
-  read: "View",
-  write: "Create/Edit",
-  delete: "Delete",
-  sync: "Sync",
-  execute: "Execute",
-  import: "Import",
-  export: "Export",
-  soft_delete: "Soft Delete",
-  pickup: "Pick Up",
-  assign: "Assign",
-  prefix: "Prefix Agent Name",
+const actionLabelKeys: Record<string, string> = {
+  read: "permissionsUi.actions.read",
+  write: "permissionsUi.actions.write",
+  delete: "permissionsUi.actions.delete",
+  sync: "permissionsUi.actions.sync",
+  execute: "permissionsUi.actions.execute",
+  import: "permissionsUi.actions.import",
+  export: "permissionsUi.actions.export",
+  soft_delete: "permissionsUi.actions.softDelete",
+  pickup: "permissionsUi.actions.pickup",
+  assign: "permissionsUi.actions.assign",
+  prefix: "permissionsUi.actions.prefix",
+};
+
+const permissionDescriptionKeys: Record<string, string> = {
+  "settings.uploads_cleanup:read":
+    "permissionsUi.descriptions.settingsUploadsCleanup.read",
+  "settings.uploads_cleanup:write":
+    "permissionsUi.descriptions.settingsUploadsCleanup.write",
+  "settings.uploads_cleanup:execute":
+    "permissionsUi.descriptions.settingsUploadsCleanup.execute",
 };
 
 function getActionLabel(action: string): string {
-  return (
-    actionLabels[action] || action.charAt(0).toUpperCase() + action.slice(1)
-  );
+  const translationKey = actionLabelKeys[action];
+  if (translationKey && te(translationKey)) {
+    return t(translationKey);
+  }
+
+  return action.charAt(0).toUpperCase() + action.slice(1);
+}
+
+function getPermissionDescription(key?: string, fallback?: string): string {
+  if (key) {
+    const translationKey = permissionDescriptionKeys[key];
+    if (translationKey && te(translationKey)) {
+      return t(translationKey);
+    }
+  }
+
+  return fallback || "";
+}
+
+function getPermissionKey(
+  permission: PermissionGroup["permissions"][number],
+): string {
+  return permission.key ?? `${permission.resource}:${permission.action}`;
 }
 
 function isSelected(key: string): boolean {
@@ -59,7 +91,7 @@ function togglePermission(key: string) {
 function toggleGroup(group: PermissionGroup) {
   if (props.disabled) return;
 
-  const groupKeys = group.permissions.map((p) => p.key);
+  const groupKeys = group.permissions.map((p) => getPermissionKey(p));
   const allSelected = groupKeys.every((key) =>
     props.selectedPermissions.includes(key),
   );
@@ -82,20 +114,20 @@ function toggleGroup(group: PermissionGroup) {
 
 function isGroupFullySelected(group: PermissionGroup): boolean {
   return group.permissions.every((p) =>
-    props.selectedPermissions.includes(p.key),
+    props.selectedPermissions.includes(getPermissionKey(p)),
   );
 }
 
 function isGroupPartiallySelected(group: PermissionGroup): boolean {
   const selectedCount = group.permissions.filter((p) =>
-    props.selectedPermissions.includes(p.key),
+    props.selectedPermissions.includes(getPermissionKey(p)),
   ).length;
   return selectedCount > 0 && selectedCount < group.permissions.length;
 }
 
 function getSelectedCountForGroup(group: PermissionGroup): number {
   return group.permissions.filter((p) =>
-    props.selectedPermissions.includes(p.key),
+    props.selectedPermissions.includes(getPermissionKey(p)),
   ).length;
 }
 
@@ -106,7 +138,9 @@ const openGroups = ref<string[]>([]);
 const groupsWithSelections = computed(() => {
   return props.permissionGroups
     .filter((g) =>
-      g.permissions.some((p) => props.selectedPermissions.includes(p.key)),
+      g.permissions.some((p) =>
+        props.selectedPermissions.includes(getPermissionKey(p)),
+      ),
     )
     .map((g) => g.resource);
 });
@@ -115,10 +149,10 @@ const groupsWithSelections = computed(() => {
 const sortedPermissionGroups = computed(() => {
   return [...props.permissionGroups].sort((a, b) => {
     const aHasSelection = a.permissions.some((p) =>
-      props.selectedPermissions.includes(p.key),
+      props.selectedPermissions.includes(getPermissionKey(p)),
     );
     const bHasSelection = b.permissions.some((p) =>
-      props.selectedPermissions.includes(p.key),
+      props.selectedPermissions.includes(getPermissionKey(p)),
     );
 
     // Groups with selections come first
@@ -155,7 +189,11 @@ watch(
     if (newlySelected.length > 0) {
       // Find which groups contain the newly selected permissions and expand them
       const groupsToExpand = props.permissionGroups
-        .filter((g) => g.permissions.some((p) => newlySelected.includes(p.key)))
+        .filter((g) =>
+          g.permissions.some((p) =>
+            newlySelected.includes(getPermissionKey(p)),
+          ),
+        )
         .map((g) => g.resource);
 
       // Add to openGroups if not already open
@@ -210,29 +248,39 @@ watch(
           <div class="grid grid-cols-2 md:grid-cols-3 gap-3 pb-4 pt-2">
             <div
               v-for="permission in group.permissions"
-              :key="permission.key"
+              :key="getPermissionKey(permission)"
               class="flex items-start space-x-2"
             >
               <Checkbox
-                :id="permission.key"
-                :checked="isSelected(permission.key)"
+                :id="getPermissionKey(permission)"
+                :checked="isSelected(getPermissionKey(permission))"
                 :disabled="disabled"
                 :aria-label="`${getActionLabel(permission.action)} ${group.label}`"
-                @update:checked="togglePermission(permission.key)"
+                @update:checked="togglePermission(getPermissionKey(permission))"
               />
               <div class="grid gap-0.5 leading-none">
                 <Label
-                  :for="permission.key"
+                  :for="getPermissionKey(permission)"
                   class="text-sm font-medium cursor-pointer"
                   :class="{ 'text-muted-foreground': disabled }"
                 >
                   {{ getActionLabel(permission.action) }}
                 </Label>
                 <p
-                  v-if="permission.description"
+                  v-if="
+                    getPermissionDescription(
+                      getPermissionKey(permission),
+                      permission.description,
+                    )
+                  "
                   class="text-xs text-muted-foreground"
                 >
-                  {{ permission.description }}
+                  {{
+                    getPermissionDescription(
+                      getPermissionKey(permission),
+                      permission.description,
+                    )
+                  }}
                 </p>
               </div>
             </div>

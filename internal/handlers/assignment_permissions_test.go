@@ -164,6 +164,21 @@ func TestApp_ListAgentTransfers_FiltersBlockedInstances(t *testing.T) {
 	assert.Equal(t, int64(1), result.Data.TotalCount)
 }
 
+func TestApp_ListAgentTransfers_RejectsWithoutTransferReadPermission(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "no-transfer-read", []string{"chat:read"})
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListAgentTransfers(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusForbidden, "permission to view transfers")
+}
+
 func TestApp_CreateAgentTransfer_RejectsWithoutTransferWritePermission(t *testing.T) {
 	t.Parallel()
 
@@ -216,6 +231,62 @@ func TestApp_CreateAgentTransfer_RejectsAssigneeWithoutInstanceAccess(t *testing
 		Where("organization_id = ? AND contact_id = ?", org.ID, contact.ID).
 		Count(&count).Error)
 	assert.Zero(t, count)
+}
+
+func TestApp_ClaimChat_FiltersBlockedInstances(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "restricted-chat-claimer", []string{"chat:write"})
+	allowed := createTestInstance(t, app, org.ID, "Allowed Claim")
+	blocked := createTestInstance(t, app, org.ID, "Blocked Claim")
+	enableRestrictedInstanceVisibility(t, app, org.ID, user.ID, allowed.ID)
+
+	blockedContact := testutil.CreateTestContactWith(t, app.DB, org.ID, func(c *models.Contact) {
+		c.InstanceID = &blocked.ID
+	})
+
+	req := testutil.NewJSONRequest(t, nil)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPut)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", blockedContact.ID.String())
+
+	err := app.ClaimChat(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusNotFound, "Chat not found")
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", blockedContact.ID).First(&refreshed).Error)
+	assert.Nil(t, refreshed.AssignedUserID)
+}
+
+func TestApp_ClaimChat_AllowsAllowedRestrictedInstance(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "allowed-chat-claimer", []string{"chat:write"})
+	allowed := createTestInstance(t, app, org.ID, "Allowed Claim Success")
+	enableRestrictedInstanceVisibility(t, app, org.ID, user.ID, allowed.ID)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, func(c *models.Contact) {
+		c.InstanceID = &allowed.ID
+	})
+
+	req := testutil.NewJSONRequest(t, nil)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPut)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.ClaimChat(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	require.NotNil(t, refreshed.AssignedUserID)
+	assert.Equal(t, user.ID, *refreshed.AssignedUserID)
 }
 
 func TestApp_ResumeFromTransfer_RejectsWithoutTransferWritePermission(t *testing.T) {

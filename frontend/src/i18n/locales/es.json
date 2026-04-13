@@ -32,17 +32,27 @@
       "trial": "Prueba",
       "paid": "De pago"
     },
-  "duration": {
-    "lifetime": "Vitalicia",
-    "oneDay": "1 día",
-    "days": "{count} días",
-    "noExpiry": "No vence",
-    "unavailable": "No disponible"
-  },
-  "quota": {
-    "subscriptionDays": "Días de suscripción"
-  },
-  "banner": {
+    "status": {
+      "disabled": "Deshabilitada"
+    },
+    "duration": {
+      "lifetime": "Vitalicia",
+      "oneDay": "1 día",
+      "days": "{count} días",
+      "disabled": "Deshabilitada",
+      "disabledDescription": "La duración de la licencia no se aplica mientras las licencias estén deshabilitadas.",
+      "noExpiry": "No vence",
+      "unavailable": "No disponible"
+    },
+    "quota": {
+      "subscriptionDays": "Días de suscripción",
+      "notEnforced": "El límite no se aplica mientras las licencias estén deshabilitadas",
+      "notEnforcedShort": "Apagado"
+    },
+    "summary": {
+      "disabled": "Las licencias están deshabilitadas para esta implementación, por lo que no se aplican verificaciones de licencia."
+    },
+    "banner": {
       "titleGrace": "Periodo de gracia de la licencia",
       "titleQuotaOverage": "Exceso de cuota de licencia",
       "titleExpiry": "La licencia está por vencer",
@@ -100,6 +110,9 @@
     "chatBackgroundUploadEmpty": "Todavía no hay una imagen personalizada guardada.",
     "chatBackgroundUploadPending": "La nueva carga se aplicará cuando guardes.",
     "chatBackgroundCurrentCustom": "Foto personalizada actual",
+    "uploadsCleanupRetentionDays": "Retención de limpieza de cargas (días)",
+    "uploadsCleanupRetentionDaysDesc": "Elimina automáticamente los archivos subidos transitorios con más días que este valor. Usa 0 para desactivar la limpieza.",
+    "uploadsCleanupRetentionDaysInvalid": "La retención de limpieza de cargas debe ser un número entero entre 0 y 3650.",
     "chatBackgroundUploadRequired": "Sube una imagen antes de guardar un fondo personalizado.",
     "chatBackgroundSelectPreset": "Selecciona un fondo predefinido antes de guardar.",
     "chatBackgroundUploadInvalidType": "Solo se admiten imágenes JPG, PNG y WebP.",

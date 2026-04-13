@@ -22,6 +22,7 @@ const deletedMessageBody = "(This message was deleted)";
 const legacyDeletedMessageBody = "This message was deleted";
 const syntheticPlaceholderCompanionWindowMs = 3000;
 const contactFetchCooldownMs = 1500;
+const missingContactFetchCooldownMs = 30000;
 
 interface ContactsListPayload {
   contacts: Contact[];
@@ -36,6 +37,12 @@ interface MessagesListPayload {
   page?: number;
   limit?: number;
   has_more?: boolean;
+}
+
+interface RecentContactFetch {
+  at: number;
+  cooldownMs: number;
+  result: Contact | null;
 }
 
 function normalizeChatStatus(
@@ -334,10 +341,7 @@ export const useContactsStore = defineStore("contacts", () => {
   const replyingTo = ref<Message | null>(null);
   const accountFilter = ref<string | null>(null);
   const inFlightContactFetches = new Map<string, Promise<Contact | null>>();
-  const recentContactFetches = new Map<
-    string,
-    { at: number; result: Contact | null }
-  >();
+  const recentContactFetches = new Map<string, RecentContactFetch>();
 
   // Contacts pagination
   const contactsPage = ref(1);
@@ -893,7 +897,7 @@ export const useContactsStore = defineStore("contacts", () => {
     }
 
     const recentFetch = recentContactFetches.get(normalizedID);
-    if (recentFetch && Date.now() - recentFetch.at < contactFetchCooldownMs) {
+    if (recentFetch && Date.now() - recentFetch.at < recentFetch.cooldownMs) {
       if (recentFetch.result) {
         if (currentContact.value?.id === normalizedID) {
           return currentContact.value;
@@ -916,13 +920,27 @@ export const useContactsStore = defineStore("contacts", () => {
         }
         recentContactFetches.set(normalizedID, {
           at: Date.now(),
+          cooldownMs: contactFetchCooldownMs,
           result: data,
         });
         return data;
       } catch (error) {
-        console.error("Failed to fetch contact:", error);
+        const errorStatus =
+          typeof error === "object" &&
+          error !== null &&
+          "isAxiosError" in error &&
+          (error as { isAxiosError?: boolean }).isAxiosError === true
+            ? (error as { response?: { status?: number } }).response?.status
+            : undefined;
+        if (errorStatus !== 404) {
+          console.error("Failed to fetch contact:", error);
+        }
         recentContactFetches.set(normalizedID, {
           at: Date.now(),
+          cooldownMs:
+            errorStatus === 404
+              ? missingContactFetchCooldownMs
+              : contactFetchCooldownMs,
           result: null,
         });
         return null;

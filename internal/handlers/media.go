@@ -262,6 +262,12 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusGone, "Media expired", nil, "")
 	}
 	if message.MediaAssetID == nil || message.MediaAsset == nil || strings.TrimSpace(message.MediaAsset.S3Key) == "" {
+		if relativePath := strings.TrimSpace(message.MediaURL); relativePath != "" {
+			if filename := strings.TrimSpace(message.MediaFilename); filename != "" {
+				r.RequestCtx.Response.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+			}
+			return a.serveLocalMediaFile(r, relativePath, message.MediaMimeType)
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "No media found", nil, "")
 	}
 	if a.ObjectStorage == nil {

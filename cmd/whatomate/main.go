@@ -56,6 +56,8 @@ func main() {
 		runQueueMigrateCampaigns(os.Args[2:])
 	case "inbound-media-reconcile":
 		runInboundMediaReconcile(os.Args[2:])
+	case "legacy-media-reconcile":
+		runLegacyMediaReconcile(os.Args[2:])
 	case "version":
 		fmt.Printf("Whatomate %s (built %s)\n", Version, BuildTime)
 	case "help", "-h", "--help":
@@ -79,6 +81,7 @@ Commands:
   crypto-migrate  Upgrade encrypted secrets from enc:/enc2: to enc3:
   queue-migrate-campaigns  Redistribute legacy global campaign jobs into tenant streams
   inbound-media-reconcile  Reconcile stale queued inbound-media rows
+  legacy-media-reconcile   Mark missing legacy local-media rows as unavailable
   version   Show version information
   help      Show this help message
 
@@ -111,6 +114,12 @@ Inbound Media Reconcile Options:
   -apply                    Apply updates; default is dry-run
   -allow-active-queue       Bypass queue-idle safety checks
 
+Legacy Media Reconcile Options:
+  -config string            Path to config file (default "config.toml")
+  -older-than duration      Only reconcile rows older than this age (default 1h)
+  -limit int                Limit number of candidate rows scanned (default 0 = all eligible)
+  -apply                    Apply updates; default is dry-run
+
 Examples:
   whatomate server                     # API + dynamic embedded workers
   whatomate server -workers 0          # API only (no workers)
@@ -120,6 +129,7 @@ Examples:
   whatomate crypto-migrate -dry-run    # Scan for legacy encrypted secrets
   whatomate queue-migrate-campaigns -config config.toml -apply
   whatomate inbound-media-reconcile -config config.toml -apply
+  whatomate legacy-media-reconcile -config config.toml -apply
 
 Deployment Scenarios:
   All-in-one:    whatomate server
@@ -372,6 +382,7 @@ func runServer(args []string) {
 	server := &fasthttp.Server{
 		Handler:            corsWrapper(g.Handler(), allowedOrigins),
 		ReadTimeout:        time.Duration(cfg.Server.ReadTimeout) * time.Second,
+		ReadBufferSize:     32 * 1024,
 		WriteTimeout:       time.Duration(cfg.Server.WriteTimeout) * time.Second,
 		MaxRequestBodySize: maxRequestBodySize,
 		Name:               "Whatomate",
@@ -408,6 +419,11 @@ func runServer(args []string) {
 	mediaRetentionCtx, mediaRetentionCancel := context.WithCancel(context.Background())
 	go mediaRetentionWorker.Start(mediaRetentionCtx)
 	lo.Info("Media retention worker started")
+
+	uploadsCleanupWorker := handlers.NewUploadsCleanupWorker(app, time.Minute)
+	uploadsCleanupCtx, uploadsCleanupCancel := context.WithCancel(context.Background())
+	go uploadsCleanupWorker.Start(uploadsCleanupCtx)
+	lo.Info("Uploads cleanup worker started")
 
 	// Start embedded workers
 	var (
@@ -497,6 +513,11 @@ func runServer(args []string) {
 	mediaRetentionCancel()
 	mediaRetentionWorker.Stop()
 	lo.Info("Media retention worker stopped")
+
+	lo.Info("Stopping uploads cleanup worker...")
+	uploadsCleanupCancel()
+	uploadsCleanupWorker.Stop()
+	lo.Info("Uploads cleanup worker stopped")
 
 	// Stop workers first
 	if workerScalerCancel != nil {
@@ -917,6 +938,68 @@ func runInboundMediaReconcile(args []string) {
 		"total_queued", summary.TotalQueued,
 		"eligible_queued", summary.EligibleQueued,
 		"updated", summary.Updated,
+		"sample_ids", strings.Join(summary.SampleIDs, ","),
+	)
+}
+
+// ============================================================================
+// LEGACY MEDIA RECONCILE COMMAND
+// ============================================================================
+
+func runLegacyMediaReconcile(args []string) {
+	reconcileFlags := flag.NewFlagSet("legacy-media-reconcile", flag.ExitOnError)
+	configPath := reconcileFlags.String("config", "config.toml", "Path to config file")
+	olderThan := reconcileFlags.Duration("older-than", time.Hour, "Only reconcile rows older than this age")
+	limit := reconcileFlags.Int("limit", 0, "Limit number of candidate rows scanned (0 = all eligible)")
+	apply := reconcileFlags.Bool("apply", false, "Apply updates; default is dry-run")
+	_ = reconcileFlags.Parse(args)
+
+	lo := logf.New(logf.Opts{
+		EnableColor:     true,
+		Level:           logf.InfoLevel,
+		EnableCaller:    true,
+		TimestampFormat: "2006-01-02 15:04:05",
+		DefaultFields:   []any{"app", "whatomate-legacy-media-reconcile"},
+	})
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		lo.Fatal("Failed to load config", "error", err)
+	}
+	if err := config.ValidateDatabaseCredentials(cfg); err != nil {
+		lo.Fatal("Invalid database configuration", "error", err)
+	}
+	if strings.ToLower(strings.TrimSpace(cfg.Storage.Type)) != "" && strings.ToLower(strings.TrimSpace(cfg.Storage.Type)) != "local" {
+		lo.Fatal("Legacy media reconciliation is only supported for local storage", "storage_type", cfg.Storage.Type)
+	}
+
+	db, err := database.NewPostgres(&cfg.Database, cfg.App.Debug)
+	if err != nil {
+		lo.Fatal("Failed to connect to database", "error", err)
+	}
+	lo.Info("Connected to PostgreSQL")
+
+	summary, err := handlers.ReconcileMissingLegacyMedia(
+		context.Background(),
+		db,
+		cfg.Storage.LocalPath,
+		handlers.LegacyMediaReconcileOptions{
+			OlderThan: *olderThan,
+			Limit:     *limit,
+			Apply:     *apply,
+		},
+	)
+	if err != nil {
+		lo.Fatal("Legacy media reconciliation failed", "error", err)
+	}
+
+	lo.Info(
+		"Legacy media reconciliation completed",
+		"dry_run", summary.DryRun,
+		"cutoff", summary.Cutoff.Format(time.RFC3339),
+		"candidates", summary.CandidateCount,
+		"missing", summary.MissingCount,
+		"updated", summary.UpdatedCount,
 		"sample_ids", strings.Join(summary.SampleIDs, ","),
 	)
 }
@@ -1347,6 +1430,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Organization Settings
 	g.GET("/api/org/settings", app.GetOrganizationSettings)
 	g.PUT("/api/org/settings", app.UpdateOrganizationSettings)
+	g.POST("/api/org/uploads-cleanup/run", app.RunUploadsCleanupNow)
 
 	// Organizations
 	g.GET("/api/organizations", app.ListOrganizations)

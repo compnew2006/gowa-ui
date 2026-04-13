@@ -202,4 +202,27 @@ describe("useContactsStore", () => {
 
     expect(mocks.contactsService.get).toHaveBeenCalledTimes(1);
   });
+
+  it("cools down repeated fetchContact retries after a 404 without logging an error", async () => {
+    setAuthenticatedUser("agent");
+    const store = useContactsStore();
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    mocks.contactsService.get.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        status: 404,
+      },
+    });
+
+    await expect(store.fetchContact("contact-missing")).resolves.toBeNull();
+    await expect(store.fetchContact("contact-missing")).resolves.toBeNull();
+
+    expect(mocks.contactsService.get).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
 });

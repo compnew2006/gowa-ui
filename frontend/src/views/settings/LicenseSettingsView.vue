@@ -73,11 +73,25 @@ function getExpiryMessage(daysUntilExpiry: number | null) {
   return t("licenseSettings.summary.healthy");
 }
 
-function getQuotaUsageLabel(overQuota: boolean, overage: number) {
+function getQuotaUsageLabel(
+  limit: number,
+  overQuota: boolean,
+  overage: number,
+) {
+  if (licenseStore.isDisabled || limit <= 0) {
+    return t("licenseSettings.quota.notEnforced");
+  }
   if (overQuota) {
     return t("licenseSettings.quota.overBy", { count: overage });
   }
   return t("licenseSettings.quota.withinCapacity");
+}
+
+function getQuotaLimitLabel(limit: number) {
+  if (licenseStore.isDisabled || limit <= 0) {
+    return t("licenseSettings.quota.notEnforcedShort");
+  }
+  return String(limit);
 }
 
 function getOrganizationUsageLabel(userCount: number, endpointCount: number) {
@@ -99,6 +113,9 @@ const shortIdLabel = computed(
 );
 
 const statusSummary = computed(() => {
+  if (licenseStore.isDisabled) {
+    return t("licenseSettings.summary.disabled");
+  }
   if (licenseStore.showQuotaOverage) {
     return t("licenseSettings.summary.paused");
   }
@@ -125,6 +142,10 @@ const remainingDurationDays = computed(() => {
 });
 
 const durationHeadline = computed(() => {
+  if (licenseStore.isDisabled) {
+    return t("licenseSettings.duration.disabled");
+  }
+
   if (licenseStore.state.duration_label === "lifetime") {
     return t("licenseSettings.duration.lifetime");
   }
@@ -137,6 +158,10 @@ const durationHeadline = computed(() => {
 });
 
 const durationProgressValue = computed(() => {
+  if (licenseStore.isDisabled) {
+    return 0;
+  }
+
   if (licenseStore.state.duration_label === "lifetime") {
     return 100;
   }
@@ -149,6 +174,10 @@ const durationProgressValue = computed(() => {
 });
 
 const durationUsageLabel = computed(() => {
+  if (licenseStore.isDisabled) {
+    return t("licenseSettings.duration.disabledDescription");
+  }
+
   if (licenseStore.state.duration_label === "lifetime") {
     return t("licenseSettings.duration.noExpiry");
   }
@@ -306,7 +335,9 @@ async function handleActivationSubmit() {
                         {{ item.label }}
                       </CardDescription>
                       <CardTitle class="text-2xl">
-                        {{ item.usage.current }}/{{ item.usage.limit || 0 }}
+                        {{ item.usage.current }}/{{
+                          getQuotaLimitLabel(item.usage.limit)
+                        }}
                       </CardTitle>
                     </CardHeader>
                     <CardContent class="space-y-3 pt-0">
@@ -325,6 +356,7 @@ async function handleActivationSubmit() {
                       >
                         {{
                           getQuotaUsageLabel(
+                            item.usage.limit,
                             item.usage.over_quota,
                             item.usage.overage,
                           )

@@ -1115,6 +1115,8 @@ export const organizationService = {
   updateSettings: (data: {
     mask_phone_numbers?: boolean;
     strict_sending_restrictions_enabled?: boolean;
+    uploads_cleanup_retention_days?: number;
+    uploads_cleanup_schedule_hour?: number;
     outbound_mode?: "inbound_only" | "mixed";
     strict_sending_apply_to_system?: boolean;
     campaign_draft_only?: boolean;
@@ -1124,6 +1126,7 @@ export const organizationService = {
     date_format?: string;
     name?: string;
   }) => api.put("/org/settings", data),
+  runUploadsCleanupNow: () => api.post("/org/uploads-cleanup/run"),
 };
 
 // Organizations

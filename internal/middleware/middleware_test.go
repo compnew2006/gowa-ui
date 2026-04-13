@@ -310,6 +310,39 @@ func TestTenantScope(t *testing.T) {
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
+	t.Run("fresh scoped db sessions do not leak joins between sequential queries", func(t *testing.T) {
+		t.Parallel()
+
+		db, mock := newMockGormDB(t)
+		orgID := uuid.New()
+		recordID := uuid.New()
+
+		scopedDB := tenant.ScopedDB(db, orgID)
+
+		mock.ExpectQuery(`SELECT .* FROM "tenant_scoped_records" LEFT JOIN organizations ON organizations.id = tenant_scoped_records.organization_id .*organization_id`).
+			WithArgs(recordID, orgID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id"}))
+
+		var records []tenantScopedRecord
+		err := scopedDB.Session(&gorm.Session{}).
+			Table("tenant_scoped_records").
+			Joins("LEFT JOIN organizations ON organizations.id = tenant_scoped_records.organization_id").
+			Where("id = ?", recordID).
+			Find(&records).Error
+		require.NoError(t, err)
+
+		mock.ExpectQuery(`SELECT .* FROM "tenant_scoped_records" WHERE id = .*organization_id`).
+			WithArgs(recordID, orgID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "organization_id"}))
+
+		err = scopedDB.Session(&gorm.Session{}).
+			Model(&tenantScopedRecord{}).
+			Where("id = ?", recordID).
+			Find(&records).Error
+		require.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
 	t.Run("honors membership-based organization override", func(t *testing.T) {
 		t.Parallel()
 

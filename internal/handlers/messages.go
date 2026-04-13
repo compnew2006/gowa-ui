@@ -785,7 +785,7 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 	}
 
 	// Add media fields
-	if msg.MediaURL != "" {
+	if messageHasVisibleMedia(msg) {
 		payload["media_url"] = msg.MediaURL
 		payload["media_mime_type"] = msg.MediaMimeType
 		payload["media_filename"] = msg.MediaFilename
@@ -817,7 +817,7 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 			if senderPhone := extractMessageSenderPhone(replyToMsg.Metadata); senderPhone != "" {
 				replyPayload["sender_phone"] = senderPhone
 			}
-			if replyToMsg.MediaURL != "" {
+			if messageHasVisibleMedia(&replyToMsg) {
 				replyPayload["media_url"] = replyToMsg.MediaURL
 				replyPayload["media_mime_type"] = replyToMsg.MediaMimeType
 				replyPayload["media_filename"] = replyToMsg.MediaFilename

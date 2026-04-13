@@ -128,6 +128,9 @@ func (a *App) validateTransferAssigneeAccess(orgID uuid.UUID, agentID *uuid.UUID
 // Agents see only their assigned transfers + their team queues; Admin see all; Managers see their teams
 func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
+	newQuery := func() *gorm.DB {
+		return requestDB.Session(&gorm.Session{})
+	}
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -135,6 +138,10 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 
 	// Check permissions - users with write permission have full access (like admin)
 	hasFullAccess := a.HasPermission(userID, models.ResourceTransfers, models.ActionWrite, orgID)
+	canReadTransfers := hasFullAccess || a.HasPermission(userID, models.ResourceTransfers, models.ActionRead, orgID)
+	if !canReadTransfers {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view transfers", nil, "")
+	}
 
 	// Query params
 	status := string(r.RequestCtx.QueryArgs().Peek("status"))
@@ -184,7 +191,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	}
 
 	// Build query with conditional JOINs for better performance
-	query := requestDB.Table("agent_transfers").
+	query := newQuery().Table("agent_transfers").
 		Select(strings.Join(selectCols, ", ")).
 		Where("agent_transfers.organization_id = ?", orgID).
 		Order("agent_transfers.transferred_at ASC") // FIFO
@@ -225,7 +232,9 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	var userTeamIDs []uuid.UUID
 	if !hasFullAccess {
 		var memberships []models.TeamMember
-		if err := requestDB.Where("user_id = ?", userID).Find(&memberships).Error; err != nil {
+		if err := newQuery().Model(&models.TeamMember{}).
+			Where("team_members.user_id = ?", userID).
+			Find(&memberships).Error; err != nil {
 			a.Log.Error("Failed to fetch team memberships", "error", err, "user_id", userID)
 		}
 		for _, m := range memberships {
@@ -254,7 +263,8 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 
 	// Get total count before pagination (for frontend to know if more exist)
 	var totalCount int64
-	countQuery := requestDB.Table("agent_transfers").Where("agent_transfers.organization_id = ?", orgID)
+	countQuery := newQuery().Model(&models.AgentTransfer{}).
+		Where("agent_transfers.organization_id = ?", orgID)
 	if len(restrictedInstanceIDs) > 0 {
 		countQuery = countQuery.Joins("JOIN contacts ON contacts.id = agent_transfers.contact_id")
 		countQuery = applyTransferRestrictedInstanceVisibilityFilter(countQuery, restrictedInstanceIDs)
@@ -276,25 +286,36 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 			countQuery = countQuery.Where("agent_transfers.agent_id = ? OR (agent_transfers.agent_id IS NULL AND agent_transfers.team_id IS NULL)", userID)
 		}
 	}
-	countQuery.Count(&totalCount)
+	if err := countQuery.Count(&totalCount).Error; err != nil {
+		a.Log.Error("Failed to count transfers", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch transfers", nil, "")
+	}
 
 	// Apply pagination
 	query = query.Limit(limit).Offset(offset)
 
 	var transfers []agentTransferRow
 	if err := query.Scan(&transfers).Error; err != nil {
+		a.Log.Error("Failed to list transfers", "error", err, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch transfers", nil, "")
 	}
 
 	// Get queue counts
 	var generalQueueCount int64
-	generalQueueQuery := requestDB.Model(&models.AgentTransfer{}).
-		Where("organization_id = ? AND status = ? AND agent_id IS NULL AND team_id IS NULL", orgID, models.TransferStatusActive)
+	generalQueueQuery := newQuery().Model(&models.AgentTransfer{}).
+		Where(
+			"agent_transfers.organization_id = ? AND agent_transfers.status = ? AND agent_transfers.agent_id IS NULL AND agent_transfers.team_id IS NULL",
+			orgID,
+			models.TransferStatusActive,
+		)
 	if len(restrictedInstanceIDs) > 0 {
 		generalQueueQuery = generalQueueQuery.Joins("JOIN contacts ON contacts.id = agent_transfers.contact_id")
 		generalQueueQuery = applyTransferRestrictedInstanceVisibilityFilter(generalQueueQuery, restrictedInstanceIDs)
 	}
-	generalQueueQuery.Count(&generalQueueCount)
+	if err := generalQueueQuery.Count(&generalQueueCount).Error; err != nil {
+		a.Log.Error("Failed to count general transfer queue", "error", err, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch transfers", nil, "")
+	}
 
 	// Get team queue counts (filtered by user's teams for non-admin)
 	type TeamQueueCount struct {
@@ -302,9 +323,13 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 		Count  int64
 	}
 	var teamQueueCounts []TeamQueueCount
-	teamCountQuery := requestDB.Model(&models.AgentTransfer{}).
-		Select("team_id, COUNT(*) as count").
-		Where("organization_id = ? AND status = ? AND agent_id IS NULL AND team_id IS NOT NULL", orgID, models.TransferStatusActive)
+	teamCountQuery := newQuery().Model(&models.AgentTransfer{}).
+		Select("agent_transfers.team_id AS team_id, COUNT(*) as count").
+		Where(
+			"agent_transfers.organization_id = ? AND agent_transfers.status = ? AND agent_transfers.agent_id IS NULL AND agent_transfers.team_id IS NOT NULL",
+			orgID,
+			models.TransferStatusActive,
+		)
 	if len(restrictedInstanceIDs) > 0 {
 		teamCountQuery = teamCountQuery.Joins("JOIN contacts ON contacts.id = agent_transfers.contact_id")
 		teamCountQuery = applyTransferRestrictedInstanceVisibilityFilter(teamCountQuery, restrictedInstanceIDs)
@@ -312,14 +337,17 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 
 	// Filter team counts by user's team membership for users without full access
 	if !hasFullAccess && len(userTeamIDs) > 0 {
-		teamCountQuery = teamCountQuery.Where("team_id IN ?", userTeamIDs)
+		teamCountQuery = teamCountQuery.Where("agent_transfers.team_id IN ?", userTeamIDs)
 	} else if !hasFullAccess && len(userTeamIDs) == 0 {
 		// User is not in any team, don't show any team queue counts
 		teamQueueCounts = []TeamQueueCount{}
 	}
 
 	if hasFullAccess || len(userTeamIDs) > 0 {
-		teamCountQuery.Group("team_id").Scan(&teamQueueCounts)
+		if err := teamCountQuery.Group("agent_transfers.team_id").Scan(&teamQueueCounts).Error; err != nil {
+			a.Log.Error("Failed to count transfer team queues", "error", err, "org_id", orgID, "user_id", userID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch transfers", nil, "")
+		}
 	}
 
 	// Build team counts map

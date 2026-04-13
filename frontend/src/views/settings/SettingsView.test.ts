@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   organizationService: {
     getSettings: vi.fn(),
     updateSettings: vi.fn(),
+    runUploadsCleanupNow: vi.fn(),
   },
   toast: {
     success: vi.fn(),
@@ -66,12 +67,30 @@ const ButtonStub = defineComponent({
 const InputStub = defineComponent({
   props: {
     modelValue: {
-      type: String,
+      type: [String, Number],
       default: "",
+    },
+    type: {
+      type: String,
+      default: "text",
     },
   },
   emits: ["update:modelValue", "change"],
-  template: `<input v-bind="$attrs" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" @change="$emit('change', $event)" />`,
+  setup(props, { emit }) {
+    function emitInputValue(event: Event) {
+      const target = event.target as HTMLInputElement;
+      const rawValue = target.value;
+      if (props.type === "number") {
+        emit("update:modelValue", rawValue === "" ? "" : Number(rawValue));
+        return;
+      }
+
+      emit("update:modelValue", rawValue);
+    }
+
+    return { emitInputValue };
+  },
+  template: `<input v-bind="$attrs" :value="modelValue" :type="type" @input="emitInputValue" @change="$emit('change', $event)" />`,
 });
 
 const passthroughStub = defineComponent({
@@ -169,11 +188,22 @@ describe("SettingsView appearance settings", () => {
             timezone: "UTC",
             date_format: "YYYY-MM-DD",
             mask_phone_numbers: false,
+            uploads_cleanup_retention_days: 5,
+            uploads_cleanup_schedule_hour: 3,
           },
         },
       },
     });
     mocks.organizationService.updateSettings.mockResolvedValue({ data: {} });
+    mocks.organizationService.runUploadsCleanupNow.mockResolvedValue({
+      data: {
+        data: {
+          message: "Uploads cleanup completed. Deleted 2 file(s).",
+          deleted_files: 2,
+          retention_days: 5,
+        },
+      },
+    });
     mocks.usersService.me.mockResolvedValue({
       data: {
         data: {
@@ -206,6 +236,17 @@ describe("SettingsView appearance settings", () => {
       email: "user@example.com",
       full_name: "Test User",
       organization_id: "org-1",
+      role: {
+        id: "role-1",
+        name: "admin",
+        permissions: [
+          "settings.general:read",
+          "settings.general:write",
+          "settings.uploads_cleanup:read",
+          "settings.uploads_cleanup:write",
+          "settings.uploads_cleanup:execute",
+        ],
+      },
       settings: {},
     };
 
@@ -230,7 +271,9 @@ describe("SettingsView appearance settings", () => {
     expect(document.documentElement.classList.contains("light")).toBe(true);
     expect(document.documentElement.dataset.themePreset).toBe("soft-pop");
 
-    await wrapper.get('[data-testid="settings-appearance-save"]').trigger("click");
+    await wrapper
+      .get('[data-testid="settings-appearance-save"]')
+      .trigger("click");
     await flushPromises();
 
     expect(mocks.usersService.updateSettings).toHaveBeenCalledWith({
@@ -258,5 +301,54 @@ describe("SettingsView appearance settings", () => {
 
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(document.documentElement.dataset.themePreset).toBe("ocean-breeze");
+  });
+
+  it("saves uploads cleanup settings with retention and fixed schedule hour", async () => {
+    const wrapper = mountSettingsView();
+    await flushPromises();
+
+    const retentionInput = wrapper.get(
+      '[data-testid="uploads-cleanup-retention-days-input"]',
+    );
+    expect((retentionInput.element as HTMLInputElement).value).toBe("5");
+
+    await retentionInput.setValue("7");
+    await wrapper
+      .get('[data-testid="uploads-cleanup-schedule-hour-input"]')
+      .setValue("4");
+    await wrapper.get('[data-testid="uploads-cleanup-save"]').trigger("click");
+    await flushPromises();
+
+    expect(mocks.organizationService.updateSettings).toHaveBeenCalledWith({
+      uploads_cleanup_retention_days: 7,
+      uploads_cleanup_schedule_hour: 4,
+    });
+  });
+
+  it("runs uploads cleanup immediately after persisting the current form values", async () => {
+    const wrapper = mountSettingsView();
+    await flushPromises();
+
+    await wrapper
+      .get('[data-testid="uploads-cleanup-retention-days-input"]')
+      .setValue("6");
+    await wrapper
+      .get('[data-testid="uploads-cleanup-schedule-hour-input"]')
+      .setValue("5");
+    await wrapper
+      .get('[data-testid="uploads-cleanup-run-now"]')
+      .trigger("click");
+    await flushPromises();
+
+    expect(mocks.organizationService.updateSettings).toHaveBeenCalledWith({
+      uploads_cleanup_retention_days: 6,
+      uploads_cleanup_schedule_hour: 5,
+    });
+    expect(
+      mocks.organizationService.runUploadsCleanupNow,
+    ).toHaveBeenCalledTimes(1);
+    expect(mocks.toast.success).toHaveBeenCalledWith(
+      "Uploads cleanup completed. Deleted 2 file(s).",
+    );
   });
 });

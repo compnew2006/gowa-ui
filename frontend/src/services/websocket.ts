@@ -2,7 +2,9 @@ import { useContactsStore } from "@/stores/contacts";
 import { useTransfersStore } from "@/stores/transfers";
 import { useAuthStore } from "@/stores/auth";
 import { useNotesStore } from "@/stores/notes";
+import { clearMissingMediaPrefetch } from "@/lib/media_prefetch_cache";
 import { maybeAutoDownloadIncomingMedia } from "@/lib/incoming_media_autodownload";
+import { canUserAccessInstance } from "@/lib/instance-access";
 import { toast } from "vue-sonner";
 import router from "@/router";
 
@@ -449,6 +451,7 @@ class WebSocketService {
     const knownContact = contactId
       ? store.contacts.find((contact) => contact.id === contactId)
       : undefined;
+    const authStore = useAuthStore();
     let unknownContactFetchPromise: Promise<
       Awaited<ReturnType<typeof store.fetchContact>>
     > | null = null;
@@ -457,6 +460,9 @@ class WebSocketService {
         return Promise.resolve(knownContact);
       }
       if (!contactId) {
+        return Promise.resolve(null);
+      }
+      if (!canUserAccessInstance(authStore.user, payloadInstanceId)) {
         return Promise.resolve(null);
       }
       if (!unknownContactFetchPromise) {
@@ -531,7 +537,6 @@ class WebSocketService {
 
     // Notifications are for newly-added incoming messages only.
     if (isNewMessage && payload.direction === "incoming") {
-      const authStore = useAuthStore();
       const currentUserId = authStore.user?.id;
       const settings = authStore.userSettings;
 
@@ -596,6 +601,9 @@ class WebSocketService {
   ) {
     const messageID = typeof payload?.id === "string" ? payload.id : "";
     if (!messageID) return;
+    if (typeof payload?.media_url === "string" && payload.media_url.trim() !== "") {
+      clearMissingMediaPrefetch(messageID);
+    }
 
     const existing = store.messages.find((message) => message.id === messageID);
     const contactID =

@@ -1490,3 +1490,161 @@ Updated: 2026-04-12 00:21 UTC
 - root-cause analysis of Go interface-nil regressions
 - low-blast-radius hotfix delivery under active outage conditions
 - browser and HTTP verification against live multi-instance domains
+
+## Production Deployment - 2026-04-12 12:00 UTC
+
+- Deployment target: `31.97.192.53`
+- Source deployed: current local `main` worktree from `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Git baseline: `e55d147`
+- Deployment method: existing `systemd` services plus rebuilt production binary in `/opt/whatomate/bin/whatomate`
+- Source sync target on VPS: `/opt/whatomate-src`
+- Build command used on VPS:
+  - `cd /opt/whatomate-src && VERSION=e55d147-worktree-20260412_1159 GOTOOLCHAIN=go1.25.8+auto make build-prod`
+- Binary backup created before install:
+  - `/opt/whatomate/bin/whatomate.20260412_120029.bak`
+- Final installed binary:
+  - path: `/opt/whatomate/bin/whatomate`
+  - SHA256: `330d48633077d2caeb2f24b8a026b0b84eccbfe77f5d04f376c360de82af46aa`
+  - version: `Whatomate e55d147-worktree-20260412_1159 (built 2026-04-12_11:59:58)`
+- Config/public-key decision:
+  - no new config files were required for this rollout
+  - no `public.key` was required because the active production configs do not define a `[license]` block
+  - the binary was built with the default embedded empty key ring (`[]`), which is safe for the current production license-disabled state
+- Runtime verification on VPS:
+  - `whatomate`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, and `whatomate@matbaat-ruya` all restarted cleanly and are `active`
+  - localhost smoke checks returned `200` for ports `18123`, `18124`, `18125`, and `18126`
+- Public verification:
+  - `https://ofuqalmadenah.com/` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/` -> `200`
+  - Chrome DevTools MCP checks on `https://ofuqalmadenah.com/login` and `https://holol-wenjaz.ofuqalmadenah.com/login` loaded the login page with no console messages
+- SSH note:
+  - the VPS SSH host keys have changed since the older local `known_hosts` entries were recorded
+  - I used a fresh trusted host-key file for this deployment after collecting the current host keys from `31.97.192.53`
+- Reverse proxy state at deploy time:
+  - `nginx` is still the live listener on `80/443`
+  - `caddy` remains `failed`
+  - the Whatomate deployment itself was completed without changing the ingress layer
+
+### Skills Applied
+
+- `devops-engineer`
+- `debugging-wizard`
+
+### Competencies Applied
+
+- rsync-based source mirroring for a dirty worktree deployment
+- Ubuntu `systemd` binary rollout with pre-install backup
+- Go + Vite production build orchestration on the VPS
+- live browser verification with Chrome DevTools MCP
+
+
+
+## Production Fix - 2026-04-12 13:40 UTC
+
+- Issue fixed: `GET /api/chatbot/transfers?status=active` and `PUT /api/chats/:id/claim` were returning `500` for restricted users on `https://ofuqalmadenah.com`.
+- Root cause:
+  - `ListAgentTransfers` reused one request-scoped GORM handle across multiple independent query chains, so joins and filters leaked into later count queries.
+  - queue count queries in `internal/handlers/agent_transfers.go` also used unqualified column names after joining `contacts`, which produced ambiguous SQL.
+  - lifecycle chat actions in `internal/handlers/contacts_management.go` reused the same scoped handle for select, update, and reload flows, which allowed `contacts` joins to leak into later updates such as `ClaimChat`.
+- Local code fix:
+  - `internal/handlers/agent_transfers.go`: every independent transfer query now starts from `requestDB.Session(&gorm.Session{})`; transfer queue count queries now fully qualify `agent_transfers.*` columns and return/log count errors.
+  - `internal/handlers/contacts_management.go`: lifecycle chat reads, updates, and reloads now use fresh GORM sessions; `buildLifecycleContactQuery` centralizes restricted-instance and agent-scope visibility.
+  - `internal/middleware/middleware_test.go`: added a regression test proving fresh scoped sessions do not leak joins between sequential queries.
+- Local verification:
+  - `go test ./internal/middleware -run 'TestTenantScope'` -> `ok`
+  - `go test ./internal/handlers -run 'TestApp_(ListAgentTransfers_FiltersBlockedInstances|ClaimChat_AllowsAllowedRestrictedInstance|ClaimChat_FiltersBlockedInstances|ListAgentTransfers_IncludesInstanceID)'` -> `ok`
+- VPS deployment:
+  - source files synced to `/opt/whatomate-src`
+  - pre-install backup: `/opt/whatomate/bin/whatomate.20260412_153327.bak`
+  - build command: `cd /opt/whatomate-src && VERSION=e55d147-transfer-claim-fix-20260412_153327 GOTOOLCHAIN=go1.25.8+auto make build-prod`
+  - installed binary: `/opt/whatomate/bin/whatomate`
+  - SHA256: `80f173d335740aaf574931e7bb5ec485837e24d6093ec930a20ecb15eaaee03f`
+  - version: `Whatomate e55d147-transfer-claim-fix-20260412_153327 (built 2026-04-12_13:34:13)`
+- Service verification:
+  - `whatomate`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, and `whatomate@matbaat-ruya` all restarted cleanly and are `active`
+  - public health checks returned `200` for `https://ofuqalmadenah.com/`, `https://holol-wenjaz.ofuqalmadenah.com/`, `https://alarkan-almthalia.ofuqalmadenah.com/`, and `https://matbaat-ruya.ofuqalmadenah.com/`
+- Live endpoint verification after deploy:
+  - authenticated restricted-user repro returned `200` for `GET https://ofuqalmadenah.com/api/chatbot/transfers?status=active`
+  - authenticated restricted-user repro returned `200` for `PUT https://ofuqalmadenah.com/api/chats/b3ef44b9-1e35-488e-bd6e-3da895fdad1c/claim`
+  - Chrome DevTools MCP fetch verification returned `200` for both endpoints from the browser context
+  - recent `journalctl` output showed the successful `ListAgentTransfers` info log and no new SQL errors after the fix
+- Config/public-key decision:
+  - no new config file was needed for this fix
+  - no `public.key` was needed because this rollout did not change the active licensing configuration
+- Skills applied:
+  - `debugging-wizard`
+  - `golang-pro`
+  - `devops-engineer`
+- Competencies applied:
+  - root-cause analysis of production SQL/state leakage
+  - low-blast-radius Go backend hotfixing
+  - systemd binary deployment with rollback backup
+  - live HTTP and browser-context verification on production
+
+
+## Production Fix - 2026-04-12 18:15 UTC
+
+- Issue bundle fixed on production:
+  - `GET /api/users` was returning `500`
+  - some authenticated chat requests were returning `431 Request Header Fields Too Large`
+  - repeated `/api/media/:id` `404` requests were spamming the console for legacy local-file media that no longer exists on disk
+- Root causes:
+  - `ListUsers` reused polluted GORM state under request/tenant scoping, producing a `500` for restricted-user flows
+  - some browsers still carried oversized legacy auth cookie variants; nginx and the Go HTTP server were also too strict for those oversized request headers
+  - many old legacy media rows still referenced deleted local files under `/opt/whatomate/uploads`, so the frontend kept retrying media URLs that can never succeed
+- Local code changes prepared and verified:
+  - `cmd/whatomate/main.go`: increased `ReadBufferSize` to `32 * 1024` for safer oversized-header tolerance
+  - `internal/handlers/cookies.go`: clear legacy auth cookie variants on login/logout so browsers shed oversized stale cookies
+  - `internal/handlers/users.go` + `internal/handlers/users_query_regression_test.go`: isolate `ListUsers` query state so `/api/users` stays stable under scoped access rules
+  - `internal/handlers/contacts.go`, `internal/handlers/messages.go`, `internal/handlers/media_visibility.go`: hide legacy media URLs from API/websocket payloads once media is marked unavailable
+  - `internal/handlers/legacy_media_reconcile.go` + `internal/handlers/legacy_media_reconcile_test.go`: added CLI reconciliation to mark truly missing legacy local-media rows with `media_deleted_at`
+  - `frontend/src/lib/media_prefetch_cache.ts` + `frontend/src/lib/media_prefetch_cache.test.ts`: treat `410 Gone` the same as `404` so deleted media is cooled down locally instead of being retried immediately
+- Local verification:
+  - `go test ./internal/handlers -run 'Test(BuildUsersListBaseQuery_UsesIsolatedStatements|AuthCookies_ClearLegacyVariantsOnLogin|MessageHasVisibleMedia|ReconcileMissingLegacyMediaMarksOnlyMissingOldFiles|App_ListUsers|App_GetUser)'` -> `ok`
+  - `go test ./cmd/whatomate` -> `? [no test files]`
+  - `cd frontend && npx vitest run src/lib/media_prefetch_cache.test.ts src/services/websocket.test.ts src/stores/contacts.test.ts` -> passed
+  - `cd frontend && npm run build` -> passed
+- VPS deployment:
+  - synced only the targeted incident-fix files to `/opt/whatomate-src`
+  - binary backup created first: `/opt/whatomate/bin/whatomate.20260412_2006.bak`
+  - installed binary: `/opt/whatomate/bin/whatomate`
+  - version: `Whatomate e55d147-users-header-mediafix2-20260412_2006 (built 2026-04-12_18:05:55)`
+  - SHA256: `0ac8cc2fead1704687b0a74145ed36912616a08fea27562a76d428574b2da8af`
+- Production data reconciliation:
+  - backup of candidate rows before apply:
+    - `/root/db_backups/legacy_media_reconcile_main_20260412_2006.tsv`
+    - `/root/db_backups/legacy_media_reconcile_holol-wenjaz_20260412_2006.tsv`
+  - main org reconcile apply updated `43,692` missing legacy media rows
+  - `holol-wenjaz` reconcile apply updated `6,105` missing legacy media rows
+  - `alarkan-almthalia` and `matbaat-ruya` had `0` matching rows
+- Additional infrastructure mitigation already applied on VPS for the `431` side of the incident:
+  - nginx site configs now include larger request-header buffers, with backups stored in `/root/ops_backups/whatomate_incident_20260412_193101`
+- Live production verification after deploy:
+  - authenticated HTTP checks returned `200` for `/api/users`
+  - authenticated HTTP checks returned `200` for `/api/chats/:id/messages?account=...`
+  - authenticated HTTP checks returned `200` for `/api/contacts/:id/typing`
+  - Chrome DevTools MCP authenticated load of `https://ofuqalmadenah.com/chat/100f94c6-2585-4e00-8149-830a0a7ef045?account=966554840026` showed:
+    - `/api/chatbot/transfers?status=active` -> `200`
+    - `/api/users` -> `200`
+    - `/api/chats/.../messages` -> `200`
+    - `/api/chats/.../messages?account=...` -> `200`
+    - no `/api/media/... 404` requests on the fresh load
+    - no console errors, only one pre-existing accessibility issue about a form field lacking an `id` or `name`
+  - missing legacy media now render as plain placeholders such as `[Image]` or `[Document]` instead of repeated failing fetches
+- Service state after rollout:
+  - `whatomate`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, and `whatomate@matbaat-ruya` are all `active`
+- Config/public-key decision:
+  - no new config file was needed for this incident fix
+  - no `public.key` was needed because the rollout did not change the active licensing configuration
+- Skills applied:
+  - `debugging-wizard`
+  - `golang-pro`
+  - `vue-expert`
+  - `devops-engineer`
+- Competencies applied:
+  - root-cause analysis across HTTP, cookie, and media-delivery failures
+  - low-blast-radius Go backend hotfixing with targeted file sync
+  - frontend retry/cooldown hardening for missing media
+  - systemd binary deployment with rollback backup and authenticated browser verification

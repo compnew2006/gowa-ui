@@ -1,0 +1,50 @@
+{
+  "name": "whatomate-plugin",
+  "version": "[TODO: 1.2.0]",
+  "description": "Whatomate browser automation starter using Chrome DevTools and Playwright.",
+  "author": {
+    "name": "[TODO: Author Name]",
+    "email": "[TODO: author@example.com]",
+    "url": "[TODO: https://github.com/author]"
+  },
+  "homepage": "[TODO: https://docs.example.com/plugin]",
+  "repository": "[TODO: https://github.com/author/plugin]",
+  "license": "[TODO: MIT]",
+  "keywords": [
+    "whatomate",
+    "browser-automation",
+    "playwright"
+  ],
+  "skills": "./skills/",
+  "hooks": "[TODO: ./hooks.json]",
+  "mcpServers": "./.mcp.json",
+  "apps": "./.app.json",
+  "interface": {
+    "displayName": "Whatomate Browser Tools",
+    "shortDescription": "Browser automation starter for Whatomate.",
+    "longDescription": "Starter plugin for inspecting and validating Whatomate browser flows with Chrome DevTools and Playwright.",
+    "developerName": "[TODO: Developer Name]",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write",
+      "Browser Automation"
+    ],
+    "websiteURL": "[TODO: https://openai.com/]",
+    "privacyPolicyURL": "[TODO: https://openai.com/policies/row-privacy-policy/]",
+    "termsOfServiceURL": "[TODO: https://openai.com/policies/row-terms-of-use/]",
+    "defaultPrompt": [
+      "Use Chrome DevTools to inspect the active Whatomate page and capture console or network issues.",
+      "Use Playwright to open local Whatomate, walk the login flow, and capture a screenshot.",
+      "Reproduce a Whatomate UI bug with Chrome DevTools or Playwright and summarize the evidence."
+    ],
+    "brandColor": "[TODO: #3B82F6]",
+    "composerIcon": "[TODO: ./assets/icon.png]",
+    "logo": "[TODO: ./assets/logo.png]",
+    "screenshots": [
+      "[TODO: ./assets/screenshot1.png]",
+      "[TODO: ./assets/screenshot2.png]",
+      "[TODO: ./assets/screenshot3.png]"
+    ]
+  }
+}

@@ -330,6 +330,102 @@ func TestBackfillSystemChatPrefixPermission_Idempotent(t *testing.T) {
 	assert.Equal(t, int64(1), count, "backfill should not create duplicate role_permissions rows")
 }
 
+func TestBackfillAdminUploadsCleanupPermissions_AddsMissingPermissions(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	require.NoError(t, database.SeedPermissionsAndRoles(db))
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Uploads Cleanup Backfill Org",
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	adminRole := models.CustomRole{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "admin",
+		Description:    "System admin",
+		IsSystem:       true,
+	}
+	managerRole := models.CustomRole{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "manager",
+		Description:    "System manager",
+		IsSystem:       true,
+	}
+	require.NoError(t, db.Create(&adminRole).Error)
+	require.NoError(t, db.Create(&managerRole).Error)
+
+	require.NoError(t, database.BackfillAdminUploadsCleanupPermissions(db))
+
+	requiredPermissions := []struct {
+		resource string
+		action   string
+	}{
+		{resource: models.ResourceSettingsUploadsCleanup, action: models.ActionRead},
+		{resource: models.ResourceSettingsUploadsCleanup, action: models.ActionWrite},
+		{resource: models.ResourceSettingsUploadsCleanup, action: models.ActionExecute},
+	}
+
+	for _, required := range requiredPermissions {
+		var permission models.Permission
+		require.NoError(t, db.Where("resource = ? AND action = ?", required.resource, required.action).
+			First(&permission).Error)
+
+		var adminCount int64
+		require.NoError(t, db.Table("role_permissions").
+			Where("custom_role_id = ? AND permission_id = ?", adminRole.ID, permission.ID).
+			Count(&adminCount).Error)
+		assert.Equal(t, int64(1), adminCount, "admin role should receive %s:%s", required.resource, required.action)
+
+		var managerCount int64
+		require.NoError(t, db.Table("role_permissions").
+			Where("custom_role_id = ? AND permission_id = ?", managerRole.ID, permission.ID).
+			Count(&managerCount).Error)
+		assert.Equal(t, int64(0), managerCount, "manager role should not receive %s:%s", required.resource, required.action)
+	}
+}
+
+func TestBackfillAdminUploadsCleanupPermissions_Idempotent(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	require.NoError(t, database.SeedPermissionsAndRoles(db))
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Uploads Cleanup Backfill Idempotent Org",
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	adminRole := models.CustomRole{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "admin",
+		Description:    "System admin",
+		IsSystem:       true,
+	}
+	require.NoError(t, db.Create(&adminRole).Error)
+
+	require.NoError(t, database.BackfillAdminUploadsCleanupPermissions(db))
+	require.NoError(t, database.BackfillAdminUploadsCleanupPermissions(db))
+
+	var executePermission models.Permission
+	require.NoError(t, db.Where("resource = ? AND action = ?", models.ResourceSettingsUploadsCleanup, models.ActionExecute).
+		First(&executePermission).Error)
+
+	var count int64
+	require.NoError(t, db.Table("role_permissions").
+		Where("custom_role_id = ? AND permission_id = ?", adminRole.ID, executePermission.ID).
+		Count(&count).Error)
+	assert.Equal(t, int64(1), count, "backfill should not create duplicate role_permissions rows")
+}
+
 // --- CreateDefaultAdmin ---
 
 func TestCreateDefaultAdmin_CreatesOrgAndUser(t *testing.T) {

@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { createPinia, setActivePinia } from 'pinia'
-import type { WhatsAppInstance } from '@/types/whatsmeow'
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { createPinia, setActivePinia } from "pinia";
+import type { WhatsAppInstance } from "@/types/whatsmeow";
+import { useAuthStore } from "./auth";
 
 const mocks = vi.hoisted(() => ({
   instancesService: {
@@ -22,35 +23,52 @@ const mocks = vi.hoisted(() => ({
     error: vi.fn(),
     info: vi.fn(),
   },
-}))
+}));
 
-vi.mock('@/services/api', () => ({
+vi.mock("@/services/api", () => ({
   instancesService: mocks.instancesService,
-}))
+}));
 
-vi.mock('vue-sonner', () => ({
+vi.mock("vue-sonner", () => ({
   toast: mocks.toast,
-}))
+}));
 
-vi.mock('@/i18n', () => ({
+vi.mock("@/i18n", () => ({
   i18n: {
     global: {
       t: (key: string) => key,
     },
   },
-}))
+}));
 
-import { useInstancesStore } from './instances'
+import { useInstancesStore } from "./instances";
 
-function makeInstance(overrides: Partial<WhatsAppInstance> = {}): WhatsAppInstance {
-  const now = new Date().toISOString()
+function setInstanceReader() {
+  const authStore = useAuthStore();
+  authStore.user = {
+    id: "user-1",
+    email: "agent@example.com",
+    full_name: "Agent",
+    organization_id: "org-1",
+    role: {
+      id: "role-1",
+      name: "Agent",
+      permissions: ["accounts:read"],
+    },
+  };
+}
+
+function makeInstance(
+  overrides: Partial<WhatsAppInstance> = {},
+): WhatsAppInstance {
+  const now = new Date().toISOString();
   return {
-    id: overrides.id ?? 'instance-1',
-    name: overrides.name ?? 'Instance 1',
-    status: overrides.status ?? 'disconnected',
+    id: overrides.id ?? "instance-1",
+    name: overrides.name ?? "Instance 1",
+    status: overrides.status ?? "disconnected",
     is_default: false,
     auto_read_receipt: true,
-    organization_id: overrides.organization_id ?? 'org-1',
+    organization_id: overrides.organization_id ?? "org-1",
     settings: overrides.settings,
     health: overrides.health,
     created_at: now,
@@ -59,131 +77,158 @@ function makeInstance(overrides: Partial<WhatsAppInstance> = {}): WhatsAppInstan
     send_blocked_until: overrides.send_blocked_until,
     jid: overrides.jid,
     phone_number: overrides.phone_number,
-  }
+  };
 }
 
 function createDeferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
   const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
-describe('useInstancesStore', () => {
+describe("useInstancesStore", () => {
   beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.clearAllMocks()
-  })
+    setActivePinia(createPinia());
+    vi.clearAllMocks();
+  });
 
   afterEach(() => {
-    vi.useRealTimers()
-  })
+    vi.useRealTimers();
+  });
 
-  it('merges updates without dropping existing settings when payload has no settings', async () => {
-    const store = useInstancesStore()
+  it("merges updates without dropping existing settings when payload has no settings", async () => {
+    setInstanceReader();
+    const store = useInstancesStore();
     store.instances = [
       makeInstance({
-        id: 'instance-merge',
+        id: "instance-merge",
         settings: {
           auto_sync_history: true,
-          custom_existing_setting: 'keep-me',
+          custom_existing_setting: "keep-me",
         },
       }),
-    ]
+    ];
 
     mocks.instancesService.update.mockResolvedValueOnce({
       data: {
         data: {
-          id: 'instance-merge',
-          name: 'Renamed',
-          status: 'connected',
+          id: "instance-merge",
+          name: "Renamed",
+          status: "connected",
         },
       },
-    })
+    });
 
-    await store.updateInstance('instance-merge', { name: 'Renamed' })
+    await store.updateInstance("instance-merge", { name: "Renamed" });
 
-    expect(store.instances[0].name).toBe('Renamed')
-    expect(store.instances[0].status).toBe('connected')
+    expect(store.instances[0].name).toBe("Renamed");
+    expect(store.instances[0].status).toBe("connected");
     expect(store.instances[0].settings).toEqual({
       auto_sync_history: true,
-      custom_existing_setting: 'keep-me',
-    })
-  })
+      custom_existing_setting: "keep-me",
+    });
+  });
 
-  it('updates status transitions for connect, disconnect, reconnect', async () => {
-    const store = useInstancesStore()
-    store.instances = [makeInstance({ id: 'instance-state', status: 'disconnected' })]
+  it("updates status transitions for connect, disconnect, reconnect", async () => {
+    setInstanceReader();
+    const store = useInstancesStore();
+    store.instances = [
+      makeInstance({ id: "instance-state", status: "disconnected" }),
+    ];
 
-    mocks.instancesService.connect.mockResolvedValueOnce({ data: { status: 'success' } })
-    const connected = await store.connectInstance('instance-state')
-    expect(connected).toBe(true)
-    expect(store.instances[0].status).toBe('connecting')
+    mocks.instancesService.connect.mockResolvedValueOnce({
+      data: { status: "success" },
+    });
+    const connected = await store.connectInstance("instance-state");
+    expect(connected).toBe(true);
+    expect(store.instances[0].status).toBe("connecting");
 
-    mocks.instancesService.disconnect.mockResolvedValueOnce({ data: { status: 'success' } })
-    await store.disconnectInstance('instance-state')
-    expect(store.instances[0].status).toBe('logged_out')
+    mocks.instancesService.disconnect.mockResolvedValueOnce({
+      data: { status: "success" },
+    });
+    await store.disconnectInstance("instance-state");
+    expect(store.instances[0].status).toBe("logged_out");
 
-    mocks.instancesService.reconnect.mockResolvedValueOnce({ data: { status: 'success' } })
-    await store.reconnectInstance('instance-state')
-    expect(store.instances[0].status).toBe('connecting')
-  })
+    mocks.instancesService.reconnect.mockResolvedValueOnce({
+      data: { status: "success" },
+    });
+    await store.reconnectInstance("instance-state");
+    expect(store.instances[0].status).toBe("connecting");
+  });
 
-  it('guards health polling when a previous tick is still in flight', async () => {
-    vi.useFakeTimers()
-    const store = useInstancesStore()
+  it("guards health polling when a previous tick is still in flight", async () => {
+    vi.useFakeTimers();
+    setInstanceReader();
+    const store = useInstancesStore();
 
-    const deferredList = createDeferred<any>()
-    mocks.instancesService.list.mockReturnValue(deferredList.promise)
+    const deferredList = createDeferred<any>();
+    mocks.instancesService.list.mockReturnValue(deferredList.promise);
 
-    store.startHealthPolling(10, { refreshInstances: true })
+    store.startHealthPolling(10, { refreshInstances: true });
 
-    await vi.advanceTimersByTimeAsync(10)
-    await vi.advanceTimersByTimeAsync(10)
+    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(10);
 
-    expect(mocks.instancesService.list).toHaveBeenCalledTimes(1)
+    expect(mocks.instancesService.list).toHaveBeenCalledTimes(1);
 
-    deferredList.resolve({ data: { data: [makeInstance({ id: 'instance-poll' })] } })
-    await Promise.resolve()
-    store.stopHealthPolling()
-  })
+    deferredList.resolve({
+      data: { data: [makeInstance({ id: "instance-poll" })] },
+    });
+    await Promise.resolve();
+    store.stopHealthPolling();
+  });
 
-  it('sets error and emits toast when fetching instances fails', async () => {
-    const store = useInstancesStore()
+  it("sets error and emits toast when fetching instances fails", async () => {
+    setInstanceReader();
+    const store = useInstancesStore();
 
     mocks.instancesService.list.mockRejectedValueOnce({
       response: {
         data: {
-          message: 'backend failed',
+          message: "backend failed",
         },
       },
-    })
+    });
 
-    await store.fetchInstances()
+    await store.fetchInstances();
 
-    expect(store.error).toBe('backend failed')
-    expect(mocks.toast.error).toHaveBeenCalledWith('backend failed')
-  })
+    expect(store.error).toBe("backend failed");
+    expect(mocks.toast.error).toHaveBeenCalledWith("backend failed");
+  });
 
-  it('returns false and shows toast when connect fails', async () => {
-    const store = useInstancesStore()
-    store.instances = [makeInstance({ id: 'instance-connect-fail', status: 'disconnected' })]
+  it("returns false and shows toast when connect fails", async () => {
+    setInstanceReader();
+    const store = useInstancesStore();
+    store.instances = [
+      makeInstance({ id: "instance-connect-fail", status: "disconnected" }),
+    ];
 
     mocks.instancesService.connect.mockRejectedValueOnce({
       response: {
         data: {
-          message: 'cannot connect',
+          message: "cannot connect",
         },
       },
-    })
+    });
 
-    const ok = await store.connectInstance('instance-connect-fail')
+    const ok = await store.connectInstance("instance-connect-fail");
 
-    expect(ok).toBe(false)
-    expect(mocks.toast.error).toHaveBeenCalledWith('cannot connect')
-    expect(store.instances[0].status).toBe('disconnected')
-  })
-})
+    expect(ok).toBe(false);
+    expect(mocks.toast.error).toHaveBeenCalledWith("cannot connect");
+    expect(store.instances[0].status).toBe("disconnected");
+  });
+
+  it("skips instance fetches when the user lacks accounts read permission", async () => {
+    const store = useInstancesStore();
+
+    await store.fetchInstances();
+
+    expect(mocks.instancesService.list).not.toHaveBeenCalled();
+    expect(store.instances).toEqual([]);
+    expect(store.error).toBeNull();
+  });
+});

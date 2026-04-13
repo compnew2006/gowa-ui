@@ -330,6 +330,69 @@ test.describe("Role with Read-Only Roles Access", () => {
   });
 });
 
+test.describe("Role with Uploads Cleanup Access", () => {
+  test.describe.configure({ mode: "serial" });
+
+  const roleName = generateUniqueName("E2E Uploads Cleanup Role");
+  const userEmail = generateUniqueEmail("e2e-uploads-cleanup");
+  const userPassword = "Password123!";
+
+  let api: ApiHelper;
+  let roleId: string;
+  let userId: string;
+  let context: BrowserContext;
+  let page: Page;
+
+  test.beforeAll(async ({ browser }) => {
+    api = adminApi;
+
+    const permissions = await api.findPermissionKeys([
+      { resource: "chat", action: "read" },
+      { resource: "settings.uploads_cleanup", action: "read" },
+      { resource: "settings.uploads_cleanup", action: "execute" },
+    ]);
+
+    const role = await api.createRole({
+      name: roleName,
+      description: "E2E test role with uploads cleanup access",
+      permissions,
+    });
+    roleId = role.id;
+
+    const user = await api.createUser({
+      email: userEmail,
+      password: userPassword,
+      full_name: "E2E Uploads Cleanup User",
+      role_id: roleId,
+    });
+    userId = user.id;
+
+    ({ context, page } = await createLoggedInSession(
+      browser,
+      userEmail,
+      userPassword,
+    ));
+  });
+
+  test.afterAll(async () => {
+    await context?.close().catch(() => {});
+    if (userId) await api.deleteUser(userId).catch(() => {});
+    if (roleId) await api.deleteRole(roleId).catch(() => {});
+  });
+
+  test("user with uploads cleanup permission can access settings and only sees the cleanup controls", async () => {
+    await page.goto("/settings");
+    await page.waitForLoadState("networkidle");
+
+    expect(page.url()).toContain("/settings");
+    await expect(
+      page.getByTestId("uploads-cleanup-retention-days-input"),
+    ).toBeVisible();
+    await expect(page.getByTestId("uploads-cleanup-run-now")).toBeVisible();
+    await expect(page.locator("input#org_name")).toHaveCount(0);
+  });
+});
+
 test.describe("Role with Accounts Access", () => {
   test.describe.configure({ mode: "serial" });
 

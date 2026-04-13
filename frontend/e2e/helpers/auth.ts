@@ -1,65 +1,83 @@
-import { Page } from '@playwright/test'
+import { Page } from "@playwright/test";
 
 export interface TestUser {
-  email: string
-  password: string
-  role: 'admin' | 'manager' | 'agent'
+  email: string;
+  password: string;
+  role: "admin" | "manager" | "agent";
 }
 
-const E2E_TEST_PASSWORD = 'Password123!'
+const E2E_TEST_PASSWORD = "Password123!";
+const E2E_ADMIN_EMAIL =
+  process.env.E2E_ADMIN_EMAIL ||
+  process.env.E2E_SUPERADMIN_EMAIL ||
+  "admin@test.com";
+const E2E_ADMIN_PASSWORD =
+  process.env.E2E_ADMIN_PASSWORD ||
+  process.env.E2E_SUPERADMIN_PASSWORD ||
+  E2E_TEST_PASSWORD;
 
 // Test users - these should match seeded data in test database
 export const TEST_USERS = {
   admin: {
-    email: 'admin@test.com',
-    password: E2E_TEST_PASSWORD,
-    role: 'admin' as const,
+    email: E2E_ADMIN_EMAIL,
+    password: E2E_ADMIN_PASSWORD,
+    role: "admin" as const,
   },
   manager: {
-    email: 'manager@test.com',
+    email: "manager@test.com",
     password: E2E_TEST_PASSWORD,
-    role: 'manager' as const,
+    role: "manager" as const,
   },
   agent: {
-    email: 'agent@test.com',
+    email: "agent@test.com",
     password: E2E_TEST_PASSWORD,
-    role: 'agent' as const,
+    role: "agent" as const,
   },
-}
+};
 
 export async function login(page: Page, user: TestUser) {
-  await page.goto('/login')
-  await page.locator('input[name="email"], input[type="email"]').fill(user.email)
-  await page.locator('input[name="password"], input[type="password"]').fill(user.password)
-  await page.locator('button[type="submit"]').click()
+  await page.goto("/login");
+  await page
+    .locator('input[name="email"], input[type="email"]')
+    .fill(user.email);
+  await page
+    .locator('input[name="password"], input[type="password"]')
+    .fill(user.password);
+  await page.locator('button[type="submit"]').click();
   // Wait for redirect away from login page (could be dashboard, chat, analytics, etc.)
-  await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10000 })
+  await page.waitForURL((url) => !url.pathname.includes("/login"), {
+    timeout: 10000,
+  });
 }
 
 export async function loginAsAdmin(page: Page) {
-  await login(page, TEST_USERS.admin)
+  await login(page, TEST_USERS.admin);
 }
 
 export async function loginAsManager(page: Page) {
-  await login(page, TEST_USERS.manager)
+  await login(page, TEST_USERS.manager);
 }
 
 export async function loginAsAgent(page: Page) {
-  await login(page, TEST_USERS.agent)
+  await login(page, TEST_USERS.agent);
 }
 
 export async function logout(page: Page) {
   // Click user menu in sidebar - it's in the aside element (not nav), button contains user's email
-  const userMenuButton = page.locator('aside').getByRole('button').filter({ hasText: /@/ }).first()
-  await userMenuButton.click()
+  const userMenuButton = page
+    .locator("aside")
+    .getByRole("button")
+    .filter({ hasText: /@/ })
+    .first();
+  await userMenuButton.click();
   // Click logout in popover
-  await page.getByRole('button', { name: /Log out/i }).click()
+  await page.getByRole("button", { name: /Log out/i }).click();
   // Wait for redirect to login
-  await page.waitForURL(/\/login/)
+  await page.waitForURL(/\/login/);
 }
 
 export async function isLoggedIn(page: Page): Promise<boolean> {
   // Check if we're on a protected page (not login/register)
-  const url = page.url()
-  return !url.includes('/login') && !url.includes('/register')
+  const url = page.url();
+  return !url.includes("/login") && !url.includes("/register");
 }
