@@ -1,7 +1,8 @@
 import * as z from 'zod/v4';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { toToolErrorResult } from '../errors.js';
-import type { MessageRecord } from '../clients/whatomate-client.js';
+// import type { MessageRecord } from '../clients/whatomate-client.js';
+export type MessageRecord = any;
 import type { McpServerDependencies } from '../mcp/types.js';
 import { toToolSuccessResult } from './result.js';
 

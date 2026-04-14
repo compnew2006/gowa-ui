@@ -82,11 +82,17 @@ func (cm *ConnectionManager) refreshContactAvatar(ctx context.Context, instanceI
 
 	avatarURL := ""
 	previousAvatarURL := strings.TrimSpace(metadataString(contact.Metadata, avatarURLMetadataKey))
-	info, err := client.GetProfilePictureInfo(ctx, targetJID, nil)
-	if err != nil {
-		cm.logger.Debug("Profile photo fetch skipped", "instance_id", instanceID, "contact_id", contact.ID, "error", err)
-	} else if info != nil {
-		avatarURL = strings.TrimSpace(info.URL)
+	if client == nil {
+	    cm.logger.Debug("Profile photo fetch skipped: client is nil", "instance_id", instanceID, "contact_id", contact.ID)
+	} else if !client.IsConnected() {
+		cm.logger.Debug("Profile photo fetch skipped: client is disconnected", "instance_id", instanceID, "contact_id", contact.ID)
+	} else {
+		info, err := client.GetProfilePictureInfo(ctx, targetJID, nil)
+		if err != nil {
+			cm.logger.Debug("Profile photo fetch skipped", "instance_id", instanceID, "contact_id", contact.ID, "error", err)
+		} else if info != nil {
+			avatarURL = strings.TrimSpace(info.URL)
+		}
 	}
 
 	metadata := cloneProfileMetadata(contact.Metadata)
