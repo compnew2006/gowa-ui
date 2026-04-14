@@ -33,6 +33,17 @@ type UpdateInstanceRequest struct {
 	Settings        *models.JSONB `json:"settings"`
 }
 
+func mergeInstanceSettings(current models.JSONB, updates models.JSONB) models.JSONB {
+	merged := make(models.JSONB, len(current)+len(updates))
+	for key, value := range current {
+		merged[key] = value
+	}
+	for key, value := range updates {
+		merged[key] = value
+	}
+	return merged
+}
+
 // PairPhoneInstanceRequest represents request body for phone-code pairing.
 type PairPhoneInstanceRequest struct {
 	PhoneNumber          string `json:"phone_number"`
@@ -306,7 +317,8 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 		instance.AutoReadReceipt = *req.AutoReadReceipt
 	}
 	if req.Settings != nil {
-		settings := waManager.EnsureInstanceSettingsDefaults(*req.Settings)
+		settings := mergeInstanceSettings(instance.Settings, *req.Settings)
+		settings = waManager.EnsureInstanceSettingsDefaults(settings)
 		if settingsErr := waManager.ValidateInstanceSettings(settings); settingsErr != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, settingsErr.Error(), nil, "settings")
 		}

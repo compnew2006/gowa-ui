@@ -4,6 +4,10 @@ import { wsService } from './websocket'
 import { useContactsStore } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
 
+const mocks = vi.hoisted(() => ({
+  maybeAutoDownloadIncomingMedia: vi.fn(),
+}))
+
 vi.mock('@/stores/contacts', () => ({
   useContactsStore: vi.fn(),
 }))
@@ -34,7 +38,7 @@ vi.mock('@/services/api', () => ({
 }))
 
 vi.mock('@/lib/incoming_media_autodownload', () => ({
-  maybeAutoDownloadIncomingMedia: vi.fn(),
+  maybeAutoDownloadIncomingMedia: mocks.maybeAutoDownloadIncomingMedia,
 }))
 
 vi.mock('vue-sonner', () => ({
@@ -179,6 +183,57 @@ describe('websocket message_media_updated', () => {
     expect(addMessage).toHaveBeenCalledTimes(1)
     expect(fetchContact).toHaveBeenCalledTimes(1)
     expect(fetchContact).toHaveBeenCalledWith('contact-42')
+  })
+
+  it('prefetches eligible incoming media even when the message is not appended locally', async () => {
+    const addMessage = vi.fn(() => false)
+
+    vi.mocked(useContactsStore).mockReturnValue({
+      currentContact: null,
+      contacts: [
+        {
+          id: 'contact-media',
+        },
+      ],
+      addMessage,
+      fetchContact: vi.fn(),
+      patchContact: vi.fn(),
+      messages: [],
+    } as unknown as ReturnType<typeof useContactsStore>)
+    vi.mocked(useAuthStore).mockReturnValue({
+      user: null,
+      userSettings: {
+        new_message_alerts: false,
+      },
+    } as unknown as ReturnType<typeof useAuthStore>)
+
+    ;(wsService as any).handleMessage(JSON.stringify({
+      type: 'new_message',
+      payload: {
+        id: 'message-media',
+        contact_id: 'contact-media',
+        instance_id: 'instance-1',
+        direction: 'incoming',
+        message_type: 'image',
+        content: { body: '[Image]' },
+        status: 'received',
+        created_at: '2026-03-03T10:00:00.000Z',
+        updated_at: '2026-03-03T10:00:00.000Z',
+      },
+    }))
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(addMessage).toHaveBeenCalledTimes(1)
+    expect(mocks.maybeAutoDownloadIncomingMedia).toHaveBeenCalledTimes(1)
+    expect(mocks.maybeAutoDownloadIncomingMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'message-media',
+        instance_id: 'instance-1',
+        message_type: 'image',
+      }),
+    )
   })
 
   it('skips unknown-contact fetches for restricted users when the message instance is out of scope', async () => {

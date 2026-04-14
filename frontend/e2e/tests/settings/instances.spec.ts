@@ -25,6 +25,13 @@ const HEALTH_PAYLOAD = {
 type MockHooks = {
   onCreate?: (payload: Record<string, unknown>) => void;
   onUpdate?: (id: string, payload: Record<string, unknown>) => void;
+  onUpdateResponse?: (
+    id: string,
+    payload: Record<string, unknown>,
+  ) => {
+    status: number;
+    body: Record<string, unknown>;
+  } | null;
   onDelete?: (id: string) => void;
   onDeleteRequest?: (id: string, deleteChats: boolean) => void;
   onConnect?: (id: string) => void;
@@ -166,6 +173,16 @@ async function mockInstancesApi(
       const instanceID = instanceRootMatch[1];
       const payload = (request.postDataJSON() || {}) as Record<string, unknown>;
       hooks.onUpdate?.(instanceID, payload);
+      const updateResponse = hooks.onUpdateResponse?.(instanceID, payload);
+
+      if (updateResponse) {
+        await route.fulfill({
+          status: updateResponse.status,
+          contentType: "application/json",
+          body: JSON.stringify(updateResponse.body),
+        });
+        return;
+      }
 
       const index = instances.findIndex(
         (instance) => instance.id === instanceID,
@@ -1018,6 +1035,59 @@ test.describe("WhatsApp Instances", () => {
     expect(receivedUpdatePayload?.settings?.auto_download_incoming_media).toBe(
       false,
     );
+  });
+
+  test("should keep the page usable when auto-download save fails", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+
+    const now = new Date().toISOString();
+    const instance: MockInstance = {
+      id: "e2e-instance-auto-download-error-id",
+      name: `Auto Download Error ${Date.now()}`,
+      status: "connected",
+      is_default: false,
+      auto_read_receipt: true,
+      organization_id: "e2e-org-id",
+      settings: {
+        auto_download_incoming_media: false,
+      },
+      created_at: now,
+      updated_at: now,
+    };
+
+    await mockInstancesApi(page, [instance], {
+      onUpdateResponse: () => ({
+        status: 500,
+        body: {
+          status: "error",
+          message: "Failed to update instance",
+        },
+      }),
+    });
+
+    await page.goto("/settings/instances");
+    await expect(
+      page.locator("h3").filter({ hasText: instance.name }),
+    ).toBeVisible();
+
+    const autoDownloadLabel = page.getByText("Auto-download incoming media");
+    await expect(autoDownloadLabel).toBeVisible();
+    const autoDownloadSwitch = autoDownloadLabel
+      .locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')
+      .getByRole("switch");
+    await autoDownloadSwitch.click();
+
+    await expect(
+      page
+        .locator("[data-sonner-toast]")
+        .filter({ hasText: "Failed to update instance" }),
+    ).toBeVisible();
+    await expect(page.getByText("Something went wrong")).toHaveCount(0);
+    await expect(
+      page.locator("h3").filter({ hasText: instance.name }),
+    ).toBeVisible();
   });
 
   test("should save instance specific chat close rating settings", async ({

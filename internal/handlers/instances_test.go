@@ -187,6 +187,50 @@ func TestApp_UpdateInstance_DuplicateNameConflict(t *testing.T) {
 	assert.Equal(t, "Support", refreshed.Name)
 }
 
+func TestApp_UpdateInstance_MergesSettingsAndPersistsAutoDownloadIncomingMedia(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createInstanceManagerUser(t, app, org.ID, "instance-manager-auto-download")
+	instance := createTestInstance(t, app, org.ID, "Support")
+
+	instance.Settings = models.JSONB{
+		"auto_sync_history":     true,
+		"custom_existing_key":   "keep-me",
+		"chat_tag_display_mode": "name",
+	}
+	require.NoError(t, app.DB.Model(instance).Update("settings", instance.Settings).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"settings": map[string]any{
+			"auto_download_incoming_media": true,
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", instance.ID.String())
+
+	err := app.UpdateInstance(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data models.WhatsAppInstance `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, true, resp.Data.Settings["auto_download_incoming_media"])
+	assert.Equal(t, true, resp.Data.Settings["auto_sync_history"])
+	assert.Equal(t, "keep-me", resp.Data.Settings["custom_existing_key"])
+	assert.Equal(t, "name", resp.Data.Settings["chat_tag_display_mode"])
+
+	var updated models.WhatsAppInstance
+	require.NoError(t, app.DB.First(&updated, "id = ?", instance.ID).Error)
+	assert.Equal(t, true, updated.Settings["auto_download_incoming_media"])
+	assert.Equal(t, true, updated.Settings["auto_sync_history"])
+	assert.Equal(t, "keep-me", updated.Settings["custom_existing_key"])
+	assert.Equal(t, "name", updated.Settings["chat_tag_display_mode"])
+}
+
 func TestApp_UpdateInstance_ReindexesConnectedRuntimeKey(t *testing.T) {
 	t.Parallel()
 

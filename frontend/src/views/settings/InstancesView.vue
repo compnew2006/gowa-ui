@@ -656,6 +656,8 @@ async function handleAutoDownloadIncomingMediaUpdate(
       auto_download_incoming_media: enabled,
     };
     await instancesStore.updateInstance(id, { settings });
+  } catch {
+    void instancesStore.fetchInstance(id);
   } finally {
     autoDownloadIncomingMediaSaving.value[id] = false;
   }

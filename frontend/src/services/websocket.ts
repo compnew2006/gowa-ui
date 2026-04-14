@@ -502,9 +502,7 @@ class WebSocketService {
       appendToActiveThread: isViewingThisContact,
     });
 
-    if (isNewMessage) {
-      maybeAutoDownloadIncomingMedia(payload);
-    }
+    maybeAutoDownloadIncomingMedia(payload);
 
     const hasContactStatus = typeof payload.contact_status === "string";
     const hasAssignedUserField = typeof payload.assigned_user_id === "string";
