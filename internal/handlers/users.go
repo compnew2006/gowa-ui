@@ -862,7 +862,7 @@ func (a *App) DeleteUser(r *fastglue.Request) error {
 	// Find user via user_organizations (supports cross-org members).
 	// Select("users.*") avoids column conflict with user_organizations.organization_id.
 	var user models.User
-	if err := requestDB.
+	if err := requestDB.Session(&gorm.Session{}).
 		Select("users.*").
 		Joins("JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL", orgID).
 		Where("users.id = ? AND users.deleted_at IS NULL", id).
@@ -875,7 +875,9 @@ func (a *App) DeleteUser(r *fastglue.Request) error {
 
 	if isMember {
 		// Cross-org member: only remove from this organization
-		result := requestDB.Where("user_id = ? AND organization_id = ?", id, orgID).Delete(&models.UserOrganization{})
+		result := requestDB.Session(&gorm.Session{}).
+			Where("user_id = ? AND organization_id = ?", id, orgID).
+			Delete(&models.UserOrganization{})
 		if result.Error != nil {
 			a.Log.Error("Failed to remove member", "error", result.Error)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to remove member", nil, "")
@@ -888,21 +890,29 @@ func (a *App) DeleteUser(r *fastglue.Request) error {
 
 	// Load org-specific role for admin check
 	var userOrg models.UserOrganization
-	if err := requestDB.Where("user_id = ? AND organization_id = ?", id, orgID).Preload("Role").First(&userOrg).Error; err == nil && userOrg.Role != nil && userOrg.Role.Name == "admin" {
+	if err := requestDB.Session(&gorm.Session{}).
+		Where("user_id = ? AND organization_id = ?", id, orgID).
+		Preload("Role").
+		First(&userOrg).Error; err == nil && userOrg.Role != nil && userOrg.Role.Name == "admin" {
 		var adminRole models.CustomRole
-		if err := requestDB.Where("organization_id = ? AND name = ? AND is_system = ?", orgID, "admin", true).First(&adminRole).Error; err == nil {
+		if err := requestDB.Session(&gorm.Session{}).
+			Where("organization_id = ? AND name = ? AND is_system = ?", orgID, "admin", true).
+			First(&adminRole).Error; err == nil {
 			var adminCount int64
-			requestDB.
+			if err := requestDB.Session(&gorm.Session{}).
 				Model(&models.UserOrganization{}).
 				Where("organization_id = ? AND role_id = ? AND deleted_at IS NULL", orgID, adminRole.ID).
-				Count(&adminCount)
+				Count(&adminCount).Error; err != nil {
+				a.Log.Error("Failed to count admin users before delete", "error", err, "organization_id", orgID, "user_id", id)
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete user", nil, "")
+			}
 			if adminCount <= 1 {
 				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Cannot delete the last admin", nil, "")
 			}
 		}
 	}
 
-	result := requestDB.Where("id = ?", id).Delete(&models.User{})
+	result := requestDB.Session(&gorm.Session{}).Where("id = ?", id).Delete(&models.User{})
 	if result.Error != nil {
 		a.Log.Error("Failed to delete user", "error", result.Error)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete user", nil, "")
@@ -910,10 +920,12 @@ func (a *App) DeleteUser(r *fastglue.Request) error {
 	if result.RowsAffected == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "User not found", nil, "")
 	}
-	requestDB.
-
-		// Delete all UserOrganization entries for this user
-		Where("user_id = ?", id).Delete(&models.UserOrganization{})
+	if err := requestDB.Session(&gorm.Session{}).
+		Where("user_id = ?", id).
+		Delete(&models.UserOrganization{}).Error; err != nil {
+		a.Log.Error("Failed to delete user organization memberships", "error", err, "user_id", id)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete user", nil, "")
+	}
 
 	return r.SendEnvelope(map[string]string{"message": "User deleted successfully"})
 }

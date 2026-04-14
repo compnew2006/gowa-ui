@@ -901,3 +901,74 @@
   - it downloads to the user’s machine when the web app is open and connected over websocket, even if the chat itself is not open
   - it does not pre-download to an offline browser that is not running
 - `summary.md` already had unrelated uncommitted edits in this worktree, so this session was appended instead of replacing prior notes.
+
+---
+
+# Session Summary - 2026-04-14 License Cleanup Delete User
+
+## Task
+
+- Fix the `DELETE /api/users/:id` failure hit from `/license-cleanup` when deleting users.
+
+## Root Cause
+
+- `internal/handlers/users.go` reused the same request-scoped GORM handle across:
+  - the initial `users` + `user_organizations` join lookup
+  - the org-role/admin-count checks
+  - the final `DELETE` statements
+- Under scoped requests this is brittle and can leak prior clauses into later statements, which matches the production failure pattern already seen in other handlers.
+
+## Changes Made
+
+- Updated `internal/handlers/users.go`
+  - `DeleteUser` now uses `requestDB.Session(&gorm.Session{})` for each independent query chain
+  - added explicit error handling for the admin-count query
+  - added explicit error handling for deleting `user_organizations` rows after the user soft-delete
+- Updated `internal/handlers/users_query_regression_test.go`
+  - added a dry-run regression test proving the delete/count queries do not inherit the earlier `JOIN user_organizations` clauses
+
+## Verification
+
+- Passed:
+  - `go test ./internal/handlers -run 'Test(BuildUsersListBaseQuery_UsesIsolatedStatements|DeleteUserQueries_UseFreshScopedSessions|App_DeleteUser|App_DeleteUser_LastAdmin)'`
+- Browser/runtime note:
+  - I reached `http://localhost:8080/license-cleanup` successfully in the browser and confirmed the page loads with the delete controls.
+  - The Workbox messages shown in the console are a separate symptom from the backend `500`; the stale asset warning for `/assets/index-CCcBgwXJ.css` indicates an outdated service worker cache on that origin.
+
+## Follow-up Note
+
+- If Workbox warnings keep appearing after you restart with the rebuilt frontend, clear site data or unregister the service worker for `localhost:8080`; those logs are not the actual cause of the delete-user backend failure.
+
+---
+
+# Session Summary - 2026-04-14 License Cleanup Delete Organization
+
+## Task
+
+- Fix the `DELETE /api/organizations/:id` failure from `/license-cleanup` that incorrectly returned `Cannot delete the last organization`.
+
+## Root Cause
+
+- `internal/handlers/organization.go` reused the same request-scoped GORM handle across:
+  - the target organization lookup
+  - the active organization count
+  - the current-user home-organization lookup
+  - the transaction start
+- Under scoped requests that can leak earlier clauses into later queries, which made the organization count behave as if only the targeted row existed and incorrectly triggered the `last organization` guard.
+
+## Changes Made
+
+- Updated `internal/handlers/organization.go`
+  - `DeleteOrganization` now starts each independent query chain from `requestDB.Session(&gorm.Session{})`
+  - the delete transaction now also starts from a fresh session
+- Added `internal/handlers/organization_query_regression_test.go`
+  - verifies the organization count and current-user lookup queries do not inherit the earlier target-organization filter
+
+## Verification
+
+- Passed:
+  - `go test ./internal/handlers -run 'Test(DeleteOrganizationQueries_UseFreshScopedSessions|App_DeleteOrganization_Success|App_DeleteOrganization_CannotDeleteHomeOrganization|App_DeleteOrganization_Unauthorized)'`
+- Browser/runtime:
+  - restarted the local server on `localhost:8080` from the patched workspace
+  - verified deleting `Scoped Org` (`5724d7e6-50b8-4082-83ef-f9a77befd483`) from `/license-cleanup` now returns `200`
+  - after deletion, the UI refreshed from `3/1` organizations to `2/1` and the organization disappeared from the list

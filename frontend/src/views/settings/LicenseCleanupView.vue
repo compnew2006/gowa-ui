@@ -222,19 +222,36 @@ async function deleteOrganization(org: Organization) {
     return;
   }
 
+  const fallbackOrg =
+    organizations.value.find((candidate) => candidate.id !== org.id) || null;
+  const deletedSelectedOrg = organizationsStore.selectedOrgId === org.id;
+
   deletingKey.value = `org:${org.id}`;
   try {
+    if (deletedSelectedOrg) {
+      organizationsStore.selectOrganization(fallbackOrg?.id || null);
+    }
+
     await organizationsService.delete(org.id);
     await organizationsStore.fetchOrganizations();
     organizations.value = [...organizationsStore.organizations];
 
-    if (organizationsStore.selectedOrgId === org.id) {
-      const fallback = organizationsStore.organizations[0];
-      organizationsStore.selectOrganization(fallback?.id || null);
+    if (
+      organizationsStore.selectedOrgId &&
+      !organizationsStore.organizations.some(
+        (candidate) => candidate.id === organizationsStore.selectedOrgId,
+      )
+    ) {
+      organizationsStore.selectOrganization(
+        organizationsStore.organizations[0]?.id || null,
+      );
     }
 
     await afterDeletion(`Deleted organization ${org.name}.`);
   } catch (error) {
+    if (deletedSelectedOrg) {
+      organizationsStore.selectOrganization(org.id);
+    }
     toast.error(getErrorMessage(error, "Failed to delete organization"));
   } finally {
     deletingKey.value = "";

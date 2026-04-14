@@ -584,13 +584,17 @@ func (a *App) DeleteOrganization(r *fastglue.Request) error {
 	}
 
 	var org models.Organization
-	if err := requestDB.Where("id = ?", targetOrgID).First(&org).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).
+		Where("id = ?", targetOrgID).
+		First(&org).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Organization not found", nil, "")
 	}
 
 	// Keep at least one active organization in the system.
 	var orgCount int64
-	if err := requestDB.Model(&models.Organization{}).Count(&orgCount).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).
+		Model(&models.Organization{}).
+		Count(&orgCount).Error; err != nil {
 		a.Log.Error("Failed to count organizations before delete", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")
 	}
@@ -599,14 +603,17 @@ func (a *App) DeleteOrganization(r *fastglue.Request) error {
 	}
 
 	var currentUser models.User
-	if err := requestDB.Select("id", "organization_id").Where("id = ?", userID).First(&currentUser).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).
+		Select("id", "organization_id").
+		Where("id = ?", userID).
+		First(&currentUser).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	if currentUser.OrganizationID == targetOrgID {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Cannot delete your home organization", nil, "")
 	}
 
-	tx := requestDB.Begin()
+	tx := requestDB.Session(&gorm.Session{}).Begin()
 	if tx.Error != nil {
 		a.Log.Error("Failed to begin transaction for organization delete", "error", tx.Error)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete organization", nil, "")

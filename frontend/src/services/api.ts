@@ -93,6 +93,22 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function shouldAttachOrganizationHeader(url?: string): boolean {
+  if (!url) {
+    return true;
+  }
+
+  const normalizedUrl = url.startsWith("http")
+    ? new URL(url, window.location.origin).pathname
+    : url;
+
+  return !(
+    normalizedUrl === "/me" ||
+    normalizedUrl.startsWith("/me/") ||
+    normalizedUrl.startsWith("/auth/")
+  );
+}
+
 // Request interceptor to add CSRF token and organization header
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -111,7 +127,7 @@ api.interceptors.request.use(
     }
     // Add organization override header for org switching
     const selectedOrgId = localStorage.getItem("selected_organization_id");
-    if (selectedOrgId) {
+    if (selectedOrgId && shouldAttachOrganizationHeader(config.url)) {
       config.headers["X-Organization-ID"] = selectedOrgId;
     }
     return config;
