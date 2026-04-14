@@ -40,7 +40,8 @@ func TestHandleMessage_PersistsDeviceSentFromMeAsOutgoing(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&instance).Error)
 
-	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	cm := NewConnectionManager(db, nil, testutil.NopLogger(), &config.WhatsmeowConfig{}, nil, "./uploads")
+	cm.disableAvatarSync = true
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
@@ -108,7 +109,10 @@ func TestHandleMessage_SkipsFromMeWithoutDeviceSentMetadata(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&instance).Error)
 
-	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	cm := NewConnectionManager(db, nil, testutil.NopLogger(), &config.WhatsmeowConfig{}, nil, "./uploads")
+
+	// Avoid triggering GetProfilePictureInfo panic since client is mocked minimally
+	cm.disableAvatarSync = true
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
@@ -161,7 +165,10 @@ func TestHandleMessage_PersistsGroupFromMeWithoutDeviceSentMetadata(t *testing.T
 	}
 	require.NoError(t, db.Create(&instance).Error)
 
-	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, "./uploads")
+	cm := NewConnectionManager(db, nil, testutil.NopLogger(), &config.WhatsmeowConfig{}, nil, "./uploads")
+
+	// Avoid triggering GetProfilePictureInfo panic since client is mocked minimally
+	cm.disableAvatarSync = true
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)

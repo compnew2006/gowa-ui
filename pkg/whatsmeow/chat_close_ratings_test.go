@@ -8,6 +8,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/pkg/chat_close_ratings"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -45,7 +46,7 @@ func TestParseInboundRatingValue_SupportsLocalizedDigitsAndComments(t *testing.T
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			gotValue, gotOK := parseInboundRatingValue(tc.input)
+			gotValue, gotOK := chat_close_ratings.ParseInboundRatingValue(tc.input)
 			assert.Equal(t, tc.wantOK, gotOK)
 			assert.Equal(t, tc.wantValue, gotValue)
 		})

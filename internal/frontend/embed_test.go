@@ -144,4 +144,3 @@ func performRequest(t *testing.T, handler fasthttp.RequestHandler, uri string) *
 
 	return resp
 }
-

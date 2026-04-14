@@ -56,7 +56,10 @@ type ConnectionManager struct {
 	healthMonitorMu     sync.Mutex
 	healthMonitorCancel context.CancelFunc
 	healthMonitorDone   chan struct{}
-	mediaService      *MediaService
+	mediaService        *MediaService
+
+	// disableAvatarSync allows tests to bypass avatar sync to avoid panics on mock clients
+	disableAvatarSync bool
 }
 
 type inboundMediaJobEnqueuer interface {
