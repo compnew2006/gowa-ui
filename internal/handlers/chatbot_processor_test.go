@@ -995,9 +995,12 @@ func TestSaveIncomingMessage_WithMedia(t *testing.T) {
 
 	waMsgID := "wamid." + uuid.New().String()[:16]
 	media := &MediaInfo{
-		MediaURL:      "/uploads/test-image.jpg",
-		MediaMimeType: "image/jpeg",
-		MediaFilename: "photo.jpg",
+		MediaURL:         "/uploads/test-image.jpg",
+		MediaMimeType:    "image/jpeg",
+		MediaFilename:    "photo.jpg",
+		RecoveryProvider: legacyMediaRecoveryProviderMeta,
+		RecoveryMediaID:  "media-123",
+		RecoveryPhoneID:  account.PhoneID,
 	}
 	app.saveIncomingMessage(account, contact, waMsgID, "image", "Look at this", media, "")
 
@@ -1006,6 +1009,12 @@ func TestSaveIncomingMessage_WithMedia(t *testing.T) {
 	assert.Equal(t, "/uploads/test-image.jpg", msg.MediaURL)
 	assert.Equal(t, "image/jpeg", msg.MediaMimeType)
 	assert.Equal(t, "photo.jpg", msg.MediaFilename)
+	require.NotNil(t, msg.Metadata)
+	assert.Equal(t, legacyMediaRecoveryProviderMeta, msg.Metadata[legacyMediaRecoveryProviderKey])
+	assert.Equal(t, "media-123", msg.Metadata[legacyMediaRecoveryMediaIDKey])
+	assert.Equal(t, account.PhoneID, msg.Metadata[legacyMediaRecoveryPhoneIDKey])
+	_, hasExpiry := msg.Metadata[legacyMediaRecoveryExpiresAtKey]
+	assert.True(t, hasExpiry)
 
 	// Non-text messages show type in preview
 	var dbContact models.Contact

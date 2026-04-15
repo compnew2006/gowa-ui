@@ -80,6 +80,15 @@ type RoleInfo struct {
 	Permissions []PermissionInfo `json:"permissions"`
 }
 
+func scopedUserWriteDB(db *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
+	if db == nil {
+		return db
+	}
+	return db.Session(&gorm.Session{}).
+		Model(&models.User{}).
+		Where("id = ? AND organization_id = ?", userID, orgID)
+}
+
 func buildUsersListBaseQuery(requestDB *gorm.DB, orgID uuid.UUID, search string) *gorm.DB {
 	const joinClause = "JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL"
 
@@ -814,7 +823,13 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		user.IsSuperAdmin = *saField
 	}
 
-	if err := requestDB.Save(&user).Error; err != nil {
+	if err := scopedUserWriteDB(a.DB, user.ID, user.OrganizationID).Updates(map[string]any{
+		"email":          user.Email,
+		"full_name":      user.FullName,
+		"role_id":        user.RoleID,
+		"is_active":      user.IsActive,
+		"is_super_admin": user.IsSuperAdmin,
+	}).Error; err != nil {
 		a.Log.Error("Failed to update user", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update user", nil, "")
 	}
@@ -1046,7 +1061,8 @@ func (a *App) UpdateCurrentUserSettings(r *fastglue.Request) error {
 			delete(user.Settings, "chat_background")
 		}
 
-		if err := requestDB.Save(&user).Error; err != nil {
+		if err := scopedUserWriteDB(a.DB, user.ID, user.OrganizationID).
+			Update("settings", user.Settings).Error; err != nil {
 			a.Log.Error("Failed to update user settings", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
 		}
@@ -1057,7 +1073,8 @@ func (a *App) UpdateCurrentUserSettings(r *fastglue.Request) error {
 			}
 		}
 	} else {
-		if err := requestDB.Save(&user).Error; err != nil {
+		if err := scopedUserWriteDB(a.DB, user.ID, user.OrganizationID).
+			Update("settings", user.Settings).Error; err != nil {
 			a.Log.Error("Failed to update user settings", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
 		}
@@ -1149,7 +1166,8 @@ func (a *App) UploadCurrentUserChatBackground(r *fastglue.Request) error {
 	}
 	user.Settings["chat_background"] = nextBackground.toSettingsValue()
 
-	if err := requestDB.Save(&user).Error; err != nil {
+	if err := scopedUserWriteDB(a.DB, user.ID, user.OrganizationID).
+		Update("settings", user.Settings).Error; err != nil {
 		_ = os.Remove(fullPath)
 		a.Log.Error("Failed to persist chat background metadata", "user_id", user.ID, "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save chat background", nil, "")
@@ -1238,7 +1256,8 @@ func (a *App) ChangePassword(r *fastglue.Request) error {
 	}
 
 	user.PasswordHash = string(hashedPassword)
-	if err := requestDB.Save(&user).Error; err != nil {
+	if err := scopedUserWriteDB(a.DB, user.ID, user.OrganizationID).
+		Update("password_hash", user.PasswordHash).Error; err != nil {
 		a.Log.Error("Failed to update password", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to change password", nil, "")
 	}
@@ -1385,7 +1404,8 @@ func (a *App) UpdateAvailability(r *fastglue.Request) error {
 
 	user.IsAvailable = req.IsAvailable
 
-	if err := requestDB.Save(&user).Error; err != nil {
+	if err := scopedUserWriteDB(a.DB, user.ID, user.OrganizationID).
+		Update("is_available", user.IsAvailable).Error; err != nil {
 		a.Log.Error("Failed to update availability", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update availability", nil, "")
 	}

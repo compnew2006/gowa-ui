@@ -48,3 +48,53 @@ func TestDeleteOrganizationQueries_UseFreshScopedSessions(t *testing.T) {
 	require.Contains(t, currentUserSQL, "from `users`")
 	require.NotContains(t, currentUserSQL, "from `organizations`")
 }
+
+func TestInstanceUpdates_UseFreshScopedSessions(t *testing.T) {
+	t.Parallel()
+
+	db := testutil.SetupTestDB(t)
+	orgID := uuid.New()
+	instanceID := uuid.New()
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: orgID},
+		Name:      "Regression Org",
+		Slug:      "regression-org-instance-update",
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: instanceID},
+		OrganizationID: orgID,
+		Name:           "Regression Instance",
+		Status:         models.InstanceStatusDisconnected,
+		Settings: models.JSONB{
+			"auto_sync_history": true,
+		},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	requestDB := tenant.ScopedDB(db, orgID)
+	var loaded models.WhatsAppInstance
+	require.NoError(t, requestDB.
+		Where("id = ? AND organization_id = ?", instanceID, orgID).
+		First(&loaded).Error)
+
+	updates := map[string]any{
+		"settings": models.JSONB{
+			"auto_sync_history":            true,
+			"auto_download_incoming_media": true,
+		},
+	}
+
+	err := tenant.ScopedDB(db.Session(&gorm.Session{}), orgID).
+		Model(&models.WhatsAppInstance{}).
+		Where("id = ?", instanceID).
+		Updates(updates).Error
+	require.NoError(t, err)
+
+	var refreshed models.WhatsAppInstance
+	require.NoError(t, db.Where("id = ?", instanceID).First(&refreshed).Error)
+	require.Equal(t, true, refreshed.Settings["auto_download_incoming_media"])
+	require.Equal(t, true, refreshed.Settings["auto_sync_history"])
+}

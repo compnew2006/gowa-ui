@@ -524,6 +524,7 @@ func TestGetIndexes(t *testing.T) {
 	// Test that critical indexes are present
 	criticalIndexes := map[string]string{
 		"idx_messages_contact_created":                  "CREATE INDEX IF NOT EXISTS idx_messages_contact_created",
+		"idx_messages_legacy_media_reconcile":           "CREATE INDEX IF NOT EXISTS idx_messages_legacy_media_reconcile",
 		"idx_contacts_org_phone_instance":               "CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_phone_instance",
 		"idx_whatsapp_instances_j_id":                   "CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_instances_j_id",
 		"idx_bulk_recipients_campaign_phone_normalized": "CREATE UNIQUE INDEX IF NOT EXISTS idx_bulk_recipients_campaign_phone_normalized",

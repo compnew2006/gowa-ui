@@ -149,56 +149,18 @@ func getContentTypeFromExt(ext string) string {
 // DownloadAndSaveMedia downloads media from Meta and saves it locally
 // Returns the local file path (relative to media storage) or error
 func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType string, account *whatsapp.Account) (string, error) {
-	// Get the media URL from Meta
-	mediaURL, err := a.WhatsApp.GetMediaURL(ctx, mediaID, account)
+	savedFile, err := a.downloadAndSaveLegacyMedia(
+		ctx,
+		mediaID,
+		mimeType,
+		legacyMediaMessageTypeFromMIME(mimeType),
+		"",
+		account,
+	)
 	if err != nil {
-		return "", fmt.Errorf("failed to get media URL: %w", err)
+		return "", err
 	}
-
-	// Download the media content
-	data, err := a.WhatsApp.DownloadMedia(ctx, mediaURL, account.AccessToken)
-	if err != nil {
-		return "", fmt.Errorf("failed to download media: %w", err)
-	}
-
-	// Determine file extension
-	ext := getExtensionFromMimeType(mimeType)
-	if ext == "" {
-		ext = ".bin"
-	}
-
-	// Generate unique filename
-	filename := uuid.New().String() + ext
-
-	// Determine subdirectory based on media type
-	var subdir string
-	switch {
-	case strings.HasPrefix(mimeType, "image/"):
-		subdir = "images"
-	case strings.HasPrefix(mimeType, "video/"):
-		subdir = "videos"
-	case strings.HasPrefix(mimeType, "audio/"):
-		subdir = "audio"
-	default:
-		subdir = "documents"
-	}
-
-	// Ensure directory exists
-	if err := a.ensureMediaDir(subdir); err != nil {
-		return "", fmt.Errorf("failed to create media directory: %w", err)
-	}
-
-	// Save file
-	filePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)
-	if err := os.WriteFile(filePath, data, 0600); err != nil {
-		return "", fmt.Errorf("failed to save media file: %w", err)
-	}
-
-	// Return relative path for storage in database
-	relativePath := filepath.Join(subdir, filename)
-	a.Log.Info("Media saved", "path", relativePath, "size", len(data))
-
-	return relativePath, nil
+	return savedFile.RelativePath, nil
 }
 
 // ServeMedia serves media files from local storage
@@ -263,6 +225,12 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	}
 	if message.MediaAssetID == nil || message.MediaAsset == nil || strings.TrimSpace(message.MediaAsset.S3Key) == "" {
 		if relativePath := strings.TrimSpace(message.MediaURL); relativePath != "" {
+			if missing, missingErr := isMissingLegacyMediaPath(a.getMediaStoragePath(), relativePath); missingErr == nil && missing {
+				if restoredMessage, restored := a.maybeRestoreLegacyMedia(r.RequestCtx, requestDB, &message); restored && restoredMessage != nil {
+					message = *restoredMessage
+					relativePath = strings.TrimSpace(message.MediaURL)
+				}
+			}
 			if filename := strings.TrimSpace(message.MediaFilename); filename != "" {
 				r.RequestCtx.Response.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
 			}

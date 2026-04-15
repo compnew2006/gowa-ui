@@ -31,9 +31,10 @@ type LegacyMediaReconcileSummary struct {
 }
 
 type legacyMediaReconcileCandidate struct {
-	ID        uuid.UUID `gorm:"column:id"`
-	MediaURL  string    `gorm:"column:media_url"`
-	CreatedAt time.Time `gorm:"column:created_at"`
+	ID        uuid.UUID    `gorm:"column:id"`
+	MediaURL  string       `gorm:"column:media_url"`
+	CreatedAt time.Time    `gorm:"column:created_at"`
+	Metadata  models.JSONB `gorm:"column:metadata"`
 }
 
 func ReconcileMissingLegacyMedia(
@@ -64,7 +65,7 @@ func ReconcileMissingLegacyMedia(
 
 	query := db.WithContext(ctx).
 		Model(&models.Message{}).
-		Select("id", "media_url", "created_at").
+		Select("id", "media_url", "created_at", "metadata").
 		Where("media_asset_id IS NULL").
 		Where("media_deleted_at IS NULL").
 		Where("TRIM(COALESCE(media_url, '')) <> ''").
@@ -111,6 +112,15 @@ func ReconcileMissingLegacyMedia(
 	for _, candidate := range candidates {
 		missing, resolveErr := isMissingLegacyMediaPath(basePath, candidate.MediaURL)
 		if resolveErr != nil || !missing {
+			continue
+		}
+		if _, eligible, _ := inspectLegacyMediaRecovery(&models.Message{
+			BaseModel: models.BaseModel{
+				ID:        candidate.ID,
+				CreatedAt: candidate.CreatedAt,
+			},
+			Metadata: candidate.Metadata,
+		}, now); eligible {
 			continue
 		}
 		if len(summary.SampleIDs) < 20 {

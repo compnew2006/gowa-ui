@@ -2,6 +2,7 @@ package license
 
 import (
 	"crypto/ed25519"
+	"encoding/base64"
 	"testing"
 	"time"
 
@@ -100,10 +101,13 @@ func TestParseEmbeddedKeyRing(t *testing.T) {
 		t.Fatalf("GenerateKeyPair() error = %v", err)
 	}
 
-	original := EmbeddedPublicKeyRingJSON
+	originalJSON := EmbeddedPublicKeyRingJSON
+	originalBase64 := EmbeddedPublicKeyRingBase64
 	t.Cleanup(func() {
-		EmbeddedPublicKeyRingJSON = original
+		EmbeddedPublicKeyRingJSON = originalJSON
+		EmbeddedPublicKeyRingBase64 = originalBase64
 	})
+	EmbeddedPublicKeyRingBase64 = ""
 	EmbeddedPublicKeyRingJSON = `[{"kid":"vendor-1","public_key":"` + publicKey + `"}]`
 
 	keyRing, err := ParseEmbeddedKeyRing()
@@ -115,10 +119,48 @@ func TestParseEmbeddedKeyRing(t *testing.T) {
 	}
 }
 
-func TestBuildKeyRingFromConfigVerifiesIssuedToken(t *testing.T) {
-	cfg, err := config.Load("../../config.toml")
+func TestParseEmbeddedKeyRingBase64(t *testing.T) {
+	publicKey, _, err := GenerateKeyPair()
 	if err != nil {
-		t.Fatalf("config.Load() error = %v", err)
+		t.Fatalf("GenerateKeyPair() error = %v", err)
+	}
+
+	originalJSON := EmbeddedPublicKeyRingJSON
+	originalBase64 := EmbeddedPublicKeyRingBase64
+	t.Cleanup(func() {
+		EmbeddedPublicKeyRingJSON = originalJSON
+		EmbeddedPublicKeyRingBase64 = originalBase64
+	})
+	EmbeddedPublicKeyRingJSON = "[]"
+	EmbeddedPublicKeyRingBase64 = base64.StdEncoding.EncodeToString([]byte(`[{"kid":"vendor-1","public_key":"` + publicKey + `"}]`))
+
+	keyRing, err := ParseEmbeddedKeyRing()
+	if err != nil {
+		t.Fatalf("ParseEmbeddedKeyRing() error = %v", err)
+	}
+	if _, ok := keyRing["vendor-1"]; !ok {
+		t.Fatal("ParseEmbeddedKeyRing() missing vendor-1 key from base64 payload")
+	}
+}
+
+func TestBuildKeyRingFromDevelopmentConfigVerifiesIssuedToken(t *testing.T) {
+	publicKey, privateKey, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() error = %v", err)
+	}
+	decodedPrivateKey, err := DecodePrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("DecodePrivateKey() error = %v", err)
+	}
+	cfg := &config.Config{
+		App: config.AppConfig{
+			Environment: "development",
+		},
+		License: config.LicenseConfig{
+			PublicKey:                    publicKey,
+			PublicKeyKID:                 "vendor-1",
+			AllowUnsafePublicKeyOverride: true,
+		},
 	}
 
 	keyRing, err := buildKeyRing(cfg)
@@ -126,9 +168,50 @@ func TestBuildKeyRingFromConfigVerifiesIssuedToken(t *testing.T) {
 		t.Fatalf("buildKeyRing() error = %v", err)
 	}
 
-	token := "eyJhbGciOiJFZERTQSIsImtpZCI6InZlbmRvci0xIiwidHlwIjoiV0hNLUxJQ0VOU0UifQ.eyJsaWNlbnNlX2lkIjoiNTNiY2RmNjgtNTFhMy00YTAyLTkxODQtOWJiZTEyNWJmMDAyIiwibGljZW5zZV9mYW1pbHlfaWQiOiI1M2JjZGY2OC01MWEzLTRhMDItOTE4NC05YmJlMTI1YmYwMDIiLCJyZXZpc2lvbiI6MSwicHJvZHVjdCI6IndoYXRvbWF0ZSIsImh3aWRfaGFzaCI6IjRlN2Y1NDhjZmViZjc3NzgxN2YxMzVkYzY2NjQwMTUzOTFlMGRmNTFlZDRhYjcwOGZmNTkyYWE3MTVlNGNkOGYiLCJ0aWVyIjoic3RhcnRlciIsImxpY2Vuc2Vfa2luZCI6InBhaWQiLCJ0cmlhbF9kYXlzIjowLCJtYXhfb3JnYW5pemF0aW9ucyI6MSwibWF4X3VzZXJzX3Blcl9vcmciOjEsIm1heF93aGF0c2FwcF9lbmRwb2ludHNfcGVyX29yZyI6MSwibWF4X3dvcmtlcnMiOjEsImlzcyI6IndoYXRvbWF0ZS1saWNlbnNlLXZlbmRvciIsInN1YiI6IndoYXRvbWF0ZSIsImF1ZCI6WyJ3aGF0b21hdGUtc2VydmVyIl0sImV4cCI6MTc4MDQ0MDA3MSwibmJmIjoxNzc1NjAxNjcxLCJpYXQiOjE3NzU2MDE2NzEsImp0aSI6IjUzYmNkZjY4LTUxYTMtNGEwMi05MTg0LTliYmUxMjViZjAwMiJ9.kihvlrOD5amf4uWIjoegPmoorgbxQ1Q3fGME91Z3ScWeMSuyEZUOGb8hycbYeqSCVbrTak0OUcVrD93YSsL4Cw"
+	now := time.Date(2026, 4, 7, 22, 44, 3, 0, time.UTC)
+	expiresAt := now.AddDate(0, 0, 365)
+	token, err := IssueToken(IssueRequest{
+		KeyID:                      "vendor-1",
+		PrivateKey:                 decodedPrivateKey,
+		LicenseID:                  "license-1",
+		LicenseFamilyID:            "family-1",
+		Revision:                   1,
+		HWIDHash:                   "hwid-hash",
+		Tier:                       "starter",
+		LicenseKind:                KindPaid,
+		MaxOrganizations:           1,
+		MaxUsersPerOrg:             1,
+		MaxWhatsAppEndpointsPerOrg: 1,
+		MaxWorkers:                 1,
+		IssuedAt:                   now,
+		NotBefore:                  now,
+		ExpiresAt:                  &expiresAt,
+	})
+	if err != nil {
+		t.Fatalf("IssueToken() error = %v", err)
+	}
 
-	if _, _, err := VerifyToken(token, keyRing, time.Date(2026, 4, 7, 22, 44, 3, 0, time.UTC)); err != nil {
+	if _, _, err := VerifyToken(token, keyRing, now); err != nil {
 		t.Fatalf("VerifyToken() error = %v", err)
+	}
+}
+
+func TestBuildKeyRingRejectsProductionConfigOverride(t *testing.T) {
+	publicKey, _, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() error = %v", err)
+	}
+
+	_, err = buildKeyRing(&config.Config{
+		App: config.AppConfig{
+			Environment: "production",
+		},
+		License: config.LicenseConfig{
+			PublicKey:    publicKey,
+			PublicKeyKID: "vendor-1",
+		},
+	})
+	if err == nil {
+		t.Fatal("buildKeyRing() error = nil, want production override rejection")
 	}
 }

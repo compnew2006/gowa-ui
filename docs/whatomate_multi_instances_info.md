@@ -1648,3 +1648,98 @@ Updated: 2026-04-12 00:21 UTC
   - low-blast-radius Go backend hotfixing with targeted file sync
   - frontend retry/cooldown hardening for missing media
   - systemd binary deployment with rollback backup and authenticated browser verification
+
+## Deployment Update
+
+Updated: 2026-04-15 22:21:06 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Pre-deploy full backup set: `/root/whatomate_backups/20260415_212640`
+- Final native VPS build directory: `/root/whatomate_temp_build` (removed after deployment)
+- Final build command: `cd /root/whatomate_temp_build && VERSION=8dfb206-worktree-20260415_2210-vps make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Installed binary version: `Whatomate 8dfb206-worktree-20260415_2210-vps (built 2026-04-15_22:11:29)`
+- Installed binary SHA256: `02999b58c65a130cdd7a1be80689b5b923dccaede692b39ccef9d059031f9da9`
+- Final runtime backup before cutover: `/opt/whatomate/bin/whatomate.20260415_221226.pre_8dfb206_2210_safe.bak`
+
+### License System Fix
+
+- Root cause:
+  - the first 2026-04-15 VPS build injected malformed `EmbeddedPublicKeyRingJSON`, which crash-looped `whatomate.service`
+  - the production configs also did not have a working active `[license]` configuration
+- Final fix:
+  - restored the last good runtime binary first to recover service availability
+  - rebuilt natively on Ubuntu without overriding `LICENSE_KEY_RING_JSON`, leaving the embedded key ring at the safe default `[]`
+  - enabled `[license]` in `/opt/whatomate/config.toml` and all `/opt/whatomate/instances/*/config.toml`
+  - set `public_key = "Sg7jjcj+DLdw6ogU8gnBmZBh2dqALk88G3QCKfPmmhU="`
+  - set `public_key_kid = "deploy-20260415"`
+  - set `allow_unsafe_public_key_override = true`
+  - activated the signed host-bound token on ports `18123`, `18124`, `18125`, and `18126`
+- Final license state:
+  - all four instances report `enabled = true`, `status = active`, `locked = false`
+  - `license_id = dc245a31-d3d3-4033-bb45-ee9fd9c0c9e1`
+  - `key_id = deploy-20260415`
+
+### VPS Cleanup
+
+- Removed stale source/worktree/archive artifacts:
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-src.old`
+  - `/opt/whatomate-src.prev.20260412_001354`
+  - `/opt/whatomate-src-backup`
+  - `/opt/whatomate-src-e55d147-worktree-20260412_113509`
+  - `/opt/whatomate-src-e55d147-worktree-20260412_114534`
+  - `/root/whatomate`
+  - `/root/whatomate_temp_build`
+  - `/root/whatomate-buildonly-20260415_2135.tgz`
+  - `/root/whatomate-src-20260415_2132.tgz`
+  - `/root/whatomate-a2b0e3a.tar`
+  - `/root/whatomate-deploy.tar`
+  - `/root/whatomate-deploy.tar.gz`
+  - `/root/whatomate-linux-20260303_172132`
+  - `/root/whatomate-linux-20260303_204653`
+  - `/root/whatomate.new`
+  - `/root/whatomate_remote_deploy_20260415.sh`
+  - `/root/whatomate_deploy_20260415.token`
+  - `/root/whatomate-keyring.json`
+- Retained:
+  - `/opt/whatomate`
+  - `/root/whatomate_backups/20260415_212640`
+  - runtime configs, uploads, PostgreSQL databases, and the remote markdown docs
+
+### Post-Deploy Verification
+
+- `systemctl is-active` returned `active` for:
+  - `whatomate`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+- Listener ports active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+- License bootstrap verification:
+  - `:18123` -> `active`
+  - `:18124` -> `active`
+  - `:18125` -> `active`
+  - `:18126` -> `active`
+- Browser verification:
+  - used Playwright CLI on the local desktop because no Chrome DevTools MCP was configured in this session
+  - `https://ofuqalmadenah.com/login` rendered the Whatomate login page with email/password inputs and a `Sign in` button
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` rendered the Whatomate login page with email/password inputs and a `Sign in` button
+
+### Skills Applied
+
+- `master-workflow`
+- `devops-engineer`
+- `playwright`
+
+### Competencies Applied
+
+- SSH automation with password-based access and host-key bypass for a changed VPS fingerprint
+- Ubuntu `systemd` deployment and rollback handling
+- native Go + Vite build orchestration on Ubuntu/amd64
+- production license activation and per-instance verification
+- browser and HTTP smoke verification against live HTTPS routes

@@ -22,6 +22,7 @@ import (
 	"github.com/zerodha/fastglue"
 	"github.com/zerodha/logf"
 	"go.mau.fi/whatsmeow/store/sqlstore"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -48,6 +49,14 @@ type App struct {
 	WhatsmeowQueue *whatsmeow.QueueManager
 	// License enforces host-bound activation and runtime quotas.
 	License *license.Service
+	// legacyMediaRestoreGroup deduplicates concurrent restore attempts per message within this process.
+	legacyMediaRestoreGroup singleflight.Group
+	// legacyMediaRestoreLimiter caps concurrent restore work across distinct messages.
+	legacyMediaRestoreLimiter chan struct{}
+	// legacyMediaRestoreLimiterOnce lazily initializes the limiter.
+	legacyMediaRestoreLimiterOnce sync.Once
+	// legacyMediaRestoreMetrics tracks in-process restore counters for observability.
+	legacyMediaRestoreMetrics legacyMediaRestoreMetrics
 	// wg tracks background goroutines for graceful shutdown
 	wg sync.WaitGroup
 }

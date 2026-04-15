@@ -1,6 +1,7 @@
 package license
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -22,8 +23,11 @@ const (
 	KindPaid         = "paid"
 )
 
-// EmbeddedPublicKeyRingJSON can be replaced at build time for production binaries.
+// EmbeddedPublicKeyRingJSON is the legacy build-time JSON injection hook.
 var EmbeddedPublicKeyRingJSON = "[]"
+
+// EmbeddedPublicKeyRingBase64 is the preferred build-time key-ring payload.
+var EmbeddedPublicKeyRingBase64 = ""
 
 type KeyRingEntry struct {
 	KID       string `json:"kid"`
@@ -160,15 +164,35 @@ func ParseKeyRing(entries []KeyRingEntry) (map[string]ed25519.PublicKey, error) 
 }
 
 func ParseEmbeddedKeyRing() (map[string]ed25519.PublicKey, error) {
+	payload, err := embeddedKeyRingPayload()
+	if err != nil {
+		return nil, err
+	}
+	var entries []KeyRingEntry
+	if err := json.Unmarshal(payload, &entries); err != nil {
+		return nil, fmt.Errorf("parse embedded key ring: %w", err)
+	}
+	return ParseKeyRing(entries)
+}
+
+func embeddedKeyRingPayload() ([]byte, error) {
+	if trimmed := strings.TrimSpace(EmbeddedPublicKeyRingBase64); trimmed != "" {
+		decoded, err := base64.StdEncoding.DecodeString(trimmed)
+		if err != nil {
+			return nil, fmt.Errorf("decode embedded key ring base64: %w", err)
+		}
+		decoded = bytes.TrimSpace(decoded)
+		if len(decoded) == 0 {
+			return []byte("[]"), nil
+		}
+		return decoded, nil
+	}
+
 	trimmed := strings.TrimSpace(EmbeddedPublicKeyRingJSON)
 	if trimmed == "" {
 		trimmed = "[]"
 	}
-	var entries []KeyRingEntry
-	if err := json.Unmarshal([]byte(trimmed), &entries); err != nil {
-		return nil, fmt.Errorf("parse embedded key ring: %w", err)
-	}
-	return ParseKeyRing(entries)
+	return []byte(trimmed), nil
 }
 
 func IssueToken(req IssueRequest) (string, error) {

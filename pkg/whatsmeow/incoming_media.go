@@ -550,6 +550,9 @@ func firstPollCreationMessage(msg *waE2E.Message) *waE2E.PollCreationMessage {
 	if poll := msg.GetPollCreationMessageV5(); poll != nil {
 		return poll
 	}
+	if poll := msg.GetPollCreationMessageV6(); poll != nil {
+		return poll
+	}
 	return nil
 }
 
@@ -658,8 +661,6 @@ func nextWrappedMessage(msg *waE2E.Message) *waE2E.Message {
 		return msg.ProtocolMessage.GetEditedMessage()
 	case msg.PollCreationMessageV4 != nil && msg.PollCreationMessageV4.Message != nil:
 		return msg.PollCreationMessageV4.Message
-	case msg.PollCreationMessageV6 != nil && msg.PollCreationMessageV6.Message != nil:
-		return msg.PollCreationMessageV6.Message
 	case msg.SpoilerMessage != nil && msg.SpoilerMessage.Message != nil:
 		return msg.SpoilerMessage.Message
 	default:

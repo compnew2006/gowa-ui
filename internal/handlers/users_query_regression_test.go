@@ -1,16 +1,29 @@
 package handlers
 
 import (
+	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
+
+type testLogWriter struct {
+	buffer *bytes.Buffer
+}
+
+func (w testLogWriter) Printf(format string, args ...interface{}) {
+	fmt.Fprintf(w.buffer, format, args...)
+}
 
 func TestBuildUsersListBaseQuery_UsesIsolatedStatements(t *testing.T) {
 	t.Parallel()
@@ -78,4 +91,36 @@ func TestDeleteUserQueries_UseFreshScopedSessions(t *testing.T) {
 	require.Equal(t, 0, strings.Count(adminCountQuery.Statement.SQL.String(), "JOIN user_organizations"))
 	require.Equal(t, 0, strings.Count(deleteUserQuery.Statement.SQL.String(), "JOIN user_organizations"))
 	require.Equal(t, 0, strings.Count(deleteMembershipsQuery.Statement.SQL.String(), "JOIN user_organizations"))
+}
+
+func TestCurrentUserSettingsWriteUsesFreshScopedSession(t *testing.T) {
+	t.Parallel()
+
+	sqlDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer sqlDB.Close()
+
+	logBuffer := &bytes.Buffer{}
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB,
+	}), &gorm.Config{
+		Logger: logger.New(testLogWriter{buffer: logBuffer}, logger.Config{LogLevel: logger.Info}),
+	})
+	require.NoError(t, err)
+
+	orgID := uuid.New()
+	userID := uuid.New()
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE .*users.*").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	err = scopedUserWriteDB(db, userID, orgID).Update("settings", models.JSONB{
+		"theme_mode": "dark",
+	}).Error
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	sql := strings.ToLower(logBuffer.String())
+	require.Contains(t, sql, `update "users"`)
+	require.NotContains(t, sql, `from "users"`)
 }

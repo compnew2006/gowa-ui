@@ -13,9 +13,9 @@ allow_legacy_encryption = true  # Set false after running crypto-migrate to reje
 
 [license]
 enabled = false
-public_key = ""  # Development-only override. Production builds should embed a key ring and leave this empty unless allow_unsafe_public_key_override=true.
+public_key = ""  # Non-production-only override. Production builds must embed a key ring and leave this empty.
 public_key_kid = ""
-allow_unsafe_public_key_override = false
+allow_unsafe_public_key_override = false  # Must be true when using public_key outside production.
 fingerprint_sources = ["/etc/machine-id", "/sys/class/dmi/id/product_uuid"]
 host_machine_id_path = ""  # In Docker on Linux, mount the host machine-id and set this to the mounted path, e.g. "/host/etc/machine-id".
 # For Docker on Linux, also point fingerprint_sources at the mounted host paths instead of the container defaults:

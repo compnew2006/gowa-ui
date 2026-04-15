@@ -196,18 +196,25 @@ func buildKeyRing(cfg *config.Config) (map[string]ed25519.PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(cfg.License.PublicKey) == "" {
+	override := strings.TrimSpace(cfg.License.PublicKey)
+	if override == "" {
 		return embedded, nil
 	}
+	if strings.EqualFold(strings.TrimSpace(cfg.App.Environment), "production") {
+		return nil, fmt.Errorf("license.public_key override is not permitted in production; embed the key ring at build time")
+	}
+	if !cfg.License.AllowUnsafePublicKeyOverride {
+		return nil, fmt.Errorf("license.public_key override requires license.allow_unsafe_public_key_override=true outside production")
+	}
 
-	overrideKey, err := DecodePublicKey(cfg.License.PublicKey)
+	overrideKey, err := DecodePublicKey(override)
 	if err != nil {
 		return nil, err
 	}
 	if embedded == nil {
 		embedded = make(map[string]ed25519.PublicKey)
 	}
-	kid := cfg.License.PublicKeyKID
+	kid := strings.TrimSpace(cfg.License.PublicKeyKID)
 	if kid == "" {
 		kid = "config-override"
 	}

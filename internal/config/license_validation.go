@@ -14,6 +14,10 @@ func ValidateLicenseConfig(cfg *Config) error {
 		return nil
 	}
 
+	cfg.License.PublicKey = strings.TrimSpace(cfg.License.PublicKey)
+	cfg.License.PublicKeyKID = strings.TrimSpace(cfg.License.PublicKeyKID)
+	cfg.License.HostMachineIDPath = strings.TrimSpace(cfg.License.HostMachineIDPath)
+
 	if cfg.License.RollbackToleranceSeconds < 60 {
 		return fmt.Errorf("license.rollback_tolerance_seconds must be at least 60")
 	}
@@ -21,13 +25,13 @@ func ValidateLicenseConfig(cfg *Config) error {
 		return fmt.Errorf("license.grace_period_days cannot be negative")
 	}
 
-	if isProductionEnv(cfg) && strings.TrimSpace(cfg.License.PublicKey) != "" && !cfg.License.AllowUnsafePublicKeyOverride {
-		return fmt.Errorf("license.public_key override is disabled in production unless license.allow_unsafe_public_key_override=true")
+	if isProductionEnv(cfg) {
+		if cfg.License.PublicKey != "" || cfg.License.PublicKeyKID != "" || cfg.License.AllowUnsafePublicKeyOverride {
+			return fmt.Errorf("production licensing must use an embedded key ring; remove license.public_key, license.public_key_kid, and license.allow_unsafe_public_key_override")
+		}
+	} else if cfg.License.PublicKey != "" && !cfg.License.AllowUnsafePublicKeyOverride {
+		return fmt.Errorf("license.public_key override requires license.allow_unsafe_public_key_override=true outside production")
 	}
-
-	cfg.License.PublicKey = strings.TrimSpace(cfg.License.PublicKey)
-	cfg.License.PublicKeyKID = strings.TrimSpace(cfg.License.PublicKeyKID)
-	cfg.License.HostMachineIDPath = strings.TrimSpace(cfg.License.HostMachineIDPath)
 
 	return nil
 }

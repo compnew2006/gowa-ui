@@ -41,9 +41,14 @@ func (j *JSONB) Scan(value interface{}) error {
 		*j = nil
 		return nil
 	}
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
+	var bytes []byte
+	switch typed := value.(type) {
+	case []byte:
+		bytes = typed
+	case string:
+		bytes = []byte(typed)
+	default:
+		return errors.New("type assertion to []byte or string failed")
 	}
 	return json.Unmarshal(bytes, j)
 }
@@ -78,9 +83,14 @@ func (j *JSONBArray) Scan(value interface{}) error {
 		*j = nil
 		return nil
 	}
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
+	var bytes []byte
+	switch typed := value.(type) {
+	case []byte:
+		bytes = typed
+	case string:
+		bytes = []byte(typed)
+	default:
+		return errors.New("type assertion to []byte or string failed")
 	}
 	return json.Unmarshal(bytes, j)
 }
@@ -115,9 +125,14 @@ func (s *StringArray) Scan(value interface{}) error {
 		*s = nil
 		return nil
 	}
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
+	var bytes []byte
+	switch typed := value.(type) {
+	case []byte:
+		bytes = typed
+	case string:
+		bytes = []byte(typed)
+	default:
+		return errors.New("type assertion to []byte or string failed")
 	}
 	return json.Unmarshal(bytes, s)
 }

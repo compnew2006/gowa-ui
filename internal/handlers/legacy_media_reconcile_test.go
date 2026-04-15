@@ -25,12 +25,13 @@ func TestMessageHasVisibleMedia(t *testing.T) {
 }
 
 func TestReconcileMissingLegacyMediaMarksOnlyMissingOldFiles(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(`
 		CREATE TABLE messages (
 			id TEXT PRIMARY KEY,
 			media_url TEXT,
+			metadata JSON,
 			media_asset_id TEXT,
 			media_deleted_at DATETIME,
 			deleted_at DATETIME,
@@ -81,4 +82,69 @@ func TestReconcileMissingLegacyMediaMarksOnlyMissingOldFiles(t *testing.T) {
 	assert.True(t, deletedAt.Valid)
 	require.NoError(t, db.Raw(`SELECT media_deleted_at FROM messages WHERE id = ?`, recentMissingID).Scan(&deletedAt).Error)
 	assert.False(t, deletedAt.Valid)
+}
+
+func TestReconcileMissingLegacyMediaSkipsOnlyRecoverableRowsWithinTTL(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`
+		CREATE TABLE messages (
+			id TEXT PRIMARY KEY,
+			media_url TEXT,
+			metadata JSON,
+			media_asset_id TEXT,
+			media_deleted_at DATETIME,
+			deleted_at DATETIME,
+			created_at DATETIME,
+			updated_at DATETIME
+		)
+	`).Error)
+
+	tempDir := t.TempDir()
+	recoverableID := uuid.NewString()
+	expiredRecoverableID := uuid.NewString()
+	unrecoverableID := uuid.NewString()
+
+	recoveryMetadata := `{"legacy_media_recovery_provider":"meta","legacy_media_recovery_media_id":"media-1","legacy_media_recovery_phone_id":"phone-1"}`
+	require.NoError(t, db.Exec(
+		`INSERT INTO messages (id, media_url, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		recoverableID,
+		"documents/recoverable.pdf",
+		recoveryMetadata,
+		time.Now().UTC().Add(-2*time.Hour),
+		time.Now().UTC(),
+	).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO messages (id, media_url, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		expiredRecoverableID,
+		"documents/expired.pdf",
+		recoveryMetadata,
+		time.Now().UTC().Add(-(legacyMediaRecoveryTTL+24*time.Hour)),
+		time.Now().UTC(),
+	).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO messages (id, media_url, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		unrecoverableID,
+		"documents/unrecoverable.pdf",
+		`{}`,
+		time.Now().UTC().Add(-2*time.Hour),
+		time.Now().UTC(),
+	).Error)
+
+	applied, err := ReconcileMissingLegacyMedia(context.Background(), db, tempDir, LegacyMediaReconcileOptions{
+		OlderThan: time.Hour,
+		Apply:     true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 3, applied.CandidateCount)
+	assert.Equal(t, 2, applied.MissingCount)
+	assert.Equal(t, 2, applied.UpdatedCount)
+
+	var deletedAt sql.NullTime
+	require.NoError(t, db.Raw(`SELECT media_deleted_at FROM messages WHERE id = ?`, recoverableID).Scan(&deletedAt).Error)
+	assert.False(t, deletedAt.Valid)
+	require.NoError(t, db.Raw(`SELECT media_deleted_at FROM messages WHERE id = ?`, expiredRecoverableID).Scan(&deletedAt).Error)
+	assert.True(t, deletedAt.Valid)
+	require.NoError(t, db.Raw(`SELECT media_deleted_at FROM messages WHERE id = ?`, unrecoverableID).Scan(&deletedAt).Error)
+	assert.True(t, deletedAt.Valid)
 }

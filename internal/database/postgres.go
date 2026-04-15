@@ -472,6 +472,7 @@ func getIndexes() []string {
 		// Indexes
 		`CREATE INDEX IF NOT EXISTS idx_messages_contact_created ON messages(contact_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_legacy_media_reconcile ON messages(created_at ASC) WHERE media_asset_id IS NULL AND media_deleted_at IS NULL AND COALESCE(BTRIM(media_url), '') <> ''`,
 		`DROP INDEX IF EXISTS idx_contacts_org_phone`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_phone_instance ON contacts(organization_id, phone_number, instance_id) WHERE instance_id IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_phone_no_instance ON contacts(organization_id, phone_number) WHERE instance_id IS NULL`,

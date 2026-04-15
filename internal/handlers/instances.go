@@ -8,6 +8,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	waManager "github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
@@ -327,7 +328,10 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 	}
 
 	if len(updates) > 0 {
-		if err := requestDB.Model(&instance).Updates(updates).Error; err != nil {
+		updateQuery := tenant.ScopedDB(a.DB.Session(&gorm.Session{}), orgID).
+			Model(&models.WhatsAppInstance{}).
+			Where("id = ?", instance.ID)
+		if err := updateQuery.Updates(updates).Error; err != nil {
 			a.Log.Error("Failed to update instance", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update instance", nil, "")
 		}

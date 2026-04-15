@@ -97,6 +97,34 @@ func TestUploadsCleanupWorker_SweepExpiredUploads_DeletesOnlyExpiredTransientFil
 	assert.NoError(t, excludedErr)
 }
 
+func TestUploadsCleanupWorker_SweepExpiredUploads_KeepsFreshlyRestoredFiles(t *testing.T) {
+	t.Parallel()
+
+	app, uploadRoot := newUploadsCleanupTestApp(t)
+	worker := NewUploadsCleanupWorker(app, 24*time.Hour)
+	now := time.Now().UTC()
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Cleanup Org",
+		Slug:      "cleanup-" + uuid.NewString(),
+		Settings: models.JSONB{
+			"uploads_cleanup_retention_days": 5,
+		},
+	}
+	require.NoError(t, app.DB.Create(&org).Error)
+
+	restoredDocument := writeAgedUploadFixture(t, uploadRoot, filepath.Join("documents", "restored.pdf"), now)
+
+	result, err := worker.sweepExpiredUploads(context.Background(), now)
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.DeletedFiles)
+	assert.Equal(t, 5, result.RetentionDays)
+
+	_, statErr := os.Stat(restoredDocument)
+	assert.NoError(t, statErr)
+}
+
 func TestUploadsCleanupWorker_DueOrganizations_UsesFixedDailyHourAndLastRunDate(t *testing.T) {
 	t.Parallel()
 

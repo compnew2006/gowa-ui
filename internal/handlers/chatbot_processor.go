@@ -332,15 +332,29 @@ func (a *App) populateMediaPayload(
 ) {
 	payload.MessageText = caption
 	payload.MediaInfo = &MediaInfo{
-		MediaMimeType: mimeType,
-		MediaFilename: filename,
+		MediaMimeType:    mimeType,
+		MediaFilename:    filename,
+		RecoveryProvider: legacyMediaRecoveryProviderMeta,
+		RecoveryMediaID:  strings.TrimSpace(mediaID),
+		RecoveryPhoneID:  strings.TrimSpace(account.PhoneID),
 	}
 
 	waAccount := a.toWhatsAppAccount(account)
-	if localPath, err := a.DownloadAndSaveMedia(context.Background(), mediaID, mimeType, waAccount); err != nil {
+	if savedFile, err := a.downloadAndSaveLegacyMedia(
+		context.Background(),
+		mediaID,
+		mimeType,
+		models.MessageType(mediaType),
+		filename,
+		waAccount,
+	); err != nil {
 		a.Log.Error(fmt.Sprintf("Failed to download %s", mediaType), "error", err, "media_id", mediaID)
 	} else {
-		payload.MediaInfo.MediaURL = localPath
+		payload.MediaInfo.MediaURL = savedFile.RelativePath
+		payload.MediaInfo.MediaMimeType = savedFile.MIMEType
+		if strings.TrimSpace(savedFile.Filename) != "" {
+			payload.MediaInfo.MediaFilename = savedFile.Filename
+		}
 	}
 }
 
@@ -2365,9 +2379,12 @@ func getStringFromMap(m map[string]interface{}, key string) string {
 
 // MediaInfo holds media-related information for an incoming message
 type MediaInfo struct {
-	MediaURL      string
-	MediaMimeType string
-	MediaFilename string
+	MediaURL         string
+	MediaMimeType    string
+	MediaFilename    string
+	RecoveryProvider string
+	RecoveryMediaID  string
+	RecoveryPhoneID  string
 }
 
 func (a *App) shouldSkipClosedChatAutoReopenForIncomingMessage(orgID uuid.UUID, contact *models.Contact, msgType, content string) bool {
@@ -2432,6 +2449,18 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 		message.MediaURL = mediaInfo.MediaURL
 		message.MediaMimeType = mediaInfo.MediaMimeType
 		message.MediaFilename = mediaInfo.MediaFilename
+		if strings.TrimSpace(mediaInfo.RecoveryProvider) != "" && strings.TrimSpace(mediaInfo.RecoveryMediaID) != "" {
+			message.Metadata = cloneMessageMetadata(message.Metadata)
+			if message.Metadata == nil {
+				message.Metadata = models.JSONB{}
+			}
+			message.Metadata[legacyMediaRecoveryProviderKey] = strings.TrimSpace(mediaInfo.RecoveryProvider)
+			message.Metadata[legacyMediaRecoveryMediaIDKey] = strings.TrimSpace(mediaInfo.RecoveryMediaID)
+			if phoneID := strings.TrimSpace(mediaInfo.RecoveryPhoneID); phoneID != "" {
+				message.Metadata[legacyMediaRecoveryPhoneIDKey] = phoneID
+			}
+			message.Metadata[legacyMediaRecoveryExpiresAtKey] = now.UTC().Add(legacyMediaRecoveryTTL).Format(time.RFC3339Nano)
+		}
 	}
 
 	if err := a.DB.Create(&message).Error; err != nil {
@@ -2484,6 +2513,7 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 			"wamid":            message.WhatsAppMessageID,
 			"created_at":       message.CreatedAt,
 			"updated_at":       message.UpdatedAt,
+			"metadata":         message.Metadata,
 			"is_reply":         message.IsReply,
 		}
 		// Include reply context if this is a reply

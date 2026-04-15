@@ -19,8 +19,10 @@ LICENSE_STUDIO_PATH=./cmd/whatomate-license-studio
 VENDOR_TOOLS_DIR=bin/vendor-tools
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
-LICENSE_KEY_RING_JSON?=[]
-GO_LDFLAGS=-s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X github.com/compnew2006/whatomate/internal/license.EmbeddedPublicKeyRingJSON=$(LICENSE_KEY_RING_JSON)
+LICENSE_KEY_RING_FILE?=
+LICENSE_KEY_RING_JSON?=
+LICENSE_KEY_RING_B64?=$(strip $(shell if [ -n "$(LICENSE_KEY_RING_FILE)" ]; then base64 < "$(LICENSE_KEY_RING_FILE)" | tr -d '\n'; elif [ -n '$(LICENSE_KEY_RING_JSON)' ]; then printf '%s' '$(LICENSE_KEY_RING_JSON)' | base64 | tr -d '\n'; fi))
+GO_LDFLAGS=-s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X github.com/compnew2006/whatomate/internal/license.EmbeddedPublicKeyRingBase64=$(LICENSE_KEY_RING_B64)
 LDFLAGS=-ldflags "$(GO_LDFLAGS)"
 AIR_PACKAGE=github.com/air-verse/air@latest
 AIR_BIN=$(shell sh -c 'if [ -n "$$GOBIN" ]; then printf "%s/air" "$$GOBIN"; else printf "%s/bin/air" "$$(go env GOPATH)"; fi')
@@ -200,6 +202,7 @@ help:
 	@echo ""
 	@echo "Production:"
 	@echo "  build-prod     - Build single binary with embedded frontend"
+	@echo "                   Optional env: LICENSE_KEY_RING_FILE=/abs/path/keyring.json"
 	@echo "  build-license-tools - Build private vendor license utilities into bin/vendor-tools"
 	@echo "  build-license-issue - Build the dedicated private issuer into bin/vendor-tools"
 	@echo "  build-license-studio - Build the private localhost GUI studio into bin/vendor-tools"
