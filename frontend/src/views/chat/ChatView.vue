@@ -1385,7 +1385,7 @@ async function executeCustomAction(action: CustomAction) {
       try {
         const parsed = new URL(redirectUrl, window.location.origin);
         if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-          window.open(parsed.href, "_blank");
+          window.open(parsed.href, "_blank", "noopener,noreferrer");
         }
       } catch {
         // Invalid URL, ignore

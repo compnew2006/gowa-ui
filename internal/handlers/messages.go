@@ -1033,7 +1033,7 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 	opts := DefaultSendOptions()
 	opts.SentByUserID = &userID
 
-	ctx := context.Background()
+	ctx := r.RequestCtx
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
 	if err != nil {
 		if restrictedMessage, reasonCode, ok := asRestrictedSendViolationWithReason(err); ok {

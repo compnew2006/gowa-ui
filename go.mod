@@ -1,6 +1,6 @@
 module github.com/compnew2006/whatomate
 
-go 1.25.8
+go 1.25.9
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
@@ -20,7 +20,7 @@ require (
 	github.com/valyala/fasthttp v1.58.0
 	github.com/zerodha/fastglue v1.8.0
 	github.com/zerodha/logf v0.5.5
-	go.mau.fi/whatsmeow v0.0.0-20260216124546-34b971e686b6
+	go.mau.fi/whatsmeow v0.0.0-20260414172242-d4ffc1df2442
 	golang.org/x/crypto v0.48.0
 	golang.org/x/oauth2 v0.34.0
 	google.golang.org/protobuf v1.36.11

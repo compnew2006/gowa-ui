@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"path"
 	"strings"
 	"sync/atomic"
@@ -297,12 +298,19 @@ func nativeMediaFileHash(media waClient.DownloadableMessage) (string, error) {
 func downloadableSize(media waClient.DownloadableMessage) int64 {
 	switch sized := media.(type) {
 	case downloadableMessageWithLength:
-		return int64(sized.GetFileLength())
+		return safeInt64FromUint64(sized.GetFileLength())
 	case downloadableMessageWithSizeBytes:
-		return int64(sized.GetFileSizeBytes())
+		return safeInt64FromUint64(sized.GetFileSizeBytes())
 	default:
 		return -1
 	}
+}
+
+func safeInt64FromUint64(value uint64) int64 {
+	if value > math.MaxInt64 {
+		return -1
+	}
+	return int64(value)
 }
 
 func buildMediaObjectKey(fileHash string) string {
