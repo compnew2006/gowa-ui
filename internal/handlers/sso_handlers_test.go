@@ -21,6 +21,12 @@ import (
 	"gorm.io/gorm"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
 // Helper function to create a test SSO provider
 func createTestSSOProvider(t *testing.T, db *gorm.DB, orgID uuid.UUID, provider string, enabled bool) *models.SSOProvider {
 	t.Helper()
@@ -74,14 +80,25 @@ func createSSOAdminRequest(t *testing.T, app *handlers.App, orgID uuid.UUID) (*f
 	return req, user
 }
 
-// Mock HTTP server for OAuth provider
-func createMockOAuthServer(t *testing.T, userInfoHandler http.HandlerFunc) *httptest.Server {
+func createMockOAuthServerWithTokenHandler(t *testing.T, tokenHandler, userInfoHandler http.HandlerFunc) *httptest.Server {
 	t.Helper()
 
 	mux := http.NewServeMux()
 
 	// Token endpoint
-	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/oauth/token", tokenHandler)
+
+	// User info endpoint
+	mux.HandleFunc("/oauth/userinfo", userInfoHandler)
+
+	return httptest.NewServer(mux)
+}
+
+// Mock HTTP server for OAuth provider
+func createMockOAuthServer(t *testing.T, userInfoHandler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+
+	return createMockOAuthServerWithTokenHandler(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "test-access-token",
@@ -89,12 +106,32 @@ func createMockOAuthServer(t *testing.T, userInfoHandler http.HandlerFunc) *http
 			"expires_in":    3600,
 			"refresh_token": "test-refresh-token",
 		})
-	})
+	}, userInfoHandler)
+}
 
-	// User info endpoint
-	mux.HandleFunc("/oauth/userinfo", userInfoHandler)
+func storeSSOState(t *testing.T, app *handlers.App, orgID uuid.UUID, provider, stateNonce string, expiresAt time.Time) handlers.SSOState {
+	t.Helper()
 
-	return httptest.NewServer(mux)
+	state := handlers.SSOState{
+		OrgID:        orgID.String(),
+		Provider:     provider,
+		Nonce:        stateNonce,
+		BrowserToken: stateNonce + "-browser-token",
+		PKCEVerifier: stateNonce + "-pkce-verifier",
+		ExpiresAt:    expiresAt,
+	}
+	stateJSON, err := json.Marshal(state)
+	require.NoError(t, err)
+
+	stateKey := "sso:state:" + stateNonce
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, app.Redis.Set(ctx, stateKey, stateJSON, 5*time.Minute).Err())
+	return state
+}
+
+func setSSOStateCookie(req *fastglue.Request, state handlers.SSOState) {
+	req.RequestCtx.Request.Header.SetCookie("whm_sso_state", state.BrowserToken)
 }
 
 // Test GetPublicSSOProviders
@@ -229,9 +266,18 @@ func TestApp_InitSSO_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(stateJSON, &state))
 
+	stateCookie := testutil.GetResponseCookie(req, "whm_sso_state")
+	assert.NotEmpty(t, stateCookie)
 	assert.Equal(t, "google", state.Provider)
 	assert.Equal(t, org.ID.String(), state.OrgID)
+	assert.Equal(t, state.BrowserToken, stateCookie)
+	assert.NotEmpty(t, state.PKCEVerifier)
 	assert.False(t, state.ExpiresAt.IsZero())
+
+	parsedURL, err := url.Parse(redirectURL)
+	require.NoError(t, err)
+	assert.Equal(t, "S256", parsedURL.Query().Get("code_challenge_method"))
+	assert.NotEmpty(t, parsedURL.Query().Get("code_challenge"))
 }
 
 func TestApp_InitSSO_InvalidProvider(t *testing.T) {
@@ -361,26 +407,15 @@ func TestApp_CallbackSSO_Success(t *testing.T) {
 	// Create test role for auto-create user
 	_ = testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent", nil)
 
-	// Set up state in Redis
 	stateNonce := "test-state-nonce"
-	state := handlers.SSOState{
-		OrgID:     org.ID.String(),
-		Provider:  "custom",
-		Nonce:     stateNonce,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
-	}
-	stateJSON, _ := json.Marshal(state)
-	stateKey := "sso:state:" + stateNonce
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, app.Redis.Set(ctx, stateKey, stateJSON, 5*time.Minute).Err())
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
 
 	// Create callback request
 	req := testutil.NewJSONRequest(t, nil)
 	req.RequestCtx.SetUserValue("provider", "custom")
 	req.RequestCtx.QueryArgs().Add("code", "test-auth-code")
 	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
 
 	err := app.CallbackSSO(req)
 	require.NoError(t, err)
@@ -405,6 +440,71 @@ func TestApp_CallbackSSO_Success(t *testing.T) {
 	// Verify auth cookies were set
 	assert.NotEmpty(t, testutil.GetResponseCookie(req, "whm_access"))
 	assert.NotEmpty(t, testutil.GetResponseCookie(req, "whm_refresh"))
+}
+
+func TestApp_CallbackSSO_UsesConfiguredHTTPClientForTokenExchange(t *testing.T) {
+	expectedHeader := "configured-client"
+	stateNonce := "test-state-nonce"
+	expectedVerifier := stateNonce + "-pkce-verifier"
+
+	mockServer := createMockOAuthServerWithTokenHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-SSO-Client") != expectedHeader {
+			http.Error(w, "missing configured client", http.StatusBadRequest)
+			return
+		}
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, expectedVerifier, r.Form.Get("code_verifier"))
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token":  "test-access-token",
+			"token_type":    "Bearer",
+			"expires_in":    3600,
+			"refresh_token": "test-refresh-token",
+		})
+	}, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":    "test-user-id",
+			"email": "test@example.com",
+			"name":  "Test User",
+		})
+	})
+	defer mockServer.Close()
+
+	client := mockServer.Client()
+	baseTransport := client.Transport
+	client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		cloned := req.Clone(req.Context())
+		cloned.Header = req.Header.Clone()
+		cloned.Header.Set("X-SSO-Client", expectedHeader)
+		return baseTransport.RoundTrip(cloned)
+	})
+
+	app := newTestApp(t, withHTTPClient(client))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	_ = testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent", nil)
+
+	ssoProvider := createTestSSOProvider(t, app.DB, org.ID, "custom", true)
+	ssoProvider.AuthURL = mockServer.URL + "/oauth/authorize"
+	ssoProvider.TokenURL = mockServer.URL + "/oauth/token"
+	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
+	require.NoError(t, app.DB.Save(ssoProvider).Error)
+
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
+
+	req := testutil.NewJSONRequest(t, nil)
+	req.RequestCtx.SetUserValue("provider", "custom")
+	req.RequestCtx.QueryArgs().Add("code", "test-auth-code")
+	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
+
+	err := app.CallbackSSO(req)
+	require.NoError(t, err)
+
+	statusCode := testutil.GetResponseStatusCode(req)
+	assert.Equal(t, fasthttp.StatusTemporaryRedirect, statusCode)
+	redirectURL := string(req.RequestCtx.Response.Header.Peek("Location"))
+	assert.Contains(t, redirectURL, "/auth/sso/callback")
 }
 
 func TestApp_CallbackSSO_OAuthError(t *testing.T) {
@@ -466,25 +566,14 @@ func TestApp_CallbackSSO_ExpiredState(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 
-	// Create expired state
 	stateNonce := "test-state-nonce"
-	state := handlers.SSOState{
-		OrgID:     org.ID.String(),
-		Provider:  "google",
-		Nonce:     stateNonce,
-		ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired
-	}
-	stateJSON, _ := json.Marshal(state)
-	stateKey := "sso:state:" + stateNonce
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, app.Redis.Set(ctx, stateKey, stateJSON, 5*time.Minute).Err())
+	state := storeSSOState(t, app, org.ID, "google", stateNonce, time.Now().Add(-1*time.Hour))
 
 	req := testutil.NewJSONRequest(t, nil)
 	req.RequestCtx.SetUserValue("provider", "google")
 	req.RequestCtx.QueryArgs().Add("code", "test-code")
 	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
 
 	err := app.CallbackSSO(req)
 	require.NoError(t, err)
@@ -494,6 +583,46 @@ func TestApp_CallbackSSO_ExpiredState(t *testing.T) {
 
 	redirectURL := string(req.RequestCtx.Response.Header.Peek("Location"))
 	assert.Contains(t, redirectURL, "Invalid or expired state")
+}
+
+func TestApp_CallbackSSO_RejectsMismatchedStateCookie(t *testing.T) {
+	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":    "test-user-id",
+			"email": "test@example.com",
+			"name":  "Test User",
+		})
+	})
+	defer mockServer.Close()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	ssoProvider := createTestSSOProvider(t, app.DB, org.ID, "custom", true)
+	ssoProvider.AuthURL = mockServer.URL + "/oauth/authorize"
+	ssoProvider.TokenURL = mockServer.URL + "/oauth/token"
+	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
+	require.NoError(t, app.DB.Save(ssoProvider).Error)
+	_ = testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent", nil)
+
+	stateNonce := "test-state-nonce"
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
+
+	req := testutil.NewJSONRequest(t, nil)
+	req.RequestCtx.SetUserValue("provider", "custom")
+	req.RequestCtx.QueryArgs().Add("code", "test-code")
+	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	req.RequestCtx.Request.Header.SetCookie("whm_sso_state", "wrong-browser-token")
+
+	err := app.CallbackSSO(req)
+	require.NoError(t, err)
+
+	statusCode := testutil.GetResponseStatusCode(req)
+	assert.Equal(t, fasthttp.StatusTemporaryRedirect, statusCode)
+
+	redirectURL := string(req.RequestCtx.Response.Header.Peek("Location"))
+	assert.Contains(t, redirectURL, "Invalid or expired state")
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_access"))
+	assert.NotEmpty(t, state.BrowserToken)
 }
 
 func TestApp_CallbackSSO_EmailDomainRestriction(t *testing.T) {
@@ -517,25 +646,14 @@ func TestApp_CallbackSSO_EmailDomainRestriction(t *testing.T) {
 	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
 	app.DB.Save(ssoProvider)
 
-	// Set up state
 	stateNonce := "test-state-nonce"
-	state := handlers.SSOState{
-		OrgID:     org.ID.String(),
-		Provider:  "custom",
-		Nonce:     stateNonce,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
-	}
-	stateJSON, _ := json.Marshal(state)
-	stateKey := "sso:state:" + stateNonce
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, app.Redis.Set(ctx, stateKey, stateJSON, 5*time.Minute).Err())
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
 
 	req := testutil.NewJSONRequest(t, nil)
 	req.RequestCtx.SetUserValue("provider", "custom")
 	req.RequestCtx.QueryArgs().Add("code", "test-code")
 	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
 
 	err := app.CallbackSSO(req)
 	require.NoError(t, err)
@@ -547,7 +665,7 @@ func TestApp_CallbackSSO_EmailDomainRestriction(t *testing.T) {
 	assert.Contains(t, redirectURL, "Email domain not allowed")
 }
 
-func TestApp_CallbackSSO_ExistingUserUpdatesSSOInfo(t *testing.T) {
+func TestApp_CallbackSSO_ExistingLinkedCustomUserSucceeds(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"id":    "test-user-id",
@@ -560,9 +678,12 @@ func TestApp_CallbackSSO_ExistingUserUpdatesSSOInfo(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 
-	// Create existing user without SSO info
+	// Create existing user already linked to the custom provider identity.
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent", nil)
 	existingUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail("existing@example.com"), testutil.WithRoleID(&role.ID))
+	existingUser.SSOProvider = "custom"
+	existingUser.SSOProviderID = "test-user-id"
+	require.NoError(t, app.DB.Save(existingUser).Error)
 
 	// Create SSO provider
 	ssoProvider := createTestSSOProvider(t, app.DB, org.ID, "custom", true)
@@ -571,35 +692,121 @@ func TestApp_CallbackSSO_ExistingUserUpdatesSSOInfo(t *testing.T) {
 	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
 	app.DB.Save(ssoProvider)
 
-	// Set up state
 	stateNonce := "test-state-nonce"
-	state := handlers.SSOState{
-		OrgID:     org.ID.String(),
-		Provider:  "custom",
-		Nonce:     stateNonce,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
-	}
-	stateJSON, _ := json.Marshal(state)
-	stateKey := "sso:state:" + stateNonce
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, app.Redis.Set(ctx, stateKey, stateJSON, 5*time.Minute).Err())
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
 
 	req := testutil.NewJSONRequest(t, nil)
 	req.RequestCtx.SetUserValue("provider", "custom")
 	req.RequestCtx.QueryArgs().Add("code", "test-code")
 	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
 
 	err := app.CallbackSSO(req)
 	require.NoError(t, err)
 
-	// Verify user's SSO info was updated
+	// Verify the linked user can still authenticate and the binding remains intact.
 	var updatedUser models.User
 	err = app.DB.First(&updatedUser, existingUser.ID).Error
 	require.NoError(t, err)
 	assert.Equal(t, "custom", updatedUser.SSOProvider)
 	assert.Equal(t, "test-user-id", updatedUser.SSOProviderID)
+	assert.NotEmpty(t, testutil.GetResponseCookie(req, "whm_access"))
+	assert.NotEmpty(t, testutil.GetResponseCookie(req, "whm_refresh"))
+}
+
+func TestApp_CallbackSSO_RejectsUnlinkedExistingCustomUser(t *testing.T) {
+	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":    "test-user-id",
+			"email": "existing@example.com",
+			"name":  "Existing User",
+		})
+	})
+	defer mockServer.Close()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent", nil)
+	existingUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail("existing@example.com"), testutil.WithRoleID(&role.ID))
+
+	ssoProvider := createTestSSOProvider(t, app.DB, org.ID, "custom", true)
+	ssoProvider.AuthURL = mockServer.URL + "/oauth/authorize"
+	ssoProvider.TokenURL = mockServer.URL + "/oauth/token"
+	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
+	require.NoError(t, app.DB.Save(ssoProvider).Error)
+
+	stateNonce := "test-state-nonce"
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
+
+	req := testutil.NewJSONRequest(t, nil)
+	req.RequestCtx.SetUserValue("provider", "custom")
+	req.RequestCtx.QueryArgs().Add("code", "test-code")
+	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
+
+	err := app.CallbackSSO(req)
+	require.NoError(t, err)
+
+	statusCode := testutil.GetResponseStatusCode(req)
+	assert.Equal(t, fasthttp.StatusTemporaryRedirect, statusCode)
+	redirectURL := string(req.RequestCtx.Response.Header.Peek("Location"))
+	assert.Contains(t, redirectURL, "SSO account is not linked")
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_access"))
+
+	var unchangedUser models.User
+	err = app.DB.First(&unchangedUser, existingUser.ID).Error
+	require.NoError(t, err)
+	assert.Empty(t, unchangedUser.SSOProvider)
+	assert.Empty(t, unchangedUser.SSOProviderID)
+}
+
+func TestApp_CallbackSSO_RejectsCrossTenantExistingUser(t *testing.T) {
+	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":    "victim-id",
+			"email": "victim@example.com",
+			"name":  "Victim User",
+		})
+	})
+	defer mockServer.Close()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	otherOrg := testutil.CreateTestOrganization(t, app.DB)
+
+	_ = testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent", nil)
+	otherRole := testutil.CreateTestRoleWithKeys(t, app.DB, otherOrg.ID, "agent", nil)
+	victim := testutil.CreateTestUser(t, app.DB, otherOrg.ID, testutil.WithEmail("victim@example.com"), testutil.WithRoleID(&otherRole.ID))
+
+	ssoProvider := createTestSSOProvider(t, app.DB, org.ID, "custom", true)
+	ssoProvider.AuthURL = mockServer.URL + "/oauth/authorize"
+	ssoProvider.TokenURL = mockServer.URL + "/oauth/token"
+	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
+	require.NoError(t, app.DB.Save(ssoProvider).Error)
+
+	stateNonce := "test-state-nonce"
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
+
+	req := testutil.NewJSONRequest(t, nil)
+	req.RequestCtx.SetUserValue("provider", "custom")
+	req.RequestCtx.QueryArgs().Add("code", "test-code")
+	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
+
+	err := app.CallbackSSO(req)
+	require.NoError(t, err)
+
+	statusCode := testutil.GetResponseStatusCode(req)
+	assert.Equal(t, fasthttp.StatusTemporaryRedirect, statusCode)
+	redirectURL := string(req.RequestCtx.Response.Header.Peek("Location"))
+	assert.Contains(t, redirectURL, "User account is not authorized for this organization")
+	assert.Empty(t, testutil.GetResponseCookie(req, "whm_access"))
+
+	var unchangedUser models.User
+	err = app.DB.First(&unchangedUser, victim.ID).Error
+	require.NoError(t, err)
+	assert.Equal(t, otherOrg.ID, unchangedUser.OrganizationID)
 }
 
 func TestApp_CallbackSSO_InactiveUser(t *testing.T) {
@@ -626,25 +833,14 @@ func TestApp_CallbackSSO_InactiveUser(t *testing.T) {
 	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
 	app.DB.Save(ssoProvider)
 
-	// Set up state
 	stateNonce := "test-state-nonce"
-	state := handlers.SSOState{
-		OrgID:     org.ID.String(),
-		Provider:  "custom",
-		Nonce:     stateNonce,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
-	}
-	stateJSON, _ := json.Marshal(state)
-	stateKey := "sso:state:" + stateNonce
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, app.Redis.Set(ctx, stateKey, stateJSON, 5*time.Minute).Err())
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
 
 	req := testutil.NewJSONRequest(t, nil)
 	req.RequestCtx.SetUserValue("provider", "custom")
 	req.RequestCtx.QueryArgs().Add("code", "test-code")
 	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
 
 	err := app.CallbackSSO(req)
 	require.NoError(t, err)
@@ -853,6 +1049,32 @@ func TestApp_UpdateSSOProvider_CustomProviderMissingURLs(t *testing.T) {
 	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "Custom provider requires auth_url, token_url, and user_info_url")
 }
 
+func TestApp_UpdateSSOProvider_CustomProviderRejectsPrivateURLs(t *testing.T) {
+	app := newTestApp(t)
+	app.Config.App.Environment = "production"
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	req, _ := createSSOAdminRequest(t, app, org.ID)
+	req.RequestCtx.SetUserValue("provider", "custom")
+
+	body := map[string]any{
+		"client_id":         "test-client-id",
+		"client_secret":     "test-client-secret",
+		"is_enabled":        true,
+		"auth_url":          "https://custom.example.com/oauth/authorize",
+		"token_url":         "http://127.0.0.1/oauth/token",
+		"user_info_url":     "https://custom.example.com/oauth/userinfo",
+		"allow_auto_create": true,
+		"default_role":      "agent",
+	}
+	jsonBody, _ := json.Marshal(body)
+	req.RequestCtx.Request.SetBody(jsonBody)
+
+	err := app.UpdateSSOProvider(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "Invalid token_url")
+}
+
 func TestApp_UpdateSSOProvider_CustomProviderSuccess(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
@@ -998,25 +1220,14 @@ func TestApp_CallbackSSO_AutoCreateDisabled(t *testing.T) {
 	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
 	app.DB.Save(ssoProvider)
 
-	// Set up state
 	stateNonce := "test-state-nonce"
-	state := handlers.SSOState{
-		OrgID:     org.ID.String(),
-		Provider:  "custom",
-		Nonce:     stateNonce,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
-	}
-	stateJSON, _ := json.Marshal(state)
-	stateKey := "sso:state:" + stateNonce
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, app.Redis.Set(ctx, stateKey, stateJSON, 5*time.Minute).Err())
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
 
 	req := testutil.NewJSONRequest(t, nil)
 	req.RequestCtx.SetUserValue("provider", "custom")
 	req.RequestCtx.QueryArgs().Add("code", "test-code")
 	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
 
 	err := app.CallbackSSO(req)
 	require.NoError(t, err)
@@ -1050,25 +1261,14 @@ func TestApp_CallbackSSO_InvalidEmail(t *testing.T) {
 	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
 	app.DB.Save(ssoProvider)
 
-	// Set up state
 	stateNonce := "test-state-nonce"
-	state := handlers.SSOState{
-		OrgID:     org.ID.String(),
-		Provider:  "custom",
-		Nonce:     stateNonce,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
-	}
-	stateJSON, _ := json.Marshal(state)
-	stateKey := "sso:state:" + stateNonce
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, app.Redis.Set(ctx, stateKey, stateJSON, 5*time.Minute).Err())
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
 
 	req := testutil.NewJSONRequest(t, nil)
 	req.RequestCtx.SetUserValue("provider", "custom")
 	req.RequestCtx.QueryArgs().Add("code", "test-code")
 	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
 
 	err := app.CallbackSSO(req)
 	require.NoError(t, err)
@@ -1101,25 +1301,14 @@ func TestApp_CallbackSSO_MissingEmail(t *testing.T) {
 	ssoProvider.UserInfoURL = mockServer.URL + "/oauth/userinfo"
 	app.DB.Save(ssoProvider)
 
-	// Set up state
 	stateNonce := "test-state-nonce"
-	state := handlers.SSOState{
-		OrgID:     org.ID.String(),
-		Provider:  "custom",
-		Nonce:     stateNonce,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
-	}
-	stateJSON, _ := json.Marshal(state)
-	stateKey := "sso:state:" + stateNonce
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	require.NoError(t, app.Redis.Set(ctx, stateKey, stateJSON, 5*time.Minute).Err())
+	state := storeSSOState(t, app, org.ID, "custom", stateNonce, time.Now().Add(5*time.Minute))
 
 	req := testutil.NewJSONRequest(t, nil)
 	req.RequestCtx.SetUserValue("provider", "custom")
 	req.RequestCtx.QueryArgs().Add("code", "test-code")
 	req.RequestCtx.QueryArgs().Add("state", stateNonce)
+	setSSOStateCookie(req, state)
 
 	err := app.CallbackSSO(req)
 	require.NoError(t, err)

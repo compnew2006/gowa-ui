@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -108,11 +107,32 @@ func (a *App) InitSSO(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO", nil, "")
 	}
 
+	browserToken, err := generateRandomString(32)
+	if err != nil {
+		a.Log.Error("Failed to generate SSO browser token", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO", nil, "")
+	}
+
+	pkceVerifier, err := generatePKCEVerifier()
+	if err != nil {
+		a.Log.Error("Failed to generate SSO PKCE verifier", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO", nil, "")
+	}
+
+	// Build OAuth config before persisting state so invalid custom provider URLs or secrets
+	// do not leave behind a stale Redis entry.
+	oauthConfig := a.buildOAuthConfig(provider, &ssoConfig, r)
+	if oauthConfig == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO", nil, "")
+	}
+
 	state := SSOState{
-		OrgID:     ssoConfig.OrganizationID.String(),
-		Provider:  provider,
-		Nonce:     nonce,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
+		OrgID:        ssoConfig.OrganizationID.String(),
+		Provider:     provider,
+		Nonce:        nonce,
+		BrowserToken: browserToken,
+		PKCEVerifier: pkceVerifier,
+		ExpiresAt:    time.Now().Add(5 * time.Minute),
 	}
 
 	stateJSON, _ := json.Marshal(state)
@@ -124,11 +144,15 @@ func (a *App) InitSSO(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO", nil, "")
 	}
 
-	// Build OAuth config
-	oauthConfig := a.buildOAuthConfig(provider, &ssoConfig, r)
+	a.setSSOStateCookie(r, browserToken)
 
 	// Redirect to provider
-	authURL := oauthConfig.AuthCodeURL(nonce, oauth2.AccessTypeOffline)
+	authURL := oauthConfig.AuthCodeURL(
+		nonce,
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("code_challenge", pkceChallenge(pkceVerifier)),
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+	)
 	r.RequestCtx.Redirect(authURL, fasthttp.StatusTemporaryRedirect)
 	return nil
 }
@@ -152,6 +176,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 		a.redirectWithError(r, "Invalid callback parameters")
 		return nil
 	}
+	defer a.clearSSOStateCookie(r)
 
 	// Retrieve and validate state from Redis
 	stateKey := "sso:state:" + stateNonce
@@ -171,7 +196,11 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 	}
 
 	// Validate state
-	if state.Provider != provider || time.Now().After(state.ExpiresAt) {
+	if state.Provider != provider || state.BrowserToken == "" || state.PKCEVerifier == "" || time.Now().After(state.ExpiresAt) {
+		a.redirectWithError(r, "Invalid or expired state")
+		return nil
+	}
+	if a.ssoStateCookieValue(r) != state.BrowserToken {
 		a.redirectWithError(r, "Invalid or expired state")
 		return nil
 	}
@@ -185,14 +214,18 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 
 	// Get SSO provider config
 	var ssoConfig models.SSOProvider
-	if err := requestDB.Where("organization_id = ? AND provider = ?", orgID, provider).First(&ssoConfig).Error; err != nil {
+	if err := requestDB.Where("organization_id = ? AND provider = ? AND is_enabled = ?", orgID, provider, true).First(&ssoConfig).Error; err != nil {
 		a.redirectWithError(r, "SSO provider not configured")
 		return nil
 	}
 
 	// Build OAuth config and exchange code for token
 	oauthConfig := a.buildOAuthConfig(provider, &ssoConfig, r)
-	token, err := oauthConfig.Exchange(context.Background(), code)
+	if oauthConfig == nil {
+		a.redirectWithError(r, "SSO provider is misconfigured")
+		return nil
+	}
+	token, err := oauthConfig.Exchange(a.oauthContext(), code, oauth2.SetAuthURLParam("code_verifier", state.PKCEVerifier))
 	if err != nil {
 		a.Log.Error("Failed to exchange OAuth code", "error", err, "provider", provider)
 		a.redirectWithError(r, "Failed to authenticate with provider")
@@ -204,6 +237,13 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 	if err != nil {
 		a.Log.Error("Failed to fetch user info", "error", err, "provider", provider)
 		a.redirectWithError(r, "Failed to get user information")
+		return nil
+	}
+	userInfo.ID = strings.TrimSpace(userInfo.ID)
+	userInfo.Email = strings.ToLower(strings.TrimSpace(userInfo.Email))
+	userInfo.Name = strings.TrimSpace(userInfo.Name)
+	if userInfo.ID == "" {
+		a.redirectWithError(r, "Invalid account identifier from provider")
 		return nil
 	}
 
@@ -287,18 +327,48 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 
 		a.Log.Info("Created SSO user", "user_id", user.ID, "email", user.Email, "provider", provider)
 	} else {
-		// User exists - update SSO info if not set
-		if user.SSOProvider == "" {
-			user.SSOProvider = provider
-			user.SSOProviderID = userInfo.ID
-			requestDB.
-				Save(&user)
+		if user.OrganizationID != orgID {
+			a.redirectWithError(r, "User account is not authorized for this organization")
+			return nil
 		}
 
 		// Check if user is active
 		if !user.IsActive {
 			a.redirectWithError(r, "Account is disabled")
 			return nil
+		}
+
+		needsSave := false
+		switch {
+		case user.SSOProvider == "" && user.SSOProviderID == "":
+			if provider == "custom" {
+				a.redirectWithError(r, "SSO account is not linked. Contact your administrator.")
+				return nil
+			}
+			user.SSOProvider = provider
+			user.SSOProviderID = userInfo.ID
+			needsSave = true
+		case user.SSOProvider != provider:
+			a.redirectWithError(r, "SSO account is linked to a different provider")
+			return nil
+		case user.SSOProviderID == "":
+			if provider == "custom" {
+				a.redirectWithError(r, "SSO account is not linked. Contact your administrator.")
+				return nil
+			}
+			user.SSOProviderID = userInfo.ID
+			needsSave = true
+		case user.SSOProviderID != userInfo.ID:
+			a.redirectWithError(r, "SSO account identity mismatch")
+			return nil
+		}
+
+		if needsSave {
+			if err := requestDB.Save(&user).Error; err != nil {
+				a.Log.Error("Failed to update SSO user binding", "error", err, "user_id", user.ID)
+				a.redirectWithError(r, "Failed to complete authentication")
+				return nil
+			}
 		}
 	}
 
@@ -404,6 +474,15 @@ func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
 	if provider == "custom" {
 		if req.AuthURL == "" || req.TokenURL == "" || req.UserInfoURL == "" {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Custom provider requires auth_url, token_url, and user_info_url", nil, "")
+		}
+		if req.AuthURL, err = a.validateCustomSSOEndpoint(req.AuthURL); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, fmt.Sprintf("Invalid auth_url: %v", err), nil, "auth_url")
+		}
+		if req.TokenURL, err = a.validateCustomSSOEndpoint(req.TokenURL); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, fmt.Sprintf("Invalid token_url: %v", err), nil, "token_url")
+		}
+		if req.UserInfoURL, err = a.validateCustomSSOEndpoint(req.UserInfoURL); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, fmt.Sprintf("Invalid user_info_url: %v", err), nil, "user_info_url")
 		}
 	}
 

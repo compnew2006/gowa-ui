@@ -26,6 +26,10 @@ func (a *App) buildOAuthConfig(provider string, ssoConfig *models.SSOProvider, r
 	var scopes []string
 
 	if provider == "custom" {
+		if err := a.validateCustomSSOProviderConfig(ssoConfig); err != nil {
+			a.Log.Error("Invalid custom SSO provider configuration", "error", err)
+			return nil
+		}
 		endpoint = oauth2.Endpoint{
 			AuthURL:  ssoConfig.AuthURL,
 			TokenURL: ssoConfig.TokenURL,
@@ -74,6 +78,9 @@ func (a *App) fetchUserInfo(provider string, ssoConfig *models.SSOProvider, toke
 	var userInfoURL string
 
 	if provider == "custom" {
+		if err := a.validateCustomSSOProviderConfig(ssoConfig); err != nil {
+			return nil, err
+		}
 		userInfoURL = ssoConfig.UserInfoURL
 	} else {
 		userInfoURL = oauthProviders[provider].UserInfoURL
@@ -89,7 +96,7 @@ func (a *App) fetchUserInfo(provider string, ssoConfig *models.SSOProvider, toke
 		req.Header.Set("Accept", "application/vnd.github+json")
 	}
 
-	resp, err := a.HTTPClient.Do(req)
+	resp, err := a.oauthHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +177,7 @@ func (a *App) fetchGitHubEmail(token *oauth2.Token) (string, error) {
 	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := a.HTTPClient.Do(req)
+	resp, err := a.oauthHTTPClient().Do(req)
 	if err != nil {
 		return "", err
 	}

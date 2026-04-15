@@ -40,10 +40,12 @@ var oauthProviders = map[string]struct {
 
 // SSOState represents the state stored in Redis during OAuth flow
 type SSOState struct {
-	OrgID     string    `json:"org_id"`
-	Provider  string    `json:"provider"`
-	Nonce     string    `json:"nonce"`
-	ExpiresAt time.Time `json:"expires_at"`
+	OrgID        string    `json:"org_id"`
+	Provider     string    `json:"provider"`
+	Nonce        string    `json:"nonce"`
+	BrowserToken string    `json:"browser_token"`
+	PKCEVerifier string    `json:"pkce_verifier"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
 // SSOProviderPublic represents public SSO provider info (no secrets)
