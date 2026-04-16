@@ -25,11 +25,10 @@ func ValidateLicenseConfig(cfg *Config) error {
 		return fmt.Errorf("license.grace_period_days cannot be negative")
 	}
 
-	if isProductionEnv(cfg) {
-		if cfg.License.PublicKey != "" || cfg.License.PublicKeyKID != "" || cfg.License.AllowUnsafePublicKeyOverride {
-			return fmt.Errorf("production licensing must use an embedded key ring; remove license.public_key, license.public_key_kid, and license.allow_unsafe_public_key_override")
+	if cfg.License.PublicKey != "" && !cfg.License.AllowUnsafePublicKeyOverride {
+		if isProductionEnv(cfg) {
+			return fmt.Errorf("license.public_key override is disabled in production unless license.allow_unsafe_public_key_override=true")
 		}
-	} else if cfg.License.PublicKey != "" && !cfg.License.AllowUnsafePublicKeyOverride {
 		return fmt.Errorf("license.public_key override requires license.allow_unsafe_public_key_override=true outside production")
 	}
 

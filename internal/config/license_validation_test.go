@@ -2,7 +2,7 @@ package config
 
 import "testing"
 
-func TestValidateLicenseConfigRejectsProductionPublicKeyOverride(t *testing.T) {
+func TestValidateLicenseConfigAllowsProductionPublicKeyOverrideWithExplicitOptIn(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
@@ -19,8 +19,29 @@ func TestValidateLicenseConfigRejectsProductionPublicKeyOverride(t *testing.T) {
 		},
 	}
 
+	if err := ValidateLicenseConfig(cfg); err != nil {
+		t.Fatalf("ValidateLicenseConfig() error = %v", err)
+	}
+}
+
+func TestValidateLicenseConfigRejectsProductionPublicKeyOverrideWithoutOptIn(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		App: AppConfig{
+			Environment: "production",
+		},
+		License: LicenseConfig{
+			Enabled:                  true,
+			PublicKey:                "test-public-key",
+			PublicKeyKID:             "vendor-1",
+			RollbackToleranceSeconds: 60,
+			GracePeriodDays:          7,
+		},
+	}
+
 	if err := ValidateLicenseConfig(cfg); err == nil {
-		t.Fatal("ValidateLicenseConfig() error = nil, want production override rejection")
+		t.Fatal("ValidateLicenseConfig() error = nil, want production opt-in enforcement")
 	}
 }
 

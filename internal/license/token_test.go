@@ -196,7 +196,31 @@ func TestBuildKeyRingFromDevelopmentConfigVerifiesIssuedToken(t *testing.T) {
 	}
 }
 
-func TestBuildKeyRingRejectsProductionConfigOverride(t *testing.T) {
+func TestBuildKeyRingAllowsProductionConfigOverrideWithExplicitOptIn(t *testing.T) {
+	publicKey, _, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() error = %v", err)
+	}
+
+	keyRing, err := buildKeyRing(&config.Config{
+		App: config.AppConfig{
+			Environment: "production",
+		},
+		License: config.LicenseConfig{
+			PublicKey:                    publicKey,
+			PublicKeyKID:                 "vendor-1",
+			AllowUnsafePublicKeyOverride: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildKeyRing() error = %v", err)
+	}
+	if _, ok := keyRing["vendor-1"]; !ok {
+		t.Fatal("buildKeyRing() missing production override key")
+	}
+}
+
+func TestBuildKeyRingRejectsProductionConfigOverrideWithoutOptIn(t *testing.T) {
 	publicKey, _, err := GenerateKeyPair()
 	if err != nil {
 		t.Fatalf("GenerateKeyPair() error = %v", err)
@@ -212,6 +236,6 @@ func TestBuildKeyRingRejectsProductionConfigOverride(t *testing.T) {
 		},
 	})
 	if err == nil {
-		t.Fatal("buildKeyRing() error = nil, want production override rejection")
+		t.Fatal("buildKeyRing() error = nil, want production opt-in enforcement")
 	}
 }

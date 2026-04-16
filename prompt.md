@@ -5,7 +5,7 @@ You are an expert DevOps Engineer and Go/Backend Developer. Your primary objecti
 - **OS:** Ubuntu (amd64)
 - **IP:** `31.97.192.53`
 - **User:** `root`
-- **Password:** `[YOUR_PASSWORD]`
+- **Password:** `01007181781Aa#`
 - **Local Workspace:** `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
 - **Local Info Doc:** `/Users/noiemany/Downloads/whatomate_GOWA/whatomate/docs/whatomate_multi_instances_info.md`
 - **Remote Info Docs:** `/root/whatomate_multi_instances_info.md` and `/root/whatomate_production_info.md`
