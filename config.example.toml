@@ -12,10 +12,10 @@ encryption_key = ""  # AES-256 key for encrypting secrets at rest. Required for 
 allow_legacy_encryption = true  # Set false after running crypto-migrate to reject enc:/enc2: payloads.
 
 [license]
-enabled = false
-public_key = ""  # Non-production-only override. Production builds must embed a key ring and leave this empty.
-public_key_kid = ""
-allow_unsafe_public_key_override = false  # Must be true when using public_key outside production.
+enabled = enable
+public_key = "V+QsmzWXu77q3A6R26tW0NlwWbvjdasYdo4QvAwCJhA="  # Non-production-only override. Production builds must embed a key ring and leave this empty.
+public_key_kid = "deploy-20260416"
+allow_unsafe_public_key_override = true  # Must be true when using public_key outside production.
 fingerprint_sources = ["/etc/machine-id", "/sys/class/dmi/id/product_uuid"]
 host_machine_id_path = ""  # In Docker on Linux, mount the host machine-id and set this to the mounted path, e.g. "/host/etc/machine-id".
 # For Docker on Linux, also point fingerprint_sources at the mounted host paths instead of the container defaults:

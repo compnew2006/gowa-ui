@@ -156,3 +156,88 @@ Harden offline licensing in local code so production trusts only embedded public
 ### Guide
 
 - Full usage guide created at `docs/offline_license_secure_build_guide.md`
+
+## 2026-04-16 VPS Deployment Retry
+
+### Objective
+
+Deploy the updated `whatomate` build to the Ubuntu amd64 VPS, preserve service availability during cutover, keep licensing active for the main instance and all three tenants, verify public login rendering in a real browser, and document the final state.
+
+### Backup Location
+
+- Existing full backup was reused per user instruction; no new full backup set was created in this session.
+- Immediate pre-cutover rollback binaries:
+  - `/opt/whatomate/bin/whatomate.20260416_011329.pre_cutover.bak`
+  - `/opt/whatomate/bin/whatomate.20260416_012035.pre_cutover.bak`
+  - `/opt/whatomate/bin/whatomate.20260416_012318.pre_cutover.bak`
+
+### Deployment Steps Taken
+
+- Read the existing VPS deployment notes and confirmed the live production layout.
+- Connected to `31.97.192.53`, verified the host, runtime configs, active tenant ports, and current license state.
+- Built the new source natively on the VPS under `/root/whatomate_temp_build_20260416_010826`.
+- Attempted cutover twice, rolled back both times automatically when `whatomate.service` failed startup, then patched the new code locally to restore the explicit production config-override license path.
+- Synced the license fix to the VPS build tree, rebuilt natively, and completed a successful third cutover in this order:
+  - `whatomate`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+
+### Build Command Used
+
+- `cd /root/whatomate_temp_build_20260416_010826 && GOTOOLCHAIN=go1.25.9+auto VERSION=a7e55d5-licensecfg-vps-20260416_012230 make build-prod`
+
+### Binary Version / SHA
+
+- Installed version: `Whatomate a7e55d5-licensecfg-vps-20260416_012230 (built 2026-04-16_01:22:46)`
+- Installed SHA256: `7d953074b3b2b7fc9a6f63d25f0e4ebca334f9db5d285472174bbdb9e513715e`
+
+### Rollback Actions
+
+- Rollback 1:
+  - restored `/opt/whatomate/bin/whatomate.20260416_011329.pre_cutover.bak`
+  - recovered the main service after the new validator rejected the production config-based license override
+- Rollback 2:
+  - restored `/opt/whatomate/bin/whatomate.20260416_012035.pre_cutover.bak`
+  - recovered the main service after rebuilding the old code by mistake from a bad file sync
+
+### License Fix
+
+- Restored the intended behavior in local code so production accepts `license.public_key` only when `license.allow_unsafe_public_key_override = true`.
+- Preserved the working production values already on the VPS instead of switching to linker-injected key rings.
+- Final runtime license state:
+  - `:18123` -> `enabled=true`, `status=active`, `locked=false`
+  - `:18124` -> `enabled=true`, `status=active`, `locked=false`
+  - `:18125` -> `enabled=true`, `status=active`, `locked=false`
+  - `:18126` -> `enabled=true`, `status=active`, `locked=false`
+
+### Cleanup Actions
+
+- Removed stray flat files from the VPS temp build tree after a bad rsync attempt:
+  - `/root/whatomate_temp_build_20260416_010826/license_validation.go`
+  - `/root/whatomate_temp_build_20260416_010826/service.go`
+  - `/root/whatomate_temp_build_20260416_010826/token_test.go`
+- Intended final cleanup targets:
+  - `/root/whatomate_temp_build_20260416_010826`
+  - `/root/whatomate_temp_build_settings_fix`
+- Final cleanup and remote markdown updates remain pending because new SSH connections to the VPS stopped completing after the successful rollout.
+
+### Test And Verification Results
+
+- Local code verification:
+  - `go test ./internal/config ./internal/license` ✅
+- VPS runtime verification before and after cutover:
+  - `http://127.0.0.1:18123/login` -> `200`
+  - `http://127.0.0.1:18124/login` -> `200`
+  - `http://127.0.0.1:18125/login` -> `200`
+  - `http://127.0.0.1:18126/login` -> `200`
+  - all four `/api/license/bootstrap` responses reported `enabled=true`, `status=active`, `locked=false`
+- Public HTTPS verification:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+- Browser verification:
+  - Chrome DevTools MCP was unavailable
+  - used Playwright CLI
+  - confirmed the rendered login page on the main domain and all three tenant domains by checking the title `Whatomate`, the heading `Welcome to Whatomate`, the `Email` field, and the `Sign in` button

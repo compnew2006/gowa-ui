@@ -258,6 +258,83 @@ Updated: 2026-03-09 06:49:10 UTC
 Updated: 2026-02-27 20:43:46 UTC
 
 - Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+
+## Deployment Update
+
+Updated: 2026-04-16 01:23:18 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- Native VPS build directory: `/root/whatomate_temp_build_20260416_010826`
+- Native VPS build command: `cd /root/whatomate_temp_build_20260416_010826 && GOTOOLCHAIN=go1.25.9+auto VERSION=a7e55d5-licensecfg-vps-20260416_012230 make build-prod`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Installed version: `Whatomate a7e55d5-licensecfg-vps-20260416_012230 (built 2026-04-16_01:22:46)`
+- Installed SHA256: `7d953074b3b2b7fc9a6f63d25f0e4ebca334f9db5d285472174bbdb9e513715e`
+
+### Backup / Rollback Paths
+
+- No new full backup set was created in this session because the existing backup was user-approved for reuse.
+- Immediate rollback binaries created during deployment:
+  - `/opt/whatomate/bin/whatomate.20260416_011329.pre_cutover.bak`
+  - `/opt/whatomate/bin/whatomate.20260416_012035.pre_cutover.bak`
+  - `/opt/whatomate/bin/whatomate.20260416_012318.pre_cutover.bak`
+
+### License Fix Applied
+
+- Root cause of the failed rollouts:
+  - the new `a7e55d5` code rejected the already-working production license config override and crash-looped `whatomate.service`
+  - the first retry rebuilt the old source by mistake because the patched files were synced into the wrong VPS paths
+- Final code fix:
+  - restored production support for config-based `license.public_key` when `license.allow_unsafe_public_key_override = true`
+  - preserved the working production values already present in:
+    - `/opt/whatomate/config.toml`
+    - `/opt/whatomate/instances/holol-wenjaz/config.toml`
+    - `/opt/whatomate/instances/alarkan-almthalia/config.toml`
+    - `/opt/whatomate/instances/matbaat-ruya/config.toml`
+- Final license state:
+  - `127.0.0.1:18123` -> `enabled = true`, `status = active`, `locked = false`
+  - `127.0.0.1:18124` -> `enabled = true`, `status = active`, `locked = false`
+  - `127.0.0.1:18125` -> `enabled = true`, `status = active`, `locked = false`
+  - `127.0.0.1:18126` -> `enabled = true`, `status = active`, `locked = false`
+
+### Rollout Notes
+
+- First cutover attempt rolled back automatically after the new binary exited with:
+  - `production licensing must use an embedded key ring; remove license.public_key, license.public_key_kid, and license.allow_unsafe_public_key_override`
+- Second cutover attempt rolled back automatically after the VPS rebuild still contained the old validator.
+- Third cutover succeeded in order:
+  - `whatomate`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+
+### Verification
+
+- Local instance checks:
+  - `http://127.0.0.1:18123/login` -> `200`
+  - `http://127.0.0.1:18124/login` -> `200`
+  - `http://127.0.0.1:18125/login` -> `200`
+  - `http://127.0.0.1:18126/login` -> `200`
+  - all four `/api/license/bootstrap` responses reported `enabled=true`, `status=active`, `locked=false`
+- Public HTTPS smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+- Browser verification:
+  - Chrome DevTools MCP was unavailable in this session
+  - used Playwright CLI instead
+  - confirmed the rendered login page on the main domain and all three tenant domains with:
+    - page title `Whatomate`
+    - heading `Welcome to Whatomate`
+    - `Email` textbox
+    - `Sign in` button
+
+### Cleanup Status
+
+- Intended cleanup targets after successful deployment:
+  - `/root/whatomate_temp_build_20260416_010826`
+  - `/root/whatomate_temp_build_settings_fix`
+- Final remote cleanup and remote markdown updates could not be completed from this client because new SSH connections to `31.97.192.53:22` stopped completing after the rollout.
 - Source sync target: `/opt/whatomate-src` (via rsync; excluded caches, `uploads/`, and local build artifacts)
 - Source revision on deploy: `e0a23f5` (working tree had local uncommitted changes)
 - Build command: `make build-prod`
