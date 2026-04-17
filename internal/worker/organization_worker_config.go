@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 )
 
@@ -79,6 +80,19 @@ func LoadOrganizationWorkerConfig(settings models.JSONB) OrganizationWorkerConfi
 	config.ScaleUpCooldownSeconds = readWorkerSettingsInt(values, "scale_up_cooldown_seconds", config.ScaleUpCooldownSeconds)
 	config.ScaleDownCooldownSeconds = readWorkerSettingsInt(values, "scale_down_cooldown_seconds", config.ScaleDownCooldownSeconds)
 	config.PauseOnDisconnect = readWorkerSettingsBool(values, "pause_on_disconnect", config.PauseOnDisconnect)
+	return config.Normalize()
+}
+
+func applyLicensedWorkerCap(config OrganizationWorkerConfig, state license.State) OrganizationWorkerConfig {
+	if state.MaxWorkersPerOrg <= 0 {
+		return config.Normalize()
+	}
+	if config.MaxWorkers > state.MaxWorkersPerOrg {
+		config.MaxWorkers = state.MaxWorkersPerOrg
+	}
+	if config.MinWorkers > state.MaxWorkersPerOrg {
+		config.MinWorkers = state.MaxWorkersPerOrg
+	}
 	return config.Normalize()
 }
 

@@ -52,6 +52,7 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 		Data struct {
 			Settings map[string]any `json:"settings"`
 			Name     string         `json:"name"`
+			Slug     string         `json:"slug"`
 		} `json:"data"`
 	}
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
@@ -67,6 +68,7 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_mode")
 	assert.NotContains(t, resp.Data.Settings, "assigned_chat_reset_hour")
 	assert.Equal(t, org.Name, resp.Data.Name)
+	assert.Equal(t, org.Slug, resp.Data.Slug)
 }
 
 func TestApp_GetOrganizationSettings_Defaults(t *testing.T) {
@@ -138,6 +140,7 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	timezone := "America/New_York"
 	dateFormat := "MM/DD/YYYY"
 	newName := "Updated Organization"
+	newSlug := "updated-organization-" + uuid.NewString()[:8]
 	org.Settings = models.JSONB{
 		"assigned_chat_reset_enabled": true,
 		"assigned_chat_reset_mode":    "custom_hour",
@@ -153,6 +156,7 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 		"timezone":                            timezone,
 		"date_format":                         dateFormat,
 		"name":                                newName,
+		"slug":                                newSlug,
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 
@@ -174,6 +178,7 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&updatedOrg).Error)
 
 	assert.Equal(t, newName, updatedOrg.Name)
+	assert.Equal(t, newSlug, updatedOrg.Slug)
 	assert.Equal(t, true, updatedOrg.Settings["mask_phone_numbers"])
 	assert.Equal(t, true, updatedOrg.Settings["strict_sending_restrictions_enabled"])
 	assert.EqualValues(t, 7, updatedOrg.Settings["uploads_cleanup_retention_days"])
@@ -423,6 +428,28 @@ func TestApp_UpdateOrganizationSettings_EmptyNameIgnored(t *testing.T) {
 	var updatedOrg models.Organization
 	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&updatedOrg).Error)
 	assert.Equal(t, originalName, updatedOrg.Name)
+}
+
+func TestApp_UpdateOrganizationSettings_RejectsDuplicateSlug(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	otherOrg := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("duplicate-org-slug")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"slug": otherOrg.Slug,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.UpdateOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusConflict, testutil.GetResponseStatusCode(req))
 }
 
 func TestApp_UpdateOrganizationSettings_InvalidJSON(t *testing.T) {

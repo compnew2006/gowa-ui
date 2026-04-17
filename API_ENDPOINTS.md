@@ -41,6 +41,7 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 | Method | Endpoint                  | Description                            |
 | ------ | ------------------------- | -------------------------------------- |
 | GET    | `/api/me`                 | Get current user profile               |
+| GET    | `/api/auth/me`            | Legacy alias for `/api/me`             |
 | PUT    | `/api/me/settings`        | Update user settings                   |
 | GET    | `/api/me/organizations`   | List organizations the user belongs to |
 | PUT    | `/api/me/password`        | Change user password                   |
@@ -198,6 +199,8 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 | DELETE | `/api/chatbot/ai-contexts/{id}` | Delete AI context             |
 | GET    | `/api/chatbot/sessions`         | List chatbot sessions (Debug) |
 | GET    | `/api/chatbot/sessions/{id}`    | Get session details           |
+| GET    | `/api/chat/sessions`            | Legacy alias for `/api/chatbot/sessions` |
+| GET    | `/api/chat/sessions/{id}`       | Legacy alias for `/api/chatbot/sessions/{id}` |
 
 ## Chatbot Transfers
 
@@ -225,6 +228,7 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 
 | Method | Endpoint                               | Description                             |
 | ------ | -------------------------------------- | --------------------------------------- |
+| GET    | `/api/analytics`                       | Dashboard alias for `/api/analytics/dashboard` |
 | GET    | `/api/analytics/dashboard`             | Get main dashboard statistics           |
 | GET    | `/api/analytics/messages`              | Get detailed message analytics          |
 | GET    | `/api/analytics/chatbot`               | Get chatbot performance analytics       |

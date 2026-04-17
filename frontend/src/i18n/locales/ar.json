@@ -675,6 +675,8 @@
     "language": "اللغة",
     "languageDesc": "اختر لغة العرض المفضلة لديك",
     "selectLanguage": "اختر اللغة",
+    "organizationSlug": "معرّف المؤسسة",
+    "organizationSlugPlaceholder": "مثال: 1 أو holol-wenjaz",
     "timezone": "المنطقة الزمنية",
     "defaultTimezone": "المنطقة الزمنية الافتراضية",
     "selectTimezone": "اختر المنطقة الزمنية",
@@ -976,6 +978,7 @@
     "createTitle": "إنشاء مؤسسة",
     "createDesc": "أنشئ مؤسسة جديدة لإدارة مساحة عمل منفصلة.",
     "namePlaceholder": "اسم المؤسسة",
+    "slugPlaceholder": "معرّف-المؤسسة",
     "created": "تم إنشاء المؤسسة",
     "createFailed": "فشل إنشاء المؤسسة",
     "deleteCurrent": "حذف المؤسسة المحددة",
@@ -2659,6 +2662,7 @@
       "organizations": "المؤسسات",
       "usersPerOrg": "المستخدمون / المؤسسة",
       "whatsAppEndpointsPerOrg": "نقاط واتساب / المؤسسة",
+      "storagePerOrg": "التخزين / المؤسسة",
       "subscriptionDays": "أيام الاشتراك",
       "notEnforced": "لا يتم فرض الحد عندما يكون نظام الترخيص معطلاً",
       "notEnforcedShort": "معطّل",
@@ -2666,7 +2670,7 @@
       "withinCapacity": "ضمن السعة المرخّصة"
     },
     "organizationUsage": {
-      "summary": "{users} مستخدم، {endpoints} نقطة نهاية"
+      "summary": "{users} مستخدم، {endpoints} نقطة نهاية، {storage}"
     },
     "banner": {
       "titleGrace": "فترة سماح الترخيص",

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useOrganizationsStore } from "@/stores/organizations";
 import { useAuthStore } from "@/stores/auth";
+import { useConfigStore } from "@/stores/config";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -48,6 +49,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const organizationsStore = useOrganizationsStore();
 const authStore = useAuthStore();
+const configStore = useConfigStore();
 const isOrgMenuOpen = ref(false);
 
 const isSuperAdmin = computed(() => authStore.user?.is_super_admin || false);
@@ -60,7 +62,9 @@ const canDeleteOrg = computed(
 );
 
 const shouldShowSwitcher = computed(
-  () => isSuperAdmin.value || organizationsStore.isMultiOrg,
+  () =>
+    !configStore.tenant.subdomain_locked &&
+    (isSuperAdmin.value || organizationsStore.isMultiOrg),
 );
 
 // Build the org list depending on user type
@@ -149,6 +153,7 @@ const switchOrganization = async (orgId: string) => {
 // Create org dialog
 const isCreateDialogOpen = ref(false);
 const newOrgName = ref("");
+const newOrgSlug = ref("");
 const isCreating = ref(false);
 const isDeleteDialogOpen = ref(false);
 const deletingOrg = ref<{ id: string; name: string } | null>(null);
@@ -158,10 +163,14 @@ async function submitCreateOrg() {
   if (!newOrgName.value.trim()) return;
   isCreating.value = true;
   try {
-    await organizationsService.create({ name: newOrgName.value.trim() });
+    await organizationsService.create({
+      name: newOrgName.value.trim(),
+      slug: newOrgSlug.value.trim() || undefined,
+    });
     toast.success(t("organizations.created"));
     isCreateDialogOpen.value = false;
     newOrgName.value = "";
+    newOrgSlug.value = "";
     await refreshOrgs();
   } catch {
     toast.error(t("organizations.createFailed"));
@@ -366,11 +375,18 @@ const refreshOrgs = async () => {
         }}</DialogDescription>
       </DialogHeader>
       <div class="py-4">
-        <Input
-          v-model="newOrgName"
-          :placeholder="t('organizations.namePlaceholder')"
-          @keydown.enter="submitCreateOrg"
-        />
+        <div class="space-y-3">
+          <Input
+            v-model="newOrgName"
+            :placeholder="t('organizations.namePlaceholder')"
+            @keydown.enter="submitCreateOrg"
+          />
+          <Input
+            v-model="newOrgSlug"
+            :placeholder="t('organizations.slugPlaceholder')"
+            @keydown.enter="submitCreateOrg"
+          />
+        </div>
       </div>
       <DialogFooter>
         <Button variant="outline" @click="isCreateDialogOpen = false">{{

@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"errors"
+	"net"
 	"strings"
 
 	"github.com/google/uuid"
@@ -17,6 +18,12 @@ const (
 	contextKeyIsSuperAdmin   = "is_super_admin"
 	headerOrganizationID     = "X-Organization-ID"
 )
+
+type HostOrganization struct {
+	ID   uuid.UUID
+	Name string
+	Slug string
+}
 
 // ScopedDB returns a request-scoped GORM clone with tenant filtering enabled.
 func ScopedDB(db *gorm.DB, orgID uuid.UUID) *gorm.DB {
@@ -68,10 +75,40 @@ func GetScopedDB(r *fastglue.Request) (*gorm.DB, bool) {
 	return db, ok
 }
 
+func ResolveHostOrganization(r *fastglue.Request, db *gorm.DB) (*HostOrganization, error) {
+	if r == nil || db == nil {
+		return nil, nil
+	}
+
+	slug := hostOrganizationSlug(string(r.RequestCtx.Host()))
+	if slug == "" {
+		return nil, nil
+	}
+
+	var org HostOrganization
+	if err := db.Table("organizations").
+		Select("id", "name", "slug").
+		Where("slug = ? AND deleted_at IS NULL", slug).
+		Take(&org).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &org, nil
+}
+
 // ResolveOrganizationID calculates the effective organization for a request.
 func ResolveOrganizationID(r *fastglue.Request, db *gorm.DB) (uuid.UUID, error) {
 	if r == nil {
 		return uuid.Nil, errors.New("request is nil")
+	}
+
+	if hostOrg, err := ResolveHostOrganization(r, db); err != nil {
+		return uuid.Nil, err
+	} else if hostOrg != nil {
+		return hostOrg.ID, nil
 	}
 
 	orgIDVal := r.RequestCtx.UserValue(contextKeyOrganizationID)
@@ -131,5 +168,32 @@ func parseContextUUID(value any) (uuid.UUID, bool) {
 		return parsed, true
 	default:
 		return uuid.Nil, false
+	}
+}
+
+func hostOrganizationSlug(host string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(host))
+	if trimmed == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		trimmed = strings.Trim(trimmed, "[]")
+	}
+	if parsedHost, _, err := net.SplitHostPort(trimmed); err == nil {
+		trimmed = parsedHost
+	}
+	if trimmed == "" || trimmed == "localhost" || net.ParseIP(trimmed) != nil {
+		return ""
+	}
+
+	parts := strings.Split(trimmed, ".")
+	switch {
+	case len(parts) >= 3:
+		return strings.TrimSpace(parts[0])
+	case len(parts) == 2 && parts[1] == "localhost":
+		return strings.TrimSpace(parts[0])
+	default:
+		return ""
 	}
 }

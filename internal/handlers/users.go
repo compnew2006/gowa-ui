@@ -1122,6 +1122,9 @@ func (a *App) UploadCurrentUserChatBackground(r *fastglue.Request) error {
 	if len(data) > maxChatBackgroundUploadSize {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 5MB", nil, "file")
 	}
+	if !a.checkQuotaWithDeltaOrRespond(r, license.ResourceStorage, user.OrganizationID, int64(len(data))) {
+		return nil
+	}
 
 	detectedMimeType := normalizeChatBackgroundMIME(http.DetectContentType(data))
 	if detectedMimeType == "" {
@@ -1140,7 +1143,7 @@ func (a *App) UploadCurrentUserChatBackground(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Unsupported file type. Use JPG, PNG, or WebP", nil, "file")
 	}
 
-	subdir := filepath.Join("chat-backgrounds", user.ID.String())
+	subdir := organizationMediaSubdir(user.OrganizationID, "chat-backgrounds", user.ID.String())
 	if err := a.ensureMediaDir(subdir); err != nil {
 		a.Log.Error("Failed to create chat background directory", "user_id", user.ID, "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save chat background", nil, "")

@@ -31,6 +31,8 @@ type RegistryEntry struct {
 	MaxUsersPerOrg             int        `json:"users"`
 	MaxWhatsAppEndpointsPerOrg int        `json:"wa_endpoints"`
 	MaxWorkers                 int        `json:"workers"`
+	MaxWorkersPerOrg           int        `json:"workers_per_org"`
+	MaxStorageBytesPerOrg      int64      `json:"storage_bytes_per_org"`
 	IssuedAt                   time.Time  `json:"issued_at"`
 	NotBefore                  time.Time  `json:"not_before"`
 	ExpiresAt                  *time.Time `json:"expires_at,omitempty"`
@@ -90,6 +92,8 @@ type VerifiedClaims struct {
 	MaxUsersPerOrg             int        `json:"users"`
 	MaxWhatsAppEndpointsPerOrg int        `json:"wa_endpoints"`
 	MaxWorkers                 int        `json:"workers"`
+	MaxWorkersPerOrg           int        `json:"workers_per_org"`
+	MaxStorageBytesPerOrg      int64      `json:"storage_bytes_per_org"`
 	IssuedAt                   time.Time  `json:"issued_at"`
 	NotBefore                  time.Time  `json:"not_before"`
 	ExpiresAt                  *time.Time `json:"expires_at,omitempty"`
@@ -309,6 +313,8 @@ func BuildRegistryEntry(result IssuedLicense) RegistryEntry {
 		MaxUsersPerOrg:             result.Claims.MaxUsersPerOrg,
 		MaxWhatsAppEndpointsPerOrg: result.Claims.MaxWhatsAppEndpointsPerOrg,
 		MaxWorkers:                 result.Claims.MaxWorkers,
+		MaxWorkersPerOrg:           result.Claims.MaxWorkersPerOrg,
+		MaxStorageBytesPerOrg:      result.Claims.MaxStorageBytesPerOrg,
 		IssuedAt:                   result.IssuedAt.UTC(),
 		NotBefore:                  result.NotBefore.UTC(),
 		ExpiresAt:                  result.ExpiresAt,
@@ -504,6 +510,8 @@ func verifiedClaimsFromClaims(claims license.LicenseClaims) VerifiedClaims {
 		MaxUsersPerOrg:             claims.MaxUsersPerOrg,
 		MaxWhatsAppEndpointsPerOrg: claims.MaxWhatsAppEndpointsPerOrg,
 		MaxWorkers:                 claims.MaxWorkers,
+		MaxWorkersPerOrg:           claims.MaxWorkersPerOrg,
+		MaxStorageBytesPerOrg:      claims.MaxStorageBytesPerOrg,
 		IssuedAt:                   issuedAt,
 		NotBefore:                  notBefore,
 		ExpiresAt:                  expiresAt,

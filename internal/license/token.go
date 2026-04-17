@@ -48,6 +48,8 @@ type LicenseClaims struct {
 	MaxUsersPerOrg             int    `json:"max_users_per_org"`
 	MaxWhatsAppEndpointsPerOrg int    `json:"max_whatsapp_endpoints_per_org"`
 	MaxWorkers                 int    `json:"max_workers"`
+	MaxWorkersPerOrg           int    `json:"max_workers_per_org"`
+	MaxStorageBytesPerOrg      int64  `json:"max_storage_bytes_per_org"`
 	jwt.RegisteredClaims
 }
 
@@ -78,7 +80,7 @@ func (c *LicenseClaims) Validate() error {
 	} else if c.TrialDays != 0 {
 		return fmt.Errorf("trial_days must be 0 for paid licenses")
 	}
-	if c.MaxOrganizations < 0 || c.MaxUsersPerOrg < 0 || c.MaxWhatsAppEndpointsPerOrg < 0 || c.MaxWorkers < 0 {
+	if c.MaxOrganizations < 0 || c.MaxUsersPerOrg < 0 || c.MaxWhatsAppEndpointsPerOrg < 0 || c.MaxWorkers < 0 || c.MaxWorkersPerOrg < 0 || c.MaxStorageBytesPerOrg < 0 {
 		return fmt.Errorf("license limits cannot be negative")
 	}
 	if c.Issuer != TokenIssuer {
@@ -111,6 +113,8 @@ type IssueRequest struct {
 	MaxUsersPerOrg             int
 	MaxWhatsAppEndpointsPerOrg int
 	MaxWorkers                 int
+	MaxWorkersPerOrg           int
+	MaxStorageBytesPerOrg      int64
 	IssuedAt                   time.Time
 	NotBefore                  time.Time
 	ExpiresAt                  *time.Time
@@ -233,6 +237,8 @@ func IssueToken(req IssueRequest) (string, error) {
 		MaxUsersPerOrg:             req.MaxUsersPerOrg,
 		MaxWhatsAppEndpointsPerOrg: req.MaxWhatsAppEndpointsPerOrg,
 		MaxWorkers:                 req.MaxWorkers,
+		MaxWorkersPerOrg:           req.MaxWorkersPerOrg,
+		MaxStorageBytesPerOrg:      req.MaxStorageBytesPerOrg,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    TokenIssuer,
 			Subject:   ProductWhatomate,

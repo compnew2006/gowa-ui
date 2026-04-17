@@ -63,6 +63,8 @@ func TestApplySignedClaimsToRecordRestoresCanonicalEntitlements(t *testing.T) {
 		MaxUsersPerOrg:             999,
 		MaxWhatsAppEndpointsPerOrg: 999,
 		MaxWorkers:                 999,
+		MaxWorkersPerOrg:           999,
+		MaxStorageBytesPerOrg:      999,
 	}
 
 	updates := svc.applySignedClaimsToRecord(record, claims, kid)
@@ -83,6 +85,12 @@ func TestApplySignedClaimsToRecordRestoresCanonicalEntitlements(t *testing.T) {
 	}
 	if record.HWIDHash != claims.HWIDHash {
 		t.Fatalf("record.HWIDHash = %q, want %q", record.HWIDHash, claims.HWIDHash)
+	}
+	if record.MaxWorkersPerOrg != claims.MaxWorkersPerOrg {
+		t.Fatalf("record.MaxWorkersPerOrg = %d, want %d", record.MaxWorkersPerOrg, claims.MaxWorkersPerOrg)
+	}
+	if record.MaxStorageBytesPerOrg != claims.MaxStorageBytesPerOrg {
+		t.Fatalf("record.MaxStorageBytesPerOrg = %d, want %d", record.MaxStorageBytesPerOrg, claims.MaxStorageBytesPerOrg)
 	}
 }
 
@@ -141,6 +149,8 @@ func newTestLicenseServiceWithIssueTime(t *testing.T, issuedAt time.Time, expire
 		MaxUsersPerOrg:             5,
 		MaxWhatsAppEndpointsPerOrg: 5,
 		MaxWorkers:                 2,
+		MaxWorkersPerOrg:           4,
+		MaxStorageBytesPerOrg:      5 * 1024 * 1024 * 1024,
 		IssuedAt:                   issuedAt,
 		NotBefore:                  issuedAt,
 		ExpiresAt:                  expiresAt,

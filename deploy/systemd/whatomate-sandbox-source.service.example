@@ -1,0 +1,32 @@
+[Unit]
+Description=Whatomate sandbox (source runtime)
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/whatomate-sandbox/src
+Environment=PATH=/usr/local/go/bin:/usr/bin:/bin
+Environment=GOTOOLCHAIN=go1.25.9+auto
+Environment=WHATOMATE_WORKERS=0
+Environment=WHATOMATE_APP_SANDBOX_MODE=true
+Environment=WHATOMATE_SERVER_HOST=127.0.0.1
+Environment=WHATOMATE_SERVER_PORT=18127
+Environment=WHATOMATE_SERVER_ALLOWED_ORIGINS=https://sandbox.ofuqalmadenah.com
+Environment=WHATOMATE_RATE_LIMIT_TRUST_PROXY=true
+Environment=WHATOMATE_COOKIE_SECURE=true
+Environment=WHATOMATE_REDIS_DB=4
+# Keep PostgreSQL settings inherited from the production config file.
+# Leave storage.local_path inherited as well if you need existing media to resolve exactly like production.
+# For isolated new uploads, uncomment the next line and accept that existing media files may not exist there.
+# Environment=WHATOMATE_STORAGE_LOCAL_PATH=/opt/whatomate-sandbox/uploads
+ExecStart=/opt/whatomate-sandbox/src/scripts/run_source_server.sh /opt/whatomate/config.toml
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+# Copy User=/Group= from `systemctl cat whatomate.service` if production does not run as root.
+# User=whatomate
+# Group=whatomate
+
+[Install]
+WantedBy=multi-user.target

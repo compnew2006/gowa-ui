@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
@@ -145,7 +146,10 @@ func (a *App) SendStatus(r *fastglue.Request) error {
 	var req sendStatusRequest
 	contentType := strings.ToLower(strings.TrimSpace(string(r.RequestCtx.Request.Header.ContentType())))
 	if strings.HasPrefix(contentType, "multipart/form-data") {
-		if err := a.parseMultipartStatusRequest(r, &req); err != nil {
+		if err := a.parseMultipartStatusRequest(r, orgID, &req); err != nil {
+			if err == errEnvelopeSent {
+				return nil
+			}
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 		}
 	} else {
@@ -437,7 +441,7 @@ func (a *App) ServeStatusMedia(r *fastglue.Request) error {
 	return a.serveLocalMediaFile(r, mediaPath, status.MediaMimeType)
 }
 
-func (a *App) parseMultipartStatusRequest(r *fastglue.Request, req *sendStatusRequest) error {
+func (a *App) parseMultipartStatusRequest(r *fastglue.Request, orgID uuid.UUID, req *sendStatusRequest) error {
 	if req == nil {
 		return fmt.Errorf("request is required")
 	}
@@ -498,7 +502,11 @@ func (a *App) parseMultipartStatusRequest(r *fastglue.Request, req *sendStatusRe
 	}
 	req.Type = string(mediaType)
 
-	localPath, err := a.saveMediaLocally(fileData, mimeType, fileHeader.Filename)
+	if !a.checkQuotaWithDeltaOrRespond(r, license.ResourceStorage, orgID, int64(len(fileData))) {
+		return errEnvelopeSent
+	}
+
+	localPath, err := a.saveMediaLocally(orgID, fileData, mimeType, fileHeader.Filename)
 	if err != nil {
 		return fmt.Errorf("failed to save uploaded file")
 	}

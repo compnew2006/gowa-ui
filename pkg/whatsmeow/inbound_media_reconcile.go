@@ -47,6 +47,8 @@ type InboundMediaReconcileSummary struct {
 	SkippedActiveQueued int64
 	TotalQueued         int64
 	EligibleQueued      int64
+	Requeued            int64
+	MarkedFailed        int64
 	Updated             int64
 	SampleIDs           []string
 }
@@ -58,9 +60,13 @@ type inboundMediaQueueGroupState struct {
 }
 
 type inboundMediaQueuedMessage struct {
-	ID        uuid.UUID    `gorm:"column:id"`
-	Metadata  models.JSONB `gorm:"column:metadata;type:jsonb"`
-	UpdatedAt time.Time    `gorm:"column:updated_at"`
+	ID                uuid.UUID          `gorm:"column:id"`
+	OrganizationID    uuid.UUID          `gorm:"column:organization_id"`
+	InstanceID        *uuid.UUID         `gorm:"column:instance_id"`
+	WhatsAppMessageID string             `gorm:"column:whats_app_message_id"`
+	MessageType       models.MessageType `gorm:"column:message_type"`
+	Metadata          models.JSONB       `gorm:"column:metadata;type:jsonb"`
+	UpdatedAt         time.Time          `gorm:"column:updated_at"`
 }
 
 func (s inboundMediaQueueGroupState) validate(allowActive bool) error {
@@ -116,6 +122,50 @@ func buildStaleInboundMediaFailure(metadata models.JSONB) (models.JSONB, string,
 	delete(nextMetadata, inboundMediaAsyncEnqueueErrorKey)
 
 	return nextMetadata, reason, inboundMediaFailureErrorMessage(reason)
+}
+
+func buildQueuedInboundMediaRecoveryJob(row inboundMediaQueuedMessage) (*queue.InboundMediaJob, error) {
+	if row.InstanceID == nil || *row.InstanceID == uuid.Nil {
+		return nil, fmt.Errorf("message %s has no instance_id", row.ID)
+	}
+
+	job, err := decodeInboundMediaAsyncJobMetadata(row.Metadata[inboundMediaAsyncJobKey])
+	if err != nil {
+		return nil, err
+	}
+
+	job.MessageID = row.ID
+	job.OrganizationID = row.OrganizationID
+	job.InstanceID = *row.InstanceID
+	job.MessageType = row.MessageType
+	job.WhatsAppMessageID = strings.TrimSpace(row.WhatsAppMessageID)
+
+	return job, nil
+}
+
+func buildRequeuedInboundMediaMetadata(metadata models.JSONB, job *queue.InboundMediaJob, now time.Time) models.JSONB {
+	nextMetadata := cloneJSONBMap(metadata)
+	if nextMetadata == nil {
+		nextMetadata = models.JSONB{}
+	}
+
+	job.EnqueuedAt = now.UTC()
+	setInboundMediaAsyncJobMetadata(nextMetadata, job)
+	nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusQueued
+	nextMetadata[inboundMediaAsyncEnqueuedAtKey] = now.UTC().Format(time.RFC3339Nano)
+	delete(nextMetadata, inboundMediaAsyncEnqueueErrorKey)
+
+	return nextMetadata
+}
+
+func buildEnqueueFailedInboundMediaMetadata(metadata models.JSONB, job *queue.InboundMediaJob, now time.Time, enqueueErr error) models.JSONB {
+	nextMetadata := buildRequeuedInboundMediaMetadata(metadata, job, now)
+	nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusEnqueueFail
+	if enqueueErr != nil {
+		nextMetadata[inboundMediaAsyncEnqueueErrorKey] = enqueueErr.Error()
+		updateInboundMediaAsyncJobLastError(nextMetadata, enqueueErr.Error())
+	}
+	return nextMetadata
 }
 
 func inboundMediaFailureErrorMessage(reason string) string {
@@ -296,7 +346,15 @@ func ReconcileStaleQueuedInboundMedia(
 	}
 
 	var rows []inboundMediaQueuedMessage
-	if err := eligibleQuery.Select("id", "metadata", "updated_at").Find(&rows).Error; err != nil {
+	if err := eligibleQuery.Select(
+		"id",
+		"organization_id",
+		"instance_id",
+		"whats_app_message_id",
+		"message_type",
+		"metadata",
+		"updated_at",
+	).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("load queued inbound-media rows: %w", err)
 	}
 
@@ -311,9 +369,44 @@ func ReconcileStaleQueuedInboundMedia(
 		return summary, nil
 	}
 
+	queueClient := queue.NewRedisQueue(rdb, logger)
 	now := opts.Now
 	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, row := range rows {
+			job, jobErr := buildQueuedInboundMediaRecoveryJob(row)
+			if jobErr == nil {
+				job.EnqueuedAt = now.UTC()
+				if enqueueErr := queueClient.EnqueueInboundMedia(ctx, job); enqueueErr == nil {
+					nextMetadata := buildRequeuedInboundMediaMetadata(row.Metadata, job, now)
+					if err := tx.Model(&models.Message{}).
+						Where("id = ?", row.ID).
+						Updates(map[string]any{
+							"metadata":      nextMetadata,
+							"updated_at":    now,
+							"error_message": "Inbound media recovery job was re-queued after stale queue detection",
+						}).Error; err != nil {
+						return fmt.Errorf("refresh stale queued inbound-media row %s: %w", row.ID, err)
+					}
+					summary.Requeued++
+					summary.Updated++
+					continue
+				} else {
+					nextMetadata := buildEnqueueFailedInboundMediaMetadata(row.Metadata, job, now, enqueueErr)
+					nextErrorMessage := fmt.Sprintf("Inbound media recovery re-queue failed: %v", enqueueErr)
+					if err := tx.Model(&models.Message{}).
+						Where("id = ?", row.ID).
+						Updates(map[string]any{
+							"metadata":      nextMetadata,
+							"error_message": nextErrorMessage,
+							"updated_at":    now,
+						}).Error; err != nil {
+						return fmt.Errorf("mark inbound-media requeue failure for row %s: %w", row.ID, err)
+					}
+					summary.Updated++
+					continue
+				}
+			}
+
 			nextMetadata, _, nextErrorMessage := buildStaleInboundMediaFailure(row.Metadata)
 			if err := tx.Model(&models.Message{}).
 				Where("id = ?", row.ID).
@@ -324,6 +417,7 @@ func ReconcileStaleQueuedInboundMedia(
 				}).Error; err != nil {
 				return fmt.Errorf("update stale queued inbound-media row %s: %w", row.ID, err)
 			}
+			summary.MarkedFailed++
 			summary.Updated++
 		}
 		return nil
@@ -334,6 +428,8 @@ func ReconcileStaleQueuedInboundMedia(
 	logger.Info(
 		"Reconciled stale queued inbound-media rows",
 		"updated", summary.Updated,
+		"requeued", summary.Requeued,
+		"marked_failed", summary.MarkedFailed,
 		"cutoff", summary.Cutoff.Format(time.RFC3339),
 		"queue_pending", summary.QueuePending,
 		"queue_lag", summary.QueueLag,

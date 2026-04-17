@@ -29,6 +29,12 @@ func (a *App) ensureMediaDir(subdir string) error {
 	return os.MkdirAll(path, 0750)
 }
 
+func organizationMediaSubdir(orgID uuid.UUID, parts ...string) string {
+	segments := []string{"orgs", orgID.String()}
+	segments = append(segments, parts...)
+	return filepath.Join(segments...)
+}
+
 // getExtensionFromMimeType returns file extension based on mime type
 func getExtensionFromMimeType(mimeType string) string {
 	// Prefix matching as implemented before

@@ -39,6 +39,8 @@ describe("useLicenseStore", () => {
           max_users_per_org: 5,
           max_whatsapp_endpoints_per_org: 5,
           max_workers: 2,
+          max_workers_per_org: 2,
+          max_storage_bytes_per_org: 5368709120,
           expiring_soon: true,
           days_until_expiry: 10,
           quota_overages: {},
@@ -61,6 +63,12 @@ describe("useLicenseStore", () => {
               over_quota: false,
               overage: 0,
             },
+            storage_bytes_per_org: {
+              current: 1024,
+              limit: 5368709120,
+              over_quota: false,
+              overage: 0,
+            },
             organization_details: [],
           },
         },
@@ -74,6 +82,7 @@ describe("useLicenseStore", () => {
     expect(store.isLocked).toBe(false);
     expect(store.showExpiryWarning).toBe(true);
     expect(store.state.usage.users_per_org.current).toBe(3);
+    expect(store.state.usage.storage_bytes_per_org.current).toBe(1024);
     expect(store.state.duration_label).toBe("56d");
   });
 
@@ -90,6 +99,8 @@ describe("useLicenseStore", () => {
       max_users_per_org: 5,
       max_whatsapp_endpoints_per_org: 5,
       max_workers: 2,
+      max_workers_per_org: 2,
+      max_storage_bytes_per_org: 5368709120,
       expiring_soon: false,
       quota_overages: {},
     });
@@ -115,6 +126,8 @@ describe("useLicenseStore", () => {
       max_users_per_org: 0,
       max_whatsapp_endpoints_per_org: 0,
       max_workers: 0,
+      max_workers_per_org: 0,
+      max_storage_bytes_per_org: 0,
       expiring_soon: false,
       quota_overages: {},
     });

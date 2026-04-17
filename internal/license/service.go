@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -38,6 +39,7 @@ const (
 	ResourceOrganizations = "organizations"
 	ResourceUsers         = "users"
 	ResourceEndpoints     = "whatsapp_endpoints"
+	ResourceStorage       = "storage_bytes"
 
 	redisStateKey          = "whatomate:license:state"
 	redisInvalidateChannel = "whatomate:license:invalidate"
@@ -46,38 +48,40 @@ const (
 )
 
 type State struct {
-	Enabled                    bool           `json:"enabled"`
-	Status                     string         `json:"status"`
-	Locked                     bool           `json:"locked"`
-	Reason                     string         `json:"reason,omitempty"`
-	LicenseID                  string         `json:"license_id,omitempty"`
-	LicenseFamilyID            string         `json:"license_family_id,omitempty"`
-	Revision                   uint64         `json:"revision"`
-	KeyID                      string         `json:"key_id,omitempty"`
-	HWIDFull                   string         `json:"hwid_full"`
-	HWIDShort                  string         `json:"hwid_short"`
-	HWIDHash                   string         `json:"hwid_hash"`
-	Tier                       string         `json:"tier,omitempty"`
-	LicenseKind                string         `json:"license_kind,omitempty"`
-	TrialDays                  int            `json:"trial_days,omitempty"`
-	DurationLabel              string         `json:"duration_label,omitempty"`
-	MaxOrganizations           int            `json:"max_organizations"`
-	MaxUsersPerOrg             int            `json:"max_users_per_org"`
-	MaxWhatsAppEndpointsPerOrg int            `json:"max_whatsapp_endpoints_per_org"`
-	MaxWorkers                 int            `json:"max_workers"`
-	ExpiresAt                  *time.Time     `json:"expires_at,omitempty"`
-	GraceDeadline              *time.Time     `json:"grace_deadline,omitempty"`
-	DaysUntilExpiry            *int           `json:"days_until_expiry,omitempty"`
-	ExpiringSoon               bool           `json:"expiring_soon"`
-	QuotaOverages              map[string]int `json:"quota_overages,omitempty"`
-	UpdatedAt                  time.Time      `json:"updated_at"`
+	Enabled                    bool             `json:"enabled"`
+	Status                     string           `json:"status"`
+	Locked                     bool             `json:"locked"`
+	Reason                     string           `json:"reason,omitempty"`
+	LicenseID                  string           `json:"license_id,omitempty"`
+	LicenseFamilyID            string           `json:"license_family_id,omitempty"`
+	Revision                   uint64           `json:"revision"`
+	KeyID                      string           `json:"key_id,omitempty"`
+	HWIDFull                   string           `json:"hwid_full"`
+	HWIDShort                  string           `json:"hwid_short"`
+	HWIDHash                   string           `json:"hwid_hash"`
+	Tier                       string           `json:"tier,omitempty"`
+	LicenseKind                string           `json:"license_kind,omitempty"`
+	TrialDays                  int              `json:"trial_days,omitempty"`
+	DurationLabel              string           `json:"duration_label,omitempty"`
+	MaxOrganizations           int              `json:"max_organizations"`
+	MaxUsersPerOrg             int              `json:"max_users_per_org"`
+	MaxWhatsAppEndpointsPerOrg int              `json:"max_whatsapp_endpoints_per_org"`
+	MaxWorkers                 int              `json:"max_workers"`
+	MaxWorkersPerOrg           int              `json:"max_workers_per_org"`
+	MaxStorageBytesPerOrg      int64            `json:"max_storage_bytes_per_org"`
+	ExpiresAt                  *time.Time       `json:"expires_at,omitempty"`
+	GraceDeadline              *time.Time       `json:"grace_deadline,omitempty"`
+	DaysUntilExpiry            *int             `json:"days_until_expiry,omitempty"`
+	ExpiringSoon               bool             `json:"expiring_soon"`
+	QuotaOverages              map[string]int64 `json:"quota_overages,omitempty"`
+	UpdatedAt                  time.Time        `json:"updated_at"`
 }
 
 type MetricUsage struct {
-	Current   int  `json:"current"`
-	Limit     int  `json:"limit"`
-	OverQuota bool `json:"over_quota"`
-	Overage   int  `json:"overage"`
+	Current   int64 `json:"current"`
+	Limit     int64 `json:"limit"`
+	OverQuota bool  `json:"over_quota"`
+	Overage   int64 `json:"overage"`
 }
 
 type OrganizationUsage struct {
@@ -85,12 +89,14 @@ type OrganizationUsage struct {
 	OrganizationName      string    `json:"organization_name"`
 	UserCount             int       `json:"user_count"`
 	WhatsAppEndpointCount int       `json:"whatsapp_endpoint_count"`
+	StorageBytes          int64     `json:"storage_bytes"`
 }
 
 type UsageSnapshot struct {
 	Organizations           MetricUsage         `json:"organizations"`
 	UsersPerOrg             MetricUsage         `json:"users_per_org"`
 	WhatsAppEndpointsPerOrg MetricUsage         `json:"whatsapp_endpoints_per_org"`
+	StorageBytesPerOrg      MetricUsage         `json:"storage_bytes_per_org"`
 	OrganizationDetails     []OrganizationUsage `json:"organization_details"`
 }
 
@@ -102,8 +108,8 @@ type BootstrapResponse struct {
 type QuotaCheck struct {
 	Allowed   bool   `json:"allowed"`
 	Resource  string `json:"resource"`
-	Current   int    `json:"current"`
-	Limit     int    `json:"limit"`
+	Current   int64  `json:"current"`
+	Limit     int64  `json:"limit"`
 	OverQuota bool   `json:"over_quota"`
 }
 
@@ -172,7 +178,7 @@ func NewService(cfg *config.Config, db *gorm.DB, redisClient *redis.Client, log 
 			HWIDShort:     short,
 			HWIDHash:      hash,
 			UpdatedAt:     svc.now().UTC(),
-			QuotaOverages: map[string]int{},
+			QuotaOverages: map[string]int64{},
 		})
 		return svc, nil
 	}
@@ -278,7 +284,7 @@ func (s *Service) CurrentState() State {
 			HWIDShort:     s.hwidShort,
 			HWIDHash:      s.hwidHash,
 			UpdatedAt:     s.now().UTC(),
-			QuotaOverages: map[string]int{},
+			QuotaOverages: map[string]int64{},
 		}
 	}
 	return cloneState(*ptr)
@@ -379,7 +385,7 @@ func (s *Service) Activate(ctx context.Context, rawToken string) (BootstrapRespo
 		return BootstrapResponse{}, &ActivationError{StatusCode: 409, Code: "stale_revision", Message: "A newer or equal license revision is already installed"}
 	}
 
-	overages, err := s.computeOverages(ctx, claims.MaxOrganizations, claims.MaxUsersPerOrg, claims.MaxWhatsAppEndpointsPerOrg)
+	overages, err := s.computeOverages(ctx, claims.MaxOrganizations, claims.MaxUsersPerOrg, claims.MaxWhatsAppEndpointsPerOrg, claims.MaxStorageBytesPerOrg)
 	if err != nil {
 		return BootstrapResponse{}, err
 	}
@@ -407,6 +413,8 @@ func (s *Service) Activate(ctx context.Context, rawToken string) (BootstrapRespo
 		MaxUsersPerOrg:             claims.MaxUsersPerOrg,
 		MaxWhatsAppEndpointsPerOrg: claims.MaxWhatsAppEndpointsPerOrg,
 		MaxWorkers:                 claims.MaxWorkers,
+		MaxWorkersPerOrg:           claims.MaxWorkersPerOrg,
+		MaxStorageBytesPerOrg:      claims.MaxStorageBytesPerOrg,
 		Status:                     StatusActive,
 		Overages:                   intMapToJSONB(overages),
 		IssuedAt:                   claims.IssuedAt.Time.UTC(),
@@ -433,6 +441,8 @@ func (s *Service) Activate(ctx context.Context, rawToken string) (BootstrapRespo
 		"max_users_per_org":              record.MaxUsersPerOrg,
 		"max_whatsapp_endpoints_per_org": record.MaxWhatsAppEndpointsPerOrg,
 		"max_workers":                    record.MaxWorkers,
+		"max_workers_per_org":            record.MaxWorkersPerOrg,
+		"max_storage_bytes_per_org":      record.MaxStorageBytesPerOrg,
 	}); err != nil {
 		s.log.Warn("Failed to record license activation event", "error", err)
 	}
@@ -460,7 +470,7 @@ func (s *Service) RefreshState(ctx context.Context) (State, error) {
 			HWIDShort:     s.hwidShort,
 			HWIDHash:      s.hwidHash,
 			UpdatedAt:     s.now().UTC(),
-			QuotaOverages: map[string]int{},
+			QuotaOverages: map[string]int64{},
 		}
 		s.storeState(state)
 		return state, nil
@@ -478,7 +488,7 @@ func (s *Service) RefreshState(ctx context.Context) (State, error) {
 				HWIDShort:     s.hwidShort,
 				HWIDHash:      s.hwidHash,
 				UpdatedAt:     s.now().UTC(),
-				QuotaOverages: map[string]int{},
+				QuotaOverages: map[string]int64{},
 			}
 			s.storeState(state)
 			if err := s.publishStateIfChanged(ctx, previous, state); err != nil {
@@ -504,7 +514,7 @@ func (s *Service) RefreshState(ctx context.Context) (State, error) {
 			HWIDShort:       s.hwidShort,
 			HWIDHash:        s.hwidHash,
 			UpdatedAt:       now,
-			QuotaOverages:   map[string]int{},
+			QuotaOverages:   map[string]int64{},
 		}
 		s.storeState(state)
 		if err := s.publishStateIfChanged(ctx, previous, state); err != nil {
@@ -533,6 +543,8 @@ func (s *Service) RefreshState(ctx context.Context) (State, error) {
 		MaxUsersPerOrg:             record.MaxUsersPerOrg,
 		MaxWhatsAppEndpointsPerOrg: record.MaxWhatsAppEndpointsPerOrg,
 		MaxWorkers:                 record.MaxWorkers,
+		MaxWorkersPerOrg:           record.MaxWorkersPerOrg,
+		MaxStorageBytesPerOrg:      record.MaxStorageBytesPerOrg,
 		ExpiresAt:                  record.ExpiresAt,
 		GraceDeadline:              record.GraceDeadline,
 		QuotaOverages:              jsonbToIntMap(record.Overages),
@@ -563,7 +575,7 @@ func (s *Service) RefreshState(ctx context.Context) (State, error) {
 		state.ExpiringSoon = !state.Locked && state.Status == StatusActive && days <= expiringSoonDays
 	}
 
-	overages, err := s.computeOverages(ctx, record.MaxOrganizations, record.MaxUsersPerOrg, record.MaxWhatsAppEndpointsPerOrg)
+	overages, err := s.computeOverages(ctx, record.MaxOrganizations, record.MaxUsersPerOrg, record.MaxWhatsAppEndpointsPerOrg, record.MaxStorageBytesPerOrg)
 	if err != nil {
 		return State{}, err
 	}
@@ -603,6 +615,10 @@ func (s *Service) RefreshState(ctx context.Context) (State, error) {
 }
 
 func (s *Service) CheckQuota(ctx context.Context, resource string, orgID uuid.UUID) (QuotaCheck, error) {
+	return s.CheckQuotaWithDelta(ctx, resource, orgID, 0)
+}
+
+func (s *Service) CheckQuotaWithDelta(ctx context.Context, resource string, orgID uuid.UUID, delta int64) (QuotaCheck, error) {
 	state := s.CurrentState()
 	if !state.Enabled {
 		return QuotaCheck{Allowed: true, Resource: resource}, nil
@@ -617,31 +633,37 @@ func (s *Service) CheckQuota(ctx context.Context, resource string, orgID uuid.UU
 		if err != nil {
 			return QuotaCheck{}, err
 		}
-		return quotaFromCount(resource, current, state.MaxOrganizations), nil
+		return quotaFromCount(resource, int64(current), int64(state.MaxOrganizations)), nil
 	case ResourceUsers:
 		current, err := s.countUsersForOrg(ctx, orgID)
 		if err != nil {
 			return QuotaCheck{}, err
 		}
-		return quotaFromCount(resource, current, state.MaxUsersPerOrg), nil
+		return quotaFromCount(resource, int64(current), int64(state.MaxUsersPerOrg)), nil
 	case ResourceEndpoints:
 		current, err := s.countWhatsAppEndpointsForOrg(ctx, orgID)
 		if err != nil {
 			return QuotaCheck{}, err
 		}
-		return quotaFromCount(resource, current, state.MaxWhatsAppEndpointsPerOrg), nil
+		return quotaFromCount(resource, int64(current), int64(state.MaxWhatsAppEndpointsPerOrg)), nil
+	case ResourceStorage:
+		current, err := s.storageBytesForOrg(ctx, orgID)
+		if err != nil {
+			return QuotaCheck{}, err
+		}
+		return quotaFromCount(resource, current+delta, state.MaxStorageBytesPerOrg), nil
 	default:
 		return QuotaCheck{}, fmt.Errorf("unknown resource %q", resource)
 	}
 }
 
-func quotaFromCount(resource string, current, limit int) QuotaCheck {
+func quotaFromCount(resource string, current, limit int64) QuotaCheck {
 	return QuotaCheck{
-		Allowed:   current < limit,
+		Allowed:   limit <= 0 || current < limit,
 		Resource:  resource,
 		Current:   current,
 		Limit:     limit,
-		OverQuota: current >= limit,
+		OverQuota: limit > 0 && current >= limit,
 	}
 }
 
@@ -738,6 +760,13 @@ func (s *Service) applySignedClaimsToRecord(record *models.LicenseRecord, claims
 		*current = next
 		updates[column] = next
 	}
+	setInt64 := func(current *int64, column string, next int64) {
+		if *current == next {
+			return
+		}
+		*current = next
+		updates[column] = next
+	}
 	setTime := func(current *time.Time, column string, next time.Time) {
 		next = next.UTC()
 		if sameMoment(*current, next) {
@@ -776,6 +805,8 @@ func (s *Service) applySignedClaimsToRecord(record *models.LicenseRecord, claims
 	setInt(&record.MaxUsersPerOrg, "max_users_per_org", claims.MaxUsersPerOrg)
 	setInt(&record.MaxWhatsAppEndpointsPerOrg, "max_whatsapp_endpoints_per_org", claims.MaxWhatsAppEndpointsPerOrg)
 	setInt(&record.MaxWorkers, "max_workers", claims.MaxWorkers)
+	setInt(&record.MaxWorkersPerOrg, "max_workers_per_org", claims.MaxWorkersPerOrg)
+	setInt64(&record.MaxStorageBytesPerOrg, "max_storage_bytes_per_org", claims.MaxStorageBytesPerOrg)
 	setTime(&record.IssuedAt, "issued_at", numericDateTime(claims.IssuedAt))
 	setTime(&record.NotBefore, "not_before", numericDateTime(claims.NotBefore))
 	setTimePtr(&record.ExpiresAt, "expires_at", toTimePtr(claims.ExpiresAt))
@@ -835,6 +866,8 @@ func (s *Service) recordHMAC(record *models.LicenseRecord) string {
 		"max_users_per_org":              record.MaxUsersPerOrg,
 		"max_whatsapp_endpoints_per_org": record.MaxWhatsAppEndpointsPerOrg,
 		"max_workers":                    record.MaxWorkers,
+		"max_workers_per_org":            record.MaxWorkersPerOrg,
+		"max_storage_bytes_per_org":      record.MaxStorageBytesPerOrg,
 		"status":                         record.Status,
 		"overages":                       record.Overages,
 		"issued_at":                      record.IssuedAt.UTC().Format(time.RFC3339Nano),
@@ -904,7 +937,7 @@ func (s *Service) storeState(state State) {
 func cloneState(state State) State {
 	cloned := state
 	if state.QuotaOverages != nil {
-		cloned.QuotaOverages = make(map[string]int, len(state.QuotaOverages))
+		cloned.QuotaOverages = make(map[string]int64, len(state.QuotaOverages))
 		for key, value := range state.QuotaOverages {
 			cloned.QuotaOverages[key] = value
 		}
@@ -924,22 +957,22 @@ func cloneState(state State) State {
 	return cloned
 }
 
-func jsonbToIntMap(input models.JSONB) map[string]int {
-	result := make(map[string]int)
+func jsonbToIntMap(input models.JSONB) map[string]int64 {
+	result := make(map[string]int64)
 	for key, value := range input {
 		switch typed := value.(type) {
 		case float64:
-			result[key] = int(typed)
+			result[key] = int64(typed)
 		case int:
-			result[key] = typed
+			result[key] = int64(typed)
 		case int64:
-			result[key] = int(typed)
+			result[key] = typed
 		}
 	}
 	return result
 }
 
-func intMapToJSONB(input map[string]int) models.JSONB {
+func intMapToJSONB(input map[string]int64) models.JSONB {
 	if len(input) == 0 {
 		return models.JSONB{}
 	}
@@ -1000,20 +1033,24 @@ func (s *Service) computeUsage(ctx context.Context, state State) (UsageSnapshot,
 
 	usage := UsageSnapshot{
 		Organizations: MetricUsage{
-			Current: len(orgs),
-			Limit:   state.MaxOrganizations,
+			Current: int64(len(orgs)),
+			Limit:   int64(state.MaxOrganizations),
 		},
 		UsersPerOrg: MetricUsage{
-			Limit: state.MaxUsersPerOrg,
+			Limit: int64(state.MaxUsersPerOrg),
 		},
 		WhatsAppEndpointsPerOrg: MetricUsage{
-			Limit: state.MaxWhatsAppEndpointsPerOrg,
+			Limit: int64(state.MaxWhatsAppEndpointsPerOrg),
+		},
+		StorageBytesPerOrg: MetricUsage{
+			Limit: state.MaxStorageBytesPerOrg,
 		},
 		OrganizationDetails: make([]OrganizationUsage, 0, len(orgs)),
 	}
 
 	maxUsers := 0
 	maxEndpoints := 0
+	var maxStorageBytes int64
 	for _, org := range orgs {
 		userCount, err := s.countUsersForOrg(ctx, org.ID)
 		if err != nil {
@@ -1029,11 +1066,19 @@ func (s *Service) computeUsage(ctx context.Context, state State) (UsageSnapshot,
 		if endpointCount > maxEndpoints {
 			maxEndpoints = endpointCount
 		}
+		storageBytes, err := s.storageBytesForOrg(ctx, org.ID)
+		if err != nil {
+			return UsageSnapshot{}, err
+		}
+		if storageBytes > maxStorageBytes {
+			maxStorageBytes = storageBytes
+		}
 		usage.OrganizationDetails = append(usage.OrganizationDetails, OrganizationUsage{
 			OrganizationID:        org.ID,
 			OrganizationName:      org.Name,
 			UserCount:             userCount,
 			WhatsAppEndpointCount: endpointCount,
+			StorageBytes:          storageBytes,
 		})
 	}
 
@@ -1041,30 +1086,36 @@ func (s *Service) computeUsage(ctx context.Context, state State) (UsageSnapshot,
 	if usage.Organizations.OverQuota {
 		usage.Organizations.Overage = usage.Organizations.Current - usage.Organizations.Limit
 	}
-	usage.UsersPerOrg.Current = maxUsers
-	usage.UsersPerOrg.OverQuota = usage.UsersPerOrg.Limit > 0 && maxUsers > usage.UsersPerOrg.Limit
+	usage.UsersPerOrg.Current = int64(maxUsers)
+	usage.UsersPerOrg.OverQuota = usage.UsersPerOrg.Limit > 0 && int64(maxUsers) > usage.UsersPerOrg.Limit
 	if usage.UsersPerOrg.OverQuota {
-		usage.UsersPerOrg.Overage = maxUsers - usage.UsersPerOrg.Limit
+		usage.UsersPerOrg.Overage = int64(maxUsers) - usage.UsersPerOrg.Limit
 	}
-	usage.WhatsAppEndpointsPerOrg.Current = maxEndpoints
-	usage.WhatsAppEndpointsPerOrg.OverQuota = usage.WhatsAppEndpointsPerOrg.Limit > 0 && maxEndpoints > usage.WhatsAppEndpointsPerOrg.Limit
+	usage.WhatsAppEndpointsPerOrg.Current = int64(maxEndpoints)
+	usage.WhatsAppEndpointsPerOrg.OverQuota = usage.WhatsAppEndpointsPerOrg.Limit > 0 && int64(maxEndpoints) > usage.WhatsAppEndpointsPerOrg.Limit
 	if usage.WhatsAppEndpointsPerOrg.OverQuota {
-		usage.WhatsAppEndpointsPerOrg.Overage = maxEndpoints - usage.WhatsAppEndpointsPerOrg.Limit
+		usage.WhatsAppEndpointsPerOrg.Overage = int64(maxEndpoints) - usage.WhatsAppEndpointsPerOrg.Limit
+	}
+	usage.StorageBytesPerOrg.Current = maxStorageBytes
+	usage.StorageBytesPerOrg.OverQuota = usage.StorageBytesPerOrg.Limit > 0 && maxStorageBytes > usage.StorageBytesPerOrg.Limit
+	if usage.StorageBytesPerOrg.OverQuota {
+		usage.StorageBytesPerOrg.Overage = maxStorageBytes - usage.StorageBytesPerOrg.Limit
 	}
 	return usage, nil
 }
 
-func (s *Service) computeOverages(ctx context.Context, maxOrganizations, maxUsersPerOrg, maxEndpointsPerOrg int) (map[string]int, error) {
+func (s *Service) computeOverages(ctx context.Context, maxOrganizations, maxUsersPerOrg, maxEndpointsPerOrg int, maxStorageBytesPerOrg int64) (map[string]int64, error) {
 	usage, err := s.computeUsage(ctx, State{
 		MaxOrganizations:           maxOrganizations,
 		MaxUsersPerOrg:             maxUsersPerOrg,
 		MaxWhatsAppEndpointsPerOrg: maxEndpointsPerOrg,
+		MaxStorageBytesPerOrg:      maxStorageBytesPerOrg,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	overages := map[string]int{}
+	overages := map[string]int64{}
 	if usage.Organizations.Overage > 0 {
 		overages[ResourceOrganizations] = usage.Organizations.Overage
 	}
@@ -1073,6 +1124,9 @@ func (s *Service) computeOverages(ctx context.Context, maxOrganizations, maxUser
 	}
 	if usage.WhatsAppEndpointsPerOrg.Overage > 0 {
 		overages[ResourceEndpoints] = usage.WhatsAppEndpointsPerOrg.Overage
+	}
+	if usage.StorageBytesPerOrg.Overage > 0 {
+		overages[ResourceStorage] = usage.StorageBytesPerOrg.Overage
 	}
 	return overages, nil
 }
@@ -1114,6 +1168,74 @@ func (s *Service) countWhatsAppEndpointsForOrg(ctx context.Context, orgID uuid.U
 		return 0, err
 	}
 	return int(accounts + instances), nil
+}
+
+func (s *Service) storageBytesForOrg(ctx context.Context, orgID uuid.UUID) (int64, error) {
+	objectBytes, err := s.countObjectStorageBytesForOrg(ctx, orgID)
+	if err != nil {
+		return 0, err
+	}
+	localBytes, err := s.countLocalStorageBytesForOrg(orgID)
+	if err != nil {
+		return 0, err
+	}
+	return objectBytes + localBytes, nil
+}
+
+func (s *Service) countObjectStorageBytesForOrg(ctx context.Context, orgID uuid.UUID) (int64, error) {
+	if s.db == nil || orgID == uuid.Nil {
+		return 0, nil
+	}
+
+	subquery := s.db.WithContext(ctx).
+		Model(&models.Message{}).
+		Distinct("media_asset_id").
+		Select("media_asset_id").
+		Where("organization_id = ? AND media_asset_id IS NOT NULL", orgID)
+
+	var total int64
+	if err := s.db.WithContext(ctx).
+		Model(&models.MediaAsset{}).
+		Select("COALESCE(SUM(size), 0)").
+		Where("id IN (?)", subquery).
+		Scan(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+func (s *Service) countLocalStorageBytesForOrg(orgID uuid.UUID) (int64, error) {
+	if s.cfg == nil || orgID == uuid.Nil {
+		return 0, nil
+	}
+
+	root := strings.TrimSpace(s.cfg.Storage.LocalPath)
+	if root == "" {
+		root = "./media"
+	}
+	orgRoot := filepath.Join(root, "orgs", orgID.String())
+	if _, err := os.Stat(orgRoot); err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	var total int64
+	err := filepath.Walk(orgRoot, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info == nil || info.IsDir() {
+			return nil
+		}
+		total += info.Size()
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 func BuildHWID(cfg *config.LicenseConfig, log logf.Logger) (full, short, hash string, err error) {

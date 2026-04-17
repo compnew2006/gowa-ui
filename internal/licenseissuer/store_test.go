@@ -32,6 +32,8 @@ func TestRegistryStoreSaveAndPermissions(t *testing.T) {
 		MaxUsersPerOrg:             5,
 		MaxWhatsAppEndpointsPerOrg: 5,
 		MaxWorkers:                 2,
+		MaxWorkersPerOrg:           4,
+		MaxStorageBytesPerOrg:      5 * 1024 * 1024 * 1024,
 	})
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -54,6 +56,12 @@ func TestRegistryStoreSaveAndPermissions(t *testing.T) {
 	}
 	if len(items) != 1 {
 		t.Fatalf("List() count = %d, want 1", len(items))
+	}
+	if items[0].MaxWorkersPerOrg != 4 {
+		t.Fatalf("List() max workers per org = %d, want %d", items[0].MaxWorkersPerOrg, 4)
+	}
+	if items[0].MaxStorageBytesPerOrg != 5*1024*1024*1024 {
+		t.Fatalf("List() max storage bytes per org = %d, want %d", items[0].MaxStorageBytesPerOrg, 5*1024*1024*1024)
 	}
 }
 

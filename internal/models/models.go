@@ -303,6 +303,8 @@ type LicenseRecord struct {
 	MaxUsersPerOrg             int        `gorm:"not null" json:"max_users_per_org"`
 	MaxWhatsAppEndpointsPerOrg int        `gorm:"not null" json:"max_whatsapp_endpoints_per_org"`
 	MaxWorkers                 int        `gorm:"not null" json:"max_workers"`
+	MaxWorkersPerOrg           int        `gorm:"not null;default:0" json:"max_workers_per_org"`
+	MaxStorageBytesPerOrg      int64      `gorm:"not null;default:0" json:"max_storage_bytes_per_org"`
 	Status                     string     `gorm:"size:20;not null;index" json:"status"`
 	Overages                   JSONB      `gorm:"type:jsonb;default:'{}'" json:"overages"`
 	IssuedAt                   time.Time  `gorm:"not null" json:"issued_at"`

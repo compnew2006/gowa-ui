@@ -129,7 +129,7 @@ func (a *App) CreateCannedResponse(r *fastglue.Request) error {
 			"Canned response with this name already exists", nil, "")
 	}
 
-	attachments, _, err := a.mergeCannedResponseAttachments(nil, nil, parsedRequest.AttachmentFiles, len(parsedRequest.AttachmentFiles) > 0)
+	attachments, _, err := a.mergeCannedResponseAttachments(orgID, nil, nil, parsedRequest.AttachmentFiles, len(parsedRequest.AttachmentFiles) > 0)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
@@ -241,6 +241,7 @@ func (a *App) UpdateCannedResponse(r *fastglue.Request) error {
 	cannedResponse.Category = req.Category
 
 	nextAttachments, removedAttachments, err := a.mergeCannedResponseAttachments(
+		orgID,
 		cannedResponse.Attachments,
 		req.KeepAttachmentIDs,
 		parsedRequest.AttachmentFiles,

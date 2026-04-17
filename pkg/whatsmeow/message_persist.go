@@ -416,11 +416,17 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 
 	if direction == models.DirectionIncoming && mediaRetryArtifact != nil {
-		enqueueErr := cm.enqueueInboundMediaRecovery(ctx, &message, mediaRetryArtifact)
+		recoveryJob, enqueueErr := buildInboundMediaRecoveryJob(&message, mediaRetryArtifact)
+		if enqueueErr == nil {
+			enqueueErr = cm.enqueueInboundMediaRecovery(ctx, recoveryJob)
+		}
 
 		nextMetadata := cloneJSONBMap(message.Metadata)
 		if nextMetadata == nil {
 			nextMetadata = models.JSONB{}
+		}
+		if recoveryJob != nil {
+			setInboundMediaAsyncJobMetadata(nextMetadata, recoveryJob)
 		}
 		nextMetadata[inboundMediaAsyncLastErrorKey] = strings.TrimSpace(mediaRetryArtifact.LastError)
 		nextMetadata[inboundMediaAsyncRecoveredAtKey] = nil
@@ -520,30 +526,24 @@ func (cm *ConnectionManager) persistParsedMessage(
 	return &message, nil
 }
 
-func (cm *ConnectionManager) enqueueInboundMediaRecovery(ctx context.Context, message *models.Message, artifact *inboundMediaRetryArtifact) error {
-	if cm == nil {
-		return fmt.Errorf("connection manager is nil")
-	}
-	if cm.inboundMediaQueue == nil {
-		return fmt.Errorf("inbound media queue is not configured")
-	}
+func buildInboundMediaRecoveryJob(message *models.Message, artifact *inboundMediaRetryArtifact) (*queue.InboundMediaJob, error) {
 	if message == nil {
-		return fmt.Errorf("message is nil")
+		return nil, fmt.Errorf("message is nil")
 	}
 	if artifact == nil {
-		return fmt.Errorf("inbound media retry artifact is nil")
+		return nil, fmt.Errorf("inbound media retry artifact is nil")
 	}
 	if message.InstanceID == nil || *message.InstanceID == uuid.Nil {
-		return fmt.Errorf("message %s has no instance id for inbound media recovery", message.ID)
+		return nil, fmt.Errorf("message %s has no instance id for inbound media recovery", message.ID)
 	}
 	if strings.TrimSpace(artifact.MediaPayloadBase64) == "" {
-		return fmt.Errorf("inbound media retry artifact is missing media payload")
+		return nil, fmt.Errorf("inbound media retry artifact is missing media payload")
 	}
 	if strings.TrimSpace(artifact.MediaKind) == "" {
-		return fmt.Errorf("inbound media retry artifact is missing media kind")
+		return nil, fmt.Errorf("inbound media retry artifact is missing media kind")
 	}
 
-	job := &queue.InboundMediaJob{
+	return &queue.InboundMediaJob{
 		MessageID:          message.ID,
 		OrganizationID:     message.OrganizationID,
 		InstanceID:         *message.InstanceID,
@@ -554,10 +554,22 @@ func (cm *ConnectionManager) enqueueInboundMediaRecovery(ctx context.Context, me
 		FallbackFilename:   strings.TrimSpace(artifact.FallbackFilename),
 		MediaPayloadBase64: strings.TrimSpace(artifact.MediaPayloadBase64),
 		LastError:          strings.TrimSpace(artifact.LastError),
+	}, nil
+}
+
+func (cm *ConnectionManager) enqueueInboundMediaRecovery(ctx context.Context, job *queue.InboundMediaJob) error {
+	if cm == nil {
+		return fmt.Errorf("connection manager is nil")
+	}
+	if cm.inboundMediaQueue == nil {
+		return fmt.Errorf("inbound media queue is not configured")
+	}
+	if job == nil {
+		return fmt.Errorf("inbound media recovery job is nil")
 	}
 
 	if err := cm.inboundMediaQueue.EnqueueInboundMedia(ctx, job); err != nil {
-		return fmt.Errorf("failed to enqueue inbound media recovery job for message %s: %w", message.ID, err)
+		return fmt.Errorf("failed to enqueue inbound media recovery job for message %s: %w", job.MessageID, err)
 	}
 
 	return nil

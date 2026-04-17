@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	waManager "github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
@@ -74,8 +75,12 @@ func (a *App) UploadInstanceAutoCampaignMedia(r *fastglue.Request) error {
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
 	}
+	if !a.checkQuotaWithDeltaOrRespond(r, license.ResourceStorage, orgID, int64(len(data))) {
+		return nil
+	}
 
 	localPath, err := a.saveInstanceAutoCampaignMedia(
+		orgID,
 		instance.ID.String(),
 		sanitizeFilename(fileHeader.Filename),
 		data,
@@ -108,7 +113,7 @@ func (a *App) UploadInstanceAutoCampaignMedia(r *fastglue.Request) error {
 	})
 }
 
-func (a *App) saveInstanceAutoCampaignMedia(instanceID, originalFilename string, data []byte, mimeType string) (string, error) {
+func (a *App) saveInstanceAutoCampaignMedia(orgID uuid.UUID, instanceID, originalFilename string, data []byte, mimeType string) (string, error) {
 	ext := strings.ToLower(strings.TrimSpace(filepath.Ext(originalFilename)))
 	if ext == "" || ext == "." {
 		ext = getExtensionFromMimeType(mimeType)
@@ -117,18 +122,19 @@ func (a *App) saveInstanceAutoCampaignMedia(instanceID, originalFilename string,
 		ext = ".bin"
 	}
 
-	subdir := "instance-auto-campaigns"
+	subdir := organizationMediaSubdir(orgID, "instance-auto-campaigns")
 	if err := a.ensureMediaDir(subdir); err != nil {
 		return "", fmt.Errorf("failed to create media directory: %w", err)
 	}
 
 	filename := instanceID + ext
-	filePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)
+	relativePath := filepath.Join(subdir, filename)
+	filePath := filepath.Join(a.getMediaStoragePath(), relativePath)
 	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		return "", fmt.Errorf("failed to save media file: %w", err)
 	}
 
-	return filepath.Join(subdir, filename), nil
+	return relativePath, nil
 }
 
 func (a *App) persistInstanceAutoCampaignSettings(instanceID uuid.UUID, settings waManager.AutoCampaignSettings) error {

@@ -103,3 +103,41 @@ func TestIssueLicenseFromOptionsAcceptsCustomPaidDuration(t *testing.T) {
 		t.Fatalf("issued.ExpiresAt = %s, want %s", issued.ExpiresAt.UTC(), wantExpiry.UTC())
 	}
 }
+
+func TestIssueLicenseFromOptionsIncludesPerOrgEntitlements(t *testing.T) {
+	t.Parallel()
+
+	_, privateKey, err := license.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() error = %v", err)
+	}
+
+	privateKeyFile := filepath.Join(t.TempDir(), "private.key")
+	if err := os.WriteFile(privateKeyFile, []byte(privateKey+"\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	issued, err := IssueLicenseFromOptions(IssueOptions{
+		KeyID:                   DefaultKeyID,
+		PrivateKeyFile:          privateKeyFile,
+		HWID:                    strings.Repeat("d", 64),
+		Duration:                "365d",
+		Tier:                    "business",
+		Organizations:           5,
+		UsersPerOrg:             25,
+		WhatsAppEndpointsPerOrg: 25,
+		Workers:                 100,
+		WorkersPerOrg:           25,
+		StorageBytesPerOrg:      5 * 1024 * 1024 * 1024,
+	}, time.Date(2026, time.April, 8, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("IssueLicenseFromOptions() error = %v", err)
+	}
+
+	if issued.Claims.MaxWorkersPerOrg != 25 {
+		t.Fatalf("issued.Claims.MaxWorkersPerOrg = %d, want %d", issued.Claims.MaxWorkersPerOrg, 25)
+	}
+	if issued.Claims.MaxStorageBytesPerOrg != 5*1024*1024*1024 {
+		t.Fatalf("issued.Claims.MaxStorageBytesPerOrg = %d, want %d", issued.Claims.MaxStorageBytesPerOrg, 5*1024*1024*1024)
+	}
+}

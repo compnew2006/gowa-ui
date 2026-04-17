@@ -10,6 +10,7 @@ environment = "development"  # development, staging, production
 debug = true
 encryption_key = ""  # AES-256 key for encrypting secrets at rest. Required for storing/updating account secrets; required in production.
 allow_legacy_encryption = true  # Set false after running crypto-migrate to reject enc:/enc2: payloads.
+sandbox_mode = false  # Shared-data sandbox guardrail. When true, the server forbids -migrate and disables reconnect loops, recurring background jobs, and embedded workers.
 
 [license]
 enabled = enable
@@ -81,6 +82,11 @@ typing_min_delay_ms = 700
 typing_max_delay_ms = 3000
 typing_char_delay_ms = 35
 typing_cooldown_ms = 4000
+
+[observability]
+enable_metrics = false  # Exposes GET /metrics. Disabled by default.
+enable_pprof = false    # Exposes guarded /debug/pprof/* endpoints. Disabled by default.
+access_token = ""       # Optional. When set, /metrics and /debug/pprof/* require this token via Authorization: Bearer or X-Observability-Token. When empty, loopback-only access is allowed.
 
 [storage]
 type = "local"  # local, s3

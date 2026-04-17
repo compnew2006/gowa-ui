@@ -41,6 +41,8 @@ func TestIssueAndVerifyTokenPaid(t *testing.T) {
 		MaxUsersPerOrg:             5,
 		MaxWhatsAppEndpointsPerOrg: 5,
 		MaxWorkers:                 2,
+		MaxWorkersPerOrg:           4,
+		MaxStorageBytesPerOrg:      5 * 1024 * 1024 * 1024,
 		IssuedAt:                   now,
 		NotBefore:                  now,
 		ExpiresAt:                  &expiresAt,
@@ -63,6 +65,12 @@ func TestIssueAndVerifyTokenPaid(t *testing.T) {
 	}
 	if claims.MaxUsersPerOrg != 5 {
 		t.Fatalf("VerifyToken() max users = %d, want %d", claims.MaxUsersPerOrg, 5)
+	}
+	if claims.MaxWorkersPerOrg != 4 {
+		t.Fatalf("VerifyToken() max workers per org = %d, want %d", claims.MaxWorkersPerOrg, 4)
+	}
+	if claims.MaxStorageBytesPerOrg != 5*1024*1024*1024 {
+		t.Fatalf("VerifyToken() max storage bytes per org = %d, want %d", claims.MaxStorageBytesPerOrg, 5*1024*1024*1024)
 	}
 }
 

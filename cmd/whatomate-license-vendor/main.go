@@ -106,6 +106,8 @@ func runIssue(args []string) {
 	users := fs.Int("users", defaults.UsersPerOrg, "Maximum users per organization")
 	endpoints := fs.Int("wa-endpoints", defaults.WhatsAppEndpointsPerOrg, "Maximum WhatsApp endpoints per organization")
 	workers := fs.Int("workers", defaults.Workers, "Maximum workers")
+	workersPerOrg := fs.Int("workers-per-org", defaults.WorkersPerOrg, "Maximum workers per organization (0 = unlimited)")
+	storageBytesPerOrg := fs.Int64("storage-bytes", defaults.StorageBytesPerOrg, "Maximum stored bytes per organization (0 = unlimited)")
 	issuedAtFlag := fs.String("issued-at", "", "Optional RFC3339 issued-at timestamp")
 	notBeforeFlag := fs.String("not-before", "", "Optional RFC3339 not-before timestamp")
 	_ = fs.Parse(args)
@@ -124,6 +126,8 @@ func runIssue(args []string) {
 		UsersPerOrg:             *users,
 		WhatsAppEndpointsPerOrg: *endpoints,
 		Workers:                 *workers,
+		WorkersPerOrg:           *workersPerOrg,
+		StorageBytesPerOrg:      *storageBytesPerOrg,
 		IssuedAt:                *issuedAtFlag,
 		NotBefore:               *notBeforeFlag,
 	}, time.Now())

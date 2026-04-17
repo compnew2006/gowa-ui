@@ -97,6 +97,29 @@ export function useLicenseActivation() {
     return licenseKind;
   });
 
+  function formatBytes(value: number): string {
+    if (!Number.isFinite(value) || value <= 0) {
+      return "0 B";
+    }
+
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let size = value;
+    let unitIndex = 0;
+    for (; size >= 1024 && unitIndex < units.length - 1; unitIndex += 1) {
+      size /= 1024;
+    }
+
+    const fractionDigits = size >= 100 || unitIndex === 0 ? 0 : 1;
+    return `${size.toFixed(fractionDigits)} ${units[unitIndex]}`;
+  }
+
+  function formatQuotaValue(key: string, value: number): string {
+    if (key === "storage") {
+      return formatBytes(value);
+    }
+    return String(value);
+  }
+
   const quotaCards = computed(() => [
     {
       key: "organizations",
@@ -112,6 +135,11 @@ export function useLicenseActivation() {
       key: "whatsapp",
       label: t("licenseSettings.quota.whatsAppEndpointsPerOrg"),
       usage: licenseStore.state.usage.whatsapp_endpoints_per_org,
+    },
+    {
+      key: "storage",
+      label: t("licenseSettings.quota.storagePerOrg"),
+      usage: licenseStore.state.usage.storage_bytes_per_org,
     },
   ]);
 
@@ -179,6 +207,8 @@ export function useLicenseActivation() {
     entitlementLabel,
     licenseMetaLabel,
     quotaCards,
+    formatBytes,
+    formatQuotaValue,
     usagePercentage,
     loadBootstrap,
     copyHWID,

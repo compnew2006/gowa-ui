@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/zerodha/fastglue"
 )
 
@@ -14,10 +15,17 @@ type FeatureFlags struct {
 	MetaInsights    bool `json:"meta_insights"`
 }
 
+type TenantConfig struct {
+	SubdomainLocked  bool   `json:"subdomain_locked"`
+	OrganizationSlug string `json:"organization_slug,omitempty"`
+	OrganizationName string `json:"organization_name,omitempty"`
+}
+
 // AppConfigResponse is the public config payload returned by GET /api/config.
 type AppConfigResponse struct {
 	WhatsAppProvider string       `json:"whatsapp_provider"`
 	Features         FeatureFlags `json:"features"`
+	Tenant           TenantConfig `json:"tenant"`
 }
 
 // GetAppConfig returns the active WhatsApp provider and feature flags.
@@ -31,6 +39,16 @@ func (a *App) GetAppConfig(r *fastglue.Request) error {
 	}
 
 	isMeta := provider == "meta"
+	tenantConfig := TenantConfig{}
+	if hostOrg, err := tenant.ResolveHostOrganization(r, a.DB); err == nil && hostOrg != nil {
+		tenantConfig = TenantConfig{
+			SubdomainLocked:  true,
+			OrganizationSlug: hostOrg.Slug,
+			OrganizationName: hostOrg.Name,
+		}
+	} else if err != nil {
+		a.Log.Warn("Failed to resolve tenant host configuration", "error", err)
+	}
 
 	resp := AppConfigResponse{
 		WhatsAppProvider: provider,
@@ -42,6 +60,7 @@ func (a *App) GetAppConfig(r *fastglue.Request) error {
 			Campaigns:       true,
 			MetaInsights:    isMeta,
 		},
+		Tenant: tenantConfig,
 	}
 
 	return r.SendEnvelope(resp)

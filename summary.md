@@ -238,6 +238,163 @@ Deploy the updated `whatomate` build to the Ubuntu amd64 VPS, preserve service a
   - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
   - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
 - Browser verification:
+
+## 2026-04-16 Local Multi-Organization Implementation
+
+### Objective
+
+Implement the single-instance local-server plan for subdomain-routed organizations with stable org slugs and per-organization quota controls, without touching the VPS.
+
+### Backend Changes
+
+- Added host-based organization resolution so requests to `slug.localhost` or `slug.<domain>` lock to the matching organization before any `X-Organization-ID` override is considered.
+- Added explicit organization slug support for:
+  - organization creation
+  - organization settings updates
+  - public app config responses for locked-subdomain UI behavior
+- Added per-organization storage quota support:
+  - new signed license claims and persisted license fields
+  - storage usage calculation per organization
+  - upload-time quota checks for campaign media, canned response media, statuses, chat backgrounds, messaging attachments, and instance auto-campaign media
+  - org-scoped local media paths under `storage.local_path/orgs/<org-id>/...`
+- Added per-organization worker cap support by applying `max_workers_per_org` to tenant worker scaler settings.
+
+### Frontend Changes
+
+- Added tenant-aware config handling so the UI can detect a host-locked subdomain.
+- Updated organization settings and create-organization flows to support explicit slugs.
+- Hid the organization switcher when the request host is locked to a specific org.
+- Extended license state typing and UI to include:
+  - `max_workers_per_org`
+  - `max_storage_bytes_per_org`
+  - `usage.storage_bytes_per_org`
+  - `organization_details[].storage_bytes`
+- Updated license screens to display storage-per-org usage and storage overage values.
+- Added missing locale strings for organization slug fields and storage quota labels.
+
+### Tests Added / Updated
+
+- Added tenant routing regressions for host-locked organization resolution.
+- Added organization slug tests for:
+  - returning slug in settings responses
+  - updating slug successfully
+  - rejecting duplicate slugs on update
+  - creating orgs with an explicit slug
+  - rejecting duplicate slugs on create
+- Updated license issuance and registry tests to cover:
+  - `max_workers_per_org`
+  - `max_storage_bytes_per_org`
+- Added worker scaler coverage for licensed per-org worker caps.
+- Updated frontend license store unit tests for storage quota normalization.
+
+### Verification Results
+
+- `gofmt -w ...` on all changed Go files ✅
+- `go test ./internal/tenant ./internal/license ./internal/licenseissuer ./internal/worker ./internal/handlers` ✅
+- `go test ./cmd/whatomate-license-issue ./cmd/whatomate-license-vendor` ✅
+- `npm --prefix frontend run test:unit` ✅
+- `npm --prefix frontend run build` ✅
+- `npm --prefix frontend run typecheck` ❌ unchanged pre-existing frontend type errors outside this change set, including:
+  - `src/components/chat/ContactInfoPanel.test.ts`
+  - `src/components/shared/CreateContactDialog.test.ts`
+  - `src/components/ui/toast/use-toast.ts`
+  - `src/stores/contacts.ts`
+  - `src/views/chat/ChatView.vue`
+  - `src/views/chatbot/AgentTransfersView.vue`
+  - `src/views/chatbot/ChatbotFlowBuilderView.vue`
+  - `src/views/dashboard/DashboardView.vue`
+  - `src/views/settings/TeamsView.vue`
+
+### Next Local Runtime Steps
+
+- Add local host entries such as:
+  - `127.0.0.1 ofuqalmadenah.localhost`
+  - `127.0.0.1 1.localhost`
+  - `127.0.0.1 2.localhost`
+  - `127.0.0.1 3.localhost`
+- Run a single local Whatomate server against local Postgres and Redis.
+- Create organizations with slugs matching the subdomains you want to use.
+- Issue a license token with:
+  - `-orgs 5`
+  - `-users 25`
+  - `-wa-endpoints 25`
+  - `-workers 100` if you want a global pool
+  - `-workers-per-org 25`
+  - `-storage-bytes 5368709120`
+- Activate the token on the local server, then test:
+  - `http://1.localhost:8080/login`
+  - `http://2.localhost:8080/login`
+  - `http://3.localhost:8080/login`
   - Chrome DevTools MCP was unavailable
   - used Playwright CLI
   - confirmed the rendered login page on the main domain and all three tenant domains by checking the title `Whatomate`, the heading `Welcome to Whatomate`, the `Email` field, and the `Sign in` button
+
+## 2026-04-17 Load-Test API Compatibility
+
+### Task
+
+- Reduced false negatives in authenticated load tests caused by stale or guessed endpoint paths.
+
+### Changes
+
+- Added backward-compatible route aliases for:
+  - `GET /api/auth/me` -> `GetCurrentUser`
+  - `GET /api/chat/sessions` and `GET /api/chat/sessions/{id}` -> chatbot session handlers
+  - `GET /api/analytics` -> dashboard analytics handler
+- Documented the aliases in `API_ENDPOINTS.md`.
+- Updated `frontend/api_spec.md` so `/auth/me` is marked as a legacy alias and `/chat/sessions` is called out explicitly as legacy.
+
+### Verification
+
+- Added `cmd/whatomate/routes_compat_test.go` to assert the alias routes resolve and hit auth middleware instead of 404ing.
+
+## 2026-04-17 Guarded Observability Endpoints
+
+### Task
+
+- Added low-overhead metrics and profiling endpoints so load tests can produce hard evidence instead of CPU-share guesses.
+
+### Changes
+
+- Added `[observability]` config with:
+  - `enable_metrics`
+  - `enable_pprof`
+  - `access_token`
+- Added `internal/observability` to expose:
+  - Prometheus-style HTTP request, runtime, DB pool, and Redis pool metrics
+  - guarded `pprof` routes under `/debug/pprof/*`
+- Default behavior is safe:
+  - endpoints are disabled unless explicitly enabled
+  - when enabled without a token, access is loopback-only
+  - when `access_token` is set, callers must send `Authorization: Bearer <token>` or `X-Observability-Token`
+- Wired the server handler so request metrics are collected without changing existing business routes.
+
+### Verification
+
+- Added `internal/config/config_test.go` coverage for the new observability env vars.
+- Added `internal/observability/observability_test.go` for token and loopback access control.
+- Added `cmd/whatomate/observability_routes_test.go` for route registration and opt-in behavior.
+
+## 2026-04-17 Inbound Media Self-Heal
+
+### Task
+
+- Reduced cases where inbound WhatsApp media rows stay stuck in `queued` after inline media persistence fails, which caused files to be missing from Whatomate even though the chat message existed.
+
+### Changes
+
+- Added `pkg/whatsmeow/inbound_media_async_state.go` to persist the async recovery job payload in message metadata under `inbound_media_async_job`.
+- Updated `pkg/whatsmeow/message_persist.go` so failed inbound media writes store a reusable recovery snapshot before marking the message for async recovery.
+- Updated `pkg/whatsmeow/inbound_media_recovery.go` so successful recovery clears the stored recovery snapshot and failed recovery keeps the last error in sync.
+- Updated `pkg/whatsmeow/inbound_media_reconcile.go` so stale queued rows are re-enqueued when a persisted recovery payload exists; rows without a reconstructable payload still fall back to `failed`.
+- Added a worker-side self-heal pass in `internal/worker/worker.go` that runs every 5 minutes and reconciles stale inbound-media rows automatically for Whatsmeow-backed workers.
+- Extended the CLI reconcile logging in `cmd/whatomate/main.go` to report `requeued` and `marked_failed`.
+
+### Verification
+
+- Extended `pkg/whatsmeow/events_message_test.go` to assert the recovery job snapshot is stored in message metadata.
+- Added `pkg/whatsmeow/inbound_media_reconcile_test.go` coverage for both successful requeue and unrecoverable stale-row fallback.
+- Ran:
+  - `go test ./pkg/whatsmeow -count=1`
+  - `go test ./internal/worker -count=1`
+  - `go test ./cmd/whatomate -count=1`

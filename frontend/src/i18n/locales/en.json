@@ -697,6 +697,8 @@
     "language": "Language",
     "languageDesc": "Choose your preferred display language",
     "selectLanguage": "Select language",
+    "organizationSlug": "Organization Slug",
+    "organizationSlugPlaceholder": "e.g., 1 or holol-wenjaz",
     "timezone": "Timezone",
     "defaultTimezone": "Default Timezone",
     "selectTimezone": "Select timezone",
@@ -998,6 +1000,7 @@
     "createTitle": "Create Organization",
     "createDesc": "Create a new organization to manage a separate workspace.",
     "namePlaceholder": "Organization name",
+    "slugPlaceholder": "organization-slug",
     "created": "Organization created",
     "createFailed": "Failed to create organization",
     "deleteCurrent": "Delete selected organization",
@@ -2684,6 +2687,7 @@
       "organizations": "Organizations",
       "usersPerOrg": "Users / Org",
       "whatsAppEndpointsPerOrg": "WA Endpoints / Org",
+      "storagePerOrg": "Storage / Org",
       "subscriptionDays": "Subscription Days",
       "notEnforced": "Limit not enforced while licensing is disabled",
       "notEnforcedShort": "Off",
@@ -2691,7 +2695,7 @@
       "withinCapacity": "Within licensed capacity"
     },
     "organizationUsage": {
-      "summary": "{users} users, {endpoints} endpoints"
+      "summary": "{users} users, {endpoints} endpoints, {storage}"
     },
     "banner": {
       "titleGrace": "License grace period",

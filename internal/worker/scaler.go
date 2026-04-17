@@ -221,6 +221,10 @@ func (s *WorkerScaler) reconcile(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	licenseState := license.State{}
+	if s.license != nil {
+		licenseState = s.license.CurrentState()
+	}
 
 	now := s.now().UTC()
 	depthByOrg := make(map[uuid.UUID]int64, len(orgRows))
@@ -251,7 +255,7 @@ func (s *WorkerScaler) reconcile(ctx context.Context) error {
 		orgSet[org.ID] = struct{}{}
 		runtime := s.runtimes[org.ID]
 		health := healthByOrg[org.ID]
-		cfg := LoadOrganizationWorkerConfig(org.Settings)
+		cfg := applyLicensedWorkerCap(LoadOrganizationWorkerConfig(org.Settings), licenseState)
 		depth := depthByOrg[org.ID]
 
 		if runtime.FailureThisTick {

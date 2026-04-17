@@ -18,6 +18,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 	assert.Equal(t, "Whatomate", cfg.App.Name)
 	assert.Equal(t, "development", cfg.App.Environment)
+	assert.False(t, cfg.App.SandboxMode)
 	assert.Equal(t, "0.0.0.0", cfg.Server.Host)
 	assert.Equal(t, 8080, cfg.Server.Port)
 	assert.Equal(t, 30, cfg.Server.ReadTimeout)
@@ -39,6 +40,9 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, "v18.0", cfg.WhatsApp.APIVersion)
 	assert.Equal(t, "https://graph.facebook.com", cfg.WhatsApp.BaseURL)
 	assert.Equal(t, "meta", cfg.WhatsApp.Provider)
+	assert.False(t, cfg.Observability.EnableMetrics)
+	assert.False(t, cfg.Observability.EnablePprof)
+	assert.Equal(t, "", cfg.Observability.AccessToken)
 
 	assert.Equal(t, 1000, cfg.Whatsmeow.RateLimitMinDelayMs)
 	assert.Equal(t, 3000, cfg.Whatsmeow.RateLimitMaxDelayMs)
@@ -82,6 +86,10 @@ func TestLoad_EnvironmentVariables(t *testing.T) {
 	t.Setenv("WHATOMATE_WHATSMEOW_TYPING_INDICATOR_ENABLED", "false")
 	t.Setenv("WHATOMATE_WHATSMEOW_INBOUND_MEDIA_ASYNC_RETRY_COUNT", "7")
 	t.Setenv("WHATOMATE_APP_ENVIRONMENT", "production")
+	t.Setenv("WHATOMATE_APP_SANDBOX_MODE", "true")
+	t.Setenv("WHATOMATE_OBSERVABILITY_ENABLE_METRICS", "true")
+	t.Setenv("WHATOMATE_OBSERVABILITY_ENABLE_PPROF", "true")
+	t.Setenv("WHATOMATE_OBSERVABILITY_ACCESS_TOKEN", "debug-token")
 
 	cfg, err := Load("")
 	require.NoError(t, err)
@@ -90,8 +98,12 @@ func TestLoad_EnvironmentVariables(t *testing.T) {
 	assert.Equal(t, 9090, cfg.Server.Port)
 	assert.Equal(t, "dbuser", cfg.Database.User)
 	assert.Equal(t, "production", cfg.App.Environment)
+	assert.True(t, cfg.App.SandboxMode)
 	assert.Equal(t, 7, cfg.Whatsmeow.InboundMediaAsyncRetryCount)
 	assert.True(t, cfg.Cookie.Secure) // Auto-set to true when environment=production
+	assert.True(t, cfg.Observability.EnableMetrics)
+	assert.True(t, cfg.Observability.EnablePprof)
+	assert.Equal(t, "debug-token", cfg.Observability.AccessToken)
 }
 
 func TestLoad_ConfigFile(t *testing.T) {

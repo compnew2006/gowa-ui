@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
@@ -490,7 +491,11 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	}
 
 	// Save file locally first
-	localPath, err := a.saveMediaLocally(fileData, effectiveMIMEType, fileHeader.Filename)
+	if !a.checkQuotaWithDeltaOrRespond(r, license.ResourceStorage, orgID, int64(len(fileData))) {
+		return nil
+	}
+
+	localPath, err := a.saveMediaLocally(orgID, fileData, effectiveMIMEType, fileHeader.Filename)
 	if err != nil {
 		a.Log.Error("Failed to save media locally", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save media", nil, "")
@@ -546,19 +551,20 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 }
 
 // saveMediaLocally saves media data to local storage and returns the relative path
-func (a *App) saveMediaLocally(data []byte, mimeType, filename string) (string, error) {
+func (a *App) saveMediaLocally(orgID uuid.UUID, data []byte, mimeType, filename string) (string, error) {
 	// Determine subdirectory based on MIME type
-	var subdir string
+	var mediaTypeDir string
 	switch {
 	case strings.HasPrefix(mimeType, "image/"):
-		subdir = "images"
+		mediaTypeDir = "images"
 	case strings.HasPrefix(mimeType, "video/"):
-		subdir = "videos"
+		mediaTypeDir = "videos"
 	case strings.HasPrefix(mimeType, "audio/"):
-		subdir = "audio"
+		mediaTypeDir = "audio"
 	default:
-		subdir = "documents"
+		mediaTypeDir = "documents"
 	}
+	subdir := organizationMediaSubdir(orgID, mediaTypeDir)
 
 	// Ensure directory exists
 	if err := a.ensureMediaDir(subdir); err != nil {
@@ -576,15 +582,14 @@ func (a *App) saveMediaLocally(data []byte, mimeType, filename string) (string, 
 
 	// Generate unique filename
 	newFilename := uuid.New().String() + ext
-	filePath := filepath.Join(a.getMediaStoragePath(), subdir, newFilename)
+	relativePath := filepath.Join(subdir, newFilename)
+	filePath := filepath.Join(a.getMediaStoragePath(), relativePath)
 
 	// Save file
 	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		return "", fmt.Errorf("failed to save media file: %w", err)
 	}
 
-	// Return relative path
-	relativePath := filepath.Join(subdir, newFilename)
 	a.Log.Info("Media saved locally", "path", relativePath, "size", len(data))
 
 	return relativePath, nil

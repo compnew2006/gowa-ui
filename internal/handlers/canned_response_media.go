@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/zerodha/fastglue"
@@ -112,6 +114,7 @@ func parseOptionalBool(raw string) (*bool, error) {
 }
 
 func (a *App) mergeCannedResponseAttachments(
+	orgID uuid.UUID,
 	existing models.CannedResponseAttachments,
 	keepIDs []string,
 	files []*multipart.FileHeader,
@@ -145,7 +148,7 @@ func (a *App) mergeCannedResponseAttachments(
 	}
 
 	for _, fileHeader := range files {
-		attachment, err := a.persistCannedResponseAttachment(fileHeader)
+		attachment, err := a.persistCannedResponseAttachment(orgID, fileHeader)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -162,7 +165,7 @@ func (a *App) mergeCannedResponseAttachments(
 	return next, removed, nil
 }
 
-func (a *App) persistCannedResponseAttachment(fileHeader *multipart.FileHeader) (models.CannedResponseAttachment, error) {
+func (a *App) persistCannedResponseAttachment(orgID uuid.UUID, fileHeader *multipart.FileHeader) (models.CannedResponseAttachment, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
 		return models.CannedResponseAttachment{}, fmt.Errorf("failed to read attachment")
@@ -189,7 +192,17 @@ func (a *App) persistCannedResponseAttachment(fileHeader *multipart.FileHeader) 
 		return models.CannedResponseAttachment{}, fmt.Errorf("only image and video attachments are supported")
 	}
 
-	relativePath, err := a.saveMediaLocally(data, mimeType, fileHeader.Filename)
+	if a.License != nil {
+		check, err := a.License.CheckQuotaWithDelta(context.Background(), license.ResourceStorage, orgID, int64(len(data)))
+		if err != nil {
+			return models.CannedResponseAttachment{}, fmt.Errorf("failed to evaluate storage quota")
+		}
+		if !check.Allowed {
+			return models.CannedResponseAttachment{}, fmt.Errorf("licensed storage quota exceeded")
+		}
+	}
+
+	relativePath, err := a.saveMediaLocally(orgID, data, mimeType, fileHeader.Filename)
 	if err != nil {
 		return models.CannedResponseAttachment{}, fmt.Errorf("failed to save attachment")
 	}

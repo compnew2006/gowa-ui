@@ -39,6 +39,8 @@ const {
   entitlementLabel,
   licenseMetaLabel,
   quotaCards,
+  formatBytes,
+  formatQuotaValue,
   usagePercentage,
   loadBootstrap,
   copyHWID,
@@ -49,14 +51,15 @@ onMounted(() => {
   void loadBootstrap();
 });
 
-function getQuotaLimitLabel(limit: number) {
+function getQuotaLimitLabel(key: string, limit: number) {
   if (licenseStore.isDisabled || limit <= 0) {
     return "Not enforced";
   }
-  return String(limit);
+  return formatQuotaValue(key, limit);
 }
 
 function getQuotaUsageLabel(
+  key: string,
   limit: number,
   overQuota: boolean,
   overage: number,
@@ -65,7 +68,7 @@ function getQuotaUsageLabel(
     return "Licensing is disabled for this deployment";
   }
   if (overQuota) {
-    return `Over by ${overage}`;
+    return `Over by ${formatQuotaValue(key, overage)}`;
   }
   return "Within licensed capacity";
 }
@@ -201,8 +204,8 @@ async function handleActivationSubmit() {
                     {{ item.label }}
                   </CardDescription>
                   <CardTitle class="text-2xl">
-                    {{ item.usage.current }}/{{
-                      getQuotaLimitLabel(item.usage.limit)
+                    {{ formatQuotaValue(item.key, item.usage.current) }}/{{
+                      getQuotaLimitLabel(item.key, item.usage.limit)
                     }}
                   </CardTitle>
                 </CardHeader>
@@ -222,6 +225,7 @@ async function handleActivationSubmit() {
                   >
                     {{
                       getQuotaUsageLabel(
+                        item.key,
                         item.usage.limit,
                         item.usage.over_quota,
                         item.usage.overage,
@@ -254,7 +258,8 @@ async function handleActivationSubmit() {
                   <span class="text-muted-foreground">
                     {{ org.user_count }} users,
                     {{ org.whatsapp_endpoint_count }}
-                    endpoints
+                    endpoints,
+                    {{ formatBytes(org.storage_bytes) }}
                   </span>
                 </div>
               </div>

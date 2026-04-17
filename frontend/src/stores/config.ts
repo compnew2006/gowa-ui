@@ -11,9 +11,16 @@ export interface FeatureFlags {
     meta_insights: boolean
 }
 
+export interface TenantConfig {
+    subdomain_locked: boolean
+    organization_slug?: string
+    organization_name?: string
+}
+
 export interface AppConfig {
     whatsapp_provider: 'meta' | 'whatsmeow'
     features: FeatureFlags
+    tenant?: TenantConfig
 }
 
 const CHAT_SHOW_PRINT_BUTTONS_KEY = 'chat.showPrintButtons'
@@ -65,6 +72,9 @@ export const useConfigStore = defineStore('config', () => {
         campaigns: true,
         meta_insights: true,
     })
+    const tenant = computed<TenantConfig>(() => config.value?.tenant ?? {
+        subdomain_locked: false,
+    })
 
     const isWhatsmeow = computed(() => provider.value === 'whatsmeow')
     const isMeta = computed(() => provider.value === 'meta')
@@ -102,6 +112,9 @@ export const useConfigStore = defineStore('config', () => {
                     campaigns: true,
                     meta_insights: true,
                 },
+                tenant: {
+                    subdomain_locked: false,
+                },
             }
         } finally {
             loading.value = false
@@ -114,6 +127,7 @@ export const useConfigStore = defineStore('config', () => {
         error,
         provider,
         features,
+        tenant,
         isWhatsmeow,
         isMeta,
         showPrintButtons,

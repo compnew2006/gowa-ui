@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/test/testutil"
@@ -43,6 +44,22 @@ func TestLoadOrganizationWorkerConfig_Defaults(t *testing.T) {
 
 	config := LoadOrganizationWorkerConfig(nil)
 	assert.Equal(t, DefaultOrganizationWorkerConfig(), config)
+}
+
+func TestApplyLicensedWorkerCap(t *testing.T) {
+	t.Parallel()
+
+	config := OrganizationWorkerConfig{
+		MinWorkers: 3,
+		MaxWorkers: 8,
+	}
+
+	capped := applyLicensedWorkerCap(config, license.State{
+		MaxWorkersPerOrg: 2,
+	})
+
+	assert.Equal(t, 2, capped.MinWorkers)
+	assert.Equal(t, 2, capped.MaxWorkers)
 }
 
 func TestAllocateWorkerBudget_PrefersBusyTenants(t *testing.T) {

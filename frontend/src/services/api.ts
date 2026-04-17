@@ -1141,6 +1141,7 @@ export const organizationService = {
     timezone?: string;
     date_format?: string;
     name?: string;
+    slug?: string;
   }) => api.put("/org/settings", data),
   runUploadsCleanupNow: () => api.post("/org/uploads-cleanup/run"),
 };
@@ -1155,7 +1156,7 @@ export interface Organization {
 
 export const organizationsService = {
   list: () => api.get<{ organizations: Organization[] }>("/organizations"),
-  create: (data: { name: string }) => api.post("/organizations", data),
+  create: (data: { name: string; slug?: string }) => api.post("/organizations", data),
   delete: (id: string) => api.delete(`/organizations/${id}`),
   // Members
   addMember: (data: { user_id?: string; email?: string; role_id?: string }) =>

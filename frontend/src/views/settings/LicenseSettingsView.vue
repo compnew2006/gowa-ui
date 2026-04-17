@@ -38,6 +38,8 @@ const {
   entitlementLabel,
   licenseMetaLabel,
   quotaCards,
+  formatBytes,
+  formatQuotaValue,
   usagePercentage,
   loadBootstrap,
   copyHWID,
@@ -74,6 +76,7 @@ function getExpiryMessage(daysUntilExpiry: number | null) {
 }
 
 function getQuotaUsageLabel(
+  key: string,
   limit: number,
   overQuota: boolean,
   overage: number,
@@ -82,22 +85,29 @@ function getQuotaUsageLabel(
     return t("licenseSettings.quota.notEnforced");
   }
   if (overQuota) {
-    return t("licenseSettings.quota.overBy", { count: overage });
+    return t("licenseSettings.quota.overBy", {
+      count: formatQuotaValue(key, overage),
+    });
   }
   return t("licenseSettings.quota.withinCapacity");
 }
 
-function getQuotaLimitLabel(limit: number) {
+function getQuotaLimitLabel(key: string, limit: number) {
   if (licenseStore.isDisabled || limit <= 0) {
     return t("licenseSettings.quota.notEnforcedShort");
   }
-  return String(limit);
+  return formatQuotaValue(key, limit);
 }
 
-function getOrganizationUsageLabel(userCount: number, endpointCount: number) {
+function getOrganizationUsageLabel(
+  userCount: number,
+  endpointCount: number,
+  storageBytes: number,
+) {
   return t("licenseSettings.organizationUsage.summary", {
     users: userCount,
     endpoints: endpointCount,
+    storage: formatBytes(storageBytes),
   });
 }
 
@@ -335,8 +345,8 @@ async function handleActivationSubmit() {
                         {{ item.label }}
                       </CardDescription>
                       <CardTitle class="text-2xl">
-                        {{ item.usage.current }}/{{
-                          getQuotaLimitLabel(item.usage.limit)
+                        {{ formatQuotaValue(item.key, item.usage.current) }}/{{
+                          getQuotaLimitLabel(item.key, item.usage.limit)
                         }}
                       </CardTitle>
                     </CardHeader>
@@ -356,6 +366,7 @@ async function handleActivationSubmit() {
                       >
                         {{
                           getQuotaUsageLabel(
+                            item.key,
                             item.usage.limit,
                             item.usage.over_quota,
                             item.usage.overage,
@@ -415,6 +426,7 @@ async function handleActivationSubmit() {
                           getOrganizationUsageLabel(
                             org.user_count,
                             org.whatsapp_endpoint_count,
+                            org.storage_bytes,
                           )
                         }}
                       </span>

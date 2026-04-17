@@ -87,8 +87,29 @@ const overageItems = computed(() =>
       label: "WA Endpoints / Org",
       value: licenseStore.state.quota_overages.whatsapp_endpoints || 0,
     },
+    {
+      key: "storage_bytes",
+      label: "Storage / Org",
+      value: licenseStore.state.quota_overages.storage_bytes || 0,
+    },
   ].filter((item) => item.value > 0),
 );
+
+function formatBytes(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0 B";
+  }
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unitIndex = 0;
+  for (; size >= 1024 && unitIndex < units.length - 1; unitIndex += 1) {
+    size /= 1024;
+  }
+
+  const fractionDigits = size >= 100 || unitIndex === 0 ? 0 : 1;
+  return `${size.toFixed(fractionDigits)} ${units[unitIndex]}`;
+}
 
 async function redirectToAppRoot() {
   const target = router.resolve({ path: "/" }).href || "/";
@@ -316,7 +337,12 @@ onMounted(() => {
               variant="warning"
               class="px-3 py-1"
             >
-              {{ item.label }}: over by {{ item.value }}
+              {{ item.label }}: over by
+              {{
+                item.key === "storage_bytes"
+                  ? formatBytes(item.value)
+                  : item.value
+              }}
             </Badge>
             <Badge v-if="licenseStore.state.tier" variant="outline">
               {{ licenseStore.state.tier }}
@@ -330,7 +356,7 @@ onMounted(() => {
             </Badge>
           </div>
         </CardHeader>
-        <CardContent class="grid gap-4 lg:grid-cols-3">
+        <CardContent class="grid gap-4 lg:grid-cols-4">
           <div class="rounded-xl border border-border/60 bg-background/80 p-4">
             <div
               class="text-xs uppercase tracking-[0.14em] text-muted-foreground"
@@ -367,6 +393,20 @@ onMounted(() => {
               }}
             </div>
           </div>
+          <div class="rounded-xl border border-border/60 bg-background/80 p-4">
+            <div
+              class="text-xs uppercase tracking-[0.14em] text-muted-foreground"
+            >
+              Storage in selected org
+            </div>
+            <div class="mt-2 text-3xl font-semibold">
+              {{ formatBytes(currentOrgUsage?.storage_bytes || 0) }}/{{
+                licenseStore.state.max_storage_bytes_per_org > 0
+                  ? formatBytes(licenseStore.state.max_storage_bytes_per_org)
+                  : "Not enforced"
+              }}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -400,7 +440,7 @@ onMounted(() => {
                   <div class="min-w-0">
                     <div class="font-medium">{{ org.name }}</div>
                     <div class="text-xs text-muted-foreground">
-                      {{ org.id }}
+                      {{ org.slug || org.id }}
                     </div>
                   </div>
                   <Button

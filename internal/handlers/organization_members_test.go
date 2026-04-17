@@ -45,6 +45,56 @@ func TestApp_CreateOrganization_Success(t *testing.T) {
 	assert.NotEmpty(t, resp.Data.CreatedAt)
 }
 
+func TestApp_CreateOrganization_SuccessWithExplicitSlug(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	allPerms := testutil.GetOrCreateTestPermissions(t, app.DB)
+	role := testutil.CreateTestRole(t, app.DB, org.ID, "admin", allPerms)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-org-slug")), testutil.WithRoleID(&role.ID))
+	slug := "tenant-one-" + uuid.NewString()[:8]
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"name": "New Test Organization",
+		"slug": slug,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.CreateOrganization(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.OrganizationResponse `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+	require.NoError(t, err)
+
+	assert.Equal(t, slug, resp.Data.Slug)
+}
+
+func TestApp_CreateOrganization_RejectsDuplicateSlug(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	allPerms := testutil.GetOrCreateTestPermissions(t, app.DB)
+	role := testutil.CreateTestRole(t, app.DB, org.ID, "admin", allPerms)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-org-duplicate-slug")), testutil.WithRoleID(&role.ID))
+	existing := testutil.CreateTestOrganization(t, app.DB)
+
+	req := testutil.NewJSONRequest(t, map[string]string{
+		"name": "Another Organization",
+		"slug": existing.Slug,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.CreateOrganization(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusConflict, testutil.GetResponseStatusCode(req))
+}
+
 func TestApp_CreateOrganization_EmptyName(t *testing.T) {
 	t.Parallel()
 

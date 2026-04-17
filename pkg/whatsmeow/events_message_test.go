@@ -495,6 +495,13 @@ func TestPersistParsedMessage_FailedInboundMediaEnqueuesRecoveryJob(t *testing.T
 	assert.NotEmpty(t, saved.Metadata[inboundMediaAsyncEnqueuedAtKey])
 	assert.Equal(t, "client is nil", saved.Metadata[inboundMediaAsyncLastErrorKey])
 	assert.Contains(t, saved.ErrorMessage, "queued for async recovery")
+	storedJob, err := decodeInboundMediaAsyncJobMetadata(saved.Metadata[inboundMediaAsyncJobKey])
+	require.NoError(t, err)
+	assert.Equal(t, job.MessageID, storedJob.MessageID)
+	assert.Equal(t, job.OrganizationID, storedJob.OrganizationID)
+	assert.Equal(t, job.InstanceID, storedJob.InstanceID)
+	assert.Equal(t, job.MediaKind, storedJob.MediaKind)
+	assert.Equal(t, job.MediaPayloadBase64, storedJob.MediaPayloadBase64)
 }
 
 func TestPersistParsedMessage_EnqueueFailureMarksMessageMetadata(t *testing.T) {
@@ -539,6 +546,12 @@ func TestPersistParsedMessage_EnqueueFailureMarksMessageMetadata(t *testing.T) {
 	assert.Contains(t, saved.Metadata[inboundMediaAsyncEnqueueErrorKey], "redis unavailable")
 	assert.Equal(t, "client is nil", saved.Metadata[inboundMediaAsyncLastErrorKey])
 	assert.Contains(t, saved.ErrorMessage, "async enqueue failed")
+	storedJob, err := decodeInboundMediaAsyncJobMetadata(saved.Metadata[inboundMediaAsyncJobKey])
+	require.NoError(t, err)
+	assert.Equal(t, message.ID, storedJob.MessageID)
+	assert.Equal(t, org.ID, storedJob.OrganizationID)
+	assert.Equal(t, instance.ID, storedJob.InstanceID)
+	assert.Equal(t, "document", storedJob.MediaKind)
 }
 
 func makeInboundDocumentEventForPersistTest(t *testing.T, waMessageID string) *events.Message {

@@ -16,12 +16,14 @@ export interface LicenseOrganizationUsage {
   organization_name: string;
   user_count: number;
   whatsapp_endpoint_count: number;
+  storage_bytes: number;
 }
 
 export interface LicenseUsageSnapshot {
   organizations: LicenseMetricUsage;
   users_per_org: LicenseMetricUsage;
   whatsapp_endpoints_per_org: LicenseMetricUsage;
+  storage_bytes_per_org: LicenseMetricUsage;
   organization_details: LicenseOrganizationUsage[];
 }
 
@@ -45,6 +47,8 @@ export interface LicenseBootstrapResponse {
   max_users_per_org: number;
   max_whatsapp_endpoints_per_org: number;
   max_workers: number;
+  max_workers_per_org: number;
+  max_storage_bytes_per_org: number;
   expires_at?: string | null;
   grace_deadline?: string | null;
   days_until_expiry?: number | null;
@@ -74,6 +78,8 @@ const emptyLicenseState = (): LicenseBootstrapResponse => ({
   max_users_per_org: 0,
   max_whatsapp_endpoints_per_org: 0,
   max_workers: 0,
+  max_workers_per_org: 0,
+  max_storage_bytes_per_org: 0,
   duration_label: "",
   expires_at: null,
   grace_deadline: null,
@@ -84,6 +90,7 @@ const emptyLicenseState = (): LicenseBootstrapResponse => ({
     organizations: emptyUsageMetric(),
     users_per_org: emptyUsageMetric(),
     whatsapp_endpoints_per_org: emptyUsageMetric(),
+    storage_bytes_per_org: emptyUsageMetric(),
     organization_details: [],
   },
 });
@@ -106,6 +113,7 @@ function normalizeResponse(
       users_per_org: usage.users_per_org ?? emptyUsageMetric(),
       whatsapp_endpoints_per_org:
         usage.whatsapp_endpoints_per_org ?? emptyUsageMetric(),
+      storage_bytes_per_org: usage.storage_bytes_per_org ?? emptyUsageMetric(),
       organization_details: usage.organization_details ?? [],
     },
   };

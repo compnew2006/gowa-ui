@@ -226,6 +226,7 @@ func (cm *ConnectionManager) applyInboundMediaRecoverySuccess(
 	nextMetadata[inboundMediaAsyncRecoveredAtKey] = time.Now().UTC().Format(time.RFC3339Nano)
 	nextMetadata[inboundMediaAsyncLastErrorKey] = nil
 	delete(nextMetadata, inboundMediaAsyncEnqueueErrorKey)
+	clearInboundMediaAsyncJobMetadata(nextMetadata)
 
 	now := time.Now().UTC()
 	if err := cm.db.WithContext(ctx).
@@ -267,6 +268,7 @@ func (cm *ConnectionManager) markInboundMediaRecoveryFailed(ctx context.Context,
 	nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusFailed
 	nextMetadata[inboundMediaAsyncLastErrorKey] = strings.TrimSpace(reason)
 	nextMetadata[inboundMediaAsyncRecoveredAtKey] = nil
+	updateInboundMediaAsyncJobLastError(nextMetadata, reason)
 
 	nextErrorMessage := fmt.Sprintf("Inbound media async recovery failed: %s", strings.TrimSpace(reason))
 	if strings.TrimSpace(reason) == "" {

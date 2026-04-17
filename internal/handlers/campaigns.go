@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/websocket"
@@ -1218,7 +1219,11 @@ func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
 	}
 
 	// Save file locally for preview
-	localPath, err := a.saveCampaignMedia(campaignUUID.String(), data, mimeType)
+	if !a.checkQuotaWithDeltaOrRespond(r, license.ResourceStorage, orgID, int64(len(data))) {
+		return nil
+	}
+
+	localPath, err := a.saveCampaignMedia(orgID, campaignUUID.String(), data, mimeType)
 	if err != nil {
 		a.Log.Error("Failed to save media locally", "error", err)
 		// Don't fail the request, just log the error - preview won't work
@@ -1248,7 +1253,7 @@ func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
 }
 
 // saveCampaignMedia saves uploaded media locally for preview
-func (a *App) saveCampaignMedia(campaignID string, data []byte, mimeType string) (string, error) {
+func (a *App) saveCampaignMedia(orgID uuid.UUID, campaignID string, data []byte, mimeType string) (string, error) {
 	// Determine file extension
 	ext := getExtensionFromMimeType(mimeType)
 	if ext == "" {
@@ -1256,14 +1261,15 @@ func (a *App) saveCampaignMedia(campaignID string, data []byte, mimeType string)
 	}
 
 	// Create campaigns media directory
-	subdir := "campaigns"
+	subdir := organizationMediaSubdir(orgID, "campaigns")
 	if err := a.ensureMediaDir(subdir); err != nil {
 		return "", fmt.Errorf("failed to create media directory: %w", err)
 	}
 
 	// Generate filename using campaign ID
 	filename := campaignID + ext
-	filePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)
+	relativePath := filepath.Join(subdir, filename)
+	filePath := filepath.Join(a.getMediaStoragePath(), relativePath)
 
 	// Save file
 	if err := os.WriteFile(filePath, data, 0600); err != nil {
@@ -1271,7 +1277,6 @@ func (a *App) saveCampaignMedia(campaignID string, data []byte, mimeType string)
 	}
 
 	// Return relative path for storage
-	relativePath := filepath.Join(subdir, filename)
 	a.Log.Info("Campaign media saved locally", "path", relativePath, "size", len(data))
 
 	return relativePath, nil

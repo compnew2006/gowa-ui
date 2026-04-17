@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -30,6 +31,12 @@ type OrganizationSettings struct {
 	StrictRolloutEnforceAt      *time.Time `json:"strict_rollout_enforce_at,omitempty"`
 	Timezone                    string     `json:"timezone"`
 	DateFormat                  string     `json:"date_format"`
+}
+
+type organizationSettingsResponse struct {
+	Settings OrganizationSettings `json:"settings"`
+	Name     string               `json:"name"`
+	Slug     string               `json:"slug"`
 }
 
 // GetOrganizationSettings returns the organization settings
@@ -94,9 +101,10 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		}
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
-		"settings": settings,
-		"name":     org.Name,
+	return r.SendEnvelope(organizationSettingsResponse{
+		Settings: settings,
+		Name:     org.Name,
+		Slug:     org.Slug,
 	})
 }
 
@@ -121,6 +129,7 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 		Timezone                    *string `json:"timezone"`
 		DateFormat                  *string `json:"date_format"`
 		Name                        *string `json:"name"`
+		Slug                        *string `json:"slug"`
 	}
 
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
@@ -136,7 +145,8 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 		req.StrictRolloutEnforceAt != nil ||
 		req.Timezone != nil ||
 		req.DateFormat != nil ||
-		req.Name != nil
+		req.Name != nil ||
+		req.Slug != nil
 	wantsUploadsCleanupUpdate := req.UploadsCleanupRetentionDays != nil || req.UploadsCleanupScheduleHour != nil
 
 	if wantsGeneralSettingsUpdate {
@@ -188,6 +198,9 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 				"uploads_cleanup_schedule_hour",
 			)
 		}
+	}
+	if req.Slug != nil && normalizeOrganizationSlug(*req.Slug) == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "slug must contain at least one letter or number", nil, "slug")
 	}
 
 	var org models.Organization
@@ -246,8 +259,23 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	delete(org.Settings, organizationSettingChatCloseRatingWindowDays)
 	delete(org.Settings, organizationSettingChatCloseRatingFollowupWindowMinutes)
 	delete(org.Settings, organizationSettingChatCloseRatingTemplates)
-	if req.Name != nil && *req.Name != "" {
-		org.Name = *req.Name
+	if req.Name != nil {
+		if trimmedName := strings.TrimSpace(*req.Name); trimmedName != "" {
+			org.Name = trimmedName
+		}
+	}
+	if req.Slug != nil {
+		nextSlug := normalizeOrganizationSlug(*req.Slug)
+		if nextSlug != org.Slug {
+			if err := ensureOrganizationSlugAvailable(requestDB.Session(&gorm.Session{NewDB: true}), nextSlug, org.ID); err != nil {
+				if errors.Is(err, errOrganizationSlugTaken) {
+					return r.SendErrorEnvelope(fasthttp.StatusConflict, "Organization slug is already in use", nil, "slug")
+				}
+				a.Log.Error("Failed to validate organization slug", "error", err, "organization_id", org.ID)
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
+			}
+			org.Slug = nextSlug
+		}
 	}
 
 	saveDB := requestDB.Session(&gorm.Session{NewDB: true})
@@ -467,6 +495,7 @@ func (a *App) GetCurrentOrganization(r *fastglue.Request) error {
 // CreateOrganizationRequest represents the request body for creating an organization
 type CreateOrganizationRequest struct {
 	Name string `json:"name"`
+	Slug string `json:"slug,omitempty"`
 }
 
 // CreateOrganization creates a new organization
@@ -486,6 +515,7 @@ func (a *App) CreateOrganization(r *fastglue.Request) error {
 		return nil
 	}
 
+	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Organization name is required", nil, "")
 	}
@@ -500,9 +530,23 @@ func (a *App) CreateOrganization(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create organization", nil, "")
 	}
 
+	slug, err := resolveOrganizationSlug(tx, req.Slug, req.Name, uuid.Nil)
+	if err != nil {
+		tx.Rollback()
+		switch {
+		case errors.Is(err, errInvalidOrganizationSlug):
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "slug must contain at least one letter or number", nil, "slug")
+		case errors.Is(err, errOrganizationSlugTaken):
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Organization slug is already in use", nil, "slug")
+		default:
+			a.Log.Error("Failed to resolve organization slug", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create organization", nil, "")
+		}
+	}
+
 	org := models.Organization{
 		Name:     req.Name,
-		Slug:     generateSlug(req.Name),
+		Slug:     slug,
 		Settings: models.JSONB{},
 	}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/middleware"
+	"github.com/compnew2006/whatomate/internal/observability"
 	"github.com/compnew2006/whatomate/internal/queue"
 	objectstorage "github.com/compnew2006/whatomate/internal/storage"
 	"github.com/compnew2006/whatomate/internal/websocket"
@@ -205,6 +206,18 @@ func runServer(args []string) {
 		})
 	}
 
+	sandboxMode := cfg.App.SandboxMode
+	if sandboxMode {
+		if *migrate {
+			lo.Fatal("Sandbox mode forbids -migrate to avoid shared-environment schema changes")
+		}
+		if *numWorkers != 0 {
+			lo.Warn("Sandbox mode forces embedded workers off", "requested", *numWorkers)
+			*numWorkers = 0
+		}
+		lo.Warn("Sandbox mode enabled: startup upgrades, reconnect automation, recurring background jobs, and embedded workers are disabled")
+	}
+
 	// Connect to PostgreSQL
 	db, err := database.NewPostgres(&cfg.Database, cfg.App.Debug)
 	if err != nil {
@@ -218,7 +231,9 @@ func runServer(args []string) {
 		lo.Fatal("Failed to get underlying SQL DB for whatsmeow", "error", err)
 	}
 	storeContainer := sqlstore.NewWithDB(sqlDB, "postgres", waLog.Stdout("Database", "DEBUG", true))
-	if err := storeContainer.Upgrade(context.Background()); err != nil {
+	if sandboxMode {
+		lo.Warn("Sandbox mode: skipping whatsmeow sqlstore upgrade")
+	} else if err := storeContainer.Upgrade(context.Background()); err != nil {
 		lo.Fatal("Failed to upgrade whatsmeow store", "error", err)
 	}
 	lo.Info("Whatsmeow sqlstore initialized")
@@ -229,7 +244,9 @@ func runServer(args []string) {
 			lo.Fatal("Migration failed", "error", err)
 		}
 	}
-	if err := database.BackfillInstanceAssignedChatResetSettings(db); err != nil {
+	if sandboxMode {
+		lo.Info("Sandbox mode: skipping assigned chat reset startup backfill")
+	} else if err := database.BackfillInstanceAssignedChatResetSettings(db); err != nil {
 		lo.Fatal("Failed to backfill per-instance assigned chat reset settings", "error", err)
 	}
 
@@ -267,29 +284,33 @@ func runServer(args []string) {
 
 	// Auto-connect linked sessions and reconnect active instances in background.
 	if cfg.WhatsApp.Provider == "whatsmeow" {
-		whatsmeowManager.StartHealthMonitor(context.Background())
-		defer whatsmeowManager.StopHealthMonitor()
+		if sandboxMode {
+			lo.Warn("Sandbox mode: skipping whatsmeow health monitor and auto-reconnect lifecycle")
+		} else {
+			whatsmeowManager.StartHealthMonitor(context.Background())
+			defer whatsmeowManager.StopHealthMonitor()
 
-		// Reconcile stale transient states before serving API traffic.
-		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := whatsmeowManager.ReconcileStartupStatuses(reconcileCtx); err != nil {
-			lo.Warn("Failed to reconcile stale instance statuses on startup", "error", err)
+			// Reconcile stale transient states before serving API traffic.
+			reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := whatsmeowManager.ReconcileStartupStatuses(reconcileCtx); err != nil {
+				lo.Warn("Failed to reconcile stale instance statuses on startup", "error", err)
+			}
+			reconcileCancel()
+
+			go func() {
+				// Wait a bit for server to start.
+				time.Sleep(2 * time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cancel()
+
+				if err := whatsmeowManager.AutoConnectLinkedInstancesOnFirstRun(ctx); err != nil {
+					lo.Warn("First-run auto-connect completed with issues", "error", err)
+				}
+				if err := whatsmeowManager.ReconnectAll(ctx); err != nil {
+					lo.Error("Failed to reconnect instances", "error", err)
+				}
+			}()
 		}
-		reconcileCancel()
-
-		go func() {
-			// Wait a bit for server to start.
-			time.Sleep(2 * time.Second)
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-
-			if err := whatsmeowManager.AutoConnectLinkedInstancesOnFirstRun(ctx); err != nil {
-				lo.Warn("First-run auto-connect completed with issues", "error", err)
-			}
-			if err := whatsmeowManager.ReconnectAll(ctx); err != nil {
-				lo.Error("Failed to reconnect instances", "error", err)
-			}
-		}()
 	}
 	lo.Info("Whatsmeow manager initialized")
 
@@ -354,6 +375,7 @@ func runServer(args []string) {
 
 	// Parse allowed origins for CORS
 	allowedOrigins := middleware.ParseAllowedOrigins(cfg.Server.AllowedOrigins)
+	observabilityManager := observability.NewManager(cfg.Observability, db, rdb)
 
 	// Setup middleware (CORS is handled by corsWrapper at fasthttp level)
 	g.Before(middleware.SecurityHeaders())
@@ -371,7 +393,7 @@ func runServer(args []string) {
 	g.Before(middleware.CSRFProtection())
 
 	// Setup routes
-	setupRoutes(g, app, lo, cfg.Server.BasePath, rdb, cfg)
+	setupRoutes(g, app, lo, cfg.Server.BasePath, rdb, cfg, observabilityManager)
 
 	// Create server with CORS wrapper
 	maxRequestBodySizeMB := cfg.Server.MaxRequestBodySizeMB
@@ -380,7 +402,7 @@ func runServer(args []string) {
 	}
 	maxRequestBodySize := maxRequestBodySizeMB * 1024 * 1024
 	server := &fasthttp.Server{
-		Handler:            corsWrapper(g.Handler(), allowedOrigins),
+		Handler:            observedHandler(corsWrapper(g.Handler(), allowedOrigins), observabilityManager),
 		ReadTimeout:        time.Duration(cfg.Server.ReadTimeout) * time.Second,
 		ReadBufferSize:     32 * 1024,
 		WriteTimeout:       time.Duration(cfg.Server.WriteTimeout) * time.Second,
@@ -397,33 +419,54 @@ func runServer(args []string) {
 		}
 	}()
 
-	// Start SLA processor (runs every minute)
-	slaProcessor := handlers.NewSLAProcessor(app, time.Minute)
-	slaCtx, slaCancel := context.WithCancel(context.Background())
-	go slaProcessor.Start(slaCtx)
-	lo.Info("SLA processor started")
+	var (
+		slaProcessor               *handlers.SLAProcessor
+		slaCancel                  context.CancelFunc
+		chatAssignmentResetWorker  *handlers.ChatAssignmentResetWorker
+		chatAssignmentResetCancel  context.CancelFunc
+		instanceAutoCampaignWorker *handlers.InstanceAutoCampaignWorker
+		instanceAutoCampaignCancel context.CancelFunc
+		mediaRetentionWorker       *handlers.MediaRetentionWorker
+		mediaRetentionCancel       context.CancelFunc
+		uploadsCleanupWorker       *handlers.UploadsCleanupWorker
+		uploadsCleanupCancel       context.CancelFunc
+	)
+	if sandboxMode {
+		lo.Warn("Sandbox mode: skipping recurring background workers")
+	} else {
+		// Start SLA processor (runs every minute)
+		slaProcessor = handlers.NewSLAProcessor(app, time.Minute)
+		var slaCtx context.Context
+		slaCtx, slaCancel = context.WithCancel(context.Background())
+		go slaProcessor.Start(slaCtx)
+		lo.Info("SLA processor started")
 
-	// Start assigned chat reset worker (checks schedule every minute).
-	chatAssignmentResetWorker := handlers.NewChatAssignmentResetWorker(app, time.Minute)
-	chatAssignmentResetCtx, chatAssignmentResetCancel := context.WithCancel(context.Background())
-	go chatAssignmentResetWorker.Start(chatAssignmentResetCtx)
-	lo.Info("Assigned chat reset worker started")
+		// Start assigned chat reset worker (checks schedule every minute).
+		chatAssignmentResetWorker = handlers.NewChatAssignmentResetWorker(app, time.Minute)
+		var chatAssignmentResetCtx context.Context
+		chatAssignmentResetCtx, chatAssignmentResetCancel = context.WithCancel(context.Background())
+		go chatAssignmentResetWorker.Start(chatAssignmentResetCtx)
+		lo.Info("Assigned chat reset worker started")
 
-	// Start instance auto campaign worker (checks interval every minute).
-	instanceAutoCampaignWorker := handlers.NewInstanceAutoCampaignWorker(app, time.Minute)
-	instanceAutoCampaignCtx, instanceAutoCampaignCancel := context.WithCancel(context.Background())
-	go instanceAutoCampaignWorker.Start(instanceAutoCampaignCtx)
-	lo.Info("Instance auto campaign worker started")
+		// Start instance auto campaign worker (checks interval every minute).
+		instanceAutoCampaignWorker = handlers.NewInstanceAutoCampaignWorker(app, time.Minute)
+		var instanceAutoCampaignCtx context.Context
+		instanceAutoCampaignCtx, instanceAutoCampaignCancel = context.WithCancel(context.Background())
+		go instanceAutoCampaignWorker.Start(instanceAutoCampaignCtx)
+		lo.Info("Instance auto campaign worker started")
 
-	mediaRetentionWorker := handlers.NewMediaRetentionWorker(app, 24*time.Hour)
-	mediaRetentionCtx, mediaRetentionCancel := context.WithCancel(context.Background())
-	go mediaRetentionWorker.Start(mediaRetentionCtx)
-	lo.Info("Media retention worker started")
+		mediaRetentionWorker = handlers.NewMediaRetentionWorker(app, 24*time.Hour)
+		var mediaRetentionCtx context.Context
+		mediaRetentionCtx, mediaRetentionCancel = context.WithCancel(context.Background())
+		go mediaRetentionWorker.Start(mediaRetentionCtx)
+		lo.Info("Media retention worker started")
 
-	uploadsCleanupWorker := handlers.NewUploadsCleanupWorker(app, time.Minute)
-	uploadsCleanupCtx, uploadsCleanupCancel := context.WithCancel(context.Background())
-	go uploadsCleanupWorker.Start(uploadsCleanupCtx)
-	lo.Info("Uploads cleanup worker started")
+		uploadsCleanupWorker = handlers.NewUploadsCleanupWorker(app, time.Minute)
+		var uploadsCleanupCtx context.Context
+		uploadsCleanupCtx, uploadsCleanupCancel = context.WithCancel(context.Background())
+		go uploadsCleanupWorker.Start(uploadsCleanupCtx)
+		lo.Info("Uploads cleanup worker started")
+	}
 
 	// Start embedded workers
 	var (
@@ -493,31 +536,40 @@ func runServer(args []string) {
 
 	licenseCancel()
 
-	// Stop SLA processor
-	lo.Info("Stopping SLA processor...")
-	slaCancel()
-	slaProcessor.Stop()
-	lo.Info("SLA processor stopped")
+	if slaCancel != nil && slaProcessor != nil {
+		lo.Info("Stopping SLA processor...")
+		slaCancel()
+		slaProcessor.Stop()
+		lo.Info("SLA processor stopped")
+	}
 
-	lo.Info("Stopping assigned chat reset worker...")
-	chatAssignmentResetCancel()
-	chatAssignmentResetWorker.Stop()
-	lo.Info("Assigned chat reset worker stopped")
+	if chatAssignmentResetCancel != nil && chatAssignmentResetWorker != nil {
+		lo.Info("Stopping assigned chat reset worker...")
+		chatAssignmentResetCancel()
+		chatAssignmentResetWorker.Stop()
+		lo.Info("Assigned chat reset worker stopped")
+	}
 
-	lo.Info("Stopping instance auto campaign worker...")
-	instanceAutoCampaignCancel()
-	instanceAutoCampaignWorker.Stop()
-	lo.Info("Instance auto campaign worker stopped")
+	if instanceAutoCampaignCancel != nil && instanceAutoCampaignWorker != nil {
+		lo.Info("Stopping instance auto campaign worker...")
+		instanceAutoCampaignCancel()
+		instanceAutoCampaignWorker.Stop()
+		lo.Info("Instance auto campaign worker stopped")
+	}
 
-	lo.Info("Stopping media retention worker...")
-	mediaRetentionCancel()
-	mediaRetentionWorker.Stop()
-	lo.Info("Media retention worker stopped")
+	if mediaRetentionCancel != nil && mediaRetentionWorker != nil {
+		lo.Info("Stopping media retention worker...")
+		mediaRetentionCancel()
+		mediaRetentionWorker.Stop()
+		lo.Info("Media retention worker stopped")
+	}
 
-	lo.Info("Stopping uploads cleanup worker...")
-	uploadsCleanupCancel()
-	uploadsCleanupWorker.Stop()
-	lo.Info("Uploads cleanup worker stopped")
+	if uploadsCleanupCancel != nil && uploadsCleanupWorker != nil {
+		lo.Info("Stopping uploads cleanup worker...")
+		uploadsCleanupCancel()
+		uploadsCleanupWorker.Stop()
+		lo.Info("Uploads cleanup worker stopped")
+	}
 
 	// Stop workers first
 	if workerScalerCancel != nil {
@@ -937,6 +989,8 @@ func runInboundMediaReconcile(args []string) {
 		"skipped_active_queued", summary.SkippedActiveQueued,
 		"total_queued", summary.TotalQueued,
 		"eligible_queued", summary.EligibleQueued,
+		"requeued", summary.Requeued,
+		"marked_failed", summary.MarkedFailed,
 		"updated", summary.Updated,
 		"sample_ids", strings.Join(summary.SampleIDs, ","),
 	)
@@ -1008,7 +1062,7 @@ func runLegacyMediaReconcile(args []string) {
 // ROUTES
 // ============================================================================
 
-func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePath string, rdb *redis.Client, cfg *config.Config) {
+func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePath string, rdb *redis.Client, cfg *config.Config, observabilityManager *observability.Manager) {
 	sendMessageHandler := app.SendMessage
 	sendMediaMessageHandler := app.SendMediaMessage
 	sendTemplateMessageHandler := app.SendTemplateMessage
@@ -1053,6 +1107,12 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Health check
 	g.GET("/health", app.HealthCheck)
 	g.GET("/ready", app.ReadyCheck)
+	if observabilityManager != nil && observabilityManager.MetricsEnabled() {
+		g.GET("/metrics", observabilityManager.MetricsHandler())
+	}
+	if observabilityManager != nil {
+		observabilityManager.RegisterPprofRoutes(g)
+	}
 	g.GET("/api/license/bootstrap", app.GetLicenseBootstrap)
 	g.POST("/api/license/activate", app.ActivateLicense)
 
@@ -1085,6 +1145,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/auth/logout", app.Logout)
 	g.POST("/api/auth/switch-org", app.SwitchOrg)
 	g.GET("/api/auth/ws-token", app.GetWSToken)
+	g.GET("/api/auth/me", app.GetCurrentUser) // Legacy alias for /api/me
 
 	// SSO routes (public, optionally rate-limited)
 	g.GET("/api/auth/sso/providers", app.GetPublicSSOProviders)
@@ -1401,8 +1462,11 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Sessions (admin/debug)
 	g.GET("/api/chatbot/sessions", app.ListChatbotSessions)
 	g.GET("/api/chatbot/sessions/{id}", app.GetChatbotSession)
+	g.GET("/api/chat/sessions", app.ListChatbotSessions)    // Legacy alias for /api/chatbot/sessions
+	g.GET("/api/chat/sessions/{id}", app.GetChatbotSession) // Legacy alias for /api/chatbot/sessions/{id}
 
 	// Analytics
+	g.GET("/api/analytics", app.GetDashboardStats) // Dashboard alias for /api/analytics/dashboard
 	g.GET("/api/analytics/dashboard", app.GetDashboardStats)
 	g.GET("/api/analytics/messages", app.GetMessageAnalytics)
 	g.GET("/api/analytics/chatbot", app.GetChatbotAnalytics)
@@ -1505,6 +1569,13 @@ func withRateLimit(handler fastglue.FastRequestHandler, opts middleware.RateLimi
 		}
 		return handler(r)
 	}
+}
+
+func observedHandler(handler fasthttp.RequestHandler, observabilityManager *observability.Manager) fasthttp.RequestHandler {
+	if observabilityManager == nil {
+		return handler
+	}
+	return observabilityManager.Wrap(handler)
 }
 
 func outboundRateLimitUserKey(r *fastglue.Request, clientIP string) string {

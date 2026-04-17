@@ -225,6 +225,7 @@ function revertAppearancePreview() {
 
 interface GeneralSettingsForm {
   organization_name: string;
+  organization_slug: string;
   default_timezone: string;
   date_format: string;
   mask_phone_numbers: boolean;
@@ -233,6 +234,7 @@ interface GeneralSettingsForm {
 // General Settings
 const generalSettings = ref<GeneralSettingsForm>({
   organization_name: "My Organization",
+  organization_slug: "",
   default_timezone: "UTC",
   date_format: "YYYY-MM-DD",
   mask_phone_numbers: false,
@@ -592,6 +594,7 @@ onMounted(async () => {
       if (canViewGeneralSettings.value) {
         generalSettings.value = {
           organization_name: orgData.name || "My Organization",
+          organization_slug: orgData.slug || "",
           default_timezone: orgData.settings?.timezone || "UTC",
           date_format: orgData.settings?.date_format || "YYYY-MM-DD",
           mask_phone_numbers: orgData.settings?.mask_phone_numbers || false,
@@ -648,6 +651,7 @@ async function saveGeneralSettings() {
   try {
     await organizationService.updateSettings({
       name: generalSettings.value.organization_name,
+      slug: generalSettings.value.organization_slug,
       timezone: generalSettings.value.default_timezone,
       date_format: generalSettings.value.date_format,
       mask_phone_numbers: generalSettings.value.mask_phone_numbers,
@@ -984,6 +988,16 @@ onBeforeRouteLeave(() => {
                       id="org_name"
                       v-model="generalSettings.organization_name"
                       :placeholder="$t('settings.organizationPlaceholder')"
+                    />
+                  </div>
+                  <div class="space-y-2">
+                    <Label for="org_slug" class="text-foreground/80">{{
+                      $t("settings.organizationSlug")
+                    }}</Label>
+                    <Input
+                      id="org_slug"
+                      v-model="generalSettings.organization_slug"
+                      :placeholder="$t('settings.organizationSlugPlaceholder')"
                     />
                   </div>
                   <div class="grid grid-cols-2 gap-4">

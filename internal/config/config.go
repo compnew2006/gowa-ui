@@ -14,6 +14,7 @@ var envTopLevelSections = []string{
 	"rate_limit",
 	"whatsmeow",
 	"whatsapp",
+	"observability",
 	"license",
 	"database",
 	"storage",
@@ -27,19 +28,20 @@ var envTopLevelSections = []string{
 
 // Config holds all configuration for the application
 type Config struct {
-	App          AppConfig          `koanf:"app"`
-	Server       ServerConfig       `koanf:"server"`
-	Database     DatabaseConfig     `koanf:"database"`
-	Redis        RedisConfig        `koanf:"redis"`
-	JWT          JWTConfig          `koanf:"jwt"`
-	WhatsApp     WhatsAppConfig     `koanf:"whatsapp"`
-	Whatsmeow    WhatsmeowConfig    `koanf:"whatsmeow"`
-	AI           AIConfig           `koanf:"ai"`
-	Storage      StorageConfig      `koanf:"storage"`
-	DefaultAdmin DefaultAdminConfig `koanf:"default_admin"`
-	RateLimit    RateLimitConfig    `koanf:"rate_limit"`
-	Cookie       CookieConfig       `koanf:"cookie"`
-	License      LicenseConfig      `koanf:"license"`
+	App           AppConfig           `koanf:"app"`
+	Server        ServerConfig        `koanf:"server"`
+	Database      DatabaseConfig      `koanf:"database"`
+	Redis         RedisConfig         `koanf:"redis"`
+	JWT           JWTConfig           `koanf:"jwt"`
+	WhatsApp      WhatsAppConfig      `koanf:"whatsapp"`
+	Whatsmeow     WhatsmeowConfig     `koanf:"whatsmeow"`
+	Observability ObservabilityConfig `koanf:"observability"`
+	AI            AIConfig            `koanf:"ai"`
+	Storage       StorageConfig       `koanf:"storage"`
+	DefaultAdmin  DefaultAdminConfig  `koanf:"default_admin"`
+	RateLimit     RateLimitConfig     `koanf:"rate_limit"`
+	Cookie        CookieConfig        `koanf:"cookie"`
+	License       LicenseConfig       `koanf:"license"`
 }
 
 type AppConfig struct {
@@ -48,6 +50,7 @@ type AppConfig struct {
 	Debug                 bool   `koanf:"debug"`
 	EncryptionKey         string `koanf:"encryption_key"` // AES-256 key for encrypting secrets at rest
 	AllowLegacyEncryption *bool  `koanf:"allow_legacy_encryption"`
+	SandboxMode           bool   `koanf:"sandbox_mode"` // Shared-data sandbox guardrail that disables startup mutations and background automation.
 }
 
 type ServerConfig struct {
@@ -114,6 +117,12 @@ type WhatsmeowConfig struct {
 	TypingMaxDelayMs                 int    `koanf:"typing_max_delay_ms"`
 	TypingCharDelayMs                int    `koanf:"typing_char_delay_ms"`
 	TypingCooldownMs                 int    `koanf:"typing_cooldown_ms"`
+}
+
+type ObservabilityConfig struct {
+	EnableMetrics bool   `koanf:"enable_metrics"`
+	EnablePprof   bool   `koanf:"enable_pprof"`
+	AccessToken   string `koanf:"access_token"`
 }
 
 type AIConfig struct {

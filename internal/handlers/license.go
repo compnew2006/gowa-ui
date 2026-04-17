@@ -137,6 +137,10 @@ func (a *App) SendLicenseLocked(r *fastglue.Request) *fastglue.Request {
 }
 
 func (a *App) checkQuotaOrRespond(r *fastglue.Request, resource string, orgID uuid.UUID) bool {
+	return a.checkQuotaWithDeltaOrRespond(r, resource, orgID, 0)
+}
+
+func (a *App) checkQuotaWithDeltaOrRespond(r *fastglue.Request, resource string, orgID uuid.UUID, delta int64) bool {
 	if a.License == nil {
 		return true
 	}
@@ -144,9 +148,9 @@ func (a *App) checkQuotaOrRespond(r *fastglue.Request, resource string, orgID uu
 		a.SendLicenseQuotaCleanupRequired(r)
 		return false
 	}
-	check, err := a.License.CheckQuota(r.RequestCtx, resource, orgID)
+	check, err := a.License.CheckQuotaWithDelta(r.RequestCtx, resource, orgID, delta)
 	if err != nil {
-		a.Log.Error("Failed to evaluate license quota", "resource", resource, "error", err, "organization_id", orgID)
+		a.Log.Error("Failed to evaluate license quota", "resource", resource, "error", err, "organization_id", orgID, "delta", delta)
 		_ = r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to evaluate license quota", nil, "")
 		return false
 	}

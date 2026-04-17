@@ -19,10 +19,17 @@ import (
 	"github.com/compnew2006/whatomate/internal/templateutil"
 	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
+	waprovider "github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodha/logf"
 	"gorm.io/gorm"
+)
+
+const (
+	inboundMediaSelfHealInterval   = 5 * time.Minute
+	inboundMediaSelfHealOlderThan  = 15 * time.Minute
+	inboundMediaSelfHealBatchLimit = 250
 )
 
 // Worker processes jobs from the queue
@@ -129,6 +136,13 @@ func (w *Worker) Run(ctx context.Context) error {
 
 	startConsumer("campaign", w.Consumer)
 	startConsumer("inbound_media", w.InboundConsumer)
+	if w.shouldRunInboundMediaSelfHeal() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.runInboundMediaSelfHealLoop(runCtx)
+		}()
+	}
 
 	var retErr error
 	select {
@@ -414,6 +428,61 @@ func (w *Worker) HandleInboundMediaJob(ctx context.Context, job *queue.InboundMe
 
 func (w *Worker) isWhatsmeowProvider() bool {
 	return w.Config != nil && w.Config.WhatsApp.Provider == "whatsmeow"
+}
+
+func (w *Worker) shouldRunInboundMediaSelfHeal() bool {
+	return w != nil &&
+		w.InboundConsumer != nil &&
+		w.DB != nil &&
+		w.Redis != nil &&
+		w.isWhatsmeowProvider()
+}
+
+func (w *Worker) runInboundMediaSelfHealLoop(ctx context.Context) {
+	w.reconcileStaleInboundMedia(ctx)
+
+	ticker := time.NewTicker(inboundMediaSelfHealInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.reconcileStaleInboundMedia(ctx)
+		}
+	}
+}
+
+func (w *Worker) reconcileStaleInboundMedia(ctx context.Context) {
+	summary, err := waprovider.ReconcileStaleQueuedInboundMedia(
+		ctx,
+		w.DB,
+		w.Redis,
+		waprovider.InboundMediaReconcileOptions{
+			OlderThan: inboundMediaSelfHealOlderThan,
+			Limit:     inboundMediaSelfHealBatchLimit,
+			Apply:     true,
+		},
+		w.Log,
+	)
+	if err != nil {
+		w.Log.Warn("Inbound media self-heal skipped", "error", err)
+		return
+	}
+	if summary == nil {
+		return
+	}
+	if summary.Requeued == 0 && summary.MarkedFailed == 0 {
+		return
+	}
+
+	w.Log.Info(
+		"Inbound media self-heal pass completed",
+		"requeued", summary.Requeued,
+		"marked_failed", summary.MarkedFailed,
+		"eligible_queued", summary.EligibleQueued,
+	)
 }
 
 // updateRecipientStatus updates the recipient's status in the database

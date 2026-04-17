@@ -9,6 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
+	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
@@ -256,5 +257,246 @@ func TestFilterQueuedInboundMediaRows(t *testing.T) {
 	}
 	if filtered[0].ID != keepFirst.ID || filtered[1].ID != keepLast.ID {
 		t.Fatalf("unexpected filtered order: %#v", filtered)
+	}
+}
+
+func TestReconcileStaleQueuedInboundMedia_RequeuesRecoverableRows(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	ctx := context.Background()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	if err := client.XGroupCreateMkStream(ctx, queue.InboundMediaStreamName, queue.InboundMediaConsumerGroup, "0").Err(); err != nil {
+		t.Fatalf("xgroup create: %v", err)
+	}
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Inbound Reconcile Org",
+		Slug:      "inbound-reconcile-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	if err := db.Create(&org).Error; err != nil {
+		t.Fatalf("create org: %v", err)
+	}
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Inbound Reconcile Instance",
+		Settings:       models.JSONB{},
+	}
+	if err := db.Create(&instance).Error; err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+
+	contact := models.Contact{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		InstanceID:     &instance.ID,
+		PhoneNumber:    "15550009999",
+		ProfileName:    "Recoverable Contact",
+		Metadata:       models.JSONB{},
+	}
+	if err := db.Create(&contact).Error; err != nil {
+		t.Fatalf("create contact: %v", err)
+	}
+
+	messageID := uuid.New()
+	staleTime := time.Now().UTC().Add(-time.Hour)
+	job := &queue.InboundMediaJob{
+		MessageID:          messageID,
+		OrganizationID:     org.ID,
+		InstanceID:         instance.ID,
+		WhatsAppMessageID:  "wamid.requeue.1",
+		MessageType:        models.MessageTypeDocument,
+		MediaKind:          "document",
+		MimeType:           "application/pdf",
+		FallbackFilename:   "report.pdf",
+		MediaPayloadBase64: "R0lGODlhAQABAIAAAAUEBA==",
+		LastError:          "client is nil",
+		EnqueuedAt:         staleTime,
+	}
+
+	metadata := models.JSONB{
+		inboundMediaAsyncStatusKey:      inboundMediaAsyncStatusQueued,
+		inboundMediaAsyncEnqueuedAtKey:  staleTime.Format(time.RFC3339Nano),
+		inboundMediaAsyncLastErrorKey:   job.LastError,
+		inboundMediaAsyncRecoveredAtKey: nil,
+	}
+	setInboundMediaAsyncJobMetadata(metadata, job)
+
+	message := models.Message{
+		BaseModel:         models.BaseModel{ID: messageID, CreatedAt: staleTime, UpdatedAt: staleTime},
+		OrganizationID:    org.ID,
+		InstanceID:        &instance.ID,
+		WhatsAppAccount:   "instance-account",
+		ContactID:         contact.ID,
+		WhatsAppMessageID: job.WhatsAppMessageID,
+		Direction:         models.DirectionIncoming,
+		MessageType:       models.MessageTypeDocument,
+		MediaMimeType:     "application/pdf",
+		MediaFilename:     "report.pdf",
+		Status:            models.MessageStatusReceived,
+		Metadata:          metadata,
+	}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+
+	summary, err := ReconcileStaleQueuedInboundMedia(
+		ctx,
+		db,
+		client,
+		InboundMediaReconcileOptions{
+			Apply:     true,
+			OlderThan: 15 * time.Minute,
+			Now:       time.Now().UTC(),
+		},
+		testutil.NopLogger(),
+	)
+	if err != nil {
+		t.Fatalf("reconcile stale inbound media: %v", err)
+	}
+	if summary.Requeued != 1 {
+		t.Fatalf("expected 1 requeued row, got %d", summary.Requeued)
+	}
+	if summary.MarkedFailed != 0 {
+		t.Fatalf("expected 0 failed rows, got %d", summary.MarkedFailed)
+	}
+
+	streams, err := client.XRangeN(ctx, queue.InboundMediaStreamName, "-", "+", 10).Result()
+	if err != nil {
+		t.Fatalf("xrange inbound_media: %v", err)
+	}
+	if len(streams) != 1 {
+		t.Fatalf("expected 1 requeued redis job, got %d", len(streams))
+	}
+
+	payload, ok := streams[0].Values["payload"].(string)
+	if !ok {
+		t.Fatalf("expected payload string, got %#v", streams[0].Values["payload"])
+	}
+	var queuedJob queue.InboundMediaJob
+	if err := json.Unmarshal([]byte(payload), &queuedJob); err != nil {
+		t.Fatalf("decode queued payload: %v", err)
+	}
+	if queuedJob.MessageID != messageID {
+		t.Fatalf("queued message id mismatch: got %s want %s", queuedJob.MessageID, messageID)
+	}
+
+	var saved models.Message
+	if err := db.First(&saved, "id = ?", messageID).Error; err != nil {
+		t.Fatalf("reload message: %v", err)
+	}
+	if saved.Metadata[inboundMediaAsyncStatusKey] != inboundMediaAsyncStatusQueued {
+		t.Fatalf("expected queued status, got %#v", saved.Metadata[inboundMediaAsyncStatusKey])
+	}
+	if saved.ErrorMessage == "" {
+		t.Fatal("expected message error to explain stale requeue")
+	}
+}
+
+func TestReconcileStaleQueuedInboundMedia_MarksFailedWithoutStoredJob(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	ctx := context.Background()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	if err := client.XGroupCreateMkStream(ctx, queue.InboundMediaStreamName, queue.InboundMediaConsumerGroup, "0").Err(); err != nil {
+		t.Fatalf("xgroup create: %v", err)
+	}
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Inbound Reconcile Fail Org",
+		Slug:      "inbound-reconcile-fail-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	if err := db.Create(&org).Error; err != nil {
+		t.Fatalf("create org: %v", err)
+	}
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Inbound Reconcile Fail Instance",
+		Settings:       models.JSONB{},
+	}
+	if err := db.Create(&instance).Error; err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+
+	contact := models.Contact{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		InstanceID:     &instance.ID,
+		PhoneNumber:    "15550008888",
+		ProfileName:    "Unrecoverable Contact",
+		Metadata:       models.JSONB{},
+	}
+	if err := db.Create(&contact).Error; err != nil {
+		t.Fatalf("create contact: %v", err)
+	}
+
+	staleTime := time.Now().UTC().Add(-time.Hour)
+	message := models.Message{
+		BaseModel:         models.BaseModel{ID: uuid.New(), CreatedAt: staleTime, UpdatedAt: staleTime},
+		OrganizationID:    org.ID,
+		InstanceID:        &instance.ID,
+		WhatsAppAccount:   "instance-account",
+		ContactID:         contact.ID,
+		WhatsAppMessageID: "wamid.requeue.fail.1",
+		Direction:         models.DirectionIncoming,
+		MessageType:       models.MessageTypeDocument,
+		MediaMimeType:     "application/pdf",
+		MediaFilename:     "report.pdf",
+		Status:            models.MessageStatusReceived,
+		Metadata: models.JSONB{
+			inboundMediaAsyncStatusKey:     inboundMediaAsyncStatusQueued,
+			inboundMediaAsyncLastErrorKey:  "download failed with status code 403",
+			inboundMediaAsyncEnqueuedAtKey: staleTime.Format(time.RFC3339Nano),
+		},
+	}
+	if err := db.Create(&message).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+
+	summary, err := ReconcileStaleQueuedInboundMedia(
+		ctx,
+		db,
+		client,
+		InboundMediaReconcileOptions{
+			Apply:     true,
+			OlderThan: 15 * time.Minute,
+			Now:       time.Now().UTC(),
+		},
+		testutil.NopLogger(),
+	)
+	if err != nil {
+		t.Fatalf("reconcile stale inbound media: %v", err)
+	}
+	if summary.MarkedFailed != 1 {
+		t.Fatalf("expected 1 failed row, got %d", summary.MarkedFailed)
+	}
+	if summary.Requeued != 0 {
+		t.Fatalf("expected 0 requeued rows, got %d", summary.Requeued)
+	}
+
+	var saved models.Message
+	if err := db.First(&saved, "id = ?", message.ID).Error; err != nil {
+		t.Fatalf("reload message: %v", err)
+	}
+	if saved.Metadata[inboundMediaAsyncStatusKey] != inboundMediaAsyncStatusFailed {
+		t.Fatalf("expected failed status, got %#v", saved.Metadata[inboundMediaAsyncStatusKey])
+	}
+	if saved.ErrorMessage == "" {
+		t.Fatal("expected failure error message to be set")
 	}
 }

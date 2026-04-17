@@ -40,6 +40,8 @@ type IssueOptions struct {
 	UsersPerOrg             int
 	WhatsAppEndpointsPerOrg int
 	Workers                 int
+	WorkersPerOrg           int
+	StorageBytesPerOrg      int64
 	IssuedAt                string
 	NotBefore               string
 }
@@ -69,6 +71,8 @@ func DefaultIssueOptions() IssueOptions {
 		UsersPerOrg:             5,
 		WhatsAppEndpointsPerOrg: 5,
 		Workers:                 2,
+		WorkersPerOrg:           0,
+		StorageBytesPerOrg:      0,
 	}
 }
 
@@ -158,6 +162,8 @@ func issueLicense(opts IssueOptions, privateKey ed25519.PrivateKey, now time.Tim
 		MaxUsersPerOrg:             opts.UsersPerOrg,
 		MaxWhatsAppEndpointsPerOrg: opts.WhatsAppEndpointsPerOrg,
 		MaxWorkers:                 opts.Workers,
+		MaxWorkersPerOrg:           opts.WorkersPerOrg,
+		MaxStorageBytesPerOrg:      opts.StorageBytesPerOrg,
 		IssuedAt:                   issuedAt,
 		NotBefore:                  notBefore,
 		ExpiresAt:                  expiresAt,
@@ -190,6 +196,8 @@ func issueLicense(opts IssueOptions, privateKey ed25519.PrivateKey, now time.Tim
 			MaxUsersPerOrg:             opts.UsersPerOrg,
 			MaxWhatsAppEndpointsPerOrg: opts.WhatsAppEndpointsPerOrg,
 			MaxWorkers:                 opts.Workers,
+			MaxWorkersPerOrg:           opts.WorkersPerOrg,
+			MaxStorageBytesPerOrg:      opts.StorageBytesPerOrg,
 		},
 	}
 

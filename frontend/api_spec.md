@@ -20,7 +20,7 @@ This document provides a comprehensive map of the API endpoints, data models, an
 | `/auth/register`      | `POST` | `{ ... }`             | Registration.                       |
 | `/auth/logout`        | `POST` | `{}`                  | Logout.                             |
 | `/auth/refresh`       | `POST` | `{}`                  | Token refresh.                      |
-| `/auth/me`            | `GET`  | -                     | Current user profile.               |
+| `/auth/me`            | `GET`  | -                     | Legacy alias for `/me`.             |
 | `/auth/switch-org`    | `POST` | `{ organization_id }` | Switch org context.                 |
 | `/auth/ws-token`      | `GET`  | -                     | Short-lived token for WS.           |
 | `/auth/sso/providers` | `GET`  | -                     | List available SSO providers.       |
@@ -65,6 +65,7 @@ Group chats are treated as **Contacts** within the system. There are no separate
 | `/chatbot/keywords`              | `G/P/U/D` | `Rule`     | Keyword-based replies.      |
 | `/chatbot/flows`                 | `G/P/U/D` | `Flow`     | List/Manage chatbot flows.  |
 | `/chatbot/sessions`              | `GET`     | `?params`  | List active bot sessions.   |
+| `/chat/sessions`                 | `GET`     | `?params`  | Legacy alias for `/chatbot/sessions`. |
 | `/chatbot/transfers`             | `G/P`     | `Transfer` | Manage agent handovers.     |
 | `/chatbot/transfers/pick`        | `POST`    | -          | Auto-pick next in queue.    |
 | `/chatbot/transfers/{id}/resume` | `PUT`     | -          | Resume bot for the contact. |
