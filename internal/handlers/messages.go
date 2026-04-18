@@ -469,7 +469,7 @@ func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, m
 
 	case models.MessageTypeDocument:
 		mediaRef := resolveProviderMediaRef(req)
-		return a.MessageProvider.SendDocument(ctx, instanceID, to, mediaRef, req.MediaFilename)
+		return a.MessageProvider.SendDocument(ctx, instanceID, to, mediaRef, req.MediaFilename, req.Caption)
 
 	case models.MessageTypeInteractive:
 		// Interactive messages are Meta-specific; for whatsmeow, send as text fallback
@@ -702,6 +702,7 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 	a.DB.Model(&models.Message{}).Where("id = ?", msg.ID).Updates(map[string]any{
 		"status":               models.MessageStatusSent,
 		"whats_app_message_id": wamid,
+		"error_message":        "",
 	})
 	if msg.InstanceID != nil && a.WhatsmeowManager != nil {
 		a.WhatsmeowManager.MarkMessageSent(*msg.InstanceID)

@@ -14,7 +14,7 @@ import (
 
 // SendText sends a text message.
 func (a *WhatsmeowAdapter) SendText(ctx context.Context, instanceID string, to string, text string) (string, error) {
-	client, err := a.getClient(instanceID)
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return "", err
 	}
@@ -37,7 +37,7 @@ func (a *WhatsmeowAdapter) SendText(ctx context.Context, instanceID string, to s
 
 // SendTextReply sends a text message as a quoted reply to a specific message.
 func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string, to string, text string, replyToMsgID string) (string, error) {
-	client, err := a.getClient(instanceID)
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return "", err
 	}
@@ -69,7 +69,7 @@ func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string,
 
 // SendImage sends an image message.
 func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to string, imageURL string, caption string) (string, error) {
-	client, err := a.getClient(instanceID)
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return "", err
 	}
@@ -111,8 +111,8 @@ func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to 
 }
 
 // SendDocument sends a document message.
-func (a *WhatsmeowAdapter) SendDocument(ctx context.Context, instanceID string, to string, docURL string, filename string) (string, error) {
-	client, err := a.getClient(instanceID)
+func (a *WhatsmeowAdapter) SendDocument(ctx context.Context, instanceID string, to string, docURL string, filename string, caption string) (string, error) {
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return "", err
 	}
@@ -141,7 +141,7 @@ func (a *WhatsmeowAdapter) SendDocument(ctx context.Context, instanceID string, 
 
 	msg := &waE2E.Message{
 		DocumentMessage: &waE2E.DocumentMessage{
-			Caption:       proto.String(filename),
+			Caption:       proto.String(caption),
 			Mimetype:      proto.String(mimeType),
 			URL:           proto.String(uploadResp.URL),
 			DirectPath:    proto.String(uploadResp.DirectPath),
@@ -164,7 +164,7 @@ func (a *WhatsmeowAdapter) SendDocument(ctx context.Context, instanceID string, 
 
 // SendVideo sends a video message.
 func (a *WhatsmeowAdapter) SendVideo(ctx context.Context, instanceID string, to string, videoURL string, caption string) (string, error) {
-	client, err := a.getClient(instanceID)
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return "", err
 	}
@@ -207,7 +207,7 @@ func (a *WhatsmeowAdapter) SendVideo(ctx context.Context, instanceID string, to 
 
 // SendAudio sends an audio message.
 func (a *WhatsmeowAdapter) SendAudio(ctx context.Context, instanceID string, to string, audioURL string) (string, error) {
-	client, err := a.getClient(instanceID)
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return "", err
 	}

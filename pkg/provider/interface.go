@@ -12,7 +12,7 @@ type MessageProvider interface {
 	SendImage(ctx context.Context, instanceID string, to string, imageURL string, caption string) (string, error)
 
 	// SendDocument sends a document message
-	SendDocument(ctx context.Context, instanceID string, to string, docURL string, filename string) (string, error)
+	SendDocument(ctx context.Context, instanceID string, to string, docURL string, filename string, caption string) (string, error)
 
 	// SendVideo sends a video message
 	SendVideo(ctx context.Context, instanceID string, to string, videoURL string, caption string) (string, error)

@@ -82,12 +82,12 @@ func (m *MetaAdapter) SendImage(ctx context.Context, instanceID string, to strin
 }
 
 // SendDocument sends a document message via Meta Cloud API.
-func (m *MetaAdapter) SendDocument(ctx context.Context, instanceID string, to string, docURL string, filename string) (string, error) {
+func (m *MetaAdapter) SendDocument(ctx context.Context, instanceID string, to string, docURL string, filename string, caption string) (string, error) {
 	account, err := m.resolveAccount(instanceID)
 	if err != nil {
 		return "", err
 	}
-	return m.client.SendDocumentMessage(ctx, account, to, docURL, filename, "")
+	return m.client.SendDocumentMessage(ctx, account, to, docURL, filename, caption)
 }
 
 // SendVideo sends a video message via Meta Cloud API.

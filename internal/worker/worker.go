@@ -696,7 +696,7 @@ func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID 
 		case "audio":
 			return w.MessageProvider.SendAudio(sendCtx, instanceID, recipient.PhoneNumber, mediaRef)
 		default:
-			return w.MessageProvider.SendDocument(sendCtx, instanceID, recipient.PhoneNumber, mediaRef, mediaFilename)
+			return w.MessageProvider.SendDocument(sendCtx, instanceID, recipient.PhoneNumber, mediaRef, mediaFilename, body)
 		}
 	}
 

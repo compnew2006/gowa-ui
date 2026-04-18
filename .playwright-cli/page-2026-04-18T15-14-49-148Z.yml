@@ -1,0 +1,258 @@
+- generic [ref=e3]:
+  - generic [ref=e28]:
+    - link "Skip to main content" [ref=e29] [cursor=pointer]:
+      - /url: "#main-content"
+    - navigation "Main navigation" [ref=e30]:
+      - generic [ref=e31]:
+        - link "Whatomate" [ref=e32] [cursor=pointer]:
+          - /url: /
+          - img [ref=e34]
+          - generic: Whatomate
+        - button:
+          - img
+      - button "مكتبة الاركان المثالية" [ref=e38] [cursor=pointer]:
+        - img
+      - menubar [ref=e42]:
+        - menuitem "Dashboard" [ref=e43] [cursor=pointer]:
+          - img [ref=e44]
+          - generic: Dashboard
+        - menuitem "Chat" [ref=e49] [cursor=pointer]:
+          - img [ref=e50]
+          - generic: Chat
+        - menuitem "Chatbot" [ref=e52] [cursor=pointer]:
+          - img [ref=e53]
+          - generic: Chatbot
+        - menuitem "Agent Analytics" [ref=e56] [cursor=pointer]:
+          - img [ref=e57]
+          - generic: Agent Analytics
+        - menuitem "Campaigns" [ref=e59] [cursor=pointer]:
+          - img [ref=e60]
+          - generic: Campaigns
+        - menuitem "Settings" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - generic: Settings
+      - button "User menu" [ref=e68] [cursor=pointer]:
+        - generic [ref=e70]: ن
+        - generic:
+          - generic [ref=e71]: نعماني
+          - generic [ref=e72]: admin@whatomate.local
+    - main [ref=e73]:
+      - generic [ref=e74]:
+        - generic [ref=e75]:
+          - generic [ref=e78]:
+            - generic [ref=e79]:
+              - paragraph [ref=e80]: Statuses
+              - generic [ref=e81]: "164"
+            - generic [ref=e82]:
+              - button "Refresh" [ref=e83] [cursor=pointer]:
+                - img
+              - button "Notifications" [ref=e85] [cursor=pointer]:
+                - img
+                - generic [ref=e86]: "1"
+              - button "Statuses" [ref=e87] [cursor=pointer]:
+                - img [ref=e88]
+          - generic [ref=e90]:
+            - generic [ref=e91]:
+              - generic [ref=e92]:
+                - img [ref=e93]
+                - textbox "Search contacts..." [ref=e96]
+              - button [ref=e97] [cursor=pointer]:
+                - img
+              - button [ref=e98] [cursor=pointer]:
+                - img
+            - generic [ref=e99]:
+              - button "Assigned (14)" [ref=e100] [cursor=pointer]
+              - button "Pending (36)" [ref=e101] [cursor=pointer]
+          - generic [ref=e105]:
+            - generic [ref=e106] [cursor=pointer]:
+              - 'button "Profile photo: ابوريما" [ref=e107]':
+                - img [ref=e109]
+              - generic [ref=e110]:
+                - paragraph [ref=e112]: ابوريما
+                - generic [ref=e113]:
+                  - generic "Print-Labn-614" [ref=e116]:
+                    - generic [ref=e118]: Print-Labn-614
+                  - generic [ref=e119]:
+                    - 'button "Hide chat: ابوريما" [ref=e120]':
+                      - img [ref=e121]
+                    - 'button "Delete chat: ابوريما" [ref=e124]':
+                      - img [ref=e125]
+            - generic [ref=e128] [cursor=pointer]:
+              - 'button "Profile photo: +966550509034" [ref=e129]':
+                - generic [ref=e131]: +
+              - generic [ref=e132]:
+                - paragraph [ref=e134]: "+966550509034"
+                - generic [ref=e135]:
+                  - generic "Print-Labn-614" [ref=e138]:
+                    - generic [ref=e140]: Print-Labn-614
+                  - generic [ref=e141]:
+                    - 'button "Hide chat: +966550509034" [ref=e142]':
+                      - img [ref=e143]
+                    - 'button "Delete chat: +966550509034" [ref=e146]':
+                      - img [ref=e147]
+            - generic [ref=e150] [cursor=pointer]:
+              - 'button "Profile photo: Raghd..🤍" [ref=e151]':
+                - img [ref=e153]
+              - generic [ref=e154]:
+                - paragraph [ref=e156]: Raghd..🤍
+                - generic [ref=e157]:
+                  - generic "العيينة-٠٠٢٦" [ref=e160]:
+                    - generic [ref=e162]: العيينة-٠٠٢٦
+                  - generic [ref=e163]:
+                    - 'button "Hide chat: Raghd..🤍" [ref=e164]':
+                      - img [ref=e165]
+                    - 'button "Delete chat: Raghd..🤍" [ref=e168]':
+                      - img [ref=e169]
+            - generic [ref=e172] [cursor=pointer]:
+              - 'button "Profile photo: Smileroses" [ref=e173]':
+                - img [ref=e175]
+              - generic [ref=e176]:
+                - paragraph [ref=e178]: Smileroses
+                - generic [ref=e179]:
+                  - generic "Print-Labn-614" [ref=e182]:
+                    - generic [ref=e184]: Print-Labn-614
+                  - generic [ref=e185]:
+                    - 'button "Hide chat: Smileroses" [ref=e186]':
+                      - img [ref=e187]
+                    - 'button "Delete chat: Smileroses" [ref=e190]':
+                      - img [ref=e191]
+            - generic [ref=e194] [cursor=pointer]:
+              - 'button "Profile photo: ." [ref=e195]':
+                - generic [ref=e197]: .
+              - generic [ref=e198]:
+                - paragraph [ref=e200]: .
+                - generic [ref=e201]:
+                  - generic "العيينة-٠٠٢٦" [ref=e204]:
+                    - generic [ref=e206]: العيينة-٠٠٢٦
+                  - generic [ref=e207]:
+                    - 'button "Hide chat: ." [ref=e208]':
+                      - img [ref=e209]
+                    - 'button "Delete chat: ." [ref=e212]':
+                      - img [ref=e213]
+            - generic [ref=e216] [cursor=pointer]:
+              - 'button "Profile photo: Trrook" [ref=e217]':
+                - generic [ref=e219]: T
+              - generic [ref=e220]:
+                - paragraph [ref=e222]: Trrook
+                - generic [ref=e223]:
+                  - generic "Print-Labn-614" [ref=e226]:
+                    - generic [ref=e228]: Print-Labn-614
+                  - generic [ref=e229]:
+                    - 'button "Hide chat: Trrook" [ref=e230]':
+                      - img [ref=e231]
+                    - 'button "Delete chat: Trrook" [ref=e234]':
+                      - img [ref=e235]
+            - generic [ref=e238] [cursor=pointer]:
+              - 'button "Profile photo: جهمان العبسي" [ref=e239]':
+                - img [ref=e241]
+              - generic [ref=e242]:
+                - paragraph [ref=e244]: جهمان العبسي
+                - generic [ref=e245]:
+                  - generic "Print-Aser-208" [ref=e248]:
+                    - generic [ref=e250]: Print-Aser-208
+                  - generic [ref=e251]:
+                    - generic [ref=e252]: "1"
+                    - 'button "Hide chat: جهمان العبسي" [ref=e253]':
+                      - img [ref=e254]
+                    - 'button "Delete chat: جهمان العبسي" [ref=e257]':
+                      - img [ref=e258]
+            - generic [ref=e261] [cursor=pointer]:
+              - 'button "Profile photo: سبحان الله" [ref=e262]':
+                - img [ref=e264]
+              - generic [ref=e265]:
+                - paragraph [ref=e267]: سبحان الله
+                - generic [ref=e268]:
+                  - generic "العيينة-٠٠٢٦" [ref=e271]:
+                    - generic [ref=e273]: العيينة-٠٠٢٦
+                  - generic [ref=e274]:
+                    - 'button "Hide chat: سبحان الله" [ref=e275]':
+                      - img [ref=e276]
+                    - 'button "Delete chat: سبحان الله" [ref=e279]':
+                      - img [ref=e280]
+            - generic [ref=e283] [cursor=pointer]:
+              - 'button "Profile photo: rehanshamim01" [ref=e284]':
+                - img [ref=e286]
+              - generic [ref=e287]:
+                - paragraph [ref=e289]: rehanshamim01
+                - generic [ref=e290]:
+                  - generic "Print-Labn-614" [ref=e293]:
+                    - generic [ref=e295]: Print-Labn-614
+                  - generic [ref=e296]:
+                    - 'button "Hide chat: rehanshamim01" [ref=e297]':
+                      - img [ref=e298]
+                    - 'button "Delete chat: rehanshamim01" [ref=e301]':
+                      - img [ref=e302]
+            - generic [ref=e305] [cursor=pointer]:
+              - 'button "Profile photo: عبدالعزيز" [ref=e306]':
+                - generic [ref=e308]: ع
+              - generic [ref=e309]:
+                - paragraph [ref=e311]: عبدالعزيز
+                - generic [ref=e312]:
+                  - generic "Print-Labn-614" [ref=e315]:
+                    - generic [ref=e317]: Print-Labn-614
+                  - generic [ref=e318]:
+                    - 'button "Hide chat: عبدالعزيز" [ref=e319]':
+                      - img [ref=e320]
+                    - 'button "Delete chat: عبدالعزيز" [ref=e323]':
+                      - img [ref=e324]
+            - generic [ref=e327] [cursor=pointer]:
+              - 'button "Profile photo: سلمان المطيري" [ref=e328]':
+                - img [ref=e330]
+              - generic [ref=e331]:
+                - paragraph [ref=e333]: سلمان المطيري
+                - generic [ref=e334]:
+                  - generic "العيينة-٠٠٢٦" [ref=e337]:
+                    - generic [ref=e339]: العيينة-٠٠٢٦
+                  - generic [ref=e340]:
+                    - 'button "Hide chat: سلمان المطيري" [ref=e341]':
+                      - img [ref=e342]
+                    - 'button "Delete chat: سلمان المطيري" [ref=e345]':
+                      - img [ref=e346]
+            - generic [ref=e349] [cursor=pointer]:
+              - 'button "Profile photo: ⭐️" [ref=e350]':
+                - img [ref=e352]
+              - generic [ref=e353]:
+                - paragraph [ref=e355]: ⭐️
+                - generic [ref=e356]:
+                  - generic "العيينة-٠٠٢٦" [ref=e359]:
+                    - generic [ref=e361]: العيينة-٠٠٢٦
+                  - generic [ref=e362]:
+                    - 'button "Hide chat: ⭐️" [ref=e363]':
+                      - img [ref=e364]
+                    - 'button "Delete chat: ⭐️" [ref=e367]':
+                      - img [ref=e368]
+            - generic [ref=e371] [cursor=pointer]:
+              - 'button "Profile photo: tufailowaisi124" [ref=e372]':
+                - img [ref=e374]
+              - generic [ref=e375]:
+                - paragraph [ref=e377]: tufailowaisi124
+                - generic [ref=e378]:
+                  - generic "العيينة-٠٠٢٦" [ref=e381]:
+                    - generic [ref=e383]: العيينة-٠٠٢٦
+                  - generic [ref=e384]:
+                    - 'button "Hide chat: tufailowaisi124" [ref=e385]':
+                      - img [ref=e386]
+                    - 'button "Delete chat: tufailowaisi124" [ref=e389]':
+                      - img [ref=e390]
+            - generic [ref=e393] [cursor=pointer]:
+              - 'button "Profile photo: Ahmed." [ref=e394]':
+                - generic [ref=e396]: A
+              - generic [ref=e397]:
+                - paragraph [ref=e399]: Ahmed.
+                - generic [ref=e400]:
+                  - generic "العيينة-٠٠٢٦" [ref=e403]:
+                    - generic [ref=e405]: العيينة-٠٠٢٦
+                  - generic [ref=e406]:
+                    - 'button "Hide chat: Ahmed." [ref=e407]':
+                      - img [ref=e408]
+                    - 'button "Delete chat: Ahmed." [ref=e411]':
+                      - img [ref=e412]
+        - generic [ref=e418]:
+          - img [ref=e420]
+          - heading "Select a conversation" [level=3] [ref=e423]
+          - paragraph [ref=e424]: Choose a contact to start chatting
+  - region "Notifications alt+T":
+    - list:
+      - status [ref=e425]:
+        - img [ref=e427]
+        - generic [ref=e430]: Login successful

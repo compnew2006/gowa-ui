@@ -15,7 +15,7 @@ import (
 
 // MarkRead marks a message as read.
 func (a *WhatsmeowAdapter) MarkRead(ctx context.Context, instanceID string, messageID string) error {
-	client, err := a.getClient(instanceID)
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func (a *WhatsmeowAdapter) MarkRead(ctx context.Context, instanceID string, mess
 
 // SendReaction sends an emoji reaction.
 func (a *WhatsmeowAdapter) SendReaction(ctx context.Context, instanceID string, messageID string, emoji string) error {
-	client, err := a.getClient(instanceID)
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func (a *WhatsmeowAdapter) SendReaction(ctx context.Context, instanceID string, 
 
 // RevokeMessage deletes an outgoing message from WhatsApp.
 func (a *WhatsmeowAdapter) RevokeMessage(ctx context.Context, instanceID string, messageID string) error {
-	client, err := a.getClient(instanceID)
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (a *WhatsmeowAdapter) DownloadMedia(ctx context.Context, instanceID string,
 
 // UploadMedia uploads media.
 func (a *WhatsmeowAdapter) UploadMedia(ctx context.Context, instanceID string, mediaType string, data []byte) (string, error) {
-	client, err := a.getClient(instanceID)
+	client, err := a.getClient(ctx, instanceID)
 	if err != nil {
 		return "", err
 	}

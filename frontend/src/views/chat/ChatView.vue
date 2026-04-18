@@ -126,6 +126,7 @@ import {
   validateWhatsAppMediaFile,
   type WhatsAppMediaCategory,
 } from "@/lib/whatsapp-media-policy";
+import { resolvePreferredOutboundInstanceID } from "@/lib/chat-outbound-instance";
 import { mergePhotosAndPdfsAndOpenPrintDialog } from "@/lib/media-merge-print";
 import {
   isMergePrintableBubbleMessage,
@@ -298,6 +299,14 @@ function resolveSelectedSourceContact(contact: Contact | null): Contact | null {
   return contact;
 }
 
+function resolveExplicitSourceContact(contact: Contact | null): Contact | null {
+  if (!contact) return null;
+  return resolveSourceContactForToggle(
+    currentSidebarEntry.value,
+    selectedAccount.value,
+  );
+}
+
 function clearTypingPauseTimer() {
   if (typingPauseTimer) {
     clearTimeout(typingPauseTimer);
@@ -330,21 +339,12 @@ function isTypingPresenceEligibleContact(contact: Contact | null): boolean {
 }
 
 function resolveTypingInstanceID(contact: Contact): string | undefined {
-  const selectedSourceContact = resolveSelectedSourceContact(contact);
-  if (
-    selectedSourceContact &&
-    typeof selectedSourceContact.instance_id === "string"
-  ) {
-    const instanceID = selectedSourceContact.instance_id.trim();
-    if (instanceID !== "") return instanceID;
-  }
-
-  if (typeof contactsStore.selectedInstanceId === "string") {
-    const selected = contactsStore.selectedInstanceId.trim();
-    if (selected !== "") return selected;
-  }
-
-  return undefined;
+  return resolvePreferredOutboundInstanceID({
+    messages: contactsStore.messages,
+    selectedSourceContact: resolveExplicitSourceContact(contact),
+    currentContact: contact,
+    selectedInstanceID: contactsStore.selectedInstanceId,
+  });
 }
 
 async function sendTypingPresenceForContact(
@@ -570,15 +570,12 @@ function formatAccountToggleLabel(toggleKey: string): string {
 function resolveOutboundInstanceID(
   contact: Contact | null,
 ): string | undefined {
-  const selectedSource = resolveSelectedSourceContact(contact);
-  const instanceID =
-    typeof selectedSource?.instance_id === "string"
-      ? selectedSource.instance_id.trim()
-      : "";
-  if (instanceID !== "") {
-    return instanceID;
-  }
-  return undefined;
+  return resolvePreferredOutboundInstanceID({
+    messages: contactsStore.messages,
+    selectedSourceContact: resolveExplicitSourceContact(contact),
+    currentContact: contact,
+    selectedInstanceID: contactsStore.selectedInstanceId,
+  });
 }
 
 function resolveOutboundWhatsAppAccount(

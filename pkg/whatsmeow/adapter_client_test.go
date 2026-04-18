@@ -1,7 +1,13 @@
 package whatsmeow
 
 import (
+	"context"
+	"io"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/zerodha/logf"
+	"go.mau.fi/whatsmeow"
 )
 
 func TestIsGroupJIDAdapter(t *testing.T) {
@@ -29,7 +35,7 @@ func TestIsGroupJIDAdapter(t *testing.T) {
 func TestWhatsmeowAdapterGetClientInvalidUUID(t *testing.T) {
 	adapter := &WhatsmeowAdapter{} // Minimal setup for testing error path
 
-	_, err := adapter.getClient("invalid-uuid")
+	_, err := adapter.getClient(context.Background(), "invalid-uuid")
 	if err == nil {
 		t.Error("Expected error for invalid UUID, got nil")
 	}
@@ -39,10 +45,86 @@ func TestWhatsmeowAdapterGetClientInvalidUUID(t *testing.T) {
 }
 
 func TestWhatsmeowAdapterGetClientNilManager(t *testing.T) {
-	// Note: This test would panic because manager.GetClient is called on a nil pointer.
-	// In a real scenario, the adapter should always have a valid manager.
-	// Skipping this test to avoid panic.
-	t.Skip("Skipping: nil manager causes panic in manager.GetClient()")
+	adapter := &WhatsmeowAdapter{logger: newTestLogger()}
+
+	_, err := adapter.getClient(context.Background(), uuid.NewString())
+	if err == nil {
+		t.Fatal("Expected error for missing manager, got nil")
+	}
+	if !containsString(err.Error(), "instance not connected") {
+		t.Fatalf("Expected not connected error, got: %v", err)
+	}
+}
+
+func TestWhatsmeowAdapterGetClientAttemptsReconnectWhenRuntimeMissing(t *testing.T) {
+	instanceID := uuid.New()
+	reconnectCalls := 0
+	adapter := &WhatsmeowAdapter{
+		logger: newTestLogger(),
+		getRuntimeClient: func(id uuid.UUID) *whatsmeow.Client {
+			if id != instanceID {
+				t.Fatalf("unexpected instance ID: %s", id)
+			}
+			return nil
+		},
+		connectRuntime: func(ctx context.Context, id uuid.UUID) error {
+			reconnectCalls++
+			if id != instanceID {
+				t.Fatalf("unexpected instance ID: %s", id)
+			}
+			return nil
+		},
+	}
+
+	_, err := adapter.getClient(context.Background(), instanceID.String())
+	if err == nil {
+		t.Fatal("Expected error when reconnect does not hydrate a client")
+	}
+	if reconnectCalls != 1 {
+		t.Fatalf("Expected one reconnect attempt, got %d", reconnectCalls)
+	}
+	if !containsString(err.Error(), "instance not connected") {
+		t.Fatalf("Expected not connected error, got: %v", err)
+	}
+}
+
+func TestWhatsmeowAdapterGetClientAttemptsReconnectWhenClientDisconnected(t *testing.T) {
+	instanceID := uuid.New()
+	reconnectCalls := 0
+	adapter := &WhatsmeowAdapter{
+		logger: newTestLogger(),
+		getRuntimeClient: func(id uuid.UUID) *whatsmeow.Client {
+			if id != instanceID {
+				t.Fatalf("unexpected instance ID: %s", id)
+			}
+			return &whatsmeow.Client{}
+		},
+		connectRuntime: func(ctx context.Context, id uuid.UUID) error {
+			reconnectCalls++
+			if id != instanceID {
+				t.Fatalf("unexpected instance ID: %s", id)
+			}
+			return nil
+		},
+	}
+
+	_, err := adapter.getClient(context.Background(), instanceID.String())
+	if err == nil {
+		t.Fatal("Expected error when reconnect leaves client disconnected")
+	}
+	if reconnectCalls != 1 {
+		t.Fatalf("Expected one reconnect attempt, got %d", reconnectCalls)
+	}
+	if !containsString(err.Error(), "instance disconnected") {
+		t.Fatalf("Expected disconnected error, got: %v", err)
+	}
+}
+
+func newTestLogger() logf.Logger {
+	return logf.New(logf.Opts{
+		Writer: io.Discard,
+		Level:  logf.DebugLevel,
+	})
 }
 
 func containsString(s, substr string) bool {
