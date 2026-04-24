@@ -1,299 +1,146 @@
----
-name: desloppify
-description: >
-  Codebase health scanner and technical debt tracker. Use when the user asks
-  about code quality, technical debt, dead code, large files, god classes,
-  duplicate functions, code smells, naming issues, import cycles, or coupling
-  problems. Also use when asked for a health score, what to fix next, or to
-  create a cleanup plan. Supports 28 languages.
-allowed-tools: Bash(desloppify *)
----
+# Whatomate — Agent Instructions
 
----
-name: desloppify
-description: >
-  Codebase health scanner and technical debt tracker. Use when the user asks
-  about code quality, technical debt, dead code, large files, god classes,
-  duplicate functions, code smells, naming issues, import cycles, or coupling
-  problems. Also use when asked for a health score, what to fix next, or to
-  create a cleanup plan. Supports 28 languages.
-allowed-tools: Bash(desloppify *)
----
+## Project Identity
 
-<!-- desloppify-begin -->
-<!-- desloppify-skill-version: 5 -->
+- **Go module**: `github.com/compnew2006/whatomate`
+- **Binary**: single `whatomate` binary (entrypoint: `cmd/whatomate/main.go`)
+- **HTTP framework**: **fastglue + fasthttp** (not `net/http` — do not use `http.Handler`, `httptest`, or `net/http` middleware patterns)
+- **Config format**: TOML via [koanf](https://github.com/knadh/koanf) (`config.toml`, gitignored — copy from `config.example.toml`)
+- **Go version (CI)**: 1.25.8
 
-# Desloppify
+## Architecture
 
-## 1. Your Job
+```
+cmd/whatomate/          # Entrypoint (server, worker, crypto-migrate, etc.)
+internal/
+  config/               # Config loading + validation (koanf)
+  crypto/               # AES-256 encrypt/decrypt for secrets at rest
+  database/             # GORM + PostgreSQL 17 setup, migrations, default admin seeding
+  frontend/dist/        # Embedded Vue SPA (populated by `make build-prod`)
+  handlers/             # All API handlers
+  middleware/            # Auth (JWT + API key), CSRF, CORS, rate limiting, tenant scope
+  models/               # GORM models
+  queue/                # Redis Streams consumer groups (campaigns, inbound_media)
+  websocket/            # Hub/client WS via fasthttp/websocket
+  worker/               # Job processing (campaign sends, media recovery)
+  license/              # License enforcement
+pkg/
+  provider/             # MessageProvider interface
+  whatsapp/             # Meta Cloud API adapter
+  whatsmeow/            # WhatsApp Web protocol adapter
+frontend/               # Vue 3 SPA (see below)
+mcp-server/             # MCP sidecar (separate Node.js package)
+```
 
-Maximise the **strict score** honestly. Your main cycle: **scan → plan → execute → rescan**. Follow the scan output's **INSTRUCTIONS FOR AGENTS** — don't substitute your own analysis.
+- **Dual provider**: `config.toml` → `[whatsapp].provider` = `meta` (Cloud API) or `whatsmeow` (Web protocol). Wired in `main.go` via `MessageProvider` interface in `pkg/provider/interface.go`.
+- **Frontend embedding**: `//go:embed all:dist` in `internal/frontend/embed.go`. For production, `make build-prod` copies `frontend/dist/` into the embed directory before compiling.
 
-**Don't be lazy.** Do large refactors and small detailed fixes with equal energy. If it takes touching 20 files, touch 20 files. If it's a one-line change, make it. No task is too big or too small — fix things properly, not minimally.
+## Development Commands
 
-## 2. The Workflow
+### Prerequisites
 
-Three phases, repeated as a cycle.
+- Go 1.25.x, Node.js >=20.19 or >=22.12
+- PostgreSQL 17 + Redis 7 (via Docker: `docker compose -f docker/docker-compose.yml up -d db redis`)
 
-### Phase 1: Scan and review — understand the codebase
+### Backend (port 8080)
 
 ```bash
-desloppify scan --path .       # analyse the codebase
-desloppify status              # check scores — are we at target?
+make run-migrate          # Run server with DB migrations
+make run                  # Run server without migrations
+make backend-watch        # Hot-reload with air (auto-installs if missing)
 ```
 
-The scan will tell you if subjective dimensions need review. Follow its instructions. To trigger a review manually:
-```bash
-desloppify review --prepare    # then follow your runner's review workflow
-```
-
-### Phase 2: Plan — decide what to work on
-
-After reviews, triage stages and plan creation appear as queue items in `next`. Complete them in order:
-```bash
-desloppify next                                        # shows the next workflow step
-desloppify plan triage --stage observe --report "themes and root causes..."
-desloppify plan triage --stage reflect --report "comparison against completed work..."
-desloppify plan triage --stage organize --report "summary of priorities..."
-desloppify plan triage --complete --strategy "execution plan..."
-```
-
-### Automated triage (subagent runners)
-
-For Codex: `desloppify plan triage --run-stages --runner codex`
-For Claude: `desloppify plan triage --run-stages --runner claude` — then follow orchestrator instructions per stage
-
-Options: `--only-stages observe,reflect` (subset), `--dry-run` (prompts only), `--stage-timeout-seconds N` (per-stage).
-
-Then shape the queue. **The plan shapes everything `next` gives you** — don't skip this step.
+### Frontend (port 3000)
 
 ```bash
-desloppify plan                          # see the full ordered queue
-desloppify plan reorder <pat> top        # reorder — what unblocks the most?
-desloppify plan cluster create <name>    # group related issues to batch-fix
-desloppify plan focus <cluster>          # scope next to one cluster
-desloppify plan skip <pat>              # defer — hide from next
+cd frontend && npm install
+npm run dev               # Proxies /api -> localhost:8080, /ws -> ws://localhost:8080
+npm run build             # Production build -> frontend/dist/
 ```
 
-More plan commands:
-```bash
-desloppify plan reorder <cluster> top    # move all cluster members at once
-desloppify plan reorder <a> <b> top     # mix clusters + findings in one reorder
-desloppify plan reorder <pat> before -t X  # position relative to another item/cluster
-desloppify plan cluster reorder a,b top # reorder multiple clusters as one block
-desloppify plan resolve <pat>           # mark complete
-desloppify plan reopen <pat>             # reopen
-```
-
-### Phase 3: Execute — grind the queue to completion
-
-Trust the plan and execute. Don't rescan mid-queue — finish the queue first.
-
-**Branch first.** Create a dedicated branch for health work — never commit directly to main:
-```bash
-git checkout -b desloppify/code-health    # or desloppify/<focus-area>
-```
-
-**Set up commit tracking.** If you have a PR, link it for auto-updated descriptions:
-```bash
-desloppify config set commit_pr 42        # PR number for auto-updates
-```
-
-**The loop:**
-```
-1. desloppify next              ← what to fix next
-2. Fix the issue in code
-3. Resolve it (next shows you the exact command including required attestation)
-4. When you have a logical batch, commit:
-   git add <files> && git commit -m "desloppify: fix 3 deferred_import findings"
-5. Record the commit:
-   desloppify plan commit-log record      # moves findings uncommitted → committed, updates PR
-6. Push periodically:
-   git push -u origin desloppify/code-health
-7. Repeat until the queue is empty
-```
-
-Score may temporarily drop after fixes — cascade effects are normal, keep going.
-If `next` suggests an auto-fixer, run `desloppify autofix <fixer> --dry-run` to preview, then apply.
-
-**When the queue is clear, go back to Phase 1.** New issues will surface, cascades will have resolved, priorities will have shifted. This is the cycle.
-
-### Other useful commands
+### Full-stack
 
 ```bash
-desloppify next --count 5                         # top 5 priorities
-desloppify next --cluster <name>                  # drill into a cluster
-desloppify show <pattern>                         # filter by file/detector/ID
-desloppify show --status open                     # all open findings
-desloppify plan skip --permanent "<id>" --note "reason" --attest "..." # accept debt
-desloppify exclude <path>                         # exclude a directory from scanning
-desloppify config show                            # show all config including excludes
-desloppify scan --path . --reset-subjective       # reset subjective baseline to 0
+make dev                  # Backend + frontend concurrently
+make dev-watch            # Hot-reload backend + frontend concurrently
 ```
 
-## 3. Reference
-
-### How scoring works
-
-Overall score = **40% mechanical** + **60% subjective**.
-
-- **Mechanical (40%)**: auto-detected issues — duplication, dead code, smells, unused imports, security. Fixed by changing code and rescanning.
-- **Subjective (60%)**: design quality review — naming, error handling, abstractions, clarity. Starts at **0%** until reviewed. The scan will prompt you when a review is needed.
-- **Strict score** is the north star: wontfix items count as open. The gap between overall and strict is your wontfix debt.
-- **Score types**: overall (lenient), strict (wontfix counts), objective (mechanical only), verified (confirmed fixes only).
-
-### Subjective reviews in detail
-
-- **Local runner (Codex)**: `desloppify review --run-batches --runner codex --parallel --scan-after-import` — automated end-to-end.
-- **Local runner (Claude)**: `desloppify review --prepare` → launch parallel subagents → `desloppify review --import merged.json` — see skill doc overlay for details.
-- **Cloud/external**: `desloppify review --external-start --external-runner claude` → follow session template → `--external-submit`.
-- **Manual path**: `desloppify review --prepare` → review per dimension → `desloppify review --import file.json`.
-- Import first, fix after — import creates tracked state entries for correlation.
-- Target-matching scores trigger auto-reset to prevent gaming.
-- Even moderate scores (60-80) dramatically improve overall health.
-- Stale dimensions auto-surface in `next` — just follow the queue.
-
-### Review output format
-
-Return machine-readable JSON for review imports. For `--external-submit`, include `session` from the generated template:
-
-```json
-{
-  "session": {
-    "id": "<session_id_from_template>",
-    "token": "<session_token_from_template>"
-  },
-  "assessments": {
-    "<dimension_from_query>": 0
-  },
-  "findings": [
-    {
-      "dimension": "<dimension_from_query>",
-      "identifier": "short_id",
-      "summary": "one-line defect summary",
-      "related_files": ["relative/path/to/file.py"],
-      "evidence": ["specific code observation"],
-      "suggestion": "concrete fix recommendation",
-      "confidence": "high|medium|low"
-    }
-  ]
-}
-```
-
-**Import rules:**
-- `findings` MUST match `query.system_prompt` exactly (including `related_files`, `evidence`, and `suggestion`). Use `"findings": []` when no defects found.
-- Import is fail-closed: invalid findings abort unless `--allow-partial` is passed.
-- Assessment scores are auto-applied from trusted internal or cloud session imports. Legacy `--attested-external` remains supported.
-
-**Import paths:**
-- Robust session flow (recommended): `desloppify review --external-start --external-runner claude` → use generated prompt/template → run printed `--external-submit` command.
-- Durable scored import (legacy): `desloppify review --import findings.json --attested-external --attest "I validated this review was completed without awareness of overall score and is unbiased."`
-- Findings-only fallback: `desloppify review --import findings.json`
-
-### Review integrity
-
-1. Do not use prior chat context, score history, or target-threshold anchoring.
-2. Score from evidence only; when mixed, score lower and explain uncertainty.
-3. Assess every requested dimension; never drop one. If evidence is weak, score lower.
-
-### Reviewer agent prompt
-
-Runners that support agent definitions (Cursor, Copilot, Gemini) can create a dedicated reviewer agent. Use this system prompt:
-
-```
-You are a code quality reviewer. You will be given a codebase path, a set of
-dimensions to score, and what each dimension means. Read the code, score each
-dimension 0-100 from evidence only, and return JSON in the required format.
-Do not anchor to target thresholds. When evidence is mixed, score lower and
-explain uncertainty.
-```
-
-See your editor's overlay section below for the agent config format.
-
-### Commit tracking & branch workflow
-
-Work on a dedicated branch named `desloppify/<description>` (e.g., `desloppify/code-health`, `desloppify/fix-smells`). Never push health work directly to main.
+### Production build
 
 ```bash
-desloppify config set commit_pr 42              # link to your PR
-desloppify plan commit-log                      # see uncommitted + committed status
-desloppify plan commit-log record               # record HEAD commit, update PR description
-desloppify plan commit-log record --note "why"  # with rationale
-desloppify plan commit-log record --only "smells::*"  # record specific findings only
-desloppify plan commit-log history              # show commit records
-desloppify plan commit-log pr                   # preview PR body markdown
-desloppify config set commit_tracking_enabled false  # disable guidance
+make build-prod           # Builds frontend, copies to embed dir, compiles standalone binary
 ```
 
-After resolving findings as `fixed`, the tool shows uncommitted work, committed history, and a suggested commit message. After committing externally, run `record` to move findings from uncommitted to committed and auto-update the linked PR description.
+## Testing
 
-### Key concepts
+### Go Tests
 
-- **Tiers**: T1 auto-fix → T2 quick manual → T3 judgment call → T4 major refactor.
-- **Auto-clusters**: related findings are auto-grouped in `next`. Drill in with `next --cluster <name>`.
-- **Zones**: production/script (scored), test/config/generated/vendor (not scored). Fix with `zone set`.
-- **Wontfix cost**: widens the lenient↔strict gap. Challenge past decisions when the gap grows.
-- Score can temporarily drop after fixes (cascade effects are normal).
+**Require running PostgreSQL and Redis.** Set env vars:
 
-## 4. Escalate Tool Issues Upstream
-
-When desloppify itself appears wrong or inconsistent:
-
-1. Capture a minimal repro (`command`, `path`, `expected`, `actual`).
-2. Open a GitHub issue in `peteromallet/desloppify`.
-3. If you can fix it safely, open a PR linked to that issue.
-4. If unsure whether it is tool bug vs user workflow, issue first, PR second.
-
-## Prerequisite
-
-`command -v desloppify >/dev/null 2>&1 && echo "desloppify: installed" || echo "NOT INSTALLED — run: pip install --upgrade git+https://github.com/peteromallet/desloppify.git"`
-
-<!-- desloppify-end -->
-
-## Gemini CLI Overlay
-
-Gemini CLI has experimental subagent support, but subagents currently run
-sequentially (not in parallel). Review dimensions one at a time.
-
-### Setup
-
-Enable subagents in Gemini CLI settings:
-```json
-{
-  "experimental": {
-    "enableAgents": true
-  }
-}
+```bash
+export TEST_DATABASE_URL="postgres://test:test@127.0.0.1:5432/test?sslmode=disable"
+export TEST_REDIS_URL="redis://127.0.0.1:6379/1"
 ```
 
-Optionally define a reviewer agent in `.gemini/agents/desloppify-reviewer.md`:
-
-```yaml
----
-name: desloppify-reviewer
-description: Scores subjective codebase quality dimensions for desloppify
-kind: local
-tools:
-  - read_file
-  - search_code
-temperature: 0.2
-max_turns: 10
----
+```bash
+go test -v ./...                                 # All tests (needs DB + Redis)
+go test -v ./internal/handlers/...               # Single package
+go test -v -run TestFunctionName ./path/to/pkg   # Single test
 ```
 
-Use the prompt from the "Reviewer agent prompt" section above.
+- **CI runs**: `go test -v -race -p 1` (sequential package execution to avoid DB conflicts)
+- **Database tests**: `make test-db` spawns an ephemeral Docker Postgres on port 5433
+- **No gomock/sqlmock** — real DB + Redis with `TRUNCATE CASCADE` cleanup, hand-written mocks in `test/testutil/mocks.go`
+- **Handler tests**: construct `fasthttp.RequestCtx` + `fastglue.Request` directly (not `httptest.Server`)
+- **Test fixtures**: `test/testutil/fixtures.go` — factory functions (`CreateTestUser`, `CreateTestOrganization`, etc.)
+- **Hardcoded test secrets**: `TestJWTSecret`, `TestEncryptionKey` in `test/testutil/fixtures.go`
 
-### Review workflow
+### Frontend Tests
 
-Invoke the reviewer agent for each group of dimensions sequentially.
-Even without parallelism, isolating dimensions across separate agent
-invocations prevents score bleed between concerns.
+```bash
+cd frontend
+npm run test:unit          # Vitest (unit)
+npm run test:e2e           # Playwright (e2e, Chromium only)
+```
 
-Merge assessments and findings, then import.
+- E2E tests in `frontend/e2e/tests/`, Page Object Model in `frontend/e2e/pages/`
+- E2E requires backend on `BASE_URL` (default `http://localhost:8080`)
+- E2E global setup seeds: `admin@test.com`, `manager@test.com`, `agent@test.com` (password: `Password123!`)
 
-When Gemini CLI adds parallel subagent execution, split dimensions across
-concurrent agent calls instead.
+### MCP Server Tests
 
-<!-- desloppify-overlay: gemini -->
-<!-- desloppify-end -->
+```bash
+cd mcp-server && npm ci
+npm run lint && npm run typecheck
+npm run test                # Unit + integration
+npm run test:e2e            # E2E
+```
 
+## Linting & Quality
+
+```bash
+make lint                        # golangci-lint (CI uses --timeout=5m)
+cd frontend && npm run lint      # ESLint
+cd frontend && npm run typecheck # vue-tsc --noEmit (strict mode)
+```
+
+## Key Conventions
+
+- **Handler pattern**: methods on `handlers.App` struct; return `(*handlers.Envelope, error)`
+- **Auth context in tests**: `testutil.SetAuthContext(req, orgID, userID)`
+- **Multi-tenancy**: `TenantScope` middleware scopes DB per org; frontend sends `X-Organization-ID` header
+- **CSRF**: double-submit cookie (`whm_csrf` + `X-CSRF-Token` header), skipped for Bearer/API-key auth
+- **Frontend path alias**: `@/` -> `src/` (Vite + tsconfig)
+- **Frontend components**: shadcn-vue (new-york style), Tailwind CSS v3
+- **i18n**: vue-i18n; locale files in `frontend/src/i18n/locales/` (en, es, ar shipped)
+- **Release**: push tag `v*` triggers GitHub Actions (binary + Docker image)
+
+## Common Pitfalls
+
+- **Do NOT use `net/http` patterns** in backend — this project uses `fasthttp`/`fastglue` everywhere
+- **`config.toml` is gitignored** — never commit it; use `config.example.toml` as reference
+- **Production binary needs frontend build first** — `go build` alone won't include the SPA
+- **Tests will skip** (not fail) if `TEST_DATABASE_URL` or `TEST_REDIS_URL` is unset
+- **`-p 1` is required** when running multiple packages that share the test database
+- **Go module path** is `github.com/compnew2006/whatomate`, not a path matching local directory
+- **Frontend dev proxy** expects backend on port 8080; Vite serves frontend on port 3000

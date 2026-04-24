@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Whatomate User Click & Navigation Guide</title>
+  <style>
+    :root {
+      --bg: #f7fafc;
+      --card: #ffffff;
+      --text: #10233b;
+      --muted: #56657d;
+      --line: #d9e4f2;
+      --accent: #0f766e;
+      --accent-soft: #d7f4ef;
+      --note: #1d4ed8;
+      --note-soft: #dbeafe;
+      --warn: #92400e;
+      --warn-soft: #ffedd5;
+      --code-bg: #edf3fb;
+      --code-text: #0b1220;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1000px 420px at 90% -120px, #dff4ff 0%, transparent 60%),
+        radial-gradient(900px 380px at -10% 0%, #ecfdf5 0%, transparent 58%),
+        var(--bg);
+      line-height: 1.5;
+    }
+
+    .wrap {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 28px 18px 52px;
+    }
+
+    header {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--card);
+      padding: 18px 20px;
+      box-shadow: 0 10px 30px rgba(16, 24, 40, 0.05);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 28px;
+      letter-spacing: 0.2px;
+    }
+
+    .sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .card {
+      grid-column: 1 / -1;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--card);
+      padding: 16px 18px;
+    }
+
+    .half {
+      grid-column: span 6;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: 20px;
+    }
+
+    h3 {
+      margin: 12px 0 8px;
+      font-size: 16px;
+    }
+
+    p, li {
+      font-size: 14px;
+      margin-top: 0;
+    }
+
+    ul, ol {
+      margin: 8px 0 0 20px;
+      padding: 0;
+    }
+
+    code {
+      font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+      background: var(--code-bg);
+      color: var(--code-text);
+      border: 1px solid #d7e3f2;
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-size: 13px;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .pill {
+      border: 1px solid #c7d8ea;
+      background: #f5f9ff;
+      border-radius: 999px;
+      font-size: 12px;
+      padding: 5px 10px;
+      color: #123254;
+    }
+
+    .note {
+      margin-top: 10px;
+      border-left: 4px solid var(--note);
+      background: var(--note-soft);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .tip {
+      margin-top: 10px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .warn {
+      margin-top: 10px;
+      border-left: 4px solid var(--warn);
+      background: var(--warn-soft);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eff5fd;
+      font-weight: 600;
+    }
+
+    .steps {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    .step {
+      border: 1px solid #d8e4f2;
+      border-radius: 10px;
+      background: #f9fcff;
+      padding: 10px;
+      font-size: 13px;
+    }
+
+    .k {
+      color: #0f3a6d;
+      font-weight: 600;
+    }
+
+    @media (max-width: 920px) {
+      .half {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .wrap {
+        padding: 16px 12px 34px;
+      }
+      h1 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Whatomate User Click & Navigation Guide</h1>
+      <p class="sub">User-facing map: what each menu means, where to click, what page opens, and how to complete common tasks.</p>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Quick Orientation</h2>
+        <ol>
+          <li>Use the left sidebar to move between modules.</li>
+          <li>Click a contact to open chat details page <code>/chat/:contactId</code>.</li>
+          <li>Use <code>Transfers</code> to claim queue chats, assign to agents, or resume bot handling.</li>
+          <li>Use <code>Chatbot</code> pages to manage keyword rules, flows, and AI contexts.</li>
+          <li>If you click a page you are not allowed to read, app redirects to your first allowed page.</li>
+        </ol>
+        <div class="pill-row">
+          <span class="pill">Permission-based menu</span>
+          <span class="pill">Provider-based hidden pages</span>
+          <span class="pill">Chat + Transfer actions from buttons</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Sidebar Menu: Meaning and Opened Page</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Menu click</th>
+              <th>Page opened</th>
+              <th>What user does there</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Dashboard</td>
+              <td><code>/</code></td>
+              <td>General analytics overview.</td>
+            </tr>
+            <tr>
+              <td>Chat</td>
+              <td><code>/chat</code> then <code>/chat/:contactId</code></td>
+              <td>Open conversations, reply, transfer, assign, see notes/info.</td>
+            </tr>
+            <tr>
+              <td>Activity Logs</td>
+              <td><code>/activity-logs</code></td>
+              <td>See authenticated user activity history.</td>
+            </tr>
+            <tr>
+              <td>Chatbot &gt; Overview</td>
+              <td><code>/chatbot</code></td>
+              <td>Enable/disable bot, open quick links, view bot stats.</td>
+            </tr>
+            <tr>
+              <td>Chatbot &gt; Keywords</td>
+              <td><code>/chatbot/keywords</code></td>
+              <td>Manage keyword rules for automated replies/transfers.</td>
+            </tr>
+            <tr>
+              <td>Chatbot &gt; Flows</td>
+              <td><code>/chatbot/flows</code></td>
+              <td>Create/edit conversational flow logic.</td>
+            </tr>
+            <tr>
+              <td>Chatbot &gt; AI Contexts</td>
+              <td><code>/chatbot/ai</code></td>
+              <td>Manage AI context configuration for bot answers.</td>
+            </tr>
+            <tr>
+              <td>Transfers</td>
+              <td><code>/chatbot/transfers</code></td>
+              <td>Claim queue, assign transfer, open chat, resume chatbot.</td>
+            </tr>
+            <tr>
+              <td>Agent Analytics</td>
+              <td><code>/analytics/agents</code></td>
+              <td>Agent performance analytics.</td>
+            </tr>
+            <tr>
+              <td>Meta Insights</td>
+              <td><code>/analytics/meta-insights</code></td>
+              <td>Meta provider insights (Meta-only feature).</td>
+            </tr>
+            <tr>
+              <td>Templates</td>
+              <td><code>/templates</code></td>
+              <td>WhatsApp template management (Meta-only feature).</td>
+            </tr>
+            <tr>
+              <td>WhatsApp Flows</td>
+              <td><code>/flows</code></td>
+              <td>Meta WhatsApp flow management (Meta-only feature).</td>
+            </tr>
+            <tr>
+              <td>Campaigns</td>
+              <td><code>/campaigns</code></td>
+              <td>Campaign management (Meta-only feature).</td>
+            </tr>
+            <tr>
+              <td>Settings (all children)</td>
+              <td><code>/settings</code> and <code>/settings/*</code></td>
+              <td>Account, contacts, users, roles, webhooks, instances, etc.</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          If user cannot read the parent menu (for example <code>/chatbot</code>) but can read one child, app opens the first allowed child page.
+        </div>
+      </section>
+
+      <section class="card half">
+        <h2>Chat Page Click Map</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Where user clicks</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Contact row in chat sidebar</td>
+              <td>Opens conversation: <code>/chat/:contactId</code>.</td>
+            </tr>
+            <tr>
+              <td>Assign icon (user-plus)</td>
+              <td>Opens assignment dialog, then assigns/unassigns contact to agent.</td>
+            </tr>
+            <tr>
+              <td>Transfer icon (user-x)</td>
+              <td>Creates manual transfer and pauses chatbot for that contact.</td>
+            </tr>
+            <tr>
+              <td>Resume icon (play) when paused</td>
+              <td>Resumes chatbot by ending active transfer for this contact.</td>
+            </tr>
+            <tr>
+              <td>Notes icon</td>
+              <td>Toggles internal notes panel.</td>
+            </tr>
+            <tr>
+              <td>Info icon</td>
+              <td>Toggles contact/session info panel.</td>
+            </tr>
+            <tr>
+              <td>Send button / Enter</td>
+              <td>Sends message to selected contact.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card half">
+        <h2>Transfers Page Click Map</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Where user clicks</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="k">Pick Next</span> (agent view)</td>
+              <td>Claims next queue transfer and opens <code>/chat/:contactId</code>.</td>
+            </tr>
+            <tr>
+              <td><span class="k">Assign</span></td>
+              <td>Opens reassign dialog, updates team queue and/or assigned agent.</td>
+            </tr>
+            <tr>
+              <td><span class="k">Chat</span> / chat icon</td>
+              <td>Opens related conversation: <code>/chat/:contactId</code>.</td>
+            </tr>
+            <tr>
+              <td><span class="k">Resume</span> / play icon</td>
+              <td>Resumes chatbot for that transfer (transfer goes to history).</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="tip">
+          Admin/manager view includes tabs (<code>My</code>, <code>Queue</code>, <code>All</code>, <code>History</code>). Agent view focuses on own transfers and one-click pick-next.
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Chatbot and Contacts: Click Map</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Page</th>
+              <th>Click</th>
+              <th>What opens / happens</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>/chatbot</code></td>
+              <td>Enable/Disable button</td>
+              <td>Toggles chatbot on/off.</td>
+            </tr>
+            <tr>
+              <td><code>/chatbot</code></td>
+              <td>Keyword Rules card</td>
+              <td>Opens <code>/chatbot/keywords</code>.</td>
+            </tr>
+            <tr>
+              <td><code>/chatbot</code></td>
+              <td>Conversation Flows card</td>
+              <td>Opens <code>/chatbot/flows</code>.</td>
+            </tr>
+            <tr>
+              <td><code>/chatbot</code></td>
+              <td>AI Contexts card</td>
+              <td>Opens <code>/chatbot/ai</code>.</td>
+            </tr>
+            <tr>
+              <td><code>/chatbot/flows</code></td>
+              <td>Create Flow</td>
+              <td>Opens <code>/chatbot/flows/new</code>.</td>
+            </tr>
+            <tr>
+              <td><code>/chatbot/flows</code></td>
+              <td>Edit icon on a flow</td>
+              <td>Opens <code>/chatbot/flows/:id/edit</code>.</td>
+            </tr>
+            <tr>
+              <td><code>/settings/contacts</code></td>
+              <td>Chat icon on contact row</td>
+              <td>Opens conversation <code>/chat/:contactId</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>How To: Common User Tasks</h2>
+
+        <h3>1) Open and reply to a chat</h3>
+        <div class="steps">
+          <div class="step">Go to <code>Chat</code> in left sidebar.</div>
+          <div class="step">Click any contact in the left contacts list.</div>
+          <div class="step">Conversation opens at <code>/chat/:contactId</code>.</div>
+          <div class="step">Type message and send.</div>
+        </div>
+
+        <h3>2) Transfer a chat to agents (pause bot)</h3>
+        <div class="steps">
+          <div class="step">Open contact conversation in <code>Chat</code>.</div>
+          <div class="step">Click transfer icon (<code>UserX</code>) in header.</div>
+          <div class="step">System creates transfer and marks chat as paused from chatbot.</div>
+        </div>
+
+        <h3>3) Claim next queue chat</h3>
+        <div class="steps">
+          <div class="step">Go to <code>Transfers</code>.</div>
+          <div class="step">Click <span class="k">Pick Next</span>.</div>
+          <div class="step">System assigns next queue item and navigates to that chat page.</div>
+        </div>
+
+        <h3>4) Reassign transfer to team or agent</h3>
+        <div class="steps">
+          <div class="step">On <code>Transfers</code>, click <span class="k">Assign</span> on the row.</div>
+          <div class="step">Choose team queue and/or agent in dialog.</div>
+          <div class="step">Click <span class="k">Save</span> to apply assignment.</div>
+        </div>
+
+        <h3>5) Resume chatbot for a transferred chat</h3>
+        <div class="steps">
+          <div class="step">From <code>Chat</code> or <code>Transfers</code>, click resume (<code>Play</code>).</div>
+          <div class="step">Transfer is resumed/closed and chatbot can continue automation for that contact.</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Visibility Rules (Why pages/buttons may be missing)</h2>
+        <ul>
+          <li><strong>Permission rules:</strong> Menu entries are shown only when user has required <code>read</code> permission.</li>
+          <li><strong>Meta-only modules:</strong> <code>/templates</code>, <code>/flows</code>, <code>/campaigns</code>, <code>/analytics/meta-insights</code>, and <code>/settings/accounts</code> can be hidden when provider feature is off.</li>
+          <li><strong>Route guard:</strong> If user opens a blocked route directly, app redirects to first accessible route.</li>
+          <li><strong>Mobile:</strong> User must tap menu icon first to show sidebar and then click target menu.</li>
+        </ul>
+        <div class="warn">
+          If a user says "I cannot see this page", first check role permissions, then provider mode/features.
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

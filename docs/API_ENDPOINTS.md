@@ -14,12 +14,16 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 
 ## Health & System
 
-| Method | Endpoint      | Description                                              |
-| ------ | ------------- | -------------------------------------------------------- |
-| GET    | `/health`     | Basic health check                                       |
-| GET    | `/ready`      | Readiness check                                          |
-| GET    | `/ws`         | WebSocket connection (auth via message-based flow)       |
-| GET    | `/api/config` | Get application configuration (provider & feature flags) |
+| Method | Endpoint                  | Description                                              |
+| ------ | ------------------------- | -------------------------------------------------------- |
+| GET    | `/health`                 | Basic health check                                       |
+| GET    | `/ready`                  | Readiness check                                          |
+| GET    | `/metrics`                | Get Prometheus metrics (auth via observability token)    |
+| GET    | `/ws`                     | WebSocket connection (auth via message-based flow)       |
+| GET    | `/api/config`             | Get application configuration (provider & feature flags) |
+| GET    | `/api/license/bootstrap`  | Get license bootstrap information                        |
+| POST   | `/api/license/activate`   | Activate the platform license                            |
+| GET    | `/debug/pprof/*`          | Go performance profiling (requires EnablePprof in config) |
 
 ## Authentication & SSO
 
@@ -124,6 +128,7 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 
 | Method | Endpoint                                            | Description                         |
 | ------ | --------------------------------------------------- | ----------------------------------- |
+| GET    | `/api/contacts/{id}/messages`                       | Get messages for a given contact    |
 | POST   | `/api/contacts/{id}/messages`                       | Send a text message to a contact    |
 | POST   | `/api/messages`                                     | Send a text message (Legacy/Bulk)   |
 | POST   | `/api/messages/template`                            | Send a template message             |
@@ -314,8 +319,7 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 | POST   | `/api/tags`                                 | Create a tag                         |
 | PUT    | `/api/tags/{name}`                          | Update a tag                         |
 | DELETE | `/api/tags/{name}`                          | Delete a tag                         |
-| POST   | `/api/admin/migrate`                        | Trigger data migration (Super Admin) |
-| GET    | `/api/admin/migrate/status`                 | Get data migration status            |
+| POST   | `/api/org/uploads-cleanup/run` | Manually trigger cleaning of expired uploads |
 | GET    | `/api/notifications`                        | List system notifications            |
 | PUT    | `/api/notifications/{id}/dismiss`           | Dismiss a notification               |
 | GET    | `/api/org/settings`                         | Get organization-level settings      |

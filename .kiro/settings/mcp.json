@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "/Users/noiemany/.local/bin/serena",
+      "args": [
+        "start-mcp-server",
+        "--project=/Users/noiemany/Downloads/whatomate_GOWA/whatomate",
+        "--context=ide"
+      ]
+    }
+  }
+}

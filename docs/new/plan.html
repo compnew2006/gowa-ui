@@ -1,0 +1,3006 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>دليل بناء Whatomate — خارطة الطريق الكاملة</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --card2: #21253a;
+      --border: #2e3350;
+      --text: #e8eaf6;
+      --muted: #8b92b8;
+      --accent: #6c63ff;
+      --accent2: #4ecdc4;
+      --success: #2ecc71;
+      --warn: #f39c12;
+      --danger: #e74c3c;
+      --done-bg: #0d2b1e;
+      --done-border: #2ecc71;
+      --note-bg: #2a2400;
+      --note-border: #f39c12;
+      --phase-colors: #6c63ff, #4ecdc4, #f39c12, #e74c3c, #2ecc71, #a29bfe, #fd79a8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', 'IBM Plex Sans Arabic', Tahoma, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      background: linear-gradient(135deg, #1a1d27 0%, #12172b 100%);
+      border-bottom: 2px solid var(--accent);
+      padding: 28px 32px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 4px 30px rgba(108,99,255,0.2);
+    }
+
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .header h1 span {
+      color: var(--accent);
+    }
+
+    .progress-box {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .progress-ring-wrap {
+      position: relative;
+      width: 64px;
+      height: 64px;
+    }
+
+    .progress-ring-wrap svg {
+      transform: rotate(-90deg);
+    }
+
+    .progress-ring-wrap .ring-bg {
+      fill: none;
+      stroke: var(--border);
+      stroke-width: 5;
+    }
+
+    .progress-ring-wrap .ring-fill {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-dasharray: 163;
+      stroke-dashoffset: 163;
+      transition: stroke-dashoffset 0.6s ease;
+    }
+
+    .ring-label {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .progress-stats {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .progress-stats .stat-total {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .progress-stats .stat-done {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--success);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: #5a52e0; }
+    .btn-secondary { background: var(--card2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover { background: #27ae60; }
+
+    /* ===== MAIN LAYOUT ===== */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px;
+    }
+
+    /* ===== PHASE SECTION ===== */
+    .phase-section {
+      margin-bottom: 32px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      transition: border-color 0.3s;
+    }
+
+    .phase-section.phase-complete {
+      border-color: var(--done-border);
+    }
+
+    .phase-header {
+      padding: 16px 22px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      user-select: none;
+      background: var(--card);
+      transition: background 0.2s;
+    }
+
+    .phase-header:hover { background: var(--card2); }
+
+    .phase-number {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      flex-shrink: 0;
+      color: white;
+    }
+
+    .phase-title-group { flex: 1; }
+
+    .phase-title {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .phase-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .phase-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .phase-badge {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid;
+    }
+
+    .badge-todo { color: var(--muted); border-color: var(--border); background: transparent; }
+    .badge-inprog { color: var(--warn); border-color: var(--warn); background: rgba(243,156,18,0.1); }
+    .badge-done { color: var(--success); border-color: var(--success); background: rgba(46,204,113,0.1); }
+
+    .phase-progress-bar-wrap {
+      width: 80px;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .phase-progress-bar {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    .phase-toggle {
+      color: var(--muted);
+      font-size: 18px;
+      transition: transform 0.3s;
+      flex-shrink: 0;
+    }
+
+    .phase-section.collapsed .phase-toggle {
+      transform: rotate(180deg);
+    }
+
+    /* ===== PHASE BODY ===== */
+    .phase-body {
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
+
+    .phase-section.collapsed .phase-body {
+      display: none;
+    }
+
+    /* ===== TASK ITEM ===== */
+    .task-item {
+      padding: 14px 22px;
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 14px;
+      align-items: start;
+      transition: background 0.2s;
+    }
+
+    .task-item:last-child { border-bottom: none; }
+    .task-item:hover { background: rgba(255,255,255,0.02); }
+
+    .task-item.done {
+      background: var(--done-bg);
+    }
+
+    .task-item.done .task-title {
+      text-decoration: line-through;
+      color: var(--muted);
+    }
+
+    .task-check {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      border: 2px solid var(--border);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+      transition: all 0.2s;
+      background: transparent;
+      color: transparent;
+      font-size: 13px;
+    }
+
+    .task-check:hover {
+      border-color: var(--success);
+      background: rgba(46,204,113,0.1);
+    }
+
+    .task-item.done .task-check {
+      background: var(--success);
+      border-color: var(--success);
+      color: white;
+    }
+
+    .task-content { min-width: 0; }
+
+    .task-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .task-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .task-prompt-wrap {
+      margin-top: 8px;
+    }
+
+    .task-prompt-toggle {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .task-prompt-toggle:hover {
+      background: rgba(108,99,255,0.1);
+      border-color: var(--accent);
+    }
+
+    .task-prompt {
+      display: none;
+      margin-top: 8px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      color: #a8dadc;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      direction: ltr;
+      text-align: left;
+      position: relative;
+    }
+
+    .task-prompt.visible { display: block; }
+
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: var(--card2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+    .copy-btn.copied { color: var(--success); border-color: var(--success); }
+
+    /* ===== NOTES ===== */
+    .task-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+
+    .note-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .note-btn:hover { border-color: var(--warn); color: var(--warn); }
+    .note-btn.has-note { border-color: var(--warn); color: var(--warn); background: var(--note-bg); }
+
+    .task-note-area {
+      display: none;
+      grid-column: 1 / -1;
+      margin-top: 6px;
+    }
+
+    .task-note-area.visible { display: block; }
+
+    .task-note-area textarea {
+      width: 100%;
+      background: var(--note-bg);
+      border: 1px solid var(--note-border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: inherit;
+      padding: 10px 12px;
+      resize: vertical;
+      min-height: 70px;
+      outline: none;
+      line-height: 1.5;
+    }
+
+    .task-note-area textarea:focus {
+      border-color: var(--warn);
+      box-shadow: 0 0 0 2px rgba(243,156,18,0.15);
+    }
+
+    .note-save-btn {
+      margin-top: 6px;
+      padding: 5px 12px;
+      background: var(--warn);
+      border: none;
+      border-radius: 5px;
+      color: white;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 600;
+    }
+
+    .note-save-btn:hover { background: #e67e22; }
+
+    .note-preview {
+      margin-top: 6px;
+      padding: 6px 10px;
+      background: var(--note-bg);
+      border: 1px solid var(--note-border);
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--warn);
+      line-height: 1.5;
+      display: none;
+    }
+
+    .note-preview.visible { display: block; }
+
+    /* ===== PROBLEM TAG ===== */
+    .tag {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+
+    .tag-hard { background: rgba(231,76,60,0.15); color: var(--danger); border: 1px solid var(--danger); }
+    .tag-ws { background: rgba(78,205,196,0.15); color: var(--accent2); border: 1px solid var(--accent2); }
+    .tag-db { background: rgba(108,99,255,0.15); color: var(--accent); border: 1px solid var(--accent); }
+    .tag-ai { background: rgba(162,155,254,0.15); color: #a29bfe; border: 1px solid #a29bfe; }
+    .tag-meta { background: rgba(253,121,168,0.15); color: #fd79a8; border: 1px solid #fd79a8); }
+
+    /* ===== DIVIDER ===== */
+    .sub-section-title {
+      padding: 10px 22px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ===== TOAST ===== */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 13px;
+      color: var(--text);
+      transition: transform 0.3s ease;
+      z-index: 999;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.success { border-color: var(--success); color: var(--success); }
+    .toast.warn { border-color: var(--warn); color: var(--warn); }
+
+    /* ===== SEARCH ===== */
+    .search-bar {
+      padding: 20px 0 0;
+      margin-bottom: 20px;
+    }
+
+    .search-bar input {
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      padding: 12px 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-bar input:focus { border-color: var(--accent); }
+    .search-bar input::placeholder { color: var(--muted); }
+
+    /* ===== FILTER TABS ===== */
+    .filter-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .filter-tab {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .filter-tab:hover { border-color: var(--accent); color: var(--accent); }
+    .filter-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 640px) {
+      .header { padding: 16px; }
+      .task-item { grid-template-columns: auto 1fr; }
+      .task-actions { flex-direction: row; grid-column: 1 / -1; justify-content: flex-start; }
+      .phase-meta { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <h1>🚀 دليل بناء <span>Whatomate</span></h1>
+      <p style="font-size:12px;color:var(--muted);margin-top:4px;">خارطة الطريق الكاملة من الصفر حتى الإطلاق</p>
+    </div>
+    <div class="progress-box">
+      <div class="progress-ring-wrap">
+        <svg width="64" height="64" viewBox="0 0 64 64">
+          <circle class="ring-bg" cx="32" cy="32" r="26"/>
+          <circle class="ring-fill" id="mainRing" cx="32" cy="32" r="26"/>
+        </svg>
+        <div class="ring-label" id="ringPercent">0%</div>
+      </div>
+      <div class="progress-stats">
+        <div class="stat-done" id="statDone">0 مهمة مكتملة</div>
+        <div class="stat-total" id="statTotal">من 0 مهمة</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" onclick="exportData()">💾 حفظ التقدم</button>
+      <button class="btn btn-secondary" onclick="importData()">📂 استعادة</button>
+      <button class="btn btn-primary" onclick="scrollToNext()">⚡ التالي</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="container">
+
+  <!-- SEARCH -->
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="🔍 ابحث عن مهمة..." oninput="filterTasks()">
+  </div>
+
+  <!-- FILTER TABS -->
+  <div class="filter-tabs">
+    <button class="filter-tab active" onclick="setFilter('all', this)">الكل</button>
+    <button class="filter-tab" onclick="setFilter('todo', this)">⏳ لم تبدأ</button>
+    <button class="filter-tab" onclick="setFilter('done', this)">✅ مكتمل</button>
+    <button class="filter-tab" onclick="setFilter('noted', this)">📝 له ملاحظة</button>
+  </div>
+
+  <!-- ===================== PHASE 1 ===================== -->
+  <div class="phase-section" id="phase-1" data-phase="1">
+    <div class="phase-header" onclick="togglePhase('phase-1')">
+      <div class="phase-number" style="background:#6c63ff">١</div>
+      <div class="phase-title-group">
+        <div class="phase-title">الأساس والبيئة</div>
+        <div class="phase-subtitle">إعداد البيئة، قاعدة البيانات، والـ Authentication</div>
+      </div>
+      <div class="phase-meta">
+        <div class="phase-progress-bar-wrap">
+          <div class="phase-progress-bar" id="phase-1-bar" style="background:#6c63ff;width:0%"></div>
+        </div>
+        <div class="phase-badge badge-todo" id="phase-1-badge">لم تبدأ</div>
+      </div>
+      <div class="phase-toggle">▲</div>
+    </div>
+    <div class="phase-body">
+
+      <div class="sub-section-title">إعداد البيئة والمشروع</div>
+
+      <div class="task-item" id="task-1-1">
+        <div class="task-check" onclick="toggleTask('task-1-1')">✓</div>
+        <div class="task-content">
+          <div class="task-title">إنشاء هيكل المشروع الكامل (Monorepo)</div>
+          <div class="task-desc">إنشاء مجلدات المشروع بالكامل — backend، frontend، shared، infra — وإعداد ملفات الإعدادات الأساسية</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-1-1', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-1-1"><button class="copy-btn" onclick="copyPrompt('prompt-1-1', this)">نسخ</button>
+أنت مهندس برمجيات متخصص. أريد بناء نسخة من مشروع Whatomate وهو منصة WhatsApp Business متكاملة.
+
+المهمة الأولى: ساعدني في إنشاء هيكل المشروع الكامل.
+
+المشروع يحتوي على:
+- Backend: API server مع WebSocket
+- Frontend: تطبيق SPA
+- قاعدة بيانات: PostgreSQL
+- Cache: Redis
+- Worker: background jobs
+
+المطلوب:
+1. اقترح هيكل المجلدات الكامل للمشروع
+2. اشرح غرض كل مجلد
+3. ما هي الملفات الأساسية التي يجب إنشاؤها أولاً؟
+4. ما هو الترتيب الصحيح للبدء؟
+
+لا تكتب أي كود، فقط الهيكل والشرح.</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-1-1')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-1-1">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-1-1')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-1-1"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-1-2">
+        <div class="task-check" onclick="toggleTask('task-1-2')">✓</div>
+        <div class="task-content">
+          <div class="task-title">إعداد Docker Compose لبيئة التطوير</div>
+          <div class="task-desc">إعداد PostgreSQL، Redis، وكل الخدمات المطلوبة في بيئة محلية</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-1-2', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-1-2"><button class="copy-btn" onclick="copyPrompt('prompt-1-2', this)">نسخ</button>
+أنا أبني منصة WhatsApp Business تحتاج إلى:
+- PostgreSQL 16
+- Redis 7
+- تخزين ملفات محلي
+- خدمة backend
+- خدمة frontend
+
+المطلوب: ساعدني في إعداد بيئة التطوير المحلية بالكامل بحيث يمكنني تشغيل كل الخدمات بأمر واحد.
+
+اشرح لي:
+1. ما هي الخدمات التي أحتاجها في بيئة التطوير؟
+2. كيف تترابط هذه الخدمات مع بعضها؟
+3. ما هي المتغيرات البيئية الأساسية التي يجب تحديدها؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-1-2')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-1-2">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-1-2')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-1-2"></div>
+        </div>
+      </div>
+
+      <div class="sub-section-title">قاعدة البيانات والـ Schema</div>
+
+      <div class="task-item" id="task-1-3">
+        <div class="task-check" onclick="toggleTask('task-1-3')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-db">قاعدة بيانات</span>
+          <div class="task-title">بناء Database Schema الكامل (44 جدول)</div>
+          <div class="task-desc">إنشاء كل الجداول بالترتيب الصحيح مع العلاقات والـ indexes والـ constraints</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-1-3', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-1-3"><button class="copy-btn" onclick="copyPrompt('prompt-1-3', this)">نسخ</button>
+لدي مشروع Whatomate وأريد بناء Database Schema الكامل.
+
+المشروع يستخدم هذه الجداول (44 جدول):
+
+Identity: organizations, organization_configs, users, user_organizations, permissions, custom_roles, role_permissions, api_keys, sso_providers
+
+Messaging: contacts, messages, tags, media_assets, contact_user_deletions, contact_collaborators
+
+Channels: whatsapp_accounts, whatsapp_instances, whatsapp_statuses, instance_notifications
+
+Automation: chatbot_settings, chatbot_flows, chatbot_flow_steps, chatbot_sessions, chatbot_session_messages, keyword_rules, ai_contexts, agent_transfers
+
+Campaigns: bulk_message_campaigns, bulk_message_recipients, notification_rules, templates, catalogs, catalog_products
+
+Operations: teams, team_members, canned_responses, conversation_notes, chat_closure_ratings
+
+Infra: webhooks, custom_actions, widgets, license_records, license_events, user_availability_logs
+
+المتطلبات:
+- Multi-tenancy عبر organization_id في كل جدول مرتبط
+- Soft Delete عبر deleted_at في الجداول الرئيسية
+- UUID كـ Primary Keys
+- JSONB للبيانات المرنة
+- Indexes مناسبة
+
+المطلوب:
+1. ما هو الترتيب الصحيح لإنشاء الجداول (من حيث الـ dependencies)؟
+2. ما هي أهم العلاقات بين الجداول؟
+3. كيف يعمل نظام الـ Multi-tenancy بدقة؟
+4. ما هي الجداول التي لا تحتاج organization_id ولماذا؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-1-3')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-1-3">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-1-3')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-1-3"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-1-4">
+        <div class="task-check" onclick="toggleTask('task-1-4')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-db">قاعدة بيانات</span>
+          <div class="task-title">إعداد نظام الـ Migrations</div>
+          <div class="task-desc">إنشاء ملفات الـ migrations بالترتيب الصحيح وإعداد نظام التشغيل التلقائي عند الـ startup</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-1-4', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-1-4"><button class="copy-btn" onclick="copyPrompt('prompt-1-4', this)">نسخ</button>
+أريد إعداد نظام Database Migrations لمشروعي.
+
+المتطلبات:
+- تشغيل تلقائي عند بدء تشغيل الـ server
+- إمكانية الـ rollback
+- ترتيب صحيح للجداول (الجداول المرتبطة أولاً)
+- إنشاء default data (admin user، default roles، chatbot settings)
+
+البيانات الافتراضية المطلوبة عند أول تشغيل:
+1. مستخدم admin افتراضي
+2. organization افتراضية
+3. أدوار افتراضية: admin, agent, manager
+4. إعدادات chatbot افتراضية
+
+ساعدني في:
+1. كيف أنظم ملفات الـ migrations؟
+2. ما هو الترتيب الصحيح لتشغيلها؟
+3. كيف أتعامل مع الـ idempotency (تشغيل نفس الـ migration مرتين لا يسبب خطأ)؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-1-4')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-1-4">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-1-4')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-1-4"></div>
+        </div>
+      </div>
+
+      <div class="sub-section-title">نظام المصادقة</div>
+
+      <div class="task-item" id="task-1-5">
+        <div class="task-check" onclick="toggleTask('task-1-5')">✓</div>
+        <div class="task-content">
+          <div class="task-title">بناء نظام الـ Authentication الكامل (JWT)</div>
+          <div class="task-desc">Login، Register، Refresh Token، Logout، Switch Org، WebSocket Token</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-1-5', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-1-5"><button class="copy-btn" onclick="copyPrompt('prompt-1-5', this)">نسخ</button>
+أبني نظام Authentication لمنصة WhatsApp Business متعددة المستأجرين (Multi-tenant).
+
+متطلبات النظام:
+1. Login بالإيميل وكلمة المرور (bcrypt)
+2. JWT Access Token (مدة قصيرة 15-60 دقيقة)
+3. JWT Refresh Token (مدة طويلة 7 أيام، يُخزن في Redis)
+4. Refresh Token Rotation (كل refresh ينشئ pair جديد، القديم يُلغى)
+5. Logout (إلغاء الـ refresh token من Redis)
+6. Switch Organization (تغيير الـ org الحالية دون تسجيل خروج)
+7. WebSocket Token خاص (30 ثانية، single-use، للـ WebSocket فقط)
+8. Invite Token للتسجيل (موقّع، مرتبط بـ org)
+9. HTTP-only Cookies للـ tokens
+
+تفاصيل مهمة:
+- كل JWT يحتوي على: user_id, organization_id, role_id
+- الـ refresh token يُخزن JTI فقط في Redis
+- عند switch org: tokens جديدة بـ org_id جديد
+- حماية من Timing Attack في التحقق من كلمة المرور
+
+المطلوب: اشرح لي تصميم هذا النظام خطوة بخطوة مع توضيح:
+1. ما هي الـ endpoints المطلوبة؟
+2. كيف يعمل Token Rotation؟
+3. كيف أتعامل مع Multi-org للمستخدم الواحد؟
+4. ما هي حالات الحافة (Edge Cases) التي يجب التعامل معها؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-1-5')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-1-5">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-1-5')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-1-5"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-1-6">
+        <div class="task-check" onclick="toggleTask('task-1-6')">✓</div>
+        <div class="task-content">
+          <div class="task-title">بناء Middleware الأساسية</div>
+          <div class="task-desc">Auth Middleware، Multi-tenancy Scope، CSRF، Security Headers، Rate Limiting، Request Logger</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-1-6', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-1-6"><button class="copy-btn" onclick="copyPrompt('prompt-1-6', this)">نسخ</button>
+أبني Backend API لمنصة WhatsApp Business. أحتاج تصميم middleware chain متكاملة.
+
+الـ Middleware المطلوبة بالترتيب:
+1. CORS Handler
+2. Security Headers (X-Frame-Options, X-Content-Type-Options, إلخ)
+3. Request Logger
+4. Panic Recovery
+5. CSRF Protection (للـ mutating requests)
+6. Auth Middleware (JWT أو API Key)
+7. Multi-tenancy Scope (inject organization_id في كل query)
+
+تفاصيل الـ Multi-tenancy:
+- كل request يحتوي على organization_id من الـ JWT
+- يجب inject هذا الـ ID في كل database query تلقائياً
+- بعض الجداول معفاة (organizations, permissions, license_records)
+- Super Admin يستطيع تحديد X-Organization-ID header لتجاوز الـ scope
+
+تفاصيل الـ CSRF:
+- Token يُولَّد عند Login
+- يُخزن في HTTP-only cookie
+- يجب إرساله في X-CSRF-Token header مع كل mutating request
+- GET/HEAD/OPTIONS معفاة
+
+المطلوب: صمم هذه الـ middleware chain وأخبرني:
+1. ما هو الترتيب الصحيح وسبب كل قرار؟
+2. كيف يعمل الـ Multi-tenancy scope تقنياً؟
+3. كيف أتعامل مع API Keys (بديل JWT للـ programmatic access)؟
+4. ما هي الـ endpoints المعفاة من الـ Auth؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-1-6')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-1-6">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-1-6')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-1-6"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-1-7">
+        <div class="task-check" onclick="toggleTask('task-1-7')">✓</div>
+        <div class="task-content">
+          <div class="task-title">إعداد RBAC — نظام الأدوار والصلاحيات</div>
+          <div class="task-desc">بناء نظام custom_roles و permissions مع cache وإمكانية إنشاء أدوار مخصصة لكل منظمة</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-1-7', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-1-7"><button class="copy-btn" onclick="copyPrompt('prompt-1-7', this)">نسخ</button>
+أبني نظام RBAC (Role-Based Access Control) لمنصة WhatsApp Business متعددة المستأجرين.
+
+هيكل النظام:
+- الجداول: custom_roles, permissions, role_permissions
+- كل منظمة تمتلك أدوارها الخاصة
+- أدوار افتراضية للنظام: admin, agent, manager (is_system = true)
+- الـ permissions تتبع نمط resource:action مثل: contacts:read, campaigns:write
+
+قائمة الـ resources المتاحة:
+analytics, campaigns, chat, chatbot, contacts, flows, messages, roles, tags, teams, templates, transfers, users, webhooks, api_keys, canned_responses, accounts, custom_actions, settings
+
+قائمة الـ actions المتاحة:
+read, write, delete, execute
+
+متطلبات إضافية:
+- Caching للـ permissions (تحميل مرة واحدة لكل role، تخزين لمدة 10 دقائق)
+- Cache invalidation عند تغيير الـ role
+- دالة requirePermission(resource, action) تستخدم في كل handler
+- Super Admin يتجاوز كل الصلاحيات تلقائياً
+
+المطلوب: صمم هذا النظام وأخبرني:
+1. كيف يعمل التحقق من الصلاحيات في كل request؟
+2. كيف أتعامل مع الـ caching بكفاءة؟
+3. كيف تعمل الأدوار الافتراضية مقابل الأدوار المخصصة؟
+4. ما هي أفضل طريقة لتخزين الصلاحيات في الـ JWT؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-1-7')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-1-7">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-1-7')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-1-7"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================== PHASE 2 ===================== -->
+  <div class="phase-section collapsed" id="phase-2" data-phase="2">
+    <div class="phase-header" onclick="togglePhase('phase-2')">
+      <div class="phase-number" style="background:#4ecdc4">٢</div>
+      <div class="phase-title-group">
+        <div class="phase-title">المنظمات والمستخدمون والفرق</div>
+        <div class="phase-subtitle">Organizations، Users، Teams، Roles CRUD</div>
+      </div>
+      <div class="phase-meta">
+        <div class="phase-progress-bar-wrap">
+          <div class="phase-progress-bar" id="phase-2-bar" style="background:#4ecdc4;width:0%"></div>
+        </div>
+        <div class="phase-badge badge-todo" id="phase-2-badge">لم تبدأ</div>
+      </div>
+      <div class="phase-toggle">▲</div>
+    </div>
+    <div class="phase-body">
+
+      <div class="task-item" id="task-2-1">
+        <div class="task-check" onclick="toggleTask('task-2-1')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Organizations CRUD + Members Management</div>
+          <div class="task-desc">إنشاء، حذف، عرض المنظمات. إدارة الأعضاء: إضافة، إزالة، تغيير الدور</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-2-1', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-2-1"><button class="copy-btn" onclick="copyPrompt('prompt-2-1', this)">نسخ</button>
+أبني Organizations Management API لمنصة متعددة المستأجرين.
+
+الـ Endpoints المطلوبة:
+GET    /api/organizations          — قائمة المنظمات (Admin فقط)
+POST   /api/organizations          — إنشاء منظمة جديدة
+DELETE /api/organizations/{id}     — حذف منظمة (Super Admin فقط)
+GET    /api/organizations/current  — تفاصيل المنظمة الحالية
+GET    /api/organizations/members  — قائمة أعضاء المنظمة الحالية
+POST   /api/organizations/members  — إضافة عضو جديد
+PUT    /api/organizations/members/{member_id} — تغيير دور عضو
+DELETE /api/organizations/members/{member_id} — إزالة عضو
+
+قواعد العمل:
+- المستخدم الواحد يمكنه الانتماء لأكثر من منظمة
+- كل عضو له دور محدد في كل منظمة (من custom_roles)
+- عند إنشاء منظمة: تُنشأ تلقائياً 3 أدوار افتراضية (admin, agent, manager) و default chatbot settings
+- لا يمكن حذف منظمة بها بيانات نشطة
+- الـ Super Admin يرى كل المنظمات
+
+المطلوب: صمم هذه الـ API وأخبرني:
+1. ما هي الـ validations المطلوبة لكل endpoint؟
+2. كيف أتعامل مع cascade delete عند حذف منظمة؟
+3. كيف أمنع حذف آخر admin في المنظمة؟
+4. ما هي الـ response formats الصحيحة؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-2-1')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-2-1">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-2-1')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-2-1"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-2-2">
+        <div class="task-check" onclick="toggleTask('task-2-2')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Users Management + Send Restrictions</div>
+          <div class="task-desc">CRUD كامل للمستخدمين مع نظام قيود الإرسال لكل مستخدم</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-2-2', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-2-2"><button class="copy-btn" onclick="copyPrompt('prompt-2-2', this)">نسخ</button>
+أبني Users Management API مع نظام Send Restrictions متقدم.
+
+الـ Endpoints:
+GET/POST   /api/users              — قائمة وإنشاء مستخدمين
+GET/PUT/DELETE /api/users/{id}     — تفاصيل وتحديث وحذف
+GET/PUT    /api/users/{id}/send-restrictions — قيود الإرسال
+
+نظام Send Restrictions:
+كل مستخدم يمكن تقييده بـ:
+- قائمة أرقام مسموح له بالإرسال إليها (authorized_numbers)
+- instance محدد يسمح له باستخدامه فقط
+- prefix تلقائي لاسمه في كل رسالة
+- هل يستطيع رؤية المحادثات غير المطالب بها؟
+- هل يستطيع الإرسال للمحادثات غير المطالب بها؟
+
+على مستوى المنظمة:
+- strict_sending_restrictions_enabled: تفعيل النظام
+- outbound_mode: inbound_only أو mixed
+- strict_rollout_mode: audit (تسجيل فقط) أو enforce (حجب)
+
+المطلوب:
+1. كيف أصمم هذا النظام بشكل مرن؟
+2. كيف يعمل Audit Mode مقابل Enforce Mode؟
+3. ما هي الـ validation rules لكل إعداد؟
+4. كيف أتعامل مع تغيير دور مستخدم وأثره على قيوده؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-2-2')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-2-2">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-2-2')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-2-2"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-2-3">
+        <div class="task-check" onclick="toggleTask('task-2-3')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Teams Management + API Keys + Tags</div>
+          <div class="task-desc">إدارة الفرق وأعضائها، مفاتيح API، والتاغات</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-2-3', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-2-3"><button class="copy-btn" onclick="copyPrompt('prompt-2-3', this)">نسخ</button>
+أبني 3 أنظمة مترابطة:
+
+1. Teams Management:
+   - CRUD للفرق مع أعضائها
+   - كل فريق له: اسم، وصف، assignment_strategy (round_robin, load_balanced)
+   - أعضاء الفريق لهم أدوار: manager أو agent
+   - الفرق تُستخدم في توجيه محادثات الـ chatbot
+
+2. API Keys:
+   - إنشاء مفاتيح API للوصول البرمجي
+   - المفتاح يُعرض مرة واحدة فقط عند الإنشاء
+   - يُخزن hash (bcrypt) وليس المفتاح الفعلي
+   - يدعم: expiry date، permissions محددة
+   - عند الاستخدام: نفس صلاحيات الـ JWT
+
+3. Tags:
+   - تاغات لتصنيف جهات الاتصال
+   - Primary Key مركب: (organization_id, name)
+   - تحتوي على: name، color
+   - حذف تاغ يُزيله من كل جهات الاتصال المرتبطة
+
+المطلوب: صمم هذه الأنظمة الثلاثة وأخبرني:
+1. كيف يعمل نظام الـ API Key authentication في الـ middleware؟
+2. ما هي استراتيجيات توزيع المحادثات (round_robin vs load_balanced)؟
+3. كيف أتعامل مع حذف فريق له محادثات نشطة؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-2-3')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-2-3">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-2-3')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-2-3"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================== PHASE 3 ===================== -->
+  <div class="phase-section collapsed" id="phase-3" data-phase="3">
+    <div class="phase-header" onclick="togglePhase('phase-3')">
+      <div class="phase-number" style="background:#f39c12">٣</div>
+      <div class="phase-title-group">
+        <div class="phase-title">حسابات WhatsApp والـ WebSocket</div>
+        <div class="phase-subtitle">WhatsApp Accounts، Instances، Real-time Hub</div>
+      </div>
+      <div class="phase-meta">
+        <div class="phase-progress-bar-wrap">
+          <div class="phase-progress-bar" id="phase-3-bar" style="background:#f39c12;width:0%"></div>
+        </div>
+        <div class="phase-badge badge-todo" id="phase-3-badge">لم تبدأ</div>
+      </div>
+      <div class="phase-toggle">▲</div>
+    </div>
+    <div class="phase-body">
+
+      <div class="task-item" id="task-3-1">
+        <div class="task-check" onclick="toggleTask('task-3-1')">✓</div>
+        <div class="task-content">
+          <div class="task-title">WhatsApp Accounts (Meta Cloud API) Management</div>
+          <div class="task-desc">ربط وإدارة حسابات Meta WhatsApp Business مع تشفير الـ tokens الحساسة</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-3-1', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-3-1"><button class="copy-btn" onclick="copyPrompt('prompt-3-1', this)">نسخ</button>
+أبني نظام إدارة حسابات WhatsApp (Meta Cloud API).
+
+البيانات المطلوبة لكل حساب:
+- phone_number_id (Meta ID)
+- business_account_id
+- app_id
+- access_token (مشفر في قاعدة البيانات)
+- webhook_verify_token (مشفر)
+- auto_read_receipt: إرسال إيصال قراءة تلقائي
+
+متطلبات الأمان:
+- الـ access_token يُشفّر بـ AES-256-GCM قبل التخزين
+- يُفك التشفير فقط عند الاستخدام
+- لا يُعاد إرساله في الـ API responses
+- الـ webhook_verify_token يُستخدم للتحقق من Meta
+
+الـ Endpoints:
+GET/POST   /api/accounts
+GET/PUT/DELETE /api/accounts/{id}
+POST       /api/accounts/{id}/test       — اختبار الاتصال بـ Meta
+POST       /api/accounts/{id}/subscribe  — اشتراك في أحداث WhatsApp
+GET/PUT    /api/accounts/{id}/business_profile
+POST       /api/accounts/{id}/business_profile/photo
+
+Caching:
+- تخزين الحسابات في Redis بـ phone_number_id كـ key
+- TTL: 5 دقائق
+- Invalidate عند التحديث أو الحذف
+
+المطلوب:
+1. كيف أصمم نظام التشفير وفك التشفير؟
+2. كيف أتحقق من صحة الحساب مع Meta API؟
+3. كيف يعمل نظام الـ caching للحسابات؟
+4. ما هي الحقول التي تُخفى في الـ API responses؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-3-1')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-3-1">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-3-1')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-3-1"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-3-2">
+        <div class="task-check" onclick="toggleTask('task-3-2')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-ws">WebSocket</span>
+          <div class="task-title">بناء WebSocket Hub الكامل</div>
+          <div class="task-desc">Hub لإدارة الاتصالات الفورية مع دعم BroadcastToOrg, BroadcastToUser, BroadcastToContact</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-3-2', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-3-2"><button class="copy-btn" onclick="copyPrompt('prompt-3-2', this)">نسخ</button>
+أبني WebSocket Hub لمنصة WhatsApp Business. هذا أحد أصعب وأهم أجزاء المشروع.
+
+بروتوكول الاتصال:
+- URL: /ws
+- Subprotocol: whm.v1
+- Authentication: JWT قصير العمر (30 ثانية) يُحصل عليه من GET /api/auth/ws-token
+- بعد الاتصال: يجب إرسال message من نوع auth خلال 5 ثواني
+
+Client → Server Events:
+- auth: {"type":"auth","payload":{"token":"JWT"}}
+- set_contact: {"type":"set_contact","payload":{"contact_id":"UUID"}} — الاشتراك في غرفة محادثة
+- ping: {"type":"ping","payload":{}} — Keepalive كل 30 ثانية
+
+Server → Client Events:
+- new_message: رسالة واردة أو صادرة جديدة
+- status_update: تحديث حالة رسالة (sent/delivered/read/failed)
+- contact_update: تحديث بيانات جهة اتصال
+- campaign_stats_update: إحصائيات حملة في الوقت الفعلي
+- instance_qr_code: QR code لربط instance
+- instance_connected: اتصال instance ناجح
+- reaction_update: تحديث reactions على رسالة
+- agent_transfer: طلب تحويل محادثة
+- notification: إشعار عام
+- agent_transfer_assign: تعيين تحويل لوكيل
+
+Room Management:
+- Organization Room: كل المستخدمين في نفس المنظمة
+- User Room: مستخدم محدد عبر كل tabs
+- Contact Room: المشاهدون الحاليون لمحادثة محددة
+
+Reconnection (Frontend):
+- Max retries: 10
+- Exponential backoff (1s, 2s, 4s, 8s...)
+- عند إعادة الاتصال: طلب البيانات الفائتة عبر REST
+
+المطلوب: صمم هذا الـ Hub الكامل وأخبرني:
+1. كيف أدير الـ rooms والـ connections في الذاكرة؟
+2. كيف أتعامل مع تعدد الـ tabs لنفس المستخدم؟
+3. كيف يعمل الـ Horizontal Scaling (لو كان هناك أكثر من server)؟
+4. كيف أتعامل مع انقطاع الاتصال وإعادة الربط؟
+5. ما هو الـ message format الكامل لكل event؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-3-2')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-3-2">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-3-2')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-3-2"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================== PHASE 4 ===================== -->
+  <div class="phase-section collapsed" id="phase-4" data-phase="4">
+    <div class="phase-header" onclick="togglePhase('phase-4')">
+      <div class="phase-number" style="background:#e74c3c">٤</div>
+      <div class="phase-title-group">
+        <div class="phase-title">جهات الاتصال والمحادثات والرسائل</div>
+        <div class="phase-subtitle">Contacts، Chat، Messages، Media — القلب النابض</div>
+      </div>
+      <div class="phase-meta">
+        <div class="phase-progress-bar-wrap">
+          <div class="phase-progress-bar" id="phase-4-bar" style="background:#e74c3c;width:0%"></div>
+        </div>
+        <div class="phase-badge badge-todo" id="phase-4-badge">لم تبدأ</div>
+      </div>
+      <div class="phase-toggle">▲</div>
+    </div>
+    <div class="phase-body">
+
+      <div class="task-item" id="task-4-1">
+        <div class="task-check" onclick="toggleTask('task-4-1')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-hard">الأصعب</span>
+          <div class="task-title">Contacts CRUD + Chat Lifecycle + Assignment</div>
+          <div class="task-desc">إدارة جهات الاتصال الكاملة مع دورة حياة المحادثة (open/close/reopen/claim) وتعيين الوكلاء</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-4-1', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-4-1"><button class="copy-btn" onclick="copyPrompt('prompt-4-1', this)">نسخ</button>
+أبني نظام Contacts وإدارة المحادثات لمنصة WhatsApp Business.
+
+هيكل جدول contacts:
+- phone_number, profile_name, avatar_url
+- assigned_user_id (الوكيل المسؤول)
+- status: pending | open | closed
+- is_read, is_public
+- last_inbound_at (لتتبع نافذة 24 ساعة)
+- tags: JSONB
+- organization_id (Multi-tenancy)
+
+Chat Lifecycle States:
+1. pending: محادثة جديدة لم تُعيَّن بعد
+2. open: محادثة نشطة مع وكيل
+3. closed: محادثة مغلقة (read-only)
+
+الـ Endpoints:
+GET/POST           /api/contacts
+GET/PUT/DELETE     /api/contacts/{id}
+POST               /api/contacts/{id}/soft-delete    — إخفاء من قبل وكيل محدد
+PUT                /api/contacts/{id}/assign          — تعيين لوكيل/فريق
+PUT                /api/contacts/{id}/tags            — تحديث التاغات
+GET                /api/contacts/{id}/session-data    — بيانات الجلسة
+PUT                /api/chats/{id}/claim              — المطالبة بمحادثة غير معيّنة
+PUT                /api/chats/{id}/close              — إغلاق محادثة
+PUT                /api/chats/{id}/reopen             — إعادة فتح
+PUT                /api/chats/{id}/public             — تعيين عام/خاص
+
+Agent Visibility Rules:
+- Admin/Manager: يرى كل المحادثات في المنظمة
+- Agent: يرى فقط:
+  * المحادثات المعيّنة له
+  * المحادثات العامة (is_public = true)
+  * المحادثات التي هو متعاون فيها
+
+Collaborators System:
+- مستخدم واحد يمكنه دعوة آخرين لمحادثة
+- حالات الدعوة: invited, accepted, declined
+- الـ endpoints: GET/POST/PUT(accept/decline)/DELETE
+
+Chat Actions عند الإغلاق:
+- تسجيل closed_at وclosed_by_user_id
+- إرسال رسالة نظام "تم إغلاق المحادثة"
+- إرسال طلب تقييم (اختياري)
+- Broadcast via WebSocket
+- Dispatch webhook
+
+المطلوب:
+1. كيف أصمم الـ filtering المتقدم للمحادثات (بحث، تاغات، حالة، تاريخ)؟
+2. كيف يعمل نظام Agent Visibility بالضبط في الـ SQL queries؟
+3. ما هي System Messages وكيف تختلف عن الرسائل العادية؟
+4. كيف أتعامل مع soft-delete لمستخدم محدد دون حذف المحادثة للآخرين؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-4-1')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-4-1">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-4-1')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-4-1"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-4-2">
+        <div class="task-check" onclick="toggleTask('task-4-2')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-hard">الأصعب</span>
+          <span class="tag tag-ws">WebSocket</span>
+          <div class="task-title">Message Sending System الكامل</div>
+          <div class="task-desc">إرسال نص، وسائط، قوالب، interactive، typing، reactions، revoke مع WebSocket broadcast</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-4-2', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-4-2"><button class="copy-btn" onclick="copyPrompt('prompt-4-2', this)">نسخ</button>
+أبني نظام إرسال الرسائل لمنصة WhatsApp Business. هذا أعقد جزء في المشروع.
+
+أنواع الرسائل المدعومة:
+1. Text: نص عادي مع إمكانية الرد على رسالة
+2. Media: صور، فيديو، صوت، ملفات (multipart upload)
+3. Template: رسائل قوالب Meta المعتمدة مع متغيرات
+4. Interactive Buttons: حتى 3 أزرار quick-reply
+5. Interactive List: قائمة اختيار أحادية مع sections
+6. Interactive CTA URL: زر مع رابط
+7. Typing Indicator: مؤشر الكتابة
+8. Reaction: emoji على رسالة
+9. Revoke: سحب رسالة
+
+الـ Endpoints:
+POST /api/contacts/{id}/messages           — إرسال رسالة نصية
+POST /api/messages/template                — إرسال قالب
+POST /api/messages/media                   — إرسال وسائط
+POST /api/contacts/{id}/typing             — مؤشر الكتابة
+POST /api/contacts/{id}/messages/{id}/reaction — إضافة reaction
+POST /api/contacts/{id}/messages/{id}/revoke   — سحب رسالة
+PUT  /api/messages/{id}/read               — علامة قراءة
+GET  /api/contacts/{id}/messages           — تاريخ المحادثة (cursor-based pagination)
+
+SendOutgoingMessage() Flow:
+1. Authorize: تحقق من صلاحيات المستخدم
+2. Load Contact: تحميل جهة الاتصال
+3. Enforce Restrictions: تطبيق send restrictions
+4. Apply Prefix: إضافة اسم الوكيل تلقائياً (إذا مفعّل)
+5. Create Message Record: إنشاء سجل بحالة pending
+6. Resolve Instance/Account: اختيار الـ WhatsApp provider
+7. Send via Provider: إرسال فعلي (async)
+8. Update Status: تحديث حالة sent/failed
+9. Broadcast: إشعار WebSocket
+10. Dispatch Webhook: إطلاق webhook خارجي
+
+Template Placeholders:
+- {{contact.name}}, {{contact.phone}}
+- {{user.name}}, {{organization.name}}
+- Custom params من الـ request
+
+Media Handling:
+- رفع لـ local storage أو Meta
+- حساب hash للمحتوى (deduplication)
+- خدمة الوسائط عبر /api/media/{message_id}
+
+المطلوب:
+1. كيف أصمم SendOutgoingMessage() كـ unified function؟
+2. كيف أتعامل مع Provider Abstraction (Meta vs WhatsMeow)؟
+3. كيف يعمل cursor-based pagination لتاريخ المحادثة؟
+4. كيف أتعامل مع الـ send restrictions في كل إرسال؟
+5. كيف أعالج فشل الإرسال وإعادة المحاولة؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-4-2')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-4-2">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-4-2')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-4-2"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-4-3">
+        <div class="task-check" onclick="toggleTask('task-4-3')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Meta Webhook Handler — استقبال الرسائل الواردة</div>
+          <div class="task-desc">استقبال وتحقق ومعالجة webhooks من Meta مع حماية HMAC وتشغيل pipeline كامل</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-4-3', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-4-3"><button class="copy-btn" onclick="copyPrompt('prompt-4-3', this)">نسخ</button>
+أبني Meta Webhook Handler لاستقبال رسائل WhatsApp الواردة.
+
+الـ Endpoints:
+GET  /api/webhook — Webhook Verification من Meta
+POST /api/webhook — Webhook Handler (الرسائل الواردة)
+
+Webhook Verification (GET):
+- Meta ترسل: hub.mode, hub.verify_token, hub.challenge
+- التحقق من verify_token مقابل القيمة المخزنة
+- إعادة hub.challenge كاستجابة
+
+Inbound Message Processing Pipeline:
+1. التحقق من X-Hub-Signature-256 (HMAC-SHA256 من App Secret)
+2. Parse payload إلى JSON
+3. لكل entry → لكل change:
+   a. إذا كان "statuses": تحديث حالة رسالة (sent/delivered/read/failed)
+   b. إذا كان "messages": processIncomingMessageFull()
+
+processIncomingMessageFull():
+1. إيجاد WhatsApp Account بـ phone_number_id
+2. Deduplication: التحقق من whatsapp_message_id
+3. GetOrCreateContact: إيجاد أو إنشاء جهة اتصال
+4. Parse message type (text, image, audio, video, document, sticker, location, contacts, reaction, interactive, flow)
+5. حفظ الرسالة في قاعدة البيانات
+6. للوسائط: وضع job في Redis Queue للتحميل في الخلفية
+7. Broadcast via WebSocket (new_message event)
+8. Dispatch outbound webhook (message.incoming)
+9. تمرير للـ Chatbot Processor
+
+Status Update Processing:
+1. إيجاد الرسالة بـ whatsapp_message_id
+2. تحديث status في قاعدة البيانات
+3. للـ failed: تسجيل رمز الخطأ
+4. Broadcast via WebSocket (status_update event)
+5. تحديث إحصائيات الحملة (إذا كانت campaign message)
+
+المطلوب:
+1. كيف أتحقق من الـ HMAC signature بشكل صحيح؟
+2. كيف أتعامل مع deduplication بكفاءة؟
+3. كيف أعالج أنواع الرسائل المختلفة؟
+4. كيف يعمل background media download؟
+5. كيف أرد بـ 200 OK فوراً وأعالج في الخلفية؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-4-3')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-4-3">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-4-3')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-4-3"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-4-4">
+        <div class="task-check" onclick="toggleTask('task-4-4')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Notes + Canned Responses + Conversation Rating</div>
+          <div class="task-desc">ملاحظات المحادثة، الردود الجاهزة مع /slash commands، ونظام تقييم إغلاق المحادثة</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-4-4', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-4-4"><button class="copy-btn" onclick="copyPrompt('prompt-4-4', this)">نسخ</button>
+أبني 3 أنظمة مكملة لنظام المحادثات:
+
+1. Conversation Notes (ملاحظات داخلية):
+   - ملاحظات لا يراها العميل، فقط الوكلاء
+   - CRUD كامل مع تقييد التحرير لصاحب الملاحظة أو Admin
+   - الـ endpoints: GET/POST /api/contacts/{id}/notes و PUT/DELETE /api/contacts/{id}/notes/{note_id}
+
+2. Canned Responses (ردود جاهزة):
+   - ردود محفوظة بـ shortcut يبدأ بـ /
+   - مثال: كتابة "/greet" تُعطي رد ترحيب كامل
+   - يدعم: نص، وسائط مرفقة
+   - عداد استخدام لكل رد
+   - الـ endpoints: CRUD + POST /api/canned-responses/{id}/send + POST /api/canned-responses/{id}/use
+
+3. Chat Closure Ratings (تقييم رضا العملاء):
+   - عند إغلاق محادثة: إرسال رسالة طلب تقييم للعميل (اختياري)
+   - العميل يختار من 1-10
+   - حالات: pending, rated, expired
+   - تُستخدم في تحليلات أداء الوكلاء
+
+المطلوب:
+1. كيف يعمل نظام /slash commands للردود الجاهزة في الـ frontend؟
+2. كيف أتعامل مع الوسائط المرفقة في الردود الجاهزة؟
+3. ما هي آلية إرسال طلب التقييم وكيف يرد العميل؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-4-4')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-4-4">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-4-4')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-4-4"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================== PHASE 5 ===================== -->
+  <div class="phase-section collapsed" id="phase-5" data-phase="5">
+    <div class="phase-header" onclick="togglePhase('phase-5')">
+      <div class="phase-number" style="background:#2ecc71">٥</div>
+      <div class="phase-title-group">
+        <div class="phase-title">الشات بوت والذكاء الاصطناعي</div>
+        <div class="phase-subtitle">Keywords، Flows، AI، Agent Transfers، SLA</div>
+      </div>
+      <div class="phase-meta">
+        <div class="phase-progress-bar-wrap">
+          <div class="phase-progress-bar" id="phase-5-bar" style="background:#2ecc71;width:0%"></div>
+        </div>
+        <div class="phase-badge badge-todo" id="phase-5-badge">لم تبدأ</div>
+      </div>
+      <div class="phase-toggle">▲</div>
+    </div>
+    <div class="phase-body">
+
+      <div class="task-item" id="task-5-1">
+        <div class="task-check" onclick="toggleTask('task-5-1')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Chatbot Settings + Keyword Rules</div>
+          <div class="task-desc">إعدادات البوت العامة وقواعد الكلمات المفتاحية (exact/contains/regex)</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-5-1', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-5-1"><button class="copy-btn" onclick="copyPrompt('prompt-5-1', this)">نسخ</button>
+أبني نظام Chatbot Settings و Keyword Rules.
+
+Chatbot Settings (واحد لكل منظمة):
+- enabled: تفعيل/تعطيل البوت
+- greeting_message: رسالة ترحيب للجلسات الجديدة
+- fallback_message: رسالة عند عدم تطابق أي شيء
+- session_timeout_minutes: مدة صمود الجلسة
+- business_hours: JSONB (ساعات العمل لكل يوم)
+- sla_response_minutes, sla_resolution_minutes
+- ai_provider, ai_model, ai_system_prompt (مشفرة)
+- ai_api_key (مشفر)
+
+Keyword Rules:
+- keywords: مصفوفة أنماط
+- match_type: exact | contains | regex
+- response_type: text | buttons | flow | media
+- response_content: نص الرد أو ID الـ flow
+- priority: لترتيب المطابقة
+- enabled: تفعيل/تعطيل القاعدة
+
+Chatbot Decision Logic (priority matrix):
+1. هل يوجد agent transfer نشط? → تجاوز البوت
+2. هل تطابق Transfer keyword? → إنشاء transfer
+3. هل يوجد active flow session? → متابعة الخطوة الحالية
+4. هل تطابق flow trigger? → بدء flow
+5. هل هذه جلسة جديدة? → إرسال greeting
+6. هل تطابق keyword rule? → تنفيذ الرد
+7. هل AI مفعل? → استشارة AI
+8. fallback message
+
+المطلوب:
+1. كيف يعمل Keyword Matching بالترتيب الصحيح (exact أولاً، ثم contains، ثم regex)؟
+2. كيف أتعامل مع Business Hours (إيقاف البوت خارج أوقات العمل)؟
+3. ما هي Session lifecycle (إنشاء، تحديث، انتهاء مهلة)؟
+4. كيف أنظم priority بين القواعد المختلفة؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-5-1')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-5-1">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-5-1')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-5-1"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-5-2">
+        <div class="task-check" onclick="toggleTask('task-5-2')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-hard">الأصعب</span>
+          <div class="task-title">Chatbot Flow Builder Engine</div>
+          <div class="task-desc">محرك تنفيذ الـ flows متعددة الخطوات مع conditional branching وAPI calls وSession state</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-5-2', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-5-2"><button class="copy-btn" onclick="copyPrompt('prompt-5-2', this)">نسخ</button>
+أبني Chatbot Flow Execution Engine. هذا النظام يُنفذ محادثات متعددة الخطوات.
+
+هيكل الـ Flow:
+- chatbot_flows: معلومات الـ flow (اسم، keywords مُشغِّلة، رسالة أولية)
+- chatbot_flow_steps: الخطوات (مرتبة، لكل خطوة step_order)
+- chatbot_sessions: الجلسة الحالية لكل contact
+- chatbot_session_messages: تتبع مسار الجلسة
+
+أنواع الـ Steps:
+1. message: إرسال رسالة نصية
+2. buttons: إرسال رسائل بأزرار (quick reply)
+3. input: طلب إدخال نصي من المستخدم، تخزينه في session_data
+4. api_fetch: طلب HTTP خارجي، تخزين النتيجة في session_data
+5. condition: تفرع بناءً على قيمة في session_data
+6. transfer: تحويل لوكيل
+7. close: إغلاق المحادثة
+
+Session State Machine:
+- active: جلسة نشطة في خطوة محددة
+- completed: اكتمل الـ flow بنجاح
+- timeout: انتهت مدة صمود الجلسة
+
+Flow Execution Logic عند استقبال رسالة:
+1. تحميل الجلسة النشطة للـ contact
+2. تحديد الخطوة الحالية
+3. معالجة رد المستخدم بناءً على نوع الخطوة:
+   - buttons: تحديد الزر المضغوط
+   - input: تخزين الإدخال في session_data
+4. تنفيذ الخطوة التالية (بناءً على conditional_next أو step_order)
+5. حفظ session_data المحدثة
+6. إرسال رسالة الخطوة التالية
+
+API Fetch Step:
+- URL template مع متغيرات من session_data
+- Method: GET أو POST
+- Headers مخصصة
+- تخزين النتيجة بـ variable name محدد
+- SSRF Protection (منع طلبات للـ IPs الداخلية)
+
+المطلوب:
+1. كيف أصمم session state machine بكفاءة؟
+2. كيف يعمل conditional branching؟
+3. كيف أتعامل مع session_data كـ dynamic variables؟
+4. كيف أحمي من SSRF في الـ API Fetch steps؟
+5. كيف أتعامل مع انتهاء مهلة الجلسة أثناء flow؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-5-2')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-5-2">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-5-2')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-5-2"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-5-3">
+        <div class="task-check" onclick="toggleTask('task-5-3')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-ai">AI</span>
+          <div class="task-title">AI Integration + AI Contexts</div>
+          <div class="task-desc">تكامل OpenAI/Anthropic/Google مع نظام السياقات (RAG بسيط) وإدارة conversation history</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-5-3', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-5-3"><button class="copy-btn" onclick="copyPrompt('prompt-5-3', this)">نسخ</button>
+أبني نظام AI Integration للشات بوت.
+
+AI Providers المدعومة:
+1. OpenAI (GPT-4o, GPT-4, etc.)
+2. Anthropic (Claude)
+3. Google (Gemini)
+
+AI Contexts (قاعدة معرفة):
+- context_type: static (نص ثابت) أو api (طلب HTTP ديناميكي)
+- static_content: نص تعليمات
+- trigger_keywords: تُضاف عند تطابق كلمات معينة
+- priority: ترتيب الأهمية
+
+AI Response Generation:
+1. تحميل إعدادات الـ AI (provider, model, system_prompt, api_key)
+2. بناء conversation history (آخر N رسالة)
+3. جمع الـ AI Contexts (الثابتة + المُطابقة للـ keywords)
+4. بناء الـ prompt:
+   - System prompt (من الإعدادات)
+   - AI Contexts
+   - Conversation history
+   - الرسالة الحالية
+5. استدعاء AI Provider API
+6. إرسال الرد كرسالة WhatsApp
+7. تسجيل الاستخدام (tokens, cost)
+
+Provider Abstraction:
+- Interface موحد لكل الـ providers
+- نفس الـ input/output format
+- معالجة أخطاء موحدة
+
+المطلوب:
+1. كيف أصمم Provider Abstraction Interface؟
+2. كيف أبني الـ conversation history بكفاءة (window size)؟
+3. كيف يعمل Dynamic Context من API؟
+4. كيف أتعامل مع rate limits و token limits لكل provider؟
+5. كيف أشفر AI API Keys في قاعدة البيانات؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-5-3')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-5-3">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-5-3')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-5-3"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-5-4">
+        <div class="task-check" onclick="toggleTask('task-5-4')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-ws">WebSocket</span>
+          <div class="task-title">Agent Transfers + SLA Processor</div>
+          <div class="task-desc">تحويل المحادثات للوكلاء مع queue management وSLA monitoring background process</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-5-4', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-5-4"><button class="copy-btn" onclick="copyPrompt('prompt-5-4', this)">نسخ</button>
+أبني نظام Agent Transfers و SLA Processor.
+
+Agent Transfer System:
+- هيكل: contact_id, team_id, agent_id, status, sla_response_deadline
+- Status: active, resumed
+- مصادر التحويل: manual, keyword, flow_step, chatbot_disabled
+
+Transfer Creation Logic:
+1. رفض التحويل إذا يوجد transfer نشط للـ contact
+2. Auto-assign agent (اختياري): explicit, team strategy, assign-to-same-agent
+3. تعيين SLA deadlines
+4. إلغاء الجلسة النشطة للبوت
+5. Broadcast via WebSocket (agent_transfer event لجميع المنظمة)
+6. Broadcast via WebSocket (agent_transfer_assign للوكيل المحدد)
+7. Dispatch outbound webhook
+
+Transfer Queue:
+- Pick Next: FIFO + FOR UPDATE SKIP LOCKED (منع race conditions)
+- Visibility Rules:
+  * Full-access users: يرون كل التحويلات
+  * Non-full-access: يرون التحويلات الخاصة بهم + القوائم غير المعيّنة
+
+الـ Endpoints:
+GET  /api/chatbot/transfers           — قائمة التحويلات
+POST /api/chatbot/transfers           — إنشاء تحويل يدوي
+POST /api/chatbot/transfers/pick      — المطالبة بأول تحويل متاح
+PUT  /api/chatbot/transfers/{id}/resume — استئناف البوت
+PUT  /api/chatbot/transfers/{id}/assign — تعيين لوكيل/فريق
+
+SLA Processor (background, كل دقيقة):
+1. تحميل إعدادات SLA لكل منظمة
+2. لكل محادثة مفتوحة:
+   - فحص response SLA (وقت منذ آخر رسالة واردة)
+   - فحص resolution SLA (وقت منذ فتح المحادثة)
+3. عند خرق SLA:
+   - إرسال تحذير للوكلاء المسؤولين via WebSocket
+   - تصعيد للمدير (إذا تجاوز escalation_minutes)
+4. Auto-close المحادثات التي تجاوزت auto_close_hours
+
+المطلوب:
+1. كيف أتعامل مع Race Conditions في pick-next؟
+2. كيف يعمل نظام الـ visibility للتحويلات بناءً على الدور؟
+3. كيف أصمم الـ SLA Processor بكفاءة دون ثقل على قاعدة البيانات؟
+4. ما هي الـ edge cases في نظام التحويلات؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-5-4')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-5-4">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-5-4')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-5-4"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================== PHASE 6 ===================== -->
+  <div class="phase-section collapsed" id="phase-6" data-phase="6">
+    <div class="phase-header" onclick="togglePhase('phase-6')">
+      <div class="phase-number" style="background:#a29bfe">٦</div>
+      <div class="phase-title-group">
+        <div class="phase-title">الحملات والقوالب والتحليلات</div>
+        <div class="phase-subtitle">Campaigns، Templates، Analytics، Widgets</div>
+      </div>
+      <div class="phase-meta">
+        <div class="phase-progress-bar-wrap">
+          <div class="phase-progress-bar" id="phase-6-bar" style="background:#a29bfe;width:0%"></div>
+        </div>
+        <div class="phase-badge badge-todo" id="phase-6-badge">لم تبدأ</div>
+      </div>
+      <div class="phase-toggle">▲</div>
+    </div>
+    <div class="phase-body">
+
+      <div class="task-item" id="task-6-1">
+        <div class="task-check" onclick="toggleTask('task-6-1')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Bulk Campaign System + Background Workers</div>
+          <div class="task-desc">نظام حملات إرسال جماعي مع Redis Queue، Workers، anti-spam delays، وReal-time stats</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-6-1', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-6-1"><button class="copy-btn" onclick="copyPrompt('prompt-6-1', this)">نسخ</button>
+أبني Bulk Campaign System مع Background Workers.
+
+Campaign Lifecycle:
+draft → queued → processing → completed | failed | cancelled
+
+Campaign Flow:
+1. Start Campaign: تحقق من الصلاحيات، template معتمد، account سليم
+2. تغيير status إلى processing
+3. نشر recipients في Redis Queue (stream per org)
+4. Workers تستهلك الـ jobs:
+   a. اكتساب Redis Lock للـ recipient (idempotency)
+   b. تحميل recipient، التحقق من status = pending
+   c. تطبيق random delay بين min_delay وmax_delay (anti-ban)
+   d. حل template placeholders مع recipient params
+   e. إرسال عبر المزود
+   f. تحديث recipient status وcampaign counters
+   g. نشر stats update عبر Redis Pub/Sub
+5. Campaign Stats Subscriber: استقبال stats وBroadcast عبر WebSocket
+
+Redis Queue Architecture:
+- Stream key: whatomate:campaigns:{org_id}
+- Consumer Group: campaign-workers
+- Idempotency: Redis lock بـ recipient_id
+
+الـ Endpoints الكاملة:
+GET/POST      /api/campaigns
+GET/PUT/DELETE /api/campaigns/{id}
+POST          /api/campaigns/{id}/start
+POST          /api/campaigns/{id}/pause
+POST          /api/campaigns/{id}/cancel
+POST          /api/campaigns/{id}/retry-failed
+GET           /api/campaigns/{id}/progress
+POST          /api/campaigns/{id}/recipients/import (CSV/JSON)
+GET/DELETE    /api/campaigns/{id}/recipients/{id}
+POST/GET      /api/campaigns/{id}/media
+
+Campaign Policy Enforcement:
+- Template يجب أن يكون APPROVED
+- Account يجب أن يكون active
+- min_delay ≥ 20 ثانية (anti-spam)
+- campaign_draft_only flag (من org settings)
+
+المطلوب:
+1. كيف يعمل Redis Streams لإدارة الـ job queue؟
+2. كيف أتعامل مع Campaign Pause وContinue؟
+3. كيف أبني نظام Retry للرسائل الفاشلة؟
+4. كيف يعمل Real-time Progress عبر WebSocket؟
+5. كيف أستورد ملف CSV به آلاف الأرقام بكفاءة؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-6-1')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-6-1">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-6-1')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-6-1"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-6-2">
+        <div class="task-check" onclick="toggleTask('task-6-2')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-meta">Meta Only</span>
+          <div class="task-title">Templates + WhatsApp Flows + Catalogs</div>
+          <div class="task-desc">إدارة قوالب Meta، WhatsApp Flows، والكتالوجات (Meta Provider فقط)</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-6-2', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-6-2"><button class="copy-btn" onclick="copyPrompt('prompt-6-2', this)">نسخ</button>
+أبني 3 أنظمة مرتبطة بـ Meta Cloud API:
+
+1. Templates Management:
+   - CRUD محلي + مزامنة مع Meta
+   - Status: APPROVED, REJECTED, PENDING
+   - Components: header (text/image/video), body, footer, buttons
+   - Sync من Meta: جلب كل القوالب ومقارنتها بالمحلية
+   - Submit: إرسال قالب لمراجعة Meta
+   - Upload Media: رفع صورة/فيديو للـ header
+
+2. WhatsApp Flows:
+   - إنشاء وتحرير Flow JSON
+   - Save to Meta: رفع الـ JSON لـ Meta
+   - Publish: نشر الـ flow
+   - Deprecate: إيقاف الـ flow
+   - Duplicate: نسخ flow موجود
+   - Sync: مزامنة مع Meta
+
+3. Catalogs & Products:
+   - إنشاء كتالوجات منتجات
+   - إضافة، تحديث، حذف منتجات
+   - Sync من Meta: مزامنة الكتالوجات الموجودة
+
+Provider Guard:
+- كل هذه الـ endpoints تعمل فقط مع provider = "meta"
+- إذا استخدم المستخدم WhatsMeow provider: يُعاد 400 "Feature not available"
+
+المطلوب:
+1. كيف أبني Provider Guard بشكل نظيف؟
+2. كيف تعمل عملية Sync بالتفصيل؟
+3. كيف أتعامل مع template components المختلفة؟
+4. ما هي الـ validations المطلوبة لـ Flow JSON؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-6-2')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-6-2">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-6-2')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-6-2"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-6-3">
+        <div class="task-check" onclick="toggleTask('task-6-3')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Analytics + Custom Widgets Dashboard</div>
+          <div class="task-desc">تحليلات الرسائل والوكلاء والبوت، مع نظام Widgets مخصص قابل للتخصيص</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-6-3', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-6-3"><button class="copy-btn" onclick="copyPrompt('prompt-6-3', this)">نسخ</button>
+أبني نظام Analytics و Custom Widgets.
+
+Analytics Endpoints:
+GET /api/analytics/dashboard     — إحصائيات عامة (contacts, messages, open chats, response times)
+GET /api/analytics/messages      — تحليل الرسائل (حجم، نوع، اتجاه، معدلات التسليم)
+GET /api/analytics/chatbot       — أداء البوت (جلسات، ردود AI، تحويلات، معدل الحل)
+GET /api/analytics/agents        — أداء الوكلاء (response time, resolution time, volume, ratings)
+GET /api/analytics/agents/comparison — مقارنة بين الوكلاء
+GET /api/analytics/agents/{id}   — تفاصيل وكيل محدد
+GET /api/analytics/agents/ratings/export — تصدير تقييمات
+GET /api/analytics/meta          — Meta insights (Meta Provider فقط)
+GET /api/analytics/meta/accounts — حسابات Meta للتحليل
+
+Custom Widgets System:
+- كل مستخدم ينشئ widgets خاصة به على Dashboard
+- Widget types: number, chart, table, progress
+- Data sources: predefined queries
+- Grid layout: كل widget لها x, y, width, height
+- Layout يُحفظ لكل مستخدم منفصلاً
+
+الـ Endpoints:
+GET/POST         /api/widgets
+GET/PUT/DELETE   /api/widgets/{id}
+GET              /api/widgets/data-sources
+GET              /api/widgets/data         — بيانات كل الـ widgets دفعة واحدة
+GET              /api/widgets/{id}/data    — بيانات widget محدد
+POST             /api/widgets/layout       — حفظ ترتيب الـ widgets
+
+المطلوب:
+1. كيف أصمم queries التحليلات بكفاءة؟
+2. كيف أتعامل مع Date Range filtering؟
+3. كيف يعمل نظام Data Sources للـ Widgets؟
+4. كيف أحفظ Widget Layout لكل مستخدم؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-6-3')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-6-3">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-6-3')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-6-3"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================== PHASE 7 ===================== -->
+  <div class="phase-section collapsed" id="phase-7" data-phase="7">
+    <div class="phase-header" onclick="togglePhase('phase-7')">
+      <div class="phase-number" style="background:#fd79a8">٧</div>
+      <div class="phase-title-group">
+        <div class="phase-title">التكاملات الخارجية والإعدادات المتقدمة</div>
+        <div class="phase-subtitle">Webhooks، Custom Actions، SSO، Import/Export، Notifications</div>
+      </div>
+      <div class="phase-meta">
+        <div class="phase-progress-bar-wrap">
+          <div class="phase-progress-bar" id="phase-7-bar" style="background:#fd79a8;width:0%"></div>
+        </div>
+        <div class="phase-badge badge-todo" id="phase-7-badge">لم تبدأ</div>
+      </div>
+      <div class="phase-toggle">▲</div>
+    </div>
+    <div class="phase-body">
+
+      <div class="task-item" id="task-7-1">
+        <div class="task-check" onclick="toggleTask('task-7-1')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Outbound Webhooks + Custom Actions</div>
+          <div class="task-desc">إرسال events لروابط خارجية عند كل حدث، والإجراءات المخصصة</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-7-1', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-7-1"><button class="copy-btn" onclick="copyPrompt('prompt-7-1', this)">نسخ</button>
+أبني نظامي Outbound Webhooks وCustom Actions.
+
+Outbound Webhooks:
+- كل منظمة تستطيع إنشاء Webhook URLs تستقبل events
+- Events المدعومة: message.new, message.status, contact.created, contact.assigned, chat.closed, chat.opened, campaign.completed, transfer.created, transfer.assigned
+- كل Webhook: url, events[], secret (HMAC signing), is_active
+- عند وقوع حدث: إرسال POST request مع payload + HMAC signature
+- Test endpoint: إرسال test payload للتحقق
+- تسجيل كل محاولة إرسال (نجاح/فشل)
+
+Dispatch Logic:
+1. تحديد events المناسبة عند وقوع حدث
+2. بناء payload موحد للحدث
+3. إضافة X-Whatomate-Signature header (HMAC-SHA256)
+4. إرسال async (لا تنتظر response)
+5. تسجيل النتيجة
+
+Custom Actions:
+- أزرار/إجراءات مخصصة تظهر في واجهة المحادثة
+- action_type: webhook (POST request) أو url (redirect)
+- config: URL, method, headers, body template
+- تنفيذ مع متغيرات من بيانات الـ contact
+- SSRF Protection
+- Redirect Tokens (one-time tokens للـ URL redirects)
+
+المطلوب:
+1. كيف أصمم Webhook Dispatch بشكل async وموثوق؟
+2. كيف يعمل HMAC signing للـ webhooks؟
+3. كيف أبني body template مع variables من بيانات الـ contact؟
+4. كيف أتعامل مع Custom Action redirect tokens؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-7-1')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-7-1">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-7-1')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-7-1"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-7-2">
+        <div class="task-check" onclick="toggleTask('task-7-2')">✓</div>
+        <div class="task-content">
+          <div class="task-title">SSO (SAML/OIDC) + Import/Export + Notifications</div>
+          <div class="task-desc">تسجيل الدخول الموحد، استيراد/تصدير البيانات، ونظام الإشعارات</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-7-2', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-7-2"><button class="copy-btn" onclick="copyPrompt('prompt-7-2', this)">نسخ</button>
+أبني 3 أنظمة في هذه المرحلة:
+
+1. SSO (Single Sign-On):
+   - Providers: Google, Microsoft, custom OIDC/SAML
+   - إعدادات لكل منظمة: client_id, client_secret (مشفر), allow_auto_create
+   - Flow: Init (redirect للـ provider) → Callback (exchange code) → Find/Create user → Issue JWT
+   - CSRF Protection: state parameter
+   - الـ endpoints:
+     * GET /api/auth/sso/providers — providers العامة
+     * GET /api/auth/sso/{provider}/init — بدء الـ flow
+     * GET /api/auth/sso/{provider}/callback — callback
+     * GET/PUT/DELETE /api/settings/sso — إدارة الإعدادات
+
+2. Import/Export:
+   - تصدير contacts, messages, campaigns إلى CSV أو JSON
+   - استيراد contacts من CSV مع mapping
+   - Config endpoint: يُعطي الحقول المتاحة وإعدادات الاستيراد
+   - Bulk import مع validation وreport
+
+3. Notifications:
+   - إشعارات للمستخدمين (system, info, warning)
+   - حالات: unread, read
+   - قائمة + إخفاء notification
+   - Broadcast via WebSocket عند وصول إشعار جديد
+
+المطلوب:
+1. كيف يعمل OAuth2 PKCE flow؟
+2. كيف أتعامل مع Auto-Create User عند SSO؟
+3. كيف أصمم Import validation report؟
+4. كيف أربط الإشعارات بالـ WebSocket؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-7-2')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-7-2">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-7-2')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-7-2"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================== PHASE 8 ===================== -->
+  <div class="phase-section collapsed" id="phase-8" data-phase="8">
+    <div class="phase-header" onclick="togglePhase('phase-8')">
+      <div class="phase-number" style="background:#00b894">٨</div>
+      <div class="phase-title-group">
+        <div class="phase-title">الواجهة الأمامية الكاملة</div>
+        <div class="phase-subtitle">Frontend — كل الصفحات الـ 38 بالترتيب</div>
+      </div>
+      <div class="phase-meta">
+        <div class="phase-progress-bar-wrap">
+          <div class="phase-progress-bar" id="phase-8-bar" style="background:#00b894;width:0%"></div>
+        </div>
+        <div class="phase-badge badge-todo" id="phase-8-badge">لم تبدأ</div>
+      </div>
+      <div class="phase-toggle">▲</div>
+    </div>
+    <div class="phase-body">
+
+      <div class="sub-section-title">الصفحات العامة والأساسية</div>
+
+      <div class="task-item" id="task-8-1">
+        <div class="task-check" onclick="toggleTask('task-8-1')">✓</div>
+        <div class="task-content">
+          <div class="task-title">AppLayout + Navigation + Auth Pages</div>
+          <div class="task-desc">الغلاف الرئيسي مع Sidebar، صفحات Login/Register/SSO Callback، WebSocket connection</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-8-1', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-8-1"><button class="copy-btn" onclick="copyPrompt('prompt-8-1', this)">نسخ</button>
+أبني Frontend لمنصة WhatsApp Business. ابدأ بالأساسيات.
+
+AppLayout المطلوب:
+- Sidebar قابل للطي مع Navigation links
+- النافيجيشن يظهر فقط الروابط المسموح بها حسب الـ permissions
+- Header مع: اسم المنظمة، صورة المستخدم، تبديل المنظمة، تسجيل خروج
+- إشعارات فورية (Bell icon)
+- WebSocket connection يبدأ تلقائياً عند دخول الـ layout
+- إذا انقطع الاتصال: تحذير مرئي + إعادة محاولة تلقائية
+
+Auth Pages:
+1. /login: إيميل + كلمة مرور + SSO providers (إذا متاحة)
+2. /register: نموذج التسجيل (يتطلب invitation token)
+3. /auth/sso/callback: معالجة SSO callback وتوجيه للصفحة الرئيسية
+4. /activate: تفعيل الترخيص (صفحة عامة)
+
+Router Guards:
+- Protected routes: إعادة توجيه لـ /login إذا لم يسجّل دخول
+- Permission-based redirect: إذا ليس لديه صلاحية → الصفحة الأولى المسموحة
+- /login: إعادة توجيه للـ dashboard إذا سجّل دخولاً بالفعل
+
+State Management:
+- Auth store: user, org, permissions, tokens
+- WebSocket store: connection state, reconnect logic
+- Notification store: قائمة الإشعارات
+
+المطلوب:
+1. كيف أصمم Navigation بحيث يُخفي روابط غير المسموحة؟
+2. كيف يعمل WebSocket في الـ AppLayout؟
+3. كيف أتعامل مع انتهاء الـ access token وتجديده تلقائياً؟
+4. كيف أبني الـ Router Guards بشكل صحيح؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-8-1')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-8-1">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-8-1')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-8-1"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-8-2">
+        <div class="task-check" onclick="toggleTask('task-8-2')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-hard">الأصعب</span>
+          <span class="tag tag-ws">WebSocket</span>
+          <div class="task-title">Chat Page — صفحة المحادثات الكاملة</div>
+          <div class="task-desc">الصفحة الأعقد: قائمة المحادثات + نافذة الرسائل + panels الجانبية + real-time كامل</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-8-2', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-8-2"><button class="copy-btn" onclick="copyPrompt('prompt-8-2', this)">نسخ</button>
+أبني صفحة Chat — هي الصفحة الأعقد في المشروع. Route: /chat و /chat/:contactId
+
+هيكل الصفحة ثلاثي الأعمدة:
+1. العمود الأيسر (Contact List):
+   - قائمة المحادثات مع: اسم، آخر رسالة، وقت، عدد غير المقروء
+   - Search، filters (status, tags, assigned)
+   - Pagination / Infinite Scroll
+   - Real-time: تحديث فوري عند وصول رسالة جديدة
+
+2. العمود الأوسط (Message Area):
+   - Header: اسم الـ contact، حالة، أزرار (assign, transfer, close, notes)
+   - Messages List: بالترتيب الزمني مع typing indicator
+   - Input Area:
+     * نص + إرسال
+     * رفع وسائط
+     * Slash commands للردود الجاهزة (مثال: /greet)
+     * اختيار Template
+     * أزرار Interactive
+     * Emoji
+   - Reply Preview: معاينة الرسالة المرد عليها
+   - Message bubbles: مع حالة (✓✓ delivered/read)
+   - Reactions عند hover
+   - Revoke option للرسائل الصادرة
+
+3. العمود الأيمن (Info Panels):
+   - Contact Info: اسم، هاتف، تاغات، metadata
+   - Notes Panel: الملاحظات الداخلية
+   - Chatbot Session: حالة الجلسة الحالية
+
+WebSocket Events المستقبلة في هذه الصفحة:
+- new_message: إضافة رسالة للقائمة
+- status_update: تحديث حالة رسالة (sent→delivered→read)
+- contact_update: تحديث بيانات الـ contact
+- reaction_update: تحديث reactions
+- agent_transfer: إشعار تحويل
+
+Actions المتاحة:
+- تعيين لوكيل/فريق
+- تحويل للبوت
+- إغلاق المحادثة
+- إعادة الفتح
+- تعيين عام/خاص
+- دعوة متعاون
+
+المطلوب:
+1. كيف أصمم الـ state management لصفحة المحادثة؟
+2. كيف يعمل Slash Commands في الـ input؟
+3. كيف أتعامل مع Virtual Scrolling لرسائل كثيرة؟
+4. كيف أمزج الرسائل القديمة (من REST) مع الجديدة (من WebSocket)؟
+5. كيف أبني Custom Background لكل وكيل؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-8-2')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-8-2">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-8-2')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-8-2"></div>
+        </div>
+      </div>
+
+      <div class="sub-section-title">صفحات الشات بوت والتحليلات</div>
+
+      <div class="task-item" id="task-8-3">
+        <div class="task-check" onclick="toggleTask('task-8-3')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Dashboard + Chatbot Pages + Transfers Page</div>
+          <div class="task-desc">لوحة التحكم الرئيسية، صفحات البوت (keywords, AI, settings)، وصفحة إدارة التحويلات</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-8-3', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-8-3"><button class="copy-btn" onclick="copyPrompt('prompt-8-3', this)">نسخ</button>
+أبني مجموعة صفحات متعلقة بالبوت والإحصائيات.
+
+1. Dashboard (/dashboard):
+   - Custom Widgets Grid (draggable, resizable)
+   - Stats cards: total contacts, open chats, messages today
+   - الـ widgets تُحمَّل من /api/widgets/data
+
+2. Chatbot Overview (/chatbot):
+   - toggle تفعيل/تعطيل البوت
+   - بطاقات سريعة للوصول لـ: Keywords، Flows، AI، Settings
+   - إحصائيات البوت
+
+3. Chatbot Keywords (/chatbot/keywords):
+   - جدول قواعد الكلمات المفتاحية
+   - CRUD مع modal للإضافة/التعديل
+   - تفعيل/تعطيل كل قاعدة
+   - ترتيب الأولوية (drag to reorder)
+
+4. Chatbot AI (/chatbot/ai):
+   - إعداد AI Provider وModel
+   - System Prompt editor
+   - إدارة AI Contexts (CRUD)
+
+5. Chatbot Transfers (/chatbot/transfers):
+   - Tabs: My Transfers، Queue، All، History
+   - Pick Next button
+   - Assign dialog
+   - Resume Bot button
+   - Real-time updates via WebSocket
+
+6. Analytics Pages (/analytics/agents, /analytics/meta-insights):
+   - Charts وGraphs للأداء
+   - Date range filters
+   - Export buttons
+
+المطلوب:
+1. كيف أبني Draggable Widget Grid؟
+2. كيف تعمل صفحة Transfers مع الـ WebSocket؟
+3. كيف أبني نظام Tabs مع الـ permissions؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-8-3')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-8-3">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-8-3')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-8-3"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-8-4">
+        <div class="task-check" onclick="toggleTask('task-8-4')">✓</div>
+        <div class="task-content">
+          <span class="tag tag-hard">الأصعب</span>
+          <div class="task-title">Flow Builder — المحرر المرئي للـ Flows</div>
+          <div class="task-desc">محرر مرئي drag-and-drop لبناء chatbot flows و IVR flows مع نظام خطوات ومنطق تفرع</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-8-4', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-8-4"><button class="copy-btn" onclick="copyPrompt('prompt-8-4', this)">نسخ</button>
+أبني Flow Builder — محرر مرئي لبناء Chatbot Flows.
+
+هيكل الصفحة ثلاثية الأعمدة:
+1. العمود الأيسر (Steps Panel):
+   - قائمة الخطوات بالترتيب
+   - Drag to reorder
+   - Add step button
+   - Delete step button
+   - اسم كل خطوة وصورة مختصرة
+
+2. العمود الأوسط (Flow Preview):
+   - عرض بصري للـ flow كـ nodes متصلة
+   - السهام تُظهر الانتقالات بين الخطوات
+   - Click على node = تحديد الخطوة للتعديل
+
+3. العمود الأيمن (Properties Panel):
+   - عند اختيار step: إظهار خصائصها
+   - حقول مختلفة حسب نوع الخطوة
+
+أنواع الخطوات وخصائصها:
+1. message: نص الرسالة
+2. buttons: نص + حتى 3 أزرار مع labels وIDs
+3. input: رسالة الطلب، variable name للتخزين، validations
+4. api_fetch: URL، method، headers، response mapping، variable name
+5. condition: variable، operator، value، next step (true/false)
+6. transfer: team selector، رسالة انتقال
+7. close: رسالة إغلاق اختيارية
+
+Flow Settings (في أعلى الصفحة):
+- اسم الـ flow
+- trigger keywords
+- رسالة أولية
+- on_complete_action
+- مفتاح تفعيل
+
+المطلوب:
+1. كيف أبني drag-and-drop بدون مكتبة ثقيلة؟
+2. كيف أبني Flow Visualization المرئية؟
+3. كيف أتعامل مع conditional branching في الـ UI؟
+4. كيف أحفظ الـ flow وأتحقق من صحته؟
+5. كيف أتعامل مع Unsaved Changes (تحذير عند الخروج)؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-8-4')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-8-4">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-8-4')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-8-4"></div>
+        </div>
+      </div>
+
+      <div class="sub-section-title">صفحات الإعدادات (Settings)</div>
+
+      <div class="task-item" id="task-8-5">
+        <div class="task-check" onclick="toggleTask('task-8-5')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Settings Pages — كل صفحات الإعدادات</div>
+          <div class="task-desc">Users، Roles، Teams، Accounts، Instances، Canned Responses، Contacts، Tags، Webhooks، API Keys، SSO</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-8-5', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-8-5"><button class="copy-btn" onclick="copyPrompt('prompt-8-5', this)">نسخ</button>
+أبني كل صفحات الإعدادات. كلها تتبع نمط مشترك (جدول + CRUD modals).
+
+الصفحات:
+1. /settings — الإعدادات العامة للمنظمة
+2. /settings/users — جدول المستخدمين + invite + role assignment
+3. /settings/roles — الأدوار والصلاحيات (checkbox matrix)
+4. /settings/teams — الفرق وأعضائها
+5. /settings/accounts — حسابات WhatsApp Meta (Meta Only)
+6. /settings/instances — instances الـ WhatsMeow مع QR pairing
+7. /settings/instances/health — صحة الـ instances
+8. /settings/canned-responses — الردود الجاهزة مع shortcuts
+9. /settings/contacts — قائمة جهات الاتصال الكاملة (Admin view)
+10. /settings/closed-chats — المحادثات المغلقة
+11. /settings/tags — إدارة التاغات مع الألوان
+12. /settings/api-keys — مفاتيح API (يُعرض مرة واحدة)
+13. /settings/webhooks — Webhooks مع test button
+14. /settings/sso — إعداد SSO providers
+15. /settings/custom-actions — الإجراءات المخصصة
+
+نمط مشترك لكل صفحة:
+- Header مع عنوان + زر إضافة
+- جدول مع pagination
+- Modal للإضافة/التعديل
+- Confirm dialog للحذف
+- Loading/Error states
+- Empty state
+
+صفحة Roles خاصة:
+- Matrix من resources × actions
+- Checkboxes قابلة للتحديد الجماعي
+- حفظ فوري أو بزر Save
+
+صفحة Instances خاصة:
+- QR code display مع countdown
+- Phone pairing alternative
+- WebSocket للـ connection status الفوري
+
+المطلوب:
+1. كيف أبني نمط CRUD مشترك قابل لإعادة الاستخدام؟
+2. كيف أبني Permissions Matrix بكفاءة؟
+3. كيف أعرض QR Code وأتعامل مع WebSocket events للـ instance؟
+4. كيف أتعامل مع API Keys (show once ثم إخفاء)؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-8-5')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-8-5">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-8-5')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-8-5"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-8-6">
+        <div class="task-check" onclick="toggleTask('task-8-6')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Campaigns + Templates + Flows Pages</div>
+          <div class="task-desc">صفحات الحملات الجماعية، قوالب Meta، وWhatsApp Flows مع المحررات</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-8-6', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-8-6"><button class="copy-btn" onclick="copyPrompt('prompt-8-6', this)">نسخ</button>
+أبني صفحات الحملات والقوالب.
+
+1. Campaigns (/campaigns):
+   - قائمة الحملات مع status badge ملوّن
+   - Progress bar للحملات الجارية (Real-time via WebSocket)
+   - Create Campaign: modal أو wizard متعدد خطوات:
+     * اسم الحملة، WhatsApp Account
+     * اختيار Template
+     * إعدادات التأخير (anti-spam)
+     * استيراد المستلمين (CSV upload)
+     * جدولة (تاريخ/وقت الإرسال)
+   - Campaign Details: إحصائيات، قائمة المستلمين مع حالة كل واحد
+   - Actions: Start، Pause، Cancel، Retry Failed
+
+2. Templates (/templates - Meta Only):
+   - قائمة القوالب مع status (Approved/Pending/Rejected)
+   - Template Builder:
+     * اختيار category وlanguage
+     * Header component (text/image/video)
+     * Body مع variable placeholders {{1}} {{2}}
+     * Footer (اختياري)
+     * Buttons (quick reply أو call-to-action)
+   - Submit for Review button
+   - Sync Templates button
+
+3. WhatsApp Flows (/flows - Meta Only):
+   - قائمة الـ flows
+   - JSON Editor لبناء الـ flow
+   - Save to Meta
+   - Publish/Deprecate buttons
+   - Duplicate button
+
+المطلوب:
+1. كيف أبني Campaign Wizard متعدد الخطوات؟
+2. كيف أتعامل مع Real-time Campaign Progress؟
+3. كيف أبني Template Builder مع Preview؟
+4. ما هي الـ validations اللازمة لـ Template components؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-8-6')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-8-6">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-8-6')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-8-6"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================== PHASE 9 ===================== -->
+  <div class="phase-section collapsed" id="phase-9" data-phase="9">
+    <div class="phase-header" onclick="togglePhase('phase-9')">
+      <div class="phase-number" style="background:#6c5ce7">٩</div>
+      <div class="phase-title-group">
+        <div class="phase-title">الجودة والأمان والنشر</div>
+        <div class="phase-subtitle">Testing، Security Hardening، Production Deployment</div>
+      </div>
+      <div class="phase-meta">
+        <div class="phase-progress-bar-wrap">
+          <div class="phase-progress-bar" id="phase-9-bar" style="background:#6c5ce7;width:0%"></div>
+        </div>
+        <div class="phase-badge badge-todo" id="phase-9-badge">لم تبدأ</div>
+      </div>
+      <div class="phase-toggle">▲</div>
+    </div>
+    <div class="phase-body">
+
+      <div class="task-item" id="task-9-1">
+        <div class="task-check" onclick="toggleTask('task-9-1')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Security Hardening الكامل</div>
+          <div class="task-desc">CSRF، SSRF protection، Rate Limiting، Input Validation، SQL Injection prevention، Security Headers</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-9-1', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-9-1"><button class="copy-btn" onclick="copyPrompt('prompt-9-1', this)">نسخ</button>
+أريد مراجعة أمنية شاملة لمشروع WhatsApp Business Platform قبل النشر.
+
+مجالات الأمان المطلوب التحقق منها:
+
+1. Authentication Security:
+   - هل الـ JWT signing key قوية كافياً؟
+   - هل الـ Refresh Token Rotation مُطبَّق بشكل صحيح؟
+   - هل يوجد حماية من Brute Force على Login؟
+   - هل الـ Cookies محمية بـ HttpOnly, Secure, SameSite؟
+
+2. CSRF Protection:
+   - هل كل mutating requests محمية بـ CSRF token؟
+   - هل الـ WebSocket محمية؟
+
+3. SSRF Protection:
+   - الـ Custom Actions و AI Contexts و Webhooks تستدعي URLs خارجية
+   - هل يتم فحص الـ IPs قبل الاتصال؟
+   - ما هي الـ IP ranges المحظورة؟
+
+4. Input Validation:
+   - هل كل المدخلات تُتحقق منها؟
+   - هل يوجد حماية من XSS في الرسائل؟
+   - هل حجم الـ requests محدود؟
+
+5. WhatsApp Webhook Security:
+   - هل الـ HMAC-SHA256 signature يُتحقق منها دائماً؟
+   - هل هناك حماية من Replay Attacks؟
+
+6. Rate Limiting:
+   - Login: max 5 attempts/IP/hour
+   - Message sending: per user per minute
+   - Webhook calls: per endpoint
+   - API Keys: configurable limits
+
+7. Data Security:
+   - هل الحقول الحساسة مشفرة في قاعدة البيانات؟
+   - هل الـ Multi-tenancy isolation محكمة؟
+   - هل يوجد حماية من Cross-tenant data leaks؟
+
+المطلوب: راجع كل نقطة وأخبرني:
+1. ما الذي يحتاج تحسين في كل مجال؟
+2. ما هي الثغرات الشائعة في هذا النوع من المشاريع؟
+3. ما هي أهم الأولويات؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-9-1')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-9-1">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-9-1')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-9-1"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-9-2">
+        <div class="task-check" onclick="toggleTask('task-9-2')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Testing Strategy + E2E Tests</div>
+          <div class="task-desc">Unit tests للـ business logic الحرجة، Integration tests للـ APIs، E2E tests للـ user flows الرئيسية</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-9-2', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-9-2"><button class="copy-btn" onclick="copyPrompt('prompt-9-2', this)">نسخ</button>
+أريد وضع استراتيجية testing لمنصة WhatsApp Business.
+
+الأجزاء الحرجة التي تحتاج testing:
+
+1. Authentication (Unit):
+   - Token generation وvalidation
+   - Refresh token rotation
+   - CSRF validation
+   - Multi-tenant isolation
+
+2. Message Sending (Integration):
+   - Send text message end-to-end
+   - Send restrictions enforcement
+   - Campaign worker idempotency
+   - Webhook dispatch
+
+3. Chatbot Logic (Unit):
+   - Keyword matching priority
+   - Flow step execution
+   - Session timeout
+   - Agent transfer creation
+
+4. Multi-tenancy (Integration):
+   - Cross-tenant data isolation
+   - User cannot access other org's data
+   - API Key scope validation
+
+5. WebSocket (Integration):
+   - Connection authentication
+   - Message broadcasting
+   - Room isolation per org
+
+6. E2E User Flows:
+   - Login → Open Chat → Send Message
+   - Create Campaign → Start → Monitor Progress
+   - Configure Chatbot → Test with Inbound Message
+   - Create Flow → Test Execution
+
+المطلوب:
+1. ما هي أولويات الـ testing لهذا النوع من المشاريع؟
+2. كيف أعمل test database isolation؟
+3. كيف أعمل mock للـ WhatsApp API في الاختبارات؟
+4. ما هي الـ edge cases الأهم للاختبار؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-9-2')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-9-2">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-9-2')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-9-2"></div>
+        </div>
+      </div>
+
+      <div class="task-item" id="task-9-3">
+        <div class="task-check" onclick="toggleTask('task-9-3')">✓</div>
+        <div class="task-content">
+          <div class="task-title">Production Deployment + Monitoring</div>
+          <div class="task-desc">Docker production setup، Nginx config، Health checks، Logging، Metrics، Backup strategy</div>
+          <div class="task-prompt-wrap">
+            <button class="task-prompt-toggle" onclick="togglePrompt('prompt-9-3', this)">🤖 عرض البرومبت</button>
+            <div class="task-prompt" id="prompt-9-3"><button class="copy-btn" onclick="copyPrompt('prompt-9-3', this)">نسخ</button>
+أريد نشر منصة WhatsApp Business على VPS في بيئة إنتاج آمنة وموثوقة.
+
+متطلبات الإنتاج:
+- Single VPS (البداية)
+- Multi-tenant: عدة منظمات على نفس الـ instance
+- أو Multi-instance: منظمة لكل sub-domain
+
+Stack الإنتاج:
+- Backend: binary app مع embedded frontend
+- PostgreSQL: قاعدة البيانات الرئيسية
+- Redis: Cache وQueue وPub/Sub
+- Nginx: Reverse Proxy وSSL termination
+- Certbot: SSL certificates
+
+التكوين المطلوب:
+1. Docker Compose للإنتاج:
+   - Services: app, postgres, redis, nginx
+   - Volumes: postgres_data, redis_data, uploads
+   - Networks: internal network بين الخدمات
+   - Health checks لكل service
+   - Restart policy: always
+
+2. Nginx Configuration:
+   - SSL/HTTPS مع Let's Encrypt
+   - WebSocket proxy (upgrade headers)
+   - Rate limiting
+   - Gzip compression
+   - Static file caching
+   - Large file upload support
+
+3. Monitoring:
+   - /health endpoint للتحقق من حالة الخدمة
+   - /ready endpoint للتحقق من جاهزية الخدمات
+   - /metrics endpoint (Prometheus)
+   - Log aggregation (structured JSON logs)
+
+4. Backup Strategy:
+   - PostgreSQL: daily automated backup
+   - Uploads: sync to object storage
+   - Redis: periodic RDB snapshots
+
+5. Zero-Downtime Deployment:
+   - Build new binary
+   - Hot-reload أو graceful restart
+
+المطلوب:
+1. كيف أعد بيئة إنتاج متكاملة؟
+2. كيف أتعامل مع WebSocket في Nginx؟
+3. كيف أطبق Zero-Downtime Deployments؟
+4. ما هي أفضل ممارسات الـ backup؟
+5. كيف أُفعّل HTTPS تلقائياً؟</div>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="note-btn" onclick="toggleNote('task-9-3')">📝 ملاحظة</button>
+        </div>
+        <div class="task-note-area" id="note-task-9-3">
+          <textarea placeholder="اكتب ملاحظتك هنا..."></textarea>
+          <button class="note-save-btn" onclick="saveNote('task-9-3')">حفظ الملاحظة</button>
+          <div class="note-preview" id="note-preview-task-9-3"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- HIDDEN FILE INPUT FOR IMPORT -->
+<input type="file" id="importFile" accept=".json" style="display:none" onchange="loadImportedData(event)">
+
+<script>
+  // ===================== DATA LAYER =====================
+  const STORAGE_KEY = 'whatomate_prd_progress';
+
+  function getData() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  function saveData(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  // ===================== INIT =====================
+  window.addEventListener('DOMContentLoaded', () => {
+    const data = getData();
+
+    // restore task states
+    document.querySelectorAll('.task-item').forEach(task => {
+      const id = task.id;
+      if (data.tasks && data.tasks[id]) {
+        const t = data.tasks[id];
+        if (t.done) applyDone(id, false);
+        if (t.note) {
+          const ta = task.querySelector('textarea');
+          const preview = document.getElementById('note-preview-' + id);
+          const btn = task.querySelector('.note-btn');
+          if (ta) ta.value = t.note;
+          if (preview) { preview.textContent = t.note; preview.classList.add('visible'); }
+          if (btn) btn.classList.add('has-note');
+        }
+      }
+    });
+
+    // restore phase collapse states
+    document.querySelectorAll('.phase-section').forEach(phase => {
+      const id = phase.id;
+      if (data.phases && data.phases[id] === 'open') {
+        phase.classList.remove('collapsed');
+      }
+    });
+
+    updateAllProgress();
+  });
+
+  // ===================== TASK TOGGLE =====================
+  function toggleTask(id) {
+    const task = document.getElementById(id);
+    const data = getData();
+    if (!data.tasks) data.tasks = {};
+    if (!data.tasks[id]) data.tasks[id] = {};
+
+    const isDone = task.classList.contains('done');
+    if (isDone) {
+      task.classList.remove('done');
+      data.tasks[id].done = false;
+      showToast('تم إلغاء التحديد', 'warn');
+    } else {
+      applyDone(id, true);
+      data.tasks[id].done = true;
+      showToast('✅ تم إكمال المهمة!', 'success');
+    }
+    saveData(data);
+    updateAllProgress();
+  }
+
+  function applyDone(id, animate) {
+    const task = document.getElementById(id);
+    task.classList.add('done');
+    if (animate) {
+      task.style.transition = 'background 0.3s';
+    }
+  }
+
+  // ===================== NOTES =====================
+  function toggleNote(id) {
+    const area = document.getElementById('note-' + id);
+    area.classList.toggle('visible');
+  }
+
+  function saveNote(id) {
+    const task = document.getElementById(id);
+    const ta = task.querySelector('textarea');
+    const preview = document.getElementById('note-preview-' + id);
+    const btn = task.querySelector('.note-btn');
+    const note = ta.value.trim();
+
+    const data = getData();
+    if (!data.tasks) data.tasks = {};
+    if (!data.tasks[id]) data.tasks[id] = {};
+    data.tasks[id].note = note;
+    saveData(data);
+
+    if (note) {
+      preview.textContent = note;
+      preview.classList.add('visible');
+      btn.classList.add('has-note');
+      showToast('📝 تم حفظ الملاحظة', 'success');
+    } else {
+      preview.textContent = '';
+      preview.classList.remove('visible');
+      btn.classList.remove('has-note');
+      showToast('تم حذف الملاحظة', 'warn');
+    }
+  }
+
+  // ===================== PROMPTS =====================
+  function togglePrompt(id, btn) {
+    const prompt = document.getElementById(id);
+    const isVisible = prompt.classList.contains('visible');
+    prompt.classList.toggle('visible');
+    btn.textContent = isVisible ? '🤖 عرض البرومبت' : '🙈 إخفاء البرومبت';
+  }
+
+  function copyPrompt(id, btn) {
+    const prompt = document.getElementById(id);
+    const text = prompt.innerText.replace('نسخ', '').trim();
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = '✅ تم النسخ';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'نسخ';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+
+  // ===================== PHASE TOGGLE =====================
+  function togglePhase(id) {
+    const phase = document.getElementById(id);
+    phase.classList.toggle('collapsed');
+    const data = getData();
+    if (!data.phases) data.phases = {};
+    data.phases[id] = phase.classList.contains('collapsed') ? 'closed' : 'open';
+    saveData(data);
+  }
+
+  // ===================== PROGRESS =====================
+  function updateAllProgress() {
+    let totalDone = 0;
+    let totalTasks = 0;
+
+    document.querySelectorAll('.phase-section').forEach(phase => {
+      const phaseId = phase.id;
+      const tasks = phase.querySelectorAll('.task-item');
+      const doneTasks = phase.querySelectorAll('.task-item.done');
+      const count = tasks.length;
+      const done = doneTasks.length;
+
+      totalTasks += count;
+      totalDone += done;
+
+      const bar = document.getElementById(phaseId + '-bar');
+      const badge = document.getElementById(phaseId + '-badge');
+
+      const pct = count > 0 ? Math.round((done / count) * 100) : 0;
+      if (bar) bar.style.width = pct + '%';
+
+      if (badge) {
+        badge.className = 'phase-badge';
+        if (done === 0) {
+          badge.classList.add('badge-todo');
+          badge.textContent = 'لم تبدأ';
+        } else if (done === count) {
+          badge.classList.add('badge-done');
+          badge.textContent = '✅ مكتمل';
+          phase.classList.add('phase-complete');
+        } else {
+          badge.classList.add('badge-inprog');
+          badge.textContent = done + '/' + count + ' مهام';
+          phase.classList.remove('phase-complete');
+        }
+      }
+    });
+
+    // update header
+    const pct = totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0;
+    const circumference = 163;
+    const offset = circumference - (pct / 100) * circumference;
+
+    const ring = document.getElementById('mainRing');
+    if (ring) ring.style.strokeDashoffset = offset;
+
+    document.getElementById('ringPercent').textContent = pct + '%';
+    document.getElementById('statDone').textContent = totalDone + ' مهمة مكتملة';
+    document.getElementById('statTotal').textContent = 'من ' + totalTasks + ' مهمة';
+  }
+
+  // ===================== SEARCH & FILTER =====================
+  let currentFilter = 'all';
+
+  function filterTasks() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    document.querySelectorAll('.task-item').forEach(task => {
+      const title = task.querySelector('.task-title').textContent.toLowerCase();
+      const desc = task.querySelector('.task-desc') ? task.querySelector('.task-desc').textContent.toLowerCase() : '';
+      const matchesSearch = title.includes(query) || desc.includes(query);
+
+      let matchesFilter = true;
+      if (currentFilter === 'todo') matchesFilter = !task.classList.contains('done');
+      else if (currentFilter === 'done') matchesFilter = task.classList.contains('done');
+      else if (currentFilter === 'noted') {
+        const btn = task.querySelector('.note-btn');
+        matchesFilter = btn && btn.classList.contains('has-note');
+      }
+
+      task.style.display = (matchesSearch && matchesFilter) ? '' : 'none';
+    });
+
+    // also open phases that have visible tasks
+    if (query) {
+      document.querySelectorAll('.phase-section').forEach(phase => {
+        const visibleTasks = [...phase.querySelectorAll('.task-item')].filter(t => t.style.display !== 'none');
+        if (visibleTasks.length > 0) phase.classList.remove('collapsed');
+      });
+    }
+  }
+
+  function setFilter(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    filterTasks();
+  }
+
+  // ===================== SCROLL TO NEXT =====================
+  function scrollToNext() {
+    const incomplete = [...document.querySelectorAll('.task-item')]
+      .find(t => !t.classList.contains('done') && t.style.display !== 'none');
+    if (incomplete) {
+      // open its phase first
+      const phase = incomplete.closest('.phase-section');
+      if (phase) phase.classList.remove('collapsed');
+      setTimeout(() => {
+        incomplete.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        incomplete.style.outline = '2px solid var(--accent)';
+        setTimeout(() => incomplete.style.outline = '', 2000);
+      }, 200);
+    } else {
+      showToast('🎉 أحسنت! كل المهام مكتملة', 'success');
+    }
+  }
+
+  // ===================== EXPORT / IMPORT =====================
+  function exportData() {
+    const data = getData();
+    data._exportedAt = new Date().toISOString();
+    data._version = '1.0';
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'whatomate_progress_' + new Date().toISOString().split('T')[0] + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('💾 تم حفظ التقدم بنجاح', 'success');
+  }
+
+  function importData() {
+    document.getElementById('importFile').click();
+  }
+
+  function loadImportedData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        saveData(data);
+        showToast('📂 تم استعادة التقدم بنجاح — يُعاد تحميل الصفحة...', 'success');
+        setTimeout(() => location.reload(), 1500);
+      } catch {
+        showToast('⚠️ ملف غير صالح', 'warn');
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  }
+
+  // ===================== TOAST =====================
+  function showToast(msg, type = '') {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'toast' + (type ? ' ' + type : '');
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2800);
+  }
+
+  // ===================== AUTO-SAVE ON VISIBILITY CHANGE =====================
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      // force save current state
+      const data = getData();
+      saveData(data);
+    }
+  });
+</script>
+</body>
+</html>
