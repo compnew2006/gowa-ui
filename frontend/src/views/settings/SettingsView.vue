@@ -292,38 +292,50 @@ function parseUploadsCleanupScheduleHourInput(value: unknown): number | null {
   if (trimmed === "") {
     return DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR;
   }
-  if (!/^\d+$/.test(trimmed)) {
+
+  const match = /^(\d{1,2})(?::([0-5]\d))?$/.exec(trimmed);
+  if (!match) {
     return null;
   }
 
-  const parsed = Number(trimmed);
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 23) {
+  const parsed = Number(match[1]);
+  const minutes = match[2];
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 0 ||
+    parsed > 23 ||
+    (minutes !== undefined && minutes !== "00")
+  ) {
     return null;
   }
 
   return parsed;
 }
 
+function formatUploadsCleanupScheduleTime(value: unknown): string {
+  const hour =
+    parseUploadsCleanupScheduleHourInput(value) ??
+    DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR;
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
 interface UploadsCleanupSettingsForm {
   retention_days: string | number;
-  schedule_hour: string | number;
+  schedule_hour: string;
   timezone: string;
 }
 
 const uploadsCleanupSettings = ref<UploadsCleanupSettingsForm>({
   retention_days: "0",
-  schedule_hour: String(DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR),
+  schedule_hour: formatUploadsCleanupScheduleTime(
+    DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR,
+  ),
   timezone: "UTC",
 });
 
-const uploadsCleanupScheduleLabel = computed(() => {
-  const parsedHour = parseUploadsCleanupScheduleHourInput(
-    uploadsCleanupSettings.value.schedule_hour,
-  );
-  const hour =
-    parsedHour === null ? DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR : parsedHour;
-  return `${String(hour).padStart(2, "0")}:00`;
-});
+const uploadsCleanupScheduleLabel = computed(() =>
+  formatUploadsCleanupScheduleTime(uploadsCleanupSettings.value.schedule_hour),
+);
 
 function buildUploadsCleanupPayload() {
   const retentionDays = parseUploadsCleanupRetentionDaysInput(
@@ -606,7 +618,7 @@ onMounted(async () => {
           retention_days: String(
             orgData.settings?.uploads_cleanup_retention_days ?? 0,
           ),
-          schedule_hour: String(
+          schedule_hour: formatUploadsCleanupScheduleTime(
             orgData.settings?.uploads_cleanup_schedule_hour ??
               DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR,
           ),
@@ -684,9 +696,8 @@ async function saveUploadsCleanupSettings() {
   isUploadsCleanupSubmitting.value = true;
   try {
     await organizationService.updateSettings(payload);
-    uploadsCleanupSettings.value.schedule_hour = String(
-      payload.uploads_cleanup_schedule_hour,
-    );
+    uploadsCleanupSettings.value.schedule_hour =
+      formatUploadsCleanupScheduleTime(payload.uploads_cleanup_schedule_hour);
     uploadsCleanupSettings.value.retention_days = String(
       payload.uploads_cleanup_retention_days,
     );
@@ -1153,10 +1164,10 @@ onBeforeRouteLeave(() => {
                       <Input
                         id="uploads_cleanup_schedule_hour"
                         v-model="uploadsCleanupSettings.schedule_hour"
-                        type="number"
-                        min="0"
-                        max="23"
-                        step="1"
+                        type="time"
+                        min="00:00"
+                        max="23:00"
+                        step="3600"
                         :disabled="!canEditUploadsCleanup"
                         data-testid="uploads-cleanup-schedule-hour-input"
                       />
