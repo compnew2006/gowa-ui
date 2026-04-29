@@ -357,6 +357,41 @@ func (w *UploadsCleanupWorker) deleteExpiredUploadFiles(now time.Time, retention
 		deletedFiles += count
 	}
 
+	orgScopedDeletedFiles, err := w.deleteExpiredOrganizationUploadFiles(rootPath, cutoff, retentionDays)
+	if err != nil {
+		return 0, err
+	}
+	deletedFiles += orgScopedDeletedFiles
+
+	return deletedFiles, nil
+}
+
+func (w *UploadsCleanupWorker) deleteExpiredOrganizationUploadFiles(rootPath string, cutoff time.Time, retentionDays int) (int, error) {
+	orgsRoot := filepath.Join(rootPath, "orgs")
+	entries, err := os.ReadDir(orgsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("read organization uploads directory %q: %w", orgsRoot, err)
+	}
+
+	deletedFiles := 0
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+
+		for _, relativeDir := range uploadsCleanupTargetDirs {
+			dirPath := filepath.Join(orgsRoot, entry.Name(), relativeDir)
+			count, err := w.deleteExpiredFilesFromDir(dirPath, cutoff, retentionDays)
+			if err != nil {
+				return 0, err
+			}
+			deletedFiles += count
+		}
+	}
+
 	return deletedFiles, nil
 }
 

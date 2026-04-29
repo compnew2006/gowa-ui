@@ -713,7 +713,7 @@
     "uploadsCleanupDesc": "Run local uploads cleanup on a fixed daily schedule and trigger it manually when needed.",
     "uploadsCleanupScheduleHour": "Daily Cleanup Hour",
     "uploadsCleanupScheduleHourDesc": "The worker runs once each day after {time} in the organization's timezone.",
-    "uploadsCleanupScheduleHourInvalid": "Uploads cleanup hour must be a whole number between 0 and 23.",
+    "uploadsCleanupScheduleHourInvalid": "Uploads cleanup time must be a whole-hour value between 00:00 and 23:00.",
     "uploadsCleanupTimezone": "Organization Timezone",
     "uploadsCleanupTimezoneDesc": "Scheduled cleanup currently runs at {time} using the {timezone} timezone.",
     "uploadsCleanupSaved": "Uploads cleanup settings saved",

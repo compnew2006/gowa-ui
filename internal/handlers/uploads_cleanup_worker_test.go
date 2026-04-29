@@ -196,3 +196,38 @@ func TestUploadsCleanupWorker_RunManualCleanup_UsesOrganizationRetention(t *test
 	_, freshErr := os.Stat(freshImage)
 	assert.NoError(t, freshErr)
 }
+
+func TestUploadsCleanupWorker_RunManualCleanup_DeletesOrganizationScopedUploads(t *testing.T) {
+	app, uploadRoot := newUploadsCleanupTestApp(t)
+	worker := NewUploadsCleanupWorker(app, time.Minute)
+	now := time.Now().UTC()
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Cleanup Org",
+		Slug:      "cleanup-" + uuid.NewString(),
+		Settings: models.JSONB{
+			organizationSettingUploadsCleanupRetentionDays: 5,
+			organizationSettingUploadsCleanupScheduleHour:  3,
+		},
+	}
+	require.NoError(t, app.DB.Create(&org).Error)
+
+	expiredDocument := writeAgedUploadFixture(t, uploadRoot, organizationMediaSubdir(org.ID, "documents", "expired.pdf"), now.Add(-6*24*time.Hour))
+	freshImage := writeAgedUploadFixture(t, uploadRoot, organizationMediaSubdir(org.ID, "images", "fresh.png"), now.Add(-2*24*time.Hour))
+	excludedBackground := writeAgedUploadFixture(t, uploadRoot, organizationMediaSubdir(org.ID, "chat-backgrounds", "bg.png"), now.Add(-10*24*time.Hour))
+
+	result, err := worker.RunManualCleanup(context.Background(), org.ID, now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.DeletedFiles)
+	assert.Equal(t, 5, result.RetentionDays)
+
+	_, expiredErr := os.Stat(expiredDocument)
+	assert.ErrorIs(t, expiredErr, os.ErrNotExist)
+
+	_, freshErr := os.Stat(freshImage)
+	assert.NoError(t, freshErr)
+
+	_, excludedErr := os.Stat(excludedBackground)
+	assert.NoError(t, excludedErr)
+}

@@ -108,12 +108,14 @@ test.describe("General Tab", () => {
     page,
   }) => {
     await settingsPage.fillUploadsCleanupRetentionDays("6");
-    await settingsPage.fillUploadsCleanupScheduleHour("4");
+    await settingsPage.fillUploadsCleanupScheduleHour("04:00");
     await settingsPage.saveUploadsCleanupSettings();
 
     await settingsPage.expectToast(/saved|success/i);
     await expect(settingsPage.uploadsCleanupRetentionInput).toHaveValue("6");
-    await expect(settingsPage.uploadsCleanupScheduleHourInput).toHaveValue("4");
+    await expect(settingsPage.uploadsCleanupScheduleHourInput).toHaveValue(
+      "04:00",
+    );
     await expect(page.getByText("Something went wrong")).toHaveCount(0);
   });
 

@@ -303,7 +303,7 @@ describe("SettingsView appearance settings", () => {
     expect(document.documentElement.dataset.themePreset).toBe("ocean-breeze");
   });
 
-  it("saves uploads cleanup settings with retention and fixed schedule hour", async () => {
+  it("saves uploads cleanup settings with retention and fixed schedule time", async () => {
     const wrapper = mountSettingsView();
     await flushPromises();
 
@@ -312,10 +312,14 @@ describe("SettingsView appearance settings", () => {
     );
     expect((retentionInput.element as HTMLInputElement).value).toBe("5");
 
+    const scheduleInput = wrapper.get(
+      '[data-testid="uploads-cleanup-schedule-hour-input"]',
+    );
+    expect((scheduleInput.element as HTMLInputElement).type).toBe("time");
+    expect((scheduleInput.element as HTMLInputElement).value).toBe("03:00");
+
     await retentionInput.setValue("7");
-    await wrapper
-      .get('[data-testid="uploads-cleanup-schedule-hour-input"]')
-      .setValue("4");
+    await scheduleInput.setValue("04:00");
     await wrapper.get('[data-testid="uploads-cleanup-save"]').trigger("click");
     await flushPromises();
 
@@ -334,7 +338,7 @@ describe("SettingsView appearance settings", () => {
       .setValue("6");
     await wrapper
       .get('[data-testid="uploads-cleanup-schedule-hour-input"]')
-      .setValue("5");
+      .setValue("05:00");
     await wrapper
       .get('[data-testid="uploads-cleanup-run-now"]')
       .trigger("click");

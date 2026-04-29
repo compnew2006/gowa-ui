@@ -691,7 +691,7 @@
     "uploadsCleanupDesc": "شغّل تنظيف ملفات الرفع المحلية بموعد يومي ثابت مع إمكانية تشغيله يدويًا عند الحاجة.",
     "uploadsCleanupScheduleHour": "ساعة التشغيل اليومية",
     "uploadsCleanupScheduleHourDesc": "يعمل العامل مرة واحدة يوميًا بعد الساعة {time} بحسب المنطقة الزمنية للمؤسسة.",
-    "uploadsCleanupScheduleHourInvalid": "يجب أن تكون ساعة تنظيف المرفوعات رقمًا صحيحًا بين 0 و 23.",
+    "uploadsCleanupScheduleHourInvalid": "يجب أن يكون وقت تنظيف المرفوعات على رأس الساعة بين 00:00 و 23:00.",
     "uploadsCleanupTimezone": "المنطقة الزمنية للمؤسسة",
     "uploadsCleanupTimezoneDesc": "سيعمل التنظيف المجدول حاليًا عند {time} باستخدام المنطقة الزمنية {timezone}.",
     "uploadsCleanupSaved": "تم حفظ إعدادات تنظيف المرفوعات",
