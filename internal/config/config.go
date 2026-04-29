@@ -40,6 +40,7 @@ type Config struct {
 	Storage       StorageConfig       `koanf:"storage"`
 	DefaultAdmin  DefaultAdminConfig  `koanf:"default_admin"`
 	RateLimit     RateLimitConfig     `koanf:"rate_limit"`
+	Campaigns     CampaignsConfig     `koanf:"campaigns"`
 	Cookie        CookieConfig        `koanf:"cookie"`
 	License       LicenseConfig       `koanf:"license"`
 }
@@ -154,16 +155,21 @@ type CookieConfig struct {
 }
 
 type RateLimitConfig struct {
-	Enabled             bool `koanf:"enabled"`
-	LoginMaxAttempts    int  `koanf:"login_max_attempts"`
-	RegisterMaxAttempts int  `koanf:"register_max_attempts"`
-	RefreshMaxAttempts  int  `koanf:"refresh_max_attempts"`
-	SSOMaxAttempts      int  `koanf:"sso_max_attempts"`
-	WebhookMaxAttempts  int  `koanf:"webhook_max_attempts"`
-	WindowSeconds       int  `koanf:"window_seconds"`
-	TrustProxy          bool `koanf:"trust_proxy"`
-	OutboundPerUserPS   int  `koanf:"outbound_per_user_per_second"`
-	OutboundPerIPPS     int  `koanf:"outbound_per_ip_per_second"`
+	Enabled                     bool `koanf:"enabled"`
+	LoginMaxAttempts            int  `koanf:"login_max_attempts"`
+	RegisterMaxAttempts         int  `koanf:"register_max_attempts"`
+	RefreshMaxAttempts          int  `koanf:"refresh_max_attempts"`
+	SSOMaxAttempts              int  `koanf:"sso_max_attempts"`
+	WebhookMaxAttempts          int  `koanf:"webhook_max_attempts"`
+	WindowSeconds               int  `koanf:"window_seconds"`
+	TrustProxy                  bool `koanf:"trust_proxy"`
+	OutboundPerUserPS           int  `koanf:"outbound_per_user_per_second"`
+	OutboundPerIPPS             int  `koanf:"outbound_per_ip_per_second"`
+	CampaignMutatingMaxAttempts int  `koanf:"campaign_mutating_max_attempts"`
+}
+
+type CampaignsConfig struct {
+	MaxImportRecipients int `koanf:"max_import_recipients"`
 }
 
 type LicenseConfig struct {
@@ -388,6 +394,12 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.RateLimit.OutboundPerIPPS == 0 {
 		cfg.RateLimit.OutboundPerIPPS = 15
+	}
+	if cfg.RateLimit.CampaignMutatingMaxAttempts == 0 {
+		cfg.RateLimit.CampaignMutatingMaxAttempts = 60
+	}
+	if cfg.Campaigns.MaxImportRecipients == 0 {
+		cfg.Campaigns.MaxImportRecipients = 10000
 	}
 	if cfg.License.RollbackToleranceSeconds == 0 {
 		cfg.License.RollbackToleranceSeconds = 900

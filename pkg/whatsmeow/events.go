@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/campaignstats"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
@@ -327,6 +328,7 @@ func (cm *ConnectionManager) handleReceipt(ctx context.Context, evt *events.Rece
 				},
 			})
 		}
+		campaignstats.ApplyMessageReceipt(ctx, cm.db, cm.campaignPublisher, cm.logger, &message, newStatus)
 
 		cm.logger.Debug("Receipt processed",
 			"wa_message_id", trimmedMessageID,

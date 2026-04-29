@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
-	"github.com/compnew2006/whatomate/internal/queue"
 	waManager "github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -366,39 +365,8 @@ func (w *InstanceAutoCampaignWorker) startAutoCampaign(
 	campaign *models.BulkMessageCampaign,
 	recipients []models.BulkMessageRecipient,
 ) error {
-	if w.app.Queue == nil {
-		return fmt.Errorf("queue is not initialized")
-	}
-
-	now := time.Now().UTC()
-	if err := w.app.DB.Model(campaign).Updates(map[string]any{
-		"status":     models.CampaignStatusProcessing,
-		"started_at": now,
-	}).Error; err != nil {
-		return err
-	}
-
-	jobs := make([]*queue.RecipientJob, len(recipients))
-	for i, recipient := range recipients {
-		jobs[i] = &queue.RecipientJob{
-			CampaignID:     campaign.ID,
-			RecipientID:    recipient.ID,
-			OrganizationID: orgID,
-			PhoneNumber:    recipient.PhoneNumber,
-			RecipientName:  recipient.RecipientName,
-			TemplateParams: recipient.TemplateParams,
-		}
-	}
-
-	if err := w.app.Queue.EnqueueRecipients(context.Background(), jobs); err != nil {
-		_ = w.app.DB.Model(campaign).Updates(map[string]any{
-			"status":     models.CampaignStatusDraft,
-			"started_at": nil,
-		}).Error
-		return err
-	}
-
-	return nil
+	_, err := w.app.StartCampaignByID(context.Background(), w.app.DB, orgID, campaign.ID)
+	return err
 }
 
 func (w *InstanceAutoCampaignWorker) campaignNameExists(

@@ -1,7 +1,10 @@
 package handlers_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -709,6 +712,132 @@ func TestApp_StartCampaign_FailsWhenCampaignDraftOnlyEnabled(t *testing.T) {
 	assert.Contains(t, string(testutil.GetResponseBody(req)), "POLICY_DRAFT_ONLY")
 }
 
+func TestCampaignScheduler_FutureScheduledCampaignDoesNotStart(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("scheduler-future")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
+	future := time.Now().UTC().Add(time.Hour)
+	require.NoError(t, app.DB.Model(campaign).Update("scheduled_at", future).Error)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+
+	handlers.NewCampaignScheduler(app, time.Minute).RunOnce(context.Background(), time.Now().UTC())
+
+	var updated models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&updated, "id = ?", campaign.ID).Error)
+	assert.Equal(t, models.CampaignStatusScheduled, updated.Status)
+	assert.Equal(t, 0, mockQueue.JobCount())
+}
+
+func TestCampaignScheduler_DueScheduledCampaignStarts(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("scheduler-due")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusScheduled)
+	past := time.Now().UTC().Add(-time.Minute)
+	require.NoError(t, app.DB.Model(campaign).Update("scheduled_at", past).Error)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+
+	handlers.NewCampaignScheduler(app, time.Minute).RunOnce(context.Background(), time.Now().UTC())
+
+	var updated models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&updated, "id = ?", campaign.ID).Error)
+	assert.Equal(t, models.CampaignStatusProcessing, updated.Status)
+	assert.Equal(t, 1, mockQueue.JobCount())
+}
+
+func TestCampaignScheduler_DueCampaignWithNoRecipientsDoesNotStart(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("scheduler-empty")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusScheduled)
+	require.NoError(t, app.DB.Model(campaign).Update("scheduled_at", time.Now().UTC().Add(-time.Minute)).Error)
+
+	handlers.NewCampaignScheduler(app, time.Minute).RunOnce(context.Background(), time.Now().UTC())
+
+	var updated models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&updated, "id = ?", campaign.ID).Error)
+	assert.Equal(t, models.CampaignStatusScheduled, updated.Status)
+	assert.Equal(t, 0, mockQueue.JobCount())
+}
+
+func TestCampaignScheduler_PolicyBlockedCampaignStaysScheduled(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	app.Config.WhatsApp.Provider = "whatsmeow"
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("scheduler-policy")), testutil.WithPassword("password"))
+	instance := createTestWhatsmeowInstance(t, app, org.ID, models.InstanceStatusConnected, nil, "")
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, instance.ID.String())
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, instance.ID.String(), models.CampaignStatusScheduled)
+	require.NoError(t, app.DB.Model(campaign).Update("scheduled_at", time.Now().UTC().Add(-time.Minute)).Error)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+	updateOrganizationSettings(t, app, org.ID, models.JSONB{"campaign_draft_only": true})
+
+	handlers.NewCampaignScheduler(app, time.Minute).RunOnce(context.Background(), time.Now().UTC())
+
+	var updated models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&updated, "id = ?", campaign.ID).Error)
+	assert.Equal(t, models.CampaignStatusScheduled, updated.Status)
+	assert.Equal(t, 0, mockQueue.JobCount())
+}
+
+func TestStartCampaignByID_ConcurrentStartsDoNotDoubleEnqueue(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("scheduler-race")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusScheduled)
+	require.NoError(t, app.DB.Model(campaign).Update("scheduled_at", time.Now().UTC().Add(-time.Minute)).Error)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = app.StartCampaignByID(context.Background(), app.DB, org.ID, campaign.ID)
+		}()
+	}
+	wg.Wait()
+
+	var updated models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&updated, "id = ?", campaign.ID).Error)
+	assert.Equal(t, models.CampaignStatusProcessing, updated.Status)
+	assert.Equal(t, 1, mockQueue.JobCount())
+}
+
+func TestStartCampaignByID_EnqueueFailureRollsBackStatus(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	mockQueue.Error = errors.New("redis down")
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("scheduler-rollback")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusScheduled)
+	createTestRecipient(t, app, campaign.ID, "+1234567890", models.MessageStatusPending)
+
+	_, err := app.StartCampaignByID(context.Background(), app.DB, org.ID, campaign.ID)
+	require.Error(t, err)
+
+	var updated models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&updated, "id = ?", campaign.ID).Error)
+	assert.Equal(t, models.CampaignStatusScheduled, updated.Status)
+	assert.Nil(t, updated.StartedAt)
+}
+
 func TestApp_StartCampaign_FailsWhenRecipientsWithoutInboundHistory(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
@@ -937,6 +1066,54 @@ func TestApp_ImportRecipients_DeduplicatesNormalizedPhoneNumbers(t *testing.T) {
 	require.NoError(t, app.DB.Where("campaign_id = ?", campaign.ID).Find(&recipients).Error)
 	require.Len(t, recipients, 1)
 	assert.Equal(t, "1234567890", recipients[0].PhoneNormalized)
+}
+
+func TestApp_ImportRecipients_RespectsConfiguredLimit(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	app.Config.Campaigns.MaxImportRecipients = 2
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-limit")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"recipients": []map[string]interface{}{
+			{"phone_number": "+1234567890", "recipient_name": "One"},
+			{"phone_number": "+1234567891", "recipient_name": "Two"},
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	require.NoError(t, app.ImportRecipients(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_ImportRecipients_RejectsConfiguredLimitPlusOne(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	app.Config.Campaigns.MaxImportRecipients = 2
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createCampaignUser(t, app, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-limit-reject")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
+
+	req := testutil.NewJSONRequest(t, map[string]interface{}{
+		"recipients": []map[string]interface{}{
+			{"phone_number": "+1234567890", "recipient_name": "One"},
+			{"phone_number": "+1234567891", "recipient_name": "Two"},
+			{"phone_number": "+1234567892", "recipient_name": "Three"},
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	require.NoError(t, app.ImportRecipients(req))
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "maximum of 2")
 }
 
 func TestApp_ImportRecipients_StrictInboundOnlyRejectsUnknownNumber(t *testing.T) {

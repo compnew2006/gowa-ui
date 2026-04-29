@@ -146,6 +146,14 @@ function mountSettingsView() {
         SelectItem: passthroughStub,
         SelectTrigger: passthroughStub,
         SelectValue: passthroughStub,
+        AlertDialog: passthroughStub,
+        AlertDialogAction: ButtonStub,
+        AlertDialogCancel: ButtonStub,
+        AlertDialogContent: passthroughStub,
+        AlertDialogDescription: passthroughStub,
+        AlertDialogFooter: passthroughStub,
+        AlertDialogHeader: passthroughStub,
+        AlertDialogTitle: passthroughStub,
         PageHeader: passthroughStub,
         LanguageSwitcher: passthroughStub,
         Settings: passthroughStub,
@@ -341,6 +349,9 @@ describe("SettingsView appearance settings", () => {
       .setValue("05:00");
     await wrapper
       .get('[data-testid="uploads-cleanup-run-now"]')
+      .trigger("click");
+    await wrapper
+      .get('[data-testid="uploads-cleanup-confirm-run"]')
       .trigger("click");
     await flushPromises();
 

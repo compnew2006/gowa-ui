@@ -17,6 +17,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/shared";
 import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
 import { toast } from "vue-sonner";
@@ -87,10 +97,15 @@ const MAX_UPLOADS_CLEANUP_RETENTION_DAYS = 3650;
 const DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR = 3;
 
 const activeSettingsTab = ref("general");
-const isSubmitting = ref(false);
+const isGeneralSubmitting = ref(false);
+const isAppearanceSubmitting = ref(false);
+const isNotificationSubmitting = ref(false);
+const isChatSubmitting = ref(false);
 const isUploadsCleanupSubmitting = ref(false);
 const isUploadsCleanupRunning = ref(false);
 const isLoading = ref(true);
+const loadError = ref<string | null>(null);
+const uploadsCleanupConfirmOpen = ref(false);
 const isPreviewPlaying = ref(false);
 let previewAudio: HTMLAudioElement | null = null;
 
@@ -239,6 +254,9 @@ const generalSettings = ref<GeneralSettingsForm>({
   date_format: "YYYY-MM-DD",
   mask_phone_numbers: false,
 });
+const savedGeneralSettings = ref<GeneralSettingsForm>({
+  ...generalSettings.value,
+});
 
 function parseUploadsCleanupRetentionDaysInput(value: unknown): number | null {
   if (typeof value === "number") {
@@ -374,6 +392,9 @@ const notificationSettings = ref<NotificationSettings>({
   campaign_updates: true,
   notification_sound: DEFAULT_NOTIFICATION_SOUND,
 });
+const savedNotificationSettings = ref<NotificationSettings>({
+  ...notificationSettings.value,
+});
 
 // Chat Preferences (localStorage-only)
 const MEDIA_GROUP_WINDOW_KEY = "chat.mediaGroupWindowSeconds";
@@ -383,6 +404,7 @@ const chatSettings = ref({
   show_print_buttons: configStore.showPrintButtons,
   show_download_buttons: configStore.showDownloadButtons,
 });
+const savedChatSettings = ref({ ...chatSettings.value });
 const savedChatBackground = ref<ChatBackgroundSettings | null>(null);
 const chatBackgroundEditorMode = ref<ChatBackgroundEditorMode>("default");
 const selectedChatBackgroundPresetID = ref<string | null>(null);
@@ -390,6 +412,36 @@ const stagedChatBackgroundFile = ref<File | null>(null);
 const stagedChatBackgroundPreviewURL = ref<string | null>(null);
 const chatBackgroundErrorKey = ref<string | null>(null);
 const chatBackgroundUsesDefault = ref(true);
+
+const isGeneralDirty = computed(
+  () =>
+    JSON.stringify(generalSettings.value) !==
+    JSON.stringify(savedGeneralSettings.value),
+);
+const isNotificationDirty = computed(
+  () =>
+    JSON.stringify(notificationSettings.value) !==
+    JSON.stringify(savedNotificationSettings.value),
+);
+const isChatBackgroundDirty = computed(() => {
+  if (stagedChatBackgroundFile.value) return true;
+  return !isSameChatBackgroundPreference(
+    savedChatBackground.value,
+    resolvePendingChatBackgroundSelection(),
+  );
+});
+const isChatDirty = computed(
+  () =>
+    JSON.stringify(chatSettings.value) !== JSON.stringify(savedChatSettings.value) ||
+    isChatBackgroundDirty.value,
+);
+const hasUnsavedSettings = computed(
+  () =>
+    isGeneralDirty.value ||
+    isAppearanceDirty.value ||
+    isNotificationDirty.value ||
+    isChatDirty.value,
+);
 
 const imageChatBackgroundPresets = computed(() =>
   CHAT_BACKGROUND_PRESETS.filter((preset) => preset.category === "image"),
@@ -591,7 +643,15 @@ watch(
   { immediate: true },
 );
 
-onMounted(async () => {
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!hasUnsavedSettings.value) return;
+  event.preventDefault();
+  event.returnValue = "";
+}
+
+async function loadSettings() {
+  isLoading.value = true;
+  loadError.value = null;
   chatSettings.value.show_print_buttons = configStore.showPrintButtons;
   chatSettings.value.show_download_buttons = configStore.showDownloadButtons;
   try {
@@ -611,6 +671,7 @@ onMounted(async () => {
           date_format: orgData.settings?.date_format || "YYYY-MM-DD",
           mask_phone_numbers: orgData.settings?.mask_phone_numbers || false,
         };
+        savedGeneralSettings.value = { ...generalSettings.value };
       }
 
       if (canViewUploadsCleanup.value) {
@@ -641,17 +702,29 @@ onMounted(async () => {
           user.settings.notification_sound,
         ),
       };
+      savedNotificationSettings.value = { ...notificationSettings.value };
     }
     if (authStore.user) {
       hydrateFromUserSettings(user.settings);
     }
     syncAppearanceSettings(user.settings);
     syncChatBackgroundState(user.settings?.chat_background);
+    savedChatSettings.value = { ...chatSettings.value };
   } catch (error) {
     console.error("Failed to load settings:", error);
+    loadError.value = getErrorMessage(
+      error,
+      t("settings.loadFailed"),
+    );
+    toast.error(loadError.value);
   } finally {
     isLoading.value = false;
   }
+}
+
+onMounted(() => {
+  window.addEventListener("beforeunload", handleBeforeUnload);
+  void loadSettings();
 });
 
 async function saveGeneralSettings() {
@@ -659,7 +732,7 @@ async function saveGeneralSettings() {
     return;
   }
 
-  isSubmitting.value = true;
+  isGeneralSubmitting.value = true;
   try {
     await organizationService.updateSettings({
       name: generalSettings.value.organization_name,
@@ -670,6 +743,7 @@ async function saveGeneralSettings() {
     });
     uploadsCleanupSettings.value.timezone =
       generalSettings.value.default_timezone;
+    savedGeneralSettings.value = { ...generalSettings.value };
     toast.success(t("settings.generalSaved"));
   } catch (error) {
     toast.error(
@@ -679,7 +753,7 @@ async function saveGeneralSettings() {
       ),
     );
   } finally {
-    isSubmitting.value = false;
+    isGeneralSubmitting.value = false;
   }
 }
 
@@ -754,8 +828,12 @@ async function runUploadsCleanupNow() {
   }
 }
 
+function requestRunUploadsCleanupNow() {
+  uploadsCleanupConfirmOpen.value = true;
+}
+
 async function saveAppearanceSettings() {
-  isSubmitting.value = true;
+  isAppearanceSubmitting.value = true;
   try {
     const response = await usersService.updateSettings({
       theme_mode: appearanceSettings.value.theme_mode,
@@ -775,12 +853,12 @@ async function saveAppearanceSettings() {
     revertAppearancePreview();
     toast.error(getErrorMessage(error, t("settings.appearanceSaveFailed")));
   } finally {
-    isSubmitting.value = false;
+    isAppearanceSubmitting.value = false;
   }
 }
 
 async function saveNotificationSettings() {
-  isSubmitting.value = true;
+  isNotificationSubmitting.value = true;
   try {
     const notificationSound = normalizeNotificationSound(
       notificationSettings.value.notification_sound,
@@ -796,6 +874,10 @@ async function saveNotificationSettings() {
       settings: UserSettings;
     }>(response);
     authStore.replaceUserSettings(payload.settings);
+    savedNotificationSettings.value = {
+      ...notificationSettings.value,
+      notification_sound: notificationSound,
+    };
 
     toast.success(t("settings.notificationsSaved"));
   } catch (error) {
@@ -808,7 +890,7 @@ async function saveNotificationSettings() {
       ),
     );
   } finally {
-    isSubmitting.value = false;
+    isNotificationSubmitting.value = false;
   }
 }
 async function saveChatSettings() {
@@ -845,7 +927,7 @@ async function saveChatSettings() {
     return;
   }
 
-  isSubmitting.value = true;
+  isChatSubmitting.value = true;
   try {
     if (shouldClearChatBackground && savedChatBackground.value) {
       const settingsResponse = await usersService.updateSettings({
@@ -900,6 +982,7 @@ async function saveChatSettings() {
     configStore.setShowDownloadButtons(
       chatSettings.value.show_download_buttons,
     );
+    savedChatSettings.value = { ...chatSettings.value };
 
     toast.success(t("settings.chatPreferencesSaved"));
   } catch (error) {
@@ -907,11 +990,12 @@ async function saveChatSettings() {
       getErrorMessage(error, t("settings.chatPreferencesSaveFailed")),
     );
   } finally {
-    isSubmitting.value = false;
+    isChatSubmitting.value = false;
   }
 }
 
 onBeforeUnmount(() => {
+  window.removeEventListener("beforeunload", handleBeforeUnload);
   if (isAppearanceDirty.value) {
     revertAppearancePreview();
   }
@@ -924,6 +1008,12 @@ onBeforeUnmount(() => {
 });
 
 onBeforeRouteLeave(() => {
+  if (hasUnsavedSettings.value) {
+    const shouldLeave = window.confirm(t("settings.unsavedChangesConfirm"));
+    if (!shouldLeave) {
+      return false;
+    }
+  }
   if (isAppearanceDirty.value) {
     revertAppearancePreview();
   }
@@ -940,7 +1030,35 @@ onBeforeRouteLeave(() => {
     />
     <ScrollArea class="flex-1">
       <div class="p-6 space-y-4 max-w-4xl mx-auto">
-        <Tabs v-model="activeSettingsTab" class="w-full">
+        <div
+          v-if="isLoading"
+          class="rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-8 text-center shadow-sm"
+          data-testid="settings-loading"
+        >
+          <Loader2 class="mx-auto mb-3 h-6 w-6 animate-spin text-primary" />
+          <p class="text-sm text-muted-foreground">
+            {{ $t("settings.loading") }}
+          </p>
+        </div>
+        <div
+          v-else-if="loadError"
+          class="rounded-[calc(var(--radius)+0.25rem)] border border-destructive/40 bg-card/95 p-8 text-center shadow-sm"
+          data-testid="settings-load-error"
+        >
+          <p class="text-sm font-medium text-foreground">
+            {{ loadError }}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            class="mt-4"
+            data-testid="settings-load-retry"
+            @click="loadSettings"
+          >
+            {{ $t("common.retry") }}
+          </Button>
+        </div>
+        <Tabs v-else v-model="activeSettingsTab" class="w-full">
           <TabsList
             class="mb-6 grid w-full grid-cols-2 gap-1 rounded-full border border-border bg-accent/70 p-1 sm:grid-cols-4"
           >
@@ -1106,11 +1224,15 @@ onBeforeRouteLeave(() => {
                       size="sm"
                       class="shadow-sm"
                       @click="saveGeneralSettings"
-                      :disabled="isSubmitting || !canEditGeneralSettings"
+                      :disabled="
+                        isGeneralSubmitting ||
+                        !canEditGeneralSettings ||
+                        !isGeneralDirty
+                      "
                       data-testid="settings-general-save"
                     >
                       <Loader2
-                        v-if="isSubmitting"
+                        v-if="isGeneralSubmitting"
                         class="mr-2 h-4 w-4 animate-spin"
                       />
                       {{ $t("settings.save") }}
@@ -1201,7 +1323,7 @@ onBeforeRouteLeave(() => {
                       variant="outline"
                       size="sm"
                       class="shadow-sm"
-                      @click="runUploadsCleanupNow"
+                      @click="requestRunUploadsCleanupNow"
                       :disabled="
                         isUploadsCleanupRunning || isUploadsCleanupSubmitting
                       "
@@ -1399,7 +1521,7 @@ onBeforeRouteLeave(() => {
                     variant="outline"
                     size="sm"
                     class="border-input bg-input text-foreground hover:bg-accent"
-                    :disabled="isSubmitting || !isAppearanceDirty"
+                    :disabled="isAppearanceSubmitting || !isAppearanceDirty"
                     data-testid="settings-appearance-revert"
                     @click="revertAppearancePreview"
                   >
@@ -1409,12 +1531,12 @@ onBeforeRouteLeave(() => {
                     variant="default"
                     size="sm"
                     class="shadow-sm"
-                    :disabled="isSubmitting || !isAppearanceDirty"
+                    :disabled="isAppearanceSubmitting || !isAppearanceDirty"
                     data-testid="settings-appearance-save"
                     @click="saveAppearanceSettings"
                   >
                     <Loader2
-                      v-if="isSubmitting"
+                      v-if="isAppearanceSubmitting"
                       class="mr-2 h-4 w-4 animate-spin"
                     />
                     {{ $t("settings.save") }}
@@ -1553,10 +1675,10 @@ onBeforeRouteLeave(() => {
                     size="sm"
                     class="border-input bg-input text-foreground hover:bg-accent"
                     @click="saveNotificationSettings"
-                    :disabled="isSubmitting"
+                    :disabled="isNotificationSubmitting || !isNotificationDirty"
                   >
                     <Loader2
-                      v-if="isSubmitting"
+                      v-if="isNotificationSubmitting"
                       class="mr-2 h-4 w-4 animate-spin"
                     />
                     {{ $t("settings.save") }}
@@ -2001,11 +2123,11 @@ onBeforeRouteLeave(() => {
                     size="sm"
                     class="border-input bg-input text-foreground hover:bg-accent"
                     @click="saveChatSettings"
-                    :disabled="isSubmitting"
+                    :disabled="isChatSubmitting || !isChatDirty"
                     data-testid="settings-chat-save"
                   >
                     <Loader2
-                      v-if="isSubmitting"
+                      v-if="isChatSubmitting"
                       class="mr-2 h-4 w-4 animate-spin"
                     />
                     {{ $t("settings.save") }}
@@ -2017,5 +2139,26 @@ onBeforeRouteLeave(() => {
         </Tabs>
       </div>
     </ScrollArea>
+    <AlertDialog v-model:open="uploadsCleanupConfirmOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {{ $t("settings.uploadsCleanupConfirmTitle") }}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {{ $t("settings.uploadsCleanupConfirmDescription") }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="uploads-cleanup-confirm-run"
+            @click="runUploadsCleanupNow"
+          >
+            {{ $t("settings.uploadsCleanupConfirmAction") }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

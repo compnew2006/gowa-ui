@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,13 +66,9 @@ func (a *App) UploadInstanceAutoCampaignMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 16MB", nil, "")
 	}
 
-	mimeType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
-	detectedMimeType := strings.TrimSpace(http.DetectContentType(data))
-	if mimeType == "" || mimeType == "application/octet-stream" {
-		mimeType = detectedMimeType
-	}
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
+	mimeType, allowed := resolveCampaignUploadMIME(fileHeader.Header.Get("Content-Type"), fileHeader.Filename, data)
+	if !allowed {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Unsupported file type: "+mimeType, nil, "")
 	}
 	if !a.checkQuotaWithDeltaOrRespond(r, license.ResourceStorage, orgID, int64(len(data))) {
 		return nil

@@ -52,6 +52,7 @@ type ConnectionManager struct {
 	// mediaStoragePath is the local root directory where inbound media is persisted.
 	mediaStoragePath  string
 	inboundMediaQueue inboundMediaJobEnqueuer
+	campaignPublisher *queue.Publisher
 
 	healthMonitorMu     sync.Mutex
 	healthMonitorCancel context.CancelFunc
@@ -103,6 +104,14 @@ func (cm *ConnectionManager) SetInboundMediaQueue(q inboundMediaJobEnqueuer) {
 		return
 	}
 	cm.inboundMediaQueue = q
+}
+
+// SetCampaignStatsPublisher configures Redis pub/sub publishing for campaign stats.
+func (cm *ConnectionManager) SetCampaignStatsPublisher(publisher *queue.Publisher) {
+	if cm == nil {
+		return
+	}
+	cm.campaignPublisher = publisher
 }
 
 // SetMediaService configures the zero-disk inbound media pipeline.

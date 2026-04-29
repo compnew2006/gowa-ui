@@ -280,6 +280,7 @@ func runServer(args []string) {
 	// Initialize whatsmeow manager
 	whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, wsHub, cfg.Storage.LocalPath)
 	whatsmeowManager.SetInboundMediaQueue(jobQueue)
+	whatsmeowManager.SetCampaignStatsPublisher(queue.NewPublisher(rdb, lo))
 	whatsmeowManager.SetMediaService(whatsmeow.NewMediaService(db, storedObjects, lo, whatsmeowManager.GetClient))
 
 	// Auto-connect linked sessions and reconnect active instances in background.
@@ -424,6 +425,8 @@ func runServer(args []string) {
 		slaCancel                  context.CancelFunc
 		chatAssignmentResetWorker  *handlers.ChatAssignmentResetWorker
 		chatAssignmentResetCancel  context.CancelFunc
+		campaignScheduler          *handlers.CampaignScheduler
+		campaignSchedulerCancel    context.CancelFunc
 		instanceAutoCampaignWorker *handlers.InstanceAutoCampaignWorker
 		instanceAutoCampaignCancel context.CancelFunc
 		mediaRetentionWorker       *handlers.MediaRetentionWorker
@@ -447,6 +450,12 @@ func runServer(args []string) {
 		chatAssignmentResetCtx, chatAssignmentResetCancel = context.WithCancel(context.Background())
 		go chatAssignmentResetWorker.Start(chatAssignmentResetCtx)
 		lo.Info("Assigned chat reset worker started")
+
+		campaignScheduler = handlers.NewCampaignScheduler(app, time.Minute)
+		var campaignSchedulerCtx context.Context
+		campaignSchedulerCtx, campaignSchedulerCancel = context.WithCancel(context.Background())
+		go campaignScheduler.Start(campaignSchedulerCtx)
+		lo.Info("Campaign scheduler started")
 
 		// Start instance auto campaign worker (checks interval every minute).
 		instanceAutoCampaignWorker = handlers.NewInstanceAutoCampaignWorker(app, time.Minute)
@@ -548,6 +557,13 @@ func runServer(args []string) {
 		chatAssignmentResetCancel()
 		chatAssignmentResetWorker.Stop()
 		lo.Info("Assigned chat reset worker stopped")
+	}
+
+	if campaignSchedulerCancel != nil && campaignScheduler != nil {
+		lo.Info("Stopping campaign scheduler...")
+		campaignSchedulerCancel()
+		campaignScheduler.Stop()
+		lo.Info("Campaign scheduler stopped")
 	}
 
 	if instanceAutoCampaignCancel != nil && instanceAutoCampaignWorker != nil {
@@ -687,6 +703,7 @@ func runWorker(args []string) {
 		whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
 		whatsmeowQueue := queue.NewRedisQueue(rdb, lo)
 		whatsmeowManager.SetInboundMediaQueue(whatsmeowQueue)
+		whatsmeowManager.SetCampaignStatsPublisher(queue.NewPublisher(rdb, lo))
 		whatsmeowManager.StartHealthMonitor(context.Background())
 		defer whatsmeowManager.StopHealthMonitor()
 		whatsmeowManager.SetMediaService(whatsmeow.NewMediaService(db, storedObjects, lo, whatsmeowManager.GetClient))
@@ -1067,6 +1084,16 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	sendMediaMessageHandler := app.SendMediaMessage
 	sendTemplateMessageHandler := app.SendTemplateMessage
 	sendCannedResponseHandler := app.SendCannedResponse
+	createCampaignHandler := app.CreateCampaign
+	updateCampaignHandler := app.UpdateCampaign
+	deleteCampaignHandler := app.DeleteCampaign
+	startCampaignHandler := app.StartCampaign
+	pauseCampaignHandler := app.PauseCampaign
+	cancelCampaignHandler := app.CancelCampaign
+	retryFailedCampaignHandler := app.RetryFailed
+	importRecipientsHandler := app.ImportRecipients
+	deleteCampaignRecipientHandler := app.DeleteCampaignRecipient
+	uploadCampaignMediaHandler := app.UploadCampaignMedia
 
 	if cfg.RateLimit.OutboundPerUserPS > 0 || cfg.RateLimit.OutboundPerIPPS > 0 {
 		if cfg.RateLimit.OutboundPerUserPS > 0 {
@@ -1102,6 +1129,27 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		lo.Info("Outbound message rate limiting enabled",
 			"per_user_per_second", cfg.RateLimit.OutboundPerUserPS,
 			"per_ip_per_second", cfg.RateLimit.OutboundPerIPPS)
+	}
+	if cfg.RateLimit.Enabled && cfg.RateLimit.CampaignMutatingMaxAttempts > 0 {
+		campaignMutatingOpts := middleware.RateLimitOpts{
+			Redis:      rdb,
+			Log:        lo,
+			Max:        cfg.RateLimit.CampaignMutatingMaxAttempts,
+			Window:     time.Duration(cfg.RateLimit.WindowSeconds) * time.Second,
+			KeyPrefix:  "campaign_mutating",
+			TrustProxy: cfg.RateLimit.TrustProxy,
+			KeyFunc:    outboundRateLimitUserKey,
+		}
+		createCampaignHandler = withRateLimit(createCampaignHandler, campaignMutatingOpts)
+		updateCampaignHandler = withRateLimit(updateCampaignHandler, campaignMutatingOpts)
+		deleteCampaignHandler = withRateLimit(deleteCampaignHandler, campaignMutatingOpts)
+		startCampaignHandler = withRateLimit(startCampaignHandler, campaignMutatingOpts)
+		pauseCampaignHandler = withRateLimit(pauseCampaignHandler, campaignMutatingOpts)
+		cancelCampaignHandler = withRateLimit(cancelCampaignHandler, campaignMutatingOpts)
+		retryFailedCampaignHandler = withRateLimit(retryFailedCampaignHandler, campaignMutatingOpts)
+		importRecipientsHandler = withRateLimit(importRecipientsHandler, campaignMutatingOpts)
+		deleteCampaignRecipientHandler = withRateLimit(deleteCampaignRecipientHandler, campaignMutatingOpts)
+		uploadCampaignMediaHandler = withRateLimit(uploadCampaignMediaHandler, campaignMutatingOpts)
 	}
 
 	// Health check
@@ -1393,19 +1441,19 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Bulk Campaigns (supported for Meta and whatsmeow)
 	g.GET("/api/campaigns", app.ListCampaigns)
-	g.POST("/api/campaigns", app.CreateCampaign)
+	g.POST("/api/campaigns", createCampaignHandler)
 	g.GET("/api/campaigns/{id}", app.GetCampaign)
-	g.PUT("/api/campaigns/{id}", app.UpdateCampaign)
-	g.DELETE("/api/campaigns/{id}", app.DeleteCampaign)
-	g.POST("/api/campaigns/{id}/start", app.StartCampaign)
-	g.POST("/api/campaigns/{id}/pause", app.PauseCampaign)
-	g.POST("/api/campaigns/{id}/cancel", app.CancelCampaign)
-	g.POST("/api/campaigns/{id}/retry-failed", app.RetryFailed)
+	g.PUT("/api/campaigns/{id}", updateCampaignHandler)
+	g.DELETE("/api/campaigns/{id}", deleteCampaignHandler)
+	g.POST("/api/campaigns/{id}/start", startCampaignHandler)
+	g.POST("/api/campaigns/{id}/pause", pauseCampaignHandler)
+	g.POST("/api/campaigns/{id}/cancel", cancelCampaignHandler)
+	g.POST("/api/campaigns/{id}/retry-failed", retryFailedCampaignHandler)
 	g.GET("/api/campaigns/{id}/progress", app.GetCampaign)
-	g.POST("/api/campaigns/{id}/recipients/import", app.ImportRecipients)
+	g.POST("/api/campaigns/{id}/recipients/import", importRecipientsHandler)
 	g.GET("/api/campaigns/{id}/recipients", app.GetCampaignRecipients)
-	g.DELETE("/api/campaigns/{id}/recipients/{recipientId}", app.DeleteCampaignRecipient)
-	g.POST("/api/campaigns/{id}/media", app.UploadCampaignMedia)
+	g.DELETE("/api/campaigns/{id}/recipients/{recipientId}", deleteCampaignRecipientHandler)
+	g.POST("/api/campaigns/{id}/media", uploadCampaignMediaHandler)
 	g.GET("/api/campaigns/{id}/media", app.ServeCampaignMedia)
 
 	// Chatbot Settings

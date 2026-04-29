@@ -1154,13 +1154,31 @@ export interface Organization {
   created_at: string;
 }
 
+export interface OrganizationMember {
+  id: string;
+  user_id: string;
+  organization_id: string;
+  role_id?: string | null;
+  email: string;
+  full_name: string;
+  role_name?: string;
+  is_active?: boolean;
+  created_at?: string;
+}
+
 export const organizationsService = {
   list: () => api.get<{ organizations: Organization[] }>("/organizations"),
+  getCurrent: () => api.get<{ organization: Organization }>("/organizations/current"),
   create: (data: { name: string; slug?: string }) => api.post("/organizations", data),
   delete: (id: string) => api.delete(`/organizations/${id}`),
   // Members
+  listMembers: () => api.get<{ members: OrganizationMember[] }>("/organizations/members"),
   addMember: (data: { user_id?: string; email?: string; role_id?: string }) =>
     api.post("/organizations/members", data),
+  updateMember: (memberId: string, data: { role_id: string }) =>
+    api.put(`/organizations/members/${memberId}`, data),
+  removeMember: (memberId: string) =>
+    api.delete(`/organizations/members/${memberId}`),
 };
 
 export interface Webhook {

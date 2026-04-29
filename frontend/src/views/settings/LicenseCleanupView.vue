@@ -49,6 +49,8 @@ const instances = ref<WhatsAppInstance[]>([]);
 const loading = ref(true);
 const reloading = ref(false);
 const deletingKey = ref("");
+const userPageSize = 100;
+const maxUserPages = 10;
 
 const isSuperAdmin = computed(() => authStore.user?.is_super_admin === true);
 const canDeleteUsers = computed(() =>
@@ -142,9 +144,17 @@ async function loadOrganizations() {
 }
 
 async function loadUsers() {
-  const response = await usersService.list({ page: 1, limit: 200 });
-  const payload = unwrapResponse<{ users: User[] }>(response);
-  users.value = payload.users || [];
+  const loadedUsers: User[] = [];
+  for (let page = 1; page <= maxUserPages; page += 1) {
+    const response = await usersService.list({ page, limit: userPageSize });
+    const payload = unwrapResponse<{ users: User[]; total?: number }>(response);
+    const pageUsers = payload.users || [];
+    loadedUsers.push(...pageUsers);
+    if (pageUsers.length < userPageSize || loadedUsers.length >= (payload.total ?? Number.MAX_SAFE_INTEGER)) {
+      break;
+    }
+  }
+  users.value = loadedUsers;
 }
 
 async function loadAccounts() {

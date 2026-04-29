@@ -2,14 +2,16 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"strings"
-	"time"
 
+	"github.com/compnew2006/whatomate/internal/campaignstats"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -412,26 +414,11 @@ func (a *App) applyMessageStatusUpdate(message *models.Message, statusValue stri
 
 	a.Log.Info("Updated message status", "message_id", message.ID, "status", statusValue)
 
-	// Update campaign stats and recipient status if this is a campaign message
-	if message.Metadata != nil {
-		if campaignID, ok := message.Metadata["campaign_id"].(string); ok && campaignID != "" {
-			a.incrementCampaignStat(campaignID, statusValue)
-
-			// Update the BulkMessageRecipient status and timestamps
-			recipientUpdates := map[string]interface{}{
-				"status": newStatus,
-			}
-			switch newStatus {
-			case models.MessageStatusDelivered:
-				recipientUpdates["delivered_at"] = time.Now()
-			case models.MessageStatusRead:
-				recipientUpdates["read_at"] = time.Now()
-			}
-			a.DB.Model(&models.BulkMessageRecipient{}).
-				Where("whats_app_message_id = ?", message.WhatsAppMessageID).
-				Updates(recipientUpdates)
-		}
+	var publisher *queue.Publisher
+	if a.Redis != nil {
+		publisher = queue.NewPublisher(a.Redis, a.Log)
 	}
+	campaignstats.ApplyMessageReceipt(context.Background(), a.DB, publisher, a.Log, message, newStatus)
 
 	// Broadcast status update via WebSocket
 	if a.WSHub != nil {

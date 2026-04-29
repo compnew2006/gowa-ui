@@ -11,6 +11,8 @@ const router = useRouter();
 const contactsStore = useContactsStore();
 const isLoading = ref(false);
 const searchQuery = ref("");
+const pageSize = 100;
+const maxPages = 10;
 
 const filteredPendingChats = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
@@ -32,7 +34,14 @@ function formatDate(value?: string): string {
 async function loadPendingChats() {
   isLoading.value = true;
   try {
-    await contactsStore.fetchPendingChats({ limit: 200 });
+    for (let page = 1; page <= maxPages; page += 1) {
+      const chats = await contactsStore.fetchPendingChats({
+        limit: pageSize,
+        page,
+        append: page > 1,
+      });
+      if (chats.length < pageSize) break;
+    }
   } finally {
     isLoading.value = false;
   }

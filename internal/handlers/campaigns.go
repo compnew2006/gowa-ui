@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,6 +24,7 @@ import (
 const (
 	defaultCampaignMinDelaySeconds = 20
 	defaultCampaignMaxDelaySeconds = 45
+	defaultCampaignImportLimit     = 10000
 )
 
 // CampaignRequest represents campaign create/update request
@@ -533,6 +535,39 @@ func normalizeCampaignRecipientPhone(value string) string {
 	return b.String()
 }
 
+func (a *App) campaignImportLimit() int {
+	if a != nil && a.Config != nil && a.Config.Campaigns.MaxImportRecipients > 0 {
+		return a.Config.Campaigns.MaxImportRecipients
+	}
+	return defaultCampaignImportLimit
+}
+
+func resolveCampaignUploadMIME(headerMIME, filename string, data []byte) (string, bool) {
+	mimeType := normalizeWhatsAppMediaMIME(resolveWhatsAppMediaMIME(headerMIME, filename, data))
+	if _, ok := whatsappImageMIMEs[mimeType]; ok {
+		return mimeType, true
+	}
+	if _, ok := whatsappVideoMIMEs[mimeType]; ok {
+		return mimeType, true
+	}
+	if _, ok := whatsappAudioMIMEs[mimeType]; ok {
+		return mimeType, true
+	}
+	switch mimeType {
+	case "application/pdf",
+		"application/msword",
+		"application/vnd.ms-excel",
+		"application/vnd.ms-powerpoint",
+		"text/plain":
+		return mimeType, true
+	default:
+		if _, ok := whatsappOOXMLMIMEs[mimeType]; ok {
+			return mimeType, true
+		}
+		return mimeType, false
+	}
+}
+
 func (a *App) shouldEnforceInboundOnlyForSystemSends(orgID uuid.UUID) bool {
 	policy := a.loadOrganizationStrictPolicySettings(orgID)
 	if !policy.StrictEnabled || !policy.ApplyToSystem {
@@ -664,92 +699,29 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 	if err != nil {
 		return nil
 	}
-
-	// Check if campaign can be started
-	if campaign.Status != models.CampaignStatusDraft && campaign.Status != models.CampaignStatusScheduled && campaign.Status != models.CampaignStatusPaused {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign cannot be started in current state", nil, "")
-	}
-	if err := a.enforceCampaignStartPolicy(orgID, campaign.WhatsAppAccount); err != nil {
-		if message, reasonCode, ok := asCampaignPolicyViolation(err); ok {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden, message, reasonCodeDetails(reasonCode), "")
+	started, err := a.StartCampaignByID(r.RequestCtx, requestDB, orgID, campaign.ID)
+	if err != nil {
+		var startErr *campaignStartError
+		if errors.As(err, &startErr) {
+			switch startErr.kind {
+			case campaignStartForbidden:
+				return r.SendErrorEnvelope(fasthttp.StatusForbidden, startErr.Error(), reasonCodeDetails(startErr.reasonCode), "")
+			case campaignStartConflict:
+				return r.SendErrorEnvelope(fasthttp.StatusConflict, startErr.Error(), nil, "")
+			case campaignStartBadRequest:
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, startErr.Error(), nil, "")
+			default:
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, startErr.Error(), nil, "")
+			}
 		}
-		a.Log.Error("Failed to validate campaign start policy", "error", err, "campaign_id", id, "organization_id", orgID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate campaign policy", nil, "")
-	}
-	if err := validateCampaignDelayFloor(campaign.MinDelaySeconds, campaign.MaxDelaySeconds, a.campaignDelayFloorSeconds(orgID)); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
-	}
-
-	// Get all pending recipients
-	var recipients []models.BulkMessageRecipient
-	if err := requestDB.Where("campaign_id = ? AND status = ?", id, models.MessageStatusPending).Find(&recipients).Error; err != nil {
-		a.Log.Error("Failed to load recipients", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load recipients", nil, "")
-	}
-
-	if len(recipients) == 0 {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign has no pending recipients", nil, "")
-	}
-	if blockedCount, err := a.countInboundPolicyViolationsForRecipients(orgID, recipients); err != nil {
-		a.Log.Error("Failed to validate campaign recipients against strict inbound policy", "campaign_id", id, "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate campaign recipients", nil, "")
-	} else if blockedCount > 0 && a.shouldEnforceInboundOnlyForSystemSends(orgID) {
-		return r.SendErrorEnvelope(
-			fasthttp.StatusForbidden,
-			fmt.Sprintf("Campaign contains %d recipient(s) without inbound history in strict inbound-only mode", blockedCount),
-			reasonCodeDetails(ReasonCodePolicyNoInbound),
-			"",
-		)
-	}
-
-	// Validate template still exists
-	if campaign.TemplateID != uuid.Nil {
-		var template models.Template
-		if err := requestDB.Where("id = ? AND organization_id = ?", campaign.TemplateID, orgID).First(&template).Error; err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign template no longer exists", nil, "")
-		}
-	}
-
-	// Update status to processing
-	now := time.Now()
-	updates := map[string]interface{}{
-		"status":     models.CampaignStatusProcessing,
-		"started_at": now,
-	}
-
-	if err := requestDB.Model(campaign).Updates(updates).Error; err != nil {
-		a.Log.Error("Failed to start campaign", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to start campaign", nil, "")
 	}
 
-	a.Log.Info("Campaign started", "campaign_id", id, "recipients", len(recipients))
-
-	// Enqueue all recipients as individual jobs for parallel processing
-	jobs := make([]*queue.RecipientJob, len(recipients))
-	for i, recipient := range recipients {
-		jobs[i] = &queue.RecipientJob{
-			CampaignID:     id,
-			RecipientID:    recipient.ID,
-			OrganizationID: orgID,
-			PhoneNumber:    recipient.PhoneNumber,
-			RecipientName:  recipient.RecipientName,
-			TemplateParams: recipient.TemplateParams,
-		}
-	}
-
-	if err := a.Queue.EnqueueRecipients(r.RequestCtx, jobs); err != nil {
-		a.Log.Error("Failed to enqueue recipients", "error", err)
-		requestDB.
-			// Revert status on failure
-			Model(campaign).Update("status", models.CampaignStatusDraft)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to queue recipients", nil, "")
-	}
-
-	a.Log.Info("Recipients enqueued for processing", "campaign_id", id, "count", len(jobs))
+	a.Log.Info("Campaign started", "campaign_id", id, "recipients", started.enqueuedCount)
 
 	return r.SendEnvelope(map[string]interface{}{
 		"message": "Campaign started",
-		"status":  models.CampaignStatusProcessing,
+		"status":  started.status,
 	})
 }
 
@@ -955,6 +927,14 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 	}
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
+	}
+	if limit := a.campaignImportLimit(); limit > 0 && len(req.Recipients) > limit {
+		return r.SendErrorEnvelope(
+			fasthttp.StatusBadRequest,
+			fmt.Sprintf("Recipient import exceeds the maximum of %d recipients", limit),
+			nil,
+			"recipients",
+		)
 	}
 
 	normalizedInboundSet, err := a.loadInboundHistoryPhoneSet(orgID)
@@ -1184,20 +1164,9 @@ func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 16MB", nil, "")
 	}
 
-	// Determine and validate MIME type
-	mimeType := fileHeader.Header.Get("Content-Type")
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
-	}
-	allowedMIME := map[string]bool{
-		"image/jpeg": true, "image/png": true, "image/webp": true,
-		"video/mp4": true, "video/3gpp": true,
-		"audio/aac": true, "audio/mp4": true, "audio/mpeg": true, "audio/ogg": true,
-		"application/pdf": true, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
-		"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   true,
-		"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
-	}
-	if !allowedMIME[mimeType] {
+	// Determine and validate MIME type from file bytes, falling back to safe metadata.
+	mimeType, allowed := resolveCampaignUploadMIME(fileHeader.Header.Get("Content-Type"), fileHeader.Filename, data)
+	if !allowed {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Unsupported file type: "+mimeType, nil, "")
 	}
 

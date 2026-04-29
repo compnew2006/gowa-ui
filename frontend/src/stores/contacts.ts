@@ -778,13 +778,15 @@ export const useContactsStore = defineStore("contacts", () => {
   async function fetchPendingChats(params?: {
     search?: string;
     limit?: number;
+    page?: number;
+    append?: boolean;
   }) {
     isLoading.value = true;
     try {
       const response = await chatsService.list({
         ...buildListParams(),
         search: params?.search,
-        page: 1,
+        page: params?.page ?? 1,
         limit: params?.limit ?? contactsLimit.value,
         status: "pending",
       });
@@ -792,7 +794,9 @@ export const useContactsStore = defineStore("contacts", () => {
       const nextPending = normalizeContacts(data.contacts || []);
 
       mergeContactsIntoStore(nextPending);
-      pendingChats.value = nextPending;
+      pendingChats.value = params?.append
+        ? [...pendingChats.value, ...nextPending]
+        : nextPending;
       pendingChatsTotal.value = data.total ?? nextPending.length;
       if (activeChatTab.value === "pending") {
         contactsTotal.value = pendingChatsTotal.value;
@@ -809,6 +813,8 @@ export const useContactsStore = defineStore("contacts", () => {
   async function fetchAssignedChats(params?: {
     search?: string;
     limit?: number;
+    page?: number;
+    append?: boolean;
     assigned_to?: "me" | string;
   }) {
     isLoading.value = true;
@@ -819,7 +825,7 @@ export const useContactsStore = defineStore("contacts", () => {
           allowImplicitRestrictedDefault: params?.assigned_to !== "me",
         }),
         search: params?.search,
-        page: 1,
+        page: params?.page ?? 1,
         limit: params?.limit ?? contactsLimit.value,
         status: "open",
         assigned_to: params?.assigned_to,
@@ -828,7 +834,9 @@ export const useContactsStore = defineStore("contacts", () => {
       const nextAssigned = normalizeContacts(data.contacts || []);
 
       mergeContactsIntoStore(nextAssigned);
-      assignedChats.value = nextAssigned;
+      assignedChats.value = params?.append
+        ? [...assignedChats.value, ...nextAssigned]
+        : nextAssigned;
       assignedChatsTotal.value = data.total ?? nextAssigned.length;
       if (activeChatTab.value === "assigned") {
         contactsTotal.value = assignedChatsTotal.value;

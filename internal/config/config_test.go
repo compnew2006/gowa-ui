@@ -76,6 +76,8 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, 60, cfg.RateLimit.WindowSeconds)
 	assert.Equal(t, 5, cfg.RateLimit.OutboundPerUserPS)
 	assert.Equal(t, 15, cfg.RateLimit.OutboundPerIPPS)
+	assert.Equal(t, 60, cfg.RateLimit.CampaignMutatingMaxAttempts)
+	assert.Equal(t, 10000, cfg.Campaigns.MaxImportRecipients)
 }
 
 func TestLoad_EnvironmentVariables(t *testing.T) {
