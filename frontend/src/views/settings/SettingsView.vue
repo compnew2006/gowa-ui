@@ -46,27 +46,23 @@ import {
   MoonStar,
   SunMedium,
   MonitorSmartphone,
+  RotateCcw,
 } from "lucide-vue-next";
 import { usersService, organizationService } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
 import { useColorMode } from "@/composables/useColorMode";
+import { useChatBackground } from "@/composables/useChatBackground";
+import { useUploadsCleanup } from "@/composables/useUploadsCleanup";
 import {
   ChatSidebarUnifier,
   type ChatSidebarViewMode,
 } from "@/lib/chat-sidebar-unifier";
 import { getErrorMessage, unwrapResponse } from "@/lib/api-utils";
 import {
-  CHAT_BACKGROUND_PRESETS,
   CHAT_BACKGROUND_UPLOAD_ACCEPT,
-  getChatBackgroundPreset,
   isSameChatBackgroundPreference,
-  normalizeChatBackgroundPreference,
   resolveChatBackgroundAssetStyle,
-  resolveChatBackgroundStyle,
-  resolveChatBackgroundEditorMode,
-  validateChatBackgroundFile,
-  type ChatBackgroundEditorMode,
 } from "@/lib/chat-backgrounds";
 import {
   THEME_PRESET_OPTIONS,
@@ -93,19 +89,50 @@ const {
 
 type NotificationSoundKey = "notification1" | "notification2" | "notification";
 const DEFAULT_NOTIFICATION_SOUND: NotificationSoundKey = "notification1";
-const MAX_UPLOADS_CLEANUP_RETENTION_DAYS = 3650;
-const DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR = 3;
+
+const {
+  savedChatBackground,
+  chatBackgroundEditorMode,
+  stagedChatBackgroundFile,
+  chatBackgroundErrorKey,
+  chatBackgroundUsesDefault,
+  imageChatBackgroundPresets,
+  patternChatBackgroundPresets,
+  activeChatBackgroundPresetID,
+  defaultChatBackgroundPreviewStyle,
+  savedCustomChatBackgroundStyle,
+  stagedChatBackgroundStyle,
+  isChatBackgroundDirty,
+  clearStagedChatBackgroundSelection,
+  syncChatBackgroundState,
+  setChatBackgroundMode,
+  selectDefaultChatBackground,
+  selectChatBackgroundPreset,
+  handleChatBackgroundFileSelection,
+  resolvePendingChatBackgroundSelection,
+} = useChatBackground();
+
+const {
+  MAX_UPLOADS_CLEANUP_RETENTION_DAYS,
+  DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR,
+  isUploadsCleanupSubmitting,
+  isUploadsCleanupRunning,
+  uploadsCleanupConfirmOpen,
+  uploadsCleanupSettings,
+  uploadsCleanupScheduleLabel,
+  formatUploadsCleanupScheduleTime,
+  saveUploadsCleanupSettings,
+  runUploadsCleanupNow,
+  requestRunUploadsCleanupNow,
+} = useUploadsCleanup();
 
 const activeSettingsTab = ref("general");
 const isGeneralSubmitting = ref(false);
 const isAppearanceSubmitting = ref(false);
 const isNotificationSubmitting = ref(false);
 const isChatSubmitting = ref(false);
-const isUploadsCleanupSubmitting = ref(false);
-const isUploadsCleanupRunning = ref(false);
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
-const uploadsCleanupConfirmOpen = ref(false);
 const isPreviewPlaying = ref(false);
 let previewAudio: HTMLAudioElement | null = null;
 
@@ -238,6 +265,41 @@ function revertAppearancePreview() {
   restorePersistedAppearance();
 }
 
+const DEFAULT_GENERAL_SETTINGS: GeneralSettingsForm = {
+  organization_name: "",
+  organization_slug: "",
+  default_timezone: "UTC",
+  date_format: "YYYY-MM-DD",
+  mask_phone_numbers: false,
+};
+
+const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  email_notifications: true,
+  new_message_alerts: true,
+  campaign_updates: true,
+  notification_sound: DEFAULT_NOTIFICATION_SOUND,
+};
+
+const DEFAULT_CHAT_SETTINGS = {
+  media_group_window: 60,
+  sidebar_view_mode: "unified" as ChatSidebarViewMode,
+  show_print_buttons: true,
+  show_download_buttons: true,
+};
+
+function resetGeneralToDefaults() {
+  generalSettings.value = { ...DEFAULT_GENERAL_SETTINGS };
+}
+
+function resetNotificationToDefaults() {
+  notificationSettings.value = { ...DEFAULT_NOTIFICATION_SETTINGS };
+}
+
+function resetChatSettingsToDefaults() {
+  chatSettings.value = { ...DEFAULT_CHAT_SETTINGS };
+  selectDefaultChatBackground();
+}
+
 interface GeneralSettingsForm {
   organization_name: string;
   organization_slug: string;
@@ -257,126 +319,6 @@ const generalSettings = ref<GeneralSettingsForm>({
 const savedGeneralSettings = ref<GeneralSettingsForm>({
   ...generalSettings.value,
 });
-
-function parseUploadsCleanupRetentionDaysInput(value: unknown): number | null {
-  if (typeof value === "number") {
-    if (
-      !Number.isInteger(value) ||
-      value < 0 ||
-      value > MAX_UPLOADS_CLEANUP_RETENTION_DAYS
-    ) {
-      return null;
-    }
-
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  if (trimmed === "") return 0;
-  if (!/^\d+$/.test(trimmed)) {
-    return null;
-  }
-
-  const parsed = Number(trimmed);
-  if (
-    !Number.isInteger(parsed) ||
-    parsed < 0 ||
-    parsed > MAX_UPLOADS_CLEANUP_RETENTION_DAYS
-  ) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function parseUploadsCleanupScheduleHourInput(value: unknown): number | null {
-  if (typeof value === "number") {
-    if (!Number.isInteger(value) || value < 0 || value > 23) {
-      return null;
-    }
-
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  if (trimmed === "") {
-    return DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR;
-  }
-
-  const match = /^(\d{1,2})(?::([0-5]\d))?$/.exec(trimmed);
-  if (!match) {
-    return null;
-  }
-
-  const parsed = Number(match[1]);
-  const minutes = match[2];
-  if (
-    !Number.isInteger(parsed) ||
-    parsed < 0 ||
-    parsed > 23 ||
-    (minutes !== undefined && minutes !== "00")
-  ) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function formatUploadsCleanupScheduleTime(value: unknown): string {
-  const hour =
-    parseUploadsCleanupScheduleHourInput(value) ??
-    DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR;
-  return `${String(hour).padStart(2, "0")}:00`;
-}
-
-interface UploadsCleanupSettingsForm {
-  retention_days: string | number;
-  schedule_hour: string;
-  timezone: string;
-}
-
-const uploadsCleanupSettings = ref<UploadsCleanupSettingsForm>({
-  retention_days: "0",
-  schedule_hour: formatUploadsCleanupScheduleTime(
-    DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR,
-  ),
-  timezone: "UTC",
-});
-
-const uploadsCleanupScheduleLabel = computed(() =>
-  formatUploadsCleanupScheduleTime(uploadsCleanupSettings.value.schedule_hour),
-);
-
-function buildUploadsCleanupPayload() {
-  const retentionDays = parseUploadsCleanupRetentionDaysInput(
-    uploadsCleanupSettings.value.retention_days,
-  );
-  if (retentionDays === null) {
-    toast.error(t("settings.uploadsCleanupRetentionDaysInvalid"));
-    return null;
-  }
-
-  const scheduleHour = parseUploadsCleanupScheduleHourInput(
-    uploadsCleanupSettings.value.schedule_hour,
-  );
-  if (scheduleHour === null) {
-    toast.error(t("settings.uploadsCleanupScheduleHourInvalid"));
-    return null;
-  }
-
-  return {
-    uploads_cleanup_retention_days: retentionDays,
-    uploads_cleanup_schedule_hour: scheduleHour,
-  };
-}
 
 interface NotificationSettings {
   email_notifications: boolean;
@@ -405,13 +347,6 @@ const chatSettings = ref({
   show_download_buttons: configStore.showDownloadButtons,
 });
 const savedChatSettings = ref({ ...chatSettings.value });
-const savedChatBackground = ref<ChatBackgroundSettings | null>(null);
-const chatBackgroundEditorMode = ref<ChatBackgroundEditorMode>("default");
-const selectedChatBackgroundPresetID = ref<string | null>(null);
-const stagedChatBackgroundFile = ref<File | null>(null);
-const stagedChatBackgroundPreviewURL = ref<string | null>(null);
-const chatBackgroundErrorKey = ref<string | null>(null);
-const chatBackgroundUsesDefault = ref(true);
 
 const isGeneralDirty = computed(
   () =>
@@ -423,13 +358,6 @@ const isNotificationDirty = computed(
     JSON.stringify(notificationSettings.value) !==
     JSON.stringify(savedNotificationSettings.value),
 );
-const isChatBackgroundDirty = computed(() => {
-  if (stagedChatBackgroundFile.value) return true;
-  return !isSameChatBackgroundPreference(
-    savedChatBackground.value,
-    resolvePendingChatBackgroundSelection(),
-  );
-});
 const isChatDirty = computed(
   () =>
     JSON.stringify(chatSettings.value) !== JSON.stringify(savedChatSettings.value) ||
@@ -442,160 +370,6 @@ const hasUnsavedSettings = computed(
     isNotificationDirty.value ||
     isChatDirty.value,
 );
-
-const imageChatBackgroundPresets = computed(() =>
-  CHAT_BACKGROUND_PRESETS.filter((preset) => preset.category === "image"),
-);
-const patternChatBackgroundPresets = computed(() =>
-  CHAT_BACKGROUND_PRESETS.filter((preset) => preset.category === "pattern"),
-);
-const activeChatBackgroundPresetID = computed(() =>
-  chatBackgroundUsesDefault.value || chatBackgroundEditorMode.value === "upload"
-    ? null
-    : selectedChatBackgroundPresetID.value,
-);
-const defaultChatBackgroundPreviewStyle = computed(() =>
-  resolveChatBackgroundStyle(null, { variant: "preview" }),
-);
-const savedCustomChatBackgroundStyle = computed(() => {
-  if (
-    chatBackgroundUsesDefault.value ||
-    savedChatBackground.value?.kind !== "custom"
-  ) {
-    return null;
-  }
-  return resolveChatBackgroundStyle(savedChatBackground.value, {
-    variant: "preview",
-  });
-});
-const stagedChatBackgroundStyle = computed(() => {
-  if (!stagedChatBackgroundPreviewURL.value) {
-    return null;
-  }
-  return resolveChatBackgroundAssetStyle(
-    stagedChatBackgroundPreviewURL.value,
-    "image",
-    "light",
-    "preview",
-  );
-});
-
-function clearStagedChatBackgroundPreview() {
-  if (stagedChatBackgroundPreviewURL.value) {
-    URL.revokeObjectURL(stagedChatBackgroundPreviewURL.value);
-  }
-  stagedChatBackgroundPreviewURL.value = null;
-}
-
-function clearStagedChatBackgroundSelection() {
-  stagedChatBackgroundFile.value = null;
-  clearStagedChatBackgroundPreview();
-}
-
-function syncChatBackgroundState(value: unknown) {
-  savedChatBackground.value = normalizeChatBackgroundPreference(value);
-  chatBackgroundUsesDefault.value = savedChatBackground.value === null;
-  chatBackgroundEditorMode.value = resolveChatBackgroundEditorMode(
-    savedChatBackground.value,
-  );
-  selectedChatBackgroundPresetID.value =
-    savedChatBackground.value?.kind === "preset"
-      ? (savedChatBackground.value.preset_id ?? null)
-      : null;
-  chatBackgroundErrorKey.value = null;
-  clearStagedChatBackgroundSelection();
-}
-
-function setChatBackgroundMode(value: string) {
-  if (
-    value !== "default" &&
-    value !== "images" &&
-    value !== "patterns" &&
-    value !== "upload"
-  ) {
-    return;
-  }
-
-  if (value === "default") {
-    selectDefaultChatBackground();
-    return;
-  }
-
-  chatBackgroundEditorMode.value = value;
-  chatBackgroundUsesDefault.value = false;
-  chatBackgroundErrorKey.value = null;
-}
-
-function selectDefaultChatBackground() {
-  chatBackgroundUsesDefault.value = true;
-  chatBackgroundEditorMode.value = "default";
-  selectedChatBackgroundPresetID.value = null;
-  clearStagedChatBackgroundSelection();
-  chatBackgroundErrorKey.value = null;
-}
-
-function selectChatBackgroundPreset(presetID: string) {
-  chatBackgroundUsesDefault.value = false;
-  selectedChatBackgroundPresetID.value = presetID;
-  chatBackgroundErrorKey.value = null;
-}
-
-function handleChatBackgroundFileSelection(files: FileList | null) {
-  const nextFile = files?.[0];
-  if (!nextFile) {
-    return;
-  }
-
-  const validation = validateChatBackgroundFile(nextFile);
-  if (!validation.valid) {
-    clearStagedChatBackgroundSelection();
-    chatBackgroundErrorKey.value = validation.errorKey ?? null;
-    return;
-  }
-
-  clearStagedChatBackgroundSelection();
-  stagedChatBackgroundFile.value = nextFile;
-  stagedChatBackgroundPreviewURL.value = URL.createObjectURL(nextFile);
-  chatBackgroundUsesDefault.value = false;
-  chatBackgroundErrorKey.value = null;
-  chatBackgroundEditorMode.value = "upload";
-}
-
-function resolvePendingChatBackgroundSelection(): ChatBackgroundSettings | null {
-  if (
-    chatBackgroundUsesDefault.value ||
-    chatBackgroundEditorMode.value === "default"
-  ) {
-    return null;
-  }
-
-  if (chatBackgroundEditorMode.value === "upload") {
-    if (stagedChatBackgroundFile.value) {
-      return { kind: "custom" };
-    }
-    return savedChatBackground.value?.kind === "custom"
-      ? savedChatBackground.value
-      : null;
-  }
-
-  const preset = getChatBackgroundPreset(selectedChatBackgroundPresetID.value);
-  if (!preset) {
-    return null;
-  }
-  if (
-    (chatBackgroundEditorMode.value === "images" &&
-      preset.category !== "image") ||
-    (chatBackgroundEditorMode.value === "patterns" &&
-      preset.category !== "pattern")
-  ) {
-    return null;
-  }
-
-  return {
-    kind: "preset",
-    preset_id: preset.id,
-  };
-}
 
 const timezoneOptions = [
   { value: "UTC", label: "UTC (GMT+0)" },
@@ -755,81 +529,6 @@ async function saveGeneralSettings() {
   } finally {
     isGeneralSubmitting.value = false;
   }
-}
-
-async function saveUploadsCleanupSettings() {
-  if (!canEditUploadsCleanup.value) {
-    return;
-  }
-
-  const payload = buildUploadsCleanupPayload();
-  if (!payload) {
-    return;
-  }
-
-  isUploadsCleanupSubmitting.value = true;
-  try {
-    await organizationService.updateSettings(payload);
-    uploadsCleanupSettings.value.schedule_hour =
-      formatUploadsCleanupScheduleTime(payload.uploads_cleanup_schedule_hour);
-    uploadsCleanupSettings.value.retention_days = String(
-      payload.uploads_cleanup_retention_days,
-    );
-    toast.success(t("settings.uploadsCleanupSaved"));
-  } catch (error) {
-    toast.error(getErrorMessage(error, t("settings.uploadsCleanupSaveFailed")));
-  } finally {
-    isUploadsCleanupSubmitting.value = false;
-  }
-}
-
-async function runUploadsCleanupNow() {
-  let payload: {
-    uploads_cleanup_retention_days: number;
-    uploads_cleanup_schedule_hour: number;
-  } | null = null;
-
-  if (canEditUploadsCleanup.value) {
-    payload = buildUploadsCleanupPayload();
-    if (!payload) {
-      return;
-    }
-  }
-
-  isUploadsCleanupRunning.value = true;
-  try {
-    if (payload) {
-      await organizationService.updateSettings(payload);
-      uploadsCleanupSettings.value.schedule_hour = String(
-        payload.uploads_cleanup_schedule_hour,
-      );
-      uploadsCleanupSettings.value.retention_days = String(
-        payload.uploads_cleanup_retention_days,
-      );
-    }
-
-    const response = await organizationService.runUploadsCleanupNow();
-    const result = unwrapResponse<{
-      message: string;
-      deleted_files: number;
-      retention_days: number;
-    }>(response);
-    toast.success(
-      result.message ||
-        t("settings.uploadsCleanupRunSuccess", {
-          count: result.deleted_files,
-          days: result.retention_days,
-        }),
-    );
-  } catch (error) {
-    toast.error(getErrorMessage(error, t("settings.uploadsCleanupRunFailed")));
-  } finally {
-    isUploadsCleanupRunning.value = false;
-  }
-}
-
-function requestRunUploadsCleanupNow() {
-  uploadsCleanupConfirmOpen.value = true;
 }
 
 async function saveAppearanceSettings() {
@@ -1218,7 +917,17 @@ onBeforeRouteLeave(() => {
                     />
                   </div>
                   <Separator class="bg-border" />
-                  <div class="flex justify-end">
+                  <div class="flex justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      @click="resetGeneralToDefaults"
+                      :disabled="isGeneralSubmitting || !canEditGeneralSettings"
+                      data-testid="settings-general-reset"
+                    >
+                      <RotateCcw class="h-4 w-4 mr-1" />
+                      {{ $t("settings.resetToDefaults") }}
+                    </Button>
                     <Button
                       variant="default"
                       size="sm"
@@ -1669,7 +1378,17 @@ onBeforeRouteLeave(() => {
                     "
                   />
                 </div>
-                <div class="flex justify-end pt-4">
+                <div class="flex justify-end gap-2 pt-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    @click="resetNotificationToDefaults"
+                    :disabled="isNotificationSubmitting"
+                    data-testid="settings-notifications-reset"
+                  >
+                    <RotateCcw class="h-4 w-4 mr-1" />
+                    {{ $t("settings.resetToDefaults") }}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -2117,7 +1836,17 @@ onBeforeRouteLeave(() => {
                     </RouterLink>
                   </div>
                 </div>
-                <div class="flex justify-end pt-4">
+                <div class="flex justify-end gap-2 pt-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    @click="resetChatSettingsToDefaults"
+                    :disabled="isChatSubmitting"
+                    data-testid="settings-chat-reset"
+                  >
+                    <RotateCcw class="h-4 w-4 mr-1" />
+                    {{ $t("settings.resetToDefaults") }}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -2153,7 +1882,7 @@ onBeforeRouteLeave(() => {
           <AlertDialogCancel>{{ $t("common.cancel") }}</AlertDialogCancel>
           <AlertDialogAction
             data-testid="uploads-cleanup-confirm-run"
-            @click="runUploadsCleanupNow"
+            @click="runUploadsCleanupNow(canEditUploadsCleanup)"
           >
             {{ $t("settings.uploadsCleanupConfirmAction") }}
           </AlertDialogAction>

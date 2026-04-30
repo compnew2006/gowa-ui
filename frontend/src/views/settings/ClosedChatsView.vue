@@ -37,8 +37,12 @@ import {
 import { useContactsStore, type Contact } from "@/stores/contacts";
 import { useInstancesStore } from "@/stores/instances";
 import { useUsersStore } from "@/stores/users";
+import { useAuthStore } from "@/stores/auth";
 
 const { t } = useI18n();
+
+const authStore = useAuthStore();
+const canReopenChats = computed(() => authStore.hasPermission("contacts", "write"));
 const router = useRouter();
 const contactsStore = useContactsStore();
 const instancesStore = useInstancesStore();
@@ -463,6 +467,7 @@ onMounted(() => {
                 </td>
                 <td class="px-4 py-3 text-right">
                   <Button
+                    v-if="canReopenChats"
                     size="sm"
                     class="h-8 px-3"
                     :disabled="reopeningChatId === chat.id"

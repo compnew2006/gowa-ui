@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { Clock3 } from "lucide-vue-next";
 import { PageHeader } from "@/components/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useContactsStore, type Contact } from "@/stores/contacts";
 
+const { t } = useI18n();
 const router = useRouter();
 const contactsStore = useContactsStore();
 const isLoading = ref(false);
@@ -61,8 +63,8 @@ onMounted(loadPendingChats);
 <template>
   <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
-      title="Pending Chats"
-      subtitle="Chats waiting to be claimed by an agent."
+      :title="t('settings.pendingChatsTitle')"
+      :subtitle="t('settings.pendingChatsSubtitle')"
       :icon="Clock3"
       icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     />
@@ -71,7 +73,7 @@ onMounted(loadPendingChats);
       <div class="flex items-center gap-2">
         <Input
           v-model="searchQuery"
-          placeholder="Search pending chats..."
+          :placeholder="t('settings.searchPendingChats')"
           class="max-w-md bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-white light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
         />
         <Button
@@ -79,7 +81,7 @@ onMounted(loadPendingChats);
           :disabled="isLoading"
           @click="loadPendingChats"
         >
-          {{ isLoading ? "Refreshing..." : "Refresh" }}
+          {{ isLoading ? t('common.refreshing') : t('common.refresh') }}
         </Button>
       </div>
 
@@ -92,12 +94,12 @@ onMounted(loadPendingChats);
               <th
                 class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
               >
-                Contact Name
+                {{ t('settings.contactName') }}
               </th>
               <th
                 class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
               >
-                Last Activity
+                {{ t('settings.lastActivity') }}
               </th>
             </tr>
           </thead>
@@ -107,7 +109,7 @@ onMounted(loadPendingChats);
                 colspan="2"
                 class="px-4 py-8 text-center text-white/50 light:text-gray-500"
               >
-                Loading pending chats...
+                {{ t('settings.loadingPendingChats') }}
               </td>
             </tr>
             <tr
@@ -133,7 +135,7 @@ onMounted(loadPendingChats);
                 colspan="2"
                 class="px-4 py-8 text-center text-white/50 light:text-gray-500"
               >
-                No pending chats found.
+                {{ t('settings.noPendingChats') }}
               </td>
             </tr>
           </tbody>

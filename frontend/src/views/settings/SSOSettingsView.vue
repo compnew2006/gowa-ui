@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { api } from "@/services/api";
+import { ssoService } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,8 +42,11 @@ import {
   Loader2,
 } from "lucide-vue-next";
 import { getErrorMessage } from "@/lib/api-utils";
+import { useAuthStore } from "@/stores/auth";
 
 const { t } = useI18n();
+const authStore = useAuthStore();
+const canWriteSSO = computed(() => authStore.hasPermission("settings.sso", "write"));
 
 interface SSOProvider {
   provider: string;
@@ -147,7 +150,7 @@ function copyRedirectUrl() {
 async function fetchProviders() {
   isLoading.value = true;
   try {
-    const response = await api.get("/settings/sso");
+    const response = await ssoService.list();
     providers.value = response.data.data || [];
   } catch (error) {
     toast.error(
@@ -229,7 +232,7 @@ async function saveProvider() {
       payload.user_info_url = editForm.value.user_info_url.trim();
     }
 
-    await api.put(`/settings/sso/${editingProvider.value}`, payload);
+    await ssoService.update(editingProvider.value, payload);
     await fetchProviders();
     isEditDialogOpen.value = false;
     toast.success(
@@ -249,7 +252,7 @@ async function saveProvider() {
 
 async function deleteProvider(providerKey: string) {
   try {
-    await api.delete(`/settings/sso/${providerKey}`);
+    await ssoService.delete(providerKey);
     await fetchProviders();
     toast.success(
       t("common.deletedSuccess", { resource: t("resources.SSOProvider") }),
@@ -375,6 +378,7 @@ onMounted(() => {
                 </div>
                 <div class="flex gap-2">
                   <Button
+                    v-if="canWriteSSO"
                     variant="outline"
                     size="sm"
                     class="flex-1"
@@ -578,7 +582,7 @@ onMounted(() => {
 
         <DialogFooter class="flex gap-2">
           <Button
-            v-if="getConfiguredProvider(editingProvider)"
+            v-if="getConfiguredProvider(editingProvider) && canWriteSSO"
             variant="destructive"
             size="sm"
             @click="
@@ -592,7 +596,7 @@ onMounted(() => {
           <Button variant="outline" size="sm" @click="isEditDialogOpen = false">
             {{ $t("common.cancel") }}
           </Button>
-          <Button size="sm" @click="saveProvider" :disabled="isSaving">
+          <Button v-if="canWriteSSO" size="sm" @click="saveProvider" :disabled="isSaving">
             <Loader2 v-if="isSaving" class="h-4 w-4 mr-2 animate-spin" />{{
               $t("common.save")
             }}

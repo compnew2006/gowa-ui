@@ -48,8 +48,13 @@ import {
 import { getErrorMessage } from "@/lib/api-utils";
 import { formatDate } from "@/lib/utils";
 import { useDebounceFn } from "@vueuse/core";
+import { useAuthStore } from "@/stores/auth";
 
 const { t } = useI18n();
+
+const authStore = useAuthStore();
+const canWriteWebhooks = computed(() => authStore.hasPermission("webhooks", "write"));
+const canDeleteWebhooks = computed(() => authStore.hasPermission("webhooks", "delete"));
 
 const organizationsStore = useOrganizationsStore();
 
@@ -331,7 +336,7 @@ onMounted(() => fetchWebhooks());
       icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
-        <Button variant="outline" size="sm" @click="openCreateDialog"
+        <Button v-if="canWriteWebhooks" variant="outline" size="sm" @click="openCreateDialog"
           ><Plus class="h-4 w-4 mr-2" />{{ $t("webhooks.addWebhook") }}</Button
         >
       </template>
@@ -410,6 +415,7 @@ onMounted(() => fetchWebhooks());
                 <template #cell-status="{ item: webhook }">
                   <div class="flex items-center gap-2">
                     <Switch
+                      v-if="canWriteWebhooks"
                       :checked="webhook.is_active"
                       @update:checked="toggleWebhook(webhook)"
                     />
@@ -440,6 +446,7 @@ onMounted(() => fetchWebhooks());
                         class="h-4 w-4"
                     /></Button>
                     <Button
+                      v-if="canWriteWebhooks"
                       variant="ghost"
                       size="icon"
                       class="h-8 w-8"
@@ -447,6 +454,7 @@ onMounted(() => fetchWebhooks());
                       ><Pencil class="h-4 w-4"
                     /></Button>
                     <Button
+                      v-if="canDeleteWebhooks"
                       variant="ghost"
                       size="icon"
                       class="h-8 w-8 text-destructive"
@@ -459,7 +467,7 @@ onMounted(() => fetchWebhooks());
                   </div>
                 </template>
                 <template #empty-action>
-                  <Button variant="outline" size="sm" @click="openCreateDialog"
+                  <Button v-if="canWriteWebhooks" variant="outline" size="sm" @click="openCreateDialog"
                     ><Plus class="h-4 w-4 mr-2" />{{
                       $t("webhooks.addWebhook")
                     }}</Button

@@ -725,6 +725,19 @@
     "notificationsSaved": "تم حفظ إعدادات التنبيهات",
     "chatPreferencesSaved": "تم حفظ تفضيلات الدردشة",
     "chatPreferencesSaveFailed": "فشل حفظ تفضيلات الدردشة",
+    "pendingChatsTitle": "المحادثات المعلقة",
+    "pendingChatsSubtitle": "المحادثات التي تنتظر أن يأخذها وكيل.",
+    "searchPendingChats": "البحث في المحادثات المعلقة...",
+    "contactName": "اسم جهة الاتصال",
+    "lastActivity": "آخر نشاط",
+    "loadingPendingChats": "جاري تحميل المحادثات المعلقة...",
+    "noPendingChats": "لم يتم العثور على محادثات معلقة.",
+    "assignedChatsTitle": "المحادثات المسندة",
+    "assignedChatsSubtitle": "المحادثات النشطة المسندة حالياً إلى الوكلاء.",
+    "searchAssignedChats": "البحث في المحادثات المسندة...",
+    "assignedUser": "المستخدم المسند",
+    "loadingAssignedChats": "جاري تحميل المحادثات المسندة...",
+    "noAssignedChats": "لم يتم العثور على محادثات مسندة.",
     "instances": {
       "title": "مثيلات واتساب",
       "subtitle": "إدارة اتصالات واتساب الخاصة بك (بدون تكاليف API)",
@@ -752,7 +765,8 @@
     "notificationSound1": "الصوت 1",
     "notificationSound2": "الصوت 2",
     "notificationSoundOriginal": "الصوت الأصلي",
-    "previewSound": "تشغيل"
+    "previewSound": "تشغيل",
+    "resetToDefaults": "إعادة تعيين"
   },
   "closedChats": {
     "title": "الدردشات المغلقة",
@@ -837,6 +851,7 @@
     "selectRoleRequired": "يرجى اختيار دور",
     "member": "عضو",
     "removeMember": "إزالة العضو",
+    "removeMemberConfirm": "هل أنت متأكد من إزالة {name} من هذا الفريق؟",
     "removeMemberTooltip": "إزالة من المؤسسة",
     "removeMemberWarning": "سيؤدي هذا لإزالة المستخدم من هذه المؤسسة. سيفقدون الوصول للموارد لكن لن يتم حذف حسابهم.",
     "memberRemoved": "تم إزالة العضو من المؤسسة",

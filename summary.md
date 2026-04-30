@@ -68,3 +68,26 @@ No dependency or environment changes.
 - Frontend typecheck is still blocked by unrelated pre-existing type errors already present in chat, contacts, chatbot, dashboard, and teams files.
 - Playwright global setup expects a backend on `localhost:8080`; the added smoke avoids backend dependency by mocking browser API calls, but global setup still logs refused backend connections when no backend is running.
 - Serena tools `initial_instructions`, `project_overview`, `style_and_conventions`, `suggested_commands`, and `done_checklist` were not active in this session. Project memories and available Serena tools were used instead, and this summary records the manual completion checklist.
+
+---
+
+## Settings Gap Verification (2026-04-29)
+
+### Task
+
+Re-verify all 15 settings gaps after user reported fixes. Remove fixed gaps from `docs/gap.md`.
+
+### Results
+
+8 of 15 gaps fixed, 7 remain open.
+
+**Fixed (removed from gap.md):** SETTINGS-GAP-01, 02, 03, 04, 05, 06, 08, 11
+
+**Still open:**
+- SETTINGS-GAP-07: Inconsistent permission guards (HIGH) — 10 views without component-level checks
+- SETTINGS-GAP-09: SSO inline API calls (LOW) — no `ssoService`
+- SETTINGS-GAP-10: Missing i18n in PendingChats/AssignedChats (LOW)
+- SETTINGS-GAP-12: No member removal confirmation in TeamsView (LOW)
+- SETTINGS-GAP-13: SettingsView still 2164 lines (MEDIUM)
+- SETTINGS-GAP-14: Mixed storage strategy (LOW)
+- SETTINGS-GAP-15: No reset-to-defaults (LOW)

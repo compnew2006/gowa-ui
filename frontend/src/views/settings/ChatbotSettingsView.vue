@@ -52,9 +52,12 @@ import {
 } from "lucide-vue-next";
 import { chatbotService } from "@/services/api";
 import { useUsersStore } from "@/stores/users";
+import { useAuthStore } from "@/stores/auth";
 
 const { t } = useI18n();
 const usersStore = useUsersStore();
+const authStore = useAuthStore();
+const canWriteChatbot = computed(() => authStore.hasPermission("settings.chatbot", "write"));
 
 const isSubmitting = ref(false);
 const isLoading = ref(true);
@@ -655,7 +658,7 @@ function removeEscalationUser(userId: string) {
                 <div class="flex justify-end pt-2">
                   <Button
                     @click="saveMessagesSettings"
-                    :disabled="isSubmitting"
+                    :disabled="isSubmitting || !canWriteChatbot"
                   >
                     <Loader2
                       v-if="isSubmitting"
@@ -734,7 +737,7 @@ function removeEscalationUser(userId: string) {
                 </div>
 
                 <div class="flex justify-end pt-4">
-                  <Button @click="saveAgentSettings" :disabled="isSubmitting">
+                  <Button @click="saveAgentSettings" :disabled="isSubmitting || !canWriteChatbot">
                     <Loader2
                       v-if="isSubmitting"
                       class="mr-2 h-4 w-4 animate-spin"
@@ -856,7 +859,7 @@ function removeEscalationUser(userId: string) {
                 <div class="flex justify-end pt-2">
                   <Button
                     @click="saveBusinessHoursSettings"
-                    :disabled="isSubmitting"
+                    :disabled="isSubmitting || !canWriteChatbot"
                   >
                     <Loader2
                       v-if="isSubmitting"
@@ -1133,7 +1136,7 @@ function removeEscalationUser(userId: string) {
                 </div>
 
                 <div class="flex justify-end pt-2">
-                  <Button @click="saveSLASettings" :disabled="isSubmitting">
+                  <Button @click="saveSLASettings" :disabled="isSubmitting || !canWriteChatbot">
                     <Loader2
                       v-if="isSubmitting"
                       class="mr-2 h-4 w-4 animate-spin"
@@ -1259,7 +1262,7 @@ function removeEscalationUser(userId: string) {
                 </div>
 
                 <div class="flex justify-end pt-2">
-                  <Button @click="saveAISettings" :disabled="isSubmitting">
+                  <Button @click="saveAISettings" :disabled="isSubmitting || !canWriteChatbot">
                     <Loader2
                       v-if="isSubmitting"
                       class="mr-2 h-4 w-4 animate-spin"

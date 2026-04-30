@@ -37,8 +37,12 @@ import { getErrorMessage } from "@/lib/api-utils";
 import { TAG_COLORS } from "@/lib/constants";
 import { formatDate } from "@/lib/utils";
 import { useDebounceFn } from "@vueuse/core";
+import { useAuthStore } from "@/stores/auth";
 
 const { t } = useI18n();
+const authStore = useAuthStore();
+const canWriteTags = computed(() => authStore.hasPermission("tags", "write"));
+const canDeleteTags = computed(() => authStore.hasPermission("tags", "delete"));
 const tagsStore = useTagsStore();
 
 interface TagFormData {
@@ -192,7 +196,7 @@ function getColorLabel(color: string): string {
       back-link="/settings"
     >
       <template #actions>
-        <Button variant="outline" size="sm" @click="openCreateDialog"
+        <Button v-if="canWriteTags" variant="outline" size="sm" @click="openCreateDialog"
           ><Plus class="h-4 w-4 mr-2" />{{ $t("tags.addTag") }}</Button
         >
       </template>
@@ -256,6 +260,7 @@ function getColorLabel(color: string): string {
                 <template #cell-actions="{ item: tag }">
                   <div class="flex items-center justify-end gap-1">
                     <Button
+                      v-if="canWriteTags"
                       variant="ghost"
                       size="icon"
                       class="h-8 w-8"
@@ -264,6 +269,7 @@ function getColorLabel(color: string): string {
                       <Pencil class="h-4 w-4" />
                     </Button>
                     <Button
+                      v-if="canDeleteTags"
                       variant="ghost"
                       size="icon"
                       class="h-8 w-8"
@@ -274,7 +280,7 @@ function getColorLabel(color: string): string {
                   </div>
                 </template>
                 <template #empty-action>
-                  <Button variant="outline" size="sm" @click="openCreateDialog">
+                  <Button v-if="canWriteTags" variant="outline" size="sm" @click="openCreateDialog">
                     <Plus class="h-4 w-4 mr-2" />
                     {{ $t("tags.addTag") }}
                   </Button>

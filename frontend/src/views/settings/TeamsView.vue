@@ -129,8 +129,11 @@ const isMembersDialogOpen = ref(false);
 const selectedTeam = ref<Team | null>(null);
 const teamMembers = ref<TeamMember[]>([]);
 const loadingMembers = ref(false);
+const removeMemberConfirmOpen = ref(false);
+const memberToRemove = ref<TeamMember | null>(null);
 
-const isAdmin = computed(() => authStore.userRole === "admin");
+const canWriteTeams = computed(() => authStore.hasPermission("teams", "write"));
+const canDeleteTeams = computed(() => authStore.hasPermission("teams", "delete"));
 const breadcrumbs = computed(() => [
   { label: t("nav.settings"), href: "/settings" },
   { label: t("nav.teams") },
@@ -323,12 +326,17 @@ async function addMember(user: User, role: "manager" | "agent" = "agent") {
   }
 }
 
-async function removeMember(member: TeamMember) {
-  if (!selectedTeam.value) return;
+function confirmRemoveMember(member: TeamMember) {
+  memberToRemove.value = member;
+  removeMemberConfirmOpen.value = true;
+}
+
+async function removeMember() {
+  if (!selectedTeam.value || !memberToRemove.value) return;
   try {
-    await teamsStore.removeTeamMember(selectedTeam.value.id, member.user_id);
+    await teamsStore.removeTeamMember(selectedTeam.value.id, memberToRemove.value.user_id);
     teamMembers.value = teamMembers.value.filter(
-      (m) => m.user_id !== member.user_id,
+      (m) => m.user_id !== memberToRemove.value!.user_id,
     );
     toast.success(t("teams.memberRemoved"));
   } catch (e) {
@@ -338,6 +346,9 @@ async function removeMember(member: TeamMember) {
         t("common.failedDelete", { resource: t("resources.member") }),
       ),
     );
+  } finally {
+    removeMemberConfirmOpen.value = false;
+    memberToRemove.value = null;
   }
 }
 
@@ -363,7 +374,7 @@ function getStrategyIcon(strategy: string) {
     >
       <template #actions>
         <Button
-          v-if="isAdmin"
+          v-if="canWriteTeams"
           variant="outline"
           size="sm"
           @click="openCreateDialog"
@@ -418,7 +429,7 @@ function getStrategyIcon(strategy: string) {
               >
                 <template #empty-action>
                   <Button
-                    v-if="isAdmin"
+                    v-if="canWriteTeams"
                     variant="outline"
                     size="sm"
                     @click="openCreateDialog"
@@ -511,7 +522,7 @@ function getStrategyIcon(strategy: string) {
                         $t("teams.editTeamTooltip")
                       }}</TooltipContent></Tooltip
                     >
-                    <Tooltip v-if="isAdmin"
+                    <Tooltip v-if="canDeleteTeams"
                       ><TooltipTrigger as-child
                         ><Button
                           variant="ghost"
@@ -662,7 +673,7 @@ function getStrategyIcon(strategy: string) {
                     variant="ghost"
                     size="icon"
                     class="h-7 w-7"
-                    @click="removeMember(member)"
+                    @click="confirmRemoveMember(member)"
                     ><UserMinus class="h-4 w-4 text-destructive"
                   /></Button>
                 </div>
@@ -699,7 +710,7 @@ function getStrategyIcon(strategy: string) {
                     >{{ $t("teams.addAsAgent") }}</Button
                   >
                   <Button
-                    v-if="isAdmin"
+                    v-if="canWriteTeams"
                     variant="outline"
                     size="sm"
                     class="h-7 text-xs"
@@ -734,6 +745,14 @@ function getStrategyIcon(strategy: string) {
       :item-name="teamToDelete?.name"
       :description="$t('teams.deleteTeamWarning')"
       @confirm="confirmDelete"
+    />
+
+    <DeleteConfirmDialog
+      v-model:open="removeMemberConfirmOpen"
+      :title="$t('teams.removeMember')"
+      :item-name="memberToRemove?.user?.full_name || memberToRemove?.email || ''"
+      :description="$t('teams.removeMemberConfirm', { name: memberToRemove?.user?.full_name || memberToRemove?.email || '' })"
+      @confirm="removeMember"
     />
   </div>
 </template>

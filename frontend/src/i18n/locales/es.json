@@ -152,7 +152,21 @@
     "generalSaved": "Configuración general guardada",
     "notificationsSaved": "Configuración de notificaciones guardada",
     "chatPreferencesSaved": "Preferencias de chat guardadas",
-    "chatPreferencesSaveFailed": "No se pudieron guardar las preferencias de chat"
+    "chatPreferencesSaveFailed": "No se pudieron guardar las preferencias de chat",
+    "resetToDefaults": "Restablecer",
+    "pendingChatsTitle": "Chats Pendientes",
+    "pendingChatsSubtitle": "Chats esperando ser reclamados por un agente.",
+    "searchPendingChats": "Buscar chats pendientes...",
+    "contactName": "Nombre del Contacto",
+    "lastActivity": "Última Actividad",
+    "loadingPendingChats": "Cargando chats pendientes...",
+    "noPendingChats": "No se encontraron chats pendientes.",
+    "assignedChatsTitle": "Chats Asignados",
+    "assignedChatsSubtitle": "Chats activos actualmente asignados a agentes.",
+    "searchAssignedChats": "Buscar chats asignados...",
+    "assignedUser": "Usuario Asignado",
+    "loadingAssignedChats": "Cargando chats asignados...",
+    "noAssignedChats": "No se encontraron chats asignados."
   },
   "users": {
     "manageSendRestrictions": "Gestionar restricciones de envío",

@@ -654,287 +654,32 @@ stores/campaigns.ts                       Pinia store (if needed)
 
 # Settings Route Gap Analysis
 
-> Added: 2026-04-29  
+> Added: 2026-04-29 | Updated: 2026-04-29  
 > Module: `/settings` and `/settings/*` routes
+
+## Verification Log
+
+| Gap | Verified | Status |
+|-----|----------|--------|
+| SETTINGS-GAP-01 | 2026-04-29 | **FIXED** — Separate per-tab submitting refs |
+| SETTINGS-GAP-02 | 2026-04-29 | **FIXED** — `v-if="isLoading"` with Loader2 spinner |
+| SETTINGS-GAP-03 | 2026-04-29 | **FIXED** — `v-else-if="loadError"` with retry button |
+| SETTINGS-GAP-04 | 2026-04-29 | **FIXED** — `isGeneralDirty`, `isNotificationDirty`, `isChatDirty` computeds |
+| SETTINGS-GAP-05 | 2026-04-29 | **FIXED** — `onBeforeRouteLeave` checks all tabs + `beforeunload` |
+| SETTINGS-GAP-06 | 2026-04-29 | **FIXED** — `AlertDialog` confirmation before cleanup |
+| SETTINGS-GAP-07 | 2026-04-29 | **FIXED** — Permission guards on all 9 views |
+| SETTINGS-GAP-08 | 2026-04-29 | **FIXED** — All 4 methods added to `organizationsService` |
+| SETTINGS-GAP-09 | 2026-04-29 | **FIXED** — `ssoService` extracted in `api.ts` |
+| SETTINGS-GAP-10 | 2026-04-29 | **FIXED** — i18n keys added to en/ar/es, views use `t()` |
+| SETTINGS-GAP-11 | 2026-04-29 | **FIXED** — Paginated with `pageSize=100, maxPages=10` |
+| SETTINGS-GAP-12 | 2026-04-29 | **FIXED** — `DeleteConfirmDialog` for team member removal |
+| SETTINGS-GAP-13 | 2026-04-29 | **FIXED** — `useChatBackground` + `useUploadsCleanup` composables extracted |
+| SETTINGS-GAP-14 | 2026-04-29 | **DEFERRED** — localStorage migration deferred (needs backend model changes) |
+| SETTINGS-GAP-15 | 2026-04-29 | **FIXED** — Reset-to-defaults buttons on General/Notifications/Chat tabs |
 
 ## Summary
 
 This section identifies gaps, missing features, and issues discovered in the `/settings` workflow of the Whatomate project. Each gap includes severity assessment, proposed solution, impact analysis, and affected functions.
-
----
-
-## SETTINGS-GAP-01: Shared `isSubmitting` State Across All Settings Tabs
-
-**Severity:** HIGH  
-**Category:** UX Bug  
-**Status:** Active — all 4 tabs share a single `isSubmitting` ref
-
-### Description
-
-In `SettingsView.vue`, the `isSubmitting` ref is shared across all 4 tabs (General, Appearance, Notifications, Chat). When a user saves on any tab, all tabs' save buttons disable simultaneously. This creates a confusing UX where a user saving Appearance settings sees General and Notification save buttons become disabled.
-
-### Affected Files & Functions
-
-| File | Function/Ref | Impact |
-|------|-------------|--------|
-| `frontend/src/views/settings/SettingsView.vue` | `isSubmitting` ref | Shared by all 4 save functions |
-| `frontend/src/views/settings/SettingsView.vue` | `saveGeneralSettings()` | Sets isSubmitting |
-| `frontend/src/views/settings/SettingsView.vue` | `saveAppearanceSettings()` | Sets isSubmitting |
-| `frontend/src/views/settings/SettingsView.vue` | `saveNotificationSettings()` | Sets isSubmitting |
-| `frontend/src/views/settings/SettingsView.vue` | `saveChatSettings()` | Sets isSubmitting |
-
-### Proposed Solution
-
-Replace the single `isSubmitting` with per-tab loading states:
-
-```typescript
-const isGeneralSubmitting = ref(false)
-const isAppearanceSubmitting = ref(false)
-const isNotificationSubmitting = ref(false)
-const isChatSubmitting = ref(false)
-```
-
-Bind each tab's save button to its own loading state.
-
-### Impact Analysis
-
-| Aspect | Impact |
-|--------|--------|
-| **Positive** | Users can save settings on different tabs independently |
-| **Positive** | Clearer UX feedback per section |
-| **Negative** | None — purely a UX fix |
-| **Risk** | Very low — no backend changes needed |
-
-### Affected Functions
-
-- `frontend/src/views/settings/SettingsView.vue` — `isSubmitting` ref → 4 separate refs, all `save*` functions, all tab templates
-
----
-
-## SETTINGS-GAP-02: No Loading Indicator on Settings Page Initial Load
-
-**Severity:** HIGH  
-**Category:** UX Bug  
-**Status:** `isLoading` ref exists but is never used in the template
-
-### Description
-
-`SettingsView.vue` sets `isLoading = true` during `onMounted` data fetching but the template never references `isLoading`. The user sees an empty form with no spinner, skeleton, or loading indicator. If the API is slow, the user sees blank inputs and may think settings are empty rather than loading.
-
-### Affected Files & Functions
-
-| File | Function/Ref | Impact |
-|------|-------------|--------|
-| `frontend/src/views/settings/SettingsView.vue` | `isLoading` ref | Set in onMounted but never rendered |
-| `frontend/src/views/settings/SettingsView.vue` | `<template>` section | No v-if/v-show for loading state |
-
-### Proposed Solution
-
-Add a loading skeleton or spinner that displays when `isLoading` is true:
-
-```vue
-<div v-if="isLoading" class="flex items-center justify-center p-12">
-  <Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
-</div>
-<div v-else class="space-y-6">
-  <!-- existing tab content -->
-</div>
-```
-
-### Impact Analysis
-
-| Aspect | Impact |
-|--------|--------|
-| **Positive** | User sees clear loading state on initial settings load |
-| **Positive** | Prevents confusion about empty settings |
-| **Negative** | None |
-| **Risk** | None — cosmetic fix |
-
-### Affected Functions
-
-- `frontend/src/views/settings/SettingsView.vue` — template section
-
----
-
-## SETTINGS-GAP-03: No Load-Error UI for Settings Page
-
-**Severity:** MEDIUM  
-**Category:** UX Bug  
-**Status:** `onMounted` catch only logs to console
-
-### Description
-
-If the initial `organizationService.getSettings()` or `usersService.me()` call fails, the error is caught and logged to console but the user sees an empty form with no error message and no retry button.
-
-### Affected Files & Functions
-
-| File | Function/Ref | Impact |
-|------|-------------|--------|
-| `frontend/src/views/settings/SettingsView.vue` | `onMounted()` catch block | `console.error` only |
-
-### Proposed Solution
-
-```typescript
-const loadError = ref<string | null>(null)
-
-// In onMounted catch:
-loadError.value = getErrorMessage(error, 'Failed to load settings')
-
-// In template:
-<div v-if="loadError" class="...">
-  <p>{{ loadError }}</p>
-  <Button @click="loadSettings">Retry</Button>
-</div>
-```
-
-### Impact Analysis
-
-| Aspect | Impact |
-|--------|--------|
-| **Positive** | User sees error message with retry option |
-| **Positive** | Improves reliability perception |
-| **Negative** | None |
-| **Risk** | None |
-
-### Affected Functions
-
-- `frontend/src/views/settings/SettingsView.vue` — `onMounted`, template
-
----
-
-## SETTINGS-GAP-04: No Dirty-Check for General, Notifications, and Chat Tabs
-
-**Severity:** MEDIUM  
-**Category:** UX Enhancement  
-**Status:** Only Appearance tab has dirty-checking (`isAppearanceDirty`)
-
-### Description
-
-The Appearance tab correctly tracks dirty state and enables/disables the Save button based on whether changes exist. General, Notifications, and Chat tabs do not track dirty state — their Save buttons are always enabled even when no changes have been made. This can cause unnecessary API calls and confusion.
-
-### Affected Files & Functions
-
-| File | Function/Ref | Impact |
-|------|-------------|--------|
-| `frontend/src/views/settings/SettingsView.vue` | General tab save | Always enabled |
-| `frontend/src/views/settings/SettingsView.vue` | Notification tab save | Always enabled |
-| `frontend/src/views/settings/SettingsView.vue` | Chat tab save | Always enabled |
-
-### Proposed Solution
-
-Implement `isDirty` computed properties for each tab by comparing current form values against loaded values:
-
-```typescript
-const initialGeneralSettings = ref<GeneralSettingsForm | null>(null)
-
-const isGeneralDirty = computed(() => {
-  if (!initialGeneralSettings.value) return false
-  return JSON.stringify(generalSettings.value) !== JSON.stringify(initialGeneralSettings.value)
-})
-```
-
-Bind `:disabled="!isGeneralDirty || isGeneralSubmitting"` to each tab's save button.
-
-### Impact Analysis
-
-| Aspect | Impact |
-|--------|--------|
-| **Positive** | Prevents unnecessary API calls |
-| **Positive** | Clear feedback about unsaved changes |
-| **Negative** | Slight increase in component complexity |
-| **Risk** | Low — JSON comparison may not work for all edge cases |
-
-### Affected Functions
-
-- `frontend/src/views/settings/SettingsView.vue` — `saveGeneralSettings`, `saveNotificationSettings`, `saveChatSettings` + templates
-
----
-
-## SETTINGS-GAP-05: No Unsaved Changes Navigation Guard (General/Notification/Chat)
-
-**Severity:** MEDIUM  
-**Category:** UX Enhancement  
-**Status:** Only Appearance has `onBeforeRouteLeave` guard
-
-### Description
-
-When a user makes changes to General, Notification, or Chat settings and navigates away without saving, the changes are silently discarded. Only the Appearance tab has a route-leave guard that reverts unsaved changes.
-
-### Affected Files & Functions
-
-| File | Function/Ref | Impact |
-|------|-------------|--------|
-| `frontend/src/views/settings/SettingsView.vue` | `onBeforeRouteLeave` | Only handles appearance |
-
-### Proposed Solution
-
-Extend the `onBeforeRouteLeave` guard to check dirty state for all tabs and show a confirmation dialog:
-
-```typescript
-onBeforeRouteLeave(() => {
-  if (isGeneralDirty.value || isNotificationDirty.value || isChatDirty.value || isAppearanceDirty.value) {
-    const answer = window.confirm('You have unsaved changes. Leave anyway?')
-    if (!answer) return false
-  }
-})
-```
-
-### Impact Analysis
-
-| Aspect | Impact |
-|--------|--------|
-| **Positive** | Prevents accidental data loss |
-| **Negative** | Adds one more dialog to dismiss |
-| **Risk** | Low — standard UX pattern |
-
-### Affected Functions
-
-- `frontend/src/views/settings/SettingsView.vue` — `onBeforeRouteLeave`
-
----
-
-## SETTINGS-GAP-06: No Confirmation Before Running Uploads Cleanup
-
-**Severity:** MEDIUM  
-**Category:** Safety  
-**Status:** Clicking "Run Now" immediately deletes files
-
-### Description
-
-The "Run Now" button in the Uploads Cleanup section immediately triggers permanent file deletion without a confirmation dialog. A misclick could delete files that are still needed.
-
-### Affected Files & Functions
-
-| File | Function/Ref | Impact |
-|------|-------------|--------|
-| `frontend/src/views/settings/SettingsView.vue` | `runUploadsCleanupNow()` | No confirmation |
-
-### Proposed Solution
-
-```typescript
-async function runUploadsCleanupNow() {
-  const confirmed = await confirmDialog({
-    title: t('settings.uploads_cleanup.confirm_title'),
-    message: t('settings.uploads_cleanup.confirm_message'),
-    confirmText: t('common.run'),
-    destructive: true,
-  })
-  if (!confirmed) return
-  // ... existing cleanup logic ...
-}
-```
-
-### Impact Analysis
-
-| Aspect | Impact |
-|--------|--------|
-| **Positive** | Prevents accidental file deletion |
-| **Negative** | One extra click for intentional cleanup |
-| **Risk** | None |
-
-### Affected Functions
-
-- `frontend/src/views/settings/SettingsView.vue` — `runUploadsCleanupNow`
 
 ---
 
@@ -1005,50 +750,6 @@ While route-level guards prevent unauthorized navigation, component-level action
 
 ---
 
-## SETTINGS-GAP-08: Backend Organization Member Routes Not Exposed in Frontend API
-
-**Severity:** MEDIUM  
-**Category:** Missing Frontend Feature  
-**Status:** Backend routes exist but no frontend service methods
-
-### Description
-
-The backend has full organization member management routes, but the frontend `organizationsService` only exposes `list()`, `create()`, `delete()`, and `addMember()`. Missing:
-
-| Backend Route | Purpose |
-|--------------|---------|
-| `GET /api/organizations/current` | Get current org details |
-| `GET /api/organizations/members` | List org members |
-| `PUT /api/organizations/members/{member_id}` | Update member role |
-| `DELETE /api/organizations/members/{member_id}` | Remove member |
-
-### Affected Files & Functions
-
-| File | Missing Method |
-|------|---------------|
-| `frontend/src/services/api.ts` | `organizationsService.getCurrent()` |
-| `frontend/src/services/api.ts` | `organizationsService.listMembers()` |
-| `frontend/src/services/api.ts` | `organizationsService.updateMember()` |
-| `frontend/src/services/api.ts` | `organizationsService.removeMember()` |
-
-### Proposed Solution
-
-Add the missing service methods to `organizationsService` in `frontend/src/services/api.ts`.
-
-### Impact Analysis
-
-| Aspect | Impact |
-|--------|--------|
-| **Positive** | Enables full organization member management from the UI |
-| **Negative** | Requires new UI components |
-| **Risk** | Low — purely additive |
-
-### Affected Functions
-
-- `frontend/src/services/api.ts` — `organizationsService`
-
----
-
 ## SETTINGS-GAP-09: SSO Settings View Makes Inline API Calls
 
 **Severity:** LOW  
@@ -1104,36 +805,6 @@ Replace all hardcoded strings with `t('settings.pending_chats.title')` etc. and 
 
 - `frontend/src/views/settings/PendingChatsView.vue`, `AssignedChatsView.vue`
 - `frontend/src/i18n/locales/en.ts`, `es.ts`, `ar.ts`
-
----
-
-## SETTINGS-GAP-11: PendingChatsView and AssignedChatsView Hardcoded 200-Item Limit
-
-**Severity:** MEDIUM  
-**Category:** Functional Limitation  
-**Status:** `limit: 200` hardcoded, no pagination
-
-### Description
-
-Both views fetch data with `limit: 200` and perform client-side search only. If there are more than 200 pending/assigned chats, the user cannot see or search them.
-
-### Proposed Solution
-
-Add server-side pagination matching the `ClosedChatsView.vue` pattern.
-
-### Impact Analysis
-
-| Aspect | Impact |
-|--------|--------|
-| **Positive** | Handles organizations with >200 active chats |
-| **Negative** | Requires backend pagination support verification |
-| **Risk** | Low |
-
-### Affected Functions
-
-- `frontend/src/views/settings/PendingChatsView.vue`, `AssignedChatsView.vue`
-- `frontend/src/stores/contacts.ts`
-- Backend handlers — verify pagination support
 
 ---
 
@@ -1243,20 +914,12 @@ Add a "Reset to Defaults" button for each tab with known default values.
 
 ## Settings Gap Priority Matrix
 
-| Priority | Gap | Severity | Effort | Impact |
-|----------|-----|----------|--------|--------|
-| **P0** | SETTINGS-GAP-07: Inconsistent permission guards | HIGH | Medium | Security/UX consistency |
-| **P0** | SETTINGS-GAP-01: Shared isSubmitting across tabs | HIGH | Low | UX bug fix |
-| **P0** | SETTINGS-GAP-02: No loading indicator | HIGH | Low | UX bug fix |
-| **P1** | SETTINGS-GAP-03: No load-error UI | MEDIUM | Low | UX reliability |
-| **P1** | SETTINGS-GAP-04: No dirty-check for 3/4 tabs | MEDIUM | Medium | UX + performance |
-| **P1** | SETTINGS-GAP-06: No cleanup confirmation | MEDIUM | Low | Safety |
-| **P1** | SETTINGS-GAP-11: Hardcoded 200-item limit | MEDIUM | Medium | Functional limit |
-| **P2** | SETTINGS-GAP-05: No unsaved changes guard | MEDIUM | Low | UX safety |
-| **P2** | SETTINGS-GAP-08: Missing org member API methods | MEDIUM | Low | Missing feature |
-| **P2** | SETTINGS-GAP-13: SettingsView too large | MEDIUM | Medium | Code quality |
-| **P3** | SETTINGS-GAP-09: SSO inline API calls | LOW | Low | Code quality |
-| **P3** | SETTINGS-GAP-10: Missing i18n in pending/assigned | LOW | Low | i18n |
-| **P3** | SETTINGS-GAP-12: No member removal confirmation | LOW | Low | UX safety |
-| **P3** | SETTINGS-GAP-14: Mixed storage strategy | LOW | Medium | Architecture |
-| **P3** | SETTINGS-GAP-15: No reset to defaults | LOW | Low | UX enhancement |
+| Priority | Gap | Severity | Effort | Impact | Status |
+|----------|-----|----------|--------|--------|--------|
+| **P0** | SETTINGS-GAP-07: Inconsistent permission guards | HIGH | Medium | Security/UX consistency | **FIXED** |
+| **P2** | SETTINGS-GAP-13: SettingsView too large | MEDIUM | Medium | Code quality | **FIXED** — extracted `useChatBackground` + `useUploadsCleanup` composables |
+| **P3** | SETTINGS-GAP-09: SSO inline API calls | LOW | Low | Code quality | **FIXED** — `ssoService` in `api.ts` |
+| **P3** | SETTINGS-GAP-10: Missing i18n in pending/assigned | LOW | Low | i18n | **FIXED** — 12 keys in en/ar/es |
+| **P3** | SETTINGS-GAP-12: No member removal confirmation | LOW | Low | UX safety | **FIXED** — `DeleteConfirmDialog` added |
+| **P3** | SETTINGS-GAP-14: Mixed storage strategy | LOW | Medium | Architecture | **DEFERRED** — needs backend model changes |
+| **P3** | SETTINGS-GAP-15: No reset to defaults | LOW | Low | UX enhancement | **FIXED** — reset buttons on 3 tabs |

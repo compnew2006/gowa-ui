@@ -61,8 +61,13 @@ import {
 import { getErrorMessage } from "@/lib/api-utils";
 import { formatDate } from "@/lib/utils";
 import { useDebounceFn } from "@vueuse/core";
+import { useAuthStore } from "@/stores/auth";
 
 const { t } = useI18n();
+
+const authStore = useAuthStore();
+const canWriteActions = computed(() => authStore.hasPermission("custom_actions", "write"));
+const canDeleteActions = computed(() => authStore.hasPermission("custom_actions", "delete"));
 
 const actions = ref<CustomAction[]>([]);
 const isLoading = ref(false);
@@ -376,7 +381,7 @@ onMounted(() => fetchActions());
       icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
-        <Button variant="outline" size="sm" @click="openCreateDialog"
+        <Button v-if="canWriteActions" variant="outline" size="sm" @click="openCreateDialog"
           ><Plus class="h-4 w-4 mr-2" />{{
             $t("customActions.addAction")
           }}</Button
@@ -455,6 +460,7 @@ onMounted(() => fetchActions());
                 <template #cell-status="{ item: action }">
                   <div class="flex items-center gap-2">
                     <Switch
+                      v-if="canWriteActions"
                       :checked="action.is_active"
                       @update:checked="toggleAction(action)"
                     /><span class="text-sm text-muted-foreground">{{
@@ -472,6 +478,7 @@ onMounted(() => fetchActions());
                 <template #cell-actions="{ item: action }">
                   <div class="flex items-center justify-end gap-1">
                     <Button
+                      v-if="canWriteActions"
                       variant="ghost"
                       size="icon"
                       class="h-8 w-8"
@@ -479,6 +486,7 @@ onMounted(() => fetchActions());
                       ><Pencil class="h-4 w-4"
                     /></Button>
                     <Button
+                      v-if="canDeleteActions"
                       variant="ghost"
                       size="icon"
                       class="h-8 w-8 text-destructive"
@@ -491,7 +499,7 @@ onMounted(() => fetchActions());
                   </div>
                 </template>
                 <template #empty-action>
-                  <Button variant="outline" size="sm" @click="openCreateDialog"
+                  <Button v-if="canWriteActions" variant="outline" size="sm" @click="openCreateDialog"
                     ><Plus class="h-4 w-4 mr-2" />{{
                       $t("customActions.addAction")
                     }}</Button

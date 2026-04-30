@@ -747,6 +747,19 @@
     "notificationsSaved": "Notification settings saved",
     "chatPreferencesSaved": "Chat preferences saved",
     "chatPreferencesSaveFailed": "Failed to save chat preferences",
+    "pendingChatsTitle": "Pending Chats",
+    "pendingChatsSubtitle": "Chats waiting to be claimed by an agent.",
+    "searchPendingChats": "Search pending chats...",
+    "contactName": "Contact Name",
+    "lastActivity": "Last Activity",
+    "loadingPendingChats": "Loading pending chats...",
+    "noPendingChats": "No pending chats found.",
+    "assignedChatsTitle": "Assigned Chats",
+    "assignedChatsSubtitle": "Active chats that are currently assigned to agents.",
+    "searchAssignedChats": "Search assigned chats...",
+    "assignedUser": "Assigned User",
+    "loadingAssignedChats": "Loading assigned chats...",
+    "noAssignedChats": "No assigned chats found.",
     "instances": {
       "title": "WhatsApp Instances",
       "subtitle": "Manage your WhatsApp connections (No API costs)",
@@ -774,7 +787,8 @@
     "notificationSound1": "Sound 1",
     "notificationSound2": "Sound 2",
     "notificationSoundOriginal": "Original Sound",
-    "previewSound": "Play"
+    "previewSound": "Play",
+    "resetToDefaults": "Reset to Defaults"
   },
   "closedChats": {
     "title": "Closed Chats",
@@ -859,6 +873,7 @@
     "selectRoleRequired": "Please select a role",
     "member": "Member",
     "removeMember": "Remove Member",
+    "removeMemberConfirm": "Are you sure you want to remove {name} from this team?",
     "removeMemberTooltip": "Remove from organization",
     "removeMemberWarning": "This will remove the user from this organization. They will lose access to all organization resources but their account will not be deleted.",
     "memberRemoved": "Member removed from organization",

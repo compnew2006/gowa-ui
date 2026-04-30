@@ -1438,4 +1438,12 @@ export const notesService = {
     api.delete(`/contacts/${contactId}/notes/${noteId}`),
 };
 
+export const ssoService = {
+  list: () => api.get("/settings/sso"),
+  update: (provider: string, data: Record<string, unknown>) =>
+    api.put(`/settings/sso/${provider}`, data),
+  delete: (provider: string) =>
+    api.delete(`/settings/sso/${provider}`),
+};
+
 export default api;

@@ -50,8 +50,12 @@ import { getErrorMessage } from "@/lib/api-utils";
 import { CANNED_RESPONSE_CATEGORIES, getLabelFromValue } from "@/lib/constants";
 import { useDebounceFn } from "@vueuse/core";
 import WhatsAppRichTextEditor from "@/components/chat/WhatsAppRichTextEditor.vue";
+import { useAuthStore } from "@/stores/auth";
 
 const { t } = useI18n();
+const authStore = useAuthStore();
+const canWriteResponses = computed(() => authStore.hasPermission("canned_responses", "write"));
+const canDeleteResponses = computed(() => authStore.hasPermission("canned_responses", "delete"));
 
 interface CannedResponseFormData {
   name: string;
@@ -327,7 +331,7 @@ function handleAttachmentSelection(event: Event) {
       icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
-        <Button variant="outline" size="sm" @click="openCreateDialog"
+        <Button v-if="canWriteResponses" variant="outline" size="sm" @click="openCreateDialog"
           ><Plus class="h-4 w-4 mr-2" />{{
             $t("cannedResponses.addResponse")
           }}</Button
@@ -446,6 +450,7 @@ function handleAttachmentSelection(event: Event) {
                       <Copy class="h-4 w-4" />
                     </Button>
                     <Button
+                      v-if="canWriteResponses"
                       variant="ghost"
                       size="icon"
                       class="h-8 w-8"
@@ -455,6 +460,7 @@ function handleAttachmentSelection(event: Event) {
                       <Pencil class="h-4 w-4" />
                     </Button>
                     <Button
+                      v-if="canDeleteResponses"
                       variant="ghost"
                       size="icon"
                       class="h-8 w-8 text-destructive"
@@ -466,7 +472,7 @@ function handleAttachmentSelection(event: Event) {
                   </div>
                 </template>
                 <template #empty-action>
-                  <Button variant="outline" size="sm" @click="openCreateDialog">
+                  <Button v-if="canWriteResponses" variant="outline" size="sm" @click="openCreateDialog">
                     <Plus class="h-4 w-4 mr-2" />{{
                       $t("cannedResponses.addResponse")
                     }}

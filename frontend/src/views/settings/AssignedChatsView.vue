@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { UserCheck } from "lucide-vue-next";
 import { PageHeader } from "@/components/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useContactsStore, type Contact } from "@/stores/contacts";
 
+const { t } = useI18n();
 const router = useRouter();
 const contactsStore = useContactsStore();
 const isLoading = ref(false);
@@ -62,8 +64,8 @@ onMounted(loadAssignedChats);
 <template>
   <div class="flex h-full flex-col bg-background text-foreground">
     <PageHeader
-      title="Assigned Chats"
-      subtitle="Active chats that are currently assigned to agents."
+      :title="t('settings.assignedChatsTitle')"
+      :subtitle="t('settings.assignedChatsSubtitle')"
       :icon="UserCheck"
       icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     />
@@ -72,7 +74,7 @@ onMounted(loadAssignedChats);
       <div class="flex items-center gap-2">
         <Input
           v-model="searchQuery"
-          placeholder="Search assigned chats..."
+          :placeholder="t('settings.searchAssignedChats')"
           class="max-w-md bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-white light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
         />
         <Button
@@ -80,7 +82,7 @@ onMounted(loadAssignedChats);
           :disabled="isLoading"
           @click="loadAssignedChats"
         >
-          {{ isLoading ? "Refreshing..." : "Refresh" }}
+          {{ isLoading ? t('common.refreshing') : t('common.refresh') }}
         </Button>
       </div>
 
@@ -93,17 +95,17 @@ onMounted(loadAssignedChats);
               <th
                 class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
               >
-                Contact Name
+                {{ t('settings.contactName') }}
               </th>
               <th
                 class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
               >
-                Assigned User
+                {{ t('settings.assignedUser') }}
               </th>
               <th
                 class="text-left px-4 py-3 font-medium text-white/70 light:text-gray-700"
               >
-                Last Activity
+                {{ t('settings.lastActivity') }}
               </th>
             </tr>
           </thead>
@@ -113,7 +115,7 @@ onMounted(loadAssignedChats);
                 colspan="3"
                 class="px-4 py-8 text-center text-white/50 light:text-gray-500"
               >
-                Loading assigned chats...
+                {{ t('settings.loadingAssignedChats') }}
               </td>
             </tr>
             <tr
@@ -142,7 +144,7 @@ onMounted(loadAssignedChats);
                 colspan="3"
                 class="px-4 py-8 text-center text-white/50 light:text-gray-500"
               >
-                No assigned chats found.
+                {{ t('settings.noAssignedChats') }}
               </td>
             </tr>
           </tbody>

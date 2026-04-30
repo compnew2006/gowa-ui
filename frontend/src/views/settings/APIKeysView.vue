@@ -36,8 +36,12 @@ import { useCrudState } from "@/composables/useCrudState";
 import { getErrorMessage } from "@/lib/api-utils";
 import { formatDate } from "@/lib/utils";
 import { useDebounceFn } from "@vueuse/core";
+import { useAuthStore } from "@/stores/auth";
 
 const { t } = useI18n();
+const authStore = useAuthStore();
+const canWriteAPIKeys = computed(() => authStore.hasPermission("api_keys", "write"));
+const canDeleteAPIKeys = computed(() => authStore.hasPermission("api_keys", "delete"));
 
 interface APIKey {
   id: string;
@@ -236,7 +240,7 @@ onMounted(() => fetchItems());
       icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
     >
       <template #actions>
-        <Button variant="outline" size="sm" @click="openCreateDialogBase"
+        <Button v-if="canWriteAPIKeys" variant="outline" size="sm" @click="openCreateDialogBase"
           ><Plus class="h-4 w-4 mr-2" />{{ $t("apiKeys.createApiKey") }}</Button
         >
       </template>
@@ -322,6 +326,7 @@ onMounted(() => fetchItems());
                 </template>
                 <template #cell-actions="{ item: key }">
                   <Button
+                    v-if="canDeleteAPIKeys"
                     variant="ghost"
                     size="icon"
                     @click="openDeleteDialog(key)"
@@ -330,6 +335,7 @@ onMounted(() => fetchItems());
                 </template>
                 <template #empty-action>
                   <Button
+                    v-if="canWriteAPIKeys"
                     variant="outline"
                     size="sm"
                     @click="openCreateDialogBase"
