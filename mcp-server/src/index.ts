@@ -1,7 +1,7 @@
 import { loadConfig } from './config.js';
 import { Logger } from './logger.js';
 // import { WhatomateClient } from './clients/whatomate-client.js';
-const WhatomateClient = class { constructor(config: any) {} } as any;
+const WhatomateClient = class { constructor(_config: any) {} } as any;
 import { OpenAIClient } from './clients/openai-client.js';
 import { createWhatomateMcpServer } from './mcp/server.js';
 import { startStdioServer } from './transports/stdio.js';
