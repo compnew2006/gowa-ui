@@ -453,16 +453,16 @@ func CreateTestChatbotFlow(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppA
 	t.Helper()
 
 	flow := &models.ChatbotFlow{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   orgID,
-		WhatsAppAccount:  whatsAppAccount,
-		Name:             "Test Flow " + uuid.New().String()[:8],
-		IsEnabled:        true,
-		Description:      "Test flow description",
-		InitialMessage:   "Hello from test flow!",
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     orgID,
+		WhatsAppAccount:    whatsAppAccount,
+		Name:               "Test Flow " + uuid.New().String()[:8],
+		IsEnabled:          true,
+		Description:        "Test flow description",
+		InitialMessage:     "Hello from test flow!",
 		InitialMessageType: models.FlowStepTypeText,
-		CompletionMessage: "Flow completed",
-		TimeoutMessage:   "Flow timed out",
+		CompletionMessage:  "Flow completed",
+		TimeoutMessage:     "Flow timed out",
 	}
 	require.NoError(t, db.Create(flow).Error)
 	return flow
@@ -474,17 +474,17 @@ func CreateTestKeywordRule(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppA
 
 	uniqueID := uuid.New().String()[:8]
 	rule := &models.KeywordRule{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   orgID,
-		WhatsAppAccount:  whatsAppAccount,
-		Name:             "Test Rule " + uniqueID,
-		IsEnabled:        true,
-		Priority:         10,
-		Keywords:         models.StringArray{"test" + uniqueID},
-		MatchType:        models.MatchTypeContains,
-		CaseSensitive:    false,
-		ResponseType:     models.ResponseTypeText,
-		ResponseContent:  models.JSONB{"message": "Test response"},
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		WhatsAppAccount: whatsAppAccount,
+		Name:            "Test Rule " + uniqueID,
+		IsEnabled:       true,
+		Priority:        10,
+		Keywords:        models.StringArray{"test" + uniqueID},
+		MatchType:       models.MatchTypeContains,
+		CaseSensitive:   false,
+		ResponseType:    models.ResponseTypeText,
+		ResponseContent: models.JSONB{"message": "Test response"},
 	}
 	require.NoError(t, db.Create(rule).Error)
 	return rule
@@ -511,14 +511,14 @@ func CreateTestAIContext(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppAcc
 	t.Helper()
 
 	context := &models.AIContext{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   orgID,
-		WhatsAppAccount:  whatsAppAccount,
-		Name:             "Test Context " + uuid.New().String()[:8],
-		IsEnabled:        true,
-		Priority:         10,
-		ContextType:      models.ContextTypeStatic,
-		StaticContent:    "Test static content",
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		WhatsAppAccount: whatsAppAccount,
+		Name:            "Test Context " + uuid.New().String()[:8],
+		IsEnabled:       true,
+		Priority:        10,
+		ContextType:     models.ContextTypeStatic,
+		StaticContent:   "Test static content",
 	}
 	require.NoError(t, db.Create(context).Error)
 	return context

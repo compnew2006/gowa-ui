@@ -162,7 +162,7 @@ func TestHasCompleteAction(t *testing.T) {
 					"type":  "button",
 					"label": "Submit",
 					"on-click-action": map[string]interface{}{
-						"name":  "complete",
+						"name": "complete",
 						"payload": map[string]interface{}{
 							"screen": "next",
 						},

@@ -61,93 +61,93 @@ func TestSnakeToPascal(t *testing.T) {
 		},
 		{
 			name:     "api acronym (lowercase)",
-			input:     "api_key",
-			expected:    "APIKey",
+			input:    "api_key",
+			expected: "APIKey",
 		},
 		{
 			name:     "api acronym (uppercase)",
-			input:     "API_KEY",
-			expected:    "APIKEY", // API is acronym, KEY stays uppercase as-is
+			input:    "API_KEY",
+			expected: "APIKEY", // API is acronym, KEY stays uppercase as-is
 		},
 		{
 			name:     "uuid acronym (lowercase)",
-			input:     "user_uuid",
-			expected:    "UserUUID",
+			input:    "user_uuid",
+			expected: "UserUUID",
 		},
 		{
 			name:     "uuid acronym (uppercase)",
-			input:     "user_UUID",
-			expected:    "UserUUID",
+			input:    "user_UUID",
+			expected: "UserUUID",
 		},
 		{
 			name:     "http acronym (lowercase)",
-			input:     "http_url",
-			expected:    "HTTPURL",
+			input:    "http_url",
+			expected: "HTTPURL",
 		},
 		{
 			name:     "sql acronym (lowercase)",
-			input:     "sql_query",
-			expected:    "SQLQuery",
+			input:    "sql_query",
+			expected: "SQLQuery",
 		},
 		{
 			name:     "json acronym (lowercase)",
-			input:     "json_data",
-			expected:    "JSONData",
+			input:    "json_data",
+			expected: "JSONData",
 		},
 		{
 			name:     "mixed acronyms",
-			input:     "user_api_url_id",
-			expected:    "UserAPIURLID",
+			input:    "user_api_url_id",
+			expected: "UserAPIURLID",
 		},
 		{
 			name:     "multiple underscores",
-			input:     "one_two_three_four",
-			expected:    "OneTwoThreeFour",
+			input:    "one_two_three_four",
+			expected: "OneTwoThreeFour",
 		},
 		{
 			name:     "leading underscore",
-			input:     "_private_field",
-			expected:    "PrivateField", // Leading empty part dropped by Join
+			input:    "_private_field",
+			expected: "PrivateField", // Leading empty part dropped by Join
 		},
 		{
 			name:     "trailing underscore",
-			input:     "private_field_",
-			expected:     "PrivateField",
+			input:    "private_field_",
+			expected: "PrivateField",
 		},
 		{
 			name:     "consecutive underscores",
-			input:     "field__name",
-			expected:     "FieldName", // Empty string part is dropped
+			input:    "field__name",
+			expected: "FieldName", // Empty string part is dropped
 		},
 		{
 			name:     "all uppercase with underscores",
-			input:     "USER_ID",
-			expected:     "USERID", // USER not in acronyms, ID is
+			input:    "USER_ID",
+			expected: "USERID", // USER not in acronyms, ID is
 		},
 		{
 			name:     "already PascalCase",
-			input:     "UserName",
-			expected:    "UserName",
+			input:    "UserName",
+			expected: "UserName",
 		},
 		{
 			name:     "camelCase input",
-			input:     "userName",
-			expected:    "UserName",
+			input:    "userName",
+			expected: "UserName",
 		},
 		{
 			name:     "numbers in field",
-			input:     "field_1_name",
-			expected:    "Field1Name",
+			input:    "field_1_name",
+			expected: "Field1Name",
 		},
 		{
 			name:     "acronym at end",
-			input:     "image_id",
-			expected:    "ImageID",
+			input:    "image_id",
+			expected: "ImageID",
 		},
 		{
 			name:     "multiple acronyms in sequence",
-			input:     "api_url_id",
-			expected:    "APIURLID",
+			input:    "api_url_id",
+			expected: "APIURLID",
 		},
 	}
 
@@ -297,7 +297,7 @@ func TestFormatExportValue(t *testing.T) {
 		},
 		{
 			name:     "complex struct",
-			input:    struct{Field string}{Field: "test"},
+			input:    struct{ Field string }{Field: "test"},
 			colType:  nil,
 			expected: `{"Field":"test"}`,
 		},

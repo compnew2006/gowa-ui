@@ -45,10 +45,6 @@ type InviteContactCollaboratorRequest struct {
 	Role   string `json:"role,omitempty"`
 }
 
-type updateCollaboratorStatusRequest struct {
-	Status string `json:"status"`
-}
-
 func (a *App) loadContactForCollaboration(r *fastglue.Request, orgID, userID, contactID uuid.UUID) (*models.Contact, error) {
 	requestDB := a.requestDB(r)
 	var contact models.Contact

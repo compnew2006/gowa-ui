@@ -268,7 +268,7 @@ func (a *App) processStatusUpdate(phoneNumberID string, status WebhookStatus) {
 
 	a.Log.Info("Processing status update", "message_id", messageID, "status", statusValue, "phone_number_id", phoneNumberID)
 
-	// Update messages table - this also handles campaign stats via incrementCampaignStat
+	// Update messages table; campaign stats are recalculated from stored messages.
 	a.updateMessageStatus(messageID, statusValue, status.Errors)
 }
 

@@ -489,6 +489,9 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	if err != nil {
 		return nil
 	}
+	if req.WhatsAppAccount == "" {
+		req.WhatsAppAccount = contact.WhatsAppAccount
+	}
 
 	// Check for existing active transfer
 	var existingCount int64
@@ -528,9 +531,10 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		if err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent_id", nil, "")
 		}
-		// Verify agent exists and is available
-		agent, err := findByIDAndOrg[models.User](requestDB, r, parsedAgentID, orgID, "Agent")
+		// Verify agent exists, is available in the org, and can receive chats.
+		agent, err := findAssignableOrgUser(requestDB, parsedAgentID, orgID)
 		if err != nil {
+			_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
 			return nil
 		}
 		if !agent.IsAvailable {
@@ -827,9 +831,10 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent_id", nil, "")
 		}
 
-		// Verify agent exists and is available
-		agent, err := findByIDAndOrg[models.User](requestDB, r, parsedAgentID, orgID, "Agent")
+		// Verify agent exists, is available in the org, and can receive chats.
+		agent, err := findAssignableOrgUser(requestDB, parsedAgentID, orgID)
 		if err != nil {
+			_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
 			return nil
 		}
 		if !agent.IsAvailable {

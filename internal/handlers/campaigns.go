@@ -13,7 +13,6 @@ import (
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
-	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -1347,55 +1346,6 @@ func getMimeTypeFromExtension(ext string) string {
 		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 	default:
 		return "application/octet-stream"
-	}
-}
-
-// incrementCampaignStat increments the appropriate campaign counter based on status
-func (a *App) incrementCampaignStat(campaignID string, status string) {
-	campaignUUID, err := uuid.Parse(campaignID)
-	if err != nil {
-		a.Log.Error("Invalid campaign ID for stats update", "campaign_id", campaignID)
-		return
-	}
-
-	var column string
-	switch models.MessageStatus(status) {
-	case models.MessageStatusDelivered:
-		column = "delivered_count"
-	case models.MessageStatusRead:
-		column = "read_count"
-	case models.MessageStatusFailed:
-		column = "failed_count"
-	default:
-		// sent is already counted during processCampaign
-		return
-	}
-
-	var campaign models.BulkMessageCampaign
-	campaign.ID = campaignUUID
-
-	// atomic update and return updated record
-	result := a.DB.Model(&campaign).
-		Clauses(clause.Returning{}).
-		Update(column, gorm.Expr(column+" + 1"))
-
-	if result.Error != nil {
-		a.Log.Error("Failed to increment campaign stat", "error", result.Error, "campaign_id", campaignID, "column", column)
-		return
-	}
-
-	// Broadcast stats update via WebSocket
-	if a.WSHub != nil && result.RowsAffected > 0 {
-		a.WSHub.BroadcastToOrg(campaign.OrganizationID, websocket.WSMessage{
-			Type: websocket.TypeCampaignStatsUpdate,
-			Payload: map[string]interface{}{
-				"campaign_id":     campaignID,
-				"sent_count":      campaign.SentCount,
-				"delivered_count": campaign.DeliveredCount,
-				"read_count":      campaign.ReadCount,
-				"failed_count":    campaign.FailedCount,
-			},
-		})
 	}
 }
 

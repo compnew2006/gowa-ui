@@ -7,7 +7,7 @@ import (
 func TestClientBuildCatalogsURL(t *testing.T) {
 	client := &Client{baseURL: "https://graph.facebook.com"}
 	account := &Account{
-		BusinessID:  "123456789",
+		BusinessID: "123456789",
 		APIVersion: "v18.0",
 	}
 

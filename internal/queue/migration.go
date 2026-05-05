@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -415,12 +416,15 @@ func appendMigrationSample(dst *[]string, value string) {
 
 func acquireCampaignMigrationLock(ctx context.Context, client *redis.Client, ttl time.Duration) (string, error) {
 	token := uuid.NewString()
-	ok, err := client.SetNX(ctx, campaignMigrationLockKey, token, ttl).Result()
+	result, err := client.SetArgs(ctx, campaignMigrationLockKey, token, redis.SetArgs{
+		Mode: "NX",
+		TTL:  ttl,
+	}).Result()
+	if errors.Is(err, redis.Nil) || result == "" {
+		return "", fmt.Errorf("campaign migration lock is already held")
+	}
 	if err != nil {
 		return "", fmt.Errorf("acquire campaign migration lock: %w", err)
-	}
-	if !ok {
-		return "", fmt.Errorf("campaign migration lock is already held")
 	}
 	return token, nil
 }

@@ -374,6 +374,7 @@ func streamMediaWithPathToWriter(
 		return 0, fmt.Errorf("media download path does not start with slash: %s", directPath)
 	}
 
+	//nolint:staticcheck // whatsmeow exposes media refresh only through DangerousInternals.
 	mediaConn, err := client.DangerousInternals().RefreshMediaConn(ctx, false)
 	if err != nil {
 		return 0, fmt.Errorf("refresh media connections: %w", err)
@@ -425,6 +426,7 @@ func streamMediaURLToWriter(
 	fileSHA256 []byte,
 	dst io.Writer,
 ) (int64, error) {
+	//nolint:staticcheck // whatsmeow exposes direct media downloads only through DangerousInternals.
 	resp, err := client.DangerousInternals().DoMediaDownloadRequest(ctx, url)
 	if err != nil {
 		return 0, err

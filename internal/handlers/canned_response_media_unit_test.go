@@ -24,37 +24,37 @@ func TestIsMultipartFormRequest(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
+		name        string
 		contentType string
 		expected    bool
 	}{
 		{
-			name:       "multipart form data",
+			name:        "multipart form data",
 			contentType: "multipart/form-data",
 			expected:    true,
 		},
 		{
-			name:       "multipart form data with boundary",
+			name:        "multipart form data with boundary",
 			contentType: "multipart/form-data; boundary=----WebKitFormBoundary",
 			expected:    true,
 		},
 		{
-			name:       "uppercase multipart",
+			name:        "uppercase multipart",
 			contentType: "MULTIPART/FORM-DATA",
 			expected:    true,
 		},
 		{
-			name:       "application json",
+			name:        "application json",
 			contentType: "application/json",
 			expected:    false,
 		},
 		{
-			name:       "text plain",
+			name:        "text plain",
 			contentType: "text/plain",
 			expected:    false,
 		},
 		{
-			name:       "empty content type",
+			name:        "empty content type",
 			contentType: "",
 			expected:    false,
 		},
@@ -311,46 +311,46 @@ func TestResolveMediaFilePath(t *testing.T) {
 	// We can't directly test resolveMediaFilePath without being able to mock getMediaStoragePath,
 	// but we can test the validation logic that it performs
 	tests := []struct {
-		name        string
+		name         string
 		relativePath string
-		wantError   bool
-		errorMsg    string
+		wantError    bool
+		errorMsg     string
 	}{
 		{
-			name:        "empty path",
+			name:         "empty path",
 			relativePath: "",
-			wantError:   true,
-			errorMsg:    "invalid media file path",
+			wantError:    true,
+			errorMsg:     "invalid media file path",
 		},
 		{
-			name:        "dot only",
+			name:         "dot only",
 			relativePath: ".",
-			wantError:   true,
-			errorMsg:    "invalid media file path",
+			wantError:    true,
+			errorMsg:     "invalid media file path",
 		},
 		{
-			name:        "double dot only",
+			name:         "double dot only",
 			relativePath: "..",
-			wantError:   true,
-			errorMsg:    "invalid media file path path traversal",
+			wantError:    true,
+			errorMsg:     "invalid media file path path traversal",
 		},
 		{
-			name:        "path with parent directory escape",
+			name:         "path with parent directory escape",
 			relativePath: "../suspicious.dat",
-			wantError:   true,
-			errorMsg:    "invalid media file path",
+			wantError:    true,
+			errorMsg:     "invalid media file path",
 		},
 		{
-			name:        "path with leading separator and parent escape",
+			name:         "path with leading separator and parent escape",
 			relativePath: ".." + string(os.PathSeparator) + "file.dat",
-			wantError:   true,
-			errorMsg:    "invalid media file path",
+			wantError:    true,
+			errorMsg:     "invalid media file path",
 		},
 		{
-			name:        "whitespace only",
+			name:         "whitespace only",
 			relativePath: "   ",
-			wantError:   true,
-			errorMsg:    "invalid media file path",
+			wantError:    true,
+			errorMsg:     "invalid media file path",
 		},
 	}
 

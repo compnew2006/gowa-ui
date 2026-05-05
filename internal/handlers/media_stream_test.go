@@ -682,7 +682,7 @@ func TestServeMedia_RollsBackRestoredFileWhenMessageUpdateFails(t *testing.T) {
 		if tx.Statement.Schema == nil || tx.Statement.Schema.Table != "messages" {
 			return
 		}
-		tx.AddError(errors.New("forced restore update failure"))
+		_ = tx.AddError(errors.New("forced restore update failure"))
 	}))
 	defer func() {
 		require.NoError(t, app.DB.Callback().Update().Remove(callbackName))

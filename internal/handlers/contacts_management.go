@@ -104,6 +104,20 @@ func (a *App) canUserSeeContactInstance(orgID, userID uuid.UUID, contact *models
 	return containsRestrictedUUID(allowedInstanceIDs, *contact.InstanceID), nil
 }
 
+func findAssignableOrgUser(db *gorm.DB, userID, orgID uuid.UUID) (*models.User, error) {
+	var user models.User
+	err := db.Session(&gorm.Session{}).
+		Select("users.*").
+		Joins("LEFT JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL", orgID).
+		Where("users.id = ? AND users.deleted_at IS NULL", userID).
+		Where("(user_organizations.user_id IS NOT NULL OR users.organization_id = ?)", orgID).
+		First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (a *App) buildLifecycleContactQuery(
 	requestDB *gorm.DB,
 	orgID, userID, contactID uuid.UUID,
@@ -204,10 +218,9 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		}
 	}
 
-	// If assigning to a user, verify they exist in the same org
+	// If assigning to a user, verify they are available in the same org.
 	if req.UserID != nil {
-		var user models.User
-		if err := requestDB.Where("id = ? AND organization_id = ?", req.UserID, orgID).First(&user).Error; err != nil {
+		if _, err := findAssignableOrgUser(requestDB, *req.UserID, orgID); err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User not found", nil, "")
 		}
 	}

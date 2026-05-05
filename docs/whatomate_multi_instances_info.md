@@ -1820,3 +1820,93 @@ Updated: 2026-04-15 22:21:06 UTC
 - native Go + Vite build orchestration on Ubuntu/amd64
 - production license activation and per-instance verification
 - browser and HTTP smoke verification against live HTTPS routes
+
+## Deployment Update
+
+Updated: 2026-05-05 09:47:26 UTC
+
+- Deployed from local workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- VPS: `31.97.192.53` (`root`, Ubuntu)
+- Source revision on deploy: `7eafdfb`
+- Native build command used on VPS: `CGO_ENABLED=0 go build` with embedded `license.EmbeddedPublicKeyRingBase64`
+- Embedded license key ID activated: `deploy-20260416`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Installed binary version: `Whatomate 7eafdfb-deploy-20260505 (built 2026-05-05_09:45:02)`
+- Installed binary SHA256: `60463f9c5e3a734692c0597ead69e9c076282ea4dd6bc63ed80e723d3f2a9715`
+- Focused pre-deploy backup: `/root/whatomate_backups/whatomate-installed-focused-20260505_093801.tar.gz`
+- Additional pre-install binary backup: `/opt/whatomate/bin/whatomate.20260505_094527.pre-20260505-deploy.bak`
+
+### License Enablement
+
+- Added `[license] enabled = true` to:
+  - `/opt/whatomate/config.toml`
+  - `/opt/whatomate/instances/holol-wenjaz/config.toml`
+  - `/opt/whatomate/instances/alarkan-almthalia/config.toml`
+  - `/opt/whatomate/instances/matbaat-ruya/config.toml`
+- Activated a host-bound lifetime production license on ports `18123`, `18124`, `18125`, and `18126`.
+- Final license state for all four instances: `enabled = true`, `status = active`, `locked = false`
+- License limits verified:
+  - max organizations: `5`
+  - max users per org: `50`
+  - max WhatsApp endpoints per org: `50`
+  - max workers: `25`
+
+### VPS Source Cleanup
+
+- Removed temporary and source runtime code paths:
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-sandbox`
+  - `/tmp/whatomate-deploy-src`
+- Disabled and stopped `whatomate-sandbox.service`.
+- Retained production runtime assets:
+  - `/opt/whatomate/bin/whatomate`
+  - `/opt/whatomate/config.toml`
+  - `/opt/whatomate/instances/*/config.toml`
+  - uploads, PostgreSQL databases, Redis, Nginx vhosts, systemd unit files, and backups.
+
+### Nginx Update
+
+- Root vhost `/etc/nginx/sites-available/ofuqalmadenah` previously pointed to sandbox port `127.0.0.1:18127`.
+- Updated root vhost upstreams to production main port `127.0.0.1:18123`.
+- Nginx config backup: `/etc/nginx/sites-available/ofuqalmadenah.20260505_094726.pre-production-upstream.bak`
+- `nginx -t` passed and Nginx was reloaded.
+
+### Services Restarted
+
+- `whatomate`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- All production services returned `active`.
+- Listener ports active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com` -> `200`
+  - `https://www.ofuqalmadenah.com` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com` -> `200`
+- License bootstrap verification:
+  - `:18123` -> `active`
+  - `:18124` -> `active`
+  - `:18125` -> `active`
+  - `:18126` -> `active`
+- Chrome DevTools MCP browser verification:
+  - opened `https://holol-wenjaz.ofuqalmadenah.com/settings/license`
+  - app redirected to the login page normally
+  - browser-side `fetch('/api/license/bootstrap')` returned `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`
+  - screenshot saved locally at `tmp/deploy-verify-holol-license.png`
+
+### Skills And Competencies Applied
+
+- Skill used: `devops-engineer`
+- MCPs/tools used: `codebase-memory-mcp` for project discovery, Chrome DevTools MCP for browser verification, SSH/rsync/systemd/Nginx tooling for deployment.
+- Competencies applied:
+  - production Linux deployment and rollback backup
+  - native Go/Vite build on Ubuntu
+  - secure offline license key-ring embedding
+  - per-instance license activation and quota verification
+  - Nginx upstream repair
+  - source-code cleanup after binary deployment

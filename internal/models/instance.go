@@ -33,11 +33,11 @@ func (WhatsAppInstance) TableName() string {
 // InstanceNotification represents a notification for an instance event
 type InstanceNotification struct {
 	BaseModel
-	OrganizationID uuid.UUID `gorm:"type:uuid;not null;index" json:"organization_id"`
-	InstanceID     uuid.UUID `gorm:"type:uuid;not null;index" json:"instance_id"`
-	EventType      string    `gorm:"not null" json:"event_type"` // e.g., "ban", "logout"
-	Message        string    `json:"message"`
-	IsDismissed    bool      `gorm:"default:false" json:"is_dismissed"`
+	OrganizationID uuid.UUID  `gorm:"type:uuid;not null;index" json:"organization_id"`
+	InstanceID     uuid.UUID  `gorm:"type:uuid;not null;index" json:"instance_id"`
+	EventType      string     `gorm:"not null" json:"event_type"` // e.g., "ban", "logout"
+	Message        string     `json:"message"`
+	IsDismissed    bool       `gorm:"default:false" json:"is_dismissed"`
 	ContactID      *uuid.UUID `gorm:"type:uuid;index" json:"contact_id,omitempty"`
 	Metadata       JSONB      `gorm:"type:jsonb;default:'{}'" json:"metadata,omitempty"`
 

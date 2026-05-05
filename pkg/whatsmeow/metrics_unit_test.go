@@ -216,11 +216,11 @@ func TestInstanceMetrics_DayKeyFormat(t *testing.T) {
 
 	// Test specific dates
 	tests := []struct {
-		name         string
-		year         int
-		month        time.Month
-		day          int
-		expectedKey  int64
+		name        string
+		year        int
+		month       time.Month
+		day         int
+		expectedKey int64
 	}{
 		{
 			name:        "2024-01-01",

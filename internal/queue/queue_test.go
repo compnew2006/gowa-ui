@@ -146,14 +146,6 @@ func (h *mockHandler) getInboundMediaJobs() []*queue.InboundMediaJob {
 	return dst
 }
 
-func (h *mockHandler) getContactJobs() []*queue.ContactRepairJob {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	dst := make([]*queue.ContactRepairJob, len(h.contactJobs))
-	copy(dst, h.contactJobs)
-	return dst
-}
-
 // --- NewRedisQueue tests ---
 
 func TestNewRedisQueue(t *testing.T) {

@@ -279,8 +279,8 @@ func TestValidateDefaultAdmin_ProductionShortPassword(t *testing.T) {
 
 	shortPasswords := []string{
 		"short",
-		"1234567890",  // 10 chars
-		"short1",       // 6 chars
+		"1234567890", // 10 chars
+		"short1",     // 6 chars
 	}
 
 	for _, password := range shortPasswords {
@@ -312,9 +312,9 @@ func TestValidateDefaultAdmin_ProductionValidPassword(t *testing.T) {
 
 	validPasswords := []string{
 		"securePassword123",      // exactly 12 chars
-		"verySecurePassword456!",  // more than 12 chars
-		"admin12345678",           // 12 chars
-		"p@ssw0rd12345",            // 12 chars with special char
+		"verySecurePassword456!", // more than 12 chars
+		"admin12345678",          // 12 chars
+		"p@ssw0rd12345",          // 12 chars with special char
 	}
 
 	for _, password := range validPasswords {

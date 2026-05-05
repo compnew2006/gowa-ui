@@ -42,7 +42,6 @@ const (
 
 var (
 	errLegacyMediaRestoreNotNeeded     = errors.New("legacy media restore not needed")
-	errLegacyMediaRestoreBudgetFull    = errors.New("legacy media restore budget exhausted")
 	errLegacyMediaRestoreWaitingTimed  = errors.New("legacy media restore wait timed out")
 	errLegacyMediaRestoreInvalidMedia  = errors.New("legacy media restore invalid media payload")
 	errLegacyMediaRestoreTransaction   = errors.New("legacy media restore transaction failed")

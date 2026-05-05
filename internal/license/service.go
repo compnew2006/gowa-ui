@@ -688,26 +688,6 @@ func (s *Service) persistRecord(ctx context.Context, record *models.LicenseRecor
 	})
 }
 
-func (s *Service) publishState(ctx context.Context, state State) error {
-	if s.redis == nil {
-		return nil
-	}
-	payload, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-	envelope := map[string]any{
-		"state": string(payload),
-		"hmac":  s.stateHMAC(payload),
-	}
-	if envBytes, err := json.Marshal(envelope); err == nil {
-		if err := s.redis.Set(ctx, redisStateKey, envBytes, 2*time.Minute).Err(); err != nil {
-			return err
-		}
-	}
-	return s.redis.Publish(ctx, redisInvalidateChannel, state.Status).Err()
-}
-
 func (s *Service) verifyStoredActivationToken(record *models.LicenseRecord) (*LicenseClaims, string, error) {
 	if s == nil || s.cfg == nil {
 		return nil, "", fmt.Errorf("license service is not configured")

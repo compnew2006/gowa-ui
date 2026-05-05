@@ -12,27 +12,27 @@ func TestGenerateRandomString_ValidLength(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name  string
+		name   string
 		length int
 	}{
 		{
-			name:  "length 1",
+			name:   "length 1",
 			length: 1,
 		},
 		{
-			name:  "length 8",
+			name:   "length 8",
 			length: 8,
 		},
 		{
-			name:  "length 16",
+			name:   "length 16",
 			length: 16,
 		},
 		{
-			name:  "length 32",
+			name:   "length 32",
 			length: 32,
 		},
 		{
-			name:  "length 64",
+			name:   "length 64",
 			length: 64,
 		},
 	}

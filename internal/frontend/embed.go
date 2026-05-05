@@ -2,8 +2,8 @@ package frontend
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"embed"
+	"encoding/base64"
 	"fmt"
 	"io/fs"
 	"net/http"

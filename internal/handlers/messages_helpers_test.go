@@ -47,8 +47,8 @@ func TestResolvedActorType(t *testing.T) {
 		{
 			name: "unknown actor type with user ID returns user",
 			opts: MessageSendOptions{
-				ActorType:      MessageActorType("unknown"),
-				SentByUserID:   &userID,
+				ActorType:    MessageActorType("unknown"),
+				SentByUserID: &userID,
 			},
 			expected: MessageActorUser,
 		},

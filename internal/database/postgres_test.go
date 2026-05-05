@@ -374,8 +374,8 @@ func TestCreateDefaultAdmin(t *testing.T) {
 		}
 
 		// After trimming, email and password should be empty
-		email := fmt.Sprintf("%s", adminCfg.Email)
-		password := fmt.Sprintf("%s", adminCfg.Password)
+		email := adminCfg.Email
+		password := adminCfg.Password
 
 		assert.Equal(t, "", email)
 		assert.Equal(t, "", password)
@@ -391,9 +391,9 @@ func TestCreateDefaultAdmin(t *testing.T) {
 		}
 
 		// Simulate trimming
-		email := fmt.Sprintf("%s", adminCfg.Email)
-		password := fmt.Sprintf("%s", adminCfg.Password)
-		fullName := fmt.Sprintf("%s", adminCfg.FullName)
+		email := adminCfg.Email
+		password := adminCfg.Password
+		fullName := adminCfg.FullName
 
 		assert.Contains(t, email, "test@example.com")
 		assert.Contains(t, password, "password123")

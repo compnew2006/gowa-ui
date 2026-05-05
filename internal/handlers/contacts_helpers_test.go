@@ -332,18 +332,18 @@ func TestIsPlaceholderTextMessage(t *testing.T) {
 
 func TestIsSyntheticPlaceholderMessage(t *testing.T) {
 	tests := []struct {
-		name                 string
-		message              models.Message
-		hasCompanionByWAMID  map[string]bool
-		expected             bool
+		name                string
+		message             models.Message
+		hasCompanionByWAMID map[string]bool
+		expected            bool
 	}{
 		{
 			name: "placeholder message with companion WAMID",
 			message: models.Message{
-				MessageType:        models.MessageTypeText,
-				Content:            unsupportedMessageBody,
-				WhatsAppMessageID:  "msg123",
-				Metadata:           models.JSONB{},
+				MessageType:       models.MessageTypeText,
+				Content:           unsupportedMessageBody,
+				WhatsAppMessageID: "msg123",
+				Metadata:          models.JSONB{},
 			},
 			hasCompanionByWAMID: map[string]bool{"msg123": true},
 			expected:            true,
@@ -351,10 +351,10 @@ func TestIsSyntheticPlaceholderMessage(t *testing.T) {
 		{
 			name: "placeholder message without companion WAMID",
 			message: models.Message{
-				MessageType:        models.MessageTypeText,
-				Content:            unsupportedMessageBody,
-				WhatsAppMessageID:  "msg123",
-				Metadata:           models.JSONB{},
+				MessageType:       models.MessageTypeText,
+				Content:           unsupportedMessageBody,
+				WhatsAppMessageID: "msg123",
+				Metadata:          models.JSONB{},
 			},
 			hasCompanionByWAMID: map[string]bool{"msg456": true},
 			expected:            false,
@@ -362,10 +362,10 @@ func TestIsSyntheticPlaceholderMessage(t *testing.T) {
 		{
 			name: "placeholder message with empty WAMID",
 			message: models.Message{
-				MessageType:        models.MessageTypeText,
-				Content:            unsupportedMessageBody,
-				WhatsAppMessageID:  "",
-				Metadata:           models.JSONB{},
+				MessageType:       models.MessageTypeText,
+				Content:           unsupportedMessageBody,
+				WhatsAppMessageID: "",
+				Metadata:          models.JSONB{},
 			},
 			hasCompanionByWAMID: map[string]bool{},
 			expected:            false,
@@ -373,10 +373,10 @@ func TestIsSyntheticPlaceholderMessage(t *testing.T) {
 		{
 			name: "placeholder message with revoked metadata",
 			message: models.Message{
-				MessageType:        models.MessageTypeText,
-				Content:            unsupportedMessageBody,
-				WhatsAppMessageID:  "msg123",
-				Metadata:           models.JSONB{"revoked": true},
+				MessageType:       models.MessageTypeText,
+				Content:           unsupportedMessageBody,
+				WhatsAppMessageID: "msg123",
+				Metadata:          models.JSONB{"revoked": true},
 			},
 			hasCompanionByWAMID: map[string]bool{"msg123": true},
 			expected:            false,
@@ -384,10 +384,10 @@ func TestIsSyntheticPlaceholderMessage(t *testing.T) {
 		{
 			name: "regular message with companion WAMID",
 			message: models.Message{
-				MessageType:        models.MessageTypeText,
-				Content:            "Hello world",
-				WhatsAppMessageID:  "msg123",
-				Metadata:           models.JSONB{},
+				MessageType:       models.MessageTypeText,
+				Content:           "Hello world",
+				WhatsAppMessageID: "msg123",
+				Metadata:          models.JSONB{},
 			},
 			hasCompanionByWAMID: map[string]bool{"msg123": true},
 			expected:            false,
@@ -395,10 +395,10 @@ func TestIsSyntheticPlaceholderMessage(t *testing.T) {
 		{
 			name: "placeholder message with nil metadata",
 			message: models.Message{
-				MessageType:        models.MessageTypeText,
-				Content:            unsupportedMessageBody,
-				WhatsAppMessageID:  "msg123",
-				Metadata:           nil,
+				MessageType:       models.MessageTypeText,
+				Content:           unsupportedMessageBody,
+				WhatsAppMessageID: "msg123",
+				Metadata:          nil,
 			},
 			hasCompanionByWAMID: map[string]bool{"msg123": true},
 			expected:            true,
@@ -406,10 +406,10 @@ func TestIsSyntheticPlaceholderMessage(t *testing.T) {
 		{
 			name: "placeholder message with whitespace-only WAMID",
 			message: models.Message{
-				MessageType:        models.MessageTypeText,
-				Content:            unsupportedMessageBody,
-				WhatsAppMessageID:  "  ",
-				Metadata:           models.JSONB{},
+				MessageType:       models.MessageTypeText,
+				Content:           unsupportedMessageBody,
+				WhatsAppMessageID: "  ",
+				Metadata:          models.JSONB{},
 			},
 			hasCompanionByWAMID: map[string]bool{},
 			expected:            false,
@@ -417,10 +417,10 @@ func TestIsSyntheticPlaceholderMessage(t *testing.T) {
 		{
 			name: "empty companion map",
 			message: models.Message{
-				MessageType:        models.MessageTypeText,
-				Content:            unsupportedMessageBody,
-				WhatsAppMessageID:  "msg123",
-				Metadata:           models.JSONB{},
+				MessageType:       models.MessageTypeText,
+				Content:           unsupportedMessageBody,
+				WhatsAppMessageID: "msg123",
+				Metadata:          models.JSONB{},
 			},
 			hasCompanionByWAMID: map[string]bool{},
 			expected:            false,

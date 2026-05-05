@@ -59,7 +59,7 @@ type Client struct {
 
 	// Current contact being viewed (nil if none)
 	currentContactMu sync.RWMutex
-	currentContact *uuid.UUID
+	currentContact   *uuid.UUID
 }
 
 // NewClient creates a new unauthenticated Client instance.

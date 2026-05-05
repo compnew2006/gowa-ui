@@ -148,40 +148,40 @@ func TestGetAppConfig_FeatureFlagsConsistency(t *testing.T) {
 	app := newTestApp(t)
 
 	testCases := []struct {
-		provider           string
-		templates          bool
-		flows              bool
-		catalog            bool
-		businessProfile    bool
-		campaigns          bool
-		metaInsights       bool
+		provider        string
+		templates       bool
+		flows           bool
+		catalog         bool
+		businessProfile bool
+		campaigns       bool
+		metaInsights    bool
 	}{
 		{
-			provider:         "meta",
-			templates:        true,
-			flows:            true,
-			catalog:          true,
-			businessProfile:  true,
-			campaigns:        true,
-			metaInsights:     true,
+			provider:        "meta",
+			templates:       true,
+			flows:           true,
+			catalog:         true,
+			businessProfile: true,
+			campaigns:       true,
+			metaInsights:    true,
 		},
 		{
-			provider:         "whatsmeow",
-			templates:        false,
-			flows:            false,
-			catalog:          false,
-			businessProfile:  false,
-			campaigns:        true, // Campaigns work for both
-			metaInsights:     false,
+			provider:        "whatsmeow",
+			templates:       false,
+			flows:           false,
+			catalog:         false,
+			businessProfile: false,
+			campaigns:       true, // Campaigns work for both
+			metaInsights:    false,
 		},
 		{
-			provider:         "", // Empty should default to meta
-			templates:        true,
-			flows:            true,
-			catalog:          true,
-			businessProfile:  true,
-			campaigns:        true,
-			metaInsights:     true,
+			provider:        "", // Empty should default to meta
+			templates:       true,
+			flows:           true,
+			catalog:         true,
+			businessProfile: true,
+			campaigns:       true,
+			metaInsights:    true,
 		},
 	}
 

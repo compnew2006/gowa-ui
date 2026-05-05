@@ -572,7 +572,7 @@ func TestValidateExportColumns_TableDriven(t *testing.T) {
 		},
 		{
 			name:      "case sensitive validation",
-			requested: []string{"Name"}, // uppercase
+			requested: []string{"Name"},       // uppercase
 			allowed:   []string{"id", "name"}, // lowercase
 			wantErr:   true,
 			errMsg:    "column 'Name' is not allowed for export",
@@ -603,9 +603,9 @@ func TestValidateRequiredColumns_AllRequiredPresent(t *testing.T) {
 	t.Parallel()
 
 	colIndex := map[string]int{
-		"name":    0,
-		"email":   1,
-		"phone":   2,
+		"name":  0,
+		"email": 1,
+		"phone": 2,
 	}
 	required := []string{"name", "email"}
 
@@ -719,8 +719,8 @@ func TestValidateRequiredColumns_TableDriven(t *testing.T) {
 				"email": 1,
 				"phone": 2,
 			},
-			required:  []string{"name", "email"},
-			wantErr:   false,
+			required: []string{"name", "email"},
+			wantErr:  false,
 		},
 		{
 			name: "missing required column",
@@ -738,45 +738,45 @@ func TestValidateRequiredColumns_TableDriven(t *testing.T) {
 				"NAME":  0,
 				"Email": 1,
 			},
-			required:  []string{"name", "email"},
-			wantErr:   false,
+			required: []string{"name", "email"},
+			wantErr:  false,
 		},
 		{
 			name: "underscore space variation",
 			colIndex: map[string]int{
 				"phone number": 0,
 			},
-			required:  []string{"phone_number"},
-			wantErr:   false,
+			required: []string{"phone_number"},
+			wantErr:  false,
 		},
 		{
 			name: "space underscore variation",
 			colIndex: map[string]int{
 				"phone_number": 0,
 			},
-			required:  []string{"phone number"},
-			wantErr:   false,
+			required: []string{"phone number"},
+			wantErr:  false,
 		},
 		{
 			name: "empty required list",
 			colIndex: map[string]int{
 				"name": 0,
 			},
-			required:  []string{},
-			wantErr:   false,
+			required: []string{},
+			wantErr:  false,
 		},
 		{
-			name:     "empty col index with required columns",
-			colIndex: map[string]int{},
-			required: []string{"name"},
-			wantErr:  true,
+			name:      "empty col index with required columns",
+			colIndex:  map[string]int{},
+			required:  []string{"name"},
+			wantErr:   true,
 			errSubstr: "name",
 		},
 		{
 			name: "all variations present",
 			colIndex: map[string]int{
-				"Name":        0,
-				"email":       1,
+				"Name":         0,
+				"email":        1,
 				"Phone Number": 2,
 			},
 			required: []string{"name", "email", "phone_number"},
@@ -801,4 +801,3 @@ func TestValidateRequiredColumns_TableDriven(t *testing.T) {
 		})
 	}
 }
-
