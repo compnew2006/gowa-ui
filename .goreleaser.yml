@@ -5,6 +5,7 @@ before:
     - bash -c "cd frontend && npm ci"
     - bash -c "cd frontend && npm run build"
     - rm -rf internal/frontend/dist/assets internal/frontend/dist/*.html internal/frontend/dist/*.svg internal/frontend/dist/*.mp3
+    - mkdir -p internal/frontend/dist
     - cp -r frontend/dist/. internal/frontend/dist/
 
 builds:
