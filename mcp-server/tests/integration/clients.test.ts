@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config.js';
-// import { WhatomateClient } from '../../src/clients/whatomate-client.js';
-const WhatomateClient = class { constructor() {} } as any;
+import { WhatomateClient } from '../../src/clients/whatomate-client.js';
 import { OpenAIClient } from '../../src/clients/openai-client.js';
 import { AppError } from '../../src/errors.js';
 import { startMockServices, type MockServices } from '../support/mock-services.js';
