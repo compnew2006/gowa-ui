@@ -1,349 +1,33 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import { contactsService, chatsService, messagesService } from "@/services/api";
+import { contactsService, chatsService } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
 import { unwrapResponse } from "@/lib/api-utils";
-import type {
-  ChatBucketTab,
-  ChatStatus,
-  ChatTypeFilter,
-  Contact,
-  Message,
-  Reaction,
-} from "@/types/contacts";
-
-export type { ChatTypeFilter, Contact, Message } from "@/types/contacts";
-interface AddMessageOptions {
-  appendToActiveThread?: boolean;
-}
-
-const unsupportedMessageBody = "[Unsupported message type]";
-const deletedMessageBody = "(This message was deleted)";
-const legacyDeletedMessageBody = "This message was deleted";
-const syntheticPlaceholderCompanionWindowMs = 3000;
-const contactFetchCooldownMs = 1500;
-const missingContactFetchCooldownMs = 30000;
-
-interface ContactsListPayload {
-  contacts: Contact[];
-  total?: number;
-  page?: number;
-  limit?: number;
-}
-
-interface MessagesListPayload {
-  messages: Message[];
-  total?: number;
-  page?: number;
-  limit?: number;
-  has_more?: boolean;
-}
-
-interface RecentContactFetch {
-  at: number;
-  cooldownMs: number;
-  result: Contact | null;
-}
-
-function normalizeChatStatus(
-  rawStatus: unknown,
-  assignedUserID?: string,
-): ChatStatus {
-  const normalized =
-    typeof rawStatus === "string" ? rawStatus.trim().toLowerCase() : "";
-  if (normalized === "closed") return "closed";
-  if (normalized === "open") return "open";
-  if (normalized === "pending") return assignedUserID ? "open" : "pending";
-  return assignedUserID ? "open" : "pending";
-}
-
-function normalizeContact(contact: Contact): Contact {
-  return {
-    ...contact,
-    is_public: contact.is_public === true,
-    is_collaborator: contact.is_collaborator === true,
-    status: normalizeChatStatus(contact.status, contact.assigned_user_id),
-  };
-}
-
-function normalizeContacts(contacts: Contact[]): Contact[] {
-  return contacts.map(normalizeContact);
-}
-
-function normalizeSearchText(value: unknown): string {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function normalizeDigits(value: string): string {
-  let normalized = "";
-
-  for (const char of value) {
-    const code = char.charCodeAt(0);
-
-    if (code >= 0x30 && code <= 0x39) {
-      normalized += char;
-      continue;
-    }
-
-    if (code >= 0x0660 && code <= 0x0669) {
-      normalized += String(code - 0x0660);
-      continue;
-    }
-
-    if (code >= 0x06f0 && code <= 0x06f9) {
-      normalized += String(code - 0x06f0);
-    }
-  }
-
-  return normalized;
-}
-
-function contactMatchesSearch(contact: Contact, rawQuery: string): boolean {
-  const query = normalizeSearchText(rawQuery);
-  if (!query) return true;
-
-  const name = normalizeSearchText(contact.name);
-  const profileName = normalizeSearchText(contact.profile_name);
-  const phoneNumber = normalizeSearchText(contact.phone_number);
-
-  if (
-    name.includes(query) ||
-    profileName.includes(query) ||
-    phoneNumber.includes(query)
-  ) {
-    return true;
-  }
-
-  const queryDigits = normalizeDigits(rawQuery);
-  if (!queryDigits) {
-    return false;
-  }
-
-  return normalizeDigits(contact.phone_number || "").includes(queryDigits);
-}
-
-function extractAllowedInstanceIDsFromUserSettings(
-  settings: unknown,
-): string[] {
-  if (!settings || typeof settings !== "object") return [];
-
-  const sendRestrictions = (settings as Record<string, unknown>)
-    .send_restrictions;
-  if (!sendRestrictions || typeof sendRestrictions !== "object") return [];
-
-  const raw = sendRestrictions as Record<string, unknown>;
-  const allowedInstanceIDs = raw.allowed_instance_ids;
-  if (Array.isArray(allowedInstanceIDs)) {
-    return Array.from(
-      new Set(
-        allowedInstanceIDs
-          .map((value) => (typeof value === "string" ? value.trim() : ""))
-          .filter(Boolean),
-      ),
-    );
-  }
-
-  const allowedInstanceID = raw.allowed_instance_id;
-  if (typeof allowedInstanceID !== "string") return [];
-
-  const trimmed = allowedInstanceID.trim();
-  return trimmed ? [trimmed] : [];
-}
-
-function getMessageBody(message: Message): string {
-  if (typeof message.content === "string") {
-    return message.content;
-  }
-  return typeof message.content?.body === "string" ? message.content.body : "";
-}
-
-function isPlaceholderMessageBody(body: string): boolean {
-  const normalized = body.trim();
-  return (
-    normalized === unsupportedMessageBody ||
-    normalized === deletedMessageBody ||
-    normalized.toLowerCase() === legacyDeletedMessageBody.toLowerCase()
-  );
-}
-
-function isSyntheticPlaceholderMessage(message: Message): boolean {
-  if (message.message_type !== "text") {
-    return false;
-  }
-  if (message.metadata?.revoked === true) {
-    return false;
-  }
-  return isPlaceholderMessageBody(getMessageBody(message));
-}
-
-function isUnsupportedPlaceholderMessage(message: Message): boolean {
-  return (
-    isSyntheticPlaceholderMessage(message) &&
-    getMessageBody(message).trim() === unsupportedMessageBody
-  );
-}
-
-function isGroupMessage(message: Message): boolean {
-  return (
-    message.is_group_chat === true || message.metadata?.is_group_chat === true
-  );
-}
-
-function isMediaLikeMessage(message: Message): boolean {
-  const messageType = (message.message_type || "").toLowerCase();
-  return (
-    messageType === "image" ||
-    messageType === "video" ||
-    messageType === "audio" ||
-    messageType === "document" ||
-    messageType === "sticker"
-  );
-}
-
-function getMessageSenderPhone(message: Message): string {
-  if (
-    typeof message.sender_phone === "string" &&
-    message.sender_phone.trim() !== ""
-  ) {
-    return message.sender_phone.trim();
-  }
-  if (
-    typeof message.metadata?.sender_phone === "string" &&
-    message.metadata.sender_phone.trim() !== ""
-  ) {
-    return message.metadata.sender_phone.trim();
-  }
-  return "";
-}
-
-function getMessageTimestamp(message: Message): number {
-  if (typeof message.created_at !== "string") return Number.NaN;
-  const parsed = Date.parse(message.created_at);
-  return Number.isNaN(parsed) ? Number.NaN : parsed;
-}
-
-function collectNearbyMediaCompanionPlaceholderIDs(
-  messageList: Message[],
-): Set<string> {
-  const ids = new Set<string>();
-  for (let i = 0; i < messageList.length; i++) {
-    const candidate = messageList[i];
-    if (
-      !candidate?.id ||
-      !isUnsupportedPlaceholderMessage(candidate) ||
-      !isGroupMessage(candidate)
-    ) {
-      continue;
-    }
-
-    const candidateSender = getMessageSenderPhone(candidate);
-    if (candidateSender === "") {
-      continue;
-    }
-
-    const candidateTimestamp = getMessageTimestamp(candidate);
-    if (!Number.isFinite(candidateTimestamp)) {
-      continue;
-    }
-
-    for (let j = i + 1; j < messageList.length; j++) {
-      const next = messageList[j];
-      if (!next) continue;
-
-      const nextTimestamp = getMessageTimestamp(next);
-      if (!Number.isFinite(nextTimestamp)) {
-        continue;
-      }
-
-      if (
-        nextTimestamp - candidateTimestamp >
-        syntheticPlaceholderCompanionWindowMs
-      ) {
-        break;
-      }
-
-      if (!isMediaLikeMessage(next)) {
-        continue;
-      }
-
-      if (
-        next.contact_id !== candidate.contact_id ||
-        next.direction !== candidate.direction
-      ) {
-        continue;
-      }
-
-      if (getMessageSenderPhone(next) !== candidateSender) {
-        continue;
-      }
-
-      ids.add(candidate.id);
-      break;
-    }
-  }
-  return ids;
-}
-
-function removeSyntheticPlaceholderMessages(messageList: Message[]): Message[] {
-  const companionWamids = new Set(
-    messageList
-      .filter(
-        (message) =>
-          !isSyntheticPlaceholderMessage(message) &&
-          typeof message.wamid === "string" &&
-          message.wamid.trim() !== "",
-      )
-      .map((message) => message.wamid!.trim()),
-  );
-  const nearbyMediaCompanionPlaceholderIDs =
-    collectNearbyMediaCompanionPlaceholderIDs(messageList);
-
-  if (
-    companionWamids.size === 0 &&
-    nearbyMediaCompanionPlaceholderIDs.size === 0
-  ) {
-    return messageList;
-  }
-
-  return messageList.filter((message) => {
-    if (message?.id && nearbyMediaCompanionPlaceholderIDs.has(message.id)) {
-      return false;
-    }
-    const wamid = typeof message.wamid === "string" ? message.wamid.trim() : "";
-    if (wamid === "" || !companionWamids.has(wamid)) {
-      return true;
-    }
-    return !isSyntheticPlaceholderMessage(message);
-  });
-}
+import type { ChatBucketTab, ChatStatus, Contact } from "@/types/contacts";
+import {
+  type ContactsListPayload,
+  type RecentContactFetch,
+  normalizeContact,
+  normalizeContacts,
+  normalizeChatStatus,
+  extractAllowedInstanceIDsFromUserSettings,
+  contactMatchesSearch,
+  contactFetchCooldownMs,
+  missingContactFetchCooldownMs,
+} from "./helpers";
+import { useChatFiltersStore } from "./chat-filters";
 
 export const useContactsStore = defineStore("contacts", () => {
   const authStore = useAuthStore();
+  const filtersStore = useChatFiltersStore();
+
   const contacts = ref<Contact[]>([]);
   const pendingChats = ref<Contact[]>([]);
   const assignedChats = ref<Contact[]>([]);
   const closedChats = ref<Contact[]>([]);
   const activeChatTab = ref<ChatBucketTab>("assigned");
   const currentContact = ref<Contact | null>(null);
-  const messages = ref<Message[]>([]);
   const isLoading = ref(false);
-  const isLoadingMessages = ref(false);
-  const isLoadingOlderMessages = ref(false);
-  const isMessageAccessRestricted = ref(false);
-  const hasMoreMessages = ref(false);
-  let messageFetchSequence = 0;
-  let latestMessageFetchSequence = 0;
-  let fetchChatsSequence = 0;
-  const searchQuery = ref("");
-  const selectedTags = ref<string[]>([]);
-  const selectedInstanceId = ref("");
-  const selectedChatTypes = ref<ChatTypeFilter[]>([]);
-  const replyingTo = ref<Message | null>(null);
-  const accountFilter = ref<string | null>(null);
-  const inFlightContactFetches = new Map<string, Promise<Contact | null>>();
-  const recentContactFetches = new Map<string, RecentContactFetch>();
-
-  // Contacts pagination
   const contactsPage = ref(1);
   const contactsLimit = ref(50);
   const contactsTotal = ref(0);
@@ -353,11 +37,15 @@ export const useContactsStore = defineStore("contacts", () => {
   const assignedChatsAssignedToFilter = ref<"me" | string | undefined>(
     undefined,
   );
+  const inFlightContactFetches = new Map<string, Promise<Contact | null>>();
+  const recentContactFetches = new Map<string, RecentContactFetch>();
+  let fetchChatsSequence = 0;
+
   const restrictedAllowedInstanceIDs = computed(() =>
     extractAllowedInstanceIDsFromUserSettings(authStore.user?.settings),
   );
   const effectiveInstanceFilterID = computed(() => {
-    const selected = selectedInstanceId.value.trim();
+    const selected = filtersStore.selectedInstanceId.trim();
     if (selected !== "") {
       return selected;
     }
@@ -370,15 +58,11 @@ export const useContactsStore = defineStore("contacts", () => {
     return (authStore.userRole || "").trim().toLowerCase() === "agent";
   });
   const currentUserID = computed(() => authStore.user?.id || "");
-  // const isAdminOrSuperAdmin = computed(() => {
-  //   if (authStore.user?.is_super_admin === true) return true;
-  //   const role = sessionStore.user?.role?.name?.toLowerCase() === "admin";
-  //   return (authStore.userRole || "").toLowerCase() === "admin";
-  // });
+
   function resolveListInstanceFilter(options?: {
     allowImplicitRestrictedDefault?: boolean;
   }): string | undefined {
-    const selected = selectedInstanceId.value.trim();
+    const selected = filtersStore.selectedInstanceId.trim();
     if (selected !== "") {
       return selected;
     }
@@ -393,13 +77,13 @@ export const useContactsStore = defineStore("contacts", () => {
   }) {
     return {
       tags:
-        selectedTags.value.length > 0
-          ? selectedTags.value.join(",")
+        filtersStore.selectedTags.length > 0
+          ? filtersStore.selectedTags.join(",")
           : undefined,
       instance_id: resolveListInstanceFilter(options),
       chat_types:
-        selectedChatTypes.value.length > 0
-          ? selectedChatTypes.value.join(",")
+        filtersStore.selectedChatTypes.length > 0
+          ? filtersStore.selectedChatTypes.join(",")
           : undefined,
     };
   }
@@ -424,7 +108,7 @@ export const useContactsStore = defineStore("contacts", () => {
   }
 
   function shouldBypassImplicitRestrictedInstanceFilter(contact: Contact) {
-    if (selectedInstanceId.value.trim() !== "") {
+    if (filtersStore.selectedInstanceId.trim() !== "") {
       return false;
     }
     if (activeChatTab.value !== "assigned") {
@@ -497,11 +181,9 @@ export const useContactsStore = defineStore("contacts", () => {
   });
 
   const searchedContacts = computed(() => {
-    const trimmedQuery = searchQuery.value.trim();
+    const trimmedQuery = filtersStore.searchQuery.trim();
     if (!trimmedQuery) return activeTabContacts.value;
 
-    // While searching from /chat, include recently-fetched closed chats so
-    // agents can locate and open historical conversations without switching pages.
     const merged = new Map<string, Contact>();
     for (const contact of activeTabContacts.value) {
       merged.set(contact.id, contact);
@@ -541,7 +223,7 @@ export const useContactsStore = defineStore("contacts", () => {
   }
 
   function matchesActiveFilters(contact: Contact): boolean {
-    const explicitInstanceFilterID = selectedInstanceId.value.trim();
+    const explicitInstanceFilterID = filtersStore.selectedInstanceId.trim();
     if (
       explicitInstanceFilterID &&
       contact.instance_id !== explicitInstanceFilterID
@@ -745,7 +427,6 @@ export const useContactsStore = defineStore("contacts", () => {
         closedChats.value = searchedClosed;
       }
 
-      // Preserve already-fetched closed chats while refreshing active buckets.
       const retainedClosed =
         searchedClosed ?? contacts.value.filter((c) => c.status === "closed");
       const merged = new Map<string, Contact>();
@@ -849,6 +530,7 @@ export const useContactsStore = defineStore("contacts", () => {
       isLoading.value = false;
     }
   }
+
   async function loadMoreContacts() {
     if (isLoadingMoreContacts.value || !hasMoreContacts.value) return;
 
@@ -863,7 +545,7 @@ export const useContactsStore = defineStore("contacts", () => {
               assignedChatsAssignedToFilter.value === "me"
             ),
         }),
-        search: searchQuery.value || undefined,
+        search: filtersStore.searchQuery || undefined,
         page: nextPage,
         limit: contactsLimit.value,
         status: activeChatTab.value === "assigned" ? "open" : "pending",
@@ -1012,7 +694,6 @@ export const useContactsStore = defineStore("contacts", () => {
       const response = await chatsService.claim(chatId);
       const updated = normalizeContact(unwrapResponse<Contact>(response));
       upsertContact(updated);
-      isMessageAccessRestricted.value = false;
       return updated;
     } catch (error) {
       console.error("Failed to claim chat:", error);
@@ -1056,225 +737,6 @@ export const useContactsStore = defineStore("contacts", () => {
     }
   }
 
-  async function fetchMessages(
-    contactId: string,
-    params?: { page?: number; limit?: number; account?: string },
-  ) {
-    const requestSequence = ++messageFetchSequence;
-    latestMessageFetchSequence = requestSequence;
-    isLoadingMessages.value = true;
-    isMessageAccessRestricted.value = false;
-    // Prevent stale thread content from staying visible while switching chats.
-    messages.value = [];
-    hasMoreMessages.value = false;
-    try {
-      const response = await chatsService.listMessages(contactId, params);
-      if (requestSequence !== latestMessageFetchSequence) {
-        return;
-      }
-      const data = unwrapResponse<MessagesListPayload>(response);
-      messages.value = removeSyntheticPlaceholderMessages(data.messages || []);
-      hasMoreMessages.value = data.has_more === true;
-      const contact = contacts.value.find((c) => c.id === contactId);
-      if (contact) {
-        contact.unread_count = 0;
-      }
-      if (currentContact.value?.id === contactId) {
-        currentContact.value.unread_count = 0;
-      }
-    } catch (error: any) {
-      if (requestSequence !== latestMessageFetchSequence) {
-        return;
-      }
-      if (error?.response?.status === 403) {
-        messages.value = [];
-        hasMoreMessages.value = false;
-        isMessageAccessRestricted.value = true;
-      }
-      console.error("Failed to fetch messages:", error);
-    } finally {
-      if (requestSequence === latestMessageFetchSequence) {
-        isLoadingMessages.value = false;
-      }
-    }
-  }
-
-  async function fetchOlderMessages(contactId: string, account?: string) {
-    if (
-      isMessageAccessRestricted.value ||
-      isLoadingOlderMessages.value ||
-      !hasMoreMessages.value ||
-      messages.value.length === 0
-    ) {
-      return;
-    }
-
-    isLoadingOlderMessages.value = true;
-    try {
-      // Get the oldest message ID for cursor-based pagination
-      const oldestMessageId = messages.value[0].id;
-      const response = await chatsService.listMessages(contactId, {
-        before_id: oldestMessageId,
-        account,
-      });
-      const data = unwrapResponse<MessagesListPayload>(response);
-      const olderMessages = data.messages || [];
-      if (currentContact.value?.id !== contactId) {
-        return;
-      }
-
-      if (olderMessages.length > 0) {
-        // Prepend older messages (they come in chronological order, oldest first)
-        messages.value = removeSyntheticPlaceholderMessages([
-          ...olderMessages,
-          ...messages.value,
-        ]);
-      }
-      hasMoreMessages.value = data.has_more === true;
-    } catch (error) {
-      console.error("Failed to fetch older messages:", error);
-    } finally {
-      isLoadingOlderMessages.value = false;
-    }
-  }
-
-  async function sendMessage(
-    contactId: string,
-    type: string,
-    content: unknown,
-    replyToMessageId?: string,
-    whatsappAccount?: string,
-    explicitInstanceID?: string,
-  ) {
-    try {
-      const contact = contacts.value.find((item) => item.id === contactId);
-      const resolvedInstanceID =
-        typeof explicitInstanceID === "string" &&
-        explicitInstanceID.trim() !== ""
-          ? explicitInstanceID.trim()
-          : contact?.instance_id;
-      const response = await messagesService.send(contactId, {
-        type,
-        content,
-        reply_to_message_id: replyToMessageId,
-        instance_id: resolvedInstanceID,
-        whatsapp_account: whatsappAccount,
-      });
-      // API returns { status: "success", data: { ... } }
-      const newMessage = unwrapResponse<Message>(response);
-      // Use addMessage which has duplicate checking (WebSocket may also broadcast this)
-      addMessage(newMessage);
-
-      return newMessage;
-    } catch (error) {
-      console.error("Failed to send message:", error);
-      throw error;
-    }
-  }
-
-  function setReplyingTo(message: Message | null) {
-    replyingTo.value = message;
-  }
-
-  function clearReplyingTo() {
-    replyingTo.value = null;
-  }
-
-  function addMessage(
-    message: Message,
-    options: AddMessageOptions = {},
-  ): boolean {
-    const { appendToActiveThread = true } = options;
-
-    // Update contact metadata regardless of account filter.
-
-    const contact = contacts.value.find((c) => c.id === message.contact_id);
-    if (contact) {
-      contact.last_message_at = message.created_at;
-      if (message.direction === "incoming") {
-        contact.unread_count++;
-        contact.last_inbound_at = message.created_at;
-        contact.service_window_open = true;
-      }
-    }
-    // Also update currentContact if it matches
-    if (
-      currentContact.value &&
-      currentContact.value.id === message.contact_id &&
-      message.direction === "incoming"
-    ) {
-      currentContact.value.last_inbound_at = message.created_at;
-      currentContact.value.service_window_open = true;
-    }
-
-    // Skip adding to messages array if account filter is active and doesn't match
-    if (
-      accountFilter.value &&
-      message.whatsapp_account &&
-      message.whatsapp_account !== accountFilter.value
-    ) {
-      return false;
-    }
-
-    const existingIndex = messages.value.findIndex((m) => m.id === message.id);
-    if (existingIndex !== -1) {
-      if (appendToActiveThread) {
-        messages.value[existingIndex] = {
-          ...messages.value[existingIndex],
-          ...message,
-        };
-        messages.value = removeSyntheticPlaceholderMessages(messages.value);
-      }
-      return false;
-    }
-
-    if (appendToActiveThread) {
-      messages.value.push(message);
-      messages.value = removeSyntheticPlaceholderMessages(messages.value);
-    }
-
-    return true;
-  }
-
-  function updateMessageStatus(
-    messageId: string,
-    status: string,
-    errorMessage?: string,
-  ) {
-    const index = messages.value.findIndex((m) => m.id === messageId);
-    if (index !== -1) {
-      messages.value[index] = {
-        ...messages.value[index],
-        status,
-        ...(errorMessage ? { error_message: errorMessage } : {}),
-      };
-    }
-  }
-
-  function patchMessage(updatedMessage: Message) {
-    const index = messages.value.findIndex((m) => m.id === updatedMessage.id);
-    if (index !== -1) {
-      messages.value[index] = { ...messages.value[index], ...updatedMessage };
-      messages.value = removeSyntheticPlaceholderMessages(messages.value);
-    }
-
-    const contact = contacts.value.find(
-      (c) => c.id === updatedMessage.contact_id,
-    );
-    if (contact) {
-      const existingLastAt = contact.last_message_at
-        ? new Date(contact.last_message_at).getTime()
-        : 0;
-      const updatedLastAt = updatedMessage.created_at
-        ? new Date(updatedMessage.created_at).getTime()
-        : 0;
-      if (updatedLastAt >= existingLastAt) {
-        contact.last_message_at = updatedMessage.created_at;
-        contact.last_message_preview = getMessageBody(updatedMessage);
-      }
-    }
-  }
-
   function patchContact(updatedContact: Partial<Contact> & { id: string }) {
     const normalizedPartial: Partial<Contact> & { id: string } = {
       ...updatedContact,
@@ -1308,8 +770,6 @@ export const useContactsStore = defineStore("contacts", () => {
 
   function setCurrentContact(contact: Contact | null) {
     currentContact.value = contact ? normalizeContact(contact) : null;
-    replyingTo.value = null; // Clear reply state when switching contacts
-    isMessageAccessRestricted.value = false;
     if (currentContact.value) {
       currentContact.value.unread_count = 0;
     }
@@ -1319,7 +779,7 @@ export const useContactsStore = defineStore("contacts", () => {
     if (!contactId) return;
 
     try {
-      // Server marks this conversation as read when listing messages.
+      const { messagesService } = await import("@/services/api");
       await messagesService.list(contactId, { limit: 1 });
     } catch (error) {
       console.error("Failed to mark conversation as read:", error);
@@ -1334,33 +794,11 @@ export const useContactsStore = defineStore("contacts", () => {
     }
   }
 
-  function setAccountFilter(account: string | null) {
-    accountFilter.value = account;
-  }
-
-  function clearMessages() {
-    latestMessageFetchSequence = ++messageFetchSequence;
-    messages.value = [];
-    hasMoreMessages.value = false;
-    isMessageAccessRestricted.value = false;
-    isLoadingMessages.value = false;
-    accountFilter.value = null;
-  }
-
-  function updateMessageReactions(messageId: string, reactions: Reaction[]) {
-    const message = messages.value.find((m) => m.id === messageId);
-    if (message) {
-      message.reactions = reactions;
-    }
-  }
-
   function updateContactTags(contactId: string, tags: string[]) {
-    // Update in contacts list
     const contact = contacts.value.find((c) => c.id === contactId);
     if (contact) {
       contact.tags = tags;
     }
-    // Update current contact if it matches
     if (currentContact.value?.id === contactId) {
       currentContact.value = { ...currentContact.value, tags };
     }
@@ -1373,23 +811,16 @@ export const useContactsStore = defineStore("contacts", () => {
     closedChats,
     activeChatTab,
     currentContact,
-    messages,
     isLoading,
-    isLoadingMessages,
-    isLoadingOlderMessages,
-    isMessageAccessRestricted,
-    hasMoreMessages,
-    searchQuery,
-    selectedTags,
-    selectedInstanceId,
-    selectedChatTypes,
-    replyingTo,
-    filteredContacts,
-    sortedContacts,
-    // Contacts pagination
     contactsTotal,
+    contactsPage,
+    contactsLimit,
     hasMoreContacts,
     isLoadingMoreContacts,
+    filteredContacts,
+    sortedContacts,
+    searchedContacts,
+    activeTabContacts,
     setActiveChatTab,
     fetchContacts,
     fetchChats,
@@ -1397,26 +828,14 @@ export const useContactsStore = defineStore("contacts", () => {
     fetchAssignedChats,
     fetchClosedChats,
     loadMoreContacts,
-    // Other
     fetchContact,
-    fetchMessages,
-    fetchOlderMessages,
     claimChat,
     closeChat,
     reopenChat,
     setChatPublic,
-    sendMessage,
-    addMessage,
-    updateMessageStatus,
-    patchMessage,
     patchContact,
     setCurrentContact,
-    clearMessages,
-    setAccountFilter,
-    setReplyingTo,
-    clearReplyingTo,
     markConversationAsRead,
-    updateMessageReactions,
     updateContactTags,
   };
 });
