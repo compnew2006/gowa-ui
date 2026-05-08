@@ -1153,6 +1153,130 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	})
 }
 
+// SearchMessages searches messages within a contact's conversation by text content.
+// GET /api/contacts/{id}/messages/search?q=<query>&limit=50&page=1
+func (a *App) SearchMessages(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	searchQuery := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("q")))
+	if searchQuery == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Missing search query parameter 'q'", nil, "")
+	}
+
+	ctx, cancel := context.WithTimeout(r.RequestCtx, 10*time.Second)
+	defer cancel()
+	ctxDB := requestDB.WithContext(ctx)
+
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	hasContactsReadPermission := a.canReadAllContacts(userID, orgID)
+	limitChatVisibilityToAgentScope := a.shouldRestrictChatVisibilityToAgentScope(userID, orgID)
+	restrictedInstanceIDs, restrictedErr := a.getRestrictedInstancesForUser(orgID, userID)
+	if restrictedErr != nil {
+		a.Log.Error("Failed to resolve restricted instance for message search", "error", restrictedErr, "org_id", orgID, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to search messages", nil, "")
+	}
+
+	var contact models.Contact
+	query := ctxDB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	if limitChatVisibilityToAgentScope {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
+	}
+	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	if err := query.First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+
+	isCollaborator := a.isContactCollaborator(orgID, contact.ID, userID)
+	if isCollaborator {
+		hasContactsReadPermission = true
+	}
+	if isChatRestrictedForMessageRead(contact) && !a.canAccessRestrictedChatWithoutClaim(contact, userID, orgID) {
+		return r.SendErrorEnvelope(
+			fasthttp.StatusForbidden,
+			"This chat is currently unassigned. Claim it before searching messages.",
+			nil,
+			"",
+		)
+	}
+
+	shouldMaskPhoneNumbers := a.ShouldMaskPhoneNumbers(orgID)
+	conversationContext := a.resolveContactConversationContext(ctx, orgID, contact)
+	deletedAt, deletionErr := a.getContactUserDeletionTimestamp(ctx, orgID, contact.ID, userID)
+	if deletionErr != nil {
+		a.Log.Error("Failed to resolve chat deletion timestamp", "error", deletionErr, "contact_id", contact.ID, "user_id", userID)
+	}
+
+	// Pagination
+	limit, _ := strconv.Atoi(string(r.RequestCtx.QueryArgs().Peek("limit")))
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	page, _ := strconv.Atoi(string(r.RequestCtx.QueryArgs().Peek("page")))
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	// Build base query scoped to the contact's messages
+	msgQuery := ctxDB.Where("contact_id = ?", contactID).
+		Where("content ILIKE ?", "%"+searchQuery+"%")
+	if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
+		msgQuery = ctxDB.Where(
+			"(contact_id = ? AND organization_id = ?) OR (conversation_id = ? AND organization_id = ? AND instance_id = ?)",
+			contactID, orgID, conversationContext.ConversationID, orgID, contact.InstanceID,
+		).Where("content ILIKE ?", "%"+searchQuery+"%")
+	}
+	if deletedAt != nil {
+		msgQuery = msgQuery.Where("created_at > ?", *deletedAt)
+	}
+
+	accountFilter := string(r.RequestCtx.QueryArgs().Peek("account"))
+	if accountFilter != "" {
+		msgQuery = msgQuery.Where("whats_app_account = ?", accountFilter)
+	}
+
+	if !hasContactsReadPermission {
+		settings, err := a.getChatbotSettingsCached(orgID, "")
+		if err == nil && settings.AgentAssignment.CurrentConversationOnly {
+			var session models.ChatbotSession
+			if err := requestDB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
+				Order("started_at DESC").First(&session).Error; err == nil {
+				msgQuery = msgQuery.Where("created_at >= ?", session.StartedAt)
+			}
+		}
+	}
+
+	var total int64
+	msgQuery.Model(&models.Message{}).Count(&total)
+
+	var messages []models.Message
+	if err := msgQuery.Preload("ReplyToMessage").
+		Order("created_at ASC").
+		Offset(offset).Limit(limit).
+		Find(&messages).Error; err != nil {
+		a.Log.Error("Failed to search messages", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to search messages", nil, "")
+	}
+
+	response := a.buildMessagesResponse(messages, shouldMaskPhoneNumbers)
+	return r.SendEnvelope(map[string]any{
+		"messages": response,
+		"total":    total,
+		"page":     page,
+		"limit":    limit,
+		"has_more": int64(offset+limit) < total,
+		"query":    searchQuery,
+	})
+}
+
 // buildMessagesResponse converts messages to response format
 func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNumbers bool) []MessageResponse {
 	hasCompanionByWAMID := make(map[string]bool)

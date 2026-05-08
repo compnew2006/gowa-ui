@@ -740,6 +740,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Messages
 	g.GET("/api/contacts/{id}/messages", app.GetMessages)
+	g.GET("/api/contacts/{id}/messages/search", app.SearchMessages)
 	g.POST("/api/contacts/{id}/messages", sendMessageHandler)
 	g.POST("/api/contacts/{id}/typing", app.SendTypingPresence)
 	g.POST("/api/contacts/{id}/messages/{message_id}/reaction", app.SendReaction)
