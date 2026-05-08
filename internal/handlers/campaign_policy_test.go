@@ -24,16 +24,12 @@ func TestCampaignPolicyViolationError_Error(t *testing.T) {
 		},
 		{
 			name: "blank message fallback",
-			err: &campaignPolicyViolationError{
-				message: "   ",
-			},
+			err:  newCampaignPolicyViolationError("   ", ""),
 			want: "campaign policy violation",
 		},
 		{
 			name: "returns message",
-			err: &campaignPolicyViolationError{
-				message: "blocked by policy",
-			},
+			err:  newCampaignPolicyViolationError("blocked by policy", ""),
 			want: "blocked by policy",
 		},
 	}
@@ -68,7 +64,7 @@ func TestAsCampaignPolicyViolation(t *testing.T) {
 
 	t.Run("policy error direct", func(t *testing.T) {
 		t.Parallel()
-		err := &campaignPolicyViolationError{message: "draft only", reasonCode: "  draft_only  "}
+		err := newCampaignPolicyViolationError("draft only", "  draft_only  ")
 		message, reason, ok := asCampaignPolicyViolation(err)
 		require.True(t, ok)
 		assert.Equal(t, "draft only", message)
@@ -77,7 +73,7 @@ func TestAsCampaignPolicyViolation(t *testing.T) {
 
 	t.Run("policy error wrapped", func(t *testing.T) {
 		t.Parallel()
-		inner := &campaignPolicyViolationError{message: "instance blocked", reasonCode: ReasonCodeInstanceBlocked}
+		inner := newCampaignPolicyViolationError("instance blocked", ReasonCodeInstanceBlocked)
 		wrapped := errors.Join(errors.New("transport layer"), inner)
 
 		message, reason, ok := asCampaignPolicyViolation(wrapped)

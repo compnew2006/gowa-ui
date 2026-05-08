@@ -313,8 +313,8 @@ func TestValidateDefaultAdmin_ProductionValidPassword(t *testing.T) {
 	validPasswords := []string{
 		"securePassword123",      // exactly 12 chars
 		"verySecurePassword456!", // more than 12 chars
-		"admin12345678",          // 12 chars
-		"p@ssw0rd12345",          // 12 chars with special char
+		"Admin12345678",          // 12 chars
+		"P@ssw0rd12345",          // 12 chars with special char
 	}
 
 	for _, password := range validPasswords {
@@ -422,7 +422,7 @@ func TestValidateDefaultAdmin_SecureEmailInProduction(t *testing.T) {
 				},
 				DefaultAdmin: DefaultAdminConfig{
 					Email:    email,
-					Password: "securepassword123456",
+					Password: "SecurePassword123",
 				},
 			}
 
@@ -523,7 +523,7 @@ func TestValidateDefaultAdmin_EmptyConfigMutation(t *testing.T) {
 func TestValidateDefaultAdmin_MinimumPasswordLengthProduction(t *testing.T) {
 	t.Parallel()
 
-	exactly12Chars := "123456789012" // exactly 12 characters
+	exactly12Chars := "Abcdef123456" // exactly 12 characters
 
 	cfg := &Config{
 		App: AppConfig{
@@ -551,7 +551,7 @@ func TestValidateDefaultAdmin_AllInsecureDefaultAdminEmails(t *testing.T) {
 			},
 			DefaultAdmin: DefaultAdminConfig{
 				Email:    email,
-				Password: "securepassword123456",
+				Password: "SecurePassword123",
 			},
 		}
 

@@ -1,8 +1,7 @@
 import * as z from 'zod/v4';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { toToolErrorResult } from '../errors.js';
 import type { McpServerDependencies } from '../mcp/types.js';
-import { toToolSuccessResult } from './result.js';
+import { wrapToolHandler } from './result.js';
 
 export const listMessagesArgsSchema = z.object({
   contact_id: z.string().min(1),
@@ -28,21 +27,14 @@ export function registerMessageTools(server: McpServer, deps: McpServerDependenc
       description: 'List messages for a contact conversation.',
       inputSchema: listMessagesArgsSchema.shape
     },
-    async (rawArgs) => {
-      try {
-        const args = listMessagesArgsSchema.parse(rawArgs ?? {});
-        const result = await deps.whatomateClient.listMessages(args.contact_id, {
-          page: args.page,
-          limit: args.limit,
-          before_id: args.before_id,
-          account: args.account
-        });
-        return toToolSuccessResult(result);
-      } catch (error) {
-        deps.logger.error('Tool failed: whatomate_list_messages', { error: String(error) });
-        return toToolErrorResult(error);
-      }
-    }
+    wrapToolHandler('whatomate_list_messages', listMessagesArgsSchema, deps.logger, (args) =>
+      deps.whatomateClient.listMessages(args.contact_id, {
+        page: args.page,
+        limit: args.limit,
+        before_id: args.before_id,
+        account: args.account
+      })
+    )
   );
 
   server.registerTool(
@@ -52,19 +44,12 @@ export function registerMessageTools(server: McpServer, deps: McpServerDependenc
       description: 'Send a text message to a contact.',
       inputSchema: sendTextMessageArgsSchema.shape
     },
-    async (rawArgs) => {
-      try {
-        const args = sendTextMessageArgsSchema.parse(rawArgs ?? {});
-        const result = await deps.whatomateClient.sendTextMessage(args.contact_id, args.text, {
-          reply_to_message_id: args.reply_to_message_id,
-          instance_id: args.instance_id,
-          whatsapp_account: args.whatsapp_account
-        });
-        return toToolSuccessResult(result);
-      } catch (error) {
-        deps.logger.error('Tool failed: whatomate_send_text_message', { error: String(error) });
-        return toToolErrorResult(error);
-      }
-    }
+    wrapToolHandler('whatomate_send_text_message', sendTextMessageArgsSchema, deps.logger, (args) =>
+      deps.whatomateClient.sendTextMessage(args.contact_id, args.text, {
+        reply_to_message_id: args.reply_to_message_id,
+        instance_id: args.instance_id,
+        whatsapp_account: args.whatsapp_account
+      })
+    )
   );
 }

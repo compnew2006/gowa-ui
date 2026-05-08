@@ -12,29 +12,19 @@ import (
 )
 
 type instanceSelectionError struct {
-	message    string
-	reasonCode string
+	*reasonedError
 }
 
-func (e *instanceSelectionError) Error() string {
-	if e == nil {
-		return "instance selection failed"
-	}
-	if strings.TrimSpace(e.message) == "" {
-		return "instance selection failed"
-	}
-	return e.message
+func newInstanceSelectionError(message, reasonCode string) *instanceSelectionError {
+	return &instanceSelectionError{reasonedError: newReasonedError(message, reasonCode, "instance selection failed")}
 }
 
 func asInstanceSelectionError(err error) (string, string, bool) {
-	if err == nil {
+	re, ok := asReasonedError(err)
+	if !ok {
 		return "", "", false
 	}
-	var selectionErr *instanceSelectionError
-	if !errors.As(err, &selectionErr) {
-		return "", "", false
-	}
-	return selectionErr.Error(), strings.TrimSpace(selectionErr.reasonCode), true
+	return re.Error(), strings.TrimSpace(re.reasonCode), true
 }
 
 func instanceSendBlockReason(instance *models.WhatsAppInstance) string {
@@ -66,16 +56,10 @@ func (a *App) resolveOutboundInstance(orgID uuid.UUID, requestedInstanceID strin
 			return nil, err
 		}
 		if instance.Status != models.InstanceStatusConnected {
-			return nil, &instanceSelectionError{
-				message:    "instance is not connected",
-				reasonCode: ReasonCodeInstanceNotConn,
-			}
+			return nil, newInstanceSelectionError("instance is not connected", ReasonCodeInstanceNotConn)
 		}
 		if blockReason := instanceSendBlockReason(&instance); blockReason != "" {
-			return nil, &instanceSelectionError{
-				message:    blockReason,
-				reasonCode: ReasonCodeInstanceBlocked,
-			}
+			return nil, newInstanceSelectionError(blockReason, ReasonCodeInstanceBlocked)
 		}
 		return &instance, nil
 	}
@@ -102,19 +86,13 @@ func (a *App) resolveOutboundInstance(orgID uuid.UUID, requestedInstanceID strin
 		Order("is_default DESC, created_at ASC").
 		Find(&connectedInstances).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, &instanceSelectionError{
-				message:    "no connected instance available",
-				reasonCode: ReasonCodeInstanceNotConn,
-			}
+			return nil, newInstanceSelectionError("no connected instance available", ReasonCodeInstanceNotConn)
 		}
 		return nil, err
 	}
 
 	if len(connectedInstances) == 0 {
-		return nil, &instanceSelectionError{
-			message:    "no connected instance available",
-			reasonCode: ReasonCodeInstanceNotConn,
-		}
+		return nil, newInstanceSelectionError("no connected instance available", ReasonCodeInstanceNotConn)
 	}
 
 	var blockedReason string
@@ -130,14 +108,8 @@ func (a *App) resolveOutboundInstance(orgID uuid.UUID, requestedInstanceID strin
 	}
 
 	if blockedReason != "" {
-		return nil, &instanceSelectionError{
-			message:    blockedReason,
-			reasonCode: ReasonCodeInstanceBlocked,
-		}
+		return nil, newInstanceSelectionError(blockedReason, ReasonCodeInstanceBlocked)
 	}
 
-	return nil, &instanceSelectionError{
-		message:    "no connected instance available",
-		reasonCode: ReasonCodeInstanceNotConn,
-	}
+	return nil, newInstanceSelectionError("no connected instance available", ReasonCodeInstanceNotConn)
 }

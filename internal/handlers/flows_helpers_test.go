@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"testing"
+	"time"
 
+	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -503,6 +506,685 @@ func TestSanitizeID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := sanitizeID(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSanitizeScreensForMeta(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		screens  []interface{}
+		validate func(t *testing.T, result []interface{})
+	}{
+		{
+			name:    "nil returns empty",
+			screens: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				assert.Empty(t, result)
+			},
+		},
+		{
+			name:    "empty returns empty",
+			screens: []interface{}{},
+			validate: func(t *testing.T, result []interface{}) {
+				assert.Empty(t, result)
+			},
+		},
+		{
+			name: "screen with no components gets sanitized IDs",
+			screens: []interface{}{
+				map[string]interface{}{
+					"id":     "SCREEN_1",
+					"layout": map[string]interface{}{
+						"children": []interface{}{},
+					},
+				},
+			},
+			validate: func(t *testing.T, result []interface{}) {
+				assert.Len(t, result, 1)
+				screen := result[0].(map[string]interface{})
+				assert.Equal(t, "SCREEN_B", screen["id"])
+			},
+		},
+		{
+			name: "screens with components get sanitized",
+			screens: []interface{}{
+				map[string]interface{}{
+					"id": "SCREEN_1",
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "field_1",
+								"id":  "comp_1",
+							},
+						},
+					},
+				},
+			},
+			validate: func(t *testing.T, result []interface{}) {
+				assert.Len(t, result, 1)
+				screen := result[0].(map[string]interface{})
+				assert.Equal(t, "SCREEN_B", screen["id"])
+				layout := screen["layout"].(map[string]interface{})
+				children := layout["children"].([]interface{})
+				comp := children[0].(map[string]interface{})
+				assert.Equal(t, "field_B", comp["name"])
+				assert.NotContains(t, comp, "id")
+			},
+		},
+		{
+			name: "terminal screen gets marked",
+			screens: []interface{}{
+				map[string]interface{}{
+					"id": "SCREEN_1",
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "Footer",
+								"on-click-action": map[string]interface{}{
+									"name": "complete",
+								},
+							},
+						},
+					},
+				},
+			},
+			validate: func(t *testing.T, result []interface{}) {
+				screen := result[0].(map[string]interface{})
+				assert.Equal(t, true, screen["terminal"])
+			},
+		},
+		{
+			name: "multi-screen data model propagated",
+			screens: []interface{}{
+				map[string]interface{}{
+					"id": "SCREEN_1",
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "email",
+							},
+						},
+					},
+				},
+				map[string]interface{}{
+					"id": "SCREEN_2",
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "Footer",
+								"on-click-action": map[string]interface{}{
+									"name": "complete",
+								},
+							},
+						},
+					},
+				},
+			},
+			validate: func(t *testing.T, result []interface{}) {
+				screen2 := result[1].(map[string]interface{})
+				data := screen2["data"].(map[string]interface{})
+				assert.Contains(t, data, "email")
+				emailEntry := data["email"].(map[string]interface{})
+				assert.Equal(t, "string", emailEntry["type"])
+			},
+		},
+		{
+			name: "non-map screen passes through unchanged",
+			screens: []interface{}{
+				"not a map",
+			},
+			validate: func(t *testing.T, result []interface{}) {
+				assert.Len(t, result, 1)
+				assert.Equal(t, "not a map", result[0])
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := sanitizeScreensForMeta(tt.screens)
+			tt.validate(t, result)
+		})
+	}
+}
+
+func TestCollectFormFieldNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		screens  []interface{}
+		expected []string
+	}{
+		{
+			name:     "nil returns empty",
+			screens:  nil,
+			expected: nil,
+		},
+		{
+			name:     "empty returns empty",
+			screens:  []interface{}{},
+			expected: nil,
+		},
+		{
+			name: "collects field names from components",
+			screens: []interface{}{
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "email",
+							},
+							map[string]interface{}{
+								"type": "Dropdown",
+								"name": "country",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"email", "country"},
+		},
+		{
+			name: "sanitizes field names with numbers",
+			screens: []interface{}{
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "field_1",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"field_B"},
+		},
+		{
+			name: "skips components without name",
+			screens: []interface{}{
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextBody",
+							},
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "email",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"email"},
+		},
+		{
+			name: "handles screens without layout",
+			screens: []interface{}{
+				map[string]interface{}{
+					"id": "SCREEN_1",
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "handles empty name",
+			screens: []interface{}{
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "",
+							},
+						},
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "does not deduplicate across screens",
+			screens: []interface{}{
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "email",
+							},
+						},
+					},
+				},
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "email",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"email", "email"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := collectFormFieldNames(tt.screens)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCollectFormFieldsPerScreen(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		screens  []interface{}
+		expected map[int][]string
+	}{
+		{
+			name:     "nil returns empty map",
+			screens:  nil,
+			expected: map[int][]string{},
+		},
+		{
+			name:     "empty returns empty map",
+			screens:  []interface{}{},
+			expected: map[int][]string{},
+		},
+		{
+			name: "maps each screen to its fields",
+			screens: []interface{}{
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "email",
+							},
+						},
+					},
+				},
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "Dropdown",
+								"name": "country",
+							},
+						},
+					},
+				},
+			},
+			expected: map[int][]string{
+				0: {"email"},
+				1: {"country"},
+			},
+		},
+		{
+			name: "screen with no fields is omitted from map",
+			screens: []interface{}{
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextBody",
+							},
+						},
+					},
+				},
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "email",
+							},
+						},
+					},
+				},
+			},
+			expected: map[int][]string{
+				1: {"email"},
+			},
+		},
+		{
+			name: "handles screen without layout",
+			screens: []interface{}{
+				map[string]interface{}{
+					"id": "SCREEN_1",
+				},
+			},
+			expected: map[int][]string{},
+		},
+		{
+			name: "sanitizes field names",
+			screens: []interface{}{
+				map[string]interface{}{
+					"layout": map[string]interface{}{
+						"children": []interface{}{
+							map[string]interface{}{
+								"type": "TextInput",
+								"name": "field_1",
+							},
+						},
+					},
+				},
+			},
+			expected: map[int][]string{
+				0: {"field_B"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := collectFormFieldsPerScreen(tt.screens)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSanitizeComponentsWithPayload(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		children []interface{}
+		allFields []string
+		prevFields []string
+		validate  func(t *testing.T, result []interface{})
+	}{
+		{
+			name:      "nil returns empty",
+			children:  nil,
+			allFields: nil,
+			prevFields: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				assert.Empty(t, result)
+			},
+		},
+		{
+			name: "removes id from components without ID support",
+			children: []interface{}{
+				map[string]interface{}{
+					"type": "TextInput",
+					"name": "email",
+					"id":   "comp_1",
+				},
+			},
+			allFields:  []string{"email"},
+			prevFields: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				comp := result[0].(map[string]interface{})
+				assert.NotContains(t, comp, "id")
+			},
+		},
+		{
+			name: "preserves id on components with ID support",
+			children: []interface{}{
+				map[string]interface{}{
+					"type": "Button",
+					"name": "btn_1",
+					"id":   "btn_comp",
+				},
+			},
+			allFields:  []string{"email"},
+			prevFields: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				comp := result[0].(map[string]interface{})
+				assert.Equal(t, "btn_comp", comp["id"])
+			},
+		},
+		{
+			name: "sanitizes component name with numbers",
+			children: []interface{}{
+				map[string]interface{}{
+					"type": "TextInput",
+					"name": "field_1",
+				},
+			},
+			allFields:  []string{"field_B"},
+			prevFields: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				comp := result[0].(map[string]interface{})
+				assert.Equal(t, "field_B", comp["name"])
+			},
+		},
+		{
+			name: "complete action gets auto-populated payload with data refs when no current-screen fields",
+			children: []interface{}{
+				map[string]interface{}{
+					"type": "Footer",
+					"on-click-action": map[string]interface{}{
+						"name": "complete",
+					},
+				},
+			},
+			allFields:  []string{"email", "phone"},
+			prevFields: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				comp := result[0].(map[string]interface{})
+				action := comp["on-click-action"].(map[string]interface{})
+				payload := action["payload"].(map[string]interface{})
+				assert.Equal(t, "${data.email}", payload["email"])
+				assert.Equal(t, "${data.phone}", payload["phone"])
+			},
+		},
+		{
+			name: "complete action uses form refs for current-screen fields",
+			children: []interface{}{
+				map[string]interface{}{
+					"type": "TextInput",
+					"name": "email",
+				},
+				map[string]interface{}{
+					"type": "TextInput",
+					"name": "phone",
+				},
+				map[string]interface{}{
+					"type": "Footer",
+					"on-click-action": map[string]interface{}{
+						"name": "complete",
+					},
+				},
+			},
+			allFields:  []string{"email", "phone"},
+			prevFields: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				comp := result[2].(map[string]interface{})
+				action := comp["on-click-action"].(map[string]interface{})
+				payload := action["payload"].(map[string]interface{})
+				assert.Equal(t, "${form.email}", payload["email"])
+				assert.Equal(t, "${form.phone}", payload["phone"])
+			},
+		},
+		{
+			name: "complete action uses data reference for previous screen fields",
+			children: []interface{}{
+				map[string]interface{}{
+					"type": "TextInput",
+					"name": "address",
+				},
+				map[string]interface{}{
+					"type": "Footer",
+					"on-click-action": map[string]interface{}{
+						"name": "complete",
+					},
+				},
+			},
+			allFields:  []string{"email", "address"},
+			prevFields: []string{"email"},
+			validate: func(t *testing.T, result []interface{}) {
+				comp := result[1].(map[string]interface{})
+				action := comp["on-click-action"].(map[string]interface{})
+				payload := action["payload"].(map[string]interface{})
+				assert.Equal(t, "${data.email}", payload["email"])
+				assert.Equal(t, "${form.address}", payload["address"])
+			},
+		},
+		{
+			name: "navigate action gets payload with current and previous fields",
+			children: []interface{}{
+				map[string]interface{}{
+					"type": "TextInput",
+					"name": "email",
+				},
+				map[string]interface{}{
+					"type": "Footer",
+					"on-click-action": map[string]interface{}{
+						"name": "navigate",
+					},
+				},
+			},
+			allFields:  []string{"email", "phone"},
+			prevFields: []string{"phone"},
+			validate: func(t *testing.T, result []interface{}) {
+				comp := result[1].(map[string]interface{})
+				action := comp["on-click-action"].(map[string]interface{})
+				payload := action["payload"].(map[string]interface{})
+				assert.Equal(t, "${data.phone}", payload["phone"])
+				assert.Equal(t, "${form.email}", payload["email"])
+			},
+		},
+		{
+			name: "navigate action with no fields has no payload",
+			children: []interface{}{
+				map[string]interface{}{
+					"type": "Footer",
+					"on-click-action": map[string]interface{}{
+						"name": "navigate",
+					},
+				},
+			},
+			allFields:  []string{},
+			prevFields: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				comp := result[0].(map[string]interface{})
+				action := comp["on-click-action"].(map[string]interface{})
+				assert.NotContains(t, action, "payload")
+			},
+		},
+		{
+			name: "non-map child passes through",
+			children: []interface{}{
+				"not a map",
+			},
+			allFields:  nil,
+			prevFields: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				assert.Equal(t, "not a map", result[0])
+			},
+		},
+		{
+			name: "sanitizes data-source option IDs",
+			children: []interface{}{
+				map[string]interface{}{
+					"type": "Dropdown",
+					"name": "country",
+					"data-source": []interface{}{
+						map[string]interface{}{"id": "opt_1", "title": "US"},
+						map[string]interface{}{"id": "opt_2", "title": "UK"},
+					},
+				},
+			},
+			allFields:  []string{"country"},
+			prevFields: nil,
+			validate: func(t *testing.T, result []interface{}) {
+				comp := result[0].(map[string]interface{})
+				ds := comp["data-source"].([]interface{})
+				assert.Equal(t, "opt_B", ds[0].(map[string]interface{})["id"])
+				assert.Equal(t, "opt_C", ds[1].(map[string]interface{})["id"])
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := sanitizeComponentsWithPayload(tt.children, tt.allFields, tt.prevFields)
+			tt.validate(t, result)
+		})
+	}
+}
+
+func TestFlowToResponse(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		flow     models.WhatsAppFlow
+		expected FlowResponse
+	}{
+		{
+			name: "zero UUID defaults",
+			flow: models.WhatsAppFlow{},
+			expected: FlowResponse{
+				CreatedAt: "0001-01-01T00:00:00Z",
+				UpdatedAt: "0001-01-01T00:00:00Z",
+			},
+		},
+		{
+			name: "all fields mapped correctly",
+			flow: models.WhatsAppFlow{
+				BaseModel: models.BaseModel{
+					ID:        uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+				OrganizationID:  uuid.MustParse("660e8400-e29b-41d4-a716-446655440001"),
+				WhatsAppAccount: "test-account",
+				MetaFlowID:      "meta-123",
+				Name:            "Test Flow",
+				Status:          "DRAFT",
+				Category:        "UTILITY",
+				JSONVersion:     "6.0",
+				FlowJSON:        models.JSONB{"key": "value"},
+				Screens:         models.JSONBArray{map[string]interface{}{"id": "SCREEN_1"}},
+				PreviewURL:      "https://example.com/preview",
+				HasLocalChanges: true,
+			},
+			expected: FlowResponse{
+				ID:              uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
+				WhatsAppAccount: "test-account",
+				MetaFlowID:      "meta-123",
+				Name:            "Test Flow",
+				Status:          "DRAFT",
+				Category:        "UTILITY",
+				JSONVersion:     "6.0",
+				FlowJSON:        map[string]interface{}{"key": "value"},
+				Screens:         []interface{}{map[string]interface{}{"id": "SCREEN_1"}},
+				PreviewURL:      "https://example.com/preview",
+				HasLocalChanges: true,
+				CreatedAt:       "2025-06-15T10:30:00Z",
+				UpdatedAt:       "2025-06-15T10:30:00Z",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := flowToResponse(tt.flow)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

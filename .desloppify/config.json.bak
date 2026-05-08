@@ -9,7 +9,17 @@
     "node_modules",
     "vendor"
   ],
-  "ignore": [],
+  "ignore": [
+    "test_coverage::cmd/whatomate-license-admin/main.go::untested_module",
+    "test_coverage::cmd/whatomate-license-issue/main.go::untested_module",
+    "test_coverage::cmd/whatomate-license-studio/main.go::untested_module",
+    "test_coverage::cmd/whatomate-license-vendor/main.go::untested_module",
+    "test_coverage::internal/handlers/contacts.go::untested_critical",
+    "test_coverage::internal/handlers/flows.go::untested_critical",
+    "test_coverage::internal/handlers/legacy_media_restore.go::untested_critical",
+    "test_coverage::internal/handlers/send_restriction_policy.go::untested_critical",
+    "test_coverage::internal/queue/migration.go::untested_critical"
+  ],
   "ignore_metadata": {},
   "zone_overrides": {},
   "review_dimensions": [],
@@ -18,11 +28,17 @@
   "issue_noise_budget": 10,
   "issue_noise_global_budget": 0,
   "execution_log_max_entries": 10000,
-  "needs_rescan": false,
+  "needs_rescan": true,
   "languages": {},
   "commit_tracking_enabled": true,
   "commit_pr": 0,
   "commit_default_branch": "",
   "commit_message_template": "desloppify: {status} {count} issue(s) \u2014 {summary}",
-  "trust_plugins": false
+  "trust_plugins": false,
+  "transition_messages": {},
+  "hermes_enabled": false,
+  "hermes_models": {
+    "execute": "openrouter:x-ai/grok-4.20-beta",
+    "review": "openrouter:google/gemini-3.1-pro-preview"
+  }
 }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"testing"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
@@ -845,6 +846,544 @@ func TestParseOrganizationBoolSetting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseOrganizationBoolSetting(tt.settings, tt.key, tt.fallback)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestReadSendRestrictionsSettings(t *testing.T) {
+	uuid1 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	uuid2 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440001")
+
+	tests := []struct {
+		name     string
+		settings models.JSONB
+		expected sendRestrictionsSettings
+	}{
+		{
+			name:     "nil settings",
+			settings: nil,
+			expected: sendRestrictionsSettings{
+				Enabled:                false,
+				IncludeAllContacts:     false,
+				AuthorizedNumbers:      []string{},
+				AllowedInstanceID:      nil,
+				AllowedInstanceIDs:     []uuid.UUID{},
+				PrefixAgentName:        true,
+				AllowUnclaimedChatView: false,
+				AllowUnclaimedChatSend: false,
+			},
+		},
+		{
+			name:     "nil userSettingSendRestrictions key",
+			settings: models.JSONB{"send_restrictions": nil},
+			expected: sendRestrictionsSettings{
+				Enabled:                false,
+				IncludeAllContacts:     false,
+				AuthorizedNumbers:      []string{},
+				AllowedInstanceID:      nil,
+				AllowedInstanceIDs:     []uuid.UUID{},
+				PrefixAgentName:        true,
+				AllowUnclaimedChatView: false,
+				AllowUnclaimedChatSend: false,
+			},
+		},
+		{
+			name:     "empty payload",
+			settings: models.JSONB{"send_restrictions": map[string]interface{}{}},
+			expected: sendRestrictionsSettings{
+				Enabled:                false,
+				IncludeAllContacts:     false,
+				AuthorizedNumbers:      []string{},
+				AllowedInstanceID:      nil,
+				AllowedInstanceIDs:     []uuid.UUID{},
+				PrefixAgentName:        true,
+				AllowUnclaimedChatView: false,
+				AllowUnclaimedChatSend: false,
+			},
+		},
+		{
+			name: "all fields populated",
+			settings: models.JSONB{
+				"send_restrictions": map[string]interface{}{
+					"enabled":                   true,
+					"include_all_contacts":      true,
+					"authorized_numbers":        []interface{}{"1234567890", "9876543210"},
+					"allowed_instance_ids":      []interface{}{uuid1.String(), uuid2.String()},
+					"prefix_agent_name":         false,
+					"allow_unclaimed_chat_view": true,
+					"allow_unclaimed_chat_send": true,
+				},
+			},
+			expected: sendRestrictionsSettings{
+				Enabled:                true,
+				IncludeAllContacts:     true,
+				AuthorizedNumbers:      []string{"1234567890", "9876543210"},
+				AllowedInstanceID:      &uuid1,
+				AllowedInstanceIDs:     []uuid.UUID{uuid1, uuid2},
+				PrefixAgentName:        false,
+				AllowUnclaimedChatView: true,
+				AllowUnclaimedChatSend: true,
+			},
+		},
+		{
+			name: "authorized_numbers as string array",
+			settings: models.JSONB{
+				"send_restrictions": map[string]interface{}{
+					"authorized_numbers": []string{"111", "222"},
+				},
+			},
+			expected: sendRestrictionsSettings{
+				Enabled:                false,
+				IncludeAllContacts:     false,
+				AuthorizedNumbers:      []string{"111", "222"},
+				AllowedInstanceID:      nil,
+				AllowedInstanceIDs:     []uuid.UUID{},
+				PrefixAgentName:        true,
+				AllowUnclaimedChatView: false,
+				AllowUnclaimedChatSend: false,
+			},
+		},
+		{
+			name: "allowed_instance_ids as legacy + new format",
+			settings: models.JSONB{
+				"send_restrictions": map[string]interface{}{
+					"allowed_instance_ids": []interface{}{uuid1.String()},
+					"allowed_instance_id":  uuid2.String(),
+				},
+			},
+			expected: sendRestrictionsSettings{
+				Enabled:                false,
+				IncludeAllContacts:     false,
+				AuthorizedNumbers:      []string{},
+				AllowedInstanceID:      &uuid1,
+				AllowedInstanceIDs:     []uuid.UUID{uuid1},
+				PrefixAgentName:        true,
+				AllowUnclaimedChatView: false,
+				AllowUnclaimedChatSend: false,
+			},
+		},
+		{
+			name: "AllowUnclaimedChatSend overrides AllowUnclaimedChatView",
+			settings: models.JSONB{
+				"send_restrictions": map[string]interface{}{
+					"allow_unclaimed_chat_send": true,
+					"allow_unclaimed_chat_view": false,
+				},
+			},
+			expected: sendRestrictionsSettings{
+				Enabled:                false,
+				IncludeAllContacts:     false,
+				AuthorizedNumbers:      []string{},
+				AllowedInstanceID:      nil,
+				AllowedInstanceIDs:     []uuid.UUID{},
+				PrefixAgentName:        true,
+				AllowUnclaimedChatView: true,
+				AllowUnclaimedChatSend: true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := readSendRestrictionsSettings(tt.settings)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestWriteSendRestrictionsSettings(t *testing.T) {
+	uuid1 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	uuid2 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440001")
+
+	t.Run("roundtrip with readSendRestrictionsSettings", func(t *testing.T) {
+		original := models.JSONB{
+			"send_restrictions": map[string]interface{}{
+				"enabled":                   true,
+				"include_all_contacts":      true,
+				"authorized_numbers":        []interface{}{"1234567890"},
+				"allowed_instance_ids":      []interface{}{uuid1.String(), uuid2.String()},
+				"prefix_agent_name":         false,
+				"allow_unclaimed_chat_view": true,
+				"allow_unclaimed_chat_send": true,
+			},
+		}
+		cfg := readSendRestrictionsSettings(original)
+		written := writeSendRestrictionsSettings(nil, cfg)
+		readBack := readSendRestrictionsSettings(written)
+		assert.Equal(t, cfg, readBack)
+	})
+
+	t.Run("nil settings creates new map", func(t *testing.T) {
+		cfg := sendRestrictionsSettings{Enabled: true}
+		result := writeSendRestrictionsSettings(nil, cfg)
+		assert.NotNil(t, result)
+		assert.Contains(t, result, userSettingSendRestrictions)
+	})
+
+	t.Run("preserves existing unrelated keys", func(t *testing.T) {
+		settings := models.JSONB{"some_other_key": "preserved"}
+		cfg := sendRestrictionsSettings{Enabled: true}
+		result := writeSendRestrictionsSettings(settings, cfg)
+		assert.Equal(t, "preserved", result["some_other_key"])
+		assert.Contains(t, result, userSettingSendRestrictions)
+	})
+}
+
+func TestParseOrganizationTimeSetting(t *testing.T) {
+	pastTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		settings models.JSONB
+		key      string
+		expected *time.Time
+	}{
+		{
+			name:     "nil settings",
+			settings: nil,
+			key:      "ts",
+			expected: nil,
+		},
+		{
+			name:     "time.Time value",
+			settings: models.JSONB{"ts": pastTime},
+			key:      "ts",
+			expected: &pastTime,
+		},
+		{
+			name: "RFC3339 string",
+			settings: models.JSONB{
+				"ts": "2023-01-01T00:00:00Z",
+			},
+			key:      "ts",
+			expected: &pastTime,
+		},
+		{
+			name: "RFC3339Nano string",
+			settings: models.JSONB{
+				"ts": "2023-01-01T00:00:00.000000000Z",
+			},
+			key:      "ts",
+			expected: &pastTime,
+		},
+		{
+			name: "string layout 2006-01-02 15:04:05",
+			settings: models.JSONB{
+				"ts": "2023-01-01 00:00:00",
+			},
+			key:      "ts",
+			expected: &pastTime,
+		},
+		{
+			name:     "missing key",
+			settings: models.JSONB{"other": "value"},
+			key:      "ts",
+			expected: nil,
+		},
+		{
+			name:     "invalid string",
+			settings: models.JSONB{"ts": "not-a-time"},
+			key:      "ts",
+			expected: nil,
+		},
+		{
+			name: "[]byte value",
+			settings: models.JSONB{
+				"ts": []byte("2023-01-01T00:00:00Z"),
+			},
+			key:      "ts",
+			expected: &pastTime,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseOrganizationTimeSetting(tt.settings, tt.key)
+			if tt.expected == nil {
+				assert.Nil(t, result)
+			} else {
+				assert.NotNil(t, result)
+				assert.True(t, tt.expected.Equal(*result), "expected %v, got %v", *tt.expected, *result)
+			}
+		})
+	}
+}
+
+func TestParseOrganizationStringSetting(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings models.JSONB
+		key      string
+		fallback string
+		expected string
+	}{
+		{
+			name:     "nil settings",
+			settings: nil,
+			key:      "k",
+			fallback: "default",
+			expected: "default",
+		},
+		{
+			name:     "string value",
+			settings: models.JSONB{"k": "hello"},
+			key:      "k",
+			fallback: "default",
+			expected: "hello",
+		},
+		{
+			name:     "empty string returns fallback",
+			settings: models.JSONB{"k": ""},
+			key:      "k",
+			fallback: "default",
+			expected: "default",
+		},
+		{
+			name:     "[]byte value",
+			settings: models.JSONB{"k": []byte("world")},
+			key:      "k",
+			fallback: "default",
+			expected: "world",
+		},
+		{
+			name:     "missing key",
+			settings: models.JSONB{"other": "val"},
+			key:      "k",
+			fallback: "default",
+			expected: "default",
+		},
+		{
+			name:     "non-string type",
+			settings: models.JSONB{"k": 123},
+			key:      "k",
+			fallback: "default",
+			expected: "default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseOrganizationStringSetting(tt.settings, tt.key, tt.fallback)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestNormalizeOutboundMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "mixed returns mixed", input: "mixed", expected: "mixed"},
+		{name: "inbound_only returns inbound_only", input: "inbound_only", expected: "inbound_only"},
+		{name: "MIXED returns mixed", input: "MIXED", expected: "mixed"},
+		{name: "random returns inbound_only", input: "random", expected: "inbound_only"},
+		{name: "empty returns inbound_only", input: "", expected: "inbound_only"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, normalizeOutboundMode(tt.input))
+		})
+	}
+}
+
+func TestNormalizeRolloutMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "audit returns audit", input: "audit", expected: "audit"},
+		{name: "enforce returns enforce", input: "enforce", expected: "enforce"},
+		{name: "AUDIT returns audit", input: "AUDIT", expected: "audit"},
+		{name: "random returns enforce", input: "random", expected: "enforce"},
+		{name: "empty returns enforce", input: "", expected: "enforce"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, normalizeRolloutMode(tt.input))
+		})
+	}
+}
+
+func TestAllowedInstanceIDsForRestrictions(t *testing.T) {
+	uuid1 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	uuid2 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440001")
+
+	tests := []struct {
+		name     string
+		cfg      sendRestrictionsSettings
+		expected []uuid.UUID
+	}{
+		{
+			name: "with AllowedInstanceIDs",
+			cfg: sendRestrictionsSettings{
+				AllowedInstanceIDs: []uuid.UUID{uuid1, uuid2},
+			},
+			expected: []uuid.UUID{uuid1, uuid2},
+		},
+		{
+			name: "empty AllowedInstanceIDs with AllowedInstanceID fallback",
+			cfg: sendRestrictionsSettings{
+				AllowedInstanceIDs: []uuid.UUID{},
+				AllowedInstanceID:  &uuid1,
+			},
+			expected: []uuid.UUID{uuid1},
+		},
+		{
+			name: "both empty",
+			cfg: sendRestrictionsSettings{
+				AllowedInstanceIDs: []uuid.UUID{},
+				AllowedInstanceID:  nil,
+			},
+			expected: []uuid.UUID{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, allowedInstanceIDsForRestrictions(tt.cfg))
+		})
+	}
+}
+
+func TestResolveOutgoingInstanceID(t *testing.T) {
+	uuid1 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	uuid2 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440001")
+
+	tests := []struct {
+		name     string
+		req      OutgoingMessageRequest
+		expected *uuid.UUID
+	}{
+		{
+			name: "req.InstanceID takes priority",
+			req: OutgoingMessageRequest{
+				InstanceID: &uuid1,
+				Contact:    &models.Contact{InstanceID: &uuid2},
+			},
+			expected: &uuid1,
+		},
+		{
+			name: "falls back to Contact.InstanceID",
+			req: OutgoingMessageRequest{
+				InstanceID: nil,
+				Contact:    &models.Contact{InstanceID: &uuid2},
+			},
+			expected: &uuid2,
+		},
+		{
+			name: "both nil returns nil",
+			req: OutgoingMessageRequest{
+				InstanceID: nil,
+				Contact:    nil,
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, resolveOutgoingInstanceID(tt.req))
+		})
+	}
+}
+
+func TestShouldEnforceStrictPolicy(t *testing.T) {
+	pastTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+	futureTime := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		settings organizationStrictPolicySettings
+		now      time.Time
+		expected bool
+	}{
+		{
+			name: "enforce mode always true",
+			settings: organizationStrictPolicySettings{
+				StrictRolloutMode: organizationStrictRolloutModeEnforce,
+			},
+			now:      now,
+			expected: true,
+		},
+		{
+			name: "audit mode with nil StrictRolloutAfter false",
+			settings: organizationStrictPolicySettings{
+				StrictRolloutMode:  organizationStrictRolloutModeAudit,
+				StrictRolloutAfter: nil,
+			},
+			now:      now,
+			expected: false,
+		},
+		{
+			name: "audit mode with past StrictRolloutAfter true",
+			settings: organizationStrictPolicySettings{
+				StrictRolloutMode:  organizationStrictRolloutModeAudit,
+				StrictRolloutAfter: &pastTime,
+			},
+			now:      now,
+			expected: true,
+		},
+		{
+			name: "audit mode with future StrictRolloutAfter false",
+			settings: organizationStrictPolicySettings{
+				StrictRolloutMode:  organizationStrictRolloutModeAudit,
+				StrictRolloutAfter: &futureTime,
+			},
+			now:      now,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.settings.shouldEnforceStrictPolicy(tt.now))
+		})
+	}
+}
+
+func TestAsStringSlice(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected []string
+	}{
+		{
+			name:     "[]string",
+			input:    []string{"a", "b", "c"},
+			expected: []string{"a", "b", "c"},
+		},
+		{
+			name:     "models.StringArray",
+			input:    models.StringArray{"x", "y"},
+			expected: []string{"x", "y"},
+		},
+		{
+			name:     "[]interface{} with mixed types",
+			input:    []interface{}{"hello", 123, "world", true},
+			expected: []string{"hello", "world"},
+		},
+		{
+			name:     "nil",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "string not slice",
+			input:    "single",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := asStringSlice(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

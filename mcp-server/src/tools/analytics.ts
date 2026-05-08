@@ -1,8 +1,7 @@
 import * as z from 'zod/v4';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { toToolErrorResult } from '../errors.js';
 import type { McpServerDependencies } from '../mcp/types.js';
-import { toToolSuccessResult } from './result.js';
+import { wrapToolHandler } from './result.js';
 
 export const getDashboardAnalyticsArgsSchema = z.object({
   account_id: z.string().optional(),
@@ -17,15 +16,8 @@ export function registerAnalyticsTools(server: McpServer, deps: McpServerDepende
       description: 'Read dashboard analytics from Whatomate.',
       inputSchema: getDashboardAnalyticsArgsSchema.shape
     },
-    async (rawArgs) => {
-      try {
-        const args = getDashboardAnalyticsArgsSchema.parse(rawArgs ?? {});
-        const result = await deps.whatomateClient.getDashboardAnalytics(args);
-        return toToolSuccessResult(result);
-      } catch (error) {
-        deps.logger.error('Tool failed: whatomate_get_dashboard_analytics', { error: String(error) });
-        return toToolErrorResult(error);
-      }
-    }
+    wrapToolHandler('whatomate_get_dashboard_analytics', getDashboardAnalyticsArgsSchema, deps.logger, (args) =>
+      deps.whatomateClient.getDashboardAnalytics(args)
+    )
   );
 }

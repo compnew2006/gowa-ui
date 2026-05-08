@@ -1,8 +1,7 @@
 import * as z from 'zod/v4';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { toToolErrorResult } from '../errors.js';
 import type { McpServerDependencies } from '../mcp/types.js';
-import { toToolSuccessResult } from './result.js';
+import { wrapToolHandler } from './result.js';
 
 export const createCampaignArgsSchema = z.object({
   name: z.string().min(1),
@@ -31,16 +30,9 @@ export function registerCampaignTools(server: McpServer, deps: McpServerDependen
       description: 'Create a campaign draft in Whatomate.',
       inputSchema: createCampaignArgsSchema.shape
     },
-    async (rawArgs) => {
-      try {
-        const args = createCampaignArgsSchema.parse(rawArgs ?? {});
-        const result = await deps.whatomateClient.createCampaign(args);
-        return toToolSuccessResult(result);
-      } catch (error) {
-        deps.logger.error('Tool failed: whatomate_create_campaign', { error: String(error) });
-        return toToolErrorResult(error);
-      }
-    }
+    wrapToolHandler('whatomate_create_campaign', createCampaignArgsSchema, deps.logger, (args) =>
+      deps.whatomateClient.createCampaign(args)
+    )
   );
 
   server.registerTool(
@@ -50,16 +42,9 @@ export function registerCampaignTools(server: McpServer, deps: McpServerDependen
       description: 'Start an existing campaign.',
       inputSchema: startCampaignArgsSchema.shape
     },
-    async (rawArgs) => {
-      try {
-        const args = startCampaignArgsSchema.parse(rawArgs ?? {});
-        const result = await deps.whatomateClient.startCampaign(args.campaign_id);
-        return toToolSuccessResult(result);
-      } catch (error) {
-        deps.logger.error('Tool failed: whatomate_start_campaign', { error: String(error) });
-        return toToolErrorResult(error);
-      }
-    }
+    wrapToolHandler('whatomate_start_campaign', startCampaignArgsSchema, deps.logger, (args) =>
+      deps.whatomateClient.startCampaign(args.campaign_id)
+    )
   );
 
   server.registerTool(
@@ -69,15 +54,8 @@ export function registerCampaignTools(server: McpServer, deps: McpServerDependen
       description: 'Get campaign details and delivery counters.',
       inputSchema: getCampaignStatusArgsSchema.shape
     },
-    async (rawArgs) => {
-      try {
-        const args = getCampaignStatusArgsSchema.parse(rawArgs ?? {});
-        const result = await deps.whatomateClient.getCampaign(args.campaign_id);
-        return toToolSuccessResult(result);
-      } catch (error) {
-        deps.logger.error('Tool failed: whatomate_get_campaign_status', { error: String(error) });
-        return toToolErrorResult(error);
-      }
-    }
+    wrapToolHandler('whatomate_get_campaign_status', getCampaignStatusArgsSchema, deps.logger, (args) =>
+      deps.whatomateClient.getCampaign(args.campaign_id)
+    )
   );
 }

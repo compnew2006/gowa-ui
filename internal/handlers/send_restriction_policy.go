@@ -29,29 +29,19 @@ const (
 
 // restrictedSendViolationError is returned when a user is blocked by strict send restrictions.
 type restrictedSendViolationError struct {
-	message    string
-	reasonCode string
+	*reasonedError
 }
 
-func (e *restrictedSendViolationError) Error() string {
-	if e == nil {
-		return "message blocked by strict sending restrictions"
-	}
-	if strings.TrimSpace(e.message) == "" {
-		return "message blocked by strict sending restrictions"
-	}
-	return e.message
+func newRestrictedSendViolationError(message, reasonCode string) *restrictedSendViolationError {
+	return &restrictedSendViolationError{reasonedError: newReasonedError(message, reasonCode, "message blocked by strict sending restrictions")}
 }
 
 func asRestrictedSendViolationWithReason(err error) (string, string, bool) {
-	if err == nil {
+	re, ok := asReasonedError(err)
+	if !ok {
 		return "", "", false
 	}
-	var violation *restrictedSendViolationError
-	if !errors.As(err, &violation) {
-		return "", "", false
-	}
-	return violation.Error(), strings.TrimSpace(violation.reasonCode), true
+	return re.Error(), strings.TrimSpace(re.reasonCode), true
 }
 
 type organizationStrictPolicySettings struct {
@@ -788,10 +778,7 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 				if !shouldEnforce {
 					return nil
 				}
-				return &restrictedSendViolationError{
-					message:    "Message blocked by strict sending restrictions. Your user must be assigned to a WhatsApp instance.",
-					reasonCode: ReasonCodePolicyNoInstance,
-				}
+				return newRestrictedSendViolationError("Message blocked by strict sending restrictions. Your user must be assigned to a WhatsApp instance.", ReasonCodePolicyNoInstance)
 			}
 		} else {
 			outgoingInstanceID := resolveOutgoingInstanceID(req)
@@ -800,10 +787,7 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 					if !shouldEnforce {
 						return nil
 					}
-					return &restrictedSendViolationError{
-						message:    "Message blocked by strict sending restrictions. You can only send and receive chats on your assigned WhatsApp instances.",
-						reasonCode: ReasonCodePolicyNoInstance,
-					}
+					return newRestrictedSendViolationError("Message blocked by strict sending restrictions. You can only send and receive chats on your assigned WhatsApp instances.", ReasonCodePolicyNoInstance)
 				}
 			}
 		}
@@ -813,10 +797,7 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 		if !shouldEnforce {
 			return nil
 		}
-		return &restrictedSendViolationError{
-			message:    "Message blocked by strict sending restrictions. This chat does not map to a valid phone number.",
-			reasonCode: ReasonCodePolicyNoInbound,
-		}
+		return newRestrictedSendViolationError("Message blocked by strict sending restrictions. This chat does not map to a valid phone number.", ReasonCodePolicyNoInbound)
 	}
 
 	if isUserSend && containsRestrictedNumber(cfg.AuthorizedNumbers, targetNumber) {
@@ -840,8 +821,5 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 	if !shouldEnforce {
 		return nil
 	}
-	return &restrictedSendViolationError{
-		message:    "Message blocked by strict sending restrictions. You can only send to phone numbers that have previously sent incoming messages in your assigned chats.",
-		reasonCode: ReasonCodePolicyNoInbound,
-	}
+	return newRestrictedSendViolationError("Message blocked by strict sending restrictions. You can only send to phone numbers that have previously sent incoming messages in your assigned chats.", ReasonCodePolicyNoInbound)
 }

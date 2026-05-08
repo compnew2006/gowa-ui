@@ -13,29 +13,19 @@ import (
 const strictCampaignDelayFloorSeconds = 10
 
 type campaignPolicyViolationError struct {
-	message    string
-	reasonCode string
+	*reasonedError
 }
 
-func (e *campaignPolicyViolationError) Error() string {
-	if e == nil {
-		return "campaign policy violation"
-	}
-	if strings.TrimSpace(e.message) == "" {
-		return "campaign policy violation"
-	}
-	return e.message
+func newCampaignPolicyViolationError(message, reasonCode string) *campaignPolicyViolationError {
+	return &campaignPolicyViolationError{reasonedError: newReasonedError(message, reasonCode, "campaign policy violation")}
 }
 
 func asCampaignPolicyViolation(err error) (string, string, bool) {
-	if err == nil {
+	re, ok := asReasonedError(err)
+	if !ok {
 		return "", "", false
 	}
-	var violation *campaignPolicyViolationError
-	if !errors.As(err, &violation) {
-		return "", "", false
-	}
-	return violation.Error(), strings.TrimSpace(violation.reasonCode), true
+	return re.Error(), strings.TrimSpace(re.reasonCode), true
 }
 
 func (a *App) campaignDelayFloorSeconds(orgID uuid.UUID) int {
@@ -56,10 +46,7 @@ func validateCampaignDelayFloor(minDelaySeconds, maxDelaySeconds, floorSeconds i
 func (a *App) enforceCampaignStartPolicy(orgID uuid.UUID, sender string) error {
 	policy := a.loadOrganizationStrictPolicySettings(orgID)
 	if policy.CampaignDraftOnly {
-		return &campaignPolicyViolationError{
-			message:    "Direct campaign execution is disabled by organization policy. Keep the campaign as draft.",
-			reasonCode: ReasonCodePolicyDraftOnly,
-		}
+		return newCampaignPolicyViolationError("Direct campaign execution is disabled by organization policy. Keep the campaign as draft.", ReasonCodePolicyDraftOnly)
 	}
 
 	if !a.isWhatsmeowProvider() {
@@ -68,10 +55,7 @@ func (a *App) enforceCampaignStartPolicy(orgID uuid.UUID, sender string) error {
 
 	instanceID, err := uuid.Parse(strings.TrimSpace(sender))
 	if err != nil {
-		return &campaignPolicyViolationError{
-			message:    "Campaign sender instance is invalid",
-			reasonCode: ReasonCodeInstanceNotConn,
-		}
+		return newCampaignPolicyViolationError("Campaign sender instance is invalid", ReasonCodeInstanceNotConn)
 	}
 
 	var instance models.WhatsAppInstance
@@ -80,26 +64,17 @@ func (a *App) enforceCampaignStartPolicy(orgID uuid.UUID, sender string) error {
 		Where("id = ? AND organization_id = ?", instanceID, orgID).
 		First(&instance).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return &campaignPolicyViolationError{
-				message:    "Campaign sender instance was not found",
-				reasonCode: ReasonCodeInstanceNotConn,
-			}
+			return newCampaignPolicyViolationError("Campaign sender instance was not found", ReasonCodeInstanceNotConn)
 		}
 		return err
 	}
 
 	if instance.Status != models.InstanceStatusConnected {
-		return &campaignPolicyViolationError{
-			message:    "Campaign sender instance is not connected",
-			reasonCode: ReasonCodeInstanceNotConn,
-		}
+		return newCampaignPolicyViolationError("Campaign sender instance is not connected", ReasonCodeInstanceNotConn)
 	}
 
 	if blockReason := instanceSendBlockReason(&instance); blockReason != "" {
-		return &campaignPolicyViolationError{
-			message:    blockReason,
-			reasonCode: ReasonCodeInstanceBlocked,
-		}
+		return newCampaignPolicyViolationError(blockReason, ReasonCodeInstanceBlocked)
 	}
 
 	return nil

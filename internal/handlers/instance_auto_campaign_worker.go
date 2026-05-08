@@ -220,16 +220,10 @@ func (w *InstanceAutoCampaignWorker) enforceAutoCampaignRunPolicy(instance model
 		return err
 	}
 	if instance.Status != models.InstanceStatusConnected {
-		return &campaignPolicyViolationError{
-			message:    "Campaign sender instance is not connected",
-			reasonCode: ReasonCodeInstanceNotConn,
-		}
+		return newCampaignPolicyViolationError("Campaign sender instance is not connected", ReasonCodeInstanceNotConn)
 	}
 	if blockReason := instanceSendBlockReason(&instance); blockReason != "" {
-		return &campaignPolicyViolationError{
-			message:    blockReason,
-			reasonCode: ReasonCodeInstanceBlocked,
-		}
+		return newCampaignPolicyViolationError(blockReason, ReasonCodeInstanceBlocked)
 	}
 	return nil
 }

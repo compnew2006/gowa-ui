@@ -152,13 +152,16 @@ func TestCORS(t *testing.T) {
 			// Check CORS headers
 			assert.Equal(t, tt.wantOrigin, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Origin")))
 			assert.Equal(t, tt.wantCreds, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Credentials")))
-			assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Methods")), "GET")
-			assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Methods")), "POST")
-			assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")), "Authorization")
-			assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")), "X-API-Key")
-			assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")), "X-Organization-ID")
 			if tt.wantOrigin != "" {
+				assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Methods")), "GET")
+				assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Methods")), "POST")
+				assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")), "Authorization")
+				assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")), "X-API-Key")
+				assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")), "X-Organization-ID")
 				assert.Equal(t, "Origin", string(result.RequestCtx.Response.Header.Peek("Vary")))
+			} else {
+				assert.Equal(t, "", string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Methods")))
+				assert.Equal(t, "", string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")))
 			}
 		})
 	}
@@ -399,30 +402,77 @@ func TestTenantScope(t *testing.T) {
 func TestSecurityHeaders(t *testing.T) {
 	t.Parallel()
 
-	req := newTestRequest()
-	req.RequestCtx.Request.SetRequestURI("/api/health")
-	securityHeadersMiddleware := middleware.SecurityHeaders(false)
-	result := securityHeadersMiddleware(req)
+	t.Run("non-API path gets CSP", func(t *testing.T) {
+		t.Parallel()
 
-	require.NotNil(t, result, "SecurityHeaders middleware should return request")
+		req := newTestRequest()
+		req.RequestCtx.Request.SetRequestURI("/dashboard")
+		securityHeadersMiddleware := middleware.SecurityHeaders(false)
+		result := securityHeadersMiddleware(req)
 
-	headers := &result.RequestCtx.Response.Header
-	assert.Equal(t, "nosniff", string(headers.Peek("X-Content-Type-Options")))
-	assert.Equal(t, "DENY", string(headers.Peek("X-Frame-Options")))
-	assert.Equal(t, "strict-origin-when-cross-origin", string(headers.Peek("Referrer-Policy")))
-	assert.Equal(t, "camera=(), microphone=(), geolocation=()", string(headers.Peek("Permissions-Policy")))
-	assert.Equal(t, "0", string(headers.Peek("X-XSS-Protection")))
+		require.NotNil(t, result, "SecurityHeaders middleware should return request")
 
-	csp := string(headers.Peek("Content-Security-Policy"))
-	require.NotEmpty(t, csp, "CSP header must be set")
-	assert.Contains(t, csp, "default-src 'self'")
-	assert.Contains(t, csp, "object-src 'none'")
-	assert.Contains(t, csp, "frame-ancestors 'none'")
-	assert.Contains(t, csp, "frame-src 'self' data: blob: https:")
-	assert.Contains(t, csp, "script-src 'self'")
-	assert.Contains(t, csp, "img-src 'self' data: blob: https:")
-	assert.Contains(t, csp, "media-src 'self' data: blob: https:")
-	assert.Contains(t, csp, "connect-src 'self' ws: wss: blob:")
+		headers := &result.RequestCtx.Response.Header
+		assert.Equal(t, "nosniff", string(headers.Peek("X-Content-Type-Options")))
+		assert.Equal(t, "DENY", string(headers.Peek("X-Frame-Options")))
+		assert.Equal(t, "strict-origin-when-cross-origin", string(headers.Peek("Referrer-Policy")))
+		assert.Equal(t, "camera=(), microphone=(), geolocation=()", string(headers.Peek("Permissions-Policy")))
+		assert.Equal(t, "0", string(headers.Peek("X-XSS-Protection")))
+
+		csp := string(headers.Peek("Content-Security-Policy"))
+		require.NotEmpty(t, csp, "CSP header must be set for non-API paths")
+		assert.Contains(t, csp, "default-src 'self'")
+		assert.Contains(t, csp, "object-src 'none'")
+		assert.Contains(t, csp, "frame-ancestors 'none'")
+		assert.Contains(t, csp, "frame-src 'self' data: blob: https:")
+		assert.Contains(t, csp, "script-src 'self'")
+		assert.Contains(t, csp, "img-src 'self' data: blob: https:")
+		assert.Contains(t, csp, "media-src 'self' data: blob: https:")
+		assert.Contains(t, csp, "connect-src 'self' ws: wss: blob:")
+	})
+
+	t.Run("API path skips CSP", func(t *testing.T) {
+		t.Parallel()
+
+		req := newTestRequest()
+		req.RequestCtx.Request.SetRequestURI("/api/health")
+		securityHeadersMiddleware := middleware.SecurityHeaders(false)
+		result := securityHeadersMiddleware(req)
+
+		require.NotNil(t, result)
+
+		headers := &result.RequestCtx.Response.Header
+		assert.Equal(t, "", string(headers.Peek("Content-Security-Policy")))
+		assert.Equal(t, "nosniff", string(headers.Peek("X-Content-Type-Options")))
+	})
+
+	t.Run("production adds HSTS", func(t *testing.T) {
+		t.Parallel()
+
+		req := newTestRequest()
+		req.RequestCtx.Request.SetRequestURI("/dashboard")
+		securityHeadersMiddleware := middleware.SecurityHeaders(true)
+		result := securityHeadersMiddleware(req)
+
+		require.NotNil(t, result)
+
+		headers := &result.RequestCtx.Response.Header
+		assert.Equal(t, "max-age=31536000; includeSubDomains", string(headers.Peek("Strict-Transport-Security")))
+	})
+
+	t.Run("non-production no HSTS", func(t *testing.T) {
+		t.Parallel()
+
+		req := newTestRequest()
+		req.RequestCtx.Request.SetRequestURI("/dashboard")
+		securityHeadersMiddleware := middleware.SecurityHeaders(false)
+		result := securityHeadersMiddleware(req)
+
+		require.NotNil(t, result)
+
+		headers := &result.RequestCtx.Response.Header
+		assert.Equal(t, "", string(headers.Peek("Strict-Transport-Security")))
+	})
 }
 
 func TestAuth_ValidJWT(t *testing.T) {

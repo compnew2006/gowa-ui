@@ -62,6 +62,7 @@ jobs:
           name = "Whatomate"
           environment = "test"
           debug = true
+          encryption_key = "test-encryption-key-for-ci-e2e-tests-64-chars-long-for-aes-256-validation"
 
           [server]
           host = "0.0.0.0"

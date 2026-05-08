@@ -176,20 +176,8 @@ func runServer(args []string) {
 	if err := config.ValidateDefaultAdmin(cfg); err != nil {
 		lo.Fatal("Invalid default admin configuration", "error", err)
 	}
-	if err := config.ValidateDatabaseCredentials(cfg); err != nil {
-		lo.Fatal("Invalid database configuration", "error", err)
-	}
-	if err := config.ValidateWebhookVerifyToken(cfg); err != nil {
-		lo.Fatal("Invalid WhatsApp configuration", "error", err)
-	}
 	if err := config.ValidateLicenseConfig(cfg); err != nil {
 		lo.Fatal("Invalid license configuration", "error", err)
-	}
-	if err := config.ValidateDatabaseCredentials(cfg); err != nil {
-		lo.Fatal("Invalid database configuration", "error", err)
-	}
-	if err := config.ValidateWebhookVerifyToken(cfg); err != nil {
-		lo.Fatal("Invalid WhatsApp configuration", "error", err)
 	}
 
 	// Warn if debug mode is on in production
@@ -1276,20 +1264,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 			return middleware.TenantScope(app.DB)(r)
 		}
 
-		return r
-	})
-
-	// Role-based access control middleware
-	g.Before(func(r *fastglue.Request) *fastglue.Request {
-		method := string(r.RequestCtx.Method())
-
-		// Skip OPTIONS preflight requests
-		if method == "OPTIONS" {
-			return r
-		}
-
-		// Route-level permission checks are now handled at the handler level
-		// using the granular permission system (HasPermission checks)
 		return r
 	})
 

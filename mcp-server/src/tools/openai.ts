@@ -1,10 +1,8 @@
 import * as z from 'zod/v4';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { toToolErrorResult } from '../errors.js';
-// import type { MessageRecord } from '../clients/whatomate-client.js';
 export type MessageRecord = any;
 import type { McpServerDependencies } from '../mcp/types.js';
-import { toToolSuccessResult } from './result.js';
+import { wrapToolHandler } from './result.js';
 
 export const summarizeConversationArgsSchema = z.object({
   contact_id: z.string().min(1),
@@ -38,35 +36,29 @@ export function registerOpenAITools(server: McpServer, deps: McpServerDependenci
       description: 'Summarize a contact conversation using OpenAI.',
       inputSchema: summarizeConversationArgsSchema.shape
     },
-    async (rawArgs) => {
-      try {
-        const args = summarizeConversationArgsSchema.parse(rawArgs ?? {});
-        const messages = await deps.whatomateClient.listMessages(args.contact_id, {
-          page: 1,
-          limit: args.limit,
-          account: args.account
-        });
+    wrapToolHandler('whatomate_openai_summarize_conversation', summarizeConversationArgsSchema, deps.logger, async (args) => {
+      const messages = await deps.whatomateClient.listMessages(args.contact_id, {
+        page: 1,
+        limit: args.limit,
+        account: args.account
+      });
 
-        const normalized = messages.items
-          .map(extractMessageBody)
-          .map((body: string) => body.trim())
-          .filter((body: string) => body.length > 0);
+      const normalized = messages.items
+        .map(extractMessageBody)
+        .map((body: string) => body.trim())
+        .filter((body: string) => body.length > 0);
 
-        const summary = await deps.openAiClient.summarizeConversation({
-          messages: normalized,
-          objective: args.objective
-        });
+      const summary = await deps.openAiClient.summarizeConversation({
+        messages: normalized,
+        objective: args.objective
+      });
 
-        return toToolSuccessResult({
-          contact_id: args.contact_id,
-          messages_considered: normalized.length,
-          summary: summary.summary,
-          model: summary.model
-        });
-      } catch (error) {
-        deps.logger.error('Tool failed: whatomate_openai_summarize_conversation', { error: String(error) });
-        return toToolErrorResult(error);
-      }
-    }
+      return {
+        contact_id: args.contact_id,
+        messages_considered: normalized.length,
+        summary: summary.summary,
+        model: summary.model
+      };
+    })
   );
 }

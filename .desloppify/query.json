@@ -1,363 +1,360 @@
 {
-  "command": "show",
-  "query": "review",
-  "status_filter": "open",
-  "total": 10,
-  "summary": {
-    "by_tier": {
-      "T1": 10
-    },
-    "by_detector": {
-      "review": 10
-    },
-    "files": 1
+  "command": "review",
+  "action": "import",
+  "mode": "holistic",
+  "diff": {
+    "new": 2,
+    "auto_resolved": 77,
+    "reopened": 0,
+    "total_current": 2,
+    "suspect_detectors": [
+      "boilerplate_duplication",
+      "dupes",
+      "flat_dirs",
+      "responsibility_cohesion",
+      "review",
+      "security",
+      "signature",
+      "structural",
+      "subjective_review",
+      "test_coverage",
+      "unused"
+    ],
+    "chronic_reopeners": [],
+    "skipped_other_lang": 0,
+    "resolved_out_of_scope": 0,
+    "ignored": 0,
+    "ignore_patterns": 0,
+    "raw_issues": 2,
+    "suppressed_pct": 0.0
   },
-  "by_file": {
-    ".": [
-      {
-        "id": "review::.::holistic::abstraction_fitness::duplicate_error_structs",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "instanceSelectionError and restrictedSendViolationError are structurally identical custom error types with duplicated Error(), nil-check, and reason-code patterns",
-        "detail": {
-          "holistic": true,
-          "dimension": "abstraction_fitness",
-          "related_files": [
-            "internal/handlers/instance_selector.go",
-            "internal/handlers/send_restriction_policy.go"
-          ],
-          "evidence": [
-            "instance_selector.go:14-38 \u2014 instanceSelectionError with message+reasonCode fields and nil-safe Error()",
-            "send_restriction_policy.go:31-55 \u2014 restrictedSendViolationError with identical structure and identical nil-check pattern",
-            "Both have parallel asXxxWithReason() helper functions doing errors.As + reason extraction"
-          ],
-          "suggestion": "Extract a single policyError struct (message, reasonCode) in helpers.go with a generic asPolicyError() accessor. Reduces duplication and standardizes policy-violation error handling",
-          "reasoning": "",
-          "summary_hash": "bcb64c9a"
-        }
-      },
-      {
-        "id": "review::.::holistic::abstraction_fitness::jsonb_settings_type_leak",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "JSONB (map[string]interface{}) used as domain model forces 800+ lines of manual type-assertion parsing in handlers instead of typed structs",
-        "detail": {
-          "holistic": true,
-          "dimension": "abstraction_fitness",
-          "related_files": [
-            "internal/models/models.go",
-            "internal/handlers/send_restriction_policy.go"
-          ],
-          "evidence": [
-            "send_restriction_policy.go:77-138 \u2014 readSendRestrictionsSettings performs 30+ type assertions against JSONB map to build a typed struct",
-            "JSONB is map[string]interface{} so every consumer must type-assert at runtime with no compile-time safety",
-            "Three nearly identical Value()/Scan()/GormDBDataType() implementations across JSONB, JSONBArray, StringArray (~80 lines of duplication)"
-          ],
-          "suggestion": "Introduce typed settings structs (e.g., SendRestrictionSettings, OrganizationSettings) with a single JSONB marshal/unmarshal point. The GORM Value()/Scan() duplication across JSONB/JSONBArray/StringArray can be eliminated with a generic JSONWrapper[T] type",
-          "reasoning": "",
-          "summary_hash": "764f2860"
-        }
-      },
-      {
-        "id": "review::.::holistic::abstraction_fitness::provider_bypass_in_handlers",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "Handlers bypass MessageProvider abstraction by checking isWhatsmeowProvider() and using WhatsApp client directly",
-        "detail": {
-          "holistic": true,
-          "dimension": "abstraction_fitness",
-          "related_files": [
-            "internal/handlers/stubs.go",
-            "internal/handlers/provider_guard.go"
-          ],
-          "evidence": [
-            "stubs.go:63-80 \u2014 MarkMessageRead checks isWhatsmeowProvider(), calls MessageProvider.MarkRead() for whatsmeow path but calls a.WhatsApp.MarkMessageRead() for Meta path, bypassing the interface",
-            "ProviderGuard reads config directly (a.Config.WhatsApp.Provider) instead of checking provider capabilities through the interface"
-          ],
-          "suggestion": "Ensure all message operations route through the MessageProvider interface. Add MarkRead/MarkMessageRead to the interface contract, or introduce a ProviderCapabilities query method so handlers don't need to know which concrete provider is active",
-          "reasoning": "",
-          "summary_hash": "31e7f710"
-        }
-      },
-      {
-        "id": "review::.::holistic::ai_generated_debt::duplicate-validation-calls",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "Identical config validation calls duplicated in runServer \u2014 ValidateDatabaseCredentials and ValidateWebhookVerifyToken each called twice",
-        "detail": {
-          "holistic": true,
-          "dimension": "ai_generated_debt",
-          "related_files": [
-            "cmd/whatomate/main.go"
-          ],
-          "evidence": [
-            "Lines 178-179: config.ValidateDatabaseCredentials(cfg) + Fatal",
-            "Lines 183-184: config.ValidateWebhookVerifyToken(cfg) + Fatal",
-            "Lines 188-189: config.ValidateDatabaseCredentials(cfg) + Fatal (exact duplicate)",
-            "Lines 191-192: config.ValidateWebhookVerifyToken(cfg) + Fatal (exact duplicate)"
-          ],
-          "suggestion": "Remove the duplicate calls at lines 188-193, keeping only the first set at lines 178-184",
-          "reasoning": "",
-          "summary_hash": "cfd13149"
-        }
-      },
-      {
-        "id": "review::.::holistic::ai_generated_debt::noop-rbac-middleware-scaffold",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "Dead no-op RBAC middleware block in setupRoutes that only checks OPTIONS then returns, with a comment saying permission checks moved to handlers",
-        "detail": {
-          "holistic": true,
-          "dimension": "ai_generated_debt",
-          "related_files": [
-            "cmd/whatomate/main.go"
-          ],
-          "evidence": [
-            "Lines 1283-1294: g.Before() callback that checks for OPTIONS method then returns r unconditionally with comment 'Route-level permission checks are now handled at the handler level'"
-          ],
-          "suggestion": "Remove the dead middleware block \u2014 it adds no behavior and is leftover scaffold",
-          "reasoning": "",
-          "summary_hash": "507d3a7d"
-        }
-      },
-      {
-        "id": "review::.::holistic::api_surface_coherence::delete_response_variance",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "DELETE responses use 3 different shapes: {message: 'X deleted'}, {message: 'X deleted successfully'}, {status: 'deleted'}",
-        "detail": {
-          "holistic": true,
-          "dimension": "api_surface_coherence",
-          "related_files": [
-            "internal/handlers/instances.go",
-            "internal/handlers/accounts.go",
-            "internal/handlers/canned_responses.go",
-            "internal/handlers/conversation_notes.go"
-          ],
-          "evidence": [
-            "instances.go:406 returns {\"status\": \"deleted\"}",
-            "accounts.go:335 returns {\"message\": \"Account deleted successfully\"}",
-            "canned_responses.go:304 returns {\"message\": \"Canned response deleted\"} (no 'successfully')",
-            "conversation_notes.go:271 returns {\"message\": \"Note deleted\"} (no 'successfully')"
-          ],
-          "suggestion": "Standardize DELETE responses to a single shape: either {\"message\": \"<Resource> deleted\"} or 204 No Content. Pick one convention and apply uniformly.",
-          "reasoning": "",
-          "summary_hash": "9781b334"
-        }
-      },
-      {
-        "id": "review::.::holistic::api_surface_coherence::duplicate_route_semantics",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "/api/campaigns/{id}/progress and /api/campaigns/{id} map to the same GetCampaign handler, and /api/chats maps to ListContacts",
-        "detail": {
-          "holistic": true,
-          "dimension": "api_surface_coherence",
-          "related_files": [
-            "cmd/whatomate/main.go"
-          ],
-          "evidence": [
-            "main.go:1445: g.GET(\"/api/campaigns/{id}\", app.GetCampaign)",
-            "main.go:1452: g.GET(\"/api/campaigns/{id}/progress\", app.GetCampaign) \u2014 identical handler",
-            "main.go:1340: g.GET(\"/api/contacts\", app.ListContacts)",
-            "main.go:1356: g.GET(\"/api/chats\", app.ListContacts) \u2014 returns contacts-shaped response under /api/chats"
-          ],
-          "suggestion": "Either create a dedicated GetCampaignProgress handler returning only progress fields, or remove the /progress route. For /api/chats, either create a dedicated handler or document the alias explicitly in the frontend contract.",
-          "reasoning": "",
-          "summary_hash": "8daf6d9a"
-        }
-      },
-      {
-        "id": "review::.::holistic::api_surface_coherence::list_pagination_inconsistency",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "List endpoints return inconsistent pagination metadata \u2014 accounts, instances, and organizations omit total/page/limit",
-        "detail": {
-          "holistic": true,
-          "dimension": "api_surface_coherence",
-          "related_files": [
-            "internal/handlers/accounts.go",
-            "internal/handlers/instances.go",
-            "internal/handlers/organization.go"
-          ],
-          "evidence": [
-            "accounts.go:80 returns SendEnvelope(map[string]interface{}{\"accounts\": response}) with no total/page/limit",
-            "instances.go:215 returns SendEnvelope(instances) \u2014 bare array with no pagination wrapper",
-            "organization.go returns SendEnvelope(map[string]any{\"organizations\": response}) with no total/page/limit",
-            "Compare with campaigns.go:157, contacts.go:858, users.go, teams.go, tags.go which all include total/page/limit"
-          ],
-          "suggestion": "Standardize all list endpoints to include {resource_name: [...], total: int, page: int, limit: int} envelope. Add parsePagination calls to accounts.go, instances.go, and organization.go list handlers.",
-          "reasoning": "",
-          "summary_hash": "ac6ff29d"
-        }
-      },
-      {
-        "id": "review::.::holistic::api_surface_coherence::raw_status_codes_in_readycheck",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "ReadyCheck uses raw integer 500 instead of fasthttp.StatusInternalServerError constant",
-        "detail": {
-          "holistic": true,
-          "dimension": "api_surface_coherence",
-          "related_files": [
-            "internal/handlers/app.go"
-          ],
-          "evidence": [
-            "app.go:90: SendErrorEnvelope(500, \"Database connection error\", nil, \"\")",
-            "app.go:93: SendErrorEnvelope(500, \"Database ping failed\", nil, \"\")",
-            "app.go:98: SendErrorEnvelope(500, \"Redis connection error\", nil, \"\")",
-            "362 other calls across the codebase correctly use fasthttp.StatusInternalServerError"
-          ],
-          "suggestion": "Replace raw 500 with fasthttp.StatusInternalServerError in app.go:90,93,98",
-          "reasoning": "",
-          "summary_hash": "9f313c7a"
-        }
-      },
-      {
-        "id": "review::.::holistic::authorization_consistency::meta_analytics_raw_perm_strings",
-        "tier": 1,
-        "confidence": "high",
-        "summary": "meta_analytics.go uses raw string literals 'analytics'/'read'/'write' instead of models.ResourceAnalytics constant",
-        "detail": {
-          "holistic": true,
-          "dimension": "authorization_consistency",
-          "related_files": [
-            "internal/handlers/meta_analytics.go"
-          ],
-          "evidence": [
-            "Line 52: a.HasPermission(userID, \"analytics\", \"read\", orgID) instead of models.ResourceAnalytics",
-            "Line 355: a.HasPermission(userID, \"analytics\", \"read\", orgID) \u2014 same raw string",
-            "Line 392: a.HasPermission(userID, \"analytics\", \"write\", orgID) \u2014 same raw string",
-            "All other handlers (widgets, chat_close_ratings, etc.) use models.ResourceAnalytics constant"
-          ],
-          "suggestion": "Replace raw \"analytics\" strings with models.ResourceAnalytics in all three locations in meta_analytics.go",
-          "reasoning": "",
-          "summary_hash": "c3e9ea4d"
-        }
-      }
-    ]
+  "next_command": "desloppify show review --status open",
+  "subjective_at_target": [],
+  "assessment_import": {
+    "mode": "issues_only",
+    "trusted": false,
+    "reason": "missing trusted run-batches source; imported issues only"
   },
-  "total_matching": 83,
-  "hidden": {
-    "by_detector": {
-      "review": 73
-    },
-    "total": 73
-  },
-  "noise_budget": 10,
-  "noise_global_budget": 0,
   "narrative": {
-    "phase": "middle_grind",
-    "headline": "88 issues open. Test health (0.3%) needs attention \u2014 run `desloppify next` to start. (83 review work items \u2014 run `desloppify show review --status open`)",
+    "phase": "stagnation",
+    "headline": "\u26a0 5 security issues \u2014 review before other cleanup. Score plateaued at 71.2 for 5 scans. Init coupling (52.0%) is where the breakthrough is. 8 wontfix items may also be worth revisiting. (2 review work items \u2014 run `desloppify show review --status open`)",
     "dimensions": {
       "lowest_dimensions": [
         {
-          "name": "Test health",
-          "strict": 0.3,
-          "failing": 5,
-          "impact": 0.0
-        },
-        {
-          "name": "AI generated debt",
-          "strict": 28.0,
-          "failing": 3,
+          "name": "Init coupling",
+          "strict": 52.0,
+          "failing": 2,
           "impact": 0.0,
           "subjective": true,
           "impact_description": "re-review to improve"
         },
         {
-          "name": "Init coupling",
-          "strict": 52.0,
-          "failing": 5,
+          "name": "Test health",
+          "strict": 53.4,
+          "failing": 131,
+          "impact": 0.0
+        },
+        {
+          "name": "Cross-module arch",
+          "strict": 55.0,
+          "failing": 0,
           "impact": 0.0,
           "subjective": true,
           "impact_description": "re-review to improve"
         }
       ],
       "biggest_gap_dimensions": [],
-      "stagnant_dimensions": []
+      "stagnant_dimensions": [
+        {
+          "name": "Abstraction fit",
+          "strict": 72.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "API coherence",
+          "strict": 62.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Auth consistency",
+          "strict": 78.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Contracts",
+          "strict": 72.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Convention drift",
+          "strict": 72.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Cross-module arch",
+          "strict": 55.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Dep health",
+          "strict": 78.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Design coherence",
+          "strict": 72.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Error consistency",
+          "strict": 78.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "High elegance",
+          "strict": 58.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Stale migration",
+          "strict": 82.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Init coupling",
+          "strict": 52.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Logic clarity",
+          "strict": 64.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Low elegance",
+          "strict": 62.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Mid elegance",
+          "strict": 68.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Naming quality",
+          "strict": 78.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Structure nav",
+          "strict": 55.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Test strategy",
+          "strict": 72.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Type safety",
+          "strict": 73.0,
+          "stuck_scans": 5
+        }
+      ]
     },
     "actions": [
       {
+        "type": "reorganize",
+        "detector": "flat_dirs",
+        "count": 2,
+        "description": "2 flat_dirs issues \u2014 create subdirectories and use `desloppify move`",
+        "command": "desloppify show flat_dirs --status open",
+        "impact": 0.0,
+        "dimension": "Code quality",
+        "priority": 1,
+        "lane": "restructure"
+      },
+      {
         "type": "refactor",
         "detector": "structural",
-        "count": 1,
-        "description": "1 structural work items \u2014 review large files \u2014 split only when responsibilities are clearly separable",
+        "count": 101,
+        "description": "101 structural work items \u2014 review large files \u2014 split only when responsibilities are clearly separable",
         "command": "desloppify show structural --status open",
         "impact": 0.0,
         "dimension": "File health",
-        "priority": 1,
+        "priority": 2,
+        "lane": "refactor_0"
+      },
+      {
+        "type": "refactor",
+        "detector": "dupes",
+        "count": 5,
+        "description": "5 dupes work items \u2014 extract shared utility or consolidate duplicates",
+        "command": "desloppify show dupes --status open",
+        "impact": 0.0,
+        "dimension": "Duplication",
+        "priority": 3,
         "lane": "refactor_0"
       },
       {
         "type": "refactor",
         "detector": "test_coverage",
-        "count": 4,
-        "description": "4 test_coverage work items \u2014 review test coverage gaps \u2014 focus on critical modules with many importers first; defer test writing until code quality issues are resolved",
+        "count": 25,
+        "description": "25 test_coverage work items \u2014 review test coverage gaps \u2014 focus on critical modules with many importers first; defer test writing until code quality issues are resolved",
         "command": "desloppify show test_coverage --status open",
         "impact": 0.0,
         "dimension": "Test health",
-        "priority": 2,
+        "priority": 4,
         "lane": "test_coverage"
       },
       {
         "type": "refactor",
+        "detector": "signature",
+        "count": 13,
+        "description": "13 signature work items \u2014 consolidate inconsistent function signatures",
+        "command": "desloppify show signature --status open",
+        "impact": 0.0,
+        "dimension": "Unknown",
+        "priority": 5,
+        "lane": "refactor_0"
+      },
+      {
+        "type": "refactor",
+        "detector": "responsibility_cohesion",
+        "count": 4,
+        "description": "4 responsibility_cohesion work items \u2014 split modules with too many responsibilities \u2014 extract focused sub-modules",
+        "command": "desloppify show responsibility_cohesion --status open",
+        "impact": 0.0,
+        "dimension": "Code quality",
+        "priority": 6,
+        "lane": "refactor_0"
+      },
+      {
+        "type": "refactor",
+        "detector": "boilerplate_duplication",
+        "count": 66,
+        "description": "66 boilerplate_duplication work items \u2014 extract shared boilerplate into reusable helpers or base classes",
+        "command": "desloppify show boilerplate_duplication --status open",
+        "impact": 0.0,
+        "dimension": "Duplication",
+        "priority": 7,
+        "lane": "refactor_0"
+      },
+      {
+        "type": "refactor",
         "detector": "review",
-        "count": 83,
-        "description": "83 review work items need investigation \u2014 run `desloppify show review --status open` to see them",
+        "count": 2,
+        "description": "2 review work items need investigation \u2014 run `desloppify show review --status open` to see them",
         "command": "desloppify show review --status open",
         "impact": 0.0,
         "dimension": "Unknown",
-        "priority": 3,
+        "priority": 8,
         "lane": "refactor_1"
+      },
+      {
+        "type": "manual_fix",
+        "detector": "unused",
+        "count": 7,
+        "description": "7 unused issues \u2014 inspect with `desloppify next` and fix manually",
+        "command": "desloppify show unused --status open",
+        "impact": 0.0,
+        "dimension": "Code quality",
+        "priority": 9,
+        "lane": "refactor_0"
+      },
+      {
+        "type": "manual_fix",
+        "detector": "security",
+        "count": 5,
+        "description": "5 security work items \u2014 review and fix security issues \u2014 prioritize by severity",
+        "command": "desloppify show security --status open",
+        "impact": 0.0,
+        "dimension": "Security",
+        "priority": 10,
+        "lane": "refactor_2"
+      },
+      {
+        "type": "manual_fix",
+        "detector": "subjective_review",
+        "count": 1,
+        "description": "1 assessment request need review \u2014 run holistic review to refresh subjective scores",
+        "command": "desloppify review --prepare",
+        "impact": 0.0,
+        "dimension": "Unknown",
+        "priority": 11,
+        "lane": "refactor_0"
       }
     ],
     "strategy": {
       "fixer_leverage": {
         "auto_fixable_count": 0,
-        "total_count": 254,
+        "total_count": 236,
         "coverage": 0.0,
         "impact_ratio": 0.0,
         "recommendation": "none"
       },
       "lanes": {
-        "refactor_0": {
+        "restructure": {
           "actions": [
             1
           ],
-          "file_count": 1,
+          "file_count": 2,
+          "total_impact": 0.0,
+          "automation": "manual",
+          "run_first": false
+        },
+        "refactor_0": {
+          "actions": [
+            2,
+            3,
+            5,
+            6,
+            7,
+            9,
+            11
+          ],
+          "file_count": 126,
           "total_impact": 0.0,
           "automation": "manual",
           "run_first": false
         },
         "refactor_1": {
           "actions": [
-            3
+            8
           ],
           "file_count": 1,
           "total_impact": 0.0,
           "automation": "manual",
           "run_first": false
         },
+        "refactor_2": {
+          "actions": [
+            10
+          ],
+          "file_count": 3,
+          "total_impact": 0.0,
+          "automation": "manual",
+          "run_first": false
+        },
         "test_coverage": {
           "actions": [
-            2
+            4
           ],
-          "file_count": 4,
+          "file_count": 25,
           "total_impact": 0.0,
           "automation": "manual",
           "run_first": false
         }
       },
-      "can_parallelize": false,
-      "hint": "Work through actions in priority order. Rescan after each fix to track progress. Review: 83 issue(s) \u2014 `desloppify show review --status open`."
+      "can_parallelize": true,
+      "hint": "5 independent workstreams, safe to parallelize. Rescan after each phase to verify. Review: 2 issue(s) \u2014 `desloppify show review --status open`."
     },
     "tools": {
       "fixers": [],
       "move": {
         "available": true,
-        "relevant": false,
-        "reason": null,
+        "relevant": true,
+        "reason": "2 flat directories",
         "usage": "desloppify move <source> <dest> [--dry-run]"
       },
       "plan": {
@@ -373,41 +370,39 @@
     },
     "debt": {
       "overall_gap": 0.0,
-      "wontfix_count": 0,
-      "worst_dimension": null,
-      "worst_gap": 0.0,
+      "wontfix_count": 8,
+      "worst_dimension": "Duplication",
+      "worst_gap": 0.6,
       "trend": "stable"
     },
     "milestone": null,
     "primary_action": {
-      "command": "desloppify show structural --status open",
-      "description": "1 structural work items \u2014 review large files \u2014 split only when responsibilities are clearly separable"
+      "command": "desloppify show flat_dirs --status open",
+      "description": "2 flat_dirs issues \u2014 create subdirectories and use `desloppify move`"
     },
-    "why_now": "Work through actions in priority order. Rescan after each fix to track progress. Review: 83 issue(s) \u2014 `desloppify show review --status open`.",
+    "why_now": "5 independent workstreams, safe to parallelize. Rescan after each phase to verify. Review: 2 issue(s) \u2014 `desloppify show review --status open`.",
     "verification_step": {
       "command": "desloppify scan",
       "reason": "revalidate after changes"
     },
-    "risk_flags": [],
+    "risk_flags": [
+      {
+        "type": "wontfix_gap",
+        "severity": "medium",
+        "message": "Strict/lenient gap is 0.0 pts with 8 wontfix issues"
+      }
+    ],
     "strict_target": {
       "target": 85.0,
-      "current": 59.1,
-      "gap": 25.9,
+      "current": 71.2,
+      "gap": 13.8,
       "state": "below",
       "warning": null
     },
-    "reminders": [
-      {
-        "type": "review_issues_pending",
-        "message": "83 review work item(s) need investigation. Run `desloppify show review --status open` to see the work queue.",
-        "command": "desloppify show review --status open",
-        "priority": 1,
-        "severity": "high"
-      }
-    ],
+    "reminders": [],
     "reminder_history": {
       "zone_classification": 3,
-      "report_scores": 6,
+      "report_scores": 8,
       "feedback_nudge": 3,
       "stagnant_nudge": 25,
       "review_issues_pending": 3
@@ -424,7 +419,18 @@
       "node_modules",
       "vendor"
     ],
-    "ignore": [],
+    "ignore": [
+      "test_coverage::cmd/whatomate-license-admin/main.go::untested_module",
+      "test_coverage::cmd/whatomate-license-issue/main.go::untested_module",
+      "test_coverage::cmd/whatomate-license-studio/main.go::untested_module",
+      "test_coverage::cmd/whatomate-license-vendor/main.go::untested_module",
+      "test_coverage::internal/handlers/contacts.go::untested_critical",
+      "test_coverage::internal/handlers/flows.go::untested_critical",
+      "test_coverage::internal/handlers/legacy_media_restore.go::untested_critical",
+      "test_coverage::internal/handlers/send_restriction_policy.go::untested_critical",
+      "test_coverage::internal/queue/migration.go::untested_critical",
+      "test_coverage::pkg/chat_close_ratings/shared.go::untested_critical"
+    ],
     "ignore_metadata": {},
     "zone_overrides": {},
     "review_dimensions": [],
@@ -433,7 +439,7 @@
     "issue_noise_budget": 10,
     "issue_noise_global_budget": 0,
     "execution_log_max_entries": 10000,
-    "needs_rescan": false,
+    "needs_rescan": true,
     "languages": {},
     "commit_tracking_enabled": true,
     "commit_pr": 0,

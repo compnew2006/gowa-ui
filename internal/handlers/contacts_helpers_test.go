@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -431,6 +432,243 @@ func TestIsSyntheticPlaceholderMessage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isSyntheticPlaceholderMessage(tt.message, tt.hasCompanionByWAMID)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestStringifyInstanceID(t *testing.T) {
+	uuid1 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+
+	tests := []struct {
+		name     string
+		input    *uuid.UUID
+		expected *string
+	}{
+		{
+			name:     "nil returns nil",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "valid UUID returns pointer to string representation",
+			input:    &uuid1,
+			expected: strPtr(uuid1.String()),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stringifyInstanceID(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestConversationUnreadKey(t *testing.T) {
+	uuid1 := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+
+	tests := []struct {
+		name         string
+		conversation string
+		instanceID   *uuid.UUID
+		expected     string
+	}{
+		{
+			name:         "nil instanceID appends pipe",
+			conversation: "conv-123",
+			instanceID:   nil,
+			expected:     "conv-123|",
+		},
+		{
+			name:         "with instanceID appends pipe uuid",
+			conversation: "conv-456",
+			instanceID:   &uuid1,
+			expected:     "conv-456|" + uuid1.String(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, conversationUnreadKey(tt.conversation, tt.instanceID))
+		})
+	}
+}
+
+func TestCloneJSONB(t *testing.T) {
+	t.Run("nil returns empty not nil", func(t *testing.T) {
+		result := cloneJSONB(nil)
+		assert.NotNil(t, result)
+		assert.Empty(t, result)
+	})
+
+	t.Run("populated returns copy", func(t *testing.T) {
+		original := models.JSONB{"key1": "val1", "key2": 42}
+		result := cloneJSONB(original)
+		if len(result) != len(original) {
+			t.Fatalf("length mismatch: got %d, want %d", len(result), len(original))
+		}
+		for k, v := range original {
+			if result[k] != v {
+				t.Fatalf("key %q: got %v, want %v", k, result[k], v)
+			}
+		}
+		_ = result
+		_ = original
+	})
+
+	t.Run("modifying copy does not affect original", func(t *testing.T) {
+		original := models.JSONB{"key1": "val1"}
+		copy := cloneJSONB(original)
+		copy["key1"] = "modified"
+		copy["key2"] = "new"
+		assert.Equal(t, "val1", original["key1"])
+		assert.NotContains(t, original, "key2")
+	})
+}
+
+func TestContactAvatarURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata models.JSONB
+		expected string
+	}{
+		{
+			name:     "nil returns empty",
+			metadata: nil,
+			expected: "",
+		},
+		{
+			name:     "missing key returns empty",
+			metadata: models.JSONB{"other": "val"},
+			expected: "",
+		},
+		{
+			name:     "non-string value returns empty",
+			metadata: models.JSONB{"avatar_url": 123},
+			expected: "",
+		},
+		{
+			name:     "valid URL returns trimmed value",
+			metadata: models.JSONB{"avatar_url": "https://example.com/avatar.jpg"},
+			expected: "https://example.com/avatar.jpg",
+		},
+		{
+			name:     "whitespace-padded URL trimmed",
+			metadata: models.JSONB{"avatar_url": "  https://example.com/avatar.jpg  "},
+			expected: "https://example.com/avatar.jpg",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, contactAvatarURL(tt.metadata))
+		})
+	}
+}
+
+func strPtr(s string) *string {
+	return &s
+}
+
+func TestApplyDirectContactPhoneFromConversation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		contact        *models.Contact
+		conversationID string
+		assertPhone    string
+	}{
+		{
+			name:           "nil contact does not panic",
+			contact:        nil,
+			conversationID: "1234567890@s.whatsapp.net",
+			assertPhone:    "",
+		},
+		{
+			name: "group contact does not change phone",
+			contact: &models.Contact{
+				PhoneNumber: "123456789@g.us",
+				Metadata:    models.JSONB{"is_group_chat": true},
+			},
+			conversationID: "1234567890@s.whatsapp.net",
+			assertPhone:    "123456789@g.us",
+		},
+		{
+			name: "channel contact does not change phone",
+			contact: &models.Contact{
+				PhoneNumber: "123456789@newsletter",
+				Metadata:    models.JSONB{"is_channel": true},
+			},
+			conversationID: "1234567890@s.whatsapp.net",
+			assertPhone:    "123456789@newsletter",
+		},
+		{
+			name: "direct conversation sets phone number",
+			contact: &models.Contact{
+				PhoneNumber: "",
+			},
+			conversationID: "1234567890@s.whatsapp.net",
+			assertPhone:    "1234567890",
+		},
+		{
+			name: "direct conversation overwrites existing phone",
+			contact: &models.Contact{
+				PhoneNumber: "old_phone",
+			},
+			conversationID: "9876543210@s.whatsapp.net",
+			assertPhone:    "9876543210",
+		},
+		{
+			name: "conversation ID without suffix does not change phone",
+			contact: &models.Contact{
+				PhoneNumber: "existing",
+			},
+			conversationID: "plain_text_id",
+			assertPhone:    "existing",
+		},
+		{
+			name: "empty conversation ID does not change phone",
+			contact: &models.Contact{
+				PhoneNumber: "existing",
+			},
+			conversationID: "",
+			assertPhone:    "existing",
+		},
+		{
+			name: "whitespace conversation ID does not change phone",
+			contact: &models.Contact{
+				PhoneNumber: "existing",
+			},
+			conversationID: "   ",
+			assertPhone:    "existing",
+		},
+		{
+			name: "group JID suffix on phone is treated as group contact",
+			contact: &models.Contact{
+				PhoneNumber: "123456789@g.us",
+			},
+			conversationID: "1234567890@s.whatsapp.net",
+			assertPhone:    "123456789@g.us",
+		},
+		{
+			name: "channel JID suffix on phone is treated as channel contact",
+			contact: &models.Contact{
+				PhoneNumber: "123456789@newsletter",
+			},
+			conversationID: "1234567890@s.whatsapp.net",
+			assertPhone:    "123456789@newsletter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			applyDirectContactPhoneFromConversation(tt.contact, tt.conversationID)
+			if tt.contact == nil {
+				return
+			}
+			assert.Equal(t, tt.assertPhone, tt.contact.PhoneNumber)
 		})
 	}
 }
