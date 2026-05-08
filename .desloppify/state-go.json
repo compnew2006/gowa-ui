@@ -1,19 +1,19 @@
 {
   "version": 3,
   "created": "2026-03-11T03:27:39+00:00",
-  "last_scan": "2026-05-08T11:00:09+00:00",
-  "scan_count": 11,
-  "overall_score": 71.3,
+  "last_scan": "2026-05-08T11:09:11+00:00",
+  "scan_count": 14,
+  "overall_score": 78.9,
   "objective_score": 84.2,
-  "strict_score": 71.2,
+  "strict_score": 78.8,
   "verified_strict_score": 84.2,
   "stats": {
-    "total": 1688,
+    "total": 1734,
     "auto_resolved": 25,
     "deferred": 1324,
     "false_positive": 0,
     "fixed": 100,
-    "open": 231,
+    "open": 277,
     "triaged_out": 0,
     "wontfix": 8,
     "by_tier": {
@@ -21,8 +21,8 @@
         "auto_resolved": 0,
         "deferred": 0,
         "false_positive": 0,
-        "fixed": 58,
-        "open": 1,
+        "fixed": 57,
+        "open": 31,
         "triaged_out": 0,
         "wontfix": 4
       },
@@ -31,7 +31,7 @@
         "deferred": 20,
         "false_positive": 0,
         "fixed": 22,
-        "open": 7,
+        "open": 24,
         "triaged_out": 0,
         "wontfix": 2
       },
@@ -48,8 +48,8 @@
         "auto_resolved": 0,
         "deferred": 182,
         "false_positive": 0,
-        "fixed": 20,
-        "open": 1,
+        "fixed": 21,
+        "open": 0,
         "triaged_out": 0,
         "wontfix": 0
       }
@@ -113,7 +113,7 @@
           "reason": "tool_not_found"
         }
       ],
-      "updated_at": "2026-05-08T10:53:53+00:00"
+      "updated_at": "2026-05-08T11:09:11+00:00"
     }
   },
   "score_confidence": {
@@ -145,16 +145,16 @@
   },
   "subjective_integrity": {
     "status": "disabled",
-    "target_score": null,
+    "target_score": 95.0,
     "matched_count": 0,
     "matched_dimensions": [],
     "reset_dimensions": []
   },
   "subjective_assessments": {
     "abstraction_fitness": {
-      "score": 72.0,
+      "score": 71.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00",
+      "assessed_at": "2026-05-08T11:07:04+00:00",
       "components": [
         "Abstraction Leverage",
         "Indirection Cost",
@@ -164,120 +164,108 @@
         "Type Discipline"
       ],
       "component_scores": {
-        "Abstraction Leverage": 78.0,
+        "Abstraction Leverage": 65.0,
         "Indirection Cost": 70.0,
-        "Interface Honesty": 65.0,
-        "Delegation Density": 85.0,
-        "Definition Directness": 68.0,
-        "Type Discipline": 62.0
-      },
-      "needs_review_refresh": true,
-      "refresh_reason": "mechanical_issues_changed",
-      "stale_since": "2026-05-08T10:06:53+00:00"
+        "Interface Honesty": 60.0,
+        "Delegation Density": 80.0,
+        "Definition Directness": 72.0,
+        "Type Discipline": 65.0
+      }
     },
     "ai_generated_debt": {
-      "score": 85.0,
+      "score": 84.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T10:24:41+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     },
     "api_surface_coherence": {
-      "score": 62.0,
+      "score": 79.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     },
     "authorization_consistency": {
-      "score": 78.0,
+      "score": 85.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     },
     "contract_coherence": {
-      "score": 72.0,
+      "score": 86.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     },
     "convention_outlier": {
-      "score": 72.0,
+      "score": 78.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00",
-      "needs_review_refresh": true,
-      "refresh_reason": "mechanical_issues_changed",
-      "stale_since": "2026-05-08T00:04:40+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     },
     "cross_module_architecture": {
-      "score": 55.0,
-      "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
-    },
-    "dependency_health": {
-      "score": 78.0,
-      "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
-    },
-    "design_coherence": {
-      "score": 72.0,
-      "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00",
-      "needs_review_refresh": true,
-      "refresh_reason": "mechanical_issues_changed",
-      "stale_since": "2026-05-08T10:06:53+00:00"
-    },
-    "error_consistency": {
-      "score": 78.0,
-      "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
-    },
-    "high_level_elegance": {
-      "score": 58.0,
-      "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
-    },
-    "incomplete_migration": {
-      "score": 82.0,
-      "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
-    },
-    "initialization_coupling": {
-      "score": 52.0,
-      "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
-    },
-    "logic_clarity": {
-      "score": 64.0,
-      "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00",
-      "needs_review_refresh": true,
-      "refresh_reason": "mechanical_issues_changed",
-      "stale_since": "2026-05-08T10:06:53+00:00"
-    },
-    "low_level_elegance": {
-      "score": 62.0,
-      "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
-    },
-    "mid_level_elegance": {
       "score": 68.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     },
-    "naming_quality": {
-      "score": 78.0,
+    "dependency_health": {
+      "score": 92.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     },
-    "package_organization": {
-      "score": 55.0,
+    "design_coherence": {
+      "score": 70.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     },
-    "test_strategy": {
+    "error_consistency": {
+      "score": 82.0,
+      "source": "holistic",
+      "assessed_at": "2026-05-08T11:07:04+00:00"
+    },
+    "high_level_elegance": {
       "score": 72.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
+    },
+    "incomplete_migration": {
+      "score": 90.0,
+      "source": "holistic",
+      "assessed_at": "2026-05-08T11:07:04+00:00"
+    },
+    "initialization_coupling": {
+      "score": 88.0,
+      "source": "holistic",
+      "assessed_at": "2026-05-08T11:07:04+00:00"
+    },
+    "logic_clarity": {
+      "score": 87.0,
+      "source": "holistic",
+      "assessed_at": "2026-05-08T11:07:04+00:00"
+    },
+    "low_level_elegance": {
+      "score": 80.0,
+      "source": "holistic",
+      "assessed_at": "2026-05-08T11:07:04+00:00"
+    },
+    "mid_level_elegance": {
+      "score": 75.0,
+      "source": "holistic",
+      "assessed_at": "2026-05-08T11:07:04+00:00"
+    },
+    "naming_quality": {
+      "score": 80.0,
+      "source": "holistic",
+      "assessed_at": "2026-05-08T11:07:04+00:00"
+    },
+    "package_organization": {
+      "score": 74.0,
+      "source": "holistic",
+      "assessed_at": "2026-05-08T11:07:04+00:00"
+    },
+    "test_strategy": {
+      "score": 76.0,
+      "source": "holistic",
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     },
     "type_safety": {
-      "score": 73.0,
+      "score": 79.0,
       "source": "holistic",
-      "assessed_at": "2026-05-08T00:04:40+00:00"
+      "assessed_at": "2026-05-08T11:07:04+00:00"
     }
   },
   "scan_history": [
@@ -1699,6 +1687,393 @@
           "strict": 97.0
         }
       }
+    },
+    {
+      "timestamp": "2026-05-08T11:06:55+00:00",
+      "lang": "go",
+      "strict_score": 71.2,
+      "verified_strict_score": 84.2,
+      "objective_score": 84.2,
+      "overall_score": 71.3,
+      "open": 231,
+      "diff_new": 0,
+      "diff_resolved": 20,
+      "ignored": 0,
+      "raw_issues": 217,
+      "suppressed_pct": 0.0,
+      "ignore_patterns": 10,
+      "subjective_integrity": {
+        "status": "disabled",
+        "matched_count": 0,
+        "reset_count": 0,
+        "target_score": 95.0
+      },
+      "score_confidence": {
+        "status": "reduced",
+        "confidence": 0.0,
+        "detector_count": 2,
+        "dimension_count": 0
+      },
+      "dimension_scores": {
+        "Code quality": {
+          "score": 96.2,
+          "strict": 96.2
+        },
+        "Security": {
+          "score": 98.5,
+          "strict": 98.5
+        },
+        "File health": {
+          "score": 84.6,
+          "strict": 84.3
+        },
+        "Test health": {
+          "score": 53.4,
+          "strict": 53.4
+        },
+        "Abstraction fit": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "AI generated debt": {
+          "score": 85.0,
+          "strict": 85.0
+        },
+        "API coherence": {
+          "score": 62.0,
+          "strict": 62.0
+        },
+        "Auth consistency": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "Contracts": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Convention drift": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Cross-module arch": {
+          "score": 55.0,
+          "strict": 55.0
+        },
+        "Dep health": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "Design coherence": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Error consistency": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "High elegance": {
+          "score": 58.0,
+          "strict": 58.0
+        },
+        "Stale migration": {
+          "score": 82.0,
+          "strict": 82.0
+        },
+        "Init coupling": {
+          "score": 52.0,
+          "strict": 52.0
+        },
+        "Logic clarity": {
+          "score": 64.0,
+          "strict": 64.0
+        },
+        "Low elegance": {
+          "score": 62.0,
+          "strict": 62.0
+        },
+        "Mid elegance": {
+          "score": 68.0,
+          "strict": 68.0
+        },
+        "Naming quality": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "Structure nav": {
+          "score": 55.0,
+          "strict": 55.0
+        },
+        "Test strategy": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Type safety": {
+          "score": 73.0,
+          "strict": 73.0
+        },
+        "Duplication": {
+          "score": 97.6,
+          "strict": 97.0
+        }
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:07:04+00:00",
+      "lang": "go",
+      "strict_score": 78.8,
+      "verified_strict_score": 84.2,
+      "objective_score": 84.2,
+      "overall_score": 78.9,
+      "open": 278,
+      "diff_new": 46,
+      "diff_resolved": 0,
+      "ignored": 0,
+      "raw_issues": 49,
+      "suppressed_pct": 0.0,
+      "ignore_patterns": 0,
+      "subjective_integrity": {
+        "status": "disabled",
+        "matched_count": 0,
+        "reset_count": 0,
+        "target_score": null
+      },
+      "score_confidence": {
+        "status": "reduced",
+        "confidence": 0.0,
+        "detector_count": 2,
+        "dimension_count": 0
+      },
+      "dimension_scores": {
+        "Code quality": {
+          "score": 96.2,
+          "strict": 96.2
+        },
+        "Security": {
+          "score": 98.5,
+          "strict": 98.5
+        },
+        "File health": {
+          "score": 84.6,
+          "strict": 84.3
+        },
+        "Test health": {
+          "score": 53.4,
+          "strict": 53.4
+        },
+        "Abstraction fit": {
+          "score": 71.0,
+          "strict": 71.0
+        },
+        "AI generated debt": {
+          "score": 84.0,
+          "strict": 84.0
+        },
+        "API coherence": {
+          "score": 79.0,
+          "strict": 79.0
+        },
+        "Auth consistency": {
+          "score": 85.0,
+          "strict": 85.0
+        },
+        "Contracts": {
+          "score": 86.0,
+          "strict": 86.0
+        },
+        "Convention drift": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "Cross-module arch": {
+          "score": 68.0,
+          "strict": 68.0
+        },
+        "Dep health": {
+          "score": 92.0,
+          "strict": 92.0
+        },
+        "Design coherence": {
+          "score": 70.0,
+          "strict": 70.0
+        },
+        "Error consistency": {
+          "score": 82.0,
+          "strict": 82.0
+        },
+        "High elegance": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Stale migration": {
+          "score": 90.0,
+          "strict": 90.0
+        },
+        "Init coupling": {
+          "score": 88.0,
+          "strict": 88.0
+        },
+        "Logic clarity": {
+          "score": 87.0,
+          "strict": 87.0
+        },
+        "Low elegance": {
+          "score": 80.0,
+          "strict": 80.0
+        },
+        "Mid elegance": {
+          "score": 75.0,
+          "strict": 75.0
+        },
+        "Naming quality": {
+          "score": 80.0,
+          "strict": 80.0
+        },
+        "Structure nav": {
+          "score": 74.0,
+          "strict": 74.0
+        },
+        "Test strategy": {
+          "score": 76.0,
+          "strict": 76.0
+        },
+        "Type safety": {
+          "score": 79.0,
+          "strict": 79.0
+        },
+        "Duplication": {
+          "score": 97.6,
+          "strict": 97.0
+        }
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:09:11+00:00",
+      "lang": "go",
+      "strict_score": 78.8,
+      "verified_strict_score": 84.2,
+      "objective_score": 84.2,
+      "overall_score": 78.9,
+      "open": 277,
+      "diff_new": 0,
+      "diff_resolved": 21,
+      "ignored": 0,
+      "raw_issues": 217,
+      "suppressed_pct": 0.0,
+      "ignore_patterns": 10,
+      "subjective_integrity": {
+        "status": "disabled",
+        "matched_count": 0,
+        "reset_count": 0,
+        "target_score": 95.0
+      },
+      "score_confidence": {
+        "status": "reduced",
+        "confidence": 0.0,
+        "detector_count": 2,
+        "dimension_count": 0
+      },
+      "dimension_scores": {
+        "Code quality": {
+          "score": 96.2,
+          "strict": 96.2
+        },
+        "Security": {
+          "score": 98.5,
+          "strict": 98.5
+        },
+        "File health": {
+          "score": 84.6,
+          "strict": 84.3
+        },
+        "Test health": {
+          "score": 53.4,
+          "strict": 53.4
+        },
+        "Abstraction fit": {
+          "score": 71.0,
+          "strict": 71.0
+        },
+        "AI generated debt": {
+          "score": 84.0,
+          "strict": 84.0
+        },
+        "API coherence": {
+          "score": 79.0,
+          "strict": 79.0
+        },
+        "Auth consistency": {
+          "score": 85.0,
+          "strict": 85.0
+        },
+        "Contracts": {
+          "score": 86.0,
+          "strict": 86.0
+        },
+        "Convention drift": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "Cross-module arch": {
+          "score": 68.0,
+          "strict": 68.0
+        },
+        "Dep health": {
+          "score": 92.0,
+          "strict": 92.0
+        },
+        "Design coherence": {
+          "score": 70.0,
+          "strict": 70.0
+        },
+        "Error consistency": {
+          "score": 82.0,
+          "strict": 82.0
+        },
+        "High elegance": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Stale migration": {
+          "score": 90.0,
+          "strict": 90.0
+        },
+        "Init coupling": {
+          "score": 88.0,
+          "strict": 88.0
+        },
+        "Logic clarity": {
+          "score": 87.0,
+          "strict": 87.0
+        },
+        "Low elegance": {
+          "score": 80.0,
+          "strict": 80.0
+        },
+        "Mid elegance": {
+          "score": 75.0,
+          "strict": 75.0
+        },
+        "Naming quality": {
+          "score": 80.0,
+          "strict": 80.0
+        },
+        "Structure nav": {
+          "score": 74.0,
+          "strict": 74.0
+        },
+        "Test strategy": {
+          "score": 76.0,
+          "strict": 76.0
+        },
+        "Type safety": {
+          "score": 79.0,
+          "strict": 79.0
+        },
+        "Duplication": {
+          "score": 97.6,
+          "strict": 97.0
+        }
+      }
     }
   ],
   "lang_capabilities": {
@@ -1712,9 +2087,9 @@
     "production": 228
   },
   "tool_hash": "9790f983f730",
-  "scan_path": null,
+  "scan_path": ".",
   "scan_completeness": {
-    "go": "full"
+    "go": "fast"
   },
   "potentials": {
     "go": {
@@ -1724,14 +2099,13 @@
       "test_coverage": 3443,
       "security": 228,
       "subjective_review": 20,
-      "stale_wontfix": 0,
-      "review": 10
+      "stale_wontfix": 0
     }
   },
   "codebase_metrics": {
     "go": {
       "total_files": 421,
-      "total_loc": 140816,
+      "total_loc": 140866,
       "total_directories": 32
     }
   },
@@ -1801,19 +2175,19 @@
       }
     },
     "Abstraction fit": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
+      "score": 71.0,
+      "strict": 71.0,
+      "verified_strict_score": 71.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 4,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 0,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
+          "pass_rate": 0.71,
+          "failing": 4,
+          "weighted_failures": 2.9,
+          "assessment_score": 71.0,
           "placeholder": false,
           "dimension_key": "abstraction_fitness",
           "configured_weight": 8.0,
@@ -1826,30 +2200,30 @@
             "Type Discipline"
           ],
           "component_scores": {
-            "Abstraction Leverage": 78.0,
+            "Abstraction Leverage": 65.0,
             "Indirection Cost": 70.0,
-            "Interface Honesty": 65.0,
-            "Delegation Density": 85.0,
-            "Definition Directness": 68.0,
-            "Type Discipline": 62.0
+            "Interface Honesty": 60.0,
+            "Delegation Density": 80.0,
+            "Definition Directness": 72.0,
+            "Type Discipline": 65.0
           }
         }
       }
     },
     "AI generated debt": {
-      "score": 85.0,
-      "strict": 85.0,
-      "verified_strict_score": 85.0,
+      "score": 84.0,
+      "strict": 84.0,
+      "verified_strict_score": 84.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 2,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.85,
-          "failing": 0,
-          "weighted_failures": 1.5,
-          "assessment_score": 85.0,
+          "pass_rate": 0.84,
+          "failing": 2,
+          "weighted_failures": 1.6,
+          "assessment_score": 84.0,
           "placeholder": false,
           "dimension_key": "ai_generated_debt",
           "configured_weight": 1.0,
@@ -1858,19 +2232,19 @@
       }
     },
     "API coherence": {
-      "score": 62.0,
-      "strict": 62.0,
-      "verified_strict_score": 62.0,
+      "score": 79.0,
+      "strict": 79.0,
+      "verified_strict_score": 79.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 2,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.62,
-          "failing": 0,
-          "weighted_failures": 3.8,
-          "assessment_score": 62.0,
+          "pass_rate": 0.79,
+          "failing": 2,
+          "weighted_failures": 2.1,
+          "assessment_score": 79.0,
           "placeholder": false,
           "dimension_key": "api_surface_coherence",
           "configured_weight": 1.0,
@@ -1879,19 +2253,19 @@
       }
     },
     "Auth consistency": {
-      "score": 78.0,
-      "strict": 78.0,
-      "verified_strict_score": 78.0,
+      "score": 85.0,
+      "strict": 85.0,
+      "verified_strict_score": 85.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 1,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.78,
-          "failing": 0,
-          "weighted_failures": 2.2,
-          "assessment_score": 78.0,
+          "pass_rate": 0.85,
+          "failing": 1,
+          "weighted_failures": 1.5,
+          "assessment_score": 85.0,
           "placeholder": false,
           "dimension_key": "authorization_consistency",
           "configured_weight": 1.0,
@@ -1900,19 +2274,19 @@
       }
     },
     "Contracts": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
+      "score": 86.0,
+      "strict": 86.0,
+      "verified_strict_score": 86.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 1,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 0,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
+          "pass_rate": 0.86,
+          "failing": 1,
+          "weighted_failures": 1.4,
+          "assessment_score": 86.0,
           "placeholder": false,
           "dimension_key": "contract_coherence",
           "configured_weight": 12.0,
@@ -1921,19 +2295,19 @@
       }
     },
     "Convention drift": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
+      "score": 78.0,
+      "strict": 78.0,
+      "verified_strict_score": 78.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 4,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 0,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
+          "pass_rate": 0.78,
+          "failing": 4,
+          "weighted_failures": 2.2,
+          "assessment_score": 78.0,
           "placeholder": false,
           "dimension_key": "convention_outlier",
           "configured_weight": 1.0,
@@ -1942,19 +2316,19 @@
       }
     },
     "Cross-module arch": {
-      "score": 55.0,
-      "strict": 55.0,
-      "verified_strict_score": 55.0,
+      "score": 68.0,
+      "strict": 68.0,
+      "verified_strict_score": 68.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 6,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.55,
-          "failing": 0,
-          "weighted_failures": 4.5,
-          "assessment_score": 55.0,
+          "pass_rate": 0.68,
+          "failing": 6,
+          "weighted_failures": 3.2,
+          "assessment_score": 68.0,
           "placeholder": false,
           "dimension_key": "cross_module_architecture",
           "configured_weight": 1.0,
@@ -1963,19 +2337,19 @@
       }
     },
     "Dep health": {
-      "score": 78.0,
-      "strict": 78.0,
-      "verified_strict_score": 78.0,
+      "score": 92.0,
+      "strict": 92.0,
+      "verified_strict_score": 92.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 1,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.78,
-          "failing": 0,
-          "weighted_failures": 2.2,
-          "assessment_score": 78.0,
+          "pass_rate": 0.92,
+          "failing": 1,
+          "weighted_failures": 0.8,
+          "assessment_score": 92.0,
           "placeholder": false,
           "dimension_key": "dependency_health",
           "configured_weight": 1.0,
@@ -1984,19 +2358,19 @@
       }
     },
     "Design coherence": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
+      "score": 70.0,
+      "strict": 70.0,
+      "verified_strict_score": 70.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 3,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 0,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
+          "pass_rate": 0.7,
+          "failing": 3,
+          "weighted_failures": 3.0,
+          "assessment_score": 70.0,
           "placeholder": false,
           "dimension_key": "design_coherence",
           "configured_weight": 10.0,
@@ -2005,19 +2379,19 @@
       }
     },
     "Error consistency": {
-      "score": 78.0,
-      "strict": 78.0,
-      "verified_strict_score": 78.0,
+      "score": 82.0,
+      "strict": 82.0,
+      "verified_strict_score": 82.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 3,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.78,
-          "failing": 0,
-          "weighted_failures": 2.2,
-          "assessment_score": 78.0,
+          "pass_rate": 0.82,
+          "failing": 3,
+          "weighted_failures": 1.8,
+          "assessment_score": 82.0,
           "placeholder": false,
           "dimension_key": "error_consistency",
           "configured_weight": 3.0,
@@ -2026,19 +2400,19 @@
       }
     },
     "High elegance": {
-      "score": 58.0,
-      "strict": 58.0,
-      "verified_strict_score": 58.0,
+      "score": 72.0,
+      "strict": 72.0,
+      "verified_strict_score": 72.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 4,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.58,
-          "failing": 0,
-          "weighted_failures": 4.2,
-          "assessment_score": 58.0,
+          "pass_rate": 0.72,
+          "failing": 4,
+          "weighted_failures": 2.8,
+          "assessment_score": 72.0,
           "placeholder": false,
           "dimension_key": "high_level_elegance",
           "configured_weight": 22.0,
@@ -2047,19 +2421,19 @@
       }
     },
     "Stale migration": {
-      "score": 82.0,
-      "strict": 82.0,
-      "verified_strict_score": 82.0,
+      "score": 90.0,
+      "strict": 90.0,
+      "verified_strict_score": 90.0,
       "checks": 10,
       "failing": 0,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.82,
+          "pass_rate": 0.9,
           "failing": 0,
-          "weighted_failures": 1.8,
-          "assessment_score": 82.0,
+          "weighted_failures": 1.0,
+          "assessment_score": 90.0,
           "placeholder": false,
           "dimension_key": "incomplete_migration",
           "configured_weight": 1.0,
@@ -2068,19 +2442,19 @@
       }
     },
     "Init coupling": {
-      "score": 52.0,
-      "strict": 52.0,
-      "verified_strict_score": 52.0,
+      "score": 88.0,
+      "strict": 88.0,
+      "verified_strict_score": 88.0,
       "checks": 10,
       "failing": 2,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.52,
+          "pass_rate": 0.88,
           "failing": 2,
-          "weighted_failures": 4.8,
-          "assessment_score": 52.0,
+          "weighted_failures": 1.2,
+          "assessment_score": 88.0,
           "placeholder": false,
           "dimension_key": "initialization_coupling",
           "configured_weight": 1.0,
@@ -2089,19 +2463,19 @@
       }
     },
     "Logic clarity": {
-      "score": 64.0,
-      "strict": 64.0,
-      "verified_strict_score": 64.0,
+      "score": 87.0,
+      "strict": 87.0,
+      "verified_strict_score": 87.0,
       "checks": 10,
       "failing": 0,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.64,
+          "pass_rate": 0.87,
           "failing": 0,
-          "weighted_failures": 3.6,
-          "assessment_score": 64.0,
+          "weighted_failures": 1.3,
+          "assessment_score": 87.0,
           "placeholder": false,
           "dimension_key": "logic_clarity",
           "configured_weight": 6.0,
@@ -2110,19 +2484,19 @@
       }
     },
     "Low elegance": {
-      "score": 62.0,
-      "strict": 62.0,
-      "verified_strict_score": 62.0,
+      "score": 80.0,
+      "strict": 80.0,
+      "verified_strict_score": 80.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 2,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.62,
-          "failing": 0,
-          "weighted_failures": 3.8,
-          "assessment_score": 62.0,
+          "pass_rate": 0.8,
+          "failing": 2,
+          "weighted_failures": 2.0,
+          "assessment_score": 80.0,
           "placeholder": false,
           "dimension_key": "low_level_elegance",
           "configured_weight": 12.0,
@@ -2131,19 +2505,19 @@
       }
     },
     "Mid elegance": {
-      "score": 68.0,
-      "strict": 68.0,
-      "verified_strict_score": 68.0,
+      "score": 75.0,
+      "strict": 75.0,
+      "verified_strict_score": 75.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 3,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.68,
-          "failing": 0,
-          "weighted_failures": 3.2,
-          "assessment_score": 68.0,
+          "pass_rate": 0.75,
+          "failing": 3,
+          "weighted_failures": 2.5,
+          "assessment_score": 75.0,
           "placeholder": false,
           "dimension_key": "mid_level_elegance",
           "configured_weight": 22.0,
@@ -2152,19 +2526,19 @@
       }
     },
     "Naming quality": {
-      "score": 78.0,
-      "strict": 78.0,
-      "verified_strict_score": 78.0,
+      "score": 80.0,
+      "strict": 80.0,
+      "verified_strict_score": 80.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 4,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.78,
-          "failing": 0,
-          "weighted_failures": 2.2,
-          "assessment_score": 78.0,
+          "pass_rate": 0.8,
+          "failing": 4,
+          "weighted_failures": 2.0,
+          "assessment_score": 80.0,
           "placeholder": false,
           "dimension_key": "naming_quality",
           "configured_weight": 2.0,
@@ -2173,19 +2547,19 @@
       }
     },
     "Structure nav": {
-      "score": 55.0,
-      "strict": 55.0,
-      "verified_strict_score": 55.0,
+      "score": 74.0,
+      "strict": 74.0,
+      "verified_strict_score": 74.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 3,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.55,
-          "failing": 0,
-          "weighted_failures": 4.5,
-          "assessment_score": 55.0,
+          "pass_rate": 0.74,
+          "failing": 3,
+          "weighted_failures": 2.6,
+          "assessment_score": 74.0,
           "placeholder": false,
           "dimension_key": "package_organization",
           "configured_weight": 5.0,
@@ -2194,19 +2568,19 @@
       }
     },
     "Test strategy": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
+      "score": 76.0,
+      "strict": 76.0,
+      "verified_strict_score": 76.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 2,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 0,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
+          "pass_rate": 0.76,
+          "failing": 2,
+          "weighted_failures": 2.4,
+          "assessment_score": 76.0,
           "placeholder": false,
           "dimension_key": "test_strategy",
           "configured_weight": 1.0,
@@ -2215,19 +2589,19 @@
       }
     },
     "Type safety": {
-      "score": 73.0,
-      "strict": 73.0,
-      "verified_strict_score": 73.0,
+      "score": 79.0,
+      "strict": 79.0,
+      "verified_strict_score": 79.0,
       "checks": 10,
-      "failing": 0,
+      "failing": 2,
       "tier": 4,
       "detectors": {
         "subjective_assessment": {
           "potential": 10,
-          "pass_rate": 0.73,
-          "failing": 0,
-          "weighted_failures": 2.7,
-          "assessment_score": 73.0,
+          "pass_rate": 0.79,
+          "failing": 2,
+          "weighted_failures": 2.1,
+          "assessment_score": 79.0,
           "placeholder": false,
           "dimension_key": "type_safety",
           "configured_weight": 12.0,
@@ -2261,7 +2635,7 @@
   },
   "reminder_history": {
     "zone_classification": 3,
-    "report_scores": 8,
+    "report_scores": 10,
     "feedback_nudge": 3,
     "stagnant_nudge": 25,
     "review_issues_pending": 3
@@ -2311,7 +2685,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2336,7 +2710,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2361,7 +2735,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2391,7 +2765,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2447,7 +2821,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2478,7 +2852,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2503,7 +2877,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2528,7 +2902,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2558,7 +2932,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2583,7 +2957,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2614,7 +2988,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2644,7 +3018,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2669,7 +3043,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2694,7 +3068,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2719,7 +3093,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2744,7 +3118,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2774,7 +3148,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2806,7 +3180,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2836,7 +3210,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2867,7 +3241,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2897,7 +3271,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2927,7 +3301,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2958,7 +3332,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -2988,7 +3362,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3018,7 +3392,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3043,7 +3417,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3073,7 +3447,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3091,14 +3465,14 @@
       "file": "internal/middleware/middleware_test.go",
       "tier": 3,
       "confidence": "low",
-      "summary": "Large file: large (1003 LOC)",
+      "summary": "Large file: large (1053 LOC)",
       "detail": {
-        "loc": 1003
+        "loc": 1053
       },
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3128,7 +3502,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3153,7 +3527,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3184,7 +3558,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3214,7 +3588,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3239,7 +3613,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3264,7 +3638,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3294,7 +3668,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3325,7 +3699,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3375,7 +3749,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3400,7 +3774,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3430,7 +3804,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3455,7 +3829,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3484,7 +3858,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3509,7 +3883,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3534,7 +3908,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3564,7 +3938,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3589,7 +3963,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3614,7 +3988,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3639,7 +4013,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3669,7 +4043,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3699,7 +4073,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3728,7 +4102,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3753,7 +4127,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3778,7 +4152,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3808,7 +4182,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3837,7 +4211,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3862,7 +4236,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3891,7 +4265,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3952,7 +4326,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -3977,7 +4351,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4002,7 +4376,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4033,7 +4407,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4063,7 +4437,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4092,7 +4466,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4121,7 +4495,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4179,7 +4553,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4208,7 +4582,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4239,7 +4613,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4272,7 +4646,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -4305,7 +4679,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28426,7 +28800,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:29:16+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28449,7 +28823,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:29:16+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28472,7 +28846,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:29:16+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28633,7 +29007,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:29:16+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28656,7 +29030,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:29:16+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28679,7 +29053,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:29:16+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28707,7 +29081,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28735,7 +29109,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28763,7 +29137,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28791,7 +29165,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28819,7 +29193,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28847,7 +29221,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28875,7 +29249,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -28931,7 +29305,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29015,7 +29389,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29043,7 +29417,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29099,7 +29473,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29127,7 +29501,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29155,7 +29529,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29184,7 +29558,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29212,7 +29586,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29240,7 +29614,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29268,7 +29642,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29382,7 +29756,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29439,7 +29813,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29496,7 +29870,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29524,7 +29898,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29666,7 +30040,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29722,7 +30096,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29779,7 +30153,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29835,7 +30209,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29863,7 +30237,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29891,7 +30265,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29919,7 +30293,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29947,7 +30321,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -29975,7 +30349,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30004,7 +30378,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30032,7 +30406,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30172,7 +30546,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30200,7 +30574,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30228,7 +30602,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30256,7 +30630,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30285,7 +30659,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30313,7 +30687,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30341,7 +30715,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30369,7 +30743,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30397,7 +30771,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30453,7 +30827,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30482,7 +30856,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30510,7 +30884,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30538,7 +30912,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30567,7 +30941,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30595,7 +30969,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30623,7 +30997,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30651,7 +31025,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30679,7 +31053,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30708,7 +31082,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30736,7 +31110,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30764,7 +31138,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30792,7 +31166,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30820,7 +31194,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30848,7 +31222,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30876,7 +31250,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30904,7 +31278,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30932,7 +31306,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30960,7 +31334,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30988,7 +31362,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31016,7 +31390,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31044,7 +31418,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31072,7 +31446,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31100,7 +31474,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31156,7 +31530,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31297,7 +31671,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31354,7 +31728,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31411,7 +31785,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31440,7 +31814,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31468,7 +31842,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31525,7 +31899,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31582,7 +31956,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31610,7 +31984,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31638,7 +32012,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -31667,7 +32041,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -39456,11 +39830,11 @@
         "reason": "unreviewed",
         "loc": 310
       },
-      "status": "open",
-      "note": null,
+      "status": "fixed",
+      "note": "Still absent from scan after manual resolution",
       "first_seen": "2026-03-11T08:47:28+00:00",
       "last_seen": "2026-03-11T08:47:28+00:00",
-      "resolved_at": null,
+      "resolved_at": "2026-05-08T11:07:29+00:00",
       "reopen_count": 0,
       "lang": "go",
       "zone": "production",
@@ -39469,7 +39843,15 @@
       "suppression_pattern": null,
       "work_item_kind": "assessment_request",
       "issue_kind": "assessment_request",
-      "origin": "synthetic_task"
+      "origin": "synthetic_task",
+      "resolution_attestation": {
+        "kind": "manual",
+        "text": "I have actually completed holistic reviews of all 20 subjective dimensions and I am not gaming",
+        "attested_at": "2026-05-08T11:07:29+00:00",
+        "scan_verified": true,
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
+        "scan_verification_text": "Absent from detector output in latest scan"
+      }
     },
     "test_coverage::cmd/whatomate-license-admin/main.go::untested_module": {
       "id": "test_coverage::cmd/whatomate-license-admin/main.go::untested_module",
@@ -39613,7 +39995,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39647,7 +40029,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39681,7 +40063,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39715,7 +40097,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39749,7 +40131,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39783,7 +40165,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39817,7 +40199,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39851,7 +40233,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39885,7 +40267,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39919,7 +40301,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39953,7 +40335,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -39987,7 +40369,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -40021,7 +40403,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -40055,7 +40437,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -40089,7 +40471,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -40123,7 +40505,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -40157,7 +40539,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -40191,7 +40573,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -40225,7 +40607,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -40259,7 +40641,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T10:53:53+00:00",
+        "scan_verified_at": "2026-05-08T11:09:11+00:00",
         "scan_verification_text": "Absent from detector output in latest scan"
       }
     },
@@ -43936,7 +44318,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -43966,7 +44348,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -43991,7 +44373,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44016,7 +44398,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44041,7 +44423,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44066,7 +44448,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44096,7 +44478,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44126,7 +44508,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44151,7 +44533,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44176,7 +44558,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44201,7 +44583,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44226,7 +44608,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44256,7 +44638,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44287,7 +44669,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44312,7 +44694,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44342,7 +44724,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44367,7 +44749,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44396,7 +44778,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44421,7 +44803,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44451,7 +44833,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44481,7 +44863,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44506,7 +44888,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44536,7 +44918,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44561,7 +44943,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44586,7 +44968,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44611,7 +44993,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44636,7 +45018,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44661,7 +45043,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44690,7 +45072,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44719,7 +45101,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44749,7 +45131,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:26+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44772,7 +45154,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44795,7 +45177,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44818,7 +45200,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44841,7 +45223,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44864,7 +45246,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44887,7 +45269,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44915,7 +45297,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44943,7 +45325,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -44971,7 +45353,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45028,7 +45410,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45056,7 +45438,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45084,7 +45466,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45112,7 +45494,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45140,7 +45522,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45197,7 +45579,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45225,7 +45607,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45253,7 +45635,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45281,7 +45663,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45338,7 +45720,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45366,7 +45748,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45394,7 +45776,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45422,7 +45804,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45450,7 +45832,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45478,7 +45860,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45506,7 +45888,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45534,7 +45916,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45620,7 +46002,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45648,7 +46030,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45676,7 +46058,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45704,7 +46086,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45732,7 +46114,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45761,7 +46143,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45790,7 +46172,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -45819,7 +46201,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:06:27+00:00",
-      "last_seen": "2026-05-08T10:53:53+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -47482,9 +47864,9 @@
       "id": "review::.::holistic::ai_generated_debt::helpers-docstring-bloat",
       "detector": "review",
       "file": ".",
-      "tier": 1,
-      "confidence": "high",
-      "summary": "Non-idiomatic Go docstrings with verbose Parameters/Returns sections on simple helper functions in helpers.go",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "Non-idiomatic verbose Go docstrings with Parameters/Returns sections on simple helpers",
       "detail": {
         "holistic": true,
         "dimension": "ai_generated_debt",
@@ -47492,34 +47874,25 @@
           "internal/handlers/helpers.go"
         ],
         "evidence": [
-          "parsePathUUID (lines 20-48): 20-line docstring for 6-line function with redundant Parameters/Returns sections",
-          "findByIDAndOrg (lines 106-138): 24-line docstring for 7-line function with Type Parameters/Parameters/Returns sections",
-          "validateExportColumns (lines 163-196): 17-line docstring for 12-line function with Parameters/Returns/Error returns sections",
-          "validateRequiredColumns (lines 198-231): 17-line docstring for 12-line function with Parameters/Returns/Error returns sections"
+          "Helper functions have multi-line docstrings with formal Parameters and Returns sections that are unusual for Go and add no value for simple functions"
         ],
-        "suggestion": "Collapse each docstring to 2-3 lines: start with the function name as per Go convention, mention the sentinel error behavior, and remove the redundant Parameters/Returns/Error returns sections since Go tooling extracts these from signatures.",
+        "suggestion": "Replace verbose docstrings with standard Go doc comments that focus on what the function does and any non-obvious behavior",
         "reasoning": "",
-        "summary_hash": "5d2b09c0"
+        "summary_hash": "61123fcb"
       },
-      "status": "fixed",
-      "note": "not reported in latest holistic re-import",
+      "status": "open",
+      "note": "Reopened (\u00d71) \u2014 reappeared in scan (was fixed)",
       "first_seen": "2026-05-08T10:24:41+00:00",
-      "last_seen": "2026-05-08T10:24:41+00:00",
-      "resolved_at": "2026-05-08T11:00:09+00:00",
-      "reopen_count": 0,
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 1,
       "work_item_kind": "review_defect",
       "issue_kind": "review_defect",
       "origin": "review_import",
       "lang": "go",
       "suppressed": false,
       "suppressed_at": null,
-      "suppression_pattern": null,
-      "resolution_attestation": {
-        "kind": "agent_import",
-        "text": "not reported in latest holistic re-import",
-        "attested_at": "2026-05-08T11:00:09+00:00",
-        "scan_verified": false
-      }
+      "suppression_pattern": null
     },
     "review::.::holistic::ai_generated_debt::cache-docstring-bloat-and-duplication": {
       "id": "review::.::holistic::ai_generated_debt::cache-docstring-bloat-and-duplication",
@@ -47578,7 +47951,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:53:51+00:00",
-      "last_seen": "2026-05-08T10:53:51+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -47603,7 +47976,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T10:53:51+00:00",
-      "last_seen": "2026-05-08T10:53:51+00:00",
+      "last_seen": "2026-05-08T11:09:11+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -47638,7 +48011,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T11:00:09+00:00",
-      "last_seen": "2026-05-08T11:00:09+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "review_defect",
@@ -47673,7 +48046,1603 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-08T11:00:09+00:00",
-      "last_seen": "2026-05-08T11:00:09+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::cross_module_architecture::pkg-imports-internal-inversion": {
+      "id": "review::.::holistic::cross_module_architecture::pkg-imports-internal-inversion",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "pkg/whatsmeow and pkg/whatsapp import internal/ packages, inverting dependency direction",
+      "detail": {
+        "holistic": true,
+        "dimension": "cross_module_architecture",
+        "related_files": [
+          "pkg/whatsmeow/manager.go",
+          "pkg/whatsapp/client.go"
+        ],
+        "evidence": [
+          "pkg/whatsmeow imports internal/models, internal/config, internal/handlers",
+          "pkg/whatsapp imports internal/models, internal/config"
+        ],
+        "suggestion": "Define interfaces in pkg/provider for models/config that internal packages implement, or move shared types to pkg/models",
+        "reasoning": "",
+        "summary_hash": "3dd76d97"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::cross_module_architecture::worker-imports-handlers": {
+      "id": "review::.::holistic::cross_module_architecture::worker-imports-handlers",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "internal/worker imports internal/handlers creating downstream->upstream dependency",
+      "detail": {
+        "holistic": true,
+        "dimension": "cross_module_architecture",
+        "related_files": [
+          "internal/worker/worker.go"
+        ],
+        "evidence": [
+          "internal/worker package imports internal/handlers for App struct and handler methods"
+        ],
+        "suggestion": "Extract shared business logic into internal/service or internal/domain package that both worker and handlers depend on",
+        "reasoning": "",
+        "summary_hash": "22297047"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::cross_module_architecture::handlers-god-struct": {
+      "id": "review::.::holistic::cross_module_architecture::handlers-god-struct",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "handlers.App is a 20+ field service locator God-struct with maximum blast radius",
+      "detail": {
+        "holistic": true,
+        "dimension": "cross_module_architecture",
+        "related_files": [
+          "internal/handlers/app.go"
+        ],
+        "evidence": [
+          "App struct contains DB, Redis, WhatsApp providers, config, crypto, license client, queue clients, and many more fields",
+          "All handlers and workers receive *handlers.App as their sole dependency"
+        ],
+        "suggestion": "Introduce focused service interfaces (CampaignService, ContactService, etc.) that group related dependencies",
+        "reasoning": "",
+        "summary_hash": "e4ed13ee"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::cross_module_architecture::workers-in-handlers": {
+      "id": "review::.::holistic::cross_module_architecture::workers-in-handlers",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "Background workers live in internal/handlers despite not handling HTTP requests",
+      "detail": {
+        "holistic": true,
+        "dimension": "cross_module_architecture",
+        "related_files": [
+          "internal/handlers/sla_processor.go",
+          "internal/handlers/campaign_scheduler.go",
+          "internal/handlers/chat_assignment_reset_worker.go"
+        ],
+        "evidence": [
+          "SLAProcessor, CampaignScheduler, ChatReset, MediaRetention workers are all defined in internal/handlers/",
+          "These workers depend on *handlers.App coupling them to HTTP handler infrastructure"
+        ],
+        "suggestion": "Move workers to internal/worker/ and have them depend on focused service interfaces instead of handlers.App",
+        "reasoning": "",
+        "summary_hash": "219aee87"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::cross_module_architecture::main-go-monolith": {
+      "id": "review::.::holistic::cross_module_architecture::main-go-monolith",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "cmd/whatomate/main.go is 1667 LOC mixing server, worker, CLI, routes, and middleware",
+      "detail": {
+        "holistic": true,
+        "dimension": "cross_module_architecture",
+        "related_files": [
+          "cmd/whatomate/main.go"
+        ],
+        "evidence": [
+          "main.go contains runServer(), runWorker(), setupRoutes(), and 4 CLI subcommands in a single 1667-line file",
+          "setupRoutes() alone is 530 lines defining all route registrations"
+        ],
+        "suggestion": "Extract CLI subcommands to cmd/whatomate/commands/, routes to internal/routes/, and shared bootstrap to internal/bootstrap/",
+        "reasoning": "",
+        "summary_hash": "1c993fc6"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::cross_module_architecture::handlers-package-size": {
+      "id": "review::.::holistic::cross_module_architecture::handlers-package-size",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "internal/handlers/ has 206 files making it a disproportionately large subsystem",
+      "detail": {
+        "holistic": true,
+        "dimension": "cross_module_architecture",
+        "related_files": [
+          "internal/handlers/"
+        ],
+        "evidence": [
+          "internal/handlers/ contains ~100 production + ~100 test files mixing HTTP handlers, workers, policies, utilities, and CLI helpers"
+        ],
+        "suggestion": "Split into internal/handlers/ (HTTP only), internal/workers/, internal/policies/, and internal/services/",
+        "reasoning": "",
+        "summary_hash": "cd8764c3"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::high_level_elegance::handlers-god-package": {
+      "id": "review::.::holistic::high_level_elegance::handlers-god-package",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "internal/handlers/ is a 206-file god package mixing HTTP handlers, workers, policies, and utilities",
+      "detail": {
+        "holistic": true,
+        "dimension": "high_level_elegance",
+        "related_files": [
+          "internal/handlers/"
+        ],
+        "evidence": [
+          "~100 production + ~100 test files in one package",
+          "Contains HTTP handlers, SLA processor, campaign scheduler, chat reset worker, media retention worker, policy objects, and CLI helpers"
+        ],
+        "suggestion": "Decompose into internal/handlers/ (HTTP only), internal/workers/, internal/policies/, internal/services/",
+        "reasoning": "",
+        "summary_hash": "05253d3c"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::high_level_elegance::main-go-duplication": {
+      "id": "review::.::holistic::high_level_elegance::main-go-duplication",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "cmd/whatomate/main.go has duplicated initialization between runServer() and runWorker()",
+      "detail": {
+        "holistic": true,
+        "dimension": "high_level_elegance",
+        "related_files": [
+          "cmd/whatomate/main.go"
+        ],
+        "evidence": [
+          "1667-line main.go with separate runServer() and runWorker() functions that duplicate DB, Redis, config, and provider initialization"
+        ],
+        "suggestion": "Extract shared initialization into a bootstrap function that both server and worker modes call",
+        "reasoning": "",
+        "summary_hash": "c758a8eb"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::high_level_elegance::route-skip-list-duplication": {
+      "id": "review::.::holistic::high_level_elegance::route-skip-list-duplication",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "Public route skip list in auth middleware duplicates route declarations",
+      "detail": {
+        "holistic": true,
+        "dimension": "high_level_elegance",
+        "related_files": [
+          "cmd/whatomate/main.go"
+        ],
+        "evidence": [
+          "Auth middleware (main.go:1229-1255) maintains a separate list of public routes that must be manually synchronized with setupRoutes()"
+        ],
+        "suggestion": "Tag public routes during registration and have middleware check route metadata instead of maintaining a parallel list",
+        "reasoning": "",
+        "summary_hash": "2874dbb3"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::high_level_elegance::workers-depend-on-handlers-app": {
+      "id": "review::.::holistic::high_level_elegance::workers-depend-on-handlers-app",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "Background workers depend on *handlers.App coupling them to HTTP handler infrastructure",
+      "detail": {
+        "holistic": true,
+        "dimension": "high_level_elegance",
+        "related_files": [
+          "internal/handlers/sla_processor.go",
+          "internal/handlers/campaign_scheduler.go"
+        ],
+        "evidence": [
+          "SLAProcessor, CampaignScheduler and other workers receive *handlers.App despite not handling HTTP requests"
+        ],
+        "suggestion": "Define worker-specific dependency interfaces separate from the HTTP handler App struct",
+        "reasoning": "",
+        "summary_hash": "e8f4127f"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::convention_outlier::interface-any-drift": {
+      "id": "review::.::holistic::convention_outlier::interface-any-drift",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "map[string]interface{} and map[string]any coexist without consistent standard",
+      "detail": {
+        "holistic": true,
+        "dimension": "convention_outlier",
+        "related_files": [
+          "internal/handlers/campaigns.go",
+          "internal/handlers/templates.go",
+          "internal/handlers/contacts.go"
+        ],
+        "evidence": [
+          "Older handler files use map[string]interface{} while newer files use map[string]any for the same purpose"
+        ],
+        "suggestion": "Run a codebase-wide search-and-replace to standardize all map[string]interface{} to map[string]any (Go 1.18+ alias)",
+        "reasoning": "",
+        "summary_hash": "e3ce3cec"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::convention_outlier::committed-disabled-files": {
+      "id": "review::.::holistic::convention_outlier::committed-disabled-files",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "Seven .disabled and .bak test files committed alongside active source",
+      "detail": {
+        "holistic": true,
+        "dimension": "convention_outlier",
+        "related_files": [
+          "internal/handlers/sso_handlers_test.go.disabled",
+          "internal/handlers/"
+        ],
+        "evidence": [
+          "Multiple .disabled and .bak files exist in internal/handlers/ committed to the repository"
+        ],
+        "suggestion": "Remove all .disabled and .bak files from the repository; use git history if these tests are ever needed",
+        "reasoning": "",
+        "summary_hash": "8e0fdd64"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::convention_outlier::docs-in-source-dir": {
+      "id": "review::.::holistic::convention_outlier::docs-in-source-dir",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "SSO_TESTS_DOCUMENTATION.md placed among Go source files in handlers/",
+      "detail": {
+        "holistic": true,
+        "dimension": "convention_outlier",
+        "related_files": [
+          "internal/handlers/SSO_TESTS_DOCUMENTATION.md"
+        ],
+        "evidence": [
+          "Markdown documentation file committed alongside Go source files in internal/handlers/"
+        ],
+        "suggestion": "Move to docs/ directory or add to the project wiki; remove from source tree",
+        "reasoning": "",
+        "summary_hash": "67acf554"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::convention_outlier::decodeRequest-interface-param": {
+      "id": "review::.::holistic::convention_outlier::decodeRequest-interface-param",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "decodeRequest uses interface{} while newer code prefers any",
+      "detail": {
+        "holistic": true,
+        "dimension": "convention_outlier",
+        "related_files": [
+          "internal/handlers/helpers.go"
+        ],
+        "evidence": [
+          "decodeRequest helper function signature uses interface{} parameter type"
+        ],
+        "suggestion": "Update decodeRequest to use any instead of interface{} for consistency with Go 1.18+ conventions",
+        "reasoning": "",
+        "summary_hash": "20e12e17"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::error_consistency::silent-error-discard-contact": {
+      "id": "review::.::holistic::error_consistency::silent-error-discard-contact",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "processIncomingMessageFull silently discards error from GetOrCreateContact",
+      "detail": {
+        "holistic": true,
+        "dimension": "error_consistency",
+        "related_files": [
+          "internal/handlers/chatbot_processor.go"
+        ],
+        "evidence": [
+          "processIncomingMessageFull calls GetOrCreateContact but does not check or propagate the returned error"
+        ],
+        "suggestion": "Log the error and propagate it to the caller, or explicitly document why it is safe to ignore",
+        "reasoning": "",
+        "summary_hash": "080fe144"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::error_consistency::legacy-percent-v-wrapping": {
+      "id": "review::.::holistic::error_consistency::legacy-percent-v-wrapping",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "legacy_media_restore.go uses %v instead of %w losing error chain",
+      "detail": {
+        "holistic": true,
+        "dimension": "error_consistency",
+        "related_files": [
+          "internal/handlers/legacy_media_restore.go"
+        ],
+        "evidence": [
+          "Error formatting uses fmt.Errorf with %v instead of %w, breaking errors.Unwrap chain"
+        ],
+        "suggestion": "Replace %v with %w in all fmt.Errorf calls in legacy_media_restore.go to preserve error chain",
+        "reasoning": "",
+        "summary_hash": "600570d1"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::error_consistency::bare-status-code-500": {
+      "id": "review::.::holistic::error_consistency::bare-status-code-500",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "ReadyCheck uses bare integer 500 instead of fasthttp constant",
+      "detail": {
+        "holistic": true,
+        "dimension": "error_consistency",
+        "related_files": [
+          "internal/handlers/health.go"
+        ],
+        "evidence": [
+          "ReadyCheck function uses literal 500 instead of fasthttp.StatusInternalServerError"
+        ],
+        "suggestion": "Replace 500 with fasthttp.StatusInternalServerError for consistency with the rest of the codebase",
+        "reasoning": "",
+        "summary_hash": "3077ec3e"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::naming_quality::incoming-text-message-misname": {
+      "id": "review::.::holistic::naming_quality::incoming-text-message-misname",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "IncomingTextMessage type represents all message types not just text",
+      "detail": {
+        "holistic": true,
+        "dimension": "naming_quality",
+        "related_files": [
+          "internal/models/"
+        ],
+        "evidence": [
+          "IncomingTextMessage struct is used for text, image, audio, video, sticker, reaction, location, and contacts messages"
+        ],
+        "suggestion": "Rename to IncomingMessage or IncomingWhatsAppMessage to accurately reflect its purpose",
+        "reasoning": "",
+        "summary_hash": "ca0fc7f8"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::naming_quality::stubs-go-misleading-name": {
+      "id": "review::.::holistic::naming_quality::stubs-go-misleading-name",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "stubs.go contains a fully implemented handler alongside only 2 actual stubs",
+      "detail": {
+        "holistic": true,
+        "dimension": "naming_quality",
+        "related_files": [
+          "internal/handlers/stubs.go"
+        ],
+        "evidence": [
+          "stubs.go contains MarkMessageRead (fully implemented handler) alongside only 2 actual stub functions"
+        ],
+        "suggestion": "Move MarkMessageRead to its own file (e.g., message_read.go) and keep only actual stubs in stubs.go",
+        "reasoning": "",
+        "summary_hash": "a70058cc"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::naming_quality::whatsmeow-casing-drift": {
+      "id": "review::.::holistic::naming_quality::whatsmeow-casing-drift",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "Inconsistent casing of 'whatsmeow' domain term across codebase",
+      "detail": {
+        "holistic": true,
+        "dimension": "naming_quality",
+        "related_files": [
+          "internal/config/config.go",
+          "pkg/whatsmeow/"
+        ],
+        "evidence": [
+          "Config uses 'whatsmeow' (lowercase), struct fields use 'Whatsmeow' (PascalCase), package reference is 'whatsmeow'"
+        ],
+        "suggestion": "Standardize to lowercase 'whatsmeow' for package/field references and 'Whatsmeow' only for Go exported identifiers",
+        "reasoning": "",
+        "summary_hash": "e26834e7"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::naming_quality::objectstorage-import-alias": {
+      "id": "review::.::holistic::naming_quality::objectstorage-import-alias",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "Import alias 'objectstorage' for internal/storage is inconsistent with directory name",
+      "detail": {
+        "holistic": true,
+        "dimension": "naming_quality",
+        "related_files": [
+          "internal/handlers/media.go"
+        ],
+        "evidence": [
+          "internal/storage package is imported with alias 'objectstorage' which doesn't match the directory name 'storage'"
+        ],
+        "suggestion": "Either rename the package to objectstorage or remove the alias and use storage directly",
+        "reasoning": "",
+        "summary_hash": "d6f2a8b0"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::abstraction_fitness::provider-interface-bypass": {
+      "id": "review::.::holistic::abstraction_fitness::provider-interface-bypass",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "Handlers bypass MessageProvider abstraction by checking isWhatsmeowProvider() directly",
+      "detail": {
+        "holistic": true,
+        "dimension": "abstraction_fitness",
+        "related_files": [
+          "internal/handlers/messages.go",
+          "internal/handlers/chatbot_processor.go"
+        ],
+        "evidence": [
+          "Multiple handlers call isWhatsmeowProvider() then use whatsmeow-specific client methods directly instead of going through the MessageProvider interface"
+        ],
+        "suggestion": "Extend MessageProvider interface to include the whatsmeow-specific methods needed by handlers, or create a WhatsmeowExtendedProvider interface",
+        "reasoning": "",
+        "summary_hash": "76a854de"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::abstraction_fitness::outgoing-message-param-bag": {
+      "id": "review::.::holistic::abstraction_fitness::outgoing-message-param-bag",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "OutgoingMessageRequest is a 25+ field union struct conflating all message types",
+      "detail": {
+        "holistic": true,
+        "dimension": "abstraction_fitness",
+        "related_files": [
+          "internal/handlers/messages.go",
+          "internal/models/"
+        ],
+        "evidence": [
+          "OutgoingMessageRequest has fields for text, media, interactive, template, and flow messages all in one struct",
+          "Most fields are optional, making it unclear which combination is valid for any given call"
+        ],
+        "suggestion": "Create separate request structs for each message type (TextMessageRequest, MediaMessageRequest, TemplateMessageRequest, etc.) with a MessageSend interface",
+        "reasoning": "",
+        "summary_hash": "5911918c"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::abstraction_fitness::jsonb-domain-model": {
+      "id": "review::.::holistic::abstraction_fitness::jsonb-domain-model",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "JSONB (map[string]interface{}) used as domain model forces manual type-assertion parsing",
+      "detail": {
+        "holistic": true,
+        "dimension": "abstraction_fitness",
+        "related_files": [
+          "internal/handlers/campaigns.go",
+          "internal/handlers/templates.go"
+        ],
+        "evidence": [
+          "Handler code contains 800+ lines of manual type-assertion parsing of JSONB fields instead of using typed structs"
+        ],
+        "suggestion": "Define typed Go structs for JSONB column contents and use GORM custom types or scanner/valuer interfaces",
+        "reasoning": "",
+        "summary_hash": "bf0fe386"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::abstraction_fitness::duplicate-error-types": {
+      "id": "review::.::holistic::abstraction_fitness::duplicate-error-types",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "instanceSelectionError and restrictedSendViolationError are structurally identical",
+      "detail": {
+        "holistic": true,
+        "dimension": "abstraction_fitness",
+        "related_files": [
+          "internal/handlers/instance_selection.go",
+          "internal/handlers/send_restriction_policy.go"
+        ],
+        "evidence": [
+          "Both error types implement the same Error(), nil-check, and reason-code patterns with identical structure"
+        ],
+        "suggestion": "Extract a shared SendPolicyError type that both can use, parameterized by the specific violation reason",
+        "reasoning": "",
+        "summary_hash": "9c64ce03"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::dependency_health::dompurify-unused-direct-dep": {
+      "id": "review::.::holistic::dependency_health::dompurify-unused-direct-dep",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "dompurify declared as production dependency but never directly imported",
+      "detail": {
+        "holistic": true,
+        "dimension": "dependency_health",
+        "related_files": [
+          "frontend/package.json"
+        ],
+        "evidence": [
+          "dompurify appears in frontend/package.json dependencies but is not imported in any application source file",
+          "It is already available as a transitive dependency of posthog-js"
+        ],
+        "suggestion": "Remove dompurify from frontend/package.json direct dependencies since it's available transitively via posthog-js",
+        "reasoning": "",
+        "summary_hash": "7fa79186"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::low_level_elegance::chatbot-processor-size": {
+      "id": "review::.::holistic::low_level_elegance::chatbot-processor-size",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "chatbot_processor.go at 2952 lines contains oversized functions with deep nesting",
+      "detail": {
+        "holistic": true,
+        "dimension": "low_level_elegance",
+        "related_files": [
+          "internal/handlers/chatbot_processor.go"
+        ],
+        "evidence": [
+          "File is 2952 lines with functions that have multiple levels of nesting and mixed responsibilities"
+        ],
+        "suggestion": "Extract chatbot flow steps into focused functions: message classification, flow matching, response generation, and media handling",
+        "reasoning": "",
+        "summary_hash": "cc94b0d8"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::low_level_elegance::agent-transfers-nesting": {
+      "id": "review::.::holistic::low_level_elegance::agent-transfers-nesting",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "agent_transfers.go has deeply nested conditional logic for transfer rules",
+      "detail": {
+        "holistic": true,
+        "dimension": "low_level_elegance",
+        "related_files": [
+          "internal/handlers/agent_transfers.go"
+        ],
+        "evidence": [
+          "1626-line file with transfer logic containing nested conditionals that could be flattened with early returns"
+        ],
+        "suggestion": "Refactor transfer validation into separate guard functions with early returns to reduce nesting depth",
+        "reasoning": "",
+        "summary_hash": "7402b35a"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::mid_level_elegance::app-struct-implicit-seams": {
+      "id": "review::.::holistic::mid_level_elegance::app-struct-implicit-seams",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "handlers.App service locator makes module handoffs implicit rather than explicit",
+      "detail": {
+        "holistic": true,
+        "dimension": "mid_level_elegance",
+        "related_files": [
+          "internal/handlers/app.go"
+        ],
+        "evidence": [
+          "All handlers and workers receive *handlers.App and pull dependencies from it, making it unclear what each component actually needs"
+        ],
+        "suggestion": "Define focused interfaces per domain (e.g., CampaignService interface with only the methods campaign handlers need) and inject those instead of App",
+        "reasoning": "",
+        "summary_hash": "4315a521"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::mid_level_elegance::worker-handler-backward-handoff": {
+      "id": "review::.::holistic::mid_level_elegance::worker-handler-backward-handoff",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "internal/worker importing internal/handlers creates improper handoff direction",
+      "detail": {
+        "holistic": true,
+        "dimension": "mid_level_elegance",
+        "related_files": [
+          "internal/worker/worker.go"
+        ],
+        "evidence": [
+          "Worker package depends on handler package, meaning the async processing layer depends on the HTTP layer"
+        ],
+        "suggestion": "Extract shared business logic to internal/domain/ or internal/service/ that both worker and handlers depend on independently",
+        "reasoning": "",
+        "summary_hash": "7eca5dd2"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::mid_level_elegance::jsonb-untyped-boundary-crossing": {
+      "id": "review::.::holistic::mid_level_elegance::jsonb-untyped-boundary-crossing",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "JSONB data crosses handler-database boundary without typed translation",
+      "detail": {
+        "holistic": true,
+        "dimension": "mid_level_elegance",
+        "related_files": [
+          "internal/handlers/campaigns.go",
+          "internal/models/"
+        ],
+        "evidence": [
+          "JSONB columns are read as map[string]interface{} and manually parsed in handlers instead of using typed structs at the boundary"
+        ],
+        "suggestion": "Implement GORM Scanner/Valuer interfaces on typed structs so JSONB data is automatically marshaled/unmarshaled at the database boundary",
+        "reasoning": "",
+        "summary_hash": "58d08190"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::test_strategy::worker-test-coverage": {
+      "id": "review::.::holistic::test_strategy::worker-test-coverage",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "Background workers and job processing may have limited test coverage",
+      "detail": {
+        "holistic": true,
+        "dimension": "test_strategy",
+        "related_files": [
+          "internal/handlers/sla_processor.go",
+          "internal/handlers/campaign_scheduler.go",
+          "internal/worker/"
+        ],
+        "evidence": [
+          "Worker files and background job processors appear to have fewer test files compared to HTTP handler counterparts"
+        ],
+        "suggestion": "Add integration tests for worker processing paths using the existing real-DB/Redis test infrastructure",
+        "reasoning": "",
+        "summary_hash": "4bdc7a1e"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::test_strategy::test-skip-on-missing-env": {
+      "id": "review::.::holistic::test_strategy::test-skip-on-missing-env",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "Tests silently skip when environment variables are unset, potentially hiding coverage gaps",
+      "detail": {
+        "holistic": true,
+        "dimension": "test_strategy",
+        "related_files": [
+          "test/testutil/fixtures.go"
+        ],
+        "evidence": [
+          "Test functions check for TEST_DATABASE_URL and TEST_REDIS_URL and skip if unset rather than failing"
+        ],
+        "suggestion": "Add a CI check that reports skipped tests, or use build tags to make test omission explicit",
+        "reasoning": "",
+        "summary_hash": "ad7642fb"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::api_surface_coherence::outgoing-message-overloaded": {
+      "id": "review::.::holistic::api_surface_coherence::outgoing-message-overloaded",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "OutgoingMessageRequest overloads all message types into a single 25+ field struct",
+      "detail": {
+        "holistic": true,
+        "dimension": "api_surface_coherence",
+        "related_files": [
+          "internal/handlers/messages.go",
+          "internal/models/"
+        ],
+        "evidence": [
+          "OutgoingMessageRequest has optional fields for text, media, interactive, template, and flow messages all in one struct"
+        ],
+        "suggestion": "Create type-specific request structs and use a discriminated union or interface to route to the appropriate handler",
+        "reasoning": "",
+        "summary_hash": "1f3aba74"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::api_surface_coherence::json-tag-casing-drift": {
+      "id": "review::.::holistic::api_surface_coherence::json-tag-casing-drift",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "Some request structs have inconsistent JSON tag casing patterns",
+      "detail": {
+        "holistic": true,
+        "dimension": "api_surface_coherence",
+        "related_files": [
+          "internal/handlers/campaigns.go",
+          "internal/handlers/templates.go"
+        ],
+        "evidence": [
+          "JSON tags on request structs mix snake_case and camelCase in different handler files"
+        ],
+        "suggestion": "Standardize all JSON tags to snake_case (matching the frontend convention) across all request/response structs",
+        "reasoning": "",
+        "summary_hash": "0f1a434c"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::authorization_consistency::public-route-skip-list-drift-risk": {
+      "id": "review::.::holistic::authorization_consistency::public-route-skip-list-drift-risk",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "Public route skip list in auth middleware requires manual synchronization with route definitions",
+      "detail": {
+        "holistic": true,
+        "dimension": "authorization_consistency",
+        "related_files": [
+          "cmd/whatomate/main.go"
+        ],
+        "evidence": [
+          "Auth middleware maintains a separate list of public route patterns that must be manually kept in sync with setupRoutes()"
+        ],
+        "suggestion": "Annotate routes during registration with auth requirements and have middleware read route metadata instead of maintaining a parallel list",
+        "reasoning": "",
+        "summary_hash": "fd1aa5b7"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::ai_generated_debt::cache-jsdoc-style-docs": {
+      "id": "review::.::holistic::ai_generated_debt::cache-jsdoc-style-docs",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "cache.go has verbose JSDoc-style docstrings unusual for Go, plus duplicated line in HasPermission",
+      "detail": {
+        "holistic": true,
+        "dimension": "ai_generated_debt",
+        "related_files": [
+          "internal/handlers/cache.go"
+        ],
+        "evidence": [
+          "cache.go contains multi-paragraph docstrings with JSDoc-style section headers",
+          "HasPermission function's docstring has a duplicated opening line"
+        ],
+        "suggestion": "Rewrite cache.go docstrings in standard Go convention and remove the duplicated line in HasPermission",
+        "reasoning": "",
+        "summary_hash": "4187a84e"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::package_organization::handlers-flat-overload": {
+      "id": "review::.::holistic::package_organization::handlers-flat-overload",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "internal/handlers/ has 100+ production files with mixed concerns in a flat directory",
+      "detail": {
+        "holistic": true,
+        "dimension": "package_organization",
+        "related_files": [
+          "internal/handlers/"
+        ],
+        "evidence": [
+          "~100 production files in a single flat directory mixing HTTP handlers, workers, policies, utilities, and CLI helpers"
+        ],
+        "suggestion": "Split into subdirectories: internal/handlers/http/, internal/handlers/policies/, or better yet separate packages: internal/workers/, internal/services/ and keep only HTTP handlers in internal/handlers/",
+        "reasoning": "",
+        "summary_hash": "0f62c576"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::package_organization::cmd-main-oversize": {
+      "id": "review::.::holistic::package_organization::cmd-main-oversize",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "cmd/whatomate/main.go is a single 1667-line file for the entire server entrypoint",
+      "detail": {
+        "holistic": true,
+        "dimension": "package_organization",
+        "related_files": [
+          "cmd/whatomate/main.go"
+        ],
+        "evidence": [
+          "Single file contains server init, worker init, 4 CLI subcommands, route definitions, and middleware wiring"
+        ],
+        "suggestion": "Extract CLI subcommands to cmd/whatomate/commands/ and route definitions to internal/routes/routes.go",
+        "reasoning": "",
+        "summary_hash": "af185552"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::package_organization::storage-objectstorage-naming": {
+      "id": "review::.::holistic::package_organization::storage-objectstorage-naming",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "internal/storage/ imported as 'objectstorage' creates naming confusion",
+      "detail": {
+        "holistic": true,
+        "dimension": "package_organization",
+        "related_files": [
+          "internal/storage/",
+          "internal/handlers/media.go"
+        ],
+        "evidence": [
+          "The directory is named 'storage' but imported with alias 'objectstorage' in some files"
+        ],
+        "suggestion": "Rename the package to match its import alias (objectstorage) or remove the alias and update callers to use 'storage'",
+        "reasoning": "",
+        "summary_hash": "985a2aa0"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::design_coherence::chatbot-processor-mixed-concerns": {
+      "id": "review::.::holistic::design_coherence::chatbot-processor-mixed-concerns",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "chatbot_processor.go at 2952 lines mixes multiple distinct responsibilities",
+      "detail": {
+        "holistic": true,
+        "dimension": "design_coherence",
+        "related_files": [
+          "internal/handlers/chatbot_processor.go"
+        ],
+        "evidence": [
+          "2952 lines combining message classification, flow matching, response generation, media handling, and contact management"
+        ],
+        "suggestion": "Extract into separate files: chatbot_classification.go, chatbot_flows.go, chatbot_responses.go, chatbot_media.go",
+        "reasoning": "",
+        "summary_hash": "5b6ac82a"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::design_coherence::main-go-mixed-concerns": {
+      "id": "review::.::holistic::design_coherence::main-go-mixed-concerns",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "cmd/whatomate/main.go at 1641 lines mixes server, worker, CLI, and routing concerns",
+      "detail": {
+        "holistic": true,
+        "dimension": "design_coherence",
+        "related_files": [
+          "cmd/whatomate/main.go"
+        ],
+        "evidence": [
+          "Single file containing runServer(), runWorker(), 4 CLI subcommands, setupRoutes(), and middleware configuration"
+        ],
+        "suggestion": "Extract to cmd/whatomate/server.go, cmd/whatomate/worker.go, cmd/whatomate/commands/, and internal/routes/",
+        "reasoning": "",
+        "summary_hash": "44c61f51"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::design_coherence::cli-boilerplate-duplication": {
+      "id": "review::.::holistic::design_coherence::cli-boilerplate-duplication",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "CLI tools in cmd/ duplicate boilerplate setup code",
+      "detail": {
+        "holistic": true,
+        "dimension": "design_coherence",
+        "related_files": [
+          "cmd/whatomate-license-issue/main.go",
+          "cmd/whatomate-license-vendor/main.go",
+          "cmd/whatomate-license-studio/main.go"
+        ],
+        "evidence": [
+          "Boilerplate blocks repeated across CLI tool entrypoints (flag parsing, DB init, config loading)"
+        ],
+        "suggestion": "Extract shared CLI bootstrap code to internal/cli/bootstrap.go or cmd/internal/",
+        "reasoning": "",
+        "summary_hash": "2f83ff51"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::contract_coherence::jsonb-runtime-type-gap": {
+      "id": "review::.::holistic::contract_coherence::jsonb-runtime-type-gap",
+      "detector": "review",
+      "file": ".",
+      "tier": 2,
+      "confidence": "medium",
+      "summary": "JSONB field access via type assertions creates gap between stated model and runtime behavior",
+      "detail": {
+        "holistic": true,
+        "dimension": "contract_coherence",
+        "related_files": [
+          "internal/handlers/campaigns.go",
+          "internal/handlers/templates.go"
+        ],
+        "evidence": [
+          "JSONB fields are typed as map[string]interface{} but accessed with specific key assumptions that aren't compile-time checked"
+        ],
+        "suggestion": "Define typed structs for JSONB contents and use GORM Scanner/Valuer to close the contract gap",
+        "reasoning": "",
+        "summary_hash": "cc667aa9"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::type_safety::jsonb-weak-typing": {
+      "id": "review::.::holistic::type_safety::jsonb-weak-typing",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "JSONB columns as map[string]interface{} bypass Go's type system with runtime assertions",
+      "detail": {
+        "holistic": true,
+        "dimension": "type_safety",
+        "related_files": [
+          "internal/handlers/campaigns.go",
+          "internal/handlers/templates.go",
+          "internal/handlers/flows.go"
+        ],
+        "evidence": [
+          "JSONB fields accessed via map[string]interface{} with manual type assertions (strconv, .(string), .(float64)) instead of typed structs"
+        ],
+        "suggestion": "Define Go structs for JSONB contents and implement GORM Scanner/Valuer interfaces for automatic marshaling",
+        "reasoning": "",
+        "summary_hash": "f9cc9935"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
+      "resolved_at": null,
+      "reopen_count": 0,
+      "work_item_kind": "review_defect",
+      "issue_kind": "review_defect",
+      "origin": "review_import",
+      "lang": "go",
+      "suppressed": false,
+      "suppressed_at": null,
+      "suppression_pattern": null
+    },
+    "review::.::holistic::type_safety::interface-any-inconsistency": {
+      "id": "review::.::holistic::type_safety::interface-any-inconsistency",
+      "detector": "review",
+      "file": ".",
+      "tier": 1,
+      "confidence": "high",
+      "summary": "map[string]interface{} and map[string]any coexist without standardization",
+      "detail": {
+        "holistic": true,
+        "dimension": "type_safety",
+        "related_files": [
+          "internal/handlers/campaigns.go",
+          "internal/handlers/contacts.go"
+        ],
+        "evidence": [
+          "Older code uses map[string]interface{} while newer code uses map[string]any for equivalent purposes"
+        ],
+        "suggestion": "Standardize to map[string]any across the entire codebase (they are identical in Go 1.18+)",
+        "reasoning": "",
+        "summary_hash": "41aa54eb"
+      },
+      "status": "open",
+      "note": null,
+      "first_seen": "2026-05-08T11:07:04+00:00",
+      "last_seen": "2026-05-08T11:07:04+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "review_defect",
@@ -67531,7 +69500,7 @@
       },
       "security": {
         "version": 1,
-        "fingerprint": "359511ddf381c7af1dd7c2f697f89ea1a1b818be",
+        "fingerprint": "0ab973b427c5bb535b834eaaa34451bb9eb11637",
         "entries": [],
         "files_scanned": 0,
         "coverage": null
@@ -75325,9 +77294,11 @@
     },
     "files": {},
     "holistic": {
-      "reviewed_at": "2026-05-08T11:00:09+00:00",
-      "file_count_at_review": 421,
-      "issue_count": 2
+      "reviewed_at": "2026-05-08T11:07:04+00:00",
+      "file_count_at_review": 228,
+      "issue_count": 49,
+      "reviewed_files_count": 0,
+      "full_sweep_included": false
     }
   },
   "assessment_import_audit": [
@@ -75369,6 +77340,19 @@
       "attest": "",
       "import_file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/.desloppify/subagents/runs/20260508_105657/results/batch-16.raw.txt",
       "packet_sha256": ""
+    },
+    {
+      "timestamp": "2026-05-08T11:07:04+00:00",
+      "mode": "trusted_internal",
+      "trusted": true,
+      "reason": "trusted import-run replay from 20260508_105657",
+      "override_used": false,
+      "attested_external": false,
+      "provisional": false,
+      "provisional_count": 0,
+      "attest": "",
+      "import_file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/.desloppify/subagents/runs/20260508_105657/holistic_issues_merged.json",
+      "packet_sha256": "ef10e7e3d242f98c1df8bcd9129b0a41269523898eacaa077416844d88e99ab1"
     }
   ],
   "attestation_log": [

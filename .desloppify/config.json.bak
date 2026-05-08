@@ -18,7 +18,8 @@
     "test_coverage::internal/handlers/flows.go::untested_critical",
     "test_coverage::internal/handlers/legacy_media_restore.go::untested_critical",
     "test_coverage::internal/handlers/send_restriction_policy.go::untested_critical",
-    "test_coverage::internal/queue/migration.go::untested_critical"
+    "test_coverage::internal/queue/migration.go::untested_critical",
+    "test_coverage::pkg/chat_close_ratings/shared.go::untested_critical"
   ],
   "ignore_metadata": {},
   "zone_overrides": {},
