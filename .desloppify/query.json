@@ -1,1058 +1,251 @@
 {
-  "command": "scan",
-  "overall_score": 59.1,
-  "objective_score": 36.9,
-  "strict_score": 59.1,
-  "verified_strict_score": 36.9,
-  "prev_overall_score": 56.8,
-  "prev_objective_score": 27.9,
-  "prev_strict_score": 54.9,
-  "prev_verified_strict_score": 26.7,
-  "profile": "full",
-  "noise_budget": 10,
-  "noise_global_budget": 0,
-  "hidden_by_detector": {
-    "review": 73
-  },
-  "hidden_total": 73,
-  "diff": {
-    "new": 0,
-    "auto_resolved": 0,
-    "reopened": 0,
-    "total_current": 6,
-    "suspect_detectors": [
-      "boilerplate_duplication",
-      "responsibility_cohesion",
-      "review",
-      "signature",
-      "unused"
-    ],
-    "chronic_reopeners": [],
-    "skipped_other_lang": 0,
-    "resolved_out_of_scope": 23,
-    "ignored": 0,
-    "ignore_patterns": 0,
-    "raw_issues": 6,
-    "suppressed_pct": 0.0
-  },
-  "stats": {
-    "total": 128,
-    "auto_resolved": 0,
-    "deferred": 20,
-    "false_positive": 0,
-    "fixed": 20,
-    "open": 88,
-    "triaged_out": 0,
-    "wontfix": 0,
+  "command": "show",
+  "query": "review",
+  "status_filter": "open",
+  "total": 10,
+  "summary": {
     "by_tier": {
-      "1": {
-        "auto_resolved": 0,
-        "deferred": 0,
-        "false_positive": 0,
-        "fixed": 0,
-        "open": 60,
-        "triaged_out": 0,
-        "wontfix": 0
-      },
-      "2": {
-        "auto_resolved": 0,
-        "deferred": 1,
-        "false_positive": 0,
-        "fixed": 0,
-        "open": 23,
-        "triaged_out": 0,
-        "wontfix": 0
-      },
-      "3": {
-        "auto_resolved": 0,
-        "deferred": 17,
-        "false_positive": 0,
-        "fixed": 0,
-        "open": 5,
-        "triaged_out": 0,
-        "wontfix": 0
-      },
-      "4": {
-        "auto_resolved": 0,
-        "deferred": 2,
-        "false_positive": 0,
-        "fixed": 20,
-        "open": 0,
-        "triaged_out": 0,
-        "wontfix": 0
-      }
-    }
+      "T1": 10
+    },
+    "by_detector": {
+      "review": 10
+    },
+    "files": 1
   },
-  "open_scope": {
-    "in_scope": 88,
-    "out_of_scope": 139,
-    "global": 227
-  },
-  "warnings": [
-    "Coverage reduced (golangci_lint): golangci-lint tooling unavailable (parser_error) Repercussion: Detector results may be under-reported for this scan. Fix: Install/fix the tool command and rerun scan.",
-    "Coverage reduced (vet_error): go vet tooling unavailable (tool_not_found) Repercussion: Detector results may be under-reported for this scan. Fix: Install/fix the tool command and rerun scan."
-  ],
-  "dimension_scores": {
-    "Code quality": {
-      "score": 100.0,
-      "strict": 100.0,
-      "verified_strict_score": 100.0,
-      "checks": 5,
-      "failing": 0,
-      "tier": 3,
-      "detectors": {
-        "flat_dirs": {
-          "potential": 5,
-          "pass_rate": 1.0,
-          "failing": 0,
-          "weighted_failures": 0.0
-        }
-      }
-    },
-    "Security": {
-      "score": 100.0,
-      "strict": 100.0,
-      "verified_strict_score": 100.0,
-      "checks": 5,
-      "failing": 0,
-      "tier": 4,
-      "detectors": {
-        "security": {
-          "potential": 5,
-          "pass_rate": 1.0,
-          "failing": 0,
-          "weighted_failures": 0.0
-        }
-      }
-    },
-    "File health": {
-      "score": 86.0,
-      "strict": 86.0,
-      "verified_strict_score": 86.0,
-      "checks": 5,
-      "failing": 1,
-      "tier": 3,
-      "detectors": {
-        "structural": {
-          "potential": 5,
-          "pass_rate": 0.86,
-          "failing": 1,
-          "weighted_failures": 0.7
-        }
-      }
-    },
-    "Duplication": {
-      "score": 100.0,
-      "strict": 100.0,
-      "verified_strict_score": 100.0,
-      "checks": 31,
-      "failing": 0,
-      "tier": 3,
-      "detectors": {
-        "dupes": {
-          "potential": 31,
-          "pass_rate": 1.0,
-          "failing": 0,
-          "weighted_failures": 0.0
-        }
-      }
-    },
-    "Test health": {
-      "score": 0.3,
-      "strict": 0.3,
-      "verified_strict_score": 0.3,
-      "checks": 84,
-      "failing": 5,
-      "tier": 4,
-      "detectors": {
-        "test_coverage": {
-          "potential": 84,
-          "pass_rate": 0.0033928364099548077,
-          "failing": 5,
-          "weighted_failures": 83.7150017415638
-        }
-      }
-    },
-    "Abstraction fit": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 4,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
-          "placeholder": false,
-          "dimension_key": "abstraction_fitness",
-          "configured_weight": 8.0,
-          "components": [
-            "Abstraction Leverage",
-            "Indirection Cost",
-            "Interface Honesty",
-            "Delegation Density",
-            "Definition Directness",
-            "Type Discipline"
+  "by_file": {
+    ".": [
+      {
+        "id": "review::.::holistic::abstraction_fitness::duplicate_error_structs",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "instanceSelectionError and restrictedSendViolationError are structurally identical custom error types with duplicated Error(), nil-check, and reason-code patterns",
+        "detail": {
+          "holistic": true,
+          "dimension": "abstraction_fitness",
+          "related_files": [
+            "internal/handlers/instance_selector.go",
+            "internal/handlers/send_restriction_policy.go"
           ],
-          "component_scores": {
-            "Abstraction Leverage": 78.0,
-            "Indirection Cost": 70.0,
-            "Interface Honesty": 65.0,
-            "Delegation Density": 85.0,
-            "Definition Directness": 68.0,
-            "Type Discipline": 62.0
-          }
+          "evidence": [
+            "instance_selector.go:14-38 \u2014 instanceSelectionError with message+reasonCode fields and nil-safe Error()",
+            "send_restriction_policy.go:31-55 \u2014 restrictedSendViolationError with identical structure and identical nil-check pattern",
+            "Both have parallel asXxxWithReason() helper functions doing errors.As + reason extraction"
+          ],
+          "suggestion": "Extract a single policyError struct (message, reasonCode) in helpers.go with a generic asPolicyError() accessor. Reduces duplication and standardizes policy-violation error handling",
+          "reasoning": "",
+          "summary_hash": "bcb64c9a"
         }
-      }
-    },
-    "AI generated debt": {
-      "score": 28.0,
-      "strict": 28.0,
-      "verified_strict_score": 28.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.28,
-          "failing": 3,
-          "weighted_failures": 7.2,
-          "assessment_score": 28.0,
-          "placeholder": false,
-          "dimension_key": "ai_generated_debt",
-          "configured_weight": 1.0,
-          "components": []
+      },
+      {
+        "id": "review::.::holistic::abstraction_fitness::jsonb_settings_type_leak",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "JSONB (map[string]interface{}) used as domain model forces 800+ lines of manual type-assertion parsing in handlers instead of typed structs",
+        "detail": {
+          "holistic": true,
+          "dimension": "abstraction_fitness",
+          "related_files": [
+            "internal/models/models.go",
+            "internal/handlers/send_restriction_policy.go"
+          ],
+          "evidence": [
+            "send_restriction_policy.go:77-138 \u2014 readSendRestrictionsSettings performs 30+ type assertions against JSONB map to build a typed struct",
+            "JSONB is map[string]interface{} so every consumer must type-assert at runtime with no compile-time safety",
+            "Three nearly identical Value()/Scan()/GormDBDataType() implementations across JSONB, JSONBArray, StringArray (~80 lines of duplication)"
+          ],
+          "suggestion": "Introduce typed settings structs (e.g., SendRestrictionSettings, OrganizationSettings) with a single JSONB marshal/unmarshal point. The GORM Value()/Scan() duplication across JSONB/JSONBArray/StringArray can be eliminated with a generic JSONWrapper[T] type",
+          "reasoning": "",
+          "summary_hash": "764f2860"
         }
-      }
-    },
-    "API coherence": {
-      "score": 62.0,
-      "strict": 62.0,
-      "verified_strict_score": 62.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.62,
-          "failing": 5,
-          "weighted_failures": 3.8,
-          "assessment_score": 62.0,
-          "placeholder": false,
-          "dimension_key": "api_surface_coherence",
-          "configured_weight": 1.0,
-          "components": []
+      },
+      {
+        "id": "review::.::holistic::abstraction_fitness::provider_bypass_in_handlers",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "Handlers bypass MessageProvider abstraction by checking isWhatsmeowProvider() and using WhatsApp client directly",
+        "detail": {
+          "holistic": true,
+          "dimension": "abstraction_fitness",
+          "related_files": [
+            "internal/handlers/stubs.go",
+            "internal/handlers/provider_guard.go"
+          ],
+          "evidence": [
+            "stubs.go:63-80 \u2014 MarkMessageRead checks isWhatsmeowProvider(), calls MessageProvider.MarkRead() for whatsmeow path but calls a.WhatsApp.MarkMessageRead() for Meta path, bypassing the interface",
+            "ProviderGuard reads config directly (a.Config.WhatsApp.Provider) instead of checking provider capabilities through the interface"
+          ],
+          "suggestion": "Ensure all message operations route through the MessageProvider interface. Add MarkRead/MarkMessageRead to the interface contract, or introduce a ProviderCapabilities query method so handlers don't need to know which concrete provider is active",
+          "reasoning": "",
+          "summary_hash": "31e7f710"
         }
-      }
-    },
-    "Auth consistency": {
-      "score": 78.0,
-      "strict": 78.0,
-      "verified_strict_score": 78.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.78,
-          "failing": 2,
-          "weighted_failures": 2.2,
-          "assessment_score": 78.0,
-          "placeholder": false,
-          "dimension_key": "authorization_consistency",
-          "configured_weight": 1.0,
-          "components": []
+      },
+      {
+        "id": "review::.::holistic::ai_generated_debt::duplicate-validation-calls",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "Identical config validation calls duplicated in runServer \u2014 ValidateDatabaseCredentials and ValidateWebhookVerifyToken each called twice",
+        "detail": {
+          "holistic": true,
+          "dimension": "ai_generated_debt",
+          "related_files": [
+            "cmd/whatomate/main.go"
+          ],
+          "evidence": [
+            "Lines 178-179: config.ValidateDatabaseCredentials(cfg) + Fatal",
+            "Lines 183-184: config.ValidateWebhookVerifyToken(cfg) + Fatal",
+            "Lines 188-189: config.ValidateDatabaseCredentials(cfg) + Fatal (exact duplicate)",
+            "Lines 191-192: config.ValidateWebhookVerifyToken(cfg) + Fatal (exact duplicate)"
+          ],
+          "suggestion": "Remove the duplicate calls at lines 188-193, keeping only the first set at lines 178-184",
+          "reasoning": "",
+          "summary_hash": "cfd13149"
         }
-      }
-    },
-    "Contracts": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 4,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
-          "placeholder": false,
-          "dimension_key": "contract_coherence",
-          "configured_weight": 12.0,
-          "components": []
+      },
+      {
+        "id": "review::.::holistic::ai_generated_debt::noop-rbac-middleware-scaffold",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "Dead no-op RBAC middleware block in setupRoutes that only checks OPTIONS then returns, with a comment saying permission checks moved to handlers",
+        "detail": {
+          "holistic": true,
+          "dimension": "ai_generated_debt",
+          "related_files": [
+            "cmd/whatomate/main.go"
+          ],
+          "evidence": [
+            "Lines 1283-1294: g.Before() callback that checks for OPTIONS method then returns r unconditionally with comment 'Route-level permission checks are now handled at the handler level'"
+          ],
+          "suggestion": "Remove the dead middleware block \u2014 it adds no behavior and is leftover scaffold",
+          "reasoning": "",
+          "summary_hash": "507d3a7d"
         }
-      }
-    },
-    "Convention drift": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 5,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
-          "placeholder": false,
-          "dimension_key": "convention_outlier",
-          "configured_weight": 1.0,
-          "components": []
+      },
+      {
+        "id": "review::.::holistic::api_surface_coherence::delete_response_variance",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "DELETE responses use 3 different shapes: {message: 'X deleted'}, {message: 'X deleted successfully'}, {status: 'deleted'}",
+        "detail": {
+          "holistic": true,
+          "dimension": "api_surface_coherence",
+          "related_files": [
+            "internal/handlers/instances.go",
+            "internal/handlers/accounts.go",
+            "internal/handlers/canned_responses.go",
+            "internal/handlers/conversation_notes.go"
+          ],
+          "evidence": [
+            "instances.go:406 returns {\"status\": \"deleted\"}",
+            "accounts.go:335 returns {\"message\": \"Account deleted successfully\"}",
+            "canned_responses.go:304 returns {\"message\": \"Canned response deleted\"} (no 'successfully')",
+            "conversation_notes.go:271 returns {\"message\": \"Note deleted\"} (no 'successfully')"
+          ],
+          "suggestion": "Standardize DELETE responses to a single shape: either {\"message\": \"<Resource> deleted\"} or 204 No Content. Pick one convention and apply uniformly.",
+          "reasoning": "",
+          "summary_hash": "9781b334"
         }
-      }
-    },
-    "Cross-module arch": {
-      "score": 55.0,
-      "strict": 55.0,
-      "verified_strict_score": 55.0,
-      "checks": 10,
-      "failing": 6,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.55,
-          "failing": 6,
-          "weighted_failures": 4.5,
-          "assessment_score": 55.0,
-          "placeholder": false,
-          "dimension_key": "cross_module_architecture",
-          "configured_weight": 1.0,
-          "components": []
+      },
+      {
+        "id": "review::.::holistic::api_surface_coherence::duplicate_route_semantics",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "/api/campaigns/{id}/progress and /api/campaigns/{id} map to the same GetCampaign handler, and /api/chats maps to ListContacts",
+        "detail": {
+          "holistic": true,
+          "dimension": "api_surface_coherence",
+          "related_files": [
+            "cmd/whatomate/main.go"
+          ],
+          "evidence": [
+            "main.go:1445: g.GET(\"/api/campaigns/{id}\", app.GetCampaign)",
+            "main.go:1452: g.GET(\"/api/campaigns/{id}/progress\", app.GetCampaign) \u2014 identical handler",
+            "main.go:1340: g.GET(\"/api/contacts\", app.ListContacts)",
+            "main.go:1356: g.GET(\"/api/chats\", app.ListContacts) \u2014 returns contacts-shaped response under /api/chats"
+          ],
+          "suggestion": "Either create a dedicated GetCampaignProgress handler returning only progress fields, or remove the /progress route. For /api/chats, either create a dedicated handler or document the alias explicitly in the frontend contract.",
+          "reasoning": "",
+          "summary_hash": "8daf6d9a"
         }
-      }
-    },
-    "Dep health": {
-      "score": 78.0,
-      "strict": 78.0,
-      "verified_strict_score": 78.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.78,
-          "failing": 2,
-          "weighted_failures": 2.2,
-          "assessment_score": 78.0,
-          "placeholder": false,
-          "dimension_key": "dependency_health",
-          "configured_weight": 1.0,
-          "components": []
+      },
+      {
+        "id": "review::.::holistic::api_surface_coherence::list_pagination_inconsistency",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "List endpoints return inconsistent pagination metadata \u2014 accounts, instances, and organizations omit total/page/limit",
+        "detail": {
+          "holistic": true,
+          "dimension": "api_surface_coherence",
+          "related_files": [
+            "internal/handlers/accounts.go",
+            "internal/handlers/instances.go",
+            "internal/handlers/organization.go"
+          ],
+          "evidence": [
+            "accounts.go:80 returns SendEnvelope(map[string]interface{}{\"accounts\": response}) with no total/page/limit",
+            "instances.go:215 returns SendEnvelope(instances) \u2014 bare array with no pagination wrapper",
+            "organization.go returns SendEnvelope(map[string]any{\"organizations\": response}) with no total/page/limit",
+            "Compare with campaigns.go:157, contacts.go:858, users.go, teams.go, tags.go which all include total/page/limit"
+          ],
+          "suggestion": "Standardize all list endpoints to include {resource_name: [...], total: int, page: int, limit: int} envelope. Add parsePagination calls to accounts.go, instances.go, and organization.go list handlers.",
+          "reasoning": "",
+          "summary_hash": "ac6ff29d"
         }
-      }
-    },
-    "Design coherence": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 4,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
-          "placeholder": false,
-          "dimension_key": "design_coherence",
-          "configured_weight": 10.0,
-          "components": []
+      },
+      {
+        "id": "review::.::holistic::api_surface_coherence::raw_status_codes_in_readycheck",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "ReadyCheck uses raw integer 500 instead of fasthttp.StatusInternalServerError constant",
+        "detail": {
+          "holistic": true,
+          "dimension": "api_surface_coherence",
+          "related_files": [
+            "internal/handlers/app.go"
+          ],
+          "evidence": [
+            "app.go:90: SendErrorEnvelope(500, \"Database connection error\", nil, \"\")",
+            "app.go:93: SendErrorEnvelope(500, \"Database ping failed\", nil, \"\")",
+            "app.go:98: SendErrorEnvelope(500, \"Redis connection error\", nil, \"\")",
+            "362 other calls across the codebase correctly use fasthttp.StatusInternalServerError"
+          ],
+          "suggestion": "Replace raw 500 with fasthttp.StatusInternalServerError in app.go:90,93,98",
+          "reasoning": "",
+          "summary_hash": "9f313c7a"
         }
-      }
-    },
-    "Error consistency": {
-      "score": 78.0,
-      "strict": 78.0,
-      "verified_strict_score": 78.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.78,
-          "failing": 3,
-          "weighted_failures": 2.2,
-          "assessment_score": 78.0,
-          "placeholder": false,
-          "dimension_key": "error_consistency",
-          "configured_weight": 3.0,
-          "components": []
+      },
+      {
+        "id": "review::.::holistic::authorization_consistency::meta_analytics_raw_perm_strings",
+        "tier": 1,
+        "confidence": "high",
+        "summary": "meta_analytics.go uses raw string literals 'analytics'/'read'/'write' instead of models.ResourceAnalytics constant",
+        "detail": {
+          "holistic": true,
+          "dimension": "authorization_consistency",
+          "related_files": [
+            "internal/handlers/meta_analytics.go"
+          ],
+          "evidence": [
+            "Line 52: a.HasPermission(userID, \"analytics\", \"read\", orgID) instead of models.ResourceAnalytics",
+            "Line 355: a.HasPermission(userID, \"analytics\", \"read\", orgID) \u2014 same raw string",
+            "Line 392: a.HasPermission(userID, \"analytics\", \"write\", orgID) \u2014 same raw string",
+            "All other handlers (widgets, chat_close_ratings, etc.) use models.ResourceAnalytics constant"
+          ],
+          "suggestion": "Replace raw \"analytics\" strings with models.ResourceAnalytics in all three locations in meta_analytics.go",
+          "reasoning": "",
+          "summary_hash": "c3e9ea4d"
         }
-      }
-    },
-    "High elegance": {
-      "score": 58.0,
-      "strict": 58.0,
-      "verified_strict_score": 58.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.58,
-          "failing": 4,
-          "weighted_failures": 4.2,
-          "assessment_score": 58.0,
-          "placeholder": false,
-          "dimension_key": "high_level_elegance",
-          "configured_weight": 22.0,
-          "components": []
-        }
-      }
-    },
-    "Stale migration": {
-      "score": 82.0,
-      "strict": 82.0,
-      "verified_strict_score": 82.0,
-      "checks": 10,
-      "failing": 2,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.82,
-          "failing": 2,
-          "weighted_failures": 1.8,
-          "assessment_score": 82.0,
-          "placeholder": false,
-          "dimension_key": "incomplete_migration",
-          "configured_weight": 1.0,
-          "components": []
-        }
-      }
-    },
-    "Init coupling": {
-      "score": 52.0,
-      "strict": 52.0,
-      "verified_strict_score": 52.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.52,
-          "failing": 5,
-          "weighted_failures": 4.8,
-          "assessment_score": 52.0,
-          "placeholder": false,
-          "dimension_key": "initialization_coupling",
-          "configured_weight": 1.0,
-          "components": []
-        }
-      }
-    },
-    "Logic clarity": {
-      "score": 64.0,
-      "strict": 64.0,
-      "verified_strict_score": 64.0,
-      "checks": 10,
-      "failing": 6,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.64,
-          "failing": 6,
-          "weighted_failures": 3.6,
-          "assessment_score": 64.0,
-          "placeholder": false,
-          "dimension_key": "logic_clarity",
-          "configured_weight": 6.0,
-          "components": []
-        }
-      }
-    },
-    "Low elegance": {
-      "score": 62.0,
-      "strict": 62.0,
-      "verified_strict_score": 62.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.62,
-          "failing": 5,
-          "weighted_failures": 3.8,
-          "assessment_score": 62.0,
-          "placeholder": false,
-          "dimension_key": "low_level_elegance",
-          "configured_weight": 12.0,
-          "components": []
-        }
-      }
-    },
-    "Mid elegance": {
-      "score": 68.0,
-      "strict": 68.0,
-      "verified_strict_score": 68.0,
-      "checks": 10,
-      "failing": 4,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.68,
-          "failing": 4,
-          "weighted_failures": 3.2,
-          "assessment_score": 68.0,
-          "placeholder": false,
-          "dimension_key": "mid_level_elegance",
-          "configured_weight": 22.0,
-          "components": []
-        }
-      }
-    },
-    "Naming quality": {
-      "score": 78.0,
-      "strict": 78.0,
-      "verified_strict_score": 78.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.78,
-          "failing": 5,
-          "weighted_failures": 2.2,
-          "assessment_score": 78.0,
-          "placeholder": false,
-          "dimension_key": "naming_quality",
-          "configured_weight": 2.0,
-          "components": []
-        }
-      }
-    },
-    "Structure nav": {
-      "score": 55.0,
-      "strict": 55.0,
-      "verified_strict_score": 55.0,
-      "checks": 10,
-      "failing": 3,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.55,
-          "failing": 3,
-          "weighted_failures": 4.5,
-          "assessment_score": 55.0,
-          "placeholder": false,
-          "dimension_key": "package_organization",
-          "configured_weight": 5.0,
-          "components": []
-        }
-      }
-    },
-    "Test strategy": {
-      "score": 72.0,
-      "strict": 72.0,
-      "verified_strict_score": 72.0,
-      "checks": 10,
-      "failing": 6,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.72,
-          "failing": 6,
-          "weighted_failures": 2.8,
-          "assessment_score": 72.0,
-          "placeholder": false,
-          "dimension_key": "test_strategy",
-          "configured_weight": 1.0,
-          "components": []
-        }
-      }
-    },
-    "Type safety": {
-      "score": 73.0,
-      "strict": 73.0,
-      "verified_strict_score": 73.0,
-      "checks": 10,
-      "failing": 5,
-      "tier": 4,
-      "detectors": {
-        "subjective_assessment": {
-          "potential": 10,
-          "pass_rate": 0.73,
-          "failing": 5,
-          "weighted_failures": 2.7,
-          "assessment_score": 73.0,
-          "placeholder": false,
-          "dimension_key": "type_safety",
-          "configured_weight": 12.0,
-          "components": []
-        }
-      }
-    }
-  },
-  "score_breakdown": {
-    "overall_score": 59.1,
-    "mechanical_fraction": 0.25,
-    "subjective_fraction": 0.75,
-    "mechanical_avg": 36.92740740740741,
-    "subjective_avg": 66.5040650406504,
-    "entries": [
-      {
-        "name": "Code quality",
-        "pool": "mechanical",
-        "score": 100.0,
-        "checks": 5.0,
-        "sample_factor": 0.025,
-        "configured_weight": 1.0,
-        "effective_weight": 0.025,
-        "pool_share": 0.037037037037037035,
-        "overall_per_point": 0.009259259259259259,
-        "overall_contribution": 0.9259259259259258,
-        "overall_drag": 0.0
-      },
-      {
-        "name": "Security",
-        "pool": "mechanical",
-        "score": 100.0,
-        "checks": 5.0,
-        "sample_factor": 0.025,
-        "configured_weight": 1.0,
-        "effective_weight": 0.025,
-        "pool_share": 0.037037037037037035,
-        "overall_per_point": 0.009259259259259259,
-        "overall_contribution": 0.9259259259259258,
-        "overall_drag": 0.0
-      },
-      {
-        "name": "File health",
-        "pool": "mechanical",
-        "score": 86.0,
-        "checks": 5.0,
-        "sample_factor": 0.025,
-        "configured_weight": 2.0,
-        "effective_weight": 0.05,
-        "pool_share": 0.07407407407407407,
-        "overall_per_point": 0.018518518518518517,
-        "overall_contribution": 1.5925925925925926,
-        "overall_drag": 0.25925925925925924
-      },
-      {
-        "name": "Duplication",
-        "pool": "mechanical",
-        "score": 100.0,
-        "checks": 31.0,
-        "sample_factor": 0.155,
-        "configured_weight": 1.0,
-        "effective_weight": 0.155,
-        "pool_share": 0.2296296296296296,
-        "overall_per_point": 0.0574074074074074,
-        "overall_contribution": 5.74074074074074,
-        "overall_drag": 0.0
-      },
-      {
-        "name": "Test health",
-        "pool": "mechanical",
-        "score": 0.3,
-        "checks": 84.0,
-        "sample_factor": 0.42,
-        "configured_weight": 1.0,
-        "effective_weight": 0.42,
-        "pool_share": 0.6222222222222221,
-        "overall_per_point": 0.15555555555555553,
-        "overall_contribution": 0.046666666666666655,
-        "overall_drag": 15.508888888888887
-      },
-      {
-        "name": "Abstraction fit",
-        "pool": "subjective",
-        "score": 72.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 8.0,
-        "effective_weight": 8.0,
-        "pool_share": 0.06504065040650407,
-        "overall_per_point": 0.04878048780487805,
-        "overall_contribution": 3.5121951219512195,
-        "overall_drag": 1.3658536585365855
-      },
-      {
-        "name": "AI generated debt",
-        "pool": "subjective",
-        "score": 28.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.006097560975609756,
-        "overall_contribution": 0.17073170731707318,
-        "overall_drag": 0.43902439024390244
-      },
-      {
-        "name": "API coherence",
-        "pool": "subjective",
-        "score": 62.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.006097560975609756,
-        "overall_contribution": 0.3780487804878049,
-        "overall_drag": 0.23170731707317074
-      },
-      {
-        "name": "Auth consistency",
-        "pool": "subjective",
-        "score": 78.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.006097560975609756,
-        "overall_contribution": 0.475609756097561,
-        "overall_drag": 0.13414634146341464
-      },
-      {
-        "name": "Contracts",
-        "pool": "subjective",
-        "score": 72.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 12.0,
-        "effective_weight": 12.0,
-        "pool_share": 0.0975609756097561,
-        "overall_per_point": 0.07317073170731708,
-        "overall_contribution": 5.26829268292683,
-        "overall_drag": 2.048780487804878
-      },
-      {
-        "name": "Convention drift",
-        "pool": "subjective",
-        "score": 72.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.006097560975609756,
-        "overall_contribution": 0.43902439024390244,
-        "overall_drag": 0.17073170731707318
-      },
-      {
-        "name": "Cross-module arch",
-        "pool": "subjective",
-        "score": 55.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.006097560975609756,
-        "overall_contribution": 0.3353658536585366,
-        "overall_drag": 0.27439024390243905
-      },
-      {
-        "name": "Dep health",
-        "pool": "subjective",
-        "score": 78.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.006097560975609756,
-        "overall_contribution": 0.475609756097561,
-        "overall_drag": 0.13414634146341464
-      },
-      {
-        "name": "Design coherence",
-        "pool": "subjective",
-        "score": 72.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 10.0,
-        "effective_weight": 10.0,
-        "pool_share": 0.08130081300813008,
-        "overall_per_point": 0.06097560975609756,
-        "overall_contribution": 4.390243902439025,
-        "overall_drag": 1.7073170731707317
-      },
-      {
-        "name": "Error consistency",
-        "pool": "subjective",
-        "score": 78.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 3.0,
-        "effective_weight": 3.0,
-        "pool_share": 0.024390243902439025,
-        "overall_per_point": 0.01829268292682927,
-        "overall_contribution": 1.426829268292683,
-        "overall_drag": 0.4024390243902439
-      },
-      {
-        "name": "High elegance",
-        "pool": "subjective",
-        "score": 58.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 22.0,
-        "effective_weight": 22.0,
-        "pool_share": 0.17886178861788618,
-        "overall_per_point": 0.13414634146341464,
-        "overall_contribution": 7.7804878048780495,
-        "overall_drag": 5.634146341463415
-      },
-      {
-        "name": "Stale migration",
-        "pool": "subjective",
-        "score": 82.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.006097560975609756,
-        "overall_contribution": 0.5,
-        "overall_drag": 0.10975609756097561
-      },
-      {
-        "name": "Init coupling",
-        "pool": "subjective",
-        "score": 52.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.006097560975609756,
-        "overall_contribution": 0.3170731707317073,
-        "overall_drag": 0.29268292682926833
-      },
-      {
-        "name": "Logic clarity",
-        "pool": "subjective",
-        "score": 64.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 6.0,
-        "effective_weight": 6.0,
-        "pool_share": 0.04878048780487805,
-        "overall_per_point": 0.03658536585365854,
-        "overall_contribution": 2.3414634146341466,
-        "overall_drag": 1.3170731707317076
-      },
-      {
-        "name": "Low elegance",
-        "pool": "subjective",
-        "score": 62.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 12.0,
-        "effective_weight": 12.0,
-        "pool_share": 0.0975609756097561,
-        "overall_per_point": 0.07317073170731708,
-        "overall_contribution": 4.536585365853659,
-        "overall_drag": 2.780487804878049
-      },
-      {
-        "name": "Mid elegance",
-        "pool": "subjective",
-        "score": 68.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 22.0,
-        "effective_weight": 22.0,
-        "pool_share": 0.17886178861788618,
-        "overall_per_point": 0.13414634146341464,
-        "overall_contribution": 9.121951219512196,
-        "overall_drag": 4.2926829268292686
-      },
-      {
-        "name": "Naming quality",
-        "pool": "subjective",
-        "score": 78.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 2.0,
-        "effective_weight": 2.0,
-        "pool_share": 0.016260162601626018,
-        "overall_per_point": 0.012195121951219513,
-        "overall_contribution": 0.951219512195122,
-        "overall_drag": 0.2682926829268293
-      },
-      {
-        "name": "Structure nav",
-        "pool": "subjective",
-        "score": 55.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 5.0,
-        "effective_weight": 5.0,
-        "pool_share": 0.04065040650406504,
-        "overall_per_point": 0.03048780487804878,
-        "overall_contribution": 1.6768292682926829,
-        "overall_drag": 1.371951219512195
-      },
-      {
-        "name": "Test strategy",
-        "pool": "subjective",
-        "score": 72.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 1.0,
-        "effective_weight": 1.0,
-        "pool_share": 0.008130081300813009,
-        "overall_per_point": 0.006097560975609756,
-        "overall_contribution": 0.43902439024390244,
-        "overall_drag": 0.17073170731707318
-      },
-      {
-        "name": "Type safety",
-        "pool": "subjective",
-        "score": 73.0,
-        "checks": 0.0,
-        "sample_factor": 1.0,
-        "configured_weight": 12.0,
-        "effective_weight": 12.0,
-        "pool_share": 0.0975609756097561,
-        "overall_per_point": 0.07317073170731708,
-        "overall_contribution": 5.341463414634147,
-        "overall_drag": 1.9756097560975612
       }
     ]
   },
-  "subjective_integrity": {
-    "status": "disabled",
-    "target_score": 95.0,
-    "matched_count": 0,
-    "matched_dimensions": [],
-    "reset_dimensions": []
+  "total_matching": 83,
+  "hidden": {
+    "by_detector": {
+      "review": 73
+    },
+    "total": 73
   },
-  "score_confidence": {
-    "status": "reduced",
-    "confidence": 0.0,
-    "detectors": [
-      {
-        "detector": "golangci_lint",
-        "status": "reduced",
-        "confidence": 0.0,
-        "summary": "golangci-lint tooling unavailable (parser_error)",
-        "impact": "Detector results may be under-reported for this scan.",
-        "remediation": "Install/fix the tool command and rerun scan.",
-        "tool": "golangci-lint",
-        "reason": "parser_error"
-      },
-      {
-        "detector": "vet_error",
-        "status": "reduced",
-        "confidence": 0.0,
-        "summary": "go vet tooling unavailable (tool_not_found)",
-        "impact": "Detector results may be under-reported for this scan.",
-        "remediation": "Install/fix the tool command and rerun scan.",
-        "tool": "go vet",
-        "reason": "tool_not_found"
-      }
-    ],
-    "dimensions": []
-  },
-  "potentials": {
-    "go": {
-      "structural": 5,
-      "flat_dirs": 5,
-      "test_coverage": 84,
-      "security": 5,
-      "subjective_review": 20,
-      "dupes": 31,
-      "stale_wontfix": 0
-    }
-  },
-  "scan_coverage": {
-    "go": {
-      "status": "reduced",
-      "confidence": 0.0,
-      "detectors": {
-        "golangci_lint": {
-          "detector": "golangci_lint",
-          "status": "reduced",
-          "confidence": 0.0,
-          "summary": "golangci-lint tooling unavailable (parser_error)",
-          "impact": "Detector results may be under-reported for this scan.",
-          "remediation": "Install/fix the tool command and rerun scan.",
-          "tool": "golangci-lint",
-          "reason": "parser_error"
-        },
-        "vet_error": {
-          "detector": "vet_error",
-          "status": "reduced",
-          "confidence": 0.0,
-          "summary": "go vet tooling unavailable (tool_not_found)",
-          "impact": "Detector results may be under-reported for this scan.",
-          "remediation": "Install/fix the tool command and rerun scan.",
-          "tool": "go vet",
-          "reason": "tool_not_found"
-        },
-        "security": {
-          "detector": "security",
-          "status": "full",
-          "confidence": 1.0,
-          "summary": "Security coverage complete for enabled detectors.",
-          "impact": "",
-          "remediation": "",
-          "tool": "",
-          "reason": ""
-        }
-      },
-      "warnings": [
-        {
-          "detector": "golangci_lint",
-          "status": "reduced",
-          "confidence": 0.0,
-          "summary": "golangci-lint tooling unavailable (parser_error)",
-          "impact": "Detector results may be under-reported for this scan.",
-          "remediation": "Install/fix the tool command and rerun scan.",
-          "tool": "golangci-lint",
-          "reason": "parser_error"
-        },
-        {
-          "detector": "vet_error",
-          "status": "reduced",
-          "confidence": 0.0,
-          "summary": "go vet tooling unavailable (tool_not_found)",
-          "impact": "Detector results may be under-reported for this scan.",
-          "remediation": "Install/fix the tool command and rerun scan.",
-          "tool": "go vet",
-          "reason": "tool_not_found"
-        }
-      ],
-      "updated_at": "2026-05-08T00:04:41+00:00"
-    }
-  },
-  "zone_distribution": {
-    "production": 5,
-    "test": 2
-  },
+  "noise_budget": 10,
+  "noise_global_budget": 0,
   "narrative": {
     "phase": "middle_grind",
     "headline": "88 issues open. Test health (0.3%) needs attention \u2014 run `desloppify next` to start. (83 review work items \u2014 run `desloppify show review --status open`)",
@@ -1100,17 +293,11 @@
         "type": "refactor",
         "detector": "test_coverage",
         "count": 4,
-        "description": "4 test_coverage issues in 3 cluster(s) \u2014 run `desloppify next`",
-        "command": "desloppify next",
+        "description": "4 test_coverage work items \u2014 review test coverage gaps \u2014 focus on critical modules with many importers first; defer test writing until code quality issues are resolved",
+        "command": "desloppify show test_coverage --status open",
         "impact": 0.0,
         "dimension": "Test health",
         "priority": 2,
-        "clusters": [
-          "auto/test_coverage-untested_module",
-          "auto/test_coverage-transitive_only",
-          "auto/test_coverage-untested_critical"
-        ],
-        "cluster_count": 3,
         "lane": "test_coverage"
       },
       {
@@ -1216,22 +403,14 @@
         "command": "desloppify show review --status open",
         "priority": 1,
         "severity": "high"
-      },
-      {
-        "type": "report_scores",
-        "message": "ALWAYS share ALL scores with the user: overall, objective, and strict, plus every dimension score (lenient + strict), including subjective dimensions. The goal is to maximize strict scores.",
-        "command": null,
-        "no_decay": true,
-        "priority": 3,
-        "severity": "low"
       }
     ],
     "reminder_history": {
       "zone_classification": 3,
-      "report_scores": 5,
+      "report_scores": 6,
       "feedback_nudge": 3,
       "stagnant_nudge": 25,
-      "review_issues_pending": 1
+      "review_issues_pending": 3
     }
   },
   "config": {
@@ -1267,12 +446,5 @@
       "execute": "openrouter:x-ai/grok-4.20-beta",
       "review": "openrouter:google/gemini-3.1-pro-preview"
     }
-  },
-  "plan": {
-    "active": true,
-    "focus": null,
-    "total_ordered": 103,
-    "total_skipped": 0,
-    "plan_overrides_narrative": true
   }
 }

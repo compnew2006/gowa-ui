@@ -1,8 +1,8 @@
 {
   "version": 3,
   "created": "2026-03-11T03:27:39+00:00",
-  "last_scan": "2026-05-08T00:04:41+00:00",
-  "scan_count": 6,
+  "last_scan": "2026-05-08T09:01:03+00:00",
+  "scan_count": 7,
   "overall_score": 59.1,
   "objective_score": 36.9,
   "strict_score": 59.1,
@@ -113,7 +113,7 @@
           "reason": "tool_not_found"
         }
       ],
-      "updated_at": "2026-05-08T00:04:41+00:00"
+      "updated_at": "2026-05-08T09:01:03+00:00"
     }
   },
   "score_confidence": {
@@ -1045,6 +1045,135 @@
           "strict": 73.0
         }
       }
+    },
+    {
+      "timestamp": "2026-05-08T09:01:03+00:00",
+      "lang": "go",
+      "strict_score": 59.1,
+      "verified_strict_score": 36.9,
+      "objective_score": 36.9,
+      "overall_score": 59.1,
+      "open": 88,
+      "diff_new": 0,
+      "diff_resolved": 0,
+      "ignored": 0,
+      "raw_issues": 6,
+      "suppressed_pct": 0.0,
+      "ignore_patterns": 0,
+      "subjective_integrity": {
+        "status": "disabled",
+        "matched_count": 0,
+        "reset_count": 0,
+        "target_score": 95.0
+      },
+      "score_confidence": {
+        "status": "reduced",
+        "confidence": 0.0,
+        "detector_count": 2,
+        "dimension_count": 0
+      },
+      "dimension_scores": {
+        "Code quality": {
+          "score": 100.0,
+          "strict": 100.0
+        },
+        "Security": {
+          "score": 100.0,
+          "strict": 100.0
+        },
+        "File health": {
+          "score": 86.0,
+          "strict": 86.0
+        },
+        "Duplication": {
+          "score": 100.0,
+          "strict": 100.0
+        },
+        "Test health": {
+          "score": 0.3,
+          "strict": 0.3
+        },
+        "Abstraction fit": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "AI generated debt": {
+          "score": 28.0,
+          "strict": 28.0
+        },
+        "API coherence": {
+          "score": 62.0,
+          "strict": 62.0
+        },
+        "Auth consistency": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "Contracts": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Convention drift": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Cross-module arch": {
+          "score": 55.0,
+          "strict": 55.0
+        },
+        "Dep health": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "Design coherence": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Error consistency": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "High elegance": {
+          "score": 58.0,
+          "strict": 58.0
+        },
+        "Stale migration": {
+          "score": 82.0,
+          "strict": 82.0
+        },
+        "Init coupling": {
+          "score": 52.0,
+          "strict": 52.0
+        },
+        "Logic clarity": {
+          "score": 64.0,
+          "strict": 64.0
+        },
+        "Low elegance": {
+          "score": 62.0,
+          "strict": 62.0
+        },
+        "Mid elegance": {
+          "score": 68.0,
+          "strict": 68.0
+        },
+        "Naming quality": {
+          "score": 78.0,
+          "strict": 78.0
+        },
+        "Structure nav": {
+          "score": 55.0,
+          "strict": 55.0
+        },
+        "Test strategy": {
+          "score": 72.0,
+          "strict": 72.0
+        },
+        "Type safety": {
+          "score": 73.0,
+          "strict": 73.0
+        }
+      }
     }
   ],
   "lang_capabilities": {
@@ -1599,9 +1728,10 @@
   },
   "reminder_history": {
     "zone_classification": 3,
-    "report_scores": 4,
+    "report_scores": 5,
     "feedback_nudge": 3,
-    "stagnant_nudge": 25
+    "stagnant_nudge": 25,
+    "review_issues_pending": 1
   },
   "work_items": {
     "structural::internal/handlers/contacts_test.go": {
@@ -2143,7 +2273,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-03-11T03:27:40+00:00",
-      "last_seen": "2026-05-08T00:04:41+00:00",
+      "last_seen": "2026-05-08T09:01:03+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -30660,7 +30790,7 @@
       "status": "deferred",
       "note": null,
       "first_seen": "2026-03-11T03:29:17+00:00",
-      "last_seen": "2026-05-08T00:04:41+00:00",
+      "last_seen": "2026-05-08T09:01:03+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "lang": "go",
@@ -38056,7 +38186,7 @@
         "text": "I have actually reviewed these deferred items and I am not gaming the score by skipping them permanently.",
         "attested_at": "2026-03-11T08:46:17+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       },
       "wontfix_scan_count": 2,
@@ -38446,7 +38576,7 @@
         "text": "I have actually reviewed these deferred items and I am not gaming the score by skipping them permanently.",
         "attested_at": "2026-03-11T08:46:18+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       },
       "wontfix_scan_count": 2,
@@ -38545,7 +38675,7 @@
         "text": "I have actually reviewed these deferred items and I am not gaming the score by skipping them permanently.",
         "attested_at": "2026-03-11T08:46:18+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       },
       "wontfix_scan_count": 2,
@@ -38845,7 +38975,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-07T23:32:58+00:00",
-      "last_seen": "2026-05-08T00:04:41+00:00",
+      "last_seen": "2026-05-08T09:01:03+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -38873,7 +39003,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-07T23:32:58+00:00",
-      "last_seen": "2026-05-08T00:04:41+00:00",
+      "last_seen": "2026-05-08T09:01:03+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -38901,7 +39031,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-07T23:32:58+00:00",
-      "last_seen": "2026-05-08T00:04:41+00:00",
+      "last_seen": "2026-05-08T09:01:03+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -38929,7 +39059,7 @@
       "status": "open",
       "note": null,
       "first_seen": "2026-05-07T23:32:58+00:00",
-      "last_seen": "2026-05-08T00:04:41+00:00",
+      "last_seen": "2026-05-08T09:01:03+00:00",
       "resolved_at": null,
       "reopen_count": 0,
       "work_item_kind": "mechanical_defect",
@@ -38971,7 +39101,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39005,7 +39135,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39039,7 +39169,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39073,7 +39203,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39107,7 +39237,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39141,7 +39271,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39175,7 +39305,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39209,7 +39339,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39243,7 +39373,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39277,7 +39407,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39311,7 +39441,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39345,7 +39475,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39379,7 +39509,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39413,7 +39543,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39447,7 +39577,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39481,7 +39611,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39515,7 +39645,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39549,7 +39679,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39583,7 +39713,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },
@@ -39617,7 +39747,7 @@
         "text": "Dimension assessment imported; coverage marker superseded",
         "attested_at": "2026-05-08T00:04:41+00:00",
         "scan_verified": true,
-        "scan_verified_at": "2026-05-08T00:04:41+00:00",
+        "scan_verified_at": "2026-05-08T09:01:03+00:00",
         "scan_verification_text": "Still absent in current scan scope (cmd)"
       }
     },

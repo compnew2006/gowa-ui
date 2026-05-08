@@ -88,7 +88,7 @@ jobs:
           db = 0
 
           [jwt]
-          secret = "test-secret-key-for-ci"
+          secret = "test-secret-key-for-ci-e2e-tests-32ch"
           access_expiry_mins = 60
           refresh_expiry_days = 7
 
