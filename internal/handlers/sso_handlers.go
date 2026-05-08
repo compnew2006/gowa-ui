@@ -167,8 +167,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 
 	// Check for OAuth error
 	if errorParam != "" {
-		errorDesc := string(r.RequestCtx.QueryArgs().Peek("error_description"))
-		a.redirectWithError(r, "SSO failed: "+errorDesc)
+		a.redirectWithError(r, "SSO authentication failed")
 		return nil
 	}
 

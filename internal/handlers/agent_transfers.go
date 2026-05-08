@@ -532,7 +532,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent_id", nil, "")
 		}
 		// Verify agent exists, is available in the org, and can receive chats.
-		agent, err := findAssignableOrgUser(requestDB, parsedAgentID, orgID)
+		agent, err := findAssignableOrgUser(a.DB, parsedAgentID, orgID)
 		if err != nil {
 			_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
 			return nil
@@ -832,7 +832,7 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 		}
 
 		// Verify agent exists, is available in the org, and can receive chats.
-		agent, err := findAssignableOrgUser(requestDB, parsedAgentID, orgID)
+		agent, err := findAssignableOrgUser(a.DB, parsedAgentID, orgID)
 		if err != nil {
 			_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
 			return nil

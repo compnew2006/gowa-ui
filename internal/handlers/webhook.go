@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"strings"
@@ -30,7 +31,7 @@ func (a *App) WebhookVerify(r *fastglue.Request) error {
 	}
 
 	// First check against global config token
-	if token == a.Config.WhatsApp.WebhookVerifyToken && token != "" {
+	if token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(a.Config.WhatsApp.WebhookVerifyToken)) == 1 {
 		a.Log.Info("Webhook verified successfully (global token)")
 		r.RequestCtx.SetStatusCode(fasthttp.StatusOK)
 		r.RequestCtx.SetBodyString(challenge)

@@ -64,9 +64,42 @@ func newFileSystemObjectStorage(cfg *config.StorageConfig) (ObjectStorage, error
 	return &fileSystemObjectStorage{rootPath: root}, nil
 }
 
+// safePath resolves key against root and enforces the resolved path stays
+// within the storage root. Returns an error if the key would escape the root
+// (path traversal) or if the final path cannot be resolved.
+func (s *fileSystemObjectStorage) safePath(key string) (string, error) {
+	cleanKey := filepath.Clean(filepath.FromSlash(key))
+	if cleanKey == ".." || strings.HasPrefix(cleanKey, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("object key %q escapes storage root", key)
+	}
+
+	absRoot, err := filepath.Abs(s.rootPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve storage root: %w", err)
+	}
+	resolvedRoot := absRoot
+	if r, err := filepath.EvalSymlinks(absRoot); err == nil {
+		resolvedRoot = r
+	}
+
+	fullPath, err := filepath.Abs(filepath.Join(resolvedRoot, cleanKey))
+	if err != nil {
+		return "", fmt.Errorf("resolve object path: %w", err)
+	}
+
+	if !strings.HasPrefix(fullPath, resolvedRoot+string(os.PathSeparator)) && fullPath != resolvedRoot {
+		return "", fmt.Errorf("object key %q escapes storage root", key)
+	}
+
+	return fullPath, nil
+}
+
 func (s *fileSystemObjectStorage) PutObject(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
-	path := filepath.Join(s.rootPath, key)
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	path, err := s.safePath(key)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
 	f, err := os.Create(path)
@@ -82,7 +115,10 @@ func (s *fileSystemObjectStorage) PutObject(ctx context.Context, key string, bod
 }
 
 func (s *fileSystemObjectStorage) GetObject(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
-	path := filepath.Join(s.rootPath, key)
+	path, err := s.safePath(key)
+	if err != nil {
+		return nil, ObjectInfo{}, err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -99,13 +135,16 @@ func (s *fileSystemObjectStorage) GetObject(ctx context.Context, key string) (io
 
 	return f, ObjectInfo{
 		Size:        stat.Size(),
-		ContentType: "application/octet-stream", // Optional: improve mime detection if needed
+		ContentType: "application/octet-stream",
 	}, nil
 }
 
 func (s *fileSystemObjectStorage) DeleteObject(ctx context.Context, key string) error {
-	path := filepath.Join(s.rootPath, key)
-	err := os.Remove(path)
+	path, err := s.safePath(key)
+	if err != nil {
+		return err
+	}
+	err = os.Remove(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove file: %w", err)
 	}

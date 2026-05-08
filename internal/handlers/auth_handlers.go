@@ -28,7 +28,7 @@ func (a *App) Login(r *fastglue.Request) error {
 	// Find user by email with role preloaded
 	var user models.User
 	if err := requestDB.Preload("Role").Where("email = ?", req.Email).First(&user).Error; err != nil {
-		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"), []byte(req.Password))
+		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36Kz2aGMhJ9YiQKJIi9QcG4"), []byte(req.Password))
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid credentials", nil, "")
 	}
 
@@ -81,6 +81,7 @@ func (a *App) Login(r *fastglue.Request) error {
 	}
 
 	now := time.Now()
+	r.RequestCtx.Response.Header.Set("Cache-Control", "no-store")
 	return r.SendEnvelope(CookieAuthResponse{
 		ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
 		User:      user,
@@ -290,6 +291,7 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 	}
 
 	now := time.Now()
+	r.RequestCtx.Response.Header.Set("Cache-Control", "no-store")
 	return r.SendEnvelope(CookieAuthResponse{
 		ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
 		User:      user,
@@ -439,6 +441,7 @@ func (a *App) SwitchOrg(r *fastglue.Request) error {
 	}
 
 	now := time.Now()
+	r.RequestCtx.Response.Header.Set("Cache-Control", "no-store")
 	return r.SendEnvelope(CookieAuthResponse{
 		ExpiresIn: accessTokenTTLSeconds(now, accessTokenExpiresAt),
 		User:      user,
@@ -485,6 +488,7 @@ func (a *App) Logout(r *fastglue.Request) error {
 
 	a.clearAuthCookies(r)
 
+	r.RequestCtx.Response.Header.Set("Cache-Control", "no-store")
 	return r.SendEnvelope(map[string]string{"status": "logged_out"})
 }
 
@@ -518,5 +522,6 @@ func (a *App) GetWSToken(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 	}
 
+	r.RequestCtx.Response.Header.Set("Cache-Control", "no-store")
 	return r.SendEnvelope(map[string]string{"token": signed})
 }

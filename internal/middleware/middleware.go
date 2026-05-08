@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"net"
 	"net/url"
@@ -46,16 +47,18 @@ func shouldSkipCSP(path string) bool {
 	if path == "" {
 		return false
 	}
-	if path == "/" {
+	if strings.HasPrefix(path, "/api") {
 		return true
 	}
-	if strings.HasPrefix(path, "/api") {
-		return false
+	if strings.HasPrefix(path, "/ws") {
+		return true
 	}
-	if strings.Contains(path, ".") {
-		return false
+	for _, suffix := range []string{".js", ".css", ".map", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".webp", ".json"} {
+		if strings.HasSuffix(path, suffix) {
+			return true
+		}
 	}
-	return true
+	return false
 }
 
 // JWTClaims represents JWT claims
@@ -235,20 +238,17 @@ func CORS(allowedOrigins map[string]bool) fastglue.FastMiddleware {
 			r.RequestCtx.Response.Header.Set("Access-Control-Allow-Origin", origin)
 			r.RequestCtx.Response.Header.Set("Access-Control-Allow-Credentials", "true")
 			r.RequestCtx.Response.Header.Set("Vary", "Origin")
+			r.RequestCtx.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+			r.RequestCtx.Response.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Organization-ID, X-CSRF-Token")
+			r.RequestCtx.Response.Header.Set("Access-Control-Max-Age", "86400")
 		}
-		// If origin is not allowed, no Access-Control-Allow-Origin header is set,
-		// which causes the browser to block the request.
-
-		r.RequestCtx.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		r.RequestCtx.Response.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Organization-ID, X-CSRF-Token")
-		r.RequestCtx.Response.Header.Set("Access-Control-Max-Age", "86400")
 
 		return r
 	}
 }
 
 // SecurityHeaders adds standard security headers to every response.
-func SecurityHeaders() fastglue.FastMiddleware {
+func SecurityHeaders(isProduction bool) fastglue.FastMiddleware {
 	return func(r *fastglue.Request) *fastglue.Request {
 		h := &r.RequestCtx.Response.Header
 		if !shouldSkipCSP(string(r.RequestCtx.Path())) {
@@ -258,7 +258,10 @@ func SecurityHeaders() fastglue.FastMiddleware {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		h.Set("X-XSS-Protection", "0") // Disabled per OWASP recommendation (use CSP instead)
+		h.Set("X-XSS-Protection", "0")
+		if isProduction {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		return r
 	}
 }
@@ -367,33 +370,36 @@ func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
 	}
 }
 
-// validateAPIKey validates an API key and sets context values
+// validateAPIKey validates an API key and sets context values.
+// If the request includes an X-Organization-ID header, the key must belong
+// to that organization (prevents cross-org key reuse).
 func validateAPIKey(r *fastglue.Request, key string, db *gorm.DB) bool {
-	// API key format: whm_<32 hex chars>
 	if len(key) != 36 || key[:4] != "whm_" {
 		return false
 	}
 
-	// Extract both new (16-char) and old (8-char) prefixes for backward compatibility.
-	// New keys store 16 chars; old keys store 8 chars. Query matches either.
 	newPrefix := key[4:20]
 	oldPrefix := key[4:12]
 
-	// Find API keys with matching prefix (supports both old and new prefix lengths)
 	var apiKeys []models.APIKey
 	if err := db.Preload("User").Where("(key_prefix = ? OR key_prefix = ?) AND is_active = ?", newPrefix, oldPrefix, true).Find(&apiKeys).Error; err != nil {
 		return false
 	}
 
-	// Check each key with bcrypt
+	headerOrgID := strings.TrimSpace(string(r.RequestCtx.Request.Header.Peek("X-Organization-ID")))
+
 	for _, apiKey := range apiKeys {
 		if err := bcrypt.CompareHashAndPassword([]byte(apiKey.KeyHash), []byte(key)); err == nil {
-			// Key matches - check expiration
 			if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
-				return false // Key expired
+				return false
 			}
 
-			// Update last used timestamp (async to not block request)
+			if headerOrgID != "" {
+				if subtle.ConstantTimeCompare([]byte(apiKey.OrganizationID.String()), []byte(headerOrgID)) != 1 {
+					continue
+				}
+			}
+
 			go func(id uuid.UUID) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -401,7 +407,6 @@ func validateAPIKey(r *fastglue.Request, key string, db *gorm.DB) bool {
 				db.WithContext(ctx).Model(&models.APIKey{}).Where("id = ?", id).Update("last_used_at", now)
 			}(apiKey.ID)
 
-			// Set context values from the user who created the key
 			if apiKey.User != nil {
 				r.RequestCtx.SetUserValue(ContextKeyUserID, apiKey.UserID)
 				r.RequestCtx.SetUserValue(ContextKeyOrganizationID, apiKey.OrganizationID)

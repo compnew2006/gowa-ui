@@ -1910,3 +1910,111 @@ Updated: 2026-05-05 09:47:26 UTC
   - per-instance license activation and quota verification
   - Nginx upstream repair
   - source-code cleanup after binary deployment
+
+## Deployment Update
+
+Updated: 2026-05-05 10:30:20 UTC
+
+- Redeployed after local fixes from workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- VPS: `31.97.192.53` (`root`, Ubuntu)
+- Source revision on deploy: `d315ee2` (working tree had local uncommitted changes)
+- Native build command used on VPS: `make build-prod`, followed by explicit `CGO_ENABLED=0 go build` with embedded `license.EmbeddedPublicKeyRingBase64`
+- Embedded license key ID verified: `deploy-20260416`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Installed binary version: `Whatomate d315ee2-deploy-20260505b (built 2026-05-05_10:29:58)`
+- Installed binary SHA256: `03d16545b92d3eece72502cc1fcc4553a8da6d5e0c6be16b9a0fbaaa560a44f8`
+- Focused pre-deploy backup: `/root/whatomate_backups/whatomate-installed-focused-20260505_102424.tar.gz`
+- Additional pre-install binary backup: `/opt/whatomate/bin/whatomate.20260505_103007.pre-d315ee2-deploy.bak`
+
+### Services Restarted
+
+- Canary first: `whatomate@holol-wenjaz`
+- Remaining services after canary passed:
+  - `whatomate`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- All production services returned `active`.
+- License bootstrap verification:
+  - `:18123` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`
+  - `:18124` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`
+  - `:18125` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`
+  - `:18126` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com` -> `200`
+  - `https://www.ofuqalmadenah.com` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com` -> `200`
+- Temporary/source paths removed after build:
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-sandbox`
+  - `/tmp/whatomate-deploy-src`
+- Chrome DevTools MCP browser verification:
+  - opened `https://holol-wenjaz.ofuqalmadenah.com/settings/license`
+  - app redirected to `/login` normally
+  - browser-side `fetch('/api/license/bootstrap')` returned active production lifetime licensing
+  - screenshot saved locally at `tmp/deploy-verify-holol-license-2.png`
+
+### Local Pre-Deploy Checks
+
+- Passed:
+  - `go test ./internal/config ./internal/crypto ./internal/license ./internal/queue ./pkg/whatsapp ./pkg/whatsmeow`
+- VPS frontend build completed successfully.
+- VPS npm install/build reported the same existing audit findings as the previous deployment: 4 vulnerabilities (`2 moderate`, `1 high`, `1 critical`), not blocking the production build.
+
+## Deployment Update
+
+Updated: 2026-05-05 10:57:10 UTC
+
+- Redeployed after additional local fixes from workspace: `/Users/noiemany/Downloads/whatomate_GOWA/whatomate`
+- VPS: `31.97.192.53` (`root`, Ubuntu)
+- Source revision on deploy: `8f155d2` (working tree had local uncommitted changes)
+- Native build command used on VPS: `make build-prod`, followed by explicit `CGO_ENABLED=0 go build` with embedded `license.EmbeddedPublicKeyRingBase64`
+- Embedded license key ID verified: `deploy-20260416`
+- Installed binary: `/opt/whatomate/bin/whatomate`
+- Installed binary version: `Whatomate 8f155d2-deploy-20260505c (built 2026-05-05_10:56:48)`
+- Installed binary SHA256: `3533aaf7abbe19de384ca35073f055f9722d90d763e11b59854142575cf0342e`
+- Focused pre-deploy backup: `/root/whatomate_backups/whatomate-installed-focused-20260505_105113.tar.gz`
+- Additional pre-install binary backup: `/opt/whatomate/bin/whatomate.20260505_105659.pre-8f155d2-deploy.bak`
+
+### Services Restarted
+
+- Canary first: `whatomate@holol-wenjaz`
+- Remaining services after canary passed:
+  - `whatomate`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- All production services returned `active`.
+- License bootstrap verification:
+  - `:18123` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`
+  - `:18124` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`
+  - `:18125` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`
+  - `:18126` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com` -> `200`
+  - `https://www.ofuqalmadenah.com` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com` -> `200`
+- Temporary/source paths removed after build:
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-sandbox`
+  - `/tmp/whatomate-deploy-src`
+- Chrome DevTools MCP browser verification:
+  - opened `https://holol-wenjaz.ofuqalmadenah.com/settings/license`
+  - app redirected to `/login` normally
+  - browser-side `fetch('/api/license/bootstrap')` returned active production lifetime licensing
+  - screenshot saved locally at `tmp/deploy-verify-holol-license-3.png`
+
+### Local Pre-Deploy Checks
+
+- Passed:
+  - `go test ./internal/config ./internal/crypto ./internal/license ./internal/queue ./pkg/whatsapp ./pkg/whatsmeow`
+- VPS frontend build completed successfully.
+- VPS npm install/build reported the same existing audit findings as the previous deployment: 4 vulnerabilities (`2 moderate`, `1 high`, `1 critical`), not blocking the production build.

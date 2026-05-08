@@ -46,9 +46,32 @@ func ValidateDefaultAdmin(cfg *Config) error {
 		if len(password) < 12 {
 			return fmt.Errorf("default_admin.password must be at least 12 characters in production")
 		}
+		if err := validatePasswordComplexity(password); err != nil {
+			return fmt.Errorf("default_admin.password: %w", err)
+		}
 	}
 
 	cfg.DefaultAdmin.Email = email
 	cfg.DefaultAdmin.Password = password
+	return nil
+}
+
+// validatePasswordComplexity checks that a password contains at least one
+// uppercase letter, one lowercase letter, and one digit.
+func validatePasswordComplexity(password string) error {
+	var hasLower, hasUpper, hasDigit bool
+	for _, ch := range password {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+			hasLower = true
+		case ch >= 'A' && ch <= 'Z':
+			hasUpper = true
+		case ch >= '0' && ch <= '9':
+			hasDigit = true
+		}
+	}
+	if !hasLower || !hasUpper || !hasDigit {
+		return fmt.Errorf("must include at least one uppercase letter, one lowercase letter, and one number")
+	}
 	return nil
 }

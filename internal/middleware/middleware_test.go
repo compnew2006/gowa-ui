@@ -401,7 +401,7 @@ func TestSecurityHeaders(t *testing.T) {
 
 	req := newTestRequest()
 	req.RequestCtx.Request.SetRequestURI("/api/health")
-	securityHeadersMiddleware := middleware.SecurityHeaders()
+	securityHeadersMiddleware := middleware.SecurityHeaders(false)
 	result := securityHeadersMiddleware(req)
 
 	require.NotNil(t, result, "SecurityHeaders middleware should return request")

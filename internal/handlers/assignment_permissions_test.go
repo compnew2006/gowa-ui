@@ -7,6 +7,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -20,6 +21,39 @@ func TestApp_AssignContact_AllowsContactsWritePermission(t *testing.T) {
 	assigner := createUserWithPermissionKeys(t, app, org.ID, "contacts-writer", []string{"contacts:write"})
 	targetUser := testutil.CreateTestUser(t, app.DB, org.ID)
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"user_id": targetUser.ID.String(),
+	})
+	testutil.SetAuthContext(req, org.ID, assigner.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.AssignContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	require.NotNil(t, refreshed.AssignedUserID)
+	assert.Equal(t, targetUser.ID, *refreshed.AssignedUserID)
+}
+
+func TestApp_AssignContact_AllowsCrossOrgMember(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	otherOrg := testutil.CreateTestOrganization(t, app.DB)
+	assigner := createUserWithPermissionKeys(t, app, org.ID, "contacts-writer-member", []string{"contacts:write"})
+	targetUser := testutil.CreateTestUser(t, app.DB, otherOrg.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	require.NoError(t, app.DB.Create(&models.UserOrganization{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		UserID:         targetUser.ID,
+		OrganizationID: org.ID,
+		IsDefault:      false,
+	}).Error)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"user_id": targetUser.ID.String(),

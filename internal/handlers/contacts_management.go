@@ -220,7 +220,7 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 
 	// If assigning to a user, verify they are available in the same org.
 	if req.UserID != nil {
-		if _, err := findAssignableOrgUser(requestDB, *req.UserID, orgID); err != nil {
+		if _, err := findAssignableOrgUser(a.DB, *req.UserID, orgID); err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User not found", nil, "")
 		}
 	}

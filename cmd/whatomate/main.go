@@ -379,7 +379,7 @@ func runServer(args []string) {
 	observabilityManager := observability.NewManager(cfg.Observability, db, rdb)
 
 	// Setup middleware (CORS is handled by corsWrapper at fasthttp level)
-	g.Before(middleware.SecurityHeaders())
+	g.Before(middleware.SecurityHeaders(strings.EqualFold(strings.TrimSpace(cfg.App.Environment), "production")))
 	g.Before(middleware.RequestLogger(lo))
 	g.Before(middleware.Recovery(lo))
 	g.Before(func(r *fastglue.Request) *fastglue.Request {
