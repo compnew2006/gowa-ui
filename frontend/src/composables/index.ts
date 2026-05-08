@@ -16,3 +16,12 @@ export { useMediaGroups, readMediaGroupWindow, saveMediaGroupWindow, MEDIA_GROUP
 // Settings composables
 export { useChatBackground } from './useChatBackground'
 export { useUploadsCleanup } from './useUploadsCleanup'
+
+// Chat composables
+export { useTypingPresence } from './useTypingPresence'
+export { useChatMedia } from './useChatMedia'
+export { useBatchPrint } from './useBatchPrint'
+export { useChatSidebar } from './useChatSidebar'
+export { useChatActions } from './useChatActions'
+export { useMessageContent } from './useMessageContent'
+export { useChatMessaging } from './useChatMessaging'
