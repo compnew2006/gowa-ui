@@ -33,9 +33,7 @@ import { getTagColorClass } from "@/lib/constants";
 import { canUserAccessInstance } from "@/lib/instance-access";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { normalizeRenderableAvatarURL } from "@/components/ui/avatar/avatar-url";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -49,21 +47,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-// Lazy-load emoji picker to reduce initial bundle size
 const EmojiPicker = defineAsyncComponent(() => {
   return import("vue3-emoji-picker").then((module) => {
-    // Import CSS when component loads
     import("vue3-emoji-picker/css");
     return module.default;
   });
 });
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { toast } from "vue-sonner";
 import {
   Search,
@@ -72,7 +61,6 @@ import {
   FileText,
   Download,
   Printer,
-  Image as ImageIcon,
   Smile,
   Phone,
   Check,
@@ -81,7 +69,6 @@ import {
   AlertCircle,
   User,
   UserPlus,
-  UserMinus,
   UserX,
   Play,
   Reply,
@@ -119,6 +106,12 @@ import InstanceTag from "@/components/chat/InstanceTag.vue";
 import LinkifiedMessageText from "@/components/chat/LinkifiedMessageText.vue";
 import MediaGroupBar from "@/components/chat/MediaGroupBar.vue";
 import StatusStoriesBar from "@/components/chat/status/StatusStoriesBar.vue";
+import ChatEmptyState from "@/components/chat/ChatEmptyState.vue";
+import ChatAssignDialog from "@/components/chat/ChatAssignDialog.vue";
+import ChatMediaViewerDialog from "@/components/chat/ChatMediaViewerDialog.vue";
+import ChatMediaSendDialog from "@/components/chat/ChatMediaSendDialog.vue";
+import type { PendingMediaUpload } from "@/components/chat/ChatMediaSendDialog.vue";
+import ChatProfilePhotoDialog from "@/components/chat/ChatProfilePhotoDialog.vue";
 import { useInstancesStore } from "@/stores/instances";
 import { useNotesStore } from "@/stores/notes";
 import { CreateContactDialog } from "@/components/shared";
@@ -315,10 +308,6 @@ function resolveOutboundWhatsAppAccount(
 
 const isProfilePhotoDialogOpen = ref(false);
 const profilePhotoContact = ref<Contact | null>(null);
-const profilePhotoImageFailed = ref(false);
-const activeProfilePhotoURL = computed(() =>
-  normalizeRenderableAvatarURL(profilePhotoContact.value?.avatar_url),
-);
 
 const stickyDate = ref("");
 const showStickyDate = ref(false);
@@ -666,7 +655,6 @@ const {
   sendMediaMessage,
   setActiveMediaPreview,
   removeSelectedMediaUpload,
-  formatMediaUploadSize,
 } = chatMessaging;
 
 const canAssignContacts = computed(() => {
@@ -1544,7 +1532,6 @@ async function softDeleteSidebarEntry(entry: SidebarContactEntry) {
 function openProfilePhotoDialog(contact: Contact | null) {
   if (!contact) return;
   profilePhotoContact.value = contact;
-  profilePhotoImageFailed.value = false;
   isProfilePhotoDialogOpen.value = true;
 }
 
@@ -1552,12 +1539,7 @@ function handleProfilePhotoDialogOpenChange(open: boolean) {
   isProfilePhotoDialogOpen.value = open;
   if (!open) {
     profilePhotoContact.value = null;
-    profilePhotoImageFailed.value = false;
   }
-}
-
-function handleProfilePhotoImageError() {
-  profilePhotoImageFailed.value = true;
 }
 
 async function handleContactDeleted(contactId: string) {
@@ -2546,24 +2528,7 @@ function handleMediaError(event: Event, mediaType: string) {
     <!-- Chat Area -->
     <div class="flex min-w-0 flex-1 flex-col bg-background">
       <!-- No Contact Selected -->
-      <div
-        v-if="!contactsStore.currentContact"
-        class="flex flex-1 items-center justify-center text-muted-foreground"
-      >
-        <div class="text-center">
-          <div
-            class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/12 shadow-sm"
-          >
-            <Send class="h-8 w-8 text-primary" />
-          </div>
-          <h3 class="mb-1 text-lg font-medium text-foreground">
-            {{ $t("chat.selectConversation") }}
-          </h3>
-          <p class="text-sm text-muted-foreground">
-            {{ $t("chat.chooseContact") }}
-          </p>
-        </div>
-      </div>
+      <ChatEmptyState v-if="!contactsStore.currentContact" />
 
       <!-- Chat Interface -->
       <template v-else>
@@ -3921,364 +3886,50 @@ function handleMediaError(event: Event, mediaType: string) {
     />
 
     <!-- Assign Contact Dialog -->
-    <Dialog
-      v-model:open="isAssignDialogOpen"
-      @update:open="(open) => !open && (assignSearchQuery = '')"
-    >
-      <DialogContent class="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{{ $t("chat.assignContact") }}</DialogTitle>
-          <DialogDescription>
-            {{ $t("chat.assignContactDesc") }}
-          </DialogDescription>
-        </DialogHeader>
-        <div class="py-4 space-y-3">
-          <!-- Search input -->
-          <div class="relative">
-            <Search
-              class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"
-            />
-            <Input
-              v-model="assignSearchQuery"
-              :placeholder="$t('chat.searchUsers') + '...'"
-              class="pl-9 h-9"
-            />
-          </div>
-          <Button
-            v-if="contactsStore.currentContact?.assigned_user_id"
-            variant="outline"
-            class="w-full justify-start"
-            @click="
-              assignContactToUser(null);
-              isAssignDialogOpen = false;
-            "
-          >
-            <UserMinus class="mr-2 h-4 w-4" />
-            {{ $t("chat.unassignContact") }}
-          </Button>
-          <Separator />
-          <ScrollArea class="max-h-[280px]">
-            <div class="space-y-1">
-              <Button
-                v-for="user in filteredAssignableUsers"
-                :key="user.id"
-                :variant="
-                  contactsStore.currentContact?.assigned_user_id === user.id
-                    ? 'secondary'
-                    : 'ghost'
-                "
-                class="w-full justify-start"
-                @click="
-                  assignContactToUser(user.id);
-                  isAssignDialogOpen = false;
-                "
-              >
-                <User class="mr-2 h-4 w-4" />
-                <span>{{ user.full_name }}</span>
-                <Check
-                  v-if="
-                    contactsStore.currentContact?.assigned_user_id === user.id
-                  "
-                  class="ml-auto h-4 w-4 text-primary"
-                />
-                <Badge v-else variant="outline" class="ml-auto text-xs">
-                  {{ user.role?.name }}
-                </Badge>
-              </Button>
-              <p
-                v-if="filteredAssignableUsers.length === 0"
-                class="text-sm text-muted-foreground text-center py-4"
-              >
-                {{ $t("chat.noUsersFound") }}
-              </p>
-            </div>
-          </ScrollArea>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <ChatAssignDialog
+      :open="isAssignDialogOpen"
+      :assigned-user-id="contactsStore.currentContact?.assigned_user_id ?? null"
+      :users="filteredAssignableUsers"
+      @update:open="isAssignDialogOpen = $event"
+      @assign="(userId) => { assignContactToUser(userId); isAssignDialogOpen = false; }"
+    />
 
     <!-- Chat Media Viewer Dialog -->
-    <Dialog
-      v-model:open="isChatMediaViewerOpen"
-      @update:open="(open) => !open && closeChatMediaViewer()"
-    >
-      <DialogContent
-        class="max-w-4xl p-0 overflow-hidden border-white/10 light:border-gray-200"
-      >
-        <div
-          class="bg-black/95 light:bg-black/90 p-3 space-y-3"
-          data-testid="chat-media-viewer-dialog"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <DialogTitle class="text-sm font-medium text-white truncate">
-              {{ chatMediaViewerTitle || "Media Preview" }}
-            </DialogTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-7 w-7 text-white hover:text-white"
-              @click="closeChatMediaViewer"
-            >
-              <X class="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div
-            class="flex items-center justify-center min-h-[220px] max-h-[80vh]"
-          >
-            <img
-              v-if="chatMediaViewerType === 'image' && chatMediaViewerURL"
-              :src="chatMediaViewerURL"
-              alt="Media preview"
-              class="max-w-full max-h-[76vh] rounded-md object-contain"
-              data-testid="chat-media-viewer-image"
-            />
-            <video
-              v-else-if="chatMediaViewerType === 'video' && chatMediaViewerURL"
-              :src="chatMediaViewerURL"
-              controls
-              autoplay
-              class="max-w-full max-h-[76vh] rounded-md"
-              data-testid="chat-media-viewer-video"
-            />
-            <audio
-              v-else-if="chatMediaViewerType === 'audio' && chatMediaViewerURL"
-              :src="chatMediaViewerURL"
-              controls
-              class="w-full max-w-md"
-              data-testid="chat-media-viewer-audio"
-            />
-            <a
-              v-else-if="chatMediaViewerURL"
-              :href="chatMediaViewerURL"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-sm text-white underline underline-offset-4"
-            >
-              Open media in new tab
-            </a>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <ChatMediaViewerDialog
+      :open="isChatMediaViewerOpen"
+      :url="chatMediaViewerURL"
+      :type="chatMediaViewerType"
+      :title="chatMediaViewerTitle"
+      @update:open="(v) => !v && closeChatMediaViewer()"
+      @close="closeChatMediaViewer()"
+    />
 
     <!-- Media Preview Dialog -->
-    <Dialog
-      v-model:open="isMediaDialogOpen"
+    <ChatMediaSendDialog
+      :open="isMediaDialogOpen"
+      :active-media-upload="activeMediaUpload as PendingMediaUpload | null"
+      :selected-media-uploads="selectedMediaUploads as PendingMediaUpload[]"
+      :selected-media-count="selectedMediaCount"
+      :is-uploading-media="isUploadingMedia"
+      :media-caption="mediaCaption"
+      :can-apply-media-caption="canApplyMediaCaption"
+      :media-dialog-description="mediaDialogDescription"
+      :media-uploading-label="mediaUploadingLabel"
+      :media-send-button-label="mediaSendButtonLabel"
       @update:open="handleMediaDialogOpenChange"
-    >
-      <DialogContent class="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{{ $t("chat.sendMedia") }}</DialogTitle>
-          <DialogDescription>
-            {{ mediaDialogDescription }}
-          </DialogDescription>
-        </DialogHeader>
-        <div class="py-4 space-y-4">
-          <div
-            v-if="
-              activeMediaUpload?.category === 'image' &&
-              activeMediaUpload.previewUrl
-            "
-            class="flex justify-center"
-          >
-            <img
-              :src="activeMediaUpload.previewUrl"
-              :alt="activeMediaUpload.file.name"
-              class="max-w-full max-h-[300px] rounded-lg object-contain"
-            />
-          </div>
-          <div
-            v-else-if="
-              activeMediaUpload?.category === 'video' &&
-              activeMediaUpload.previewUrl
-            "
-            class="flex justify-center"
-          >
-            <video
-              :src="activeMediaUpload.previewUrl"
-              controls
-              class="max-w-full max-h-[300px] rounded-lg"
-            />
-          </div>
-          <div
-            v-else-if="activeMediaUpload?.category === 'audio'"
-            class="flex justify-center"
-          >
-            <div class="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
-              <div
-                class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"
-              >
-                <Paperclip class="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p class="font-medium text-sm">
-                  {{ activeMediaUpload.file.name }}
-                </p>
-                <p class="text-xs text-muted-foreground">
-                  {{ $t("chat.audioFile") }}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div v-else-if="activeMediaUpload" class="flex justify-center">
-            <div class="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
-              <div
-                class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"
-              >
-                <FileText class="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p class="font-medium text-sm truncate max-w-[200px]">
-                  {{ activeMediaUpload.file.name }}
-                </p>
-                <p class="text-xs text-muted-foreground">
-                  {{ formatMediaUploadSize(activeMediaUpload.file.size) }}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="selectedMediaCount > 1" class="space-y-2">
-            <ScrollArea class="max-h-[220px] pr-3">
-              <div class="space-y-2">
-                <div
-                  v-for="upload in selectedMediaUploads"
-                  :key="upload.id"
-                  class="flex items-center gap-2"
-                >
-                  <button
-                    type="button"
-                    class="flex flex-1 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors"
-                    :class="
-                      activeMediaUpload?.id === upload.id
-                        ? 'border-primary/45 bg-primary/10'
-                        : 'border-border bg-muted/30 hover:bg-muted/60'
-                    "
-                    :disabled="isUploadingMedia"
-                    @click="setActiveMediaPreview(upload.id)"
-                  >
-                    <div
-                      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10"
-                    >
-                      <ImageIcon
-                        v-if="upload.category === 'image'"
-                        class="h-5 w-5 text-primary"
-                      />
-                      <Play
-                        v-else-if="upload.category === 'video'"
-                        class="h-5 w-5 text-primary"
-                      />
-                      <Paperclip
-                        v-else-if="upload.category === 'audio'"
-                        class="h-5 w-5 text-primary"
-                      />
-                      <FileText v-else class="h-5 w-5 text-primary" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                      <p class="truncate text-sm font-medium">
-                        {{ upload.file.name }}
-                      </p>
-                      <p class="text-xs text-muted-foreground">
-                        {{ $t(`chat.${upload.category}`) }} ·
-                        {{ formatMediaUploadSize(upload.file.size) }}
-                      </p>
-                    </div>
-                  </button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    class="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                    :disabled="isUploadingMedia"
-                    :aria-label="`${$t('common.remove')} ${upload.file.name}`"
-                    @click="removeSelectedMediaUpload(upload.id)"
-                  >
-                    <X class="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </ScrollArea>
-            <p class="text-sm text-muted-foreground">
-              {{ $t("chat.mediaBatchCaptionHint") }}
-            </p>
-          </div>
-
-          <div v-else-if="canApplyMediaCaption">
-            <Textarea
-              v-model="mediaCaption"
-              :placeholder="$t('chat.mediaCaption') + '...'"
-              class="min-h-[60px] max-h-[100px] resize-none"
-              :rows="2"
-            />
-          </div>
-
-          <div class="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              @click="closeMediaDialog"
-              :disabled="isUploadingMedia"
-            >
-              {{ $t("common.cancel") }}
-            </Button>
-            <Button
-              type="button"
-              @click="sendMediaMessage"
-              :disabled="isUploadingMedia || selectedMediaCount === 0"
-            >
-              <Send v-if="!isUploadingMedia" class="mr-2 h-4 w-4" />
-              <span v-if="isUploadingMedia">{{ mediaUploadingLabel }}</span>
-              <span v-else>{{ mediaSendButtonLabel }}</span>
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+      @update:media-caption="mediaCaption = $event"
+      @set-active-preview="setActiveMediaPreview"
+      @remove-upload="removeSelectedMediaUpload"
+      @close="closeMediaDialog"
+      @send="sendMediaMessage"
+    />
 
     <!-- Contact Profile Photo Dialog -->
-    <Dialog
-      v-model:open="isProfilePhotoDialogOpen"
+    <ChatProfilePhotoDialog
+      :open="isProfilePhotoDialogOpen"
+      :contact="profilePhotoContact"
       @update:open="handleProfilePhotoDialogOpenChange"
-    >
-      <DialogContent class="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{{ $t("resources.ProfilePhoto") }}</DialogTitle>
-          <DialogDescription>
-            {{
-              profilePhotoContact?.name ||
-              profilePhotoContact?.phone_number ||
-              $t("chat.customer")
-            }}
-          </DialogDescription>
-        </DialogHeader>
-        <div class="flex items-center justify-center py-2">
-          <img
-            v-if="activeProfilePhotoURL !== '' && !profilePhotoImageFailed"
-            :src="activeProfilePhotoURL"
-            :alt="
-              profilePhotoContact?.name ||
-              profilePhotoContact?.phone_number ||
-              $t('resources.ProfilePhoto')
-            "
-            class="max-h-[70vh] max-w-full rounded-lg object-contain"
-            @error="handleProfilePhotoImageError"
-          />
-          <div
-            v-else
-            class="flex h-48 w-48 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-blue-600 text-4xl font-semibold text-white"
-          >
-            {{
-              getInitials(
-                profilePhotoContact?.name ||
-                  profilePhotoContact?.phone_number ||
-                  $t("chat.customer"),
-              )
-            }}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    />
 
     <!-- Add Contact Dialog -->
     <CreateContactDialog
