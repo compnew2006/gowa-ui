@@ -294,6 +294,144 @@ type contactConversationContext struct {
 	DisplayName    string
 }
 
+// batchResolveConversationContexts resolves conversation contexts for multiple contacts
+// in O(1) queries instead of O(N). Group/channel contacts use metadata; direct contacts
+// get their latest message via a single DISTINCT ON query.
+func (a *App) batchResolveConversationContexts(ctx context.Context, orgID uuid.UUID, contacts []models.Contact) []contactConversationContext {
+	result := make([]contactConversationContext, len(contacts))
+	directIndices := make([]int, 0, len(contacts))
+	directIDs := make([]uuid.UUID, 0, len(contacts))
+
+	for i, c := range contacts {
+		if isGroupContact(&c) {
+			conversationID := strings.TrimSpace(c.PhoneNumber)
+			if conversationID == "" {
+				conversationID = messageMetadataString(c.Metadata, "group_jid")
+			}
+			groupName := messageMetadataString(c.Metadata, "group_name")
+			if groupName == "" {
+				groupName = strings.TrimSpace(c.ProfileName)
+			}
+			result[i] = contactConversationContext{
+				ConversationID: conversationID,
+				IsGroupChat:    conversationID != "",
+				DisplayName:    groupName,
+			}
+			continue
+		}
+
+		if isChannelContact(&c) {
+			conversationID := messageMetadataString(c.Metadata, "channel_jid")
+			if conversationID == "" {
+				conversationID = strings.TrimSpace(c.PhoneNumber)
+			}
+			channelName := messageMetadataString(c.Metadata, "channel_name")
+			if channelName == "" {
+				channelName = strings.TrimSpace(c.ProfileName)
+			}
+			if (channelName == "" || channelName == strings.TrimSpace(c.PhoneNumber)) && conversationID != "" {
+				if resolvedName := a.resolveChannelNameFromWhatsmeow(c, conversationID); resolvedName != "" {
+					channelName = resolvedName
+				}
+			}
+			result[i] = contactConversationContext{
+				ConversationID: conversationID,
+				IsChannelChat:  conversationID != "" || channelName != "",
+				DisplayName:    channelName,
+			}
+			continue
+		}
+
+		directIndices = append(directIndices, i)
+		directIDs = append(directIDs, c.ID)
+	}
+
+	if len(directIDs) == 0 {
+		return result
+	}
+
+	type latestMessageRow struct {
+		ContactID      uuid.UUID    `gorm:"column:contact_id"`
+		ConversationID string       `gorm:"column:conversation_id"`
+		Metadata       models.JSONB `gorm:"column:metadata"`
+		Direction      string       `gorm:"column:direction"`
+	}
+	var rows []latestMessageRow
+	batchSQL := `SELECT DISTINCT ON (contact_id) contact_id, conversation_id, metadata, direction ` +
+		`FROM messages WHERE organization_id = ? AND contact_id IN ? ` +
+		`ORDER BY contact_id, created_at DESC`
+	if err := a.DB.WithContext(ctx).Raw(batchSQL, orgID, directIDs).Scan(&rows).Error; err != nil {
+		a.Log.Warn("Batch conversation context query failed, falling back to empty", "error", err)
+		return result
+	}
+
+	msgByContact := make(map[uuid.UUID]latestMessageRow, len(rows))
+	for _, row := range rows {
+		msgByContact[row.ContactID] = row
+	}
+
+	for _, idx := range directIndices {
+		c := contacts[idx]
+		msg, ok := msgByContact[c.ID]
+		if !ok {
+			result[idx] = contactConversationContext{}
+			continue
+		}
+
+		if isGroupMessage(models.Message{ConversationID: msg.ConversationID, Metadata: msg.Metadata}) {
+			conversationID := strings.TrimSpace(msg.ConversationID)
+			if conversationID == "" {
+				conversationID = messageMetadataString(msg.Metadata, "group_jid")
+			}
+			displayName := messageMetadataString(msg.Metadata, "group_name")
+			if displayName == "" {
+				displayName = strings.TrimSpace(c.ProfileName)
+			}
+			result[idx] = contactConversationContext{
+				ConversationID: conversationID,
+				IsGroupChat:    conversationID != "",
+				DisplayName:    displayName,
+			}
+			continue
+		}
+
+		if isChannelMessage(models.Message{ConversationID: msg.ConversationID, Metadata: msg.Metadata}) {
+			conversationID := strings.TrimSpace(msg.ConversationID)
+			if conversationID == "" {
+				conversationID = messageMetadataString(msg.Metadata, "channel_jid")
+			}
+			displayName := messageMetadataString(msg.Metadata, "channel_name")
+			if displayName == "" {
+				displayName = messageMetadataString(c.Metadata, "channel_name")
+			}
+			if displayName == "" {
+				displayName = strings.TrimSpace(c.ProfileName)
+			}
+			result[idx] = contactConversationContext{
+				ConversationID: conversationID,
+				IsChannelChat:  conversationID != "" || displayName != "",
+				DisplayName:    displayName,
+			}
+			continue
+		}
+
+		conversationID := strings.TrimSpace(msg.ConversationID)
+		displayName := ""
+		if msg.Direction == string(models.DirectionIncoming) {
+			displayName = messageMetadataString(msg.Metadata, "sender_push_name")
+			if displayName == "" {
+				displayName = messageMetadataString(msg.Metadata, "push_name")
+			}
+		}
+		result[idx] = contactConversationContext{
+			ConversationID: conversationID,
+			DisplayName:    displayName,
+		}
+	}
+
+	return result
+}
+
 func (a *App) resolveContactConversationContext(ctx context.Context, orgID uuid.UUID, contact models.Contact) contactConversationContext {
 	if isGroupContact(&contact) {
 		conversationID := strings.TrimSpace(contact.PhoneNumber)
@@ -676,14 +814,13 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	groupConversationIDSet := make(map[string]struct{}, len(contacts))
 	groupKeyByContactID := make(map[uuid.UUID]string, len(contacts))
 
+	conversationContexts = a.batchResolveConversationContexts(ctx, orgID, contacts)
 	for i, c := range contacts {
-		conversationContext := a.resolveContactConversationContext(ctx, orgID, c)
-		conversationContexts[i] = conversationContext
-		if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
-			groupKeyByContactID[c.ID] = conversationUnreadKey(conversationContext.ConversationID, c.InstanceID)
-			if _, ok := groupConversationIDSet[conversationContext.ConversationID]; !ok {
-				groupConversationIDSet[conversationContext.ConversationID] = struct{}{}
-				groupConversationIDs = append(groupConversationIDs, conversationContext.ConversationID)
+		if conversationContexts[i].IsGroupChat && conversationContexts[i].ConversationID != "" {
+			groupKeyByContactID[c.ID] = conversationUnreadKey(conversationContexts[i].ConversationID, c.InstanceID)
+			if _, ok := groupConversationIDSet[conversationContexts[i].ConversationID]; !ok {
+				groupConversationIDSet[conversationContexts[i].ConversationID] = struct{}{}
+				groupConversationIDs = append(groupConversationIDs, conversationContexts[i].ConversationID)
 			}
 		} else {
 			directContactIDs = append(directContactIDs, c.ID)
@@ -1040,9 +1177,10 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		a.Log.Error("Failed to resolve chat deletion timestamp", "error", deletionErr, "contact_id", contact.ID, "user_id", userID)
 	}
 
-	// Pagination parameters
+	// Cursor-based pagination parameters
 	limit, _ := strconv.Atoi(string(r.RequestCtx.QueryArgs().Peek("limit")))
 	beforeIDStr := string(r.RequestCtx.QueryArgs().Peek("before_id"))
+	afterIDStr := string(r.RequestCtx.QueryArgs().Peek("after_id"))
 
 	if limit < 1 || limit > 100 {
 		limit = 50
@@ -1068,72 +1206,73 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		settings, err := a.getChatbotSettingsCached(orgID, "")
 		if err == nil {
 			if settings.AgentAssignment.CurrentConversationOnly {
-				// Find the most recent session for this contact
 				var session models.ChatbotSession
 				if err := requestDB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
 					Order("started_at DESC").First(&session).Error; err == nil {
-					// Filter messages to only those from this session onwards
 					msgQuery = msgQuery.Where("created_at >= ?", session.StartedAt)
 				}
 			}
 		}
 	}
 
-	// Count total messages (with session filter if applied)
-	var total int64
-	msgQuery.Model(&models.Message{}).Count(&total)
+	var messages []models.Message
 
-	// Cursor-based pagination: load messages before a specific ID
-	if beforeIDStr != "" {
+	switch {
+	// before_id: load messages older than cursor (scroll up / load older)
+	case beforeIDStr != "":
 		beforeID, err := uuid.Parse(beforeIDStr)
 		if err == nil {
-			// Get the created_at of the before_id message
 			var beforeMsg models.Message
 			if err := requestDB.Where("id = ?", beforeID).First(&beforeMsg).Error; err == nil {
-				msgQuery = msgQuery.Where("created_at < ?", beforeMsg.CreatedAt)
+				msgQuery = msgQuery.Where(
+					"(created_at < ?) OR (created_at = ? AND id < ?)",
+					beforeMsg.CreatedAt, beforeMsg.CreatedAt, beforeID,
+				)
 			}
 		}
-		// For loading older messages, order DESC and limit, then reverse
-		var messages []models.Message
-		if err := msgQuery.Preload("ReplyToMessage").Order("created_at DESC").Limit(limit).Find(&messages).Error; err != nil {
+		if err := msgQuery.Preload("ReplyToMessage").
+			Order("created_at DESC, id DESC").
+			Limit(limit).
+			Find(&messages).Error; err != nil {
 			a.Log.Error("Failed to list messages", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list messages", nil, "")
 		}
-		// Reverse to get chronological order
 		for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
 			messages[i], messages[j] = messages[j], messages[i]
 		}
 
-		response := a.buildMessagesResponse(messages, shouldMaskPhoneNumbers)
-		return r.SendEnvelope(map[string]any{
-			"messages": response,
-			"total":    total,
-			"has_more": len(messages) == limit,
-		})
-	}
+	// after_id: load messages newer than cursor (initial load from newest / refresh)
+	case afterIDStr != "":
+		afterID, err := uuid.Parse(afterIDStr)
+		if err == nil {
+			var afterMsg models.Message
+			if err := requestDB.Where("id = ?", afterID).First(&afterMsg).Error; err == nil {
+				msgQuery = msgQuery.Where(
+					"(created_at > ?) OR (created_at = ? AND id > ?)",
+					afterMsg.CreatedAt, afterMsg.CreatedAt, afterID,
+				)
+			}
+		}
+		if err := msgQuery.Preload("ReplyToMessage").
+			Order("created_at ASC, id ASC").
+			Limit(limit).
+			Find(&messages).Error; err != nil {
+			a.Log.Error("Failed to list messages", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list messages", nil, "")
+		}
 
-	// Default: load most recent messages (page 1)
-	page, _ := strconv.Atoi(string(r.RequestCtx.QueryArgs().Peek("page")))
-	if page < 1 {
-		page = 1
-	}
-
-	// For chat, we want the most recent messages
-	// Calculate offset from the end for pagination
-	// Preserve the original limit for the response; adjust a query-specific limit
-	// when the remaining messages are fewer than the requested page size.
-	responseLimit := limit
-	queryLimit := limit
-	offset := int(total) - (page * limit)
-	if offset < 0 {
-		queryLimit = limit + offset // Adjust limit if we're on the last page
-		offset = 0
-	}
-
-	var messages []models.Message
-	if err := msgQuery.Preload("ReplyToMessage").Order("created_at ASC").Offset(offset).Limit(queryLimit).Find(&messages).Error; err != nil {
-		a.Log.Error("Failed to list messages", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list messages", nil, "")
+	// No cursor: load the most recent N messages (default initial view)
+	default:
+		if err := msgQuery.Preload("ReplyToMessage").
+			Order("created_at DESC, id DESC").
+			Limit(limit).
+			Find(&messages).Error; err != nil {
+			a.Log.Error("Failed to list messages", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list messages", nil, "")
+		}
+		for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+			messages[i], messages[j] = messages[j], messages[i]
+		}
 	}
 
 	// Mark messages as read
@@ -1144,13 +1283,20 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	}
 
 	response := a.buildMessagesResponse(messages, shouldMaskPhoneNumbers)
-	return r.SendEnvelope(map[string]any{
+
+	resp := map[string]any{
 		"messages": response,
-		"total":    total,
-		"page":     page,
-		"limit":    responseLimit,
-		"has_more": offset > 0,
-	})
+		"has_more": len(messages) == limit,
+		"limit":    limit,
+		"total":    len(messages),
+	}
+
+	if len(messages) > 0 {
+		resp["next_cursor"] = messages[len(messages)-1].ID.String()
+		resp["prev_cursor"] = messages[0].ID.String()
+	}
+
+	return r.SendEnvelope(resp)
 }
 
 // SearchMessages searches messages within a contact's conversation by text content.

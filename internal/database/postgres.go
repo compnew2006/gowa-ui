@@ -531,6 +531,10 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_org_closed ON chat_closure_ratings(organization_id, closed_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_contact_state ON chat_closure_ratings(contact_id, state, closed_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_agent_rated ON chat_closure_ratings(agent_user_id, rated_at DESC) WHERE state = 'rated'`,
+		// Composite indexes for hottest query paths (ARCH-07)
+		`CREATE INDEX IF NOT EXISTS idx_contacts_org_status_lastmsg ON contacts(organization_id, status, last_message_at DESC NULLS LAST)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_org_contact_created ON messages(organization_id, contact_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_contacts_org_assigned ON contacts(organization_id, assigned_user_id) WHERE assigned_user_id IS NOT NULL`,
 	}
 }
 
