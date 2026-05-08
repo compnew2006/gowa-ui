@@ -1,276 +1,238 @@
-# Whatomate Security Audit Report
+# Whatomate Security and Code Health Audit
 
-**Date**: 2026-05-08  
-**Scope**: Full codebase — Go backend, Vue 3 frontend, configuration, dependencies  
-**Pre-publication audit** — ranked by threat level (CRITICAL > HIGH > MEDIUM > LOW > INFO)
+Date: 2026-05-08
+Branch: agent/security-audit-dead-code-scan
+Scope: report-only security and dead-code audit of the current workspace. No source-code fixes were applied in this pass.
 
----
+## Method
 
-## CRITICAL (Severity 9-10)
+- Used Serena MCP for project file/code reads, symbol lookup, reference tracing, pattern search, and writing this report.
+- Used codebase-memory-mcp graph search/snippets for function discovery, caller/callee evidence, and dead-code candidates.
+- Applied the security-reviewer and desloppify review lenses. The project-local `.agents/skills-guide.md` was missing and `.agents/skills/*` is ignored by Serena, so the skill bodies could not be loaded from the project. I used the installed skill inventory plus the relevant review workflow instead.
+- `ruflo` was requested, but no callable ruflo namespace/tool was exposed by tool discovery. The review used Serena, codebase-memory-mcp, and the available semantic/code graph tooling.
+- Serena `initial_instructions`, `project_overview`, `style_and_conventions`, `suggested_commands`, `restart_language_server`, and `done_checklist` are visible in config only as available-but-inactive, so they could not be called directly.
+- Assumption: because no answer was received to the clarification question, this pass is an audit report only, not a patch pass.
 
-### C1. Path Traversal in `fileSystemObjectStorage.PutObject/GetObject/DeleteObject`
-**File**: `internal/storage/object_storage.go:67-108`  
-**Threat**: An attacker who controls the `key` parameter can traverse directories outside the storage root using `../` sequences. Unlike `serveLocalMediaFile` in `media.go` which validates prefix containment, the `ObjectStorage` interface methods blindly join the key with the root path and operate on the resulting path.  
-**Impact**: Arbitrary file read/write/delete on the server filesystem.  
-**Status**: `PutObject` and `GetObject` in `fileSystemObjectStorage` perform zero path sanitization or boundary checks.  
-**Fix**: Add `filepath.Clean`, `filepath.EvalSymlinks`, and prefix containment checks matching the pattern in `media.go:280-300`.
+## Threat Ranking
 
-### C2. Path Traversal in `fileSystemObjectStorage.PutObject` — Directory Creation
-**File**: `internal/storage/object_storage.go:68`  
-**Threat**: `os.MkdirAll(filepath.Dir(path), 0755)` creates arbitrary directories on the filesystem when a malicious key like `../../../tmp/evil` is provided.  
-**Impact**: Arbitrary directory creation outside storage root.  
-**Fix**: Validate key against root before any filesystem operations.
+### CRITICAL
 
-### C3. Open Redirect in SSO Error Redirect
-**File**: `internal/handlers/sso_handlers.go:169-170`  
-**Threat**: `a.redirectWithError(r, "SSO failed: "+errorDesc)` — the `errorDesc` value comes directly from the OAuth provider's `error_description` query parameter (`r.RequestCtx.QueryArgs().Peek("error_description")`). If `redirectWithError` reflects this into a URL or HTML response, it enables reflected XSS or open redirect.  
-**Impact**: Potential XSS or open redirect via crafted OAuth error callback.  
-**Fix**: Sanitize or HTML-escape `errorDesc` before reflecting it in any response. Never include raw provider error strings in redirects.
+No confirmed critical unauthenticated remote exploit was found in this pass. There are, however, multiple HIGH issues that should block publication until fixed and reverified.
 
----
+### HIGH
 
-## HIGH (Severity 7-8)
+1. Plaintext password persistence in browser localStorage
 
-### H1. Insecure Default Configuration Values
-**File**: `config.example.toml`, `internal/config/config.go`  
-**Threat**: Default values for production-sensitive fields are dangerous:
-- `database.user = "change-me"` / `database.password = "change-me"`
-- `jwt.secret = ""` (empty — must be explicitly set)
-- `encryption_key = ""` (empty — must be explicitly set)
-- `whatsapp.webhook_verify_token = "change-me"`
-- `database.ssl_mode = "disable"`
-- `cookie.secure = false`
-- `observability.enable_pprof = false` (good, but can be enabled without auth)
-- `license.allow_unsafe_public_key_override = true`
+Evidence:
+- `frontend/src/views/auth/LoginView.vue:31` defines `auth:remembered_login_credentials`.
+- `frontend/src/views/auth/LoginView.vue:33-36` includes `password` in the remembered credential shape.
+- `frontend/src/views/auth/LoginView.vue:68-84` loads the password from `localStorage` into the login form.
+- `frontend/src/views/auth/LoginView.vue:109-120` writes the raw password to `localStorage` after login.
 
-**Impact**: Operators who deploy without changing defaults run with no JWT signing, no encryption, weak database credentials, and no TLS cookies.  
-**Mitigation**: The `security_validation.go`, `jwt_validation.go`, and `encryption_validation.go` files validate these in production — **but only if the startup code actually calls these validators**. Verify all validators are invoked at boot.  
-**Fix**: Add a startup gate that refuses to start in production unless all validators pass.
+Impact: any XSS, malicious browser extension, shared workstation user, browser sync leak, or local malware gets the user's real account password, not just an app-scoped session token. This is worse than token theft because the password may be reused and can outlive the app session.
 
-### H2. Timing-Safe Comparison Missing on CSRF Token
-**File**: `internal/middleware/csrf.go:43`  
-**Threat**: `csrfCookie != csrfHeader` uses Go's standard string comparison, which is vulnerable to timing side-channel attacks.  
-**Impact**: An attacker could theoretically infer the CSRF token byte-by-byte via timing measurements.  
-**Fix**: Use `crypto/subtle.ConstantTimeCompare` for the CSRF token comparison.
+Recommendation: remove password persistence entirely. If needed, remember only the email address and rely on browser password managers/WebAuthn/passkeys for password fill.
 
-### H3. WebSocket Token Returned in API Response Body
-**File**: `internal/handlers/auth_handlers.go` (GetWSToken)  
-**Threat**: The WebSocket token is returned as JSON in the response body: `r.SendEnvelope(map[string]string{"token": signed})`. If the frontend stores this token where JavaScript can access it (e.g., in memory or localStorage), any XSS on the page can steal it.  
-**Impact**: Stolen WS token grants real-time chat access.  
-**Fix**: Consider returning the WS token in an HttpOnly cookie instead of the response body, similar to access/refresh tokens.
+2. Production config validators exist but are not called on normal server/worker startup
 
-### H4. CSP `style-src 'unsafe-inline'` Weakens XSS Protection
-**File**: `internal/middleware/middleware.go:28`  
-**Threat**: The Content Security Policy includes `style-src 'self' 'unsafe-inline'`, which allows inline styles everywhere. An attacker who can inject HTML can use inline styles to exfiltrate data via CSS injection (e.g., attribute selectors + background-image exfil).  
-**Impact**: CSS-based data exfiltration if HTML injection exists elsewhere.  
-**Fix**: Use nonce-based or hash-based style-src. Migrate inline styles to CSS classes.
+Evidence:
+- `cmd/whatomate/main.go:129-147` calls `ValidateJWTSecret`, `ValidateEncryptionKey`, `ValidateDefaultAdmin`, and `ValidateLicenseConfig` only.
+- `internal/config/security_validation.go:44-62` implements `ValidateDatabaseCredentials` for insecure production DB users/passwords.
+- `internal/config/security_validation.go:65-84` implements `ValidateWebhookVerifyToken` for empty/placeholder production webhook tokens.
+- `config.example.toml` still documents `database.user = "change-me"`, `database.password = "change-me"`, and `whatsapp.webhook_verify_token = "change-me"`.
 
-### H5. Login Endpoint Missing Constant-Time Password Comparison
-**File**: `internal/handlers/auth_handlers.go:43`  
-**Threat**: `bcrypt.CompareHashAndPassword` is used (which is timing-safe), but the dummy comparison on line 43 (`bcrypt.CompareHashAndPassword([]byte("$2a$10$xxxx..."), []byte(req.Password))`) leaks timing information because the dummy hash is a different length than real hashes.  
-**Impact**: Minor timing leak that could theoretically aid username enumeration.  
-**Fix**: Use a proper constant-time dummy comparison with a real bcrypt hash.
+Impact: a production deployment can start with placeholder database credentials or webhook verify token even though validators exist. For a publish/release gate, this is a hard blocker.
 
-### H6. CSP Skipped on Root Path `/` and All Non-Extension Paths
-**File**: `internal/middleware/middleware.go:34-45`  
-**Threat**: `shouldSkipCSP` returns `true` for the root path `/` and any path without a file extension (e.g., `/dashboard`, `/settings`). This means the CSP header is not set for the majority of the SPA routes.  
-**Impact**: No CSP protection on most application routes, making XSS exploitation easier.  
-**Fix**: Apply CSP to all responses except static asset file extensions (`.js`, `.css`, `.png`, etc.), not based on URL path.
+Recommendation: call both validators from `loadAndValidateConfig`, add tests that production startup fails on placeholders, and fix `config.example.toml` to make insecure examples impossible to copy accidentally.
 
-### H7. `style-src 'unsafe-inline'` + Missing CSP on SPA Routes = XSS Amplification
-**Combined**: H4 + H6 together mean that the CSP is essentially non-functional for the entire Vue SPA. Any XSS vulnerability in the frontend code or dependencies is fully exploitable.
+3. Custom webhook actions validate the stored URL, but not the final substituted URL
 
----
+Evidence:
+- `internal/handlers/custom_actions.go:640-671` validates `config.url` on create/update.
+- `internal/handlers/custom_actions.go:385-460` runs `replaceVariables(config.URL, ctxData)` and passes the result directly to `http.NewRequest`.
+- `internal/handlers/custom_actions.go:463-504` shows URL actions do the safer thing: they validate `finalURL` after variable replacement.
+- `internal/handlers/webhooks.go:21-52` contains the SSRF URL validator that is skipped at webhook execution time.
 
-## MEDIUM (Severity 5-6)
+Impact: an allowed custom-action template can become a different URL at execution after contact/user/org variable substitution. Runtime `SSRFSafeDialer` helps with private IPs, but it does not replace policy validation of the final URL string and hostname suffix. It also still permits exfiltration to attacker-controlled public URLs.
 
-### M1. ObjectStorage Interface Lacks Path Validation (Design Gap)
-**File**: `internal/storage/object_storage.go`  
-**Threat**: The `ObjectStorage` interface itself has no contract for path safety. Any caller that passes unsanitized keys can trigger C1/C2.  
-**Impact**: Systemic risk — any code path that accepts user input and passes it to `PutObject`/`GetObject`/`DeleteObject` is exploitable.  
-**Fix**: Add path validation in the interface implementation and document the contract.
+Recommendation: call `validateWebhookURL(url)` immediately after variable replacement in `executeWebhookAction`, before `http.NewRequest`. Consider restricting which variables may appear in host/scheme portions.
 
-### M2. `Allow-Origin` Headers Leaked on Non-CORS Requests
-**File**: `internal/middleware/middleware.go:173-178`  
-**Threat**: `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, and `Access-Control-Max-Age` headers are set on ALL responses, even when the origin is not allowed. This reveals the API's capabilities to any caller.  
-**Impact**: Information disclosure of allowed methods and headers.  
-**Fix**: Only set these headers on OPTIONS preflight requests, and only when the origin is allowed.
+4. Server-side JavaScript custom actions can return arbitrary redirect URLs directly to the frontend
 
-### M3. Pprof Endpoints Without Strong Authentication Guard
-**File**: `config.example.toml` (observability section)  
-**Threat**: When `observability.enable_pprof = true` and `access_token` is empty, pprof endpoints are restricted to loopback only. However, if `TrustProxy = true` is configured, an attacker behind a trusted proxy can reach pprof via `X-Forwarded-For`.  
-**Impact**: Memory/CPU profiling data exposure reveals runtime internals.  
-**Fix**: Always require the access_token for pprof, regardless of client IP.
+Evidence:
+- `internal/handlers/custom_actions.go:508-578` extracts `jsResult["url"]` and assigns it directly to `result.RedirectURL`.
+- `frontend/src/views/chat/ChatView.vue:1371-1384` opens any resulting http/https URL with `window.open`.
+- Normal URL actions use a one-time redirect token and final URL validation in `internal/handlers/custom_actions.go:463-504`; JavaScript actions bypass that path.
+- `internal/handlers/custom_actions.go:285-364` allows custom action execution for users with either `custom_actions:write` or `chat:write`.
 
-### M4. `style-src 'unsafe-inline'` in CSP
-**File**: `internal/middleware/middleware.go:28`  
-**(Covered by H4/H7 — listed separately for tracking)**
+Impact: a configured JavaScript action can turn the app into a trusted launcher for arbitrary external URLs. Depending on who can configure or trigger these actions, this can be used for phishing or policy bypass.
 
-### M5. Custom Action JavaScript Execution (goja)
-**File**: `internal/handlers/custom_action_runtime.go`  
-**Threat**: Custom actions execute user-defined JavaScript using the goja runtime with a 2-10 second timeout. While the VM is sandboxed from the OS, JavaScript execution within the application context could access any data passed to it.  
-**Impact**: If custom action scripts have access to sensitive request data, a compromised script could exfiltrate it.  
-**Mitigation**: Timeout is enforced; VM has no filesystem/network access by default.  
-**Fix**: Document the security boundary clearly. Consider running JS in a separate process with resource limits.
+Recommendation: route JavaScript-returned URLs through the same `validateWebhookURL` plus one-time redirect-token flow as URL actions, or require returned URLs to be relative app paths.
 
-### M6. License Public Key Override Enabled by Default
-**File**: `config.example.toml` — `license.allow_unsafe_public_key_override = true`  
-**Threat**: Allows operators to substitute the license verification public key, effectively disabling license enforcement.  
-**Impact**: License bypass — the entire licensing system can be defeated.  
-**Fix**: Default to `false` and require explicit opt-in.
+5. WebSocket token is short-lived but exposed to JavaScript and sent in the WebSocket subprotocol
 
-### M7. SuperAdmin Can Access Any Organization via X-Organization-ID
-**File**: `internal/handlers/app.go:70-73`, `internal/tenant/scope.go:100+`  
-**Threat**: The `getOrgID` function allows super admins to override the organization context via the `X-Organization-ID` header. While this is by design, there's no audit logging of cross-organization access.  
-**Impact**: Super admin can silently access any tenant's data without trace.  
-**Fix**: Add audit logging for super admin cross-org access.
+Evidence:
+- `internal/handlers/auth_handlers.go:495-526` returns a 30-second JWT in a JSON response with `Cache-Control: no-store`.
+- `frontend/src/services/websocket.ts:312-316` sends the token as `auth.<token>` in `Sec-WebSocket-Protocol` and again in the auth message payload.
 
-### M8. API Key Lookup Not Scoped to Organization
-**File**: `internal/middleware/middleware.go:220-225`  
-**Threat**: `validateAPIKey` queries API keys globally (`db.Preload("User").Where("(key_prefix = ? OR key_prefix = ?) AND is_active = ?", ...)`), not scoped to the request's organization. An API key created in org A can authenticate requests intended for org B if the API key's user also has access to org B.  
-**Impact**: Cross-tenant authentication if API keys aren't org-scoped.  
-**Fix**: Add `AND organization_id = ?` to the API key query and validate it matches the request context.
+Impact: the current design is much improved by short TTL and no-store, but the token is still visible to XSS and may be logged by reverse proxies or WebSocket infrastructure that records subprotocol headers.
 
----
+Recommendation: make the token one-time-use server-side, avoid logging `Sec-WebSocket-Protocol`, consider binding it to the authenticated cookie/session, and prefer a handshake that does not place bearer material in commonly logged headers.
 
-## LOW (Severity 3-4)
+6. Uploaded/chat media filenames can be replayed into Content-Disposition without header-safe encoding
 
-### L1. `X-XSS-Protection: 0` Header
-**File**: `internal/middleware/middleware.go:251`  
-**Note**: This is actually correct per OWASP recommendation (use CSP instead of buggy XSS filter). Listed for awareness.
+Evidence:
+- `internal/handlers/contacts_messaging.go:510-512` stores `fileHeader.Filename` as `MediaFilename` for outgoing media.
+- `internal/handlers/media.go:239-240` and `internal/handlers/media.go:268-269` interpolate `message.MediaFilename` into `Content-Disposition` as `inline; filename="%s"`.
 
-### L2. No `Strict-Transport-Security` (HSTS) Header
-**File**: `internal/middleware/middleware.go:240-252`  
-**Threat**: HSTS header is not set. Without it, browsers may fall back to HTTP on the first connection.  
-**Impact**: Protocol downgrade attacks possible.  
-**Fix**: Add `Strict-Transport-Security: max-age=31536000; includeSubDomains` in `SecurityHeaders()` when running in production.
+Impact: path storage is safe because media files are saved with UUID names, but response headers still use the original filename. Quotes, control characters, or unusual bytes can produce broken headers or browser-specific behavior. fasthttp may mitigate CRLF injection, but the code should not rely on that.
 
-### L3. No `Cache-Control` on Sensitive API Responses
-**Threat**: API responses containing user data, settings, or tokens may be cached by intermediary proxies or browsers.  
-**Impact**: Sensitive data in cache.  
-**Fix**: Add `Cache-Control: no-store` to all `/api/auth/*` responses.
+Recommendation: reuse `sanitizeFilename` or encode with a proper `filename*=` strategy before writing `Content-Disposition`.
 
-### L4. Webhook Verify Token Compared with `==` (Not Constant-Time)
-**File**: `internal/handlers/webhook.go:33`  
-**Threat**: `token == a.Config.WhatsApp.WebhookVerifyToken` uses standard comparison.  
-**Impact**: Minimal — the verify token is sent in a URL query parameter, making timing attacks impractical.  
-**Fix**: Use `subtle.ConstantTimeCompare` for defense-in-depth.
+### MEDIUM
 
-### L5. Refresh Token Rotation Does Not Check IP Binding
-**File**: `internal/handlers/auth_handlers.go:139-165`  
-**Threat**: Refresh tokens are not bound to the client IP or user-agent. If a refresh token is stolen, it can be used from any IP.  
-**Impact**: Token theft enables persistent access.  
-**Fix**: Consider binding refresh tokens to client fingerprint (IP + User-Agent hash) and invalidating on change.
+1. CSP still allows inline styles
 
-### L6. Default Admin Bootstrap Without Password Complexity
-**File**: `internal/config/default_admin_validation.go`  
-**Threat**: While there's validation for minimum 12 chars in production, the default admin seeding doesn't enforce the same password policy (`validatePasswordStrength`) that registration uses.  
-**Impact**: Weak bootstrap admin password possible.  
-**Fix**: Apply `validatePasswordStrength` to the default admin password.
+Evidence:
+- `internal/middleware/middleware.go:33` sets `style-src 'self' 'unsafe-inline'`.
+- `internal/middleware/middleware.go:254` applies that policy to non-skipped routes.
 
-### L7. `Database.SSLMode` Defaults to `disable`
-**File**: `internal/config/config.go:149`  
-**Threat**: Database connections default to unencrypted.  
-**Impact**: Database credentials and data can be intercepted on the network.  
-**Fix**: Default to `require` in production or warn loudly.
+Impact: this does not create XSS by itself, but it weakens browser containment once any HTML/style injection exists.
 
----
+Recommendation: remove inline style dependence, use nonces/hashes where needed, and keep CSP route coverage.
 
-## INFO (Severity 1-2)
+2. API key lookup remains global before optional organization match
 
-### I1. Password Policy Does Not Require Special Characters
-**File**: `internal/handlers/password_policy.go`  
-**Note**: Policy requires upper + lower + digit + 12 chars minimum but no special characters. This is a design choice, not a vulnerability.
+Evidence:
+- `internal/middleware/middleware.go:376-424` looks up active keys by prefix globally, then checks `X-Organization-ID` only if that header is present.
 
-### I2. JWT Uses HS256 (Symmetric)
-**Note**: HMAC-SHA256 is secure when the secret is sufficiently long (32+ chars enforced). RS256 would provide better key rotation but adds complexity. Acceptable for this application.
+Impact: header mismatch is correctly rejected and absent org header sets the request org from the key, so I did not confirm direct tenant escape. The lookup is still less strict than a tenant-scoped design and depends on prefix filtering plus bcrypt verification across candidate keys.
 
-### I3. Rate Limiter Fails Closed (Correct Behavior)
-**File**: `internal/middleware/ratelimit.go:82-87`  
-**Note**: Rate limiter denies requests when Redis is unavailable. This is the correct security posture.
+Recommendation: require `X-Organization-ID` for API-key auth or add an explicit tenant-scoped lookup path when the caller supplies an org. Keep the constant-time comparison.
 
-### I4. Good: SSRF Protection
-**Files**: `internal/handlers/webhooks.go:56-80`, `internal/handlers/sso_security.go:109`  
-**Note**: SSRFSafeDialer correctly blocks connections to private/loopback IPs after DNS resolution. SSO custom endpoint validation blocks private hosts in production. Webhook URL validation blocks internal hostnames.
+3. Observability can be tokenless on loopback
 
-### I5. Good: JWT Algorithm Confusion Prevention
-**File**: `internal/middleware/middleware.go:192-197`  
-**Note**: JWT parsing enforces `jwt.SigningMethodHS256` and rejects non-HMAC methods, preventing algorithm confusion attacks.
+Evidence:
+- `internal/observability/observability.go:137-169` allows `/metrics` and `/debug/pprof/*` with no token when `ctx.RemoteIP()` is loopback.
+- `config.example.toml` has observability disabled by default, which is good.
 
-### I6. Good: CSRF Double-Submit Pattern
-**File**: `internal/middleware/csrf.go`  
-**Note**: CSRF protection correctly skips header-based auth and validates double-submit cookie pattern. Timing-safe comparison should be added (H2).
+Impact: if a reverse proxy, sidecar, tunnel, or local process exposes these endpoints, pprof and metrics can leak sensitive runtime data.
 
-### I7. Good: SSO Security
-**Note**: SSO implements PKCE, state nonce with Redis, browser-bound cookie, state deletion after use, and email domain validation. Custom provider URLs are validated for SSRF.
+Recommendation: require `observability.access_token` whenever metrics or pprof are enabled in production.
 
-### I8. Good: Media File Serving Has Path Traversal Protection
-**File**: `internal/handlers/media.go:280-300`  
-**Note**: `serveLocalMediaFile` properly validates path containment with symlink rejection. The vulnerability is in the `ObjectStorage` abstraction layer (C1/C2).
+4. Generated secret-scan reports preserve raw match/secret fields
 
-### I9. Good: Encryption at Rest
-**File**: `internal/crypto/crypto.go`  
-**Note**: Uses AES-256-GCM with Argon2id key derivation (enc3). Legacy formats (enc/enc2) supported with opt-in. Production validation blocks weak keys.
+Evidence:
+- `security_reports/gitleaks_latest.json`, `security_reports/gitleaks_worktree_latest.json`, `security_reports/gitleaks_worktree_fresh_2026-03-04.json`, and `security_reports/gitleaks.json` contain many `Secret`/`Match` fields.
+- `semgrep_summary.json`, `semgrep_results.json`, `semgrep_latest.json`, and `semgrep_secrets.json` are present in the project root.
 
-### I10. Good: Security Headers Present
-**File**: `internal/middleware/middleware.go:240-252`  
-**Note**: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy are all set. Missing HSTS (L2).
+Impact: even if many entries are examples or false positives, publishing raw scanner JSON can leak actual secrets and creates recurring scanner noise.
 
----
+Recommendation: do not publish raw secret-scan reports. Redact `Secret`/`Match`, store reports outside the repo, or keep only summarized sanitized findings.
 
-## Summary Table
+5. CSV formula injection protection is intentionally incomplete
 
-| ID | Severity | Category | Title | Status |
-|---|---|---|---|---|
-| C1 | CRITICAL | Path Traversal | `ObjectStorage` lacks path validation | **FIXED** |
-| C2 | CRITICAL | Path Traversal | `PutObject` creates arbitrary directories | **FIXED** |
-| C3 | CRITICAL | XSS/Open Redirect | SSO error reflects unsanitized provider string | **FIXED** |
-| H1 | HIGH | Configuration | Insecure defaults for production deployment | Partially mitigated |
-| H2 | HIGH | CSRF | Non-constant-time CSRF comparison | **FIXED** |
-| H3 | HIGH | Token Exposure | WS token in response body, stealable via XSS | Open |
-| H4 | HIGH | CSP | `style-src 'unsafe-inline'` weakens XSS protection | Open |
-| H5 | HIGH | Timing | Login dummy hash comparison leaks timing | **FIXED** |
-| H6 | HIGH | CSP | CSP skipped on all SPA routes | **FIXED** |
-| H7 | HIGH | CSP | Combined: no effective CSP on any SPA route | **FIXED** |
-| M1 | MEDIUM | Design | ObjectStorage interface lacks safety contract | **FIXED** (via C1/C2) |
-| M2 | MEDIUM | Info Leak | CORS headers leaked on non-allowed origins | **FIXED** |
-| M3 | MEDIUM | Auth | Pprof accessible without strong auth when TrustProxy=true | Open |
-| M4 | MEDIUM | CSP | `style-src 'unsafe-inline'` (duplicate of H4) | Open |
-| M5 | MEDIUM | Sandboxing | Custom action JS execution boundaries unclear | Open |
-| M6 | MEDIUM | License | Public key override enabled by default | Open |
-| M7 | MEDIUM | Audit | No audit logging for super admin cross-org access | Open |
-| M8 | MEDIUM | Tenant | API key lookup not org-scoped | **FIXED** |
-| L1 | LOW | Headers | `X-XSS-Protection: 0` (correct per OWASP) | Info |
-| L2 | LOW | Headers | Missing HSTS header | **FIXED** |
-| L3 | LOW | Caching | No `Cache-Control: no-store` on auth endpoints | **FIXED** |
-| L4 | LOW | Timing | Webhook verify token non-constant-time compare | **FIXED** |
-| L5 | LOW | Auth | Refresh tokens not bound to client fingerprint | Open |
-| L6 | LOW | Auth | Default admin password policy gap | **FIXED** |
-| L7 | LOW | Transport | DB SSL mode defaults to disabled | Open |
+Evidence:
+- `internal/handlers/import_export.go:323-331` escapes only leading `=` and `@`.
+- The comment explicitly skips `+` and `-` because they can be legitimate phone numbers or negative values.
 
----
+Impact: spreadsheet software can treat leading `+`, `-`, tab, or carriage return as formula triggers. A malicious exported field may execute as a formula when opened by staff in Excel/LibreOffice/Sheets.
 
-## Priority Remediation Order
+Recommendation: escape all known formula prefixes globally, or special-case phone number columns with safer display formatting while still escaping other columns.
 
-1. **Immediate (before launch)**: C1, C2, C3 — path traversal in ObjectStorage and SSO reflection
-2. **Before launch**: H1 — verify all config validators are called at startup; H2, H6, H7 — fix CSP and CSRF
-3. **Before launch**: M8 — scope API key lookup to organization
-4. **Post-launch**: H3, H5, M2, M3, L2, L3 — defense-in-depth improvements
-5. **Ongoing**: M5, M6, M7, L5, L6, L7 — hardening and monitoring
+### LOW / HYGIENE
 
----
+1. `config.example.toml` has invalid TOML for license enablement
 
-## Files Analyzed
+Evidence:
+- `config.example.toml:15` uses `enabled = enable` rather than a boolean or quoted string.
 
-- `internal/middleware/middleware.go`, `csrf.go`, `ratelimit.go`
-- `internal/crypto/crypto.go`
-- `internal/handlers/auth_handlers.go`, `auth_utils.go`, `auth_crypto.go`, `auth_types.go`, `auth_expiry.go`, `jwt_secret.go`, `cookies.go`, `password_policy.go`
-- `internal/handlers/sso_handlers.go`, `sso_security.go`, `sso_utils.go`
-- `internal/handlers/webhook.go`, `webhook_security.go`, `webhooks.go`
-- `internal/handlers/config_handler.go`, `custom_action_runtime.go`, `provider_guard.go`
-- `internal/handlers/media.go`, `users.go`, `app.go`
-- `internal/handlers/websocket.go`
-- `internal/storage/object_storage.go`
-- `internal/tenant/scope.go`
-- `internal/config/config.go`, `security_validation.go`, `jwt_validation.go`, `encryption_validation.go`, `default_admin_validation.go`
-- `config.example.toml`
+Impact: copy/paste deployment from the example can fail before startup. This is not directly exploitable but is a release-quality issue.
+
+Recommendation: use a valid boolean, for example `enabled = true` or `enabled = false`, matching the intended default.
+
+2. `go test ./...` is broken by ignored local repro files in `tmp/`
+
+Evidence:
+- `go test ./...` fails in package `github.com/compnew2006/whatomate/tmp` with multiple `main redeclared` errors involving `tmp/gorm_reuse_repro.go`, `tmp/gorm_reuse_dryrun.go`, and `tmp/inspect_org_save.go`.
+- `.gitignore` ignores `tmp/`, but the Go tool still includes a present local `tmp` directory in `./...`.
+
+Impact: local and CI verification can fail depending on workspace contents. It also undermines confidence in final publish checks.
+
+Recommendation: delete local repro files, move them outside the module, or add `//go:build ignore` to standalone scratch programs.
+
+3. Unused middleware helper candidates
+
+Evidence:
+- codebase-memory graph showed zero inbound references for several non-test helpers.
+- Serena `find_referencing_symbols` returned no references for:
+  - `internal/middleware/middleware.go:426-465` `OrganizationContext`
+  - `internal/middleware/middleware.go:537-540` `GetUser`
+  - `internal/middleware/middleware.go:543-546` `GetOrganization`
+  - `internal/middleware/middleware.go:549-552` `IsSuperAdmin`
+
+Impact: low runtime risk, but these helpers can confuse future auth/middleware changes because they imply context-loading paths that are not used.
+
+Recommendation: confirm they are not public API, then remove with `safe_delete_symbol` in a cleanup branch.
+
+4. Frontend lint has one unused variable warning
+
+Evidence:
+- `frontend/e2e/tests/chat/soft-delete.spec.ts:11` has unused `loginAsAdmin`.
+
+Impact: minor hygiene issue.
+
+Recommendation: remove the unused import/variable or use it.
+
+## Confirmed Prior Fixes / Strong Controls
+
+- Object storage local path traversal appears fixed. `internal/storage/object_storage.go:70-95` resolves, cleans, and checks local object paths under the storage root.
+- CSRF token comparison uses constant-time comparison in `internal/middleware/csrf.go` and skips bearer/API-key auth as intended.
+- SSO callback no longer reflects raw provider error descriptions; it uses a fixed message and URL escaping.
+- CSP is now applied to SPA routes; skip logic is limited to API, WebSocket, and static asset paths.
+- CORS now only returns allow headers for allowed origins.
+- Login uses a real bcrypt dummy hash for nonexistent users and marks auth responses `Cache-Control: no-store`.
+- WebSocket upgrade validates `Origin` and requires the short-lived WS token before upgrade.
+- Import/export SQL uses table/column whitelists and bind arguments.
+- Widget raw SQL paths use server-side whitelists for table, column, grouping, and filter fields.
+- Webhook URL validation plus `SSRFSafeDialer` provide good baseline SSRF protection for normal webhook paths.
+
+## Verification Results
+
+Commands were run via Serena `execute_shell_command` except for one process cleanup after Playwright exceeded the tool timeout and left child processes running; no source code was read with shell.
+
+- `git status --short --branch`: workspace already had pre-existing dirty/untracked changes before this report, including `.desloppify/*` and several `cmd/whatomate/*.go` files. I did not revert or stage those changes.
+- `git checkout -b agent/security-audit-dead-code-scan`: passed.
+- `go test ./...`: failed because the local ignored `tmp/` package contains multiple standalone `main` files with redeclared `main`.
+- `go test ./cmd/... ./internal/... ./pkg/... ./test/...`: passed.
+- `cd frontend && npm run typecheck`: failed with existing TypeScript errors, mainly readonly test fixture arrays, missing component custom properties in tests, deep type instantiation in `use-toast.ts`, `content.body` typed as `{}`, and non-exported store types used by views.
+- `cd frontend && npx eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --ignore-path .gitignore`: passed with one warning (`loginAsAdmin` unused in `frontend/e2e/tests/chat/soft-delete.spec.ts`). I intentionally did not run the repo script `npm run lint` because it includes `--fix` and would rewrite files outside Serena.
+- `cd frontend && npm run test:unit`: passed, 31 test files and 149 tests.
+- `cd frontend && npx playwright test --project=chromium`: attempted, but exceeded Serena's 120s tool timeout and left Playwright child processes. Those were stopped before continuing.
+- `cd frontend && CI=1 BASE_URL=http://localhost:8080 npx playwright test --project=chromium --reporter=list --global-timeout=30000`: completed but produced more output than Serena returned.
+- `cd frontend && CI=1 BASE_URL=http://localhost:8080 npx playwright test e2e/tests/auth/login.spec.ts --project=chromium --reporter=line --global-timeout=30000`: failed all 9 tests because no backend was listening on `localhost:8080`; global setup and page navigation hit `ECONNREFUSED`.
+
+## Files Modified / Created / Deleted
+
+Modified:
+- `summary.md` only.
+
+Created:
+- none.
+
+Deleted:
+- none.
+
+No dependencies, migrations, or environment variables were changed. No tests were added because this was a report-only audit pass.
+
+## Publish Recommendation
+
+Do not publish this app yet. Patch the HIGH items first, remove or isolate the `tmp/` repro files so `go test ./...` is trustworthy, fix frontend typecheck, and rerun Playwright with the backend running on `localhost:8080` or the correct `BASE_URL`.
+
+Suggested first patch order:
+1. Remove password storage from `LoginView.vue`.
+2. Call production DB/webhook validators from `loadAndValidateConfig` and fix `config.example.toml`.
+3. Revalidate final webhook custom-action URLs after variable substitution.
+4. Route JavaScript custom-action URLs through the validated redirect-token flow.
+5. Sanitize/encode `Content-Disposition` filenames.
+6. Clean local `tmp/` repro files or add ignore build tags.
