@@ -510,7 +510,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		MediaData:     fileData,
 		MediaURL:      localPath,
 		MediaMimeType: effectiveMIMEType,
-		MediaFilename: fileHeader.Filename,
+		MediaFilename: sanitizeFilename(fileHeader.Filename),
 		Caption:       caption,
 	}
 

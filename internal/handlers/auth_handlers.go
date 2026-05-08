@@ -500,10 +500,12 @@ func (a *App) GetWSToken(r *fastglue.Request) error {
 	}
 	orgID, _ := r.RequestCtx.UserValue("organization_id").(uuid.UUID)
 
+	jti := uuid.New().String()
 	claims := middleware.JWTClaims{
 		UserID:         userID,
 		OrganizationID: orgID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "whatomate",
@@ -520,6 +522,13 @@ func (a *App) GetWSToken(r *fastglue.Request) error {
 	signed, err := token.SignedString(signingKey)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
+	}
+
+	// Mark the token as issued so it can be consumed exactly once.
+	if a.Redis != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = a.Redis.Set(ctx, wsTokenUsedKey(jti), "1", 35*time.Second).Err()
 	}
 
 	r.RequestCtx.Response.Header.Set("Cache-Control", "no-store")

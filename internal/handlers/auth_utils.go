@@ -167,6 +167,10 @@ func refreshTokenKey(jti string) string {
 	return fmt.Sprintf("refresh:%s", jti)
 }
 
+func wsTokenUsedKey(jti string) string {
+	return fmt.Sprintf("ws_token_used:%s", jti)
+}
+
 func generateSlug(name string) string {
 	slug := ""
 	for _, c := range name {

@@ -313,16 +313,12 @@ class WebSocketService {
       this.ws = new WebSocket(url, ["whm.v1", `auth.${token}`]);
 
       this.ws.onopen = () => {
-        // Keep message auth for backward compatibility with existing WS flow.
-        this.send({ type: WS_TYPE_AUTH, payload: { token } });
-
         const isReconnection = this.hasConnectedBefore;
         this.isConnected = true;
         this.hasConnectedBefore = true;
         this.reconnectAttempts = 0;
         this.startPing();
 
-        // Force refresh data after reconnection to sync any missed updates
         if (isReconnection) {
           this.refreshStaleData();
         }

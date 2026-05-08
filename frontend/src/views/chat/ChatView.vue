@@ -1370,22 +1370,19 @@ async function executeCustomAction(action: CustomAction) {
 
     // Handle different result types
     if (result.redirect_url) {
-      // Open URL action result - prepend base path for relative URLs
       let redirectUrl = result.redirect_url;
-      if (redirectUrl.startsWith("/api/")) {
+      if (!redirectUrl.startsWith("/api/")) {
+        // All redirect URLs must now be server-validated relative paths
+        // (one-time redirect tokens). Reject anything else.
+        redirectUrl = "";
+      }
+      if (redirectUrl) {
         const basePath = ((window as any).__BASE_PATH__ ?? "").replace(
           /\/$/,
           "",
         );
         redirectUrl = basePath + redirectUrl;
-      }
-      try {
-        const parsed = new URL(redirectUrl, window.location.origin);
-        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-          window.open(parsed.href, "_blank", "noopener,noreferrer");
-        }
-      } catch {
-        // Invalid URL, ignore
+        window.open(redirectUrl, "_blank", "noopener,noreferrer");
       }
     }
 

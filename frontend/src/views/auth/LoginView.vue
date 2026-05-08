@@ -29,12 +29,7 @@ const password = ref("");
 const rememberCredentials = ref(false);
 const isLoading = ref(false);
 const ssoProviders = ref<SSOProvider[]>([]);
-const REMEMBER_CREDENTIALS_KEY = "auth:remembered_login_credentials";
-
-interface RememberedCredentials {
-  email: string;
-  password: string;
-}
+const REMEMBER_EMAIL_KEY = "auth:remembered_email";
 
 // SSO provider icons (using simple SVG paths)
 const providerIcons: Record<string, string> = {
@@ -58,25 +53,10 @@ const providerColors: Record<string, string> = {
 };
 
 onMounted(async () => {
-  const rememberedRaw = localStorage.getItem(REMEMBER_CREDENTIALS_KEY);
-  if (rememberedRaw) {
-    try {
-      const remembered = JSON.parse(
-        rememberedRaw,
-      ) as Partial<RememberedCredentials>;
-      if (
-        typeof remembered.email === "string" &&
-        typeof remembered.password === "string"
-      ) {
-        email.value = remembered.email;
-        password.value = remembered.password;
-        rememberCredentials.value = true;
-      } else {
-        localStorage.removeItem(REMEMBER_CREDENTIALS_KEY);
-      }
-    } catch {
-      localStorage.removeItem(REMEMBER_CREDENTIALS_KEY);
-    }
+  const rememberedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY);
+  if (rememberedEmail) {
+    email.value = rememberedEmail;
+    rememberCredentials.value = true;
   }
 
   // Check for SSO error in query params
@@ -98,7 +78,7 @@ onMounted(async () => {
 
 watch(rememberCredentials, (enabled) => {
   if (!enabled) {
-    localStorage.removeItem(REMEMBER_CREDENTIALS_KEY);
+    localStorage.removeItem(REMEMBER_EMAIL_KEY);
   }
 });
 
@@ -113,16 +93,9 @@ const handleLogin = async () => {
   try {
     await authStore.login(email.value, password.value);
     if (rememberCredentials.value) {
-      const rememberedCredentials: RememberedCredentials = {
-        email: email.value,
-        password: password.value,
-      };
-      localStorage.setItem(
-        REMEMBER_CREDENTIALS_KEY,
-        JSON.stringify(rememberedCredentials),
-      );
+      localStorage.setItem(REMEMBER_EMAIL_KEY, email.value);
     } else {
-      localStorage.removeItem(REMEMBER_CREDENTIALS_KEY);
+      localStorage.removeItem(REMEMBER_EMAIL_KEY);
     }
 
     toast.success(t("auth.loginSuccess"));

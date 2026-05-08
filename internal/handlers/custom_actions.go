@@ -400,6 +400,9 @@ func (a *App) executeWebhookAction(action models.CustomAction, ctxData map[strin
 
 	// Replace variables in URL
 	url := replaceVariables(config.URL, ctxData)
+	if err := validateWebhookURL(url); err != nil {
+		return nil, fmt.Errorf("invalid webhook URL after variable substitution: %w", err)
+	}
 
 	// Replace variables in headers
 	headers := make(map[string]string)
@@ -565,8 +568,20 @@ func (a *App) executeJavaScriptAction(action models.CustomAction, ctxData map[st
 			if clip, ok := jsResult["clipboard"].(string); ok {
 				result.Clipboard = clip
 			}
-			if url, ok := jsResult["url"].(string); ok {
-				result.RedirectURL = url
+			if rawURL, ok := jsResult["url"].(string); ok {
+				if err := validateWebhookURL(rawURL); err != nil {
+					return nil, fmt.Errorf("javascript returned invalid redirect URL: %w", err)
+				}
+				tokenBytes := make([]byte, 16)
+				_, _ = rand.Read(tokenBytes)
+				token := hex.EncodeToString(tokenBytes)
+				if err := a.saveRedirectToken(context.Background(), token, redirectToken{
+					URL:       rawURL,
+					ExpiresAt: time.Now().Add(customActionRedirectTokenTTL),
+				}); err != nil {
+					return nil, fmt.Errorf("failed to persist redirect token: %w", err)
+				}
+				result.RedirectURL = "/api/custom-actions/redirect/" + token
 			}
 			if msg, ok := jsResult["message"].(string); ok {
 				result.Message = msg

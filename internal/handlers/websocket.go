@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/middleware"
 	"github.com/compnew2006/whatomate/internal/models"
@@ -61,7 +63,8 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
 	if tokenString == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Missing WebSocket token", nil, "")
 	}
-	if _, _, err := a.validateWSToken(tokenString); err != nil {
+	userID, orgID, err := a.validateWSToken(tokenString)
+	if err != nil {
 		a.Log.Warn("WebSocket handshake authentication failed", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired WebSocket token", nil, "")
 	}
@@ -70,14 +73,12 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
 	up := a.wsUpgrader()
 	up.Subprotocols = []string{"whm.v1"}
 	err = up.Upgrade(r.RequestCtx, func(conn *websocket.Conn) {
-		// Create unauthenticated client — auth happens via first message
-		client := ws.NewUnauthenticatedClient(a.WSHub, conn, a.validateWSTokenFn())
+		client := ws.NewClient(a.WSHub, conn, userID, orgID)
 		client.SetContactAccessFn(a.canSubscribeToContactUpdates)
+		a.WSHub.Register(client)
 
-		// Start pumps in goroutines
-		// Client self-registers with hub after successful auth message
 		go client.WritePump()
-		client.ReadPump() // Blocking - runs until connection closes
+		client.ReadPump()
 	})
 
 	if err != nil {
@@ -121,12 +122,6 @@ func wsTokenFromProtocols(protocolHeader string) string {
 		}
 	}
 	return ""
-}
-
-// validateWSTokenFn returns a function that validates a JWT token
-// and returns user ID and organization ID.
-func (a *App) validateWSTokenFn() ws.AuthenticateFn {
-	return a.validateWSToken
 }
 
 func (a *App) canSubscribeToContactUpdates(userID, orgID, contactID uuid.UUID) bool {
@@ -182,6 +177,18 @@ func (a *App) validateWSToken(tokenString string) (uuid.UUID, uuid.UUID, error) 
 	}
 	if claims.Subject != wsTokenSubject || claims.UserID == uuid.Nil || claims.OrganizationID == uuid.Nil {
 		return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
+	}
+
+	// Consume the one-time-use marker so the same token cannot be replayed.
+	if claims.ID != "" && a.Redis != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		deleted, delErr := a.Redis.Del(ctx, wsTokenUsedKey(claims.ID)).Result()
+		if delErr != nil {
+			a.Log.Warn("Failed to check WS token one-time-use marker", "error", delErr)
+		} else if deleted == 0 {
+			return uuid.Nil, uuid.Nil, fmt.Errorf("websocket token already used or expired")
+		}
 	}
 
 	return claims.UserID, claims.OrganizationID, nil

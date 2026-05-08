@@ -238,7 +238,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 				}
 			}
 			if filename := strings.TrimSpace(message.MediaFilename); filename != "" {
-				r.RequestCtx.Response.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+				r.RequestCtx.Response.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, sanitizeFilename(filename)))
 			}
 			return a.serveLocalMediaFile(r, relativePath, message.MediaMimeType)
 		}
@@ -267,7 +267,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	r.RequestCtx.SetStatusCode(fasthttp.StatusOK)
 	r.RequestCtx.Response.Header.SetContentType(contentType)
 	if filename := strings.TrimSpace(message.MediaFilename); filename != "" {
-		r.RequestCtx.Response.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+		r.RequestCtx.Response.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, sanitizeFilename(filename)))
 	}
 	r.RequestCtx.SetBodyStream(reader, int(objectInfo.Size))
 	return nil
