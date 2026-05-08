@@ -342,24 +342,18 @@ export function useMessageContent(
     });
   }
 
-  function getReplyAuthorLabel(message: Message | null): string {
-    if (!message) {
-      return "Yourself";
+  function getReplyAuthorLabel(message: Message): string {
+    if (!message.reply_to_message) {
+      return "You";
     }
-    if (message.direction === "outgoing") {
-      return "Yourself";
-    }
-    if (isGroupMessage(message) || isCurrentGroupChat.value) {
-      const senderPhone = getGroupSenderPhone(message);
-      if (senderPhone) {
-        return senderPhone;
-      }
+    if (message.reply_to_message.direction === "outgoing") {
+      return "You";
     }
     if (
-      message.reply_to_message &&
-      message.direction === "incoming"
+      (isGroupMessage(message) || isCurrentGroupChat.value) &&
+      message.reply_to_message.sender_phone
     ) {
-      return message.reply_to_message.sender_phone ?? "Customer";
+      return message.reply_to_message.sender_phone;
     }
     return (
       currentContact.value?.profile_name ||
@@ -389,20 +383,97 @@ export function useMessageContent(
   }
 
   function shouldShowReplyPreviewThumbnail(message: Message): boolean {
-    if (!message.reply_to_message) return false;
-    const replyType = message.reply_to_message.message_type;
-    return replyType === "image" || replyType === "sticker" || replyType === "video";
+    return (
+      message.reply_to_message?.message_type === "image" &&
+      getReplyPreviewMediaURL(message) !== ""
+    );
   }
 
   function getReplyPreviewMediaURL(message: Message): string {
-    if (!message.reply_to_message?.media_url) return "";
-    return message.reply_to_message.media_url;
+    const rawURL =
+      typeof message.reply_to_message?.media_url === "string"
+        ? message.reply_to_message.media_url.trim()
+        : "";
+    if (!rawURL) return "";
+
+    const lower = rawURL.toLowerCase();
+    if (
+      lower.startsWith("http://") ||
+      lower.startsWith("https://") ||
+      lower.startsWith("data:") ||
+      rawURL.startsWith("/")
+    ) {
+      return rawURL;
+    }
+    return "";
   }
 
   function getReplyPreviewContent(message: Message): string {
     if (!message.reply_to_message) return "";
-    const replyMsg = message.reply_to_message;
-    return extractBody(replyMsg.content) || `[${replyMsg.message_type || "Media"}]`;
+    const reply = message.reply_to_message;
+    if (reply.message_type === "text") {
+      const rawBody = extractBody(reply.content);
+      const body = applyMentionDisplayNames(normalizeDeletedMessageText(rawBody));
+      return body.length > 50 ? body.substring(0, 50) + "..." : body;
+    }
+    if (reply.message_type === "button_reply") {
+      const body = extractBody(reply.content);
+      const displayBody = applyMentionDisplayNames(body);
+      return displayBody.length > 50
+        ? displayBody.substring(0, 50) + "..."
+        : displayBody;
+    }
+    if (reply.message_type === "interactive") {
+      const body =
+        extractBody(reply.content) ||
+        (reply as any).interactive_data?.body ||
+        "";
+      const displayBody = applyMentionDisplayNames(body);
+      return displayBody.length > 50
+        ? displayBody.substring(0, 50) + "..."
+        : displayBody;
+    }
+    if (reply.message_type === "template") {
+      const body = extractBody(reply.content);
+      const displayBody = applyMentionDisplayNames(body);
+      return displayBody.length > 50
+        ? displayBody.substring(0, 50) + "..."
+        : displayBody;
+    }
+    if (reply.message_type === "image") {
+      const body = extractBody(reply.content);
+      const displayBody = applyMentionDisplayNames(body);
+      if (displayBody.trim() !== "") {
+        return displayBody.length > 50
+          ? displayBody.substring(0, 50) + "..."
+          : displayBody;
+      }
+      return "[Photo]";
+    }
+    if (reply.message_type === "video") return "[Video]";
+    if (reply.message_type === "audio") return "[Audio]";
+    if (reply.message_type === "document") return "[Document]";
+    if (reply.message_type === "location") return "[Location]";
+    if (reply.message_type === "contacts" || reply.message_type === "contact")
+      return "[Contact]";
+    if (reply.message_type === "sticker") return "[Sticker]";
+    return "[Message]";
+  }
+
+  function resolveReplyPreviewMediaType(
+    message: Message,
+  ): "image" | "video" | "audio" | "document" {
+    const type = message.reply_to_message?.message_type;
+    if (type === "video") return "video";
+    if (type === "audio") return "audio";
+    if (type === "document") return "document";
+    return "image";
+  }
+
+  function handleReplyPreviewThumbnailError(event: Event): void {
+    const target = event.target as HTMLImageElement | null;
+    if (!target) return;
+    target.style.display = "none";
   }
 
   return {
@@ -431,6 +502,8 @@ export function useMessageContent(
     shouldShowReplyPreviewThumbnail,
     getReplyPreviewMediaURL,
     getReplyPreviewContent,
+    resolveReplyPreviewMediaType,
+    handleReplyPreviewThumbnailError,
     deletedMessageText,
   };
 }

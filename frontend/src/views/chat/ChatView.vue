@@ -20,16 +20,11 @@ import { useAuthStore } from "@/stores/auth";
 import { useUsersStore } from "@/stores/users";
 import { useTransfersStore } from "@/stores/transfers";
 import { useConfigStore } from "@/stores/config";
-import { localeDirectionManager } from "@/i18n/locale-direction";
 import { wsService } from "@/services/websocket";
 import {
   contactsService,
-  chatbotService,
   messagesService,
-  customActionsService,
   cannedResponsesService,
-  type CustomAction,
-  type ActionResult,
   type CannedResponseAttachment,
 } from "@/services/api";
 import { useTagsStore } from "@/stores/tags";
@@ -97,54 +92,26 @@ import {
   MapPin,
   ExternalLink,
   Loader2,
-  Zap,
-  Ticket,
-  BarChart,
-  Link,
-  Mail,
-  Globe,
   Pin,
-  Code,
   RotateCw,
   Filter,
   StickyNote,
 } from "lucide-vue-next";
 import { getInitials, getAvatarGradient } from "@/lib/utils";
-import { getMessageSenderPhone, isGroupContact } from "@/lib/group-chat";
-import {
-  downloadMessageMedia,
-  resolveMediaFilename,
-} from "@/lib/media-actions";
-import { getErrorMessage } from "@/lib/api-utils";
-import {
-  getCachedMediaBlob,
-  prefetchMediaBlob,
-  storeMediaBlobInPersistentCache,
-} from "@/lib/media_prefetch_cache";
-import {
-  resolveWhatsAppMediaCategoryForFile,
-  validateWhatsAppMediaFile,
-  type WhatsAppMediaCategory,
-} from "@/lib/whatsapp-media-policy";
+import { isGroupContact } from "@/lib/group-chat";
+import { resolveMediaFilename } from "@/lib/media-actions";
 import { resolvePreferredOutboundInstanceID } from "@/lib/chat-outbound-instance";
-import { mergePhotosAndPdfsAndOpenPrintDialog } from "@/lib/media-merge-print";
-import {
-  isMergePrintableBubbleMessage,
-  toMergePrintableFile,
-} from "@/lib/chat-bubble-merge-print";
-import {
-  isMessagePrintSupported,
-  openPrintDialogForSingleMessage,
-} from "@/lib/single-media-print";
-import {
-  ChatSidebarUnifier,
-  type ChatSidebarViewMode,
-  type SidebarContactEntry,
-} from "@/lib/chat-sidebar-unifier";
-import { MentionContactResolver } from "@/lib/mention-contact-resolver";
+import type { SidebarContactEntry } from "@/lib/chat-sidebar-unifier";
 import { MessageHistoryNavigator } from "@/lib/message-history-navigator";
 import { useColorMode } from "@/composables/useColorMode";
 import { useInfiniteScroll } from "@/composables/useInfiniteScroll";
+import { useMessageContent } from "@/composables/useMessageContent";
+import { useTypingPresence } from "@/composables/useTypingPresence";
+import { useChatSidebar } from "@/composables/useChatSidebar";
+import { useChatMedia } from "@/composables/useChatMedia";
+import { useBatchPrint } from "@/composables/useBatchPrint";
+import { useChatActions } from "@/composables/useChatActions";
+import { useChatMessaging } from "@/composables/useChatMessaging";
 import CannedResponsePicker from "@/components/chat/CannedResponsePicker.vue";
 import ContactInfoPanel from "@/components/chat/ContactInfoPanel.vue";
 import ConversationNotes from "@/components/chat/ConversationNotes.vue";
@@ -158,8 +125,9 @@ import { CreateContactDialog } from "@/components/shared";
 import { Info } from "lucide-vue-next";
 import { useMediaGroups } from "@/composables/useMediaGroups";
 import { resolveChatBackgroundStyle } from "@/lib/chat-backgrounds";
+import { isMessagePrintSupported } from "@/lib/single-media-print";
 
-const { t, locale } = useI18n();
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const contactsStore = useContactsStore();
@@ -211,360 +179,114 @@ const canRevokeMessages = computed(() =>
 const canManageTransfers = computed(() =>
   authStore.hasPermission("transfers", "write"),
 );
-const isRTL = computed(() =>
-  localeDirectionManager.isRTL(String(locale.value)),
+const chatSidebar = useChatSidebar();
+const {
+  isRTL,
+  chatSidebarUnifier,
+  chatSidebarViewMode,
+  selectedAccount,
+  contactAccounts,
+  contactsSidebarWidth,
+  isContactsSidebarResizing,
+  isContactsSidebarCompact,
+  isContactsSidebarWide,
+  isSidebarUnifiedMode,
+  startContactsSidebarResize,
+  stopContactsSidebarResize,
+  refreshChatSidebarViewModePreference,
+  toAccountToggleKey,
+  toContactToggleKey,
+  contactIDFromToggleKey,
+  selectedAccountFilter,
+  findSidebarEntrySourceContact,
+  resolveSourceContactForToggle,
+  resolveSidebarEntryInstanceIDs,
+  getSidebarEntryInstanceCount,
+  hasSidebarEntryMultipleInstances,
+  getSidebarEntryPrimaryInstanceID,
+  resolveSidebarEntryInstanceLabel,
+  getSidebarEntryPrimaryInstanceLabel,
+  isSidebarEntryActive,
+  getSidebarEntryPreferredContact,
+} = chatSidebar;
+
+const chatMedia = useChatMedia(computed(() => contactsStore.messages));
+const {
+  mediaBlobUrls,
+  mediaBlobCache,
+  isChatMediaViewerOpen,
+  chatMediaViewerURL,
+  chatMediaViewerType,
+  chatMediaViewerTitle,
+  resetMediaLoadingPipeline,
+  loadMediaForMessage,
+  loadMediaForMessages,
+  getMediaBlobUrl,
+  isMediaLoading,
+  openChatMediaViewer,
+  closeChatMediaViewer,
+  cleanupBlobUrls,
+} = chatMedia;
+
+const batchPrint = useBatchPrint(
+  computed(() => contactsStore.messages),
+  mediaBlobCache,
+  mediaBlobUrls,
+  getMediaBlobUrl,
+  loadMediaForMessage,
 );
+const {
+  isPreparingBatchPrint,
+  isBatchPrintSelectionMode,
+  selectedBatchPrintMessageIds,
+  selectedBatchPrintCount,
+  canMergeSelectedBubbleFiles,
+  resetBatchPrintSelection,
+  cancelBatchPrintSelection,
+  isBatchPrintBubbleSelectable,
+  isBatchPrintBubbleSelected,
+  toggleBatchPrintMessageSelection,
+  handleMessageBubbleClickForBatchPrint,
+  resolveMessageBlobForBatchPrint,
+  openBatchPrintPicker,
+  isModifiedPointerEvent,
+} = batchPrint;
 
-type TypingPresenceState = "composing" | "paused";
+function resolveSelectedSourceContact(contact: Contact | null): Contact | null {
+  return chatSidebar.resolveSelectedSourceContact(contact, currentSidebarEntry.value);
+}
 
-const TYPING_COMPOSING_THROTTLE_MS = 2500;
-const TYPING_IDLE_PAUSE_MS = 3500;
+function resolveExplicitSourceContact(contact: Contact | null): Contact | null {
+  return chatSidebar.resolveExplicitSourceContact(contact, currentSidebarEntry.value);
+}
+
+function formatAccountToggleLabel(toggleKey: string): string {
+  return chatSidebar.formatAccountToggleLabel(toggleKey, currentSidebarEntry.value, contactsStore.contacts);
+}
 
 const messageInput = ref("");
 const messagesEndRef = ref<HTMLElement | null>(null);
 const messageInputRef = ref<HTMLTextAreaElement | null>(null);
 const isSending = ref(false);
-let typingPauseTimer: ReturnType<typeof setTimeout> | null = null;
-const typingLastComposeAt = ref(0);
-const typingLastState = ref<TypingPresenceState | null>(null);
-const typingLastContactID = ref<string | null>(null);
-const isAssignDialogOpen = ref(false);
-const isTransferring = ref(false);
-const isResuming = ref(false);
 const isInfoPanelOpen = ref(false);
 const isNotesPanelOpen = ref(false);
 const contactSessionData = ref<any>(null);
 
-// Multi-account state
-const selectedAccount = ref<string | null>(null);
-const contactAccounts = ref<string[]>([]);
-const chatSidebarUnifier = new ChatSidebarUnifier();
-const chatSidebarViewMode = ref<ChatSidebarViewMode>(
-  ChatSidebarUnifier.readViewMode(),
-);
-const ACCOUNT_TOGGLE_PREFIX = "acct:";
-const CONTACT_TOGGLE_PREFIX = "contact:";
+const typingPresence = useTypingPresence();
+const {
+  resetTypingPresenceState,
+  sendTypingPresenceForContact,
+  scheduleTypingPaused,
+  stopTypingForContact,
+} = typingPresence;
 
-function toAccountToggleKey(accountName: string): string {
-  return `${ACCOUNT_TOGGLE_PREFIX}${accountName}`;
-}
-
-function toContactToggleKey(contactID: string): string {
-  return `${CONTACT_TOGGLE_PREFIX}${contactID}`;
-}
-
-function accountFromToggleKey(toggleKey?: string | null): string {
-  if (!toggleKey || !toggleKey.startsWith(ACCOUNT_TOGGLE_PREFIX)) {
-    return "";
-  }
-  return toggleKey.slice(ACCOUNT_TOGGLE_PREFIX.length).trim();
-}
-
-function contactIDFromToggleKey(toggleKey?: string | null): string {
-  if (!toggleKey || !toggleKey.startsWith(CONTACT_TOGGLE_PREFIX)) {
-    return "";
-  }
-  return toggleKey.slice(CONTACT_TOGGLE_PREFIX.length).trim();
-}
-
-function selectedAccountFilter(toggleKey?: string | null): string | undefined {
-  const account = accountFromToggleKey(toggleKey);
-  return account || undefined;
-}
-
-function resolveSourceContactForToggle(
-  entry: SidebarContactEntry | null,
-  toggleKey?: string | null,
-): Contact | null {
-  if (!entry || !toggleKey) return null;
-
-  const contactID = contactIDFromToggleKey(toggleKey);
-  if (contactID) {
-    return findSidebarEntrySourceContact(entry, contactID);
-  }
-
-  const accountName = accountFromToggleKey(toggleKey);
-  if (accountName && entry.contactsByAccount[accountName]) {
-    return entry.contactsByAccount[accountName];
-  }
-
-  return null;
-}
-
-function resolveSelectedSourceContact(contact: Contact | null): Contact | null {
-  if (!contact) return null;
-  const entry = currentSidebarEntry.value;
-  const selected = resolveSourceContactForToggle(entry, selectedAccount.value);
-  if (selected) return selected;
-  return contact;
-}
-
-function resolveExplicitSourceContact(contact: Contact | null): Contact | null {
-  if (!contact) return null;
-  return resolveSourceContactForToggle(
-    currentSidebarEntry.value,
-    selectedAccount.value,
-  );
-}
-
-function clearTypingPauseTimer() {
-  if (typingPauseTimer) {
-    clearTimeout(typingPauseTimer);
-    typingPauseTimer = null;
-  }
-}
-
-function resetTypingPresenceState() {
-  typingLastComposeAt.value = 0;
-  typingLastState.value = null;
-  typingLastContactID.value = null;
-}
-
-function isTypingPresenceEligibleContact(contact: Contact | null): boolean {
-  if (!contact) return false;
-  if (contact.is_group_chat === true) return false;
-
-  const metadata = contact.metadata || {};
-  if (metadata.is_group_chat === true || metadata.is_channel_chat === true) {
-    return false;
-  }
-
-  const phone = String(contact.phone_number || "")
-    .trim()
-    .toLowerCase();
-  if (!phone) return false;
-  if (phone.endsWith("@g.us") || phone.endsWith("@newsletter")) return false;
-
-  return true;
-}
-
-function resolveTypingInstanceID(contact: Contact): string | undefined {
-  return resolvePreferredOutboundInstanceID({
+function typingContext() {
+  const contact = contactsStore.currentContact;
+  return {
     messages: contactsStore.messages,
     selectedSourceContact: resolveExplicitSourceContact(contact),
-    currentContact: contact,
     selectedInstanceID: contactsStore.selectedInstanceId,
-  });
-}
-
-async function sendTypingPresenceForContact(
-  contact: Contact | null,
-  state: TypingPresenceState,
-  options?: { force?: boolean },
-) {
-  if (!isTypingPresenceEligibleContact(contact)) return;
-  if (!contact) return;
-
-  const contactID = contact.id;
-  const force = options?.force === true;
-
-  if (!force) {
-    if (
-      state === "paused" &&
-      typingLastState.value === "paused" &&
-      typingLastContactID.value === contactID
-    ) {
-      return;
-    }
-
-    if (
-      state === "composing" &&
-      typingLastContactID.value === contactID &&
-      Date.now() - typingLastComposeAt.value < TYPING_COMPOSING_THROTTLE_MS
-    ) {
-      return;
-    }
-  }
-
-  if (state === "composing") {
-    typingLastComposeAt.value = Date.now();
-  }
-  typingLastState.value = state;
-  typingLastContactID.value = contactID;
-
-  try {
-    await messagesService.sendTyping(contactID, {
-      state,
-      instance_id: resolveTypingInstanceID(contact),
-    });
-  } catch {
-    // Typing presence is best-effort and should not interrupt chat UX.
-  }
-}
-
-function scheduleTypingPaused(contact: Contact | null) {
-  clearTypingPauseTimer();
-  if (!isTypingPresenceEligibleContact(contact)) return;
-
-  typingPauseTimer = setTimeout(() => {
-    void sendTypingPresenceForContact(contact, "paused");
-    clearTypingPauseTimer();
-  }, TYPING_IDLE_PAUSE_MS);
-}
-
-function stopTypingForContact(
-  contact: Contact | null,
-  options?: { force?: boolean },
-) {
-  clearTypingPauseTimer();
-  void sendTypingPresenceForContact(contact, "paused", options);
-}
-
-function findSidebarEntrySourceContact(
-  entry: SidebarContactEntry | null,
-  contactID: string,
-): Contact | null {
-  if (!entry || !contactID) return null;
-  return (
-    entry.sourceContacts.find((contact) => contact.id === contactID) || null
-  );
-}
-
-function resolveInstanceToggleLabel(instanceID?: string): string {
-  if (!instanceID) return "";
-  const instance = instancesStore.instances.find(
-    (item) => item.id === instanceID,
-  );
-  if (!instance) return "";
-  if (typeof instance.name === "string" && instance.name.trim() !== "") {
-    return instance.name.trim();
-  }
-  if (
-    typeof (instance as Record<string, unknown>).phone_number === "string" &&
-    String((instance as Record<string, unknown>).phone_number).trim() !== ""
-  ) {
-    return String((instance as Record<string, unknown>).phone_number).trim();
-  }
-  return "";
-}
-
-function resolveSidebarEntryInstanceIDs(entry: SidebarContactEntry): string[] {
-  const instanceIDs: string[] = [];
-  const seen = new Set<string>();
-
-  const appendInstanceID = (rawValue?: string) => {
-    const instanceID = (rawValue || "").trim();
-    if (!instanceID || seen.has(instanceID)) return;
-    seen.add(instanceID);
-    instanceIDs.push(instanceID);
   };
-
-  for (const sourceContact of entry.sourceContacts || []) {
-    appendInstanceID(
-      typeof sourceContact.instance_id === "string"
-        ? sourceContact.instance_id
-        : "",
-    );
-  }
-
-  for (const instanceID of entry.sourceInstanceIDs || []) {
-    appendInstanceID(instanceID);
-  }
-
-  if (instanceIDs.length === 0 && entry.displayContact.instance_id) {
-    appendInstanceID(entry.displayContact.instance_id);
-  }
-
-  return instanceIDs;
-}
-
-function getSidebarEntryInstanceCount(entry: SidebarContactEntry): number {
-  return resolveSidebarEntryInstanceIDs(entry).length;
-}
-
-function hasSidebarEntryMultipleInstances(entry: SidebarContactEntry): boolean {
-  return getSidebarEntryInstanceCount(entry) > 1;
-}
-
-function getSidebarEntryPrimaryInstanceID(
-  entry: SidebarContactEntry,
-): string | undefined {
-  return resolveSidebarEntryInstanceIDs(entry)[0];
-}
-
-function resolveSidebarEntryInstanceLabel(
-  entry: SidebarContactEntry,
-  instanceID?: string,
-): string {
-  const normalizedInstanceID = (instanceID || "").trim();
-  if (!normalizedInstanceID) return "";
-
-  for (const sourceContact of entry.sourceContacts || []) {
-    const sourceInstanceID =
-      typeof sourceContact.instance_id === "string"
-        ? sourceContact.instance_id.trim()
-        : "";
-    if (sourceInstanceID !== normalizedInstanceID) {
-      continue;
-    }
-    const accountLabel =
-      typeof sourceContact.whatsapp_account === "string"
-        ? sourceContact.whatsapp_account.trim()
-        : "";
-    if (accountLabel) {
-      return accountLabel;
-    }
-  }
-
-  const displayInstanceID =
-    typeof entry.displayContact.instance_id === "string"
-      ? entry.displayContact.instance_id.trim()
-      : "";
-  if (displayInstanceID === normalizedInstanceID) {
-    const displayAccount =
-      typeof entry.displayContact.whatsapp_account === "string"
-        ? entry.displayContact.whatsapp_account.trim()
-        : "";
-    if (displayAccount) {
-      return displayAccount;
-    }
-  }
-
-  return "";
-}
-
-function getSidebarEntryPrimaryInstanceLabel(
-  entry: SidebarContactEntry,
-): string {
-  return resolveSidebarEntryInstanceLabel(
-    entry,
-    getSidebarEntryPrimaryInstanceID(entry),
-  );
-}
-
-function formatAccountToggleLabel(toggleKey: string): string {
-  const account = accountFromToggleKey(toggleKey);
-  if (account) {
-    return account;
-  }
-
-  const contactID = contactIDFromToggleKey(toggleKey);
-  if (contactID) {
-    const sourceContact =
-      findSidebarEntrySourceContact(currentSidebarEntry.value, contactID) ||
-      contactsStore.contacts.find((contact) => contact.id === contactID) ||
-      null;
-    if (sourceContact) {
-      const instanceLabel = resolveInstanceToggleLabel(
-        sourceContact.instance_id,
-      );
-      if (instanceLabel) {
-        return instanceLabel;
-      }
-      const contactAccount = (sourceContact.whatsapp_account || "").trim();
-      if (contactAccount) {
-        return contactAccount;
-      }
-      if (sourceContact.instance_id) {
-        return sourceContact.instance_id;
-      }
-      if (sourceContact.phone_number) {
-        return sourceContact.phone_number;
-      }
-    }
-  }
-
-  return toggleKey;
 }
 
 function resolveOutboundInstanceID(
@@ -591,94 +313,13 @@ function resolveOutboundWhatsAppAccount(
   return accountName || undefined;
 }
 
-interface PendingMediaUpload {
-  id: string;
-  file: File;
-  category: WhatsAppMediaCategory;
-  previewUrl: string | null;
-}
-
-// File upload state
-const fileInputRef = ref<HTMLInputElement | null>(null);
-const selectedMediaUploads = ref<PendingMediaUpload[]>([]);
-const activeMediaPreviewID = ref<string | null>(null);
-const isMediaDialogOpen = ref(false);
-type ChatMediaViewerType = "image" | "video" | "audio" | "document";
-const isChatMediaViewerOpen = ref(false);
-const chatMediaViewerURL = ref("");
-const chatMediaViewerType = ref<ChatMediaViewerType>("image");
-const chatMediaViewerTitle = ref("");
 const isProfilePhotoDialogOpen = ref(false);
 const profilePhotoContact = ref<Contact | null>(null);
 const profilePhotoImageFailed = ref(false);
 const activeProfilePhotoURL = computed(() =>
   normalizeRenderableAvatarURL(profilePhotoContact.value?.avatar_url),
 );
-const mediaCaption = ref("");
-const isUploadingMedia = ref(false);
-const mediaUploadProgress = ref<{ current: number; total: number } | null>(
-  null,
-);
-const isPreparingBatchPrint = ref(false);
-const isBatchPrintSelectionMode = ref(false);
-const selectedBatchPrintMessageIds = ref<string[]>([]);
-const selectedMediaCount = computed(() => selectedMediaUploads.value.length);
-const activeMediaUpload = computed<PendingMediaUpload | null>(() => {
-  if (activeMediaPreviewID.value) {
-    const matchedUpload = selectedMediaUploads.value.find(
-      (upload) => upload.id === activeMediaPreviewID.value,
-    );
-    if (matchedUpload) {
-      return matchedUpload;
-    }
-  }
 
-  return selectedMediaUploads.value[0] ?? null;
-});
-const canApplyMediaCaption = computed(
-  () =>
-    selectedMediaCount.value === 1 &&
-    activeMediaUpload.value?.category !== "audio",
-);
-const mediaDialogDescription = computed(() => {
-  if (selectedMediaCount.value === 0) {
-    return "";
-  }
-  if (selectedMediaCount.value === 1) {
-    return activeMediaUpload.value?.file.name ?? "";
-  }
-  return t("chat.mediaFilesSelected", { count: selectedMediaCount.value });
-});
-const mediaSendButtonLabel = computed(() =>
-  selectedMediaCount.value > 1 ? t("chat.sendFiles") : t("chat.send"),
-);
-const mediaUploadingLabel = computed(() => {
-  if (selectedMediaCount.value > 1 && mediaUploadProgress.value) {
-    return t("chat.mediaSendingProgress", mediaUploadProgress.value);
-  }
-  return `${t("chat.sending")}...`;
-});
-
-// Cache for media blob URLs (message_id -> blob URL)
-const mediaBlobUrls = ref<Record<string, string>>({});
-const mediaLoadingStates = ref<Record<string, boolean>>({});
-const mediaBlobCache = new Map<string, Blob>();
-const MAX_MEDIA_LOAD_CONCURRENCY = 4;
-const pendingMediaQueue: Message[] = [];
-const queuedMediaMessageIDs = new Set<string>();
-const inFlightMediaRequests = new Map<string, AbortController>();
-let activeMediaLoadCount = 0;
-let mediaLoadGeneration = 0;
-
-// Canned responses slash command state
-const cannedPickerOpen = ref(false);
-const cannedSearchQuery = ref("");
-const pendingCannedResponse = ref<{
-  id: string;
-  attachments: CannedResponseAttachment[];
-} | null>(null);
-
-// Sticky date header state
 const stickyDate = ref("");
 const showStickyDate = ref(false);
 let stickyDateTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -686,14 +327,6 @@ let quoteHighlightTimeout: ReturnType<typeof setTimeout> | null = null;
 const isQuoteNavigationInProgress = ref(false);
 const QUOTE_NAVIGATION_MAX_HISTORY_REQUESTS = 64;
 
-// Emoji picker state
-const emojiPickerOpen = ref(false);
-
-// Custom actions state
-const customActions = ref<CustomAction[]>([]);
-const executingActionId = ref<string | null>(null);
-
-// Tags filter state
 const isTagFilterOpen = ref(false);
 
 // Service window state
@@ -704,29 +337,11 @@ const isServiceWindowExpired = computed(() => {
   return contact.service_window_open === false;
 });
 
-const hasPendingCannedAttachments = computed(() => {
-  return (pendingCannedResponse.value?.attachments.length ?? 0) > 0;
-});
-
 const canSendMessage = computed(() => {
   return (
     Boolean(messageInput.value.trim()) || hasPendingCannedAttachments.value
   );
 });
-
-const selectedBatchPrintCount = computed(
-  () => selectedBatchPrintMessageIds.value.length,
-);
-
-const hasMergePrintableBubbles = computed(() =>
-  contactsStore.messages.some((message) =>
-    isMergePrintableBubbleMessage(message),
-  ),
-);
-
-const canMergeSelectedBubbleFiles = computed(
-  () => selectedBatchPrintCount.value >= 2,
-);
 
 // Add contact dialog state
 const isAddContactOpen = ref(false);
@@ -739,92 +354,6 @@ let pendingSidebarDeleteTimeout: ReturnType<typeof setTimeout> | null = null;
 let pendingSidebarSoftDeleteTimeout: ReturnType<typeof setTimeout> | null =
   null;
 let contactSelectionSequence = 0;
-const CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY = "chat.contactsSidebarWidth";
-const CONTACTS_SIDEBAR_MIN_WIDTH = 280;
-const CONTACTS_SIDEBAR_MAX_WIDTH = 500;
-const CONTACTS_SIDEBAR_DEFAULT_WIDTH = 320;
-
-function clampContactsSidebarWidth(value: number): number {
-  return Math.min(
-    CONTACTS_SIDEBAR_MAX_WIDTH,
-    Math.max(CONTACTS_SIDEBAR_MIN_WIDTH, value),
-  );
-}
-
-function readContactsSidebarWidth(): number {
-  try {
-    const stored = Number(
-      localStorage.getItem(CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY),
-    );
-    if (Number.isFinite(stored) && stored > 0) {
-      return clampContactsSidebarWidth(stored);
-    }
-  } catch {
-    // Ignore localStorage errors
-  }
-  return CONTACTS_SIDEBAR_DEFAULT_WIDTH;
-}
-
-const contactsSidebarWidth = ref(readContactsSidebarWidth());
-const isContactsSidebarResizing = ref(false);
-const isContactsSidebarCompact = computed(
-  () => contactsSidebarWidth.value <= 320,
-);
-const isContactsSidebarWide = computed(() => contactsSidebarWidth.value >= 420);
-let contactsSidebarResizeStartX = 0;
-let contactsSidebarResizeStartWidth = contactsSidebarWidth.value;
-
-function setContactsSidebarWidth(value: number) {
-  const nextWidth = clampContactsSidebarWidth(value);
-  contactsSidebarWidth.value = nextWidth;
-  try {
-    localStorage.setItem(CONTACTS_SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth));
-  } catch {
-    // Ignore localStorage errors
-  }
-}
-
-function onContactsSidebarResizeMove(event: MouseEvent) {
-  if (!isContactsSidebarResizing.value) return;
-  const deltaX = isRTL.value
-    ? contactsSidebarResizeStartX - event.clientX
-    : event.clientX - contactsSidebarResizeStartX;
-  setContactsSidebarWidth(contactsSidebarResizeStartWidth + deltaX);
-}
-
-function stopContactsSidebarResize() {
-  if (!isContactsSidebarResizing.value) return;
-  isContactsSidebarResizing.value = false;
-  window.removeEventListener("mousemove", onContactsSidebarResizeMove);
-  window.removeEventListener("mouseup", stopContactsSidebarResize);
-}
-
-function startContactsSidebarResize(event: MouseEvent) {
-  if (window.innerWidth < 768) return;
-  isContactsSidebarResizing.value = true;
-  contactsSidebarResizeStartX = event.clientX;
-  contactsSidebarResizeStartWidth = contactsSidebarWidth.value;
-  window.addEventListener("mousemove", onContactsSidebarResizeMove);
-  window.addEventListener("mouseup", stopContactsSidebarResize);
-  event.preventDefault();
-}
-
-function openAddContactDialog() {
-  isAddContactOpen.value = true;
-}
-
-async function onContactCreated(contact: any) {
-  // Refresh contacts and select the new one
-  await refreshContactsSidebar();
-  if (contact?.id) {
-    router.push({
-      name: "chat-conversation",
-      params: { contactId: contact.id },
-    });
-  }
-}
-
-// Infinite scroll for contacts (load more at bottom)
 const contactsScroll = useInfiniteScroll({
   direction: "bottom",
   onLoadMore: () => contactsStore.loadMoreContacts(),
@@ -969,54 +498,7 @@ const currentSidebarEntry = computed(() => {
     ) || null
   );
 });
-const isSidebarUnifiedMode = computed(
-  () => chatSidebarViewMode.value === "unified",
-);
 
-function refreshChatSidebarViewModePreference() {
-  chatSidebarViewMode.value = ChatSidebarUnifier.readViewMode();
-}
-
-function getSidebarEntryPreferredContact(entry: SidebarContactEntry): Contact {
-  const selectedAccountName = accountFromToggleKey(selectedAccount.value);
-  if (selectedAccountName && entry.contactsByAccount[selectedAccountName]) {
-    return entry.contactsByAccount[selectedAccountName];
-  }
-
-  const selectedContactID = contactIDFromToggleKey(selectedAccount.value);
-  if (selectedContactID) {
-    const selectedContact = findSidebarEntrySourceContact(
-      entry,
-      selectedContactID,
-    );
-    if (selectedContact) {
-      return selectedContact;
-    }
-  }
-
-  const displayAccount =
-    typeof entry.displayContact.whatsapp_account === "string"
-      ? entry.displayContact.whatsapp_account.trim()
-      : "";
-  if (displayAccount && entry.contactsByAccount[displayAccount]) {
-    return entry.contactsByAccount[displayAccount];
-  }
-
-  if (entry.accountNames.length > 0) {
-    const fallbackContact = entry.contactsByAccount[entry.accountNames[0]];
-    if (fallbackContact) {
-      return fallbackContact;
-    }
-  }
-
-  return entry.displayContact;
-}
-
-function isSidebarEntryActive(entry: SidebarContactEntry): boolean {
-  const currentContactID = contactsStore.currentContact?.id;
-  if (!currentContactID) return false;
-  return entry.sourceContactIDs.includes(currentContactID);
-}
 
 // Get active transfer for current contact from the store (reactive)
 const activeTransfer = computed(() => {
@@ -1030,6 +512,41 @@ const activeTransferId = computed(() => activeTransfer.value?.id || null);
 const isCurrentGroupChat = computed(() =>
   isGroupContact(contactsStore.currentContact),
 );
+
+const messageContentHelpers = useMessageContent(
+  computed(() => contactsStore.contacts),
+  computed(() => contactsStore.pendingChats),
+  computed(() => contactsStore.assignedChats),
+  computed(() => contactsStore.closedChats),
+  computed(() => contactsStore.messages),
+  computed(() => contactsStore.currentContact),
+  isCurrentGroupChat,
+);
+const {
+  isDeletedMessage,
+  isSystemEventMessage,
+  shouldShowGroupSenderPhone,
+  getGroupSenderPhone,
+  getMessageContent,
+  getLocationData,
+  getContactsData,
+  getGoogleMapsUrl,
+  getInteractiveButtons,
+  getCTAUrlData,
+  isMediaMessage,
+  shouldShowDateSeparator,
+  getDateLabel,
+  formatMessageTime,
+  getReplyAuthorLabel,
+  getReplyingToAuthorLabel,
+  shouldShowReplyPreviewThumbnail,
+  getReplyPreviewMediaURL,
+  getReplyPreviewContent,
+  resolveReplyPreviewMediaType,
+  handleReplyPreviewThumbnailError,
+  preloadMentionResolverFromKnownContacts,
+  resolveMentionsForCurrentMessages,
+} = messageContentHelpers;
 const isCurrentChatClosed = computed(
   () => contactsStore.currentContact?.status === "closed",
 );
@@ -1097,124 +614,61 @@ const canToggleCurrentChatPublic = computed(() => {
     authStore.hasPermission("chat", "write")
   );
 });
-const isClaimingCurrentChat = ref(false);
-const isClosingCurrentChat = ref(false);
-const isReopeningCurrentChat = ref(false);
-const isUpdatingCurrentChatPublic = ref(false);
-const deletedMessageText = "(This message was deleted)";
-const legacyDeletedMessageText = "This message was deleted";
-const mentionContactResolver = new MentionContactResolver();
-const mentionResolutionVersion = ref(0);
 
-function getGroupSenderPhone(message: Message): string {
-  return getMessageSenderPhone(message);
-}
+const chatMessaging = useChatMessaging(
+  computed(() => contactsStore.currentContact),
+  {
+    isCurrentChatSendRestricted,
+    isCurrentChatClosed,
+    resolveOutboundInstanceID,
+    resolveOutboundWhatsAppAccount,
+    scrollToBottom,
+    addMessage: (message: Message) => contactsStore.addMessage(message),
+    loadMediaForMessage,
+    openChatMediaViewer,
+    resolveMessageBlobForBatchPrint,
+    isBatchPrintSelectionMode,
+    isBatchPrintBubbleSelectable,
+    isModifiedPointerEvent,
+    handleMessageBubbleClickForBatchPrint,
+  },
+);
+const {
+  fileInputRef,
+  selectedMediaUploads,
+  isMediaDialogOpen,
+  mediaCaption,
+  isUploadingMedia,
+  cannedPickerOpen,
+  cannedSearchQuery,
+  pendingCannedResponse,
+  emojiPickerOpen,
+  reactionPickerMessageId,
+  quickReactionEmojis,
+  retryingMessageId,
+  revokingMessageId,
+  selectedMediaCount,
+  activeMediaUpload,
+  canApplyMediaCaption,
+  mediaDialogDescription,
+  mediaSendButtonLabel,
+  mediaUploadingLabel,
+  hasPendingCannedAttachments,
+  closeCannedPicker,
+  clearPendingCannedAttachments,
+  removePendingCannedAttachment,
+  getPendingAttachmentIcon,
+  sendReaction,
+  openFilePicker,
+  handleFileSelect,
+  closeMediaDialog,
+  handleMediaDialogOpenChange,
+  sendMediaMessage,
+  setActiveMediaPreview,
+  removeSelectedMediaUpload,
+  formatMediaUploadSize,
+} = chatMessaging;
 
-function isGroupMessage(message: Message): boolean {
-  if (message.is_group_chat === true) {
-    return true;
-  }
-  if (
-    typeof message.conversation_id === "string" &&
-    message.conversation_id.endsWith("@g.us")
-  ) {
-    return true;
-  }
-  return isCurrentGroupChat.value;
-}
-
-function shouldShowGroupSenderPhone(message: Message): boolean {
-  if (message.direction !== "incoming" || !isGroupMessage(message)) {
-    return false;
-  }
-  return getGroupSenderPhone(message) !== "";
-}
-
-function normalizeDeletedMessageText(content: string): string {
-  if (content.trim().toLowerCase() === legacyDeletedMessageText.toLowerCase()) {
-    return deletedMessageText;
-  }
-  return content;
-}
-
-function preloadMentionResolverFromKnownContacts(): void {
-  const changed = mentionContactResolver.preloadContacts([
-    ...contactsStore.contacts,
-    ...contactsStore.pendingChats,
-    ...contactsStore.assignedChats,
-    ...contactsStore.closedChats,
-  ]);
-
-  if (changed) {
-    mentionResolutionVersion.value += 1;
-  }
-}
-
-function applyMentionDisplayNames(content: string): string {
-  if (!content || !content.includes("@")) {
-    return content;
-  }
-
-  // Keep render reactive to async lookup results.
-  const revision = mentionResolutionVersion.value;
-  if (revision < 0) {
-    return content;
-  }
-
-  return mentionContactResolver.replaceMentions(content);
-}
-
-async function resolveMentionsForCurrentMessages(): Promise<void> {
-  preloadMentionResolverFromKnownContacts();
-
-  const texts: string[] = [];
-  for (const message of contactsStore.messages) {
-    const raw = getMessageContentRaw(message);
-    if (raw && raw.includes("@")) {
-      texts.push(raw);
-    }
-  }
-
-  if (texts.length === 0) {
-    return;
-  }
-
-  const changed = await mentionContactResolver.resolveMentionsInTexts(texts);
-  if (changed) {
-    mentionResolutionVersion.value += 1;
-  }
-}
-
-function isDeletedMessage(message: Message): boolean {
-  if (message.content && typeof message.content === "object") {
-    const metadata = (message.content as { metadata?: Record<string, any> })
-      .metadata;
-    if (metadata?.revoked === true) {
-      return true;
-    }
-  }
-
-  const body = getMessageContent(message).trim();
-  if (!body) {
-    return false;
-  }
-
-  return (
-    body.includes(deletedMessageText) || body.includes(legacyDeletedMessageText)
-  );
-}
-
-function isSystemEventMessage(message: Message): boolean {
-  const rawValue = message.metadata?.system_event;
-  return (
-    rawValue === true ||
-    rawValue === "true" ||
-    rawValue === 1 ||
-    rawValue === "1"
-  );
-}
-
-// Check if current user can assign contacts (permission-based)
 const canAssignContacts = computed(() => {
   return (
     authStore.hasPermission("chat.assign", "write") ||
@@ -1226,7 +680,35 @@ const canReadCustomActions = computed(() => {
   return authStore.hasPermission("custom_actions", "read");
 });
 
-// Get list of users for assignment
+const chatActions = useChatActions(
+  computed(() => contactsStore.currentContact),
+  {
+    isAdminUser,
+    refreshContactsSidebar,
+    canReadCustomActions,
+  },
+);
+const {
+  customActions,
+  executingActionId,
+  isTransferring,
+  isResuming,
+  isAssignDialogOpen,
+  assignSearchQuery,
+  isClaimingCurrentChat,
+  isClosingCurrentChat,
+  isReopeningCurrentChat,
+  isUpdatingCurrentChatPublic,
+  getActionIcon,
+  fetchCustomActions,
+  executeCustomAction,
+  transferToAgent,
+  assignContactToUser,
+  claimCurrentChat,
+  closeCurrentChat,
+  reopenCurrentChat,
+} = chatActions;
+
 const assignableUsers = computed(() => {
   const instanceId = contactsStore.currentContact?.instance_id?.trim();
   return usersStore.users
@@ -1259,38 +741,6 @@ function getAssignedAgentName(contact: Contact): string {
   }
 
   return assignedUserID;
-}
-
-// Icon mapping for custom actions
-const actionIconMap: Record<string, any> = {
-  ticket: Ticket,
-  user: User,
-  "bar-chart": BarChart,
-  link: Link,
-  phone: Phone,
-  mail: Mail,
-  "file-text": FileText,
-  "external-link": ExternalLink,
-  zap: Zap,
-  globe: Globe,
-  code: Code,
-};
-
-function getActionIcon(iconName: string) {
-  return actionIconMap[iconName] || Zap;
-}
-
-async function fetchCustomActions() {
-  try {
-    const response = await customActionsService.list();
-    const data = (response.data as any).data || response.data;
-    customActions.value = (data.custom_actions || []).filter(
-      (a: CustomAction) => a.is_active,
-    );
-  } catch (error) {
-    // Silently fail - custom actions are optional
-    console.error("Failed to fetch custom actions:", error);
-  }
 }
 
 async function toggleTagFilter(tagName: string) {
@@ -1354,71 +804,6 @@ const selectedInstanceName = computed(() => {
   return selected?.name || contactsStore.selectedInstanceId;
 });
 
-async function executeCustomAction(action: CustomAction) {
-  if (!contactsStore.currentContact || executingActionId.value) return;
-
-  executingActionId.value = action.id;
-  try {
-    const response = await customActionsService.execute(
-      action.id,
-      contactsStore.currentContact.id,
-    );
-    let result: ActionResult = (response.data as any).data || response.data;
-
-    // JavaScript actions are now executed server-side via goja.
-    // The response already contains structured result fields (toast, clipboard, redirect_url, message).
-
-    // Handle different result types
-    if (result.redirect_url) {
-      let redirectUrl = result.redirect_url;
-      if (!redirectUrl.startsWith("/api/")) {
-        // All redirect URLs must now be server-validated relative paths
-        // (one-time redirect tokens). Reject anything else.
-        redirectUrl = "";
-      }
-      if (redirectUrl) {
-        const basePath = ((window as any).__BASE_PATH__ ?? "").replace(
-          /\/$/,
-          "",
-        );
-        redirectUrl = basePath + redirectUrl;
-        window.open(redirectUrl, "_blank", "noopener,noreferrer");
-      }
-    }
-
-    if (result.clipboard) {
-      // Copy to clipboard
-      await navigator.clipboard.writeText(result.clipboard);
-      toast.success(t("common.copiedToClipboard"));
-    }
-
-    if (result.toast) {
-      // Show toast notification
-      if (result.toast.type === "success") {
-        toast.success(result.toast.message);
-      } else if (result.toast.type === "error") {
-        toast.error(result.toast.message);
-      } else {
-        toast.info(result.toast.message);
-      }
-    } else if (result.success && !result.redirect_url && !result.clipboard) {
-      // Default success message
-      toast.success(result.message || t("chat.actionExecuted"));
-    } else if (!result.success) {
-      toast.error(result.message || t("chat.actionFailed"));
-    }
-  } catch (error: any) {
-    const message = error.response?.data?.message || "Failed to execute action";
-    toast.error(message);
-  } finally {
-    executingActionId.value = null;
-  }
-}
-
-// Search state for assignment dialog
-const assignSearchQuery = ref("");
-
-// Filtered users for assignment dialog
 const filteredAssignableUsers = computed(() => {
   const query = assignSearchQuery.value.toLowerCase().trim();
   if (!query) return assignableUsers.value;
@@ -1519,7 +904,7 @@ onUnmounted(() => {
   wsService.unsubscribe("chat_collaborator_invite", handleCollaboratorInvite);
   wsService.unsubscribe("chat_collaborator_update", handleCollaboratorUpdate);
   const activeContact = contactsStore.currentContact;
-  stopTypingForContact(activeContact, { force: true });
+  stopTypingForContact(activeContact, { force: true, ...typingContext() });
   resetTypingPresenceState();
   contactsSearchPrefetchRunToken++;
   if (contactsSearchRefreshTimer !== null) {
@@ -1539,13 +924,7 @@ onUnmounted(() => {
   contactsStore.setCurrentContact(null);
   notesStore.clearNotes();
   resetMediaLoadingPipeline();
-  // Clean up blob URLs to prevent memory leaks
-  Object.values(mediaBlobUrls.value).forEach((url) => {
-    URL.revokeObjectURL(url);
-  });
-  mediaBlobUrls.value = {};
-  mediaBlobCache.clear();
-  // Clear sticky date timeout
+  cleanupBlobUrls();
   if (stickyDateTimeout) clearTimeout(stickyDateTimeout);
   if (quoteHighlightTimeout) clearTimeout(quoteHighlightTimeout);
 });
@@ -1589,7 +968,7 @@ function updateStickyDate(scrollContainer: HTMLElement) {
 // Watch for route changes
 watch(contactId, (newId) => {
   const previousContact = contactsStore.currentContact;
-  stopTypingForContact(previousContact, { force: true });
+  stopTypingForContact(previousContact, { force: true, ...typingContext() });
   resetTypingPresenceState();
   const selectionSequence = ++contactSelectionSequence;
   resetBatchPrintSelection();
@@ -2070,7 +1449,7 @@ async function deleteSidebarEntry(entry: SidebarContactEntry) {
       : false;
 
     if (deletedCurrentContact) {
-      stopTypingForContact(contactsStore.currentContact, { force: true });
+      stopTypingForContact(contactsStore.currentContact, { force: true, ...typingContext() });
       resetTypingPresenceState();
       wsService.setCurrentContact(null);
       contactsStore.setCurrentContact(null);
@@ -2132,7 +1511,7 @@ async function softDeleteSidebarEntry(entry: SidebarContactEntry) {
       : false;
 
     if (deletedCurrentContact) {
-      stopTypingForContact(contactsStore.currentContact, { force: true });
+      stopTypingForContact(contactsStore.currentContact, { force: true, ...typingContext() });
       resetTypingPresenceState();
       wsService.setCurrentContact(null);
       contactsStore.setCurrentContact(null);
@@ -2183,7 +1562,7 @@ function handleProfilePhotoImageError() {
 
 async function handleContactDeleted(contactId: string) {
   if (contactsStore.currentContact?.id === contactId) {
-    stopTypingForContact(contactsStore.currentContact, { force: true });
+    stopTypingForContact(contactsStore.currentContact, { force: true, ...typingContext() });
     resetTypingPresenceState();
     wsService.setCurrentContact(null);
     contactsStore.setCurrentContact(null);
@@ -2202,7 +1581,7 @@ async function sendMessage() {
   if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) return;
   if (!canSendMessage.value || !contactsStore.currentContact) return;
 
-  stopTypingForContact(contactsStore.currentContact);
+  stopTypingForContact(contactsStore.currentContact, typingContext());
   isSending.value = true;
   try {
     const outboundInstanceID = resolveOutboundInstanceID(
@@ -2257,8 +1636,6 @@ async function sendMessage() {
   }
 }
 
-const retryingMessageId = ref<string | null>(null);
-const revokingMessageId = ref<string | null>(null);
 
 async function retryMessage(message: Message) {
   if (!contactsStore.currentContact || retryingMessageId.value) return;
@@ -2353,121 +1730,6 @@ function resetTextareaHeight() {
   textarea.style.height = "auto";
 }
 
-function getReplyPreviewContent(message: Message): string {
-  if (!message.reply_to_message) return "";
-  const reply = message.reply_to_message;
-  if (reply.message_type === "text") {
-    const rawBody =
-      typeof reply.content === "string"
-        ? reply.content
-        : reply.content?.body || "";
-    const body = applyMentionDisplayNames(normalizeDeletedMessageText(rawBody));
-    return body.length > 50 ? body.substring(0, 50) + "..." : body;
-  }
-  if (reply.message_type === "button_reply") {
-    const body =
-      typeof reply.content === "string"
-        ? reply.content
-        : reply.content?.body || "";
-    const displayBody = applyMentionDisplayNames(body);
-    return displayBody.length > 50
-      ? displayBody.substring(0, 50) + "..."
-      : displayBody;
-  }
-  if (reply.message_type === "interactive") {
-    const body =
-      typeof reply.content === "string"
-        ? reply.content
-        : (reply as any).interactive_data?.body || reply.content?.body || "";
-    const displayBody = applyMentionDisplayNames(body);
-    return displayBody.length > 50
-      ? displayBody.substring(0, 50) + "..."
-      : displayBody;
-  }
-  if (reply.message_type === "template") {
-    const body = reply.content?.body || "";
-    const displayBody = applyMentionDisplayNames(body);
-    return displayBody.length > 50
-      ? displayBody.substring(0, 50) + "..."
-      : displayBody;
-  }
-  if (reply.message_type === "image") {
-    const body =
-      typeof reply.content === "string"
-        ? reply.content
-        : reply.content?.body || "";
-    const displayBody = applyMentionDisplayNames(body);
-    if (displayBody.trim() !== "") {
-      return displayBody.length > 50
-        ? displayBody.substring(0, 50) + "..."
-        : displayBody;
-    }
-    return "[Photo]";
-  }
-  if (reply.message_type === "video") return "[Video]";
-  if (reply.message_type === "audio") return "[Audio]";
-  if (reply.message_type === "document") return "[Document]";
-  if (reply.message_type === "location") return "[Location]";
-  if (reply.message_type === "contacts" || reply.message_type === "contact")
-    return "[Contact]";
-  if (reply.message_type === "sticker") return "[Sticker]";
-  return "[Message]";
-}
-
-function getReplyPreviewMediaURL(message: Message): string {
-  const rawURL =
-    typeof message.reply_to_message?.media_url === "string"
-      ? message.reply_to_message.media_url.trim()
-      : "";
-  if (!rawURL) return "";
-
-  const lower = rawURL.toLowerCase();
-  if (
-    lower.startsWith("http://") ||
-    lower.startsWith("https://") ||
-    lower.startsWith("data:") ||
-    rawURL.startsWith("/")
-  ) {
-    return rawURL;
-  }
-  return "";
-}
-
-function shouldShowReplyPreviewThumbnail(message: Message): boolean {
-  return (
-    message.reply_to_message?.message_type === "image" &&
-    getReplyPreviewMediaURL(message) !== ""
-  );
-}
-
-function resolveReplyPreviewMediaType(message: Message): ChatMediaViewerType {
-  const type = message.reply_to_message?.message_type;
-  if (type === "video") return "video";
-  if (type === "audio") return "audio";
-  if (type === "document") return "document";
-  return "image";
-}
-
-function openChatMediaViewer(
-  url: string,
-  type: ChatMediaViewerType,
-  title?: string,
-): void {
-  const normalizedURL = typeof url === "string" ? url.trim() : "";
-  if (!normalizedURL) return;
-  chatMediaViewerURL.value = normalizedURL;
-  chatMediaViewerType.value = type;
-  chatMediaViewerTitle.value = (title || "").trim();
-  isChatMediaViewerOpen.value = true;
-}
-
-function closeChatMediaViewer(): void {
-  isChatMediaViewerOpen.value = false;
-  chatMediaViewerURL.value = "";
-  chatMediaViewerType.value = "image";
-  chatMediaViewerTitle.value = "";
-}
-
 function openReplyPreviewMedia(message: Message, event?: MouseEvent): void {
   if (isBatchPrintSelectionMode.value) return;
   if (isModifiedPointerEvent(event)) return;
@@ -2478,53 +1740,7 @@ function openReplyPreviewMedia(message: Message, event?: MouseEvent): void {
   openChatMediaViewer(
     mediaURL,
     resolveReplyPreviewMediaType(message),
-    message.reply_to_message?.media_filename,
-  );
-}
-
-function handleReplyPreviewThumbnailError(event: Event): void {
-  const target = event.target as HTMLImageElement | null;
-  if (!target) return;
-  target.style.display = "none";
-}
-
-function getReplyAuthorLabel(message: Message): string {
-  if (!message.reply_to_message) {
-    return "You";
-  }
-  if (message.reply_to_message.direction === "outgoing") {
-    return "You";
-  }
-  if (
-    (isGroupMessage(message) || isCurrentGroupChat.value) &&
-    message.reply_to_message.sender_phone
-  ) {
-    return message.reply_to_message.sender_phone;
-  }
-  return (
-    contactsStore.currentContact?.profile_name ||
-    contactsStore.currentContact?.name ||
-    "Customer"
-  );
-}
-
-function getReplyingToAuthorLabel(message: Message | null): string {
-  if (!message) {
-    return "Yourself";
-  }
-  if (message.direction === "outgoing") {
-    return "Yourself";
-  }
-  if (isGroupMessage(message) || isCurrentGroupChat.value) {
-    const senderPhone = getGroupSenderPhone(message);
-    if (senderPhone) {
-      return senderPhone;
-    }
-  }
-  return (
-    contactsStore.currentContact?.profile_name ||
-    contactsStore.currentContact?.name ||
-    "Customer"
+    message.reply_to_message?.media_filename ?? "",
   );
 }
 
@@ -2612,40 +1828,7 @@ function insertCannedResponse(payload: {
   attachments: CannedResponseAttachment[];
 }) {
   messageInput.value = payload.content;
-  if (payload.attachments && payload.attachments.length > 0) {
-    pendingCannedResponse.value = {
-      id: payload.id,
-      attachments: [...payload.attachments],
-    };
-  } else {
-    pendingCannedResponse.value = null;
-  }
-  cannedPickerOpen.value = false;
-  cannedSearchQuery.value = "";
-}
-
-function closeCannedPicker() {
-  cannedPickerOpen.value = false;
-  cannedSearchQuery.value = "";
-}
-
-function clearPendingCannedAttachments() {
-  pendingCannedResponse.value = null;
-}
-
-function removePendingCannedAttachment(index: number) {
-  if (!pendingCannedResponse.value) return;
-  pendingCannedResponse.value.attachments =
-    pendingCannedResponse.value.attachments.filter(
-      (_, currentIndex) => currentIndex !== index,
-    );
-  if (pendingCannedResponse.value.attachments.length === 0) {
-    pendingCannedResponse.value = null;
-  }
-}
-
-function getPendingAttachmentIcon(type: string) {
-  return type === "video" ? Play : ImageIcon;
+  chatMessaging.insertCannedResponse(payload);
 }
 
 function insertEmoji(emoji: string) {
@@ -2682,28 +1865,6 @@ function resolveSendErrorMessage(error: any, fallbackMessage: string): string {
   return baseMessage;
 }
 
-// Reaction handling
-const reactionPickerMessageId = ref<string | null>(null);
-const quickReactionEmojis = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
-
-async function sendReaction(messageId: string, emoji: string) {
-  if (!contactsStore.currentContact) return;
-
-  try {
-    const response = await messagesService.sendReaction(
-      contactsStore.currentContact.id,
-      messageId,
-      emoji,
-    );
-    // Update will come via WebSocket, but we can update locally for immediate feedback
-    const data = response.data.data || response.data;
-    contactsStore.updateMessageReactions(messageId, data.reactions);
-  } catch (error) {
-    toast.error(t("chat.reactionFailed"));
-  }
-  reactionPickerMessageId.value = null;
-}
-
 function _toggleReactionPicker(messageId: string) {
   if (reactionPickerMessageId.value === messageId) {
     reactionPickerMessageId.value = null;
@@ -2711,7 +1872,7 @@ function _toggleReactionPicker(messageId: string) {
     reactionPickerMessageId.value = messageId;
   }
 }
-void _toggleReactionPicker; // Suppress unused warning
+void _toggleReactionPicker;
 
 function replyToMessage(message: Message) {
   contactsStore.setReplyingTo(message);
@@ -2728,7 +1889,7 @@ watch(messageInput, (val) => {
     const query = val.slice(1); // Remove the leading /
     cannedSearchQuery.value = query;
     cannedPickerOpen.value = true;
-    stopTypingForContact(activeContact);
+    stopTypingForContact(activeContact, typingContext());
   } else if (cannedPickerOpen.value) {
     // Close picker if user removes the /
     cannedPickerOpen.value = false;
@@ -2736,7 +1897,6 @@ watch(messageInput, (val) => {
   }
 
   if (!activeContact) {
-    clearTypingPauseTimer();
     resetTypingPresenceState();
     return;
   }
@@ -2746,222 +1906,26 @@ watch(messageInput, (val) => {
   }
 
   if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) {
-    stopTypingForContact(activeContact);
+    stopTypingForContact(activeContact, typingContext());
     return;
   }
 
   if (val.trim() === "") {
-    stopTypingForContact(activeContact);
+    stopTypingForContact(activeContact, typingContext());
     return;
   }
 
-  void sendTypingPresenceForContact(activeContact, "composing");
-  scheduleTypingPaused(activeContact);
+  const ctx = typingContext();
+  void sendTypingPresenceForContact(activeContact, "composing", ctx);
+  scheduleTypingPaused(activeContact, ctx);
 });
 
-async function assignContactToUser(userId: string | null) {
-  if (!contactsStore.currentContact) return;
-
-  try {
-    await contactsService.assign(contactsStore.currentContact.id, userId);
-    toast.success(
-      userId ? t("chat.contactAssigned") : t("chat.contactUnassigned"),
-    );
-    // Update current contact with new assignment
-    contactsStore.currentContact = {
-      ...contactsStore.currentContact,
-      assigned_user_id: userId || undefined,
-      status: userId ? "open" : "pending",
-    };
-    // Refresh contacts list
-    await refreshContactsSidebar();
-  } catch (error: any) {
-    const message = error.response?.data?.message || t("chat.assignFailed");
-    toast.error(message);
-  }
+function toggleCurrentChatPublicVisibility() {
+  return chatActions.toggleCurrentChatPublicVisibility(canToggleCurrentChatPublic.value);
 }
 
-async function claimCurrentChat() {
-  if (!contactsStore.currentContact || isClaimingCurrentChat.value) return;
-  isClaimingCurrentChat.value = true;
-  try {
-    const updated = await contactsStore.claimChat(
-      contactsStore.currentContact.id,
-    );
-    if (!updated) {
-      toast.error("Failed to claim chat");
-      return;
-    }
-    toast.success("Chat claimed successfully");
-    contactsStore.setActiveChatTab("assigned");
-    await refreshContactsSidebar();
-    const selectionSequence = ++contactSelectionSequence;
-    resetMediaLoadingPipeline();
-    await selectContact(updated.id, selectionSequence);
-  } catch (error: any) {
-    const message = error?.response?.data?.message || "Failed to claim chat";
-    toast.error(message);
-  } finally {
-    isClaimingCurrentChat.value = false;
-  }
-}
-
-async function closeCurrentChat() {
-  if (!contactsStore.currentContact || isClosingCurrentChat.value) return;
-  isClosingCurrentChat.value = true;
-  try {
-    const updated = await contactsStore.closeChat(
-      contactsStore.currentContact.id,
-    );
-    if (!updated) {
-      toast.error("Failed to close chat");
-      return;
-    }
-    toast.success("Chat closed");
-    await refreshContactsSidebar();
-    stopTypingForContact(contactsStore.currentContact, { force: true });
-    resetTypingPresenceState();
-    wsService.setCurrentContact(null);
-    contactsStore.setCurrentContact(null);
-    contactsStore.clearMessages();
-    router.push("/chat");
-  } catch (error: any) {
-    const message = error?.response?.data?.message || "Failed to close chat";
-    toast.error(message);
-  } finally {
-    isClosingCurrentChat.value = false;
-  }
-}
-
-async function reopenCurrentChat() {
-  if (!contactsStore.currentContact || isReopeningCurrentChat.value) return;
-  isReopeningCurrentChat.value = true;
-  try {
-    const updated = await contactsStore.reopenChat(
-      contactsStore.currentContact.id,
-    );
-    if (!updated) {
-      toast.error("Failed to reopen chat");
-      return;
-    }
-    toast.success("Chat reopened and moved to pending queue");
-    contactsStore.setActiveChatTab("pending");
-    await refreshContactsSidebar();
-    const selectionSequence = ++contactSelectionSequence;
-    resetMediaLoadingPipeline();
-    await selectContact(updated.id, selectionSequence);
-  } catch (error: any) {
-    const message = error?.response?.data?.message || "Failed to reopen chat";
-    toast.error(message);
-  } finally {
-    isReopeningCurrentChat.value = false;
-  }
-}
-
-async function toggleCurrentChatPublicVisibility() {
-  if (
-    !contactsStore.currentContact ||
-    !canToggleCurrentChatPublic.value ||
-    isUpdatingCurrentChatPublic.value
-  ) {
-    return;
-  }
-
-  isUpdatingCurrentChatPublic.value = true;
-  const nextIsPublic = contactsStore.currentContact.is_public !== true;
-  try {
-    const updated = await contactsStore.setChatPublic(
-      contactsStore.currentContact.id,
-      nextIsPublic,
-    );
-    if (!updated) {
-      toast.error("Failed to update public chat setting");
-      return;
-    }
-    toast.success(
-      nextIsPublic ? t("chat.publicChatEnabled") : t("chat.publicChatDisabled"),
-    );
-
-    if (
-      nextIsPublic &&
-      contactsStore.currentContact?.id === updated.id &&
-      contactsStore.isMessageAccessRestricted
-    ) {
-      const activeAccountFilter = selectedAccountFilter(selectedAccount.value);
-      await contactsStore.fetchMessages(
-        updated.id,
-        activeAccountFilter ? { account: activeAccountFilter } : undefined,
-      );
-    }
-
-    await refreshContactsSidebar();
-  } catch (error: any) {
-    const message =
-      error?.response?.data?.message || t("chat.publicChatUpdateFailed");
-    toast.error(message);
-  } finally {
-    isUpdatingCurrentChatPublic.value = false;
-  }
-}
-
-async function transferToAgent() {
-  if (!contactsStore.currentContact) return;
-
-  isTransferring.value = true;
-  try {
-    await chatbotService.createTransfer({
-      contact_id: contactsStore.currentContact.id,
-      whatsapp_account: (contactsStore.currentContact as any).whatsapp_account,
-      source: "manual",
-    });
-    toast.success(t("chat.transferSuccess"), {
-      description: t("chat.transferSuccessDesc"),
-    });
-    // Refresh transfers store (WebSocket will also update, but this ensures immediate sync)
-    await transfersStore.fetchTransfers({ status: "active" });
-  } catch (error: any) {
-    const message = error.response?.data?.message || t("chat.transferFailed");
-    toast.error(message);
-  } finally {
-    isTransferring.value = false;
-  }
-}
-
-async function resumeChatbot() {
-  if (!activeTransferId.value) return;
-
-  const currentContactId = contactsStore.currentContact?.id;
-  isResuming.value = true;
-  try {
-    await chatbotService.resumeTransfer(activeTransferId.value);
-    toast.success(t("chat.resumeSuccess"), {
-      description: t("chat.resumeSuccessDesc"),
-    });
-    // Refresh transfers store to update UI
-    await transfersStore.fetchTransfers({ status: "active" });
-    // Refresh contacts list (assignment may have changed)
-    await refreshContactsSidebar();
-
-    // Check if current contact is still in the list (may have been unassigned)
-    if (currentContactId) {
-      const stillExists = contactsStore.contacts.some(
-        (c) => c.id === currentContactId,
-      );
-      if (!stillExists) {
-        // Contact no longer visible to this user, navigate away
-        stopTypingForContact(contactsStore.currentContact, { force: true });
-        resetTypingPresenceState();
-        contactsStore.setCurrentContact(null);
-        contactsStore.clearMessages();
-        router.push("/chat");
-      }
-    }
-  } catch (error: any) {
-    const message = error.response?.data?.message || t("chat.resumeFailed");
-    toast.error(message);
-  } finally {
-    isResuming.value = false;
-  }
+function resumeChatbot() {
+  return chatActions.resumeChatbot(activeTransferId.value);
 }
 
 function scrollToBottom(instant = false) {
@@ -3014,14 +1978,6 @@ function getMessageStatusClass(status: string) {
   }
 }
 
-function formatMessageTime(dateStr: string) {
-  const date = new Date(dateStr);
-  return date.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function formatContactTime(dateStr?: string) {
   if (!dateStr) return "";
   const date = new Date(dateStr);
@@ -3041,418 +1997,20 @@ function formatContactTime(dateStr?: string) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function getDateLabel(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const messageDate = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-  );
-  const diffDays = Math.floor(
-    (today.getTime() - messageDate.getTime()) / 86400000,
-  );
-
-  if (diffDays === 0) {
-    return "Today";
-  } else if (diffDays === 1) {
-    return "Yesterday";
-  }
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function shouldShowDateSeparator(index: number): boolean {
-  const messages = contactsStore.messages;
-  if (index === 0) return true;
-
-  const currentDate = new Date(messages[index].created_at);
-  const prevDate = new Date(messages[index - 1].created_at);
-
-  return currentDate.toDateString() !== prevDate.toDateString();
-}
-
-function getMessageContentRaw(message: Message): string {
-  if (message.message_type === "text") {
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "";
-  }
-  if (message.message_type === "button_reply") {
-    // Button reply stores the selected button title in content
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "";
-  }
-  if (message.message_type === "interactive") {
-    // Interactive messages store body text in content (string) or content.body or interactive_data.body
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    if (message.interactive_data?.body) {
-      return message.interactive_data.body;
-    }
-    return message.content?.body || "[Interactive Message]";
-  }
-  // For media messages, return caption if available (media is displayed inline)
-  if (
-    message.message_type === "image" ||
-    message.message_type === "video" ||
-    message.message_type === "sticker"
-  ) {
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "";
-  }
-  if (message.message_type === "audio") {
-    return ""; // Audio doesn't have captions
-  }
-  if (message.message_type === "document") {
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "";
-  }
-  if (message.message_type === "template") {
-    // Show actual content if available (campaign messages), otherwise fallback
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "[Template Message]";
-  }
-  if (message.message_type === "location") {
-    return ""; // Location is displayed as a map/card, not text
-  }
-  if (
-    message.message_type === "contacts" ||
-    message.message_type === "contact"
-  ) {
-    return ""; // Contacts are displayed as a card, not text
-  }
-  if (message.message_type === "unsupported") {
-    return ""; // Displayed as a visual card, not text
-  }
-  return "[Message]";
-}
-
-function getMessageContent(message: Message): string {
-  const rawContent = getMessageContentRaw(message);
-  const normalizedContent = normalizeDeletedMessageText(rawContent);
-  return applyMentionDisplayNames(normalizedContent);
-}
-
-interface LocationData {
-  latitude: number;
-  longitude: number;
-  name?: string;
-  address?: string;
-}
-
-interface ContactData {
-  name: string;
-  phones?: string[];
-}
-
-function getLocationData(message: Message): LocationData | null {
-  if (message.message_type !== "location") return null;
-  try {
-    // Content is stored as JSON string in body
-    const body = message.content?.body || message.content;
-    if (typeof body === "string") {
-      return JSON.parse(body);
-    }
-    return body as LocationData;
-  } catch {
-    return null;
-  }
-}
-
-function getContactsData(message: Message): ContactData[] {
-  if (message.message_type !== "contacts" && message.message_type !== "contact")
-    return [];
-  try {
-    // Content is stored as JSON string in body
-    const body = message.content?.body || message.content;
-    if (typeof body === "string") {
-      return JSON.parse(body);
-    }
-    return body as ContactData[];
-  } catch {
-    return [];
-  }
-}
-
-function getGoogleMapsUrl(location: LocationData): string {
-  return `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
-}
-
-function getInteractiveButtons(
-  message: Message,
-): Array<{ id: string; title: string }> {
-  if (!message.interactive_data) {
-    return [];
-  }
-  // Support both interactive and template messages with buttons
-  if (
-    message.message_type !== "interactive" &&
-    message.message_type !== "template"
-  ) {
-    return [];
-  }
-  // Handle both "buttons" (<=3) and "rows" (>3 list format)
-  const items =
-    message.interactive_data.buttons || message.interactive_data.rows;
-  if (!items || !Array.isArray(items)) {
-    return [];
-  }
-  return items.map((btn: any) => ({
-    id: btn.reply?.id || btn.id || "",
-    title: btn.reply?.title || btn.title || btn.text || "",
-  }));
-}
-
-interface CTAUrlData {
-  type: "cta_url";
-  body: string;
-  button_text: string;
-  url: string;
-}
-
-function sanitizeCTAUrl(raw: unknown): string {
-  const candidate = typeof raw === "string" ? raw.trim() : "";
-  if (!candidate) return "";
-  try {
-    const parsed = new URL(candidate);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return "";
-    }
-    return parsed.toString();
-  } catch {
-    return "";
-  }
-}
-
-function getCTAUrlData(message: Message): CTAUrlData | null {
-  if (message.message_type !== "interactive" || !message.interactive_data) {
-    return null;
-  }
-  if (message.interactive_data.type !== "cta_url") {
-    return null;
-  }
-  const safeURL = sanitizeCTAUrl((message.interactive_data as any).url);
-  if (!safeURL) {
-    return null;
-  }
-  return {
-    type: "cta_url",
-    body: message.interactive_data.body || "",
-    button_text: (message.interactive_data as any).button_text || "Open",
-    url: safeURL,
-  };
-}
-
-function isMediaMessage(message: Message): boolean {
-  return ["image", "video", "audio", "document", "sticker"].includes(
-    message.message_type,
-  );
-}
-
-function getMediaBlobUrl(message: Message): string {
-  return mediaBlobUrls.value[message.id] || "";
-}
-
-function isMediaLoading(message: Message): boolean {
-  return mediaLoadingStates.value[message.id] || false;
-}
-
 function getAttachmentFilename(message: Message): string {
   return resolveMediaFilename(message);
 }
 
-function isModifiedPointerEvent(event?: MouseEvent): boolean {
-  if (!event) return false;
-  return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-}
-
 function downloadAttachment(message: Message, event?: MouseEvent) {
-  if (isBatchPrintSelectionMode.value) return;
-  if (isModifiedPointerEvent(event)) return;
-  const mediaUrl = getMediaBlobUrl(message);
-  if (!mediaUrl) return;
-  downloadMessageMedia(mediaUrl, message);
+  chatMessaging.downloadAttachment(message, event, getMediaBlobUrl);
 }
 
 function printAttachment(message: Message, event?: MouseEvent) {
-  if (isBatchPrintSelectionMode.value) return;
-  if (isModifiedPointerEvent(event)) return;
-  const mediaUrl = getMediaBlobUrl(message);
-  if (!mediaUrl) return;
-  if (!isMessagePrintSupported(message)) {
-    toast.error(t("chat.printDialogFailed"), {
-      description: t("chat.batchPrintUnsupportedDesc"),
-    });
-    return;
-  }
-  void (async () => {
-    const opened = await openPrintDialogForSingleMessage({
-      message,
-      mediaUrl,
-      resolveBlob: () => resolveMessageBlobForBatchPrint(message),
-    });
-    if (!opened) {
-      toast.error(t("chat.printDialogFailed"));
-    }
-  })();
-}
-
-function resetMediaLoadingPipeline() {
-  mediaLoadGeneration++;
-  pendingMediaQueue.length = 0;
-  queuedMediaMessageIDs.clear();
-  for (const controller of inFlightMediaRequests.values()) {
-    controller.abort();
-  }
-  inFlightMediaRequests.clear();
-}
-
-function enqueueMediaForBackgroundLoad(message: Message) {
-  if (queuedMediaMessageIDs.has(message.id)) return;
-  queuedMediaMessageIDs.add(message.id);
-  pendingMediaQueue.push(message);
-}
-
-function pumpMediaLoadQueue() {
-  while (
-    activeMediaLoadCount < MAX_MEDIA_LOAD_CONCURRENCY &&
-    pendingMediaQueue.length > 0
-  ) {
-    const message = pendingMediaQueue.shift();
-    if (!message) continue;
-    queuedMediaMessageIDs.delete(message.id);
-
-    if (
-      !message.media_url ||
-      mediaBlobUrls.value[message.id] ||
-      mediaLoadingStates.value[message.id]
-    ) {
-      continue;
-    }
-
-    const generationAtStart = mediaLoadGeneration;
-    activeMediaLoadCount++;
-    void loadMediaForMessage(message, generationAtStart).finally(() => {
-      activeMediaLoadCount = Math.max(0, activeMediaLoadCount - 1);
-      pumpMediaLoadQueue();
-    });
-  }
-}
-
-async function loadMediaForMessage(
-  message: Message,
-  generation: number = mediaLoadGeneration,
-) {
-  if (
-    generation !== mediaLoadGeneration ||
-    !message.media_url ||
-    mediaLoadingStates.value[message.id]
-  ) {
-    return;
-  }
-
-  const cachedBlob = mediaBlobCache.get(message.id);
-  if (cachedBlob) {
-    if (!mediaBlobUrls.value[message.id]) {
-      mediaBlobUrls.value[message.id] = URL.createObjectURL(cachedBlob);
-    }
-    return;
-  }
-
-  const persistentCachedBlob = await getCachedMediaBlob(message.id);
-  if (persistentCachedBlob) {
-    mediaBlobCache.set(message.id, persistentCachedBlob);
-    if (generation !== mediaLoadGeneration) {
-      return;
-    }
-    if (!mediaBlobUrls.value[message.id]) {
-      mediaBlobUrls.value[message.id] =
-        URL.createObjectURL(persistentCachedBlob);
-    }
-    return;
-  }
-
-  if (mediaBlobUrls.value[message.id]) {
-    return;
-  }
-
-  const controller = new AbortController();
-  inFlightMediaRequests.set(message.id, controller);
-  mediaLoadingStates.value[message.id] = true;
-
-  try {
-    const blob = await prefetchMediaBlob(message.id, {
-      signal: controller.signal,
-    });
-    if (!blob) {
-      throw new Error("Failed to load media: empty response");
-    }
-    mediaBlobCache.set(message.id, blob);
-    void storeMediaBlobInPersistentCache(message.id, blob);
-    if (generation !== mediaLoadGeneration) {
-      return;
-    }
-    if (mediaBlobUrls.value[message.id]) {
-      URL.revokeObjectURL(mediaBlobUrls.value[message.id]);
-    }
-    const blobUrl = URL.createObjectURL(blob);
-    mediaBlobUrls.value[message.id] = blobUrl;
-  } catch (error: any) {
-    if (error?.name === "AbortError") {
-      return;
-    }
-    console.error("Failed to load media:", error, "message_id:", message.id);
-  } finally {
-    if (inFlightMediaRequests.get(message.id) === controller) {
-      inFlightMediaRequests.delete(message.id);
-    }
-    mediaLoadingStates.value[message.id] = false;
-  }
-}
-
-// Load media for all messages that have media_url
-function loadMediaForMessages() {
-  try {
-    for (const message of contactsStore.messages) {
-      if (message.media_url && !mediaBlobUrls.value[message.id]) {
-        enqueueMediaForBackgroundLoad(message);
-      }
-    }
-    pumpMediaLoadQueue();
-  } catch (e) {
-    console.error("Error in loadMediaForMessages:", e);
-  }
+  chatMessaging.printAttachment(message, event, getMediaBlobUrl);
 }
 
 function openMediaPreview(message: Message, event?: MouseEvent) {
-  if (isBatchPrintSelectionMode.value) {
-    handleMessageBubbleClickForBatchPrint(message, event);
-    return;
-  }
-  if (isModifiedPointerEvent(event)) return;
-  const url = getMediaBlobUrl(message);
-  if (!url) return;
-  openChatMediaViewer(
-    url,
-    message.message_type === "video" ? "video" : "image",
-    getAttachmentFilename(message),
-  );
+  chatMessaging.openMediaPreview(message, event, getMediaBlobUrl);
 }
 
 function handleImageError(event: Event) {
@@ -3462,402 +2020,6 @@ function handleImageError(event: Event) {
 
 function handleMediaError(event: Event, mediaType: string) {
   console.error(`Failed to load ${mediaType}:`, event);
-}
-
-// File upload functions
-function openFilePicker() {
-  fileInputRef.value?.click();
-}
-
-function resetBatchPrintSelection() {
-  isBatchPrintSelectionMode.value = false;
-  selectedBatchPrintMessageIds.value = [];
-}
-
-function cancelBatchPrintSelection() {
-  resetBatchPrintSelection();
-}
-
-function isBatchPrintBubbleSelectable(message: Message): boolean {
-  return isMergePrintableBubbleMessage(message);
-}
-
-function isBatchPrintBubbleSelected(messageId: string): boolean {
-  return selectedBatchPrintMessageIds.value.includes(messageId);
-}
-
-function toggleBatchPrintMessageSelection(messageId: string) {
-  if (isBatchPrintBubbleSelected(messageId)) {
-    selectedBatchPrintMessageIds.value =
-      selectedBatchPrintMessageIds.value.filter((id) => id !== messageId);
-    return;
-  }
-  selectedBatchPrintMessageIds.value = [
-    ...selectedBatchPrintMessageIds.value,
-    messageId,
-  ];
-}
-
-function handleMessageBubbleClickForBatchPrint(
-  message: Message,
-  event?: MouseEvent,
-) {
-  if (!isBatchPrintSelectionMode.value) return;
-  if (!isBatchPrintBubbleSelectable(message)) return;
-  if (isModifiedPointerEvent(event)) return;
-  event?.preventDefault();
-  event?.stopPropagation();
-  toggleBatchPrintMessageSelection(message.id);
-}
-
-async function resolveMessageBlobForBatchPrint(
-  message: Message,
-): Promise<Blob> {
-  const cachedBlob = mediaBlobCache.get(message.id);
-  if (cachedBlob) {
-    return cachedBlob;
-  }
-
-  const persistentCachedBlob = await getCachedMediaBlob(message.id);
-  if (persistentCachedBlob) {
-    mediaBlobCache.set(message.id, persistentCachedBlob);
-    if (!mediaBlobUrls.value[message.id]) {
-      mediaBlobUrls.value[message.id] =
-        URL.createObjectURL(persistentCachedBlob);
-    }
-    return persistentCachedBlob;
-  }
-
-  await loadMediaForMessage(message);
-  const loadedBlob = mediaBlobCache.get(message.id);
-  if (loadedBlob) {
-    return loadedBlob;
-  }
-
-  const fallbackBlob = await prefetchMediaBlob(message.id);
-  if (!fallbackBlob) {
-    throw new Error("Failed to load media: empty response");
-  }
-  mediaBlobCache.set(message.id, fallbackBlob);
-  void storeMediaBlobInPersistentCache(message.id, fallbackBlob);
-  if (!mediaBlobUrls.value[message.id]) {
-    mediaBlobUrls.value[message.id] = URL.createObjectURL(fallbackBlob);
-  }
-  return fallbackBlob;
-}
-
-async function mergeSelectedMessageBubblesAndPrint() {
-  if (!canMergeSelectedBubbleFiles.value) {
-    toast.error(t("chat.batchPrintMinSelection"), {
-      description: t("chat.batchPrintMinSelectionDesc"),
-    });
-    return;
-  }
-
-  const selectedMessageIDs = new Set(selectedBatchPrintMessageIds.value);
-  const selectedMessages = contactsStore.messages.filter(
-    (message) =>
-      selectedMessageIDs.has(message.id) &&
-      isBatchPrintBubbleSelectable(message),
-  );
-
-  if (selectedMessages.length < 2) {
-    toast.error(t("chat.batchPrintMinSelection"), {
-      description: t("chat.batchPrintMinSelectionDesc"),
-    });
-    return;
-  }
-
-  isPreparingBatchPrint.value = true;
-  toast.info(t("chat.batchPrintPreparing"));
-  try {
-    const files: File[] = [];
-    for (const message of selectedMessages) {
-      const blob = await resolveMessageBlobForBatchPrint(message);
-      const file = toMergePrintableFile(message, blob, files.length);
-      if (!file) {
-        throw new Error(`Unsupported selected message: ${message.id}`);
-      }
-      files.push(file);
-    }
-
-    const opened = await mergePhotosAndPdfsAndOpenPrintDialog(files);
-    if (!opened) {
-      toast.error(t("chat.printDialogFailed"));
-      return;
-    }
-    resetBatchPrintSelection();
-  } catch (error) {
-    console.error("Failed to merge selected bubbles for printing:", error);
-    const errorDescription =
-      error instanceof Error && error.message
-        ? error.message
-        : t("chat.batchPrintFailedDesc");
-    toast.error(t("chat.batchPrintFailed"), {
-      description: errorDescription,
-    });
-  } finally {
-    isPreparingBatchPrint.value = false;
-  }
-}
-
-function openBatchPrintPicker() {
-  if (isPreparingBatchPrint.value) return;
-
-  if (!isBatchPrintSelectionMode.value) {
-    if (!hasMergePrintableBubbles.value) {
-      toast.error(t("chat.batchPrintNoBubbleFiles"), {
-        description: t("chat.batchPrintNoBubbleFilesDesc"),
-      });
-      return;
-    }
-    resetBatchPrintSelection();
-    isBatchPrintSelectionMode.value = true;
-    toast.info(t("chat.batchPrintSelectionMode"), {
-      description: t("chat.batchPrintSelectionModeDesc"),
-    });
-    return;
-  }
-
-  void mergeSelectedMessageBubblesAndPrint();
-}
-
-function getMediaSizeErrorKey(category: WhatsAppMediaCategory) {
-  if (category === "image") {
-    return "chat.fileTooLargeImageDesc";
-  }
-  if (category === "video") {
-    return "chat.fileTooLargeVideoDesc";
-  }
-  if (category === "audio") {
-    return "chat.fileTooLargeAudioDesc";
-  }
-  return "chat.fileTooLargeDocumentDesc";
-}
-
-function buildPendingMediaUpload(
-  file: File,
-  index: number,
-): PendingMediaUpload {
-  const category = resolveWhatsAppMediaCategoryForFile(file);
-  const shouldPreview = category === "image" || category === "video";
-
-  return {
-    id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
-    file,
-    category,
-    previewUrl: shouldPreview ? URL.createObjectURL(file) : null,
-  };
-}
-
-function revokePendingMediaUpload(upload: PendingMediaUpload) {
-  if (upload.previewUrl) {
-    URL.revokeObjectURL(upload.previewUrl);
-  }
-}
-
-function formatMediaUploadSize(sizeBytes: number) {
-  const kilobyte = 1024;
-  const megabyte = kilobyte * 1024;
-  if (sizeBytes >= megabyte) {
-    return `${(sizeBytes / megabyte).toFixed(1)} MB`;
-  }
-  if (sizeBytes >= kilobyte) {
-    return `${(sizeBytes / kilobyte).toFixed(1)} KB`;
-  }
-  return `${sizeBytes} B`;
-}
-
-function setActiveMediaPreview(uploadID: string) {
-  activeMediaPreviewID.value = uploadID;
-}
-
-function removeSelectedMediaUpload(uploadID: string) {
-  const removedUpload = selectedMediaUploads.value.find(
-    (upload) => upload.id === uploadID,
-  );
-  if (!removedUpload) return;
-
-  revokePendingMediaUpload(removedUpload);
-
-  const remainingUploads = selectedMediaUploads.value.filter(
-    (upload) => upload.id !== uploadID,
-  );
-  selectedMediaUploads.value = remainingUploads;
-
-  if (remainingUploads.length === 0) {
-    closeMediaDialog();
-    return;
-  }
-
-  if (activeMediaPreviewID.value === uploadID) {
-    activeMediaPreviewID.value = remainingUploads[0].id;
-  }
-
-  if (remainingUploads.length > 1) {
-    mediaCaption.value = "";
-  }
-}
-
-function handleMediaDialogOpenChange(open: boolean) {
-  if (open) {
-    isMediaDialogOpen.value = true;
-    return;
-  }
-
-  if (isUploadingMedia.value) {
-    isMediaDialogOpen.value = true;
-    return;
-  }
-
-  closeMediaDialog();
-}
-
-function handleFileSelect(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const files = Array.from(input.files ?? []);
-  if (files.length === 0) return;
-
-  const acceptedUploads: PendingMediaUpload[] = [];
-
-  files.forEach((file, index) => {
-    const validation = validateWhatsAppMediaFile(file);
-    if (!validation.isValid) {
-      toast.error(t("chat.fileTooLarge"), {
-        description: `${file.name}: ${t(getMediaSizeErrorKey(validation.category))}`,
-      });
-      return;
-    }
-
-    acceptedUploads.push(buildPendingMediaUpload(file, index));
-  });
-
-  input.value = "";
-
-  if (acceptedUploads.length === 0) {
-    return;
-  }
-
-  selectedMediaUploads.value.forEach(revokePendingMediaUpload);
-  selectedMediaUploads.value = acceptedUploads;
-  activeMediaPreviewID.value = acceptedUploads[0]?.id ?? null;
-  mediaCaption.value = "";
-  isMediaDialogOpen.value = true;
-}
-
-function closeMediaDialog() {
-  selectedMediaUploads.value.forEach(revokePendingMediaUpload);
-  selectedMediaUploads.value = [];
-  activeMediaPreviewID.value = null;
-  mediaUploadProgress.value = null;
-  mediaCaption.value = "";
-  isMediaDialogOpen.value = false;
-}
-
-async function sendMediaMessage() {
-  if (isCurrentChatSendRestricted.value || isCurrentChatClosed.value) return;
-  if (
-    selectedMediaUploads.value.length === 0 ||
-    !contactsStore.currentContact
-  ) {
-    return;
-  }
-
-  const uploads = [...selectedMediaUploads.value];
-  const outboundInstanceID = resolveOutboundInstanceID(
-    contactsStore.currentContact,
-  );
-  const accountFilter = resolveOutboundWhatsAppAccount(
-    contactsStore.currentContact,
-  );
-  const shouldApplyCaption =
-    uploads.length === 1 && uploads[0].category !== "audio";
-  const caption = shouldApplyCaption ? mediaCaption.value : "";
-  const sentMessages: Message[] = [];
-  const successfulUploadIDs = new Set<string>();
-  let firstError: unknown = null;
-
-  isUploadingMedia.value = true;
-  try {
-    for (const [index, upload] of uploads.entries()) {
-      mediaUploadProgress.value = {
-        current: index + 1,
-        total: uploads.length,
-      };
-
-      try {
-        const response = await messagesService.sendMedia({
-          contactId: contactsStore.currentContact.id,
-          file: upload.file,
-          type: upload.category,
-          caption,
-          instance_id: outboundInstanceID,
-          whatsapp_account: accountFilter,
-        });
-        const result = response.data.data || response.data;
-        successfulUploadIDs.add(upload.id);
-        if (result) {
-          sentMessages.push(result);
-        }
-      } catch (error) {
-        if (!firstError) {
-          firstError = error;
-        }
-      }
-    }
-
-    sentMessages.forEach((message) => contactsStore.addMessage(message));
-
-    if (sentMessages.length > 0) {
-      scrollToBottom();
-      await nextTick();
-      sentMessages.forEach((message) => {
-        if (message.media_url) {
-          loadMediaForMessage(message);
-        }
-      });
-    }
-
-    if (successfulUploadIDs.size === uploads.length) {
-      toast.success(
-        uploads.length > 1
-          ? t("chat.mediaBatchSent", { count: uploads.length })
-          : t("chat.mediaSent"),
-      );
-      closeMediaDialog();
-      return;
-    }
-
-    if (successfulUploadIDs.size === 0) {
-      throw firstError;
-    }
-
-    const failedUploads = uploads.filter(
-      (upload) => !successfulUploadIDs.has(upload.id),
-    );
-
-    uploads
-      .filter((upload) => successfulUploadIDs.has(upload.id))
-      .forEach(revokePendingMediaUpload);
-
-    selectedMediaUploads.value = failedUploads;
-    activeMediaPreviewID.value = failedUploads[0]?.id ?? null;
-    mediaCaption.value = "";
-
-    toast.warning(t("chat.mediaBatchPartialFailed"), {
-      description: t("chat.mediaBatchPartialFailedDesc", {
-        sent: successfulUploadIDs.size,
-        failed: failedUploads.length,
-      }),
-    });
-  } catch (error: any) {
-    toast.error(t("chat.mediaFailed"), {
-      description: getErrorMessage(error, t("chat.mediaFailedDesc")),
-    });
-  } finally {
-    mediaUploadProgress.value = null;
-    isUploadingMedia.value = false;
-  }
 }
 </script>
 
