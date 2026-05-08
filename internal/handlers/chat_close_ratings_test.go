@@ -389,7 +389,7 @@ func TestReadInstanceChatCloseRatingSettings(t *testing.T) {
 	instanceSettings := models.JSONB{
 		"chat_close_rating_enabled":                 false,
 		"chat_close_rating_followup_window_minutes": 10,
-		"chat_close_rating_templates": map[string]interface{}{
+		"chat_close_rating_templates": map[string]any{
 			"en": "Instance English",
 			"es": "Instance Spanish",
 		},
@@ -417,7 +417,7 @@ func TestApplyChatCloseRatingSettingsToResult_AppliesAllSettings(t *testing.T) {
 		"chat_close_rating_enabled":                 false,
 		"chat_close_rating_window_days":             7,
 		"chat_close_rating_followup_window_minutes": 15,
-		"chat_close_rating_templates": map[string]interface{}{
+		"chat_close_rating_templates": map[string]any{
 			"en": "Custom English",
 			"fr": "Custom French",
 		},
@@ -445,7 +445,7 @@ func TestApplyChatCloseRatingSettingsToResult_PartialOverride(t *testing.T) {
 	// Only override enabled and templates
 	settings := models.JSONB{
 		"chat_close_rating_enabled": false,
-		"chat_close_rating_templates": map[string]interface{}{
+		"chat_close_rating_templates": map[string]any{
 			"en": "Override English",
 		},
 	}
@@ -530,7 +530,7 @@ func TestApplyChatCloseRatingSettingsToResult_MergesTemplates(t *testing.T) {
 
 	// Apply partial template override
 	settings := models.JSONB{
-		"chat_close_rating_templates": map[string]interface{}{
+		"chat_close_rating_templates": map[string]any{
 			"en": "Custom English",
 			"de": "Custom German",
 		},

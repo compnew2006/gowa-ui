@@ -54,7 +54,7 @@ func ApplyMessageReceipt(ctx context.Context, db *gorm.DB, publisher *queue.Publ
 	}
 
 	now := time.Now().UTC()
-	recipientUpdates := map[string]interface{}{
+	recipientUpdates := map[string]any{
 		"status": newStatus,
 	}
 	switch newStatus {

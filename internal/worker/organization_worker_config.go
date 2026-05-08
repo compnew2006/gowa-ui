@@ -48,10 +48,10 @@ func (c OrganizationWorkerConfig) Normalize() OrganizationWorkerConfig {
 	if c.JobsPerWorker <= 0 {
 		c.JobsPerWorker = defaults.JobsPerWorker
 	}
-	if c.ScaleUpCooldownSeconds <= 0 {
+	if c.ScaleUpCooldownSeconds < 0 {
 		c.ScaleUpCooldownSeconds = defaults.ScaleUpCooldownSeconds
 	}
-	if c.ScaleDownCooldownSeconds <= 0 {
+	if c.ScaleDownCooldownSeconds < 0 {
 		c.ScaleDownCooldownSeconds = defaults.ScaleDownCooldownSeconds
 	}
 	return c

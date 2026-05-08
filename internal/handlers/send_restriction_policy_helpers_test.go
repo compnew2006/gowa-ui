@@ -890,7 +890,7 @@ func TestReadSendRestrictionsSettings(t *testing.T) {
 		},
 		{
 			name:     "empty payload",
-			settings: models.JSONB{"send_restrictions": map[string]interface{}{}},
+			settings: models.JSONB{"send_restrictions": map[string]any{}},
 			expected: sendRestrictionsSettings{
 				Enabled:                false,
 				IncludeAllContacts:     false,
@@ -905,7 +905,7 @@ func TestReadSendRestrictionsSettings(t *testing.T) {
 		{
 			name: "all fields populated",
 			settings: models.JSONB{
-				"send_restrictions": map[string]interface{}{
+				"send_restrictions": map[string]any{
 					"enabled":                   true,
 					"include_all_contacts":      true,
 					"authorized_numbers":        []interface{}{"1234567890", "9876543210"},
@@ -929,7 +929,7 @@ func TestReadSendRestrictionsSettings(t *testing.T) {
 		{
 			name: "authorized_numbers as string array",
 			settings: models.JSONB{
-				"send_restrictions": map[string]interface{}{
+				"send_restrictions": map[string]any{
 					"authorized_numbers": []string{"111", "222"},
 				},
 			},
@@ -947,7 +947,7 @@ func TestReadSendRestrictionsSettings(t *testing.T) {
 		{
 			name: "allowed_instance_ids as legacy + new format",
 			settings: models.JSONB{
-				"send_restrictions": map[string]interface{}{
+				"send_restrictions": map[string]any{
 					"allowed_instance_ids": []interface{}{uuid1.String()},
 					"allowed_instance_id":  uuid2.String(),
 				},
@@ -966,7 +966,7 @@ func TestReadSendRestrictionsSettings(t *testing.T) {
 		{
 			name: "AllowUnclaimedChatSend overrides AllowUnclaimedChatView",
 			settings: models.JSONB{
-				"send_restrictions": map[string]interface{}{
+				"send_restrictions": map[string]any{
 					"allow_unclaimed_chat_send": true,
 					"allow_unclaimed_chat_view": false,
 				},
@@ -998,7 +998,7 @@ func TestWriteSendRestrictionsSettings(t *testing.T) {
 
 	t.Run("roundtrip with readSendRestrictionsSettings", func(t *testing.T) {
 		original := models.JSONB{
-			"send_restrictions": map[string]interface{}{
+			"send_restrictions": map[string]any{
 				"enabled":                   true,
 				"include_all_contacts":      true,
 				"authorized_numbers":        []interface{}{"1234567890"},

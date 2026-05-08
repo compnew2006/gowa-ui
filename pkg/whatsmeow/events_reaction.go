@@ -117,7 +117,7 @@ func (cm *ConnectionManager) handleReactionPayload(
 	if reactionsRaw, ok := metadata["reactions"]; ok {
 		if arr, ok := reactionsRaw.([]interface{}); ok {
 			for _, r := range arr {
-				if rMap, ok := r.(map[string]interface{}); ok {
+				if rMap, ok := r.(map[string]any); ok {
 					e, _ := rMap["emoji"].(string)
 					fp, _ := rMap["from_phone"].(string)
 					reactions = append(reactions, reactionEntry{Emoji: e, FromPhone: fp})

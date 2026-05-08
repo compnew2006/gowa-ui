@@ -57,7 +57,7 @@ type FlowListResponse struct {
 type FlowJSON struct {
 	Version        string                 `json:"version"`
 	DataAPIVersion string                 `json:"data_api_version,omitempty"`
-	RoutingModel   map[string]interface{} `json:"routing_model,omitempty"`
+	RoutingModel   map[string]any `json:"routing_model,omitempty"`
 	Screens        []interface{}          `json:"screens"`
 }
 

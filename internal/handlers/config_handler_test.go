@@ -128,7 +128,7 @@ func TestGetAppConfig_JSONSerialization(t *testing.T) {
 	body := testutil.GetResponseBody(req)
 
 	// Verify it's valid JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	err = json.Unmarshal(body, &parsed)
 	require.NoError(t, err, "Response should be valid JSON")
 
@@ -136,7 +136,7 @@ func TestGetAppConfig_JSONSerialization(t *testing.T) {
 	assert.Contains(t, parsed, "status")
 	assert.Contains(t, parsed, "data")
 
-	data := parsed["data"].(map[string]interface{})
+	data := parsed["data"].(map[string]any)
 	assert.Contains(t, data, "whatsapp_provider")
 	assert.Contains(t, data, "features")
 }

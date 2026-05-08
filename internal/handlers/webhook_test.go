@@ -440,7 +440,7 @@ func TestUpdateMessageStatus_FailedBroadcastsErrorMessageViaWebSocket(t *testing
 		require.NoError(t, json.Unmarshal(data, &wsMsg))
 		assert.Equal(t, websocket.TypeStatusUpdate, wsMsg.Type)
 
-		payload, ok := wsMsg.Payload.(map[string]interface{})
+		payload, ok := wsMsg.Payload.(map[string]any)
 		require.True(t, ok, "payload should be a map")
 		assert.Equal(t, msg.ID.String(), payload["message_id"])
 		assert.Equal(t, "failed", payload["status"])
@@ -516,7 +516,7 @@ func TestUpdateMessageStatus_DeliveredBroadcastsViaWebSocket_NoErrorMessage(t *t
 		require.NoError(t, json.Unmarshal(data, &wsMsg))
 		assert.Equal(t, websocket.TypeStatusUpdate, wsMsg.Type)
 
-		payload, ok := wsMsg.Payload.(map[string]interface{})
+		payload, ok := wsMsg.Payload.(map[string]any)
 		require.True(t, ok, "payload should be a map")
 		assert.Equal(t, msg.ID.String(), payload["message_id"])
 		assert.Equal(t, "delivered", payload["status"])

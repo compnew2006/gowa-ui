@@ -132,7 +132,7 @@ func (p *SLAProcessor) autoCloseExpiredTransfers(orgID uuid.UUID, settings model
 		}
 
 		// Update transfer status
-		if err := p.app.DB.Model(&transfer).Updates(map[string]interface{}{
+		if err := p.app.DB.Model(&transfer).Updates(map[string]any{
 			"status":     models.TransferStatusExpired,
 			"resumed_at": now,
 			"notes":      transfer.Notes + "\n[Auto-closed: No agent response within SLA]",
@@ -194,7 +194,7 @@ func (p *SLAProcessor) escalateTransfers(orgID uuid.UUID, settings models.Chatbo
 		newLevel := transfer.SLA.EscalationLevel + 1
 
 		// Update transfer
-		updates := map[string]interface{}{
+		updates := map[string]any{
 			"escalation_level": newLevel,
 			"escalated_at":     now,
 		}
@@ -240,7 +240,7 @@ func (p *SLAProcessor) markSLABreached(orgID uuid.UUID, settings models.ChatbotS
 	result := p.app.DB.Model(&models.AgentTransfer{}).Where(
 		"organization_id = ? AND status = ? AND sla_breached = ? AND sla_response_deadline IS NOT NULL AND sla_response_deadline < ? AND agent_id IS NULL",
 		orgID, models.TransferStatusActive, false, now,
-	).Updates(map[string]interface{}{
+	).Updates(map[string]any{
 		"sla_breached":    true,
 		"sla_breached_at": now,
 	})
@@ -285,7 +285,7 @@ func (p *SLAProcessor) notifyEscalation(transfer models.AgentTransfer, settings 
 
 	p.app.WSHub.BroadcastToOrg(transfer.OrganizationID, websocket.WSMessage{
 		Type: "transfer_escalation",
-		Payload: map[string]interface{}{
+		Payload: map[string]any{
 			"transfer_id":           transfer.ID.String(),
 			"contact_id":            transfer.ContactID.String(),
 			"contact_name":          contactName,
@@ -390,7 +390,7 @@ func (p *SLAProcessor) broadcastTransferUpdate(transfer models.AgentTransfer, ev
 
 	p.app.WSHub.BroadcastToOrg(transfer.OrganizationID, websocket.WSMessage{
 		Type: "transfer_" + eventType,
-		Payload: map[string]interface{}{
+		Payload: map[string]any{
 			"id":               transfer.ID.String(),
 			"contact_id":       transfer.ContactID.String(),
 			"contact_name":     contactName,
@@ -610,7 +610,7 @@ func (a *App) UpdateContactChatbotMessage(contactID uuid.UUID) {
 	now := time.Now()
 	a.DB.Model(&models.Contact{}).
 		Where("id = ?", contactID).
-		Updates(map[string]interface{}{
+		Updates(map[string]any{
 			"chatbot_last_message_at": now,
 			"chatbot_reminder_sent":   false, // Reset reminder when chatbot sends a new message
 		})
@@ -620,7 +620,7 @@ func (a *App) UpdateContactChatbotMessage(contactID uuid.UUID) {
 func (a *App) ClearContactChatbotTracking(contactID uuid.UUID) {
 	a.DB.Model(&models.Contact{}).
 		Where("id = ?", contactID).
-		Updates(map[string]interface{}{
+		Updates(map[string]any{
 			"chatbot_last_message_at": nil,
 			"chatbot_reminder_sent":   false,
 		})

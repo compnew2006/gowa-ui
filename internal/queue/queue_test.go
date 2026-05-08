@@ -562,7 +562,7 @@ func TestConsume_PermanentFailureMovesToDLQ(t *testing.T) {
 	// Push a malformed job type that cannot be processed and should be dead-lettered.
 	_, err := client.XAdd(ctx, &redis.XAddArgs{
 		Stream: streamName,
-		Values: map[string]interface{}{
+		Values: map[string]any{
 			"type":    "unknown_job_type",
 			"payload": "{}",
 		},
@@ -639,7 +639,7 @@ func TestConsumeInboundMedia_PermanentFailureMovesToDLQ(t *testing.T) {
 
 	_, err := client.XAdd(ctx, &redis.XAddArgs{
 		Stream: queue.InboundMediaStreamName,
-		Values: map[string]interface{}{
+		Values: map[string]any{
 			"type":    string(queue.JobTypeInboundMedia),
 			"payload": "{not-json",
 		},
@@ -1243,7 +1243,7 @@ func TestRedisConsumer_WithMiniRedis_PermanentFailureMovesToDLQ(t *testing.T) {
 	// Push a malformed job type that cannot be processed and should be dead-lettered.
 	_, err := client.XAdd(ctx, &redis.XAddArgs{
 		Stream: streamName,
-		Values: map[string]interface{}{
+		Values: map[string]any{
 			"type":    "unknown_job_type",
 			"payload": "{}",
 		},

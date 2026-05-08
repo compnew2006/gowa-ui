@@ -8,20 +8,20 @@ import (
 
 func TestFlowsCollectFormFieldNames(t *testing.T) {
 	screens := []interface{}{
-		map[string]interface{}{
-			"layout": map[string]interface{}{
+		map[string]any{
+			"layout": map[string]any{
 				"children": []interface{}{
-					map[string]interface{}{"type": "TextInput", "name": "email"},
-					map[string]interface{}{"type": "TextInput", "name": "email"},
-					map[string]interface{}{"type": "TextArea", "name": "comment"},
+					map[string]any{"type": "TextInput", "name": "email"},
+					map[string]any{"type": "TextInput", "name": "email"},
+					map[string]any{"type": "TextArea", "name": "comment"},
 				},
 			},
 		},
-		map[string]interface{}{
-			"layout": map[string]interface{}{
+		map[string]any{
+			"layout": map[string]any{
 				"children": []interface{}{
-					map[string]interface{}{"type": "Dropdown", "name": "country"},
-					map[string]interface{}{"type": "Body", "text": "hello"},
+					map[string]any{"type": "Dropdown", "name": "country"},
+					map[string]any{"type": "Body", "text": "hello"},
 				},
 			},
 		},

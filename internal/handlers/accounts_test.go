@@ -158,7 +158,7 @@ func TestApp_CreateAccount_Success(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := createAccountsAuthorizedUser(t, app, org.ID)
 
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"name":         "My WhatsApp Account",
 		"phone_id":     "123456789",
 		"business_id":  "987654321",
@@ -192,7 +192,7 @@ func TestApp_CreateAccount_WithOptionalFields(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := createAccountsAuthorizedUser(t, app, org.ID)
 
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"name":                 "Full Account",
 		"phone_id":             "111222333",
 		"business_id":          "444555666",
@@ -236,11 +236,11 @@ func TestApp_CreateAccount_ValidationErrors(t *testing.T) {
 
 	tests := []struct {
 		name string
-		body map[string]interface{}
+		body map[string]any
 	}{
 		{
 			name: "missing_name",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"phone_id":     "123",
 				"business_id":  "456",
 				"access_token": "tok",
@@ -248,7 +248,7 @@ func TestApp_CreateAccount_ValidationErrors(t *testing.T) {
 		},
 		{
 			name: "missing_phone_id",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"name":         "Test",
 				"business_id":  "456",
 				"access_token": "tok",
@@ -256,7 +256,7 @@ func TestApp_CreateAccount_ValidationErrors(t *testing.T) {
 		},
 		{
 			name: "missing_business_id",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"name":         "Test",
 				"phone_id":     "123",
 				"access_token": "tok",
@@ -264,7 +264,7 @@ func TestApp_CreateAccount_ValidationErrors(t *testing.T) {
 		},
 		{
 			name: "missing_access_token",
-			body: map[string]interface{}{
+			body: map[string]any{
 				"name":        "Test",
 				"phone_id":    "123",
 				"business_id": "456",
@@ -272,7 +272,7 @@ func TestApp_CreateAccount_ValidationErrors(t *testing.T) {
 		},
 		{
 			name: "all_fields_empty",
-			body: map[string]interface{}{},
+			body: map[string]any{},
 		},
 	}
 
@@ -293,7 +293,7 @@ func TestApp_CreateAccount_Unauthorized(t *testing.T) {
 
 	app := newTestApp(t)
 
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"name":         "Test",
 		"phone_id":     "123",
 		"business_id":  "456",
@@ -404,7 +404,7 @@ func TestApp_UpdateAccount_Success(t *testing.T) {
 	user := createAccountsAuthorizedUser(t, app, org.ID)
 	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"name":              "Updated Account Name",
 		"phone_id":          "new-phone-id",
 		"business_id":       "new-business-id",
@@ -449,7 +449,7 @@ func TestApp_UpdateAccount_PartialUpdate(t *testing.T) {
 	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 
 	// Only update the name, leave other fields unchanged
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"name": "Only Name Changed",
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
@@ -478,7 +478,7 @@ func TestApp_UpdateAccount_NotFound(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := createAccountsAuthorizedUser(t, app, org.ID)
 
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"name": "Updated Name",
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
@@ -496,7 +496,7 @@ func TestApp_UpdateAccount_InvalidID(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := createAccountsAuthorizedUser(t, app, org.ID)
 
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"name": "Updated",
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)

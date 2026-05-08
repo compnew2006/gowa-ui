@@ -14,7 +14,7 @@ func TestCloneLegacyValues(t *testing.T) {
 
 	tests := []struct {
 		name string
-		in   map[string]interface{}
+		in   map[string]any
 		len  int
 		key  string
 		val  interface{}
@@ -26,12 +26,12 @@ func TestCloneLegacyValues(t *testing.T) {
 		},
 		{
 			name: "empty returns empty map",
-			in:   map[string]interface{}{},
+			in:   map[string]any{},
 			len:  0,
 		},
 		{
 			name: "populated returns copy with same length",
-			in: map[string]interface{}{
+			in: map[string]any{
 				"type":    "recipient",
 				"payload": `{"organization_id":"550e8400-e29b-41d4-a716-446655440000"}`,
 			},
@@ -54,7 +54,7 @@ func TestCloneLegacyValues(t *testing.T) {
 
 	t.Run("modifying copy does not affect original", func(t *testing.T) {
 		t.Parallel()
-		original := map[string]interface{}{"key1": "val1", "key2": 42}
+		original := map[string]any{"key1": "val1", "key2": 42}
 		cloned := cloneLegacyValues(original)
 		cloned["key1"] = "modified"
 		cloned["key3"] = "new"
@@ -136,7 +136,7 @@ func TestLegacyCampaignMessageOrganizationID(t *testing.T) {
 		{
 			name: "missing type field returns error",
 			msg: redis.XMessage{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"payload": string(recipientPayload),
 				},
 			},
@@ -146,7 +146,7 @@ func TestLegacyCampaignMessageOrganizationID(t *testing.T) {
 		{
 			name: "missing payload returns error",
 			msg: redis.XMessage{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"type": string(JobTypeRecipient),
 				},
 			},
@@ -156,7 +156,7 @@ func TestLegacyCampaignMessageOrganizationID(t *testing.T) {
 		{
 			name: "invalid JSON returns error",
 			msg: redis.XMessage{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"type":    string(JobTypeRecipient),
 					"payload": "not-json",
 				},
@@ -167,7 +167,7 @@ func TestLegacyCampaignMessageOrganizationID(t *testing.T) {
 		{
 			name: "valid RecipientJob returns org ID",
 			msg: redis.XMessage{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"type":    string(JobTypeRecipient),
 					"payload": string(recipientPayload),
 				},
@@ -177,7 +177,7 @@ func TestLegacyCampaignMessageOrganizationID(t *testing.T) {
 		{
 			name: "valid ContactRepairJob returns org ID",
 			msg: redis.XMessage{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"type":    string(JobTypeContactRepair),
 					"payload": string(contactRepairPayload),
 				},
@@ -187,7 +187,7 @@ func TestLegacyCampaignMessageOrganizationID(t *testing.T) {
 		{
 			name: "nil org ID in RecipientJob returns error",
 			msg: redis.XMessage{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"type":    string(JobTypeRecipient),
 					"payload": string(nilOrgRecipientPayload),
 				},
@@ -198,7 +198,7 @@ func TestLegacyCampaignMessageOrganizationID(t *testing.T) {
 		{
 			name: "unsupported job type returns error",
 			msg: redis.XMessage{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"type":    "unknown_type",
 					"payload": string(recipientPayload),
 				},
@@ -209,7 +209,7 @@ func TestLegacyCampaignMessageOrganizationID(t *testing.T) {
 		{
 			name: "empty type value returns error",
 			msg: redis.XMessage{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"type":    "",
 					"payload": string(recipientPayload),
 				},
@@ -220,7 +220,7 @@ func TestLegacyCampaignMessageOrganizationID(t *testing.T) {
 		{
 			name: "empty payload value returns error",
 			msg: redis.XMessage{
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"type":    string(JobTypeRecipient),
 					"payload": "",
 				},

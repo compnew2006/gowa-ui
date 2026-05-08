@@ -670,11 +670,11 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	}
 
 	// Parse existing reactions from Metadata
-	var metadata map[string]interface{}
+	var metadata map[string]any
 	if message.Metadata != nil {
 		metadata = message.Metadata
 	} else {
-		metadata = make(map[string]interface{})
+		metadata = make(map[string]any)
 	}
 
 	// Get or initialize reactions array
@@ -687,7 +687,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	if reactionsRaw, ok := metadata["reactions"]; ok {
 		if reactionsArray, ok := reactionsRaw.([]interface{}); ok {
 			for _, r := range reactionsArray {
-				if rMap, ok := r.(map[string]interface{}); ok {
+				if rMap, ok := r.(map[string]any); ok {
 					emoji, _ := rMap["emoji"].(string)
 					fromPhone, _ := rMap["from_phone"].(string)
 					fromUser, _ := rMap["from_user"].(string)

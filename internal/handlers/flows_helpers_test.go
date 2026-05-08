@@ -23,9 +23,9 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "single child with complete action",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "complete",
 					},
 				},
@@ -35,9 +35,9 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "single child with different action",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "navigate",
 					},
 				},
@@ -47,7 +47,7 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "single child without on-click-action",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "text",
 				},
 			},
@@ -63,13 +63,13 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "multiple children, none with complete action",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "navigate",
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "text",
 				},
 			},
@@ -78,15 +78,15 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "multiple children, one with complete action",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "navigate",
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "complete",
 					},
 				},
@@ -96,15 +96,15 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "multiple children, complete action is first",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "complete",
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "navigate",
 					},
 				},
@@ -114,7 +114,7 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "on-click-action is not a map",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type":            "button",
 					"on-click-action": "string",
 				},
@@ -124,9 +124,9 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "on-click-action name is not a string",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": 123,
 					},
 				},
@@ -137,9 +137,9 @@ func TestHasCompleteAction(t *testing.T) {
 			name: "child is not a map",
 			children: []interface{}{
 				"not a map",
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "complete",
 					},
 				},
@@ -149,9 +149,9 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "complete action with different casing",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "button",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "Complete",
 					},
 				},
@@ -161,12 +161,12 @@ func TestHasCompleteAction(t *testing.T) {
 		{
 			name: "complete action with extra properties",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type":  "button",
 					"label": "Submit",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "complete",
-						"payload": map[string]interface{}{
+						"payload": map[string]any{
 							"screen": "next",
 						},
 					},
@@ -200,13 +200,13 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "single screen with complete action",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "footer",
-								"on-click-action": map[string]interface{}{
+								"on-click-action": map[string]any{
 									"name": "complete",
 								},
 							},
@@ -219,11 +219,11 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "single screen without complete action",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "text",
 							},
 						},
@@ -236,23 +236,23 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "two screens, complete action on last screen only",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "text",
 							},
 						},
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_2",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "footer",
-								"on-click-action": map[string]interface{}{
+								"on-click-action": map[string]any{
 									"name": "complete",
 								},
 							},
@@ -265,24 +265,24 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "two screens, complete action on first screen",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "footer",
-								"on-click-action": map[string]interface{}{
+								"on-click-action": map[string]any{
 									"name": "complete",
 								},
 							},
 						},
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_2",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "text",
 							},
 						},
@@ -295,32 +295,32 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "three screens, complete action on middle and last",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{},
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_2",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "footer",
-								"on-click-action": map[string]interface{}{
+								"on-click-action": map[string]any{
 									"name": "complete",
 								},
 							},
 						},
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_3",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "footer",
-								"on-click-action": map[string]interface{}{
+								"on-click-action": map[string]any{
 									"name": "complete",
 								},
 							},
@@ -334,7 +334,7 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "screen without layout",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
 				},
 			},
@@ -344,7 +344,7 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "screen with non-map layout",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id":     "SCREEN_1",
 					"layout": "invalid",
 				},
@@ -355,9 +355,9 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "screen with layout but no children",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{},
 					},
 				},
@@ -368,9 +368,9 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "screen with non-array children",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": "not an array",
 					},
 				},
@@ -381,15 +381,15 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "multiple screens, none have complete action",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{},
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_2",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{},
 					},
 				},
@@ -400,16 +400,16 @@ func TestValidateFlowStructure(t *testing.T) {
 		{
 			name: "screen with nested components, complete action deep",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "container",
 							},
-							map[string]interface{}{
+							map[string]any{
 								"type": "footer",
-								"on-click-action": map[string]interface{}{
+								"on-click-action": map[string]any{
 									"name": "complete",
 								},
 							},
@@ -536,27 +536,27 @@ func TestSanitizeScreensForMeta(t *testing.T) {
 		{
 			name: "screen with no components gets sanitized IDs",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id":     "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{},
 					},
 				},
 			},
 			validate: func(t *testing.T, result []interface{}) {
 				assert.Len(t, result, 1)
-				screen := result[0].(map[string]interface{})
+				screen := result[0].(map[string]any)
 				assert.Equal(t, "SCREEN_B", screen["id"])
 			},
 		},
 		{
 			name: "screens with components get sanitized",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "field_1",
 								"id":  "comp_1",
@@ -567,11 +567,11 @@ func TestSanitizeScreensForMeta(t *testing.T) {
 			},
 			validate: func(t *testing.T, result []interface{}) {
 				assert.Len(t, result, 1)
-				screen := result[0].(map[string]interface{})
+				screen := result[0].(map[string]any)
 				assert.Equal(t, "SCREEN_B", screen["id"])
-				layout := screen["layout"].(map[string]interface{})
+				layout := screen["layout"].(map[string]any)
 				children := layout["children"].([]interface{})
-				comp := children[0].(map[string]interface{})
+				comp := children[0].(map[string]any)
 				assert.Equal(t, "field_B", comp["name"])
 				assert.NotContains(t, comp, "id")
 			},
@@ -579,13 +579,13 @@ func TestSanitizeScreensForMeta(t *testing.T) {
 		{
 			name: "terminal screen gets marked",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "Footer",
-								"on-click-action": map[string]interface{}{
+								"on-click-action": map[string]any{
 									"name": "complete",
 								},
 							},
@@ -594,31 +594,31 @@ func TestSanitizeScreensForMeta(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, result []interface{}) {
-				screen := result[0].(map[string]interface{})
+				screen := result[0].(map[string]any)
 				assert.Equal(t, true, screen["terminal"])
 			},
 		},
 		{
 			name: "multi-screen data model propagated",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "email",
 							},
 						},
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_2",
-					"layout": map[string]interface{}{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "Footer",
-								"on-click-action": map[string]interface{}{
+								"on-click-action": map[string]any{
 									"name": "complete",
 								},
 							},
@@ -627,10 +627,10 @@ func TestSanitizeScreensForMeta(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, result []interface{}) {
-				screen2 := result[1].(map[string]interface{})
-				data := screen2["data"].(map[string]interface{})
+				screen2 := result[1].(map[string]any)
+				data := screen2["data"].(map[string]any)
 				assert.Contains(t, data, "email")
-				emailEntry := data["email"].(map[string]interface{})
+				emailEntry := data["email"].(map[string]any)
 				assert.Equal(t, "string", emailEntry["type"])
 			},
 		},
@@ -676,14 +676,14 @@ func TestCollectFormFieldNames(t *testing.T) {
 		{
 			name: "collects field names from components",
 			screens: []interface{}{
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "email",
 							},
-							map[string]interface{}{
+							map[string]any{
 								"type": "Dropdown",
 								"name": "country",
 							},
@@ -696,10 +696,10 @@ func TestCollectFormFieldNames(t *testing.T) {
 		{
 			name: "sanitizes field names with numbers",
 			screens: []interface{}{
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "field_1",
 							},
@@ -712,13 +712,13 @@ func TestCollectFormFieldNames(t *testing.T) {
 		{
 			name: "skips components without name",
 			screens: []interface{}{
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextBody",
 							},
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "email",
 							},
@@ -731,7 +731,7 @@ func TestCollectFormFieldNames(t *testing.T) {
 		{
 			name: "handles screens without layout",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
 				},
 			},
@@ -740,10 +740,10 @@ func TestCollectFormFieldNames(t *testing.T) {
 		{
 			name: "handles empty name",
 			screens: []interface{}{
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "",
 							},
@@ -756,20 +756,20 @@ func TestCollectFormFieldNames(t *testing.T) {
 		{
 			name: "does not deduplicate across screens",
 			screens: []interface{}{
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "email",
 							},
 						},
 					},
 				},
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "email",
 							},
@@ -811,20 +811,20 @@ func TestCollectFormFieldsPerScreen(t *testing.T) {
 		{
 			name: "maps each screen to its fields",
 			screens: []interface{}{
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "email",
 							},
 						},
 					},
 				},
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "Dropdown",
 								"name": "country",
 							},
@@ -840,19 +840,19 @@ func TestCollectFormFieldsPerScreen(t *testing.T) {
 		{
 			name: "screen with no fields is omitted from map",
 			screens: []interface{}{
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextBody",
 							},
 						},
 					},
 				},
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "email",
 							},
@@ -867,7 +867,7 @@ func TestCollectFormFieldsPerScreen(t *testing.T) {
 		{
 			name: "handles screen without layout",
 			screens: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"id": "SCREEN_1",
 				},
 			},
@@ -876,10 +876,10 @@ func TestCollectFormFieldsPerScreen(t *testing.T) {
 		{
 			name: "sanitizes field names",
 			screens: []interface{}{
-				map[string]interface{}{
-					"layout": map[string]interface{}{
+				map[string]any{
+					"layout": map[string]any{
 						"children": []interface{}{
-							map[string]interface{}{
+							map[string]any{
 								"type": "TextInput",
 								"name": "field_1",
 							},
@@ -924,7 +924,7 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 		{
 			name: "removes id from components without ID support",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "TextInput",
 					"name": "email",
 					"id":   "comp_1",
@@ -933,14 +933,14 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 			allFields:  []string{"email"},
 			prevFields: nil,
 			validate: func(t *testing.T, result []interface{}) {
-				comp := result[0].(map[string]interface{})
+				comp := result[0].(map[string]any)
 				assert.NotContains(t, comp, "id")
 			},
 		},
 		{
 			name: "preserves id on components with ID support",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "Button",
 					"name": "btn_1",
 					"id":   "btn_comp",
@@ -949,14 +949,14 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 			allFields:  []string{"email"},
 			prevFields: nil,
 			validate: func(t *testing.T, result []interface{}) {
-				comp := result[0].(map[string]interface{})
+				comp := result[0].(map[string]any)
 				assert.Equal(t, "btn_comp", comp["id"])
 			},
 		},
 		{
 			name: "sanitizes component name with numbers",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "TextInput",
 					"name": "field_1",
 				},
@@ -964,16 +964,16 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 			allFields:  []string{"field_B"},
 			prevFields: nil,
 			validate: func(t *testing.T, result []interface{}) {
-				comp := result[0].(map[string]interface{})
+				comp := result[0].(map[string]any)
 				assert.Equal(t, "field_B", comp["name"])
 			},
 		},
 		{
 			name: "complete action gets auto-populated payload with data refs when no current-screen fields",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "Footer",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "complete",
 					},
 				},
@@ -981,9 +981,9 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 			allFields:  []string{"email", "phone"},
 			prevFields: nil,
 			validate: func(t *testing.T, result []interface{}) {
-				comp := result[0].(map[string]interface{})
-				action := comp["on-click-action"].(map[string]interface{})
-				payload := action["payload"].(map[string]interface{})
+				comp := result[0].(map[string]any)
+				action := comp["on-click-action"].(map[string]any)
+				payload := action["payload"].(map[string]any)
 				assert.Equal(t, "${data.email}", payload["email"])
 				assert.Equal(t, "${data.phone}", payload["phone"])
 			},
@@ -991,17 +991,17 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 		{
 			name: "complete action uses form refs for current-screen fields",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "TextInput",
 					"name": "email",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "TextInput",
 					"name": "phone",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "Footer",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "complete",
 					},
 				},
@@ -1009,9 +1009,9 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 			allFields:  []string{"email", "phone"},
 			prevFields: nil,
 			validate: func(t *testing.T, result []interface{}) {
-				comp := result[2].(map[string]interface{})
-				action := comp["on-click-action"].(map[string]interface{})
-				payload := action["payload"].(map[string]interface{})
+				comp := result[2].(map[string]any)
+				action := comp["on-click-action"].(map[string]any)
+				payload := action["payload"].(map[string]any)
 				assert.Equal(t, "${form.email}", payload["email"])
 				assert.Equal(t, "${form.phone}", payload["phone"])
 			},
@@ -1019,13 +1019,13 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 		{
 			name: "complete action uses data reference for previous screen fields",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "TextInput",
 					"name": "address",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "Footer",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "complete",
 					},
 				},
@@ -1033,9 +1033,9 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 			allFields:  []string{"email", "address"},
 			prevFields: []string{"email"},
 			validate: func(t *testing.T, result []interface{}) {
-				comp := result[1].(map[string]interface{})
-				action := comp["on-click-action"].(map[string]interface{})
-				payload := action["payload"].(map[string]interface{})
+				comp := result[1].(map[string]any)
+				action := comp["on-click-action"].(map[string]any)
+				payload := action["payload"].(map[string]any)
 				assert.Equal(t, "${data.email}", payload["email"])
 				assert.Equal(t, "${form.address}", payload["address"])
 			},
@@ -1043,13 +1043,13 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 		{
 			name: "navigate action gets payload with current and previous fields",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "TextInput",
 					"name": "email",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "Footer",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "navigate",
 					},
 				},
@@ -1057,9 +1057,9 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 			allFields:  []string{"email", "phone"},
 			prevFields: []string{"phone"},
 			validate: func(t *testing.T, result []interface{}) {
-				comp := result[1].(map[string]interface{})
-				action := comp["on-click-action"].(map[string]interface{})
-				payload := action["payload"].(map[string]interface{})
+				comp := result[1].(map[string]any)
+				action := comp["on-click-action"].(map[string]any)
+				payload := action["payload"].(map[string]any)
 				assert.Equal(t, "${data.phone}", payload["phone"])
 				assert.Equal(t, "${form.email}", payload["email"])
 			},
@@ -1067,9 +1067,9 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 		{
 			name: "navigate action with no fields has no payload",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "Footer",
-					"on-click-action": map[string]interface{}{
+					"on-click-action": map[string]any{
 						"name": "navigate",
 					},
 				},
@@ -1077,8 +1077,8 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 			allFields:  []string{},
 			prevFields: nil,
 			validate: func(t *testing.T, result []interface{}) {
-				comp := result[0].(map[string]interface{})
-				action := comp["on-click-action"].(map[string]interface{})
+				comp := result[0].(map[string]any)
+				action := comp["on-click-action"].(map[string]any)
 				assert.NotContains(t, action, "payload")
 			},
 		},
@@ -1096,22 +1096,22 @@ func TestSanitizeComponentsWithPayload(t *testing.T) {
 		{
 			name: "sanitizes data-source option IDs",
 			children: []interface{}{
-				map[string]interface{}{
+				map[string]any{
 					"type": "Dropdown",
 					"name": "country",
 					"data-source": []interface{}{
-						map[string]interface{}{"id": "opt_1", "title": "US"},
-						map[string]interface{}{"id": "opt_2", "title": "UK"},
+						map[string]any{"id": "opt_1", "title": "US"},
+						map[string]any{"id": "opt_2", "title": "UK"},
 					},
 				},
 			},
 			allFields:  []string{"country"},
 			prevFields: nil,
 			validate: func(t *testing.T, result []interface{}) {
-				comp := result[0].(map[string]interface{})
+				comp := result[0].(map[string]any)
 				ds := comp["data-source"].([]interface{})
-				assert.Equal(t, "opt_B", ds[0].(map[string]interface{})["id"])
-				assert.Equal(t, "opt_C", ds[1].(map[string]interface{})["id"])
+				assert.Equal(t, "opt_B", ds[0].(map[string]any)["id"])
+				assert.Equal(t, "opt_C", ds[1].(map[string]any)["id"])
 			},
 		},
 	}
@@ -1159,7 +1159,7 @@ func TestFlowToResponse(t *testing.T) {
 				Category:        "UTILITY",
 				JSONVersion:     "6.0",
 				FlowJSON:        models.JSONB{"key": "value"},
-				Screens:         models.JSONBArray{map[string]interface{}{"id": "SCREEN_1"}},
+				Screens:         models.JSONBArray{map[string]any{"id": "SCREEN_1"}},
 				PreviewURL:      "https://example.com/preview",
 				HasLocalChanges: true,
 			},
@@ -1171,8 +1171,8 @@ func TestFlowToResponse(t *testing.T) {
 				Status:          "DRAFT",
 				Category:        "UTILITY",
 				JSONVersion:     "6.0",
-				FlowJSON:        map[string]interface{}{"key": "value"},
-				Screens:         []interface{}{map[string]interface{}{"id": "SCREEN_1"}},
+				FlowJSON:        map[string]any{"key": "value"},
+				Screens:         []interface{}{map[string]any{"id": "SCREEN_1"}},
 				PreviewURL:      "https://example.com/preview",
 				HasLocalChanges: true,
 				CreatedAt:       "2025-06-15T10:30:00Z",

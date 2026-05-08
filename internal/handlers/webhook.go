@@ -375,7 +375,7 @@ func (a *App) applyMessageStatusUpdate(message *models.Message, statusValue stri
 		return
 	}
 
-	updates := map[string]interface{}{}
+	updates := map[string]any{}
 
 	switch newStatus {
 	case models.MessageStatusSent:

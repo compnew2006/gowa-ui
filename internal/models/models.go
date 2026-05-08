@@ -12,7 +12,7 @@ import (
 )
 
 // JSONB is a custom type for PostgreSQL JSONB columns
-type JSONB map[string]interface{}
+type JSONB map[string]any
 
 func (JSONB) GormDataType() string {
 	return "json"

@@ -59,8 +59,8 @@ func ResolveParamsFromMap(paramNames []string, params map[string]string) []strin
 }
 
 // ResolveParams resolves both positional and named parameters to ordered values
-// using a map[string]interface{} parameter source (e.g. models.JSONB).
-func ResolveParams(bodyContent string, params map[string]interface{}) []string {
+// using a map[string]any parameter source (e.g. models.JSONB).
+func ResolveParams(bodyContent string, params map[string]any) []string {
 	if len(params) == 0 {
 		return nil
 	}
@@ -114,10 +114,10 @@ func ReplaceWithStringParams(content string, params map[string]string) string {
 }
 
 // ReplaceWithJSONBParams replaces both positional ({{1}}) and named ({{name}}) placeholders
-// using a map[string]interface{} parameter source. bodyContent is used to extract parameter
+// using a map[string]any parameter source. bodyContent is used to extract parameter
 // names (typically the template's body content), and content is the string to perform
 // replacements on.
-func ReplaceWithJSONBParams(bodyContent, content string, params map[string]interface{}) string {
+func ReplaceWithJSONBParams(bodyContent, content string, params map[string]any) string {
 	if len(params) == 0 {
 		return content
 	}

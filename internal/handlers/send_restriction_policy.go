@@ -84,12 +84,12 @@ func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSetting
 		return cfg
 	}
 
-	var payload map[string]interface{}
+	var payload map[string]any
 	switch typed := raw.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		payload = typed
 	case models.JSONB:
-		payload = map[string]interface{}(typed)
+		payload = map[string]any(typed)
 	default:
 		return cfg
 	}

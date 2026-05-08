@@ -27,7 +27,7 @@ type WidgetRequest struct {
 	ShowChange   *bool                  `json:"show_change"`
 	Color        string                 `json:"color"`
 	Size         string                 `json:"size"` // small, medium, large
-	Config       map[string]interface{} `json:"config"`
+	Config       map[string]any `json:"config"`
 	IsShared     *bool                  `json:"is_shared"`
 	GridX        *int                   `json:"grid_x"`
 	GridY        *int                   `json:"grid_y"`
@@ -62,7 +62,7 @@ type WidgetResponse struct {
 	GridY        int                    `json:"grid_y"`
 	GridW        int                    `json:"grid_w"`
 	GridH        int                    `json:"grid_h"`
-	Config       map[string]interface{} `json:"config"`
+	Config       map[string]any `json:"config"`
 	IsShared     bool                   `json:"is_shared"`
 	IsDefault    bool                   `json:"is_default"`
 	IsOwner      bool                   `json:"is_owner"` // True if current user created this widget
@@ -271,7 +271,7 @@ func (a *App) ListWidgets(r *fastglue.Request) error {
 		response[i] = widgetToResponse(w, userID)
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"widgets": response,
 	})
 }
@@ -382,7 +382,7 @@ func (a *App) CreateWidget(r *fastglue.Request) error {
 	// Convert filters to JSONBArray
 	filters := make(models.JSONBArray, len(req.Filters))
 	for i, f := range req.Filters {
-		filters[i] = map[string]interface{}{
+		filters[i] = map[string]any{
 			"field":    f.Field,
 			"operator": f.Operator,
 			"value":    f.Value,
@@ -559,7 +559,7 @@ func (a *App) UpdateWidget(r *fastglue.Request) error {
 	if req.Filters != nil {
 		filters := make(models.JSONBArray, len(req.Filters))
 		for i, f := range req.Filters {
-			filters[i] = map[string]interface{}{
+			filters[i] = map[string]any{
 				"field":    f.Field,
 				"operator": f.Operator,
 				"value":    f.Value,
@@ -686,7 +686,7 @@ func (a *App) SaveWidgetLayout(r *fastglue.Request) error {
 		for i, item := range req.Layout {
 			result := tx.Model(&models.Widget{}).
 				Where("id = ? AND organization_id = ? AND (user_id = ? OR is_shared = true)", item.ID, orgID, userID).
-				Updates(map[string]interface{}{
+				Updates(map[string]any{
 					"grid_x":        item.GridX,
 					"grid_y":        item.GridY,
 					"grid_w":        item.GridW,
@@ -718,9 +718,9 @@ func (a *App) GetWidgetDataSources(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
 	}
 
-	sources := make([]map[string]interface{}, 0)
+	sources := make([]map[string]any, 0)
 	for source, fields := range widgetDataSources {
-		sources = append(sources, map[string]interface{}{
+		sources = append(sources, map[string]any{
 			"name":          source,
 			"label":         formatLabel(source),
 			"fields":        fields,
@@ -729,7 +729,7 @@ func (a *App) GetWidgetDataSources(r *fastglue.Request) error {
 		})
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"data_sources":  sources,
 		"metrics":       widgetMetrics,
 		"display_types": widgetDisplayTypes,
@@ -748,9 +748,9 @@ func (a *App) GetWidgetDataSources(r *fastglue.Request) error {
 // Helper functions
 
 func widgetToResponse(w models.Widget, currentUserID uuid.UUID) WidgetResponse {
-	config := map[string]interface{}(w.Config)
+	config := map[string]any(w.Config)
 	if config == nil {
-		config = map[string]interface{}{}
+		config = map[string]any{}
 	}
 
 	return WidgetResponse{
@@ -781,7 +781,7 @@ func widgetToResponse(w models.Widget, currentUserID uuid.UUID) WidgetResponse {
 	}
 }
 
-func widgetGetString(m map[string]interface{}, key string) string {
+func widgetGetString(m map[string]any, key string) string {
 	if v, ok := m[key]; ok {
 		if s, ok := v.(string); ok {
 			return s
@@ -810,7 +810,7 @@ func formatLabel(s string) string {
 func widgetFiltersToInputs(filters models.JSONBArray) []FilterInput {
 	result := make([]FilterInput, 0, len(filters))
 	for _, f := range filters {
-		if filterMap, ok := f.(map[string]interface{}); ok {
+		if filterMap, ok := f.(map[string]any); ok {
 			result = append(result, FilterInput{
 				Field:    strings.TrimSpace(widgetGetString(filterMap, "field")),
 				Operator: strings.TrimSpace(widgetGetString(filterMap, "operator")),
@@ -948,7 +948,7 @@ func (a *App) GetAllWidgetsData(r *fastglue.Request) error {
 		results[widget.ID.String()] = data
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"data": results,
 	})
 }

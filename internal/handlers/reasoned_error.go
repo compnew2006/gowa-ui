@@ -13,7 +13,7 @@ type reasonedError struct {
 
 func (e *reasonedError) Error() string {
 	if e == nil {
-		return e.fallback
+		return ""
 	}
 	if strings.TrimSpace(e.message) == "" {
 		return e.fallback

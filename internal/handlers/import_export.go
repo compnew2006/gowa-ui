@@ -34,7 +34,7 @@ type ImportConfig struct {
 	OptionalColumns []string
 	ColumnTransform map[string]func(string) (interface{}, error)
 	UniqueColumn    string // Column to check for duplicates (e.g., "phone_number")
-	BeforeCreate    func(db *gorm.DB, orgID uuid.UUID, record map[string]interface{}) error
+	BeforeCreate    func(db *gorm.DB, orgID uuid.UUID, record map[string]any) error
 }
 
 // Supported export/import configurations
@@ -483,7 +483,7 @@ func (a *App) ImportData(r *fastglue.Request) error {
 		}
 
 		// Build record map
-		recordMap := make(map[string]interface{})
+		recordMap := make(map[string]any)
 		recordMap["organization_id"] = orgID
 
 		hasError := false
@@ -614,7 +614,7 @@ func (a *App) ImportData(r *fastglue.Request) error {
 		created++
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"created":  created,
 		"updated":  updated,
 		"skipped":  skipped,
@@ -655,7 +655,7 @@ func (a *App) GetExportConfig(r *fastglue.Request) error {
 		}
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"table":           tableName,
 		"columns":         columns,
 		"default_columns": config.DefaultColumns,
@@ -716,7 +716,7 @@ func (a *App) GetImportConfig(r *fastglue.Request) error {
 		}
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"table":            tableName,
 		"required_columns": requiredCols,
 		"optional_columns": optionalCols,

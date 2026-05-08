@@ -102,14 +102,14 @@ func TestClient_SendInteractiveButtons(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			var capturedBody map[string]interface{}
+			var capturedBody map[string]any
 			var serverCalled bool
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				serverCalled = true
 				_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 				w.WriteHeader(http.StatusOK)
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]any{
 					"messages": []map[string]string{{"id": "wamid.test"}},
 				})
 			}))
@@ -143,7 +143,7 @@ func TestClient_SendInteractiveButtons(t *testing.T) {
 			require.True(t, serverCalled, "server should have been called")
 
 			// Verify interactive type
-			interactive := capturedBody["interactive"].(map[string]interface{})
+			interactive := capturedBody["interactive"].(map[string]any)
 			assert.Equal(t, tt.wantInteractive, interactive["type"])
 		})
 	}
@@ -152,12 +152,12 @@ func TestClient_SendInteractiveButtons(t *testing.T) {
 func TestClient_SendInteractiveButtons_ButtonTruncation(t *testing.T) {
 	t.Parallel()
 
-	var capturedBody map[string]interface{}
+	var capturedBody map[string]any
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"messages": []map[string]string{{"id": "wamid.test"}},
 		})
 	}))
@@ -186,11 +186,11 @@ func TestClient_SendInteractiveButtons_ButtonTruncation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify button title was truncated
-	interactive := capturedBody["interactive"].(map[string]interface{})
-	action := interactive["action"].(map[string]interface{})
+	interactive := capturedBody["interactive"].(map[string]any)
+	action := interactive["action"].(map[string]any)
 	buttonsList := action["buttons"].([]interface{})
-	button := buttonsList[0].(map[string]interface{})
-	reply := button["reply"].(map[string]interface{})
+	button := buttonsList[0].(map[string]any)
+	reply := button["reply"].(map[string]any)
 
 	// Should be truncated to 20 chars
 	assert.Len(t, reply["title"], 20)
@@ -245,12 +245,12 @@ func TestClient_SendTemplateMessage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			var capturedBody map[string]interface{}
+			var capturedBody map[string]any
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 				w.WriteHeader(http.StatusOK)
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]any{
 					"messages": []map[string]string{{"id": "wamid.template123"}},
 				})
 			}))
@@ -285,10 +285,10 @@ func TestClient_SendTemplateMessage(t *testing.T) {
 			assert.Equal(t, "template", capturedBody["type"])
 			assert.Equal(t, tt.phone, capturedBody["to"])
 
-			template := capturedBody["template"].(map[string]interface{})
+			template := capturedBody["template"].(map[string]any)
 			assert.Equal(t, tt.templateName, template["name"])
 
-			language := template["language"].(map[string]interface{})
+			language := template["language"].(map[string]any)
 			assert.Equal(t, tt.language, language["code"])
 
 			// If params were provided, verify components
@@ -296,7 +296,7 @@ func TestClient_SendTemplateMessage(t *testing.T) {
 				components := template["components"].([]interface{})
 				assert.Len(t, components, 1)
 
-				bodyComponent := components[0].(map[string]interface{})
+				bodyComponent := components[0].(map[string]any)
 				assert.Equal(t, "body", bodyComponent["type"])
 
 				params := bodyComponent["parameters"].([]interface{})
@@ -304,7 +304,7 @@ func TestClient_SendTemplateMessage(t *testing.T) {
 
 				// Verify each param has type "text" and a text value
 				for _, p := range params {
-					param := p.(map[string]interface{})
+					param := p.(map[string]any)
 					assert.Equal(t, "text", param["type"])
 					assert.NotEmpty(t, param["text"])
 				}
@@ -357,12 +357,12 @@ func TestClient_SendCTAURLButton(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			var capturedBody map[string]interface{}
+			var capturedBody map[string]any
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 				w.WriteHeader(http.StatusOK)
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]any{
 					"messages": []map[string]string{{"id": "wamid.cta123"}},
 				})
 			}))
@@ -396,11 +396,11 @@ func TestClient_SendCTAURLButton(t *testing.T) {
 			assert.Equal(t, "wamid.cta123", msgID)
 
 			// Verify request body
-			interactive := capturedBody["interactive"].(map[string]interface{})
+			interactive := capturedBody["interactive"].(map[string]any)
 			assert.Equal(t, "cta_url", interactive["type"])
 
-			action := interactive["action"].(map[string]interface{})
-			params := action["parameters"].(map[string]interface{})
+			action := interactive["action"].(map[string]any)
+			params := action["parameters"].(map[string]any)
 			assert.Equal(t, tt.url, params["url"])
 		})
 	}
@@ -409,12 +409,12 @@ func TestClient_SendCTAURLButton(t *testing.T) {
 func TestClient_SendTemplateMessage_WithComponents(t *testing.T) {
 	t.Parallel()
 
-	var capturedBody map[string]interface{}
+	var capturedBody map[string]any
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"messages": []map[string]string{{"id": "wamid.comp123"}},
 		})
 	}))
@@ -435,16 +435,16 @@ func TestClient_SendTemplateMessage_WithComponents(t *testing.T) {
 	ctx := testutil.TestContext(t)
 
 	// Test with header and body components
-	components := []map[string]interface{}{
+	components := []map[string]any{
 		{
 			"type": "header",
-			"parameters": []map[string]interface{}{
+			"parameters": []map[string]any{
 				{"type": "image", "image": map[string]string{"link": "https://example.com/image.jpg"}},
 			},
 		},
 		{
 			"type": "body",
-			"parameters": []map[string]interface{}{
+			"parameters": []map[string]any{
 				{"type": "text", "text": "John Doe"},
 				{"type": "text", "text": "Order #12345"},
 			},
@@ -457,7 +457,7 @@ func TestClient_SendTemplateMessage_WithComponents(t *testing.T) {
 	assert.Equal(t, "wamid.comp123", msgID)
 
 	// Verify components were passed correctly
-	template := capturedBody["template"].(map[string]interface{})
+	template := capturedBody["template"].(map[string]any)
 	sentComponents := template["components"].([]interface{})
 	assert.Len(t, sentComponents, 2)
 }

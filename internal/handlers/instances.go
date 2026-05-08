@@ -290,7 +290,7 @@ func (a *App) UpdateInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
 	}
 
-	updates := make(map[string]interface{})
+	updates := make(map[string]any)
 	if req.Name != nil {
 		normalizedName := normalizeInstanceName(*req.Name)
 		if normalizedName == "" {

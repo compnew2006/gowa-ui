@@ -112,7 +112,7 @@ func (cm *ConnectionManager) resolveInboundContactDetails(
 
 		channelName := strings.TrimSpace(senderPushName)
 		channelDescription := ""
-		if client != nil {
+		if client != nil && client.IsConnected() {
 			infoCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 			newsletterInfo, err := client.GetNewsletterInfo(infoCtx, chatJID)
@@ -137,7 +137,7 @@ func (cm *ConnectionManager) resolveInboundContactDetails(
 	details.PhoneNumber = chatJID.String()
 	details.GroupName = chatJID.User
 
-	if client != nil {
+	if client != nil && client.IsConnected() {
 		groupInfo, err := client.GetGroupInfo(ctx, chatJID)
 		if err == nil && groupInfo != nil {
 			if trimmedName := strings.TrimSpace(groupInfo.Name); trimmedName != "" {

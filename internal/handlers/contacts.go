@@ -1252,7 +1252,7 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 					if msgResp.ReplyToMessage.SenderPhone != "" {
 						msgResp.ReplyToMessage.SenderPhone = MaskPhoneNumber(msgResp.ReplyToMessage.SenderPhone)
 					}
-					if cMap, ok := msgResp.ReplyToMessage.Content.(map[string]interface{}); ok {
+					if cMap, ok := msgResp.ReplyToMessage.Content.(map[string]any); ok {
 						if bodyAny, ok := cMap["body"]; ok {
 							if bodyStr, ok := bodyAny.(string); ok {
 								cMap["body"] = MaskPhoneNumbersInText(bodyStr)
@@ -1271,7 +1271,7 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 			if reactionsRaw, ok := m.Metadata["reactions"]; ok {
 				if reactionsArray, ok := reactionsRaw.([]interface{}); ok {
 					for _, r := range reactionsArray {
-						if rMap, ok := r.(map[string]interface{}); ok {
+						if rMap, ok := r.(map[string]any); ok {
 							emoji, _ := rMap["emoji"].(string)
 							fromPhone, _ := rMap["from_phone"].(string)
 							fromUser, _ := rMap["from_user"].(string)

@@ -524,9 +524,9 @@ func TestCalculateBreakTime_MultipleBreaks_SumsCorrectly(t *testing.T) {
 
 	now := time.Now().UTC()
 	break1Start := now.Add(-3 * time.Hour)
-	break1End := now.Add(-2 * time.Hour).Add(30 * time.Minute)
+	break1End := now.Add(-2 * time.Hour)
 	break2Start := now.Add(-2 * time.Hour)
-	break2End := now.Add(-1 * time.Hour).Add(30 * time.Minute)
+	break2End := now.Add(-1 * time.Hour)
 
 	createTestUserAvailabilityLog(t, app, agent.ID, org.ID, false, break1Start, &break1End)
 	createTestUserAvailabilityLog(t, app, agent.ID, org.ID, false, break2Start, &break2End)
@@ -847,6 +847,7 @@ func TestCalculateSummaryStats_WithInstanceFilter_FiltersCorrectly(t *testing.T)
 	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-3*time.Hour), &[]time.Time{now.Add(-2 * time.Hour)}[0])
 
 	var summary handlers.AgentAnalyticsSummary
+	summary.TransfersBySource = make(map[string]int64)
 	app.CalculateSummaryStats(org.ID, now.Add(-5*time.Hour), now, &summary, &instance1.ID)
 
 	assert.Equal(t, int64(1), summary.TotalTransfersHandled)

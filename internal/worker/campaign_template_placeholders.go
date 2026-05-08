@@ -36,7 +36,7 @@ func (w *Worker) resolveCampaignTemplateParams(
 	fallbackPhone string,
 	fallbackRecipientName string,
 	templateBody string,
-	existing map[string]interface{},
+	existing map[string]any,
 ) models.JSONB {
 	base := make(models.JSONB, len(existing))
 	for key, value := range existing {
@@ -167,7 +167,7 @@ func (w *Worker) resolveCampaignOrganizationName(ctx context.Context, orgID uuid
 	return defaultCampaignOrganizationName
 }
 
-func renderCampaignTemplateBody(templateBody string, params map[string]interface{}) string {
+func renderCampaignTemplateBody(templateBody string, params map[string]any) string {
 	rendered := templateutil.ReplaceWithJSONBParams(templateBody, templateBody, params)
 	return strings.NewReplacer(
 		"{{customer_name}}", campaignTemplateValue(params, "customer_name"),
@@ -185,7 +185,7 @@ func renderCampaignTemplateBody(templateBody string, params map[string]interface
 	).Replace(rendered)
 }
 
-func campaignTemplateValue(params map[string]interface{}, key string) string {
+func campaignTemplateValue(params map[string]any, key string) string {
 	if params == nil {
 		return ""
 	}

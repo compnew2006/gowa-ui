@@ -107,7 +107,7 @@ func TestApp_UpdateUserSendRestrictions_NormalizesNumbers(t *testing.T) {
 	}
 	require.NoError(t, app.DB.Create(instance).Error)
 
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"enabled":                   true,
 		"include_all_contacts":      true,
 		"allowed_instance_ids":      []string{instance.ID.String()},
@@ -160,7 +160,7 @@ func TestApp_UpdateUserSendRestrictions_NormalizesUnclaimedChatSendAsView(t *tes
 	adminUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
 	targetUser := testutil.CreateTestUser(t, app.DB, org.ID)
 
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"allow_unclaimed_chat_view": false,
 		"allow_unclaimed_chat_send": true,
 	})
@@ -193,7 +193,7 @@ func TestApp_UpdateUserSendRestrictions_AllowsMultipleInstances(t *testing.T) {
 	instanceA := createTestInstance(t, app, org.ID, "Instance A")
 	instanceB := createTestInstance(t, app, org.ID, "Instance B")
 
-	req := testutil.NewJSONRequest(t, map[string]interface{}{
+	req := testutil.NewJSONRequest(t, map[string]any{
 		"enabled":              true,
 		"include_all_contacts": false,
 		"allowed_instance_ids": []string{instanceA.ID.String(), instanceB.ID.String(), instanceA.ID.String()},

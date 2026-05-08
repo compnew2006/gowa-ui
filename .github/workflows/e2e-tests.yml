@@ -96,6 +96,11 @@ jobs:
           [storage]
           type = "local"
           local_path = "./uploads"
+
+          [default_admin]
+          email = "admin@admin.com"
+          password = "adminpassword12"
+          full_name = "Admin"
           EOF
 
       # Build frontend FIRST so it can be embedded in the backend

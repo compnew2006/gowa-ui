@@ -292,7 +292,7 @@ func TestHub_GetClientCount_AfterRegisterAndUnregister(t *testing.T) {
 func TestWSMessage_JSONRoundTrip(t *testing.T) {
 	original := websocket.WSMessage{
 		Type:    websocket.TypeNewMessage,
-		Payload: map[string]interface{}{"key": "value"},
+		Payload: map[string]any{"key": "value"},
 	}
 	data, err := json.Marshal(original)
 	require.NoError(t, err)
@@ -302,7 +302,7 @@ func TestWSMessage_JSONRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, websocket.TypeNewMessage, decoded.Type)
-	payload, ok := decoded.Payload.(map[string]interface{})
+	payload, ok := decoded.Payload.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "value", payload["key"])
 }
@@ -424,7 +424,7 @@ func TestHandleAuthMessage_ValidAuth_Succeeds(t *testing.T) {
 
 	msg := websocket.WSMessage{
 		Type:    websocket.TypeAuth,
-		Payload: map[string]interface{}{"token": "valid-token"},
+		Payload: map[string]any{"token": "valid-token"},
 	}
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -448,7 +448,7 @@ func TestHandleAuthMessage_InvalidToken_Fails(t *testing.T) {
 
 	msg := websocket.WSMessage{
 		Type:    websocket.TypeAuth,
-		Payload: map[string]interface{}{"token": "bad-token"},
+		Payload: map[string]any{"token": "bad-token"},
 	}
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -469,7 +469,7 @@ func TestHandleAuthMessage_WrongMessageType_Fails(t *testing.T) {
 
 	msg := websocket.WSMessage{
 		Type:    websocket.TypePing,
-		Payload: map[string]interface{}{},
+		Payload: map[string]any{},
 	}
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -488,7 +488,7 @@ func TestHandleAuthMessage_EmptyToken_Fails(t *testing.T) {
 
 	msg := websocket.WSMessage{
 		Type:    websocket.TypeAuth,
-		Payload: map[string]interface{}{"token": ""},
+		Payload: map[string]any{"token": ""},
 	}
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -507,7 +507,7 @@ func TestHandleAuthMessage_MissingTokenField_Fails(t *testing.T) {
 
 	msg := websocket.WSMessage{
 		Type:    websocket.TypeAuth,
-		Payload: map[string]interface{}{"wrong_field": "value"},
+		Payload: map[string]any{"wrong_field": "value"},
 	}
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -537,7 +537,7 @@ func TestHandleAuthMessage_NilAuthFn_Fails(t *testing.T) {
 
 	msg := websocket.WSMessage{
 		Type:    websocket.TypeAuth,
-		Payload: map[string]interface{}{"token": "some-token"},
+		Payload: map[string]any{"token": "some-token"},
 	}
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -578,7 +578,7 @@ func TestHandleAuthMessage_ValidAuth_ReceivesBroadcastAfterAuth(t *testing.T) {
 	// Authenticate
 	msg := websocket.WSMessage{
 		Type:    websocket.TypeAuth,
-		Payload: map[string]interface{}{"token": "valid-token"},
+		Payload: map[string]any{"token": "valid-token"},
 	}
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -606,7 +606,7 @@ func TestHandleAuthMessage_ValidAuth_ReceivesUserTargetedBroadcast(t *testing.T)
 	// Authenticate
 	msg := websocket.WSMessage{
 		Type:    websocket.TypeAuth,
-		Payload: map[string]interface{}{"token": "valid-token"},
+		Payload: map[string]any{"token": "valid-token"},
 	}
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -634,7 +634,7 @@ func TestHandleAuthMessage_FailedAuth_DoesNotReceiveBroadcast(t *testing.T) {
 	// Attempt auth (will fail)
 	msg := websocket.WSMessage{
 		Type:    websocket.TypeAuth,
-		Payload: map[string]interface{}{"token": "bad-token"},
+		Payload: map[string]any{"token": "bad-token"},
 	}
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)

@@ -487,7 +487,7 @@ func (w *Worker) reconcileStaleInboundMedia(ctx context.Context) {
 
 // updateRecipientStatus updates the recipient's status in the database
 func (w *Worker) updateRecipientStatus(recipientID uuid.UUID, status models.MessageStatus, waMessageID, errorMsg string) {
-	updates := map[string]interface{}{
+	updates := map[string]any{
 		"status":               status,
 		"whats_app_message_id": waMessageID,
 		"error_message":        errorMsg,
@@ -543,7 +543,7 @@ func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organi
 		now := time.Now()
 		result := w.DB.Model(&models.BulkMessageCampaign{}).
 			Where("id = ? AND status = ?", campaignID, models.CampaignStatusProcessing).
-			Updates(map[string]interface{}{
+			Updates(map[string]any{
 				"status":       models.CampaignStatusCompleted,
 				"completed_at": now,
 			})
@@ -612,7 +612,7 @@ func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsA
 	}
 
 	// Build template components with parameters
-	var components []map[string]interface{}
+	var components []map[string]any
 
 	// Handle header component (for media templates)
 	if template.HeaderType != "" && template.HeaderType != "TEXT" {
@@ -620,18 +620,18 @@ func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsA
 		if campaignHeaderMediaID != "" {
 			headerParam := buildMediaParameter(template.HeaderType, "id", campaignHeaderMediaID)
 			if headerParam != nil {
-				components = append(components, map[string]interface{}{
+				components = append(components, map[string]any{
 					"type":       "header",
-					"parameters": []map[string]interface{}{headerParam},
+					"parameters": []map[string]any{headerParam},
 				})
 			}
 		} else if template.HeaderContent != "" {
 			// Fall back to template's header content (URL)
 			headerParam := buildMediaParameter(template.HeaderType, "link", template.HeaderContent)
 			if headerParam != nil {
-				components = append(components, map[string]interface{}{
+				components = append(components, map[string]any{
 					"type":       "header",
-					"parameters": []map[string]interface{}{headerParam},
+					"parameters": []map[string]any{headerParam},
 				})
 			}
 		}
@@ -640,14 +640,14 @@ func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsA
 	// Resolve body parameters (supports both named and positional)
 	resolvedParams := templateutil.ResolveParams(template.BodyContent, recipient.TemplateParams)
 	if len(resolvedParams) > 0 {
-		bodyParams := make([]map[string]interface{}, len(resolvedParams))
+		bodyParams := make([]map[string]any, len(resolvedParams))
 		for i, val := range resolvedParams {
-			bodyParams[i] = map[string]interface{}{
+			bodyParams[i] = map[string]any{
 				"type": "text",
 				"text": val,
 			}
 		}
-		components = append(components, map[string]interface{}{
+		components = append(components, map[string]any{
 			"type":       "body",
 			"parameters": bodyParams,
 		})
@@ -731,7 +731,7 @@ func classifyCampaignMediaType(mimeType, filename string) string {
 
 // buildMediaParameter creates a media parameter for WhatsApp template headers.
 // keyName is "id" for Meta media IDs or "link" for external URLs.
-func buildMediaParameter(headerType, keyName, value string) map[string]interface{} {
+func buildMediaParameter(headerType, keyName, value string) map[string]any {
 	var mediaType string
 	switch headerType {
 	case "IMAGE":
@@ -743,9 +743,9 @@ func buildMediaParameter(headerType, keyName, value string) map[string]interface
 	default:
 		return nil
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"type": mediaType,
-		mediaType: map[string]interface{}{
+		mediaType: map[string]any{
 			keyName: value,
 		},
 	}

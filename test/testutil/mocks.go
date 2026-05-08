@@ -29,7 +29,7 @@ type MockWhatsAppClient struct {
 	// Configurable behavior
 	SendTextMessageFunc        func(ctx context.Context, account *whatsapp.Account, phone, text string) (string, error)
 	SendInteractiveButtonsFunc func(ctx context.Context, account *whatsapp.Account, phone, body string, buttons []whatsapp.Button) (string, error)
-	SendTemplateMessageFunc    func(ctx context.Context, account *whatsapp.Account, phone, template, lang string, components []map[string]interface{}) (string, error)
+	SendTemplateMessageFunc    func(ctx context.Context, account *whatsapp.Account, phone, template, lang string, components []map[string]any) (string, error)
 	SendImageMessageFunc       func(ctx context.Context, account *whatsapp.Account, phone, mediaID, caption string) (string, error)
 	SendDocumentMessageFunc    func(ctx context.Context, account *whatsapp.Account, phone, mediaID, filename, caption string) (string, error)
 	MarkMessageReadFunc        func(ctx context.Context, account *whatsapp.Account, messageID string) error
@@ -93,7 +93,7 @@ func (m *MockWhatsAppClient) SendInteractiveButtons(ctx context.Context, account
 	m.SentMessages = append(m.SentMessages, MockSentMessage{
 		Type:        "interactive",
 		PhoneNumber: phone,
-		Content:     map[string]interface{}{"body": body, "buttons": buttons},
+		Content:     map[string]any{"body": body, "buttons": buttons},
 		Account:     account,
 		MessageID:   msgID,
 	})
@@ -105,7 +105,7 @@ func (m *MockWhatsAppClient) SendInteractiveButtons(ctx context.Context, account
 }
 
 // SendTemplateMessage mocks sending a template message.
-func (m *MockWhatsAppClient) SendTemplateMessage(ctx context.Context, account *whatsapp.Account, phone, template, lang string, components []map[string]interface{}) (string, error) {
+func (m *MockWhatsAppClient) SendTemplateMessage(ctx context.Context, account *whatsapp.Account, phone, template, lang string, components []map[string]any) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -117,7 +117,7 @@ func (m *MockWhatsAppClient) SendTemplateMessage(ctx context.Context, account *w
 	m.SentMessages = append(m.SentMessages, MockSentMessage{
 		Type:        "template",
 		PhoneNumber: phone,
-		Content:     map[string]interface{}{"template": template, "lang": lang, "components": components},
+		Content:     map[string]any{"template": template, "lang": lang, "components": components},
 		Account:     account,
 		TemplateID:  template,
 		MessageID:   msgID,
@@ -142,7 +142,7 @@ func (m *MockWhatsAppClient) SendImageMessage(ctx context.Context, account *what
 	m.SentMessages = append(m.SentMessages, MockSentMessage{
 		Type:        "image",
 		PhoneNumber: phone,
-		Content:     map[string]interface{}{"media_id": mediaID, "caption": caption},
+		Content:     map[string]any{"media_id": mediaID, "caption": caption},
 		Account:     account,
 		MessageID:   msgID,
 	})
@@ -166,7 +166,7 @@ func (m *MockWhatsAppClient) SendDocumentMessage(ctx context.Context, account *w
 	m.SentMessages = append(m.SentMessages, MockSentMessage{
 		Type:        "document",
 		PhoneNumber: phone,
-		Content:     map[string]interface{}{"media_id": mediaID, "filename": filename, "caption": caption},
+		Content:     map[string]any{"media_id": mediaID, "filename": filename, "caption": caption},
 		Account:     account,
 		MessageID:   msgID,
 	})

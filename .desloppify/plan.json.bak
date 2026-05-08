@@ -1,56 +1,53 @@
 {
   "version": 8,
   "created": "2026-03-11T03:30:19+00:00",
-  "updated": "2026-05-08T11:08:48+00:00",
+  "updated": "2026-05-08T12:42:36+00:00",
   "queue_order": [
-    "review::.::holistic::initialization_coupling::mutable-pkg-level-cached-template",
-    "review::.::holistic::initialization_coupling::test-singleton-env-var-coupling",
-    "review::.::holistic::abstraction_fitness::duplicate-error-types",
-    "review::.::holistic::abstraction_fitness::jsonb-domain-model",
-    "review::.::holistic::abstraction_fitness::outgoing-message-param-bag",
-    "review::.::holistic::abstraction_fitness::provider-interface-bypass",
-    "review::.::holistic::ai_generated_debt::cache-jsdoc-style-docs",
-    "review::.::holistic::api_surface_coherence::json-tag-casing-drift",
-    "review::.::holistic::api_surface_coherence::outgoing-message-overloaded",
-    "review::.::holistic::authorization_consistency::public-route-skip-list-drift-risk",
-    "review::.::holistic::contract_coherence::jsonb-runtime-type-gap",
-    "review::.::holistic::convention_outlier::committed-disabled-files",
-    "review::.::holistic::convention_outlier::decodeRequest-interface-param",
-    "review::.::holistic::convention_outlier::docs-in-source-dir",
-    "review::.::holistic::convention_outlier::interface-any-drift",
-    "review::.::holistic::cross_module_architecture::handlers-god-struct",
-    "review::.::holistic::cross_module_architecture::handlers-package-size",
-    "review::.::holistic::cross_module_architecture::main-go-monolith",
-    "review::.::holistic::cross_module_architecture::pkg-imports-internal-inversion",
-    "review::.::holistic::cross_module_architecture::worker-imports-handlers",
-    "review::.::holistic::cross_module_architecture::workers-in-handlers",
-    "review::.::holistic::dependency_health::dompurify-unused-direct-dep",
-    "review::.::holistic::design_coherence::chatbot-processor-mixed-concerns",
-    "review::.::holistic::design_coherence::cli-boilerplate-duplication",
-    "review::.::holistic::design_coherence::main-go-mixed-concerns",
-    "review::.::holistic::error_consistency::bare-status-code-500",
-    "review::.::holistic::error_consistency::legacy-percent-v-wrapping",
-    "review::.::holistic::error_consistency::silent-error-discard-contact",
-    "review::.::holistic::high_level_elegance::handlers-god-package",
-    "review::.::holistic::high_level_elegance::main-go-duplication",
-    "review::.::holistic::high_level_elegance::route-skip-list-duplication",
-    "review::.::holistic::high_level_elegance::workers-depend-on-handlers-app",
-    "review::.::holistic::low_level_elegance::agent-transfers-nesting",
-    "review::.::holistic::low_level_elegance::chatbot-processor-size",
-    "review::.::holistic::mid_level_elegance::app-struct-implicit-seams",
-    "review::.::holistic::mid_level_elegance::jsonb-untyped-boundary-crossing",
-    "review::.::holistic::mid_level_elegance::worker-handler-backward-handoff",
-    "review::.::holistic::naming_quality::incoming-text-message-misname",
-    "review::.::holistic::naming_quality::objectstorage-import-alias",
-    "review::.::holistic::naming_quality::stubs-go-misleading-name",
-    "review::.::holistic::naming_quality::whatsmeow-casing-drift",
-    "review::.::holistic::package_organization::cmd-main-oversize",
-    "review::.::holistic::package_organization::handlers-flat-overload",
-    "review::.::holistic::package_organization::storage-objectstorage-naming",
-    "review::.::holistic::test_strategy::test-skip-on-missing-env",
-    "review::.::holistic::test_strategy::worker-test-coverage",
-    "review::.::holistic::type_safety::interface-any-inconsistency",
-    "review::.::holistic::type_safety::jsonb-weak-typing"
+    "review::.::holistic::cross_module_architecture::issue-0",
+    "review::.::holistic::cross_module_architecture::issue-1",
+    "review::.::holistic::design_coherence::issue-2",
+    "review::.::holistic::package_organization::handlers-package-size",
+    "review::.::holistic::package_organization::tmp-directory-at-root",
+    "review::.::holistic::abstraction_fitness::app-god-object",
+    "review::.::holistic::abstraction_fitness::config-wide-bag",
+    "review::.::holistic::abstraction_fitness::crud-handler-boilerplate",
+    "review::.::holistic::abstraction_fitness::helpers-low-cohesion",
+    "review::.::holistic::abstraction_fitness::jsonb-untyped-access",
+    "review::.::holistic::abstraction_fitness::reply-provider-leak",
+    "review::.::holistic::abstraction_fitness::wsmessage-any-payload",
+    "review::.::holistic::high_level_elegance::agent-transfers-monolith",
+    "review::.::holistic::high_level_elegance::aux-cmd-duplication",
+    "review::.::holistic::high_level_elegance::chatbot-processor-monolith",
+    "review::.::holistic::high_level_elegance::decodeRequest-interface",
+    "review::.::holistic::high_level_elegance::god-package-handlers",
+    "review::.::holistic::high_level_elegance::route-skip-duplication",
+    "review::.::holistic::high_level_elegance::worker-imports-handlers",
+    "review::.::holistic::mid_level_elegance::MID-001",
+    "review::.::holistic::mid_level_elegance::MID-002",
+    "review::.::holistic::type_safety::TS001",
+    "review::.::holistic::type_safety::TS002",
+    "review::.::holistic::type_safety::TS003",
+    "subjective::abstraction_fitness",
+    "subjective::ai_generated_debt",
+    "subjective::api_surface_coherence",
+    "subjective::convention_outlier",
+    "subjective::cross_module_architecture",
+    "subjective::design_coherence",
+    "subjective::error_consistency",
+    "subjective::high_level_elegance",
+    "subjective::low_level_elegance",
+    "subjective::mid_level_elegance",
+    "subjective::naming_quality",
+    "subjective::package_organization",
+    "subjective::test_strategy",
+    "subjective::type_safety",
+    "triage::strategize",
+    "triage::observe",
+    "triage::reflect",
+    "triage::organize",
+    "triage::enrich",
+    "triage::sense-check",
+    "triage::commit"
   ],
   "deferred": [],
   "skipped": {
@@ -23932,20 +23929,20 @@
   },
   "promoted_ids": [],
   "plan_start_scores": {
-    "strict": 71.2,
-    "overall": 71.3,
-    "objective": 84.2,
-    "verified": 84.2
+    "strict": 80.7,
+    "overall": 80.8,
+    "objective": 89.0,
+    "verified": 83.6
   },
   "refresh_state": {
     "_subjective_migration_pruned": true,
     "lifecycle_phase": "plan",
-    "postflight_scan_completed_at_scan_count": 13,
-    "subjective_review_completed_at_scan_count": 13,
+    "postflight_scan_completed_at_scan_count": 33,
+    "subjective_review_completed_at_scan_count": 32,
     "pending_import_scores": {
-      "timestamp": "2026-05-08T11:00:09+00:00",
-      "import_file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/.desloppify/subagents/runs/20260508_105657/results/batch-16.raw.txt",
-      "normalized_import_file": "/Users/noiemany/Downloads/whatomate_GOWA/whatomate/.desloppify/subagents/runs/20260508_105657/results/batch-16.raw.txt",
+      "timestamp": "2026-05-08T11:22:18+00:00",
+      "import_file": "/tmp/desloppify_review_update.raw.txt",
+      "normalized_import_file": "/private/tmp/desloppify_review_update.raw.txt",
       "packet_sha256": ""
     }
   },
@@ -31405,6 +31402,963 @@
         "strategy_len": 343,
         "coverage": "0/0"
       }
+    },
+    {
+      "timestamp": "2026-05-08T11:09:11+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:09:11+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T11:09:11+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 14
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:21:40+00:00",
+      "action": "review_import_sync",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "trigger": "review_import",
+        "new_ids": [],
+        "added_to_queue": [],
+        "workflow_injected_ids": [],
+        "triage_injected": false,
+        "triage_injected_ids": [],
+        "triage_deferred": false,
+        "diff_new": 0,
+        "diff_reopened": 0,
+        "diff_auto_resolved": 70,
+        "stale_pruned_from_queue": [
+          "review::.::holistic::abstraction_fitness::duplicate-error-types",
+          "review::.::holistic::abstraction_fitness::jsonb-domain-model",
+          "review::.::holistic::abstraction_fitness::outgoing-message-param-bag",
+          "review::.::holistic::abstraction_fitness::provider-interface-bypass",
+          "review::.::holistic::ai_generated_debt::cache-jsdoc-style-docs",
+          "review::.::holistic::api_surface_coherence::json-tag-casing-drift",
+          "review::.::holistic::api_surface_coherence::outgoing-message-overloaded",
+          "review::.::holistic::authorization_consistency::public-route-skip-list-drift-risk",
+          "review::.::holistic::contract_coherence::jsonb-runtime-type-gap",
+          "review::.::holistic::convention_outlier::committed-disabled-files",
+          "review::.::holistic::convention_outlier::decodeRequest-interface-param",
+          "review::.::holistic::convention_outlier::docs-in-source-dir",
+          "review::.::holistic::convention_outlier::interface-any-drift",
+          "review::.::holistic::cross_module_architecture::handlers-god-struct",
+          "review::.::holistic::cross_module_architecture::handlers-package-size",
+          "review::.::holistic::cross_module_architecture::main-go-monolith",
+          "review::.::holistic::cross_module_architecture::pkg-imports-internal-inversion",
+          "review::.::holistic::cross_module_architecture::worker-imports-handlers",
+          "review::.::holistic::cross_module_architecture::workers-in-handlers",
+          "review::.::holistic::dependency_health::dompurify-unused-direct-dep",
+          "review::.::holistic::design_coherence::chatbot-processor-mixed-concerns",
+          "review::.::holistic::design_coherence::cli-boilerplate-duplication",
+          "review::.::holistic::design_coherence::main-go-mixed-concerns",
+          "review::.::holistic::error_consistency::bare-status-code-500",
+          "review::.::holistic::error_consistency::legacy-percent-v-wrapping",
+          "review::.::holistic::error_consistency::silent-error-discard-contact",
+          "review::.::holistic::high_level_elegance::handlers-god-package",
+          "review::.::holistic::high_level_elegance::main-go-duplication",
+          "review::.::holistic::high_level_elegance::route-skip-list-duplication",
+          "review::.::holistic::high_level_elegance::workers-depend-on-handlers-app",
+          "review::.::holistic::initialization_coupling::mutable-pkg-level-cached-template",
+          "review::.::holistic::initialization_coupling::test-singleton-env-var-coupling",
+          "review::.::holistic::low_level_elegance::agent-transfers-nesting",
+          "review::.::holistic::low_level_elegance::chatbot-processor-size",
+          "review::.::holistic::mid_level_elegance::app-struct-implicit-seams",
+          "review::.::holistic::mid_level_elegance::jsonb-untyped-boundary-crossing",
+          "review::.::holistic::mid_level_elegance::worker-handler-backward-handoff",
+          "review::.::holistic::naming_quality::incoming-text-message-misname",
+          "review::.::holistic::naming_quality::objectstorage-import-alias",
+          "review::.::holistic::naming_quality::stubs-go-misleading-name",
+          "review::.::holistic::naming_quality::whatsmeow-casing-drift",
+          "review::.::holistic::package_organization::cmd-main-oversize",
+          "review::.::holistic::package_organization::handlers-flat-overload",
+          "review::.::holistic::package_organization::storage-objectstorage-naming",
+          "review::.::holistic::test_strategy::test-skip-on-missing-env",
+          "review::.::holistic::test_strategy::worker-test-coverage",
+          "review::.::holistic::type_safety::interface-any-inconsistency",
+          "review::.::holistic::type_safety::jsonb-weak-typing"
+        ],
+        "covered_subjective_pruned_from_queue": [],
+        "covered_subjective": [],
+        "stale_sync_injected": [],
+        "stale_sync_pruned": [],
+        "auto_cluster_changes": 0,
+        "import_scores_injected": [
+          "workflow::import-scores"
+        ],
+        "import_scores_pruned": [],
+        "sync_status": "synced",
+        "sync_message": null
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:22:18+00:00",
+      "action": "review_import_sync",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "trigger": "review_import",
+        "new_ids": [
+          "review::.::holistic::abstraction_fitness::issue-3",
+          "review::.::holistic::cross_module_architecture::issue-0",
+          "review::.::holistic::cross_module_architecture::issue-1",
+          "review::.::holistic::design_coherence::issue-2",
+          "review::.::holistic::high_level_elegance::issue-4",
+          "review::.::holistic::high_level_elegance::issue-5"
+        ],
+        "added_to_queue": [
+          "review::.::holistic::abstraction_fitness::issue-3",
+          "review::.::holistic::cross_module_architecture::issue-0",
+          "review::.::holistic::cross_module_architecture::issue-1",
+          "review::.::holistic::design_coherence::issue-2",
+          "review::.::holistic::high_level_elegance::issue-4",
+          "review::.::holistic::high_level_elegance::issue-5"
+        ],
+        "workflow_injected_ids": [],
+        "triage_injected": false,
+        "triage_injected_ids": [],
+        "triage_deferred": false,
+        "diff_new": 6,
+        "diff_reopened": 0,
+        "diff_auto_resolved": 21,
+        "stale_pruned_from_queue": [],
+        "covered_subjective_pruned_from_queue": [],
+        "covered_subjective": [],
+        "stale_sync_injected": [],
+        "stale_sync_pruned": [],
+        "auto_cluster_changes": 0,
+        "import_scores_injected": [],
+        "import_scores_pruned": [],
+        "sync_status": "synced",
+        "sync_message": null
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:25:14+00:00",
+      "action": "review_import_sync",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "trigger": "review_import",
+        "new_ids": [
+          "review::.::holistic::abstraction_fitness::issue-3",
+          "review::.::holistic::cross_module_architecture::issue-0",
+          "review::.::holistic::cross_module_architecture::issue-1",
+          "review::.::holistic::design_coherence::issue-2",
+          "review::.::holistic::high_level_elegance::issue-4",
+          "review::.::holistic::high_level_elegance::issue-5"
+        ],
+        "added_to_queue": [],
+        "workflow_injected_ids": [],
+        "triage_injected": false,
+        "triage_injected_ids": [],
+        "triage_deferred": false,
+        "diff_new": 0,
+        "diff_reopened": 0,
+        "diff_auto_resolved": 21,
+        "stale_pruned_from_queue": [],
+        "covered_subjective_pruned_from_queue": [
+          "subjective::abstraction_fitness",
+          "subjective::cross_module_architecture",
+          "subjective::design_coherence",
+          "subjective::high_level_elegance"
+        ],
+        "covered_subjective": [
+          "subjective::abstraction_fitness",
+          "subjective::cross_module_architecture",
+          "subjective::design_coherence",
+          "subjective::high_level_elegance"
+        ],
+        "stale_sync_injected": [],
+        "stale_sync_pruned": [],
+        "auto_cluster_changes": 0,
+        "import_scores_injected": [],
+        "import_scores_pruned": [],
+        "sync_status": "synced",
+        "sync_message": null
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:25:29+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:25:29+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:25:29+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T11:25:29+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 18
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:30:07+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:30:07+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:30:07+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T11:30:07+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 19
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:31:36+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:31:36+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:31:36+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T11:31:36+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 20
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:34:57+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:34:57+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:34:57+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T11:34:57+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 21
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:35:31+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:35:31+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:35:31+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T11:35:31+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 22
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:39:28+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:39:28+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:39:28+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T11:39:28+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 23
+      }
+    },
+    {
+      "timestamp": "2026-05-08T11:39:46+00:00",
+      "action": "review_import_sync",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "trigger": "review_import",
+        "new_ids": [
+          "review::.::holistic::abstraction_fitness::issue-3",
+          "review::.::holistic::cross_module_architecture::issue-0",
+          "review::.::holistic::cross_module_architecture::issue-1",
+          "review::.::holistic::design_coherence::issue-2",
+          "review::.::holistic::high_level_elegance::issue-4",
+          "review::.::holistic::high_level_elegance::issue-5",
+          "review::.::holistic::package_organization::handlers-package-size",
+          "review::.::holistic::package_organization::tmp-directory-at-root"
+        ],
+        "added_to_queue": [
+          "review::.::holistic::package_organization::handlers-package-size",
+          "review::.::holistic::package_organization::tmp-directory-at-root"
+        ],
+        "workflow_injected_ids": [],
+        "triage_injected": false,
+        "triage_injected_ids": [],
+        "triage_deferred": false,
+        "diff_new": 2,
+        "diff_reopened": 0,
+        "diff_auto_resolved": 21,
+        "stale_pruned_from_queue": [],
+        "covered_subjective_pruned_from_queue": [
+          "subjective::package_organization"
+        ],
+        "covered_subjective": [
+          "subjective::package_organization"
+        ],
+        "stale_sync_injected": [],
+        "stale_sync_pruned": [],
+        "auto_cluster_changes": 0,
+        "import_scores_injected": [],
+        "import_scores_pruned": [],
+        "sync_status": "synced",
+        "sync_message": null
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:07:16+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:07:16+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:07:16+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T12:07:16+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 25
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:07:52+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:07:52+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:07:52+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T12:07:52+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 26
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:08:11+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:08:11+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:08:11+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T12:08:11+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 27
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:08:11+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:08:11+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:08:11+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T12:11:29+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:11:29+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:11:29+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T12:11:29+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 28
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:13:47+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:13:47+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:13:47+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T12:13:47+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 29
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:20:07+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:20:07+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:20:07+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T12:20:07+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 30
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:23:25+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:23:25+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:23:25+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T12:23:25+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 31
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:40:18+00:00",
+      "action": "review_import_sync",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "trigger": "review_import",
+        "new_ids": [
+          "review::.::holistic::abstraction_fitness::app-god-object",
+          "review::.::holistic::abstraction_fitness::config-wide-bag",
+          "review::.::holistic::abstraction_fitness::crud-handler-boilerplate",
+          "review::.::holistic::abstraction_fitness::helpers-low-cohesion",
+          "review::.::holistic::abstraction_fitness::jsonb-untyped-access",
+          "review::.::holistic::abstraction_fitness::reply-provider-leak",
+          "review::.::holistic::abstraction_fitness::wsmessage-any-payload",
+          "review::.::holistic::cross_module_architecture::issue-0",
+          "review::.::holistic::cross_module_architecture::issue-1",
+          "review::.::holistic::design_coherence::issue-2",
+          "review::.::holistic::high_level_elegance::agent-transfers-monolith",
+          "review::.::holistic::high_level_elegance::aux-cmd-duplication",
+          "review::.::holistic::high_level_elegance::chatbot-processor-monolith",
+          "review::.::holistic::high_level_elegance::decodeRequest-interface",
+          "review::.::holistic::high_level_elegance::god-package-handlers",
+          "review::.::holistic::high_level_elegance::route-skip-duplication",
+          "review::.::holistic::high_level_elegance::worker-imports-handlers",
+          "review::.::holistic::mid_level_elegance::MID-001",
+          "review::.::holistic::mid_level_elegance::MID-002",
+          "review::.::holistic::package_organization::handlers-package-size",
+          "review::.::holistic::package_organization::tmp-directory-at-root",
+          "review::.::holistic::type_safety::TS001",
+          "review::.::holistic::type_safety::TS002",
+          "review::.::holistic::type_safety::TS003"
+        ],
+        "added_to_queue": [
+          "review::.::holistic::abstraction_fitness::app-god-object",
+          "review::.::holistic::abstraction_fitness::config-wide-bag",
+          "review::.::holistic::abstraction_fitness::crud-handler-boilerplate",
+          "review::.::holistic::abstraction_fitness::helpers-low-cohesion",
+          "review::.::holistic::abstraction_fitness::jsonb-untyped-access",
+          "review::.::holistic::abstraction_fitness::reply-provider-leak",
+          "review::.::holistic::abstraction_fitness::wsmessage-any-payload",
+          "review::.::holistic::high_level_elegance::agent-transfers-monolith",
+          "review::.::holistic::high_level_elegance::aux-cmd-duplication",
+          "review::.::holistic::high_level_elegance::chatbot-processor-monolith",
+          "review::.::holistic::high_level_elegance::decodeRequest-interface",
+          "review::.::holistic::high_level_elegance::god-package-handlers",
+          "review::.::holistic::high_level_elegance::route-skip-duplication",
+          "review::.::holistic::high_level_elegance::worker-imports-handlers",
+          "review::.::holistic::mid_level_elegance::MID-001",
+          "review::.::holistic::mid_level_elegance::MID-002",
+          "review::.::holistic::type_safety::TS001",
+          "review::.::holistic::type_safety::TS002",
+          "review::.::holistic::type_safety::TS003"
+        ],
+        "workflow_injected_ids": [],
+        "triage_injected": false,
+        "triage_injected_ids": [],
+        "triage_deferred": false,
+        "diff_new": 19,
+        "diff_reopened": 0,
+        "diff_auto_resolved": 24,
+        "stale_pruned_from_queue": [
+          "review::.::holistic::abstraction_fitness::issue-3",
+          "review::.::holistic::high_level_elegance::issue-4",
+          "review::.::holistic::high_level_elegance::issue-5"
+        ],
+        "covered_subjective_pruned_from_queue": [
+          "subjective::abstraction_fitness",
+          "subjective::high_level_elegance",
+          "subjective::mid_level_elegance",
+          "subjective::type_safety"
+        ],
+        "covered_subjective": [
+          "subjective::abstraction_fitness",
+          "subjective::high_level_elegance",
+          "subjective::mid_level_elegance",
+          "subjective::type_safety"
+        ],
+        "stale_sync_injected": [],
+        "stale_sync_pruned": [],
+        "auto_cluster_changes": 0,
+        "import_scores_injected": [],
+        "import_scores_pruned": [],
+        "sync_status": "synced",
+        "sync_message": null
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:42:36+00:00",
+      "action": "sync_subjective",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "changes": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:42:36+00:00",
+      "action": "sync_triage",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "injected": true
+      }
+    },
+    {
+      "timestamp": "2026-05-08T12:42:36+00:00",
+      "action": "seed_start_scores",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {}
+    },
+    {
+      "timestamp": "2026-05-08T12:42:36+00:00",
+      "action": "complete_postflight_scan",
+      "issue_ids": [],
+      "cluster_name": null,
+      "actor": "system",
+      "note": null,
+      "detail": {
+        "scan_count": 33
+      }
     }
   ],
   "epic_triage_meta": {
@@ -32430,5 +33384,11 @@
     "subjective_review::pkg/chat_close_ratings/shared.go::unreviewed"
   ],
   "commit_tracking_branch": null,
-  "scan_count_at_plan_start": 12
+  "scan_count_at_plan_start": 33,
+  "previous_plan_start_scores": {
+    "strict": 81.5,
+    "overall": 81.6,
+    "objective": 89.0,
+    "verified": 83.6
+  }
 }

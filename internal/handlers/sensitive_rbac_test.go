@@ -135,7 +135,7 @@ func TestSensitiveRBAC_ExecuteCustomAction_AllowsChatWritePermission(t *testing.
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := createUserWithPermissionKeys(t, app, org.ID, "chat-writer", []string{"chat:write"})
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
-	action := createTestCustomAction(t, app, org.ID, "Open CRM", models.ActionTypeURL, map[string]interface{}{
+	action := createTestCustomAction(t, app, org.ID, "Open CRM", models.ActionTypeURL, map[string]any{
 		"url":             "https://crm.example.com/contact/{{contact.id}}",
 		"open_in_new_tab": true,
 	}, true, 0)

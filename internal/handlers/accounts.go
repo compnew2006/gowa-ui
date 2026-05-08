@@ -77,7 +77,7 @@ func (a *App) ListAccounts(r *fastglue.Request) error {
 		response[i] = accountToResponse(acc)
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"accounts": response,
 	})
 }
@@ -362,7 +362,7 @@ func (a *App) TestAccountConnection(r *fastglue.Request) error {
 	// Use the comprehensive validation function
 	if err := a.validateAccountCredentials(account.PhoneID, account.BusinessID, account.AccessToken, account.APIVersion); err != nil {
 		a.Log.Error("Account test failed", "error", err, "account", account.Name)
-		return r.SendEnvelope(map[string]interface{}{
+		return r.SendEnvelope(map[string]any{
 			"success": false,
 			"error":   "Account credential validation failed. Check your access token and phone ID.",
 		})
@@ -378,7 +378,7 @@ func (a *App) TestAccountConnection(r *fastglue.Request) error {
 	resp, err := a.HTTPClient.Do(req)
 	if err != nil {
 		a.Log.Error("Failed to connect to WhatsApp API", "error", err)
-		return r.SendEnvelope(map[string]interface{}{
+		return r.SendEnvelope(map[string]any{
 			"success": false,
 			"error":   "Failed to connect to WhatsApp API",
 		})
@@ -388,16 +388,16 @@ func (a *App) TestAccountConnection(r *fastglue.Request) error {
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != 200 {
-		var errorResp map[string]interface{}
+		var errorResp map[string]any
 		_ = json.Unmarshal(body, &errorResp)
-		return r.SendEnvelope(map[string]interface{}{
+		return r.SendEnvelope(map[string]any{
 			"success": false,
 			"error":   "API error",
 			"details": errorResp,
 		})
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	_ = json.Unmarshal(body, &result)
 
 	// Check if this is a test/sandbox number
@@ -405,7 +405,7 @@ func (a *App) TestAccountConnection(r *fastglue.Request) error {
 	isTestNumber := accountMode == "SANDBOX"
 
 	// Prepare response
-	response := map[string]interface{}{
+	response := map[string]any{
 		"success":                  true,
 		"display_phone_number":     result["display_phone_number"],
 		"verified_name":            result["verified_name"],
@@ -493,14 +493,14 @@ func (a *App) SubscribeApp(r *fastglue.Request) error {
 	ctx := context.Background()
 	if err := a.WhatsApp.SubscribeApp(ctx, a.toWhatsAppAccount(account)); err != nil {
 		a.Log.Error("Failed to subscribe app to webhooks", "error", err, "account", account.Name)
-		return r.SendEnvelope(map[string]interface{}{
+		return r.SendEnvelope(map[string]any{
 			"success": false,
 			"error":   "Failed to subscribe app to webhooks. Check your credentials.",
 		})
 	}
 
 	a.Log.Info("App subscribed to webhooks successfully", "account", account.Name, "business_id", account.BusinessID)
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"success": true,
 		"message": "App subscribed to webhooks successfully. You should now receive incoming messages.",
 	})

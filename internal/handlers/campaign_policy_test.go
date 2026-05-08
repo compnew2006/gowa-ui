@@ -18,8 +18,8 @@ func TestCampaignPolicyViolationError_Error(t *testing.T) {
 		want string
 	}{
 		{
-			name: "nil pointer fallback",
-			err:  nil,
+			name: "empty message uses derived fallback",
+			err:  newCampaignPolicyViolationError("", ""),
 			want: "campaign policy violation",
 		},
 		{

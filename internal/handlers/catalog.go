@@ -91,7 +91,7 @@ func (a *App) ListCatalogs(r *fastglue.Request) error {
 		result[i] = catalogToResponse(c, int(productCount))
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"catalogs": result,
 	})
 }
@@ -281,7 +281,7 @@ func (a *App) SyncCatalogs(r *fastglue.Request) error {
 		}
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"message": "Catalogs synced",
 		"synced":  synced,
 		"total":   len(metaCatalogs),
@@ -319,7 +319,7 @@ func (a *App) ListCatalogProducts(r *fastglue.Request) error {
 		result[i] = productToResponse(p)
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
+	return r.SendEnvelope(map[string]any{
 		"products": result,
 	})
 }

@@ -93,8 +93,13 @@ func runMigrations(db *gorm.DB) error {
 		&models.Webhook{},
 		&models.CustomAction{},
 		&models.UserAvailabilityLog{},
+		// Licensing
+		&models.LicenseRecord{},
+		&models.LicenseEvent{},
+		&models.ContactUserDeletion{},
 		// WhatsApp models
 		&models.WhatsAppAccount{},
+		&models.WhatsAppStatus{},
 		&models.Contact{},
 		&models.MediaAsset{},
 		&models.Tag{},
@@ -166,6 +171,11 @@ func cleanupTables(db *gorm.DB) {
 		"whatsapp_instances",
 		"whatsapp_flows",
 		"whatsapp_accounts",
+		"whatsapp_statuses",
+		// Licensing
+		"license_records",
+		"license_events",
+		"contact_user_deletions",
 		// Roles and permissions
 		"role_permissions",
 		"custom_roles",
@@ -218,6 +228,10 @@ func TruncateTables(db *gorm.DB) {
 		"templates",
 		"whatsapp_flows",
 		"whatsapp_accounts",
+		"whatsapp_statuses",
+		"license_records",
+		"license_events",
+		"contact_user_deletions",
 		"role_permissions",
 		"custom_roles",
 		"permissions",

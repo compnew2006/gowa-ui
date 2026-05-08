@@ -19,7 +19,7 @@ func TestMigrationCloneLegacyValuesNilSafe(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Empty(t, result)
 
-	result = cloneLegacyValues(map[string]interface{}{})
+	result = cloneLegacyValues(map[string]any{})
 	assert.NotNil(t, result)
 	assert.Empty(t, result)
 }

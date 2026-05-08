@@ -20,6 +20,13 @@ func newCampaignPolicyViolationError(message, reasonCode string) *campaignPolicy
 	return &campaignPolicyViolationError{reasonedError: newReasonedError(message, reasonCode, "campaign policy violation")}
 }
 
+func (e *campaignPolicyViolationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.reasonedError
+}
+
 func asCampaignPolicyViolation(err error) (string, string, bool) {
 	re, ok := asReasonedError(err)
 	if !ok {

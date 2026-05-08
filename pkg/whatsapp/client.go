@@ -336,8 +336,8 @@ func (c *Client) UploadMedia(ctx context.Context, account *Account, data []byte,
 }
 
 // sendMediaMessage is the shared implementation for all media message types.
-func (c *Client) sendMediaMessage(ctx context.Context, account *Account, phoneNumber, mediaType string, mediaFields map[string]interface{}) (string, error) {
-	payload := map[string]interface{}{
+func (c *Client) sendMediaMessage(ctx context.Context, account *Account, phoneNumber, mediaType string, mediaFields map[string]any) (string, error) {
+	payload := map[string]any{
 		"messaging_product": "whatsapp",
 		"recipient_type":    "individual",
 		"to":                phoneNumber,
@@ -369,35 +369,35 @@ func (c *Client) sendMediaMessage(ctx context.Context, account *Account, phoneNu
 
 // SendImageMessage sends an image message using a media ID
 func (c *Client) SendImageMessage(ctx context.Context, account *Account, phoneNumber, mediaID, caption string) (string, error) {
-	return c.sendMediaMessage(ctx, account, phoneNumber, "image", map[string]interface{}{
+	return c.sendMediaMessage(ctx, account, phoneNumber, "image", map[string]any{
 		"id": mediaID, "caption": caption,
 	})
 }
 
 // SendDocumentMessage sends a document message using a media ID
 func (c *Client) SendDocumentMessage(ctx context.Context, account *Account, phoneNumber, mediaID, filename, caption string) (string, error) {
-	return c.sendMediaMessage(ctx, account, phoneNumber, "document", map[string]interface{}{
+	return c.sendMediaMessage(ctx, account, phoneNumber, "document", map[string]any{
 		"id": mediaID, "filename": filename, "caption": caption,
 	})
 }
 
 // SendVideoMessage sends a video message using a media ID
 func (c *Client) SendVideoMessage(ctx context.Context, account *Account, phoneNumber, mediaID, caption string) (string, error) {
-	return c.sendMediaMessage(ctx, account, phoneNumber, "video", map[string]interface{}{
+	return c.sendMediaMessage(ctx, account, phoneNumber, "video", map[string]any{
 		"id": mediaID, "caption": caption,
 	})
 }
 
 // SendAudioMessage sends an audio message using a media ID
 func (c *Client) SendAudioMessage(ctx context.Context, account *Account, phoneNumber, mediaID string) (string, error) {
-	return c.sendMediaMessage(ctx, account, phoneNumber, "audio", map[string]interface{}{
+	return c.sendMediaMessage(ctx, account, phoneNumber, "audio", map[string]any{
 		"id": mediaID,
 	})
 }
 
 // MarkMessageRead sends a read receipt for a message
 func (c *Client) MarkMessageRead(ctx context.Context, account *Account, messageID string) error {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"messaging_product": "whatsapp",
 		"status":            "read",
 		"message_id":        messageID,
@@ -417,12 +417,12 @@ func (c *Client) MarkMessageRead(ctx context.Context, account *Account, messageI
 
 // SendReactionMessage sends a reaction emoji to a message
 func (c *Client) SendReactionMessage(ctx context.Context, account *Account, phoneNumber, messageID, emoji string) error {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"messaging_product": "whatsapp",
 		"recipient_type":    "individual",
 		"to":                phoneNumber,
 		"type":              "reaction",
-		"reaction": map[string]interface{}{
+		"reaction": map[string]any{
 			"message_id": messageID,
 			"emoji":      emoji,
 		},
@@ -461,7 +461,7 @@ func (c *Client) ResumableUpload(ctx context.Context, account *Account, data []b
 	// Step 1: Create upload session
 	sessionURL := fmt.Sprintf("%s/%s/%s/uploads", c.getBaseURL(), account.APIVersion, account.AppID)
 
-	sessionPayload := map[string]interface{}{
+	sessionPayload := map[string]any{
 		"file_length": len(data),
 		"file_type":   mimeType,
 		"file_name":   filename,

@@ -114,7 +114,7 @@ func (a *App) fetchUserInfo(provider string, ssoConfig *models.SSOProvider, toke
 
 	// Parse based on provider
 	var userInfo UserInfo
-	var rawData map[string]interface{}
+	var rawData map[string]any
 	if err := json.Unmarshal(body, &rawData); err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func sanitizeRedirectPath(path string) string {
 	return path
 }
 
-func getString(data map[string]interface{}, key string) string {
+func getString(data map[string]any, key string) string {
 	if val, ok := data[key]; ok {
 		if str, ok := val.(string); ok {
 			return str

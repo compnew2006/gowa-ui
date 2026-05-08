@@ -47,6 +47,9 @@ func (cm *ConnectionManager) lookupPNForLID(ctx context.Context, lidUser string)
 	if lidUser == "" {
 		return ""
 	}
+	if cm == nil || cm.db == nil {
+		return ""
+	}
 	var pn string
 	err := cm.db.WithContext(ctx).
 		Table("whatsmeow_lid_map").
@@ -186,7 +189,7 @@ func (cm *ConnectionManager) migrateContactPhoneFromLID(ctx context.Context, org
 func (cm *ConnectionManager) updateInstanceIdentity(ctx context.Context, instanceID uuid.UUID, jid, phoneNumber string) error {
 	return cm.db.WithContext(ctx).Model(&models.WhatsAppInstance{}).
 		Where("id = ?", instanceID).
-		Updates(map[string]interface{}{
+		Updates(map[string]any{
 			"jid":          jid,
 			"phone_number": phoneNumber,
 		}).Error

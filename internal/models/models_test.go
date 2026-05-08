@@ -43,7 +43,7 @@ func TestJSONB_Value(t *testing.T) {
 		{
 			name: "nested JSONB",
 			input: models.JSONB{
-				"outer": map[string]interface{}{
+				"outer": map[string]any{
 					"inner": "value",
 				},
 			},
@@ -244,8 +244,8 @@ func TestJSONBArray_Value(t *testing.T) {
 		{
 			name: "JSONBArray with values",
 			input: models.JSONBArray{
-				map[string]interface{}{"id": "1", "title": "Button 1"},
-				map[string]interface{}{"id": "2", "title": "Button 2"},
+				map[string]any{"id": "1", "title": "Button 1"},
+				map[string]any{"id": "2", "title": "Button 2"},
 			},
 			wantJSON: `[{"id":"1","title":"Button 1"},{"id":"2","title":"Button 2"}]`,
 		},

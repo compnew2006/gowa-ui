@@ -10,7 +10,7 @@ import (
 func TestWidgetGetString(t *testing.T) {
 	tests := []struct {
 		name     string
-		m        map[string]interface{}
+		m        map[string]any
 		key      string
 		expected string
 	}{
@@ -22,67 +22,67 @@ func TestWidgetGetString(t *testing.T) {
 		},
 		{
 			name:     "key not present returns empty",
-			m:        map[string]interface{}{"other": "value"},
+			m:        map[string]any{"other": "value"},
 			key:      "test",
 			expected: "",
 		},
 		{
 			name:     "key present with string value returns value",
-			m:        map[string]interface{}{"test": "hello"},
+			m:        map[string]any{"test": "hello"},
 			key:      "test",
 			expected: "hello",
 		},
 		{
 			name:     "key present with non-string value returns empty",
-			m:        map[string]interface{}{"test": 123},
+			m:        map[string]any{"test": 123},
 			key:      "test",
 			expected: "",
 		},
 		{
 			name:     "key present with bool value returns empty",
-			m:        map[string]interface{}{"test": true},
+			m:        map[string]any{"test": true},
 			key:      "test",
 			expected: "",
 		},
 		{
 			name:     "key present with nil value returns empty",
-			m:        map[string]interface{}{"test": nil},
+			m:        map[string]any{"test": nil},
 			key:      "test",
 			expected: "",
 		},
 		{
 			name:     "key present with map value returns empty",
-			m:        map[string]interface{}{"test": map[string]string{}},
+			m:        map[string]any{"test": map[string]string{}},
 			key:      "test",
 			expected: "",
 		},
 		{
 			name:     "key present with slice value returns empty",
-			m:        map[string]interface{}{"test": []string{}},
+			m:        map[string]any{"test": []string{}},
 			key:      "test",
 			expected: "",
 		},
 		{
 			name:     "empty string value returned",
-			m:        map[string]interface{}{"test": ""},
+			m:        map[string]any{"test": ""},
 			key:      "test",
 			expected: "",
 		},
 		{
 			name:     "multiple keys, correct one returned",
-			m:        map[string]interface{}{"a": "1", "b": "2", "c": "3"},
+			m:        map[string]any{"a": "1", "b": "2", "c": "3"},
 			key:      "b",
 			expected: "2",
 		},
 		{
 			name:     "key with special characters",
-			m:        map[string]interface{}{"test-key": "value"},
+			m:        map[string]any{"test-key": "value"},
 			key:      "test-key",
 			expected: "value",
 		},
 		{
 			name:     "empty key lookup in non-empty map",
-			m:        map[string]interface{}{"": "empty-key-value"},
+			m:        map[string]any{"": "empty-key-value"},
 			key:      "",
 			expected: "empty-key-value",
 		},

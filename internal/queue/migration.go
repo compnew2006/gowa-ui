@@ -399,8 +399,8 @@ func legacyCampaignMessageOrganizationID(msg redis.XMessage) (uuid.UUID, error) 
 	}
 }
 
-func cloneLegacyValues(values map[string]interface{}) map[string]interface{} {
-	cloned := make(map[string]interface{}, len(values))
+func cloneLegacyValues(values map[string]any) map[string]any {
+	cloned := make(map[string]any, len(values))
 	for key, value := range values {
 		cloned[key] = value
 	}

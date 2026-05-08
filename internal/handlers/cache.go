@@ -497,6 +497,9 @@ func (a *App) getUserPermissionsCached(userID uuid.UUID, orgIDs ...uuid.UUID) (*
 	}
 
 	// Cache miss - fetch from database
+	if a.DB == nil {
+		return nil, fmt.Errorf("database not available")
+	}
 	var user models.User
 	if err := a.DB.Where("id = ?", userID).First(&user).Error; err != nil {
 		return nil, err

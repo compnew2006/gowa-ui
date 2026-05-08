@@ -173,7 +173,11 @@ func TestWorkerScaler_FreezesAfterRepeatedStartFailures(t *testing.T) {
 		BaseModel: models.BaseModel{ID: uuid.New()},
 		Name:      "Scaler Fail Org",
 		Slug:      "scaler-fail-" + uuid.NewString()[:8],
-		Settings:  models.JSONB{},
+		Settings: models.JSONB{
+			"worker_scaler": map[string]any{
+				"scale_up_cooldown_seconds": 0,
+			},
+		},
 	}
 	require.NoError(t, db.Create(org).Error)
 

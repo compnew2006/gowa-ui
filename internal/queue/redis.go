@@ -103,7 +103,7 @@ func (q *RedisQueue) EnqueueRecipient(ctx context.Context, job *RecipientJob) er
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: CampaignStreamName(job.OrganizationID),
-		Values: map[string]interface{}{
+		Values: map[string]any{
 			"type":    string(JobTypeRecipient),
 			"payload": string(payload),
 		},
@@ -149,7 +149,7 @@ func (q *RedisQueue) EnqueueRecipients(ctx context.Context, jobs []*RecipientJob
 
 			pipe.XAdd(ctx, &redis.XAddArgs{
 				Stream: streamName,
-				Values: map[string]interface{}{
+				Values: map[string]any{
 					"type":    string(JobTypeRecipient),
 					"payload": string(payload),
 				},
@@ -179,7 +179,7 @@ func (q *RedisQueue) EnqueueInboundMedia(ctx context.Context, job *InboundMediaJ
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: InboundMediaStreamName,
-		Values: map[string]interface{}{
+		Values: map[string]any{
 			"type":    string(JobTypeInboundMedia),
 			"payload": string(payload),
 		},
@@ -210,7 +210,7 @@ func (q *RedisQueue) EnqueueContactRepair(ctx context.Context, job *ContactRepai
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: CampaignStreamName(job.OrganizationID),
-		Values: map[string]interface{}{
+		Values: map[string]any{
 			"type":    string(JobTypeContactRepair),
 			"payload": string(payload),
 		},
@@ -533,7 +533,7 @@ func (c *RedisConsumer) movePendingToDeadLetter(ctx context.Context, messageID, 
 }
 
 func (c *RedisConsumer) moveToDeadLetter(ctx context.Context, msg redis.XMessage, reason string, attempts int64) error {
-	values := map[string]interface{}{
+	values := map[string]any{
 		"original_stream": c.streamName,
 		"original_id":     msg.ID,
 		"reason":          reason,

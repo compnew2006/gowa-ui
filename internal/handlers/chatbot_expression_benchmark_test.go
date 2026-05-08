@@ -4,7 +4,7 @@ import "testing"
 
 var expressionEvalSink bool
 
-var benchmarkExprData = map[string]interface{}{
+var benchmarkExprData = map[string]any{
 	"status": "vip",
 	"amount": "150",
 	"name":   "alice",
