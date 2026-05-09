@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/contactutil"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/queue"
+	"github.com/compnew2006/whatomate/internal/websocket"
 )
 
 type IncomingTextMessage struct {
@@ -125,7 +128,12 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 
 	savedIncomingMessage := a.saveIncomingMessage(account, contact, msg.ID, payload.MessageType, payload.MessageText, payload.MediaInfo, payload.ReplyToWAMID)
 	if savedIncomingMessage == nil {
+		a.pushToInboundDLQ(phoneNumberID, profileName, msg)
 		return
+	}
+
+	if account.AutoReadReceipt && msg.ID != "" {
+		a.sendInboundAutoReadReceipt(account, savedIncomingMessage, contact)
 	}
 
 	if a.licenseBlocksValueDelivery() {
@@ -326,4 +334,76 @@ func (a *App) populateMediaPayload(
 			payload.MediaInfo.MediaFilename = savedFile.Filename
 		}
 	}
+}
+
+func (a *App) pushToInboundDLQ(phoneNumberID, profileName string, msg IncomingTextMessage) {
+	if a.InboundDLQ == nil {
+		a.Log.Error("Inbound DLQ not initialized, cannot queue failed message",
+			"phone_number_id", phoneNumberID,
+			"wa_msg_id", msg.ID,
+		)
+		return
+	}
+
+	rawMsg, err := json.Marshal(msg)
+	if err != nil {
+		a.Log.Error("Failed to marshal message for DLQ",
+			"error", err,
+			"phone_number_id", phoneNumberID,
+			"wa_msg_id", msg.ID,
+		)
+		return
+	}
+
+	entry := &queue.InboundDLQEntry{
+		PhoneNumberID: phoneNumberID,
+		ProfileName:   profileName,
+		RawMessage:    rawMsg,
+		Attempt:       0,
+		EnqueuedAt:    time.Now(),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := a.InboundDLQ.Push(ctx, entry); err != nil {
+		a.Log.Error("Failed to push message to inbound DLQ",
+			"error", err,
+			"phone_number_id", phoneNumberID,
+			"wa_msg_id", msg.ID,
+		)
+	}
+}
+
+func (a *App) sendInboundAutoReadReceipt(account *models.WhatsAppAccount, message *models.Message, contact *models.Contact) {
+	if message.WhatsAppMessageID == "" || a.WhatsApp == nil {
+		return
+	}
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		waAccount := a.toWhatsAppAccount(account)
+		if err := a.WhatsApp.MarkMessageRead(ctx, waAccount, message.WhatsAppMessageID); err != nil {
+			a.Log.Error("Failed to send auto-read receipt",
+				"error", err,
+				"message_id", message.ID,
+				"wa_message_id", message.WhatsAppMessageID,
+			)
+			return
+		}
+		a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Update("status", models.MessageStatusRead)
+		a.DB.Model(contact).Update("is_read", true)
+		if a.WSHub != nil {
+			a.WSHub.BroadcastToOrg(account.OrganizationID, websocket.WSMessage{
+				Type: websocket.TypeStatusUpdate,
+				Payload: map[string]any{
+					"message_id": message.ID.String(),
+					"status":     string(models.MessageStatusRead),
+				},
+			})
+		}
+	}()
 }

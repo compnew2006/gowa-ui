@@ -77,13 +77,13 @@ const router = createRouter({
         {
           path: "chat",
           name: "chat",
-          component: () => import("@/views/chat/ChatView.vue"),
+          component: () => import("@/views/chat/ChatViewWrapper.vue"),
           meta: { permission: "chat" },
         },
         {
           path: "chat/:contactId",
           name: "chat-conversation",
-          component: () => import("@/views/chat/ChatView.vue"),
+          component: () => import("@/views/chat/ChatViewWrapper.vue"),
           props: true,
           meta: { permission: "chat" },
         },

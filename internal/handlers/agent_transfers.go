@@ -1348,7 +1348,7 @@ func (a *App) saveAndFinalizeTransfer(transfer *models.AgentTransfer, account *m
 	return nil
 }
 
-// createTransferToQueue creates an unassigned agent transfer that goes to the queue
+// createTransferToQueue creates an agent transfer that goes to the queue
 func (a *App) createTransferToQueue(account *models.WhatsAppAccount, contact *models.Contact, source models.TransferSource) {
 	if a.hasActiveAgentTransfer(account.OrganizationID, contact.ID) {
 		a.Log.Debug("Contact already has active transfer, skipping", "contact_id", contact.ID, "source", source)
@@ -1356,6 +1356,15 @@ func (a *App) createTransferToQueue(account *models.WhatsAppAccount, contact *mo
 	}
 
 	settings, _ := a.getChatbotSettingsCached(account.OrganizationID, account.Name)
+
+	// Determine agent assignment
+	var agentID *uuid.UUID
+	if settings != nil && settings.AgentAssignment.AssignToSameAgent && contact.AssignedUserID != nil {
+		var assignedAgent models.User
+		if a.DB.Where("id = ?", contact.AssignedUserID).First(&assignedAgent).Error == nil && assignedAgent.IsAvailable {
+			agentID = contact.AssignedUserID
+		}
+	}
 
 	transfer := models.AgentTransfer{
 		BaseModel:       models.BaseModel{ID: uuid.New()},
@@ -1365,12 +1374,28 @@ func (a *App) createTransferToQueue(account *models.WhatsAppAccount, contact *mo
 		PhoneNumber:     contact.PhoneNumber,
 		Status:          models.TransferStatusActive,
 		Source:          source,
+		AgentID:         agentID,
 		TransferredAt:   time.Now(),
 	}
 
 	if err := a.saveAndFinalizeTransfer(&transfer, account, contact, settings, false); err != nil {
 		a.Log.Error("Failed to create transfer to queue", "error", err, "contact_id", contact.ID, "source", string(source))
 		return
+	}
+
+	// If still unassigned but the transfer belongs to a team with an assignment strategy, auto-assign
+	if transfer.AgentID == nil && transfer.TeamID != nil {
+		teamAgentID := a.assignToTeam(*transfer.TeamID, account.OrganizationID)
+		if teamAgentID != nil {
+			transfer.AgentID = teamAgentID
+			a.UpdateSLAOnPickup(&transfer)
+			if err := a.DB.Save(&transfer).Error; err != nil {
+				a.Log.Error("Failed to auto-assign transfer from team strategy", "error", err, "transfer_id", transfer.ID, "team_id", *transfer.TeamID)
+			} else {
+				a.DB.Model(contact).Updates(chatAssignmentUpdates(teamAgentID))
+				a.broadcastTransferAssigned(&transfer)
+			}
+		}
 	}
 
 	a.Log.Info("Transfer created to agent queue", "transfer_id", transfer.ID, "contact_id", contact.ID, "source", source)

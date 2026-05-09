@@ -237,6 +237,7 @@ watch(deleteDialogOpen, (open) => {
         variant="ghost"
         size="icon"
         class="h-7 w-7 text-muted-foreground hover:bg-accent hover:text-foreground"
+        :aria-label="$t('common.close')"
         @click="emit('close')"
       >
         <X class="h-4 w-4" />
@@ -285,6 +286,7 @@ watch(deleteDialogOpen, (open) => {
                   variant="ghost"
                   size="sm"
                   class="h-7 text-xs"
+                  :aria-label="$t('common.cancel')"
                   @click="cancelEditing"
                 >
                   {{ t("common.cancel") }}
@@ -293,6 +295,7 @@ watch(deleteDialogOpen, (open) => {
                   size="sm"
                   class="h-7 text-xs"
                   :disabled="!editingContent.trim() || isSaving"
+                  :aria-label="$t('common.save')"
                   @click="saveEdit(note.id)"
                 >
                   <Loader2 v-if="isSaving" class="h-3 w-3 mr-1 animate-spin" />
@@ -339,12 +342,14 @@ watch(deleteDialogOpen, (open) => {
               >
                 <button
                   class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  aria-label="Edit note"
                   @click="startEditing(note.id, note.content)"
                 >
                   <Pencil class="h-3 w-3" />
                 </button>
                 <button
                   class="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  :aria-label="$t('common.delete')"
                   @click="requestDeleteNote(note.id)"
                 >
                   <Trash2 class="h-3 w-3" />
@@ -385,6 +390,7 @@ watch(deleteDialogOpen, (open) => {
         <textarea
           v-model="newNoteContent"
           :placeholder="t('chat.writeNote') + '...'"
+          :aria-label="$t('chat.writeNote')"
           class="min-h-[36px] max-h-[120px] flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none"
           rows="1"
           @keydown.enter.exact.prevent="addNote"
@@ -392,6 +398,7 @@ watch(deleteDialogOpen, (open) => {
         <button
           class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           :disabled="!newNoteContent.trim() || isSaving"
+          :aria-label="$t('chat.addNote')"
           @click="addNote"
         >
           <Loader2 v-if="isSaving" class="h-4 w-4 animate-spin text-white" />

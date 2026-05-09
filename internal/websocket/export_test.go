@@ -26,3 +26,8 @@ func ClientOrgID(c *Client) uuid.UUID {
 func ClientSetCurrentContact(c *Client, contactID *uuid.UUID) {
 	c.setCurrentContact(contactID)
 }
+
+// ClientDroppedCount returns the number of messages dropped for a client.
+func ClientDroppedCount(c *Client) int64 {
+	return c.dropped.Load()
+}

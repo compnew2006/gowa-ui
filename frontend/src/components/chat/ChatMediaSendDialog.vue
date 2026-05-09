@@ -211,6 +211,7 @@ function formatMediaUploadSize(bytes: number): string {
             type="button"
             variant="outline"
             :disabled="isUploadingMedia"
+            :aria-label="$t('common.cancel')"
             @click="emit('close')"
           >
             {{ t("common.cancel") }}
@@ -218,6 +219,7 @@ function formatMediaUploadSize(bytes: number): string {
           <Button
             type="button"
             :disabled="isUploadingMedia || selectedMediaCount === 0"
+            :aria-label="$t('chat.send')"
             @click="emit('send')"
           >
             <Send v-if="!isUploadingMedia" class="mr-2 h-4 w-4" />

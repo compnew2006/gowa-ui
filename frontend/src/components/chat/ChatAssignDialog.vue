@@ -76,6 +76,7 @@ function handleOpenChange(open: boolean) {
           <Input
             v-model="searchQuery"
             :placeholder="t('chat.searchUsers') + '...'"
+            :aria-label="$t('chat.searchUsers')"
             class="pl-9 h-9"
           />
         </div>
@@ -83,6 +84,7 @@ function handleOpenChange(open: boolean) {
           v-if="assignedUserId"
           variant="outline"
           class="w-full justify-start"
+          :aria-label="$t('chat.unassignContact')"
           @click="handleAssign(null)"
         >
           <UserMinus class="mr-2 h-4 w-4" />
@@ -96,6 +98,7 @@ function handleOpenChange(open: boolean) {
               :key="user.id"
               :variant="assignedUserId === user.id ? 'secondary' : 'ghost'"
               class="w-full justify-start"
+              :aria-label="`${t('chat.assignTo')}: ${user.full_name}`"
               @click="handleAssign(user.id)"
             >
               <User class="mr-2 h-4 w-4" />

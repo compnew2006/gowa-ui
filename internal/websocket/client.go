@@ -3,6 +3,7 @@ package websocket
 import (
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fasthttp/websocket"
@@ -51,6 +52,9 @@ type Client struct {
 	// Current contact being viewed (nil if none)
 	currentContactMu sync.RWMutex
 	currentContact   *uuid.UUID
+
+	// dropped counts messages dropped because the per-client send buffer was full
+	dropped atomic.Int64
 }
 
 // NewClient creates a new pre-authenticated Client instance.
@@ -58,7 +62,7 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID, orgID uuid.UUID) *Client 
 	return &Client{
 		hub:            hub,
 		conn:           conn,
-		send:           make(chan []byte, 256),
+		send:           make(chan []byte, clientSendBufSize),
 		userID:         userID,
 		organizationID: orgID,
 		authenticated:  userID != uuid.Nil, // pre-authenticated if userID is set (tests)
@@ -254,6 +258,11 @@ func (c *Client) getCurrentContact() *uuid.UUID {
 // SendChan returns the client's send channel for use in tests.
 func (c *Client) SendChan() <-chan []byte {
 	return c.send
+}
+
+// DroppedCount returns the number of messages dropped for this client.
+func (c *Client) DroppedCount() int64 {
+	return c.dropped.Load()
 }
 
 // sendPong sends a pong response to the client

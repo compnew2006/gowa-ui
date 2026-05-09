@@ -31,6 +31,7 @@ port = 8080
 read_timeout = 30
 write_timeout = 30
 max_request_body_size_mb = 110  # Allows WhatsApp document uploads up to 100MB plus multipart overhead.
+max_media_upload_size_mb = 20   # Per-file upload size cap for media uploads (campaigns, auto-campaign, canned responses).
 base_path = ""  # Set to "/subpath" if behind nginx proxy pass
 allowed_origins = ""  # Comma-separated CORS/WS origins. Empty = same-origin + localhost loopback only.
 

@@ -17,6 +17,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type persistMessageOptions struct {
@@ -411,8 +412,16 @@ func (cm *ConnectionManager) persistParsedMessage(
 		Metadata:          metadata,
 	}
 
-	if err := cm.db.WithContext(ctx).Create(&message).Error; err != nil {
-		return nil, fmt.Errorf("failed to save message: %w", err)
+	result := cm.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "whats_app_message_id"}},
+		DoNothing: true,
+	}).Create(&message)
+	if result.Error != nil {
+		return nil, fmt.Errorf("failed to save message: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		cm.logger.Info("Duplicate message ignored (ON CONFLICT)", "whats_app_message_id", waMessageID)
+		return nil, nil
 	}
 
 	if direction == models.DirectionIncoming && mediaRetryArtifact != nil {

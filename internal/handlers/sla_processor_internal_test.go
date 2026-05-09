@@ -282,3 +282,86 @@ func TestSLAEscalationFiresWhenNoAgentResponse(t *testing.T) {
 	assert.Equal(t, 1, updated.SLA.EscalationLevel, "escalation level should increase to 1")
 	require.NotNil(t, updated.SLA.EscalatedAt)
 }
+
+// --- expireOrphanedTransfers ---
+
+func TestExpireOrphanedTransfers_ExpiresOldTransfersWithoutSLADeadline(t *testing.T) {
+	app := newSLATestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	agent := testutil.CreateTestUser(t, app.DB, org.ID)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	transfer := &models.AgentTransfer{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       contact.ID,
+		AgentID:         &agent.ID,
+		WhatsAppAccount: account.Name,
+		PhoneNumber:     "+1234567890",
+		Status:          models.TransferStatusActive,
+	}
+	require.NoError(t, app.DB.Create(transfer).Error)
+
+	require.NoError(t, app.DB.Model(transfer).Update("transferred_at", time.Now().Add(-25*time.Hour)).Error)
+
+	proc := NewSLAProcessor(app, time.Minute)
+	proc.expireOrphanedTransfers(time.Now())
+
+	var updated models.AgentTransfer
+	require.NoError(t, app.DB.Where("id = ?", transfer.ID).First(&updated).Error)
+
+	assert.Equal(t, models.TransferStatusExpired, updated.Status, "orphaned transfer should be expired")
+	assert.Contains(t, updated.Notes, "Auto-expired")
+}
+
+func TestExpireOrphanedTransfers_SkipsRecentTransfers(t *testing.T) {
+	app := newSLATestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	agent := testutil.CreateTestUser(t, app.DB, org.ID)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	transfer := &models.AgentTransfer{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       contact.ID,
+		AgentID:         &agent.ID,
+		WhatsAppAccount: account.Name,
+		PhoneNumber:     "+1234567890",
+		Status:          models.TransferStatusActive,
+	}
+	require.NoError(t, app.DB.Create(transfer).Error)
+
+	require.NoError(t, app.DB.Model(transfer).Update("transferred_at", time.Now().Add(-1*time.Hour)).Error)
+
+	proc := NewSLAProcessor(app, time.Minute)
+	proc.expireOrphanedTransfers(time.Now())
+
+	var updated models.AgentTransfer
+	require.NoError(t, app.DB.Where("id = ?", transfer.ID).First(&updated).Error)
+
+	assert.Equal(t, models.TransferStatusActive, updated.Status, "recent transfer should remain active")
+}
+
+func TestExpireOrphanedTransfers_SkipsTransfersWithExpiresAt(t *testing.T) {
+	app := newSLATestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	agent := testutil.CreateTestUser(t, app.DB, org.ID)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	expiresAt := time.Now().Add(2 * time.Hour)
+	transfer := createSLATestTransfer(t, app, org.ID, contact.ID, agent.ID, account.Name, models.SLATracking{
+		ExpiresAt: &expiresAt,
+	})
+	require.NoError(t, app.DB.Model(transfer).Update("transferred_at", time.Now().Add(-25*time.Hour)).Error)
+
+	proc := NewSLAProcessor(app, time.Minute)
+	proc.expireOrphanedTransfers(time.Now())
+
+	var updated models.AgentTransfer
+	require.NoError(t, app.DB.Where("id = ?", transfer.ID).First(&updated).Error)
+
+	assert.Equal(t, models.TransferStatusActive, updated.Status, "transfer with expires_at should be managed by SLA path")
+}

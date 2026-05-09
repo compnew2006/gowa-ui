@@ -5,8 +5,10 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/sanitizer"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
+	"gorm.io/gorm/clause"
 )
 
 type MediaInfo struct {
@@ -59,7 +61,7 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 		WhatsAppMessageID: whatsappMsgID,
 		Direction:         models.DirectionIncoming,
 		MessageType:       models.MessageType(msgType),
-		Content:           content,
+		Content:           sanitizer.SanitizeMessageContent(content),
 		Status:            models.MessageStatusReceived,
 	}
 
@@ -91,8 +93,15 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 		}
 	}
 
-	if err := a.DB.Create(&message).Error; err != nil {
-		a.Log.Error("Failed to save incoming message", "error", err)
+	result := a.DB.Clauses(clause.OnConflict{
+		DoNothing: true,
+	}).Create(&message)
+	if result.Error != nil {
+		a.Log.Error("Failed to save incoming message", "error", result.Error)
+		return nil
+	}
+	if result.RowsAffected == 0 {
+		a.Log.Info("Duplicate incoming message ignored (ON CONFLICT)", "whats_app_message_id", whatsappMsgID)
 		return nil
 	}
 

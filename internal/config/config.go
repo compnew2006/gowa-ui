@@ -60,8 +60,9 @@ type ServerConfig struct {
 	ReadTimeout          int    `koanf:"read_timeout"`
 	WriteTimeout         int    `koanf:"write_timeout"`
 	MaxRequestBodySizeMB int    `koanf:"max_request_body_size_mb"`
-	BasePath             string `koanf:"base_path"`       // Base path for frontend (e.g., "/whatomate" for proxy pass)
-	AllowedOrigins       string `koanf:"allowed_origins"` // Comma-separated list of allowed CORS origins
+	MaxMediaUploadSizeMB int    `koanf:"max_media_upload_size_mb"`
+	BasePath             string `koanf:"base_path"`
+	AllowedOrigins       string `koanf:"allowed_origins"`
 }
 
 type DatabaseConfig struct {
@@ -263,6 +264,9 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Server.MaxRequestBodySizeMB == 0 {
 		cfg.Server.MaxRequestBodySizeMB = 110
+	}
+	if cfg.Server.MaxMediaUploadSizeMB == 0 {
+		cfg.Server.MaxMediaUploadSizeMB = 20
 	}
 	cfg.Server.BasePath = normalizeBasePath(cfg.Server.BasePath)
 	if cfg.Database.Port == 0 {

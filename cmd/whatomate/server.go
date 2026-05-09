@@ -175,17 +175,19 @@ func runServer(args []string) {
 	}
 
 	app := &handlers.App{
-		Config:           cfg,
-		DB:               db,
-		Redis:            rdb,
-		Log:              lo,
-		WhatsApp:         waClient,
-		WSHub:            wsHub,
-		WhatsmeowStore:   storeContainer,
-		WhatsmeowManager: whatsmeowManager,
-		ObjectStorage:    storedObjects,
-		Queue:            jobQueue,
-		HTTPClient:       httpClient,
+		Config:             cfg,
+		DB:                 db,
+		Redis:              rdb,
+		Log:                lo,
+		WhatsApp:           waClient,
+		WSHub:              wsHub,
+		WhatsmeowStore:     storeContainer,
+		WhatsmeowManager:   whatsmeowManager,
+		ObjectStorage:      storedObjects,
+		Queue:              jobQueue,
+		HTTPClient:         httpClient,
+		InboundDLQ:         queue.NewInboundDLQ(rdb, lo),
+		OutgoingRetryQueue: queue.NewOutgoingRetryQueue(rdb, lo),
 	}
 
 	licenseService, licenseCancel := initLicenseService(cfg, db, rdb, lo)
@@ -276,6 +278,10 @@ func runServer(args []string) {
 		mediaRetentionCancel       context.CancelFunc
 		uploadsCleanupWorker       *handlers.UploadsCleanupWorker
 		uploadsCleanupCancel       context.CancelFunc
+		dlqRetryWorker             *worker.DLQRetyWorker
+		dlqRetryCancel             context.CancelFunc
+		outgoingRetryWorker        *worker.OutgoingRetryWorker
+		outgoingRetryWorkerCancel  context.CancelFunc
 	)
 	if sandboxMode {
 		lo.Warn("Sandbox mode: skipping recurring background workers")
@@ -318,6 +324,18 @@ func runServer(args []string) {
 		uploadsCleanupCtx, uploadsCleanupCancel = context.WithCancel(context.Background())
 		go uploadsCleanupWorker.Start(uploadsCleanupCtx)
 		lo.Info("Uploads cleanup worker started")
+
+		dlqRetryWorker = worker.NewDLQRetyWorker(db, rdb, lo, app.RetryInboundDLQEntry)
+		var dlqRetryCtx context.Context
+		dlqRetryCtx, dlqRetryCancel = context.WithCancel(context.Background())
+		go dlqRetryWorker.Run(dlqRetryCtx)
+		lo.Info("Inbound DLQ retry worker started")
+
+		outgoingRetryWorker = worker.NewOutgoingRetryWorker(db, rdb, lo, app.RetryOutgoingMessage)
+		var outgoingRetryCtx context.Context
+		outgoingRetryCtx, outgoingRetryWorkerCancel = context.WithCancel(context.Background())
+		go outgoingRetryWorker.Run(outgoingRetryCtx)
+		lo.Info("Outgoing message retry worker started")
 	}
 
 	// Start embedded workers
@@ -422,6 +440,18 @@ func runServer(args []string) {
 		uploadsCleanupCancel()
 		uploadsCleanupWorker.Stop()
 		lo.Info("Uploads cleanup worker stopped")
+	}
+
+	if dlqRetryCancel != nil {
+		lo.Info("Stopping DLQ retry worker...")
+		dlqRetryCancel()
+		lo.Info("DLQ retry worker stopped")
+	}
+
+	if outgoingRetryWorkerCancel != nil {
+		lo.Info("Stopping outgoing retry worker...")
+		outgoingRetryWorkerCancel()
+		lo.Info("Outgoing retry worker stopped")
 	}
 
 	// Stop workers first
@@ -716,6 +746,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/contacts/{id}/collaborators/{user_id}/decline", app.DeclineContactCollaborator)
 	g.DELETE("/api/contacts/{id}/collaborators/{user_id}", app.RemoveContactCollaborator)
 	g.PUT("/api/contacts/{id}/tags", app.UpdateContactTags)
+	g.POST("/api/contacts/{id}/transfer", app.TransferContact)
 	g.GET("/api/contacts/{id}/session-data", app.GetContactSessionData)
 
 	// Chats (contact-backed alias + lifecycle endpoints)
@@ -725,6 +756,9 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/chats/{id}/reopen", app.ReopenChat)
 	g.PUT("/api/chats/{id}/public", app.SetChatPublic)
 	g.GET("/api/chats/{id}/messages", app.GetMessages)
+	g.POST("/api/chats/bulk/close", app.BulkCloseChats)
+	g.POST("/api/chats/bulk/assign", app.BulkAssignChats)
+	g.POST("/api/chats/bulk/reopen", app.BulkReopenChats)
 
 	// Generic Import/Export
 	g.POST("/api/export", app.ExportData)
@@ -743,6 +777,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/contacts/{id}/messages/search", app.SearchMessages)
 	g.POST("/api/contacts/{id}/messages", sendMessageHandler)
 	g.POST("/api/contacts/{id}/typing", app.SendTypingPresence)
+	g.POST("/api/contacts/{id}/read", app.MarkConversationAsRead)
 	g.POST("/api/contacts/{id}/messages/{message_id}/reaction", app.SendReaction)
 	g.POST("/api/contacts/{id}/messages/{message_id}/revoke", app.RevokeMessage)
 	g.POST("/api/messages", sendMessageHandler) // Legacy route

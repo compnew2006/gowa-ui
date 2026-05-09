@@ -24,6 +24,7 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, 30, cfg.Server.ReadTimeout)
 	assert.Equal(t, 30, cfg.Server.WriteTimeout)
 	assert.Equal(t, 110, cfg.Server.MaxRequestBodySizeMB)
+	assert.Equal(t, 20, cfg.Server.MaxMediaUploadSizeMB)
 
 	assert.Equal(t, 5432, cfg.Database.Port)
 	assert.Equal(t, "disable", cfg.Database.SSLMode)
@@ -139,6 +140,7 @@ port = 5433
 
 	// Check a default value
 	assert.Equal(t, 110, cfg.Server.MaxRequestBodySizeMB)
+	assert.Equal(t, 20, cfg.Server.MaxMediaUploadSizeMB)
 }
 
 func TestLoad_InvalidFile(t *testing.T) {

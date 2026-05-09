@@ -38,6 +38,9 @@ const (
 	userPermissionsCachePrefix = "permissions:user:"
 	rolePermissionsCachePrefix = "permissions:role:"
 	tagsCachePrefix            = "tags:"
+
+	transferQueueCountsCachePrefix = "transfer:queue_counts:"
+	transferQueueCountsCacheTTL    = 10 * time.Second
 )
 
 // chatbotSettingsCache is used for caching since AI.APIKey has json:"-" tag
@@ -841,4 +844,51 @@ func (a *App) InvalidateTagsCache(orgID uuid.UUID) {
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf("%s%s", tagsCachePrefix, orgID.String())
 	a.Redis.Del(ctx, cacheKey)
+}
+
+// transferQueueCounts holds cached transfer queue counts.
+type transferQueueCounts struct {
+	TotalCount       int64            `json:"total_count"`
+	GeneralQueueCount int64           `json:"general_queue_count"`
+	TeamQueueCounts  map[string]int64 `json:"team_queue_counts"`
+}
+
+// getTransferQueueCountsCached retrieves transfer queue counts from Redis cache.
+func (a *App) getTransferQueueCountsCached(orgID, userID uuid.UUID, hasFullAccess bool) (*transferQueueCounts, bool) {
+	if a.Redis == nil {
+		return nil, false
+	}
+	ctx := context.Background()
+	cacheKey := fmt.Sprintf("%s%s:%s", transferQueueCountsCachePrefix, orgID.String(), userID.String())
+	cached, err := a.Redis.Get(ctx, cacheKey).Result()
+	if err != nil || cached == "" {
+		return nil, false
+	}
+	var counts transferQueueCounts
+	if err := json.Unmarshal([]byte(cached), &counts); err != nil {
+		return nil, false
+	}
+	return &counts, true
+}
+
+// setTransferQueueCountsCached stores transfer queue counts in Redis cache.
+func (a *App) setTransferQueueCountsCached(orgID, userID uuid.UUID, counts *transferQueueCounts) {
+	if a.Redis == nil || counts == nil {
+		return
+	}
+	ctx := context.Background()
+	cacheKey := fmt.Sprintf("%s%s:%s", transferQueueCountsCachePrefix, orgID.String(), userID.String())
+	if data, err := json.Marshal(counts); err == nil {
+		a.Redis.Set(ctx, cacheKey, data, transferQueueCountsCacheTTL)
+	}
+}
+
+// InvalidateTransferQueueCountsCache invalidates cached transfer queue counts for all users in an org.
+func (a *App) InvalidateTransferQueueCountsCache(orgID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
+	ctx := context.Background()
+	pattern := fmt.Sprintf("%s%s:*", transferQueueCountsCachePrefix, orgID.String())
+	a.deleteKeysByPattern(ctx, pattern)
 }

@@ -204,6 +204,7 @@ async function removeCollaborator(collab: ContactCollaborator) {
         variant="ghost"
         size="sm"
         class="h-7 px-2"
+        :aria-label="$t('chat.collaboratorInvite')"
         @click="isInviteDialogOpen = true"
       >
         <Plus class="h-3.5 w-3.5" />
@@ -233,6 +234,7 @@ async function removeCollaborator(collab: ContactCollaborator) {
             variant="outline"
             size="sm"
             :disabled="collaboratorActionId === collab.user_id"
+            :aria-label="`${$t('chat.collaboratorAccept')} ${collab.user_name || collab.user_id}`"
             @click="acceptInvite(collab)"
           >
             {{ $t("chat.collaboratorAccept") }}
@@ -242,6 +244,7 @@ async function removeCollaborator(collab: ContactCollaborator) {
             variant="ghost"
             size="sm"
             :disabled="collaboratorActionId === collab.user_id"
+            :aria-label="`${$t('chat.collaboratorDecline')} ${collab.user_name || collab.user_id}`"
             @click="declineInvite(collab)"
           >
             {{ $t("chat.collaboratorDecline") }}
@@ -251,6 +254,7 @@ async function removeCollaborator(collab: ContactCollaborator) {
             variant="outline"
             size="sm"
             :disabled="collaboratorActionId === collab.user_id"
+            :aria-label="`${$t('chat.collaboratorReinvite')} ${collab.user_name || collab.user_id}`"
             @click="inviteCollaborator(collab.user_id)"
           >
             {{ $t("chat.collaboratorReinvite") }}
@@ -261,6 +265,7 @@ async function removeCollaborator(collab: ContactCollaborator) {
             size="icon"
             class="h-7 w-7 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
             :disabled="collaboratorActionId === collab.user_id"
+            :aria-label="`${$t('common.remove')} ${collab.user_name || collab.user_id}`"
             @click="removeCollaborator(collab)"
           >
             <Trash2 class="h-3.5 w-3.5" />

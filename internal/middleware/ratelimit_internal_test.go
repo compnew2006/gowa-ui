@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"net"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
@@ -60,4 +62,49 @@ func TestExtractClientIP_TrustProxyUsesRemoteAddrWhenHeadersMissing(t *testing.T
 	req := newRateLimitTestRequest("10.0.0.10:4321", nil)
 
 	assert.Equal(t, "10.0.0.10", extractClientIP(req, true))
+}
+
+func TestAPIKeyRateLimiting_BlocksAfterMaxFailures(t *testing.T) {
+	apiKeyFailureLimiter = sync.Map{}
+	defer func() { apiKeyFailureLimiter = sync.Map{} }()
+
+	ip := "192.168.1.100"
+
+	assert.False(t, isAPIKeyRateLimited(ip), "should not be limited initially")
+
+	for i := 0; i < apiKeyAuthMaxFailures; i++ {
+		recordAPIKeyFailure(ip)
+	}
+
+	assert.True(t, isAPIKeyRateLimited(ip), "should be limited after max failures")
+}
+
+func TestAPIKeyRateLimiting_DifferentIPsIndependent(t *testing.T) {
+	apiKeyFailureLimiter = sync.Map{}
+	defer func() { apiKeyFailureLimiter = sync.Map{} }()
+
+	ip1 := "192.168.1.100"
+	ip2 := "10.0.0.1"
+
+	for i := 0; i < apiKeyAuthMaxFailures; i++ {
+		recordAPIKeyFailure(ip1)
+	}
+
+	assert.True(t, isAPIKeyRateLimited(ip1), "ip1 should be limited")
+	assert.False(t, isAPIKeyRateLimited(ip2), "ip2 should not be limited")
+}
+
+func TestAPIKeyRateLimiting_WindowExpiry(t *testing.T) {
+	apiKeyFailureLimiter = sync.Map{}
+	defer func() { apiKeyFailureLimiter = sync.Map{} }()
+
+	ip := "192.168.1.100"
+
+	entry := &apiKeyFailureEntry{count: apiKeyAuthMaxFailures, expiresAt: time.Now().Add(-1 * time.Second)}
+	apiKeyFailureLimiter.Store(ip, entry)
+
+	assert.False(t, isAPIKeyRateLimited(ip), "should not be limited after window expires")
+
+	recordAPIKeyFailure(ip)
+	assert.False(t, isAPIKeyRateLimited(ip), "should reset count after expired window")
 }

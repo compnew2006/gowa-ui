@@ -144,7 +144,7 @@ function selectResponse(response: CannedResponse) {
 <template>
   <Popover v-model:open="isOpen">
     <PopoverTrigger as-child>
-      <Button type="button" variant="ghost" size="icon">
+      <Button type="button" variant="ghost" size="icon" :aria-label="$t('chat.cannedResponses')">
         <MessageSquareText class="h-5 w-5" />
       </Button>
     </PopoverTrigger>

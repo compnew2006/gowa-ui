@@ -470,7 +470,8 @@ func getIndexes() []string {
 		`ALTER TABLE bulk_message_campaigns ADD COLUMN IF NOT EXISTS min_delay_seconds integer DEFAULT 0`,
 		`ALTER TABLE bulk_message_campaigns ADD COLUMN IF NOT EXISTS max_delay_seconds integer DEFAULT 0`,
 		// Indexes
-		`CREATE INDEX IF NOT EXISTS idx_messages_contact_created ON messages(contact_id, created_at DESC)`,
+		`DROP INDEX IF EXISTS idx_messages_contact_created`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_contact_created ON messages(contact_id, created_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_legacy_media_reconcile ON messages(created_at ASC) WHERE media_asset_id IS NULL AND media_deleted_at IS NULL AND COALESCE(BTRIM(media_url), '') <> ''`,
 		`DROP INDEX IF EXISTS idx_contacts_org_phone`,
@@ -533,8 +534,13 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_agent_rated ON chat_closure_ratings(agent_user_id, rated_at DESC) WHERE state = 'rated'`,
 		// Composite indexes for hottest query paths (ARCH-07)
 		`CREATE INDEX IF NOT EXISTS idx_contacts_org_status_lastmsg ON contacts(organization_id, status, last_message_at DESC NULLS LAST)`,
-		`CREATE INDEX IF NOT EXISTS idx_messages_org_contact_created ON messages(organization_id, contact_id, created_at DESC)`,
+		`DROP INDEX IF EXISTS idx_messages_org_contact_created`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_org_contact_created ON messages(organization_id, contact_id, created_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_org_assigned ON contacts(organization_id, assigned_user_id) WHERE assigned_user_id IS NOT NULL`,
+		// pg_trgm extension + GIN trigram index for fast message content search (ILIKE)
+		`CREATE EXTENSION IF NOT EXISTS pg_trgm`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_content_trgm ON messages USING GIN (content gin_trgm_ops)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_wamid_unique ON messages(whats_app_message_id) WHERE whats_app_message_id <> ''`,
 	}
 }
 

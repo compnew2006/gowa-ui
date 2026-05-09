@@ -278,6 +278,8 @@
     "read": "Read",
     "failed": "Failed to send",
     "retry": "Retry",
+    "loadErrorTitle": "Failed to load messages",
+    "loadErrorDescription": "Something went wrong while loading this conversation. Please try again.",
     "reply": "Reply",
     "replyingTo": "Replying to",
     "cancelReply": "Cancel reply",
@@ -288,7 +290,10 @@
     "yesterday": "Yesterday",
     "online": "Online",
     "offline": "Offline",
+    "connecting": "Reconnecting...",
+    "reconnected": "Connected",
     "typing": "typing",
+    "isTyping": "is typing...",
     "attachment": "Attachment",
     "image": "Image",
     "video": "Video",
@@ -484,7 +489,12 @@
     "parameterRequired": "All parameters are required",
     "preview": "Preview",
     "serviceWindowExpired": "The 24-hour messaging window has expired. Only template messages can be sent until the customer replies.",
-    "sendTemplateAction": "Send Template"
+    "sendTemplateAction": "Send Template",
+    "errorBoundary": {
+      "title": "Something went wrong",
+      "description": "An unexpected error occurred in the chat. Please try again.",
+      "retry": "Reload Chat"
+    }
   },
   "contacts": {
     "title": "Contacts",

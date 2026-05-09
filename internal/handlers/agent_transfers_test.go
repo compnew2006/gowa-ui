@@ -871,3 +871,236 @@ func TestApp_ReturnAgentTransfersToQueue(t *testing.T) {
 	assert.Nil(t, updatedTransfer1.AgentID)
 	assert.Nil(t, updatedTransfer2.AgentID)
 }
+
+// --- TransferContact (POST /api/contacts/{id}/transfer) Tests ---
+
+func TestApp_TransferContact_Success(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	_ = testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	agent := createTestAgent(t, app, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"agent_id": agent.ID.String(),
+		"notes":    "Transfer via REST",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var result struct {
+		Status string `json:"status"`
+		Data   struct {
+			Transfer handlers.AgentTransferResponse `json:"transfer"`
+			Message  string                         `json:"message"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &result))
+	assert.Equal(t, "success", result.Status)
+	assert.Equal(t, contact.ID.String(), result.Data.Transfer.ContactID)
+	assert.Equal(t, models.TransferStatusActive, result.Data.Transfer.Status)
+	assert.Equal(t, agent.ID.String(), *result.Data.Transfer.AgentID)
+	assert.Contains(t, result.Data.Message, "transferred")
+
+	var dbTransfer models.AgentTransfer
+	require.NoError(t, app.DB.Where("contact_id = ? AND organization_id = ?", contact.ID, org.ID).First(&dbTransfer).Error)
+	assert.Equal(t, models.TransferStatusActive, dbTransfer.Status)
+	assert.Equal(t, agent.ID, *dbTransfer.AgentID)
+}
+
+func TestApp_TransferContact_ToTeamQueue(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	agent := createTestAgent(t, app, org.ID)
+	team := createTestTeam(t, app, org.ID, agent.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"team_id": team.ID.String(),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var result struct {
+		Status string `json:"status"`
+		Data   struct {
+			Transfer handlers.AgentTransferResponse `json:"transfer"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &result))
+	assert.Equal(t, "success", result.Status)
+	assert.Equal(t, team.ID.String(), *result.Data.Transfer.TeamID)
+}
+
+func TestApp_TransferContact_Unauthorized(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"agent_id": uuid.New().String(),
+	})
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusUnauthorized, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_TransferContact_Forbidden(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	agentRole := testutil.CreateAgentRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"agent_id": uuid.New().String(),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_TransferContact_InvalidContactID(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"agent_id": uuid.New().String(),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", "not-a-uuid")
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_TransferContact_ContactNotFound(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"agent_id": uuid.New().String(),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", uuid.New().String())
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_TransferContact_AgentNotFound(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"agent_id": uuid.New().String(),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_TransferContact_AgentUnavailable(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	agent := createTestAgent(t, app, org.ID)
+
+	require.NoError(t, app.DB.Model(agent).Update("is_available", false).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"agent_id": agent.ID.String(),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &result))
+	assert.Equal(t, "Agent is currently away", result["message"])
+}
+
+func TestApp_TransferContact_AlreadyActiveTransfer(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	agent := createTestAgent(t, app, org.ID)
+
+	_ = createTestTransfer(t, app, org.ID, contact.ID, account.Name, models.TransferStatusActive, &agent.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"agent_id": agent.ID.String(),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusConflict, testutil.GetResponseStatusCode(req))
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &result))
+	assert.Equal(t, "Contact already has an active transfer", result["message"])
+}
+
+func TestApp_TransferContact_InvalidBody(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetContentType("application/json")
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.SetBody([]byte("not-json"))
+	req := &fastglue.Request{RequestCtx: ctx}
+
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.TransferContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+}

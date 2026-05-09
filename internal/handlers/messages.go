@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/queue"
+	"github.com/compnew2006/whatomate/internal/sanitizer"
 	"github.com/compnew2006/whatomate/internal/templateutil"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/provider"
@@ -62,6 +64,9 @@ type OutgoingMessageRequest struct {
 
 	// Reply context
 	ReplyToMessage *models.Message
+
+	// IdempotencyKey prevents duplicate sends on frontend retry
+	IdempotencyKey string
 }
 
 type MessageActorType string
@@ -150,12 +155,21 @@ func SLASendOptions() MessageSendOptions {
 	}
 }
 
+const (
+	idempotencyKeyPrefix = "whatomate:msg:idem:"
+	idempotencyKeyTTL    = 5 * time.Minute
+)
+
 // SendOutgoingMessage is the unified method for sending all types of WhatsApp messages.
 // It handles: text, media (image/video/audio/document), interactive (buttons/list/cta_url), and template messages.
 // Routes through MessageProvider when configured for whatsmeow, otherwise uses the Meta client directly.
 func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageRequest, opts MessageSendOptions) (*models.Message, error) {
 	if err := a.enforceStrictSendRestrictions(ctx, req, opts); err != nil {
 		return nil, err
+	}
+
+	if existing, ok := a.checkIdempotencyKey(ctx, req.IdempotencyKey); ok {
+		return existing, nil
 	}
 
 	a.applyAgentNamePrefixToTextMessage(&req, opts)
@@ -168,6 +182,8 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 		a.Log.Error("Failed to create message", "error", err)
 		return nil, fmt.Errorf("failed to create message: %w", err)
 	}
+
+	a.recordIdempotencyKey(ctx, req.IdempotencyKey, msg.ID)
 
 	// 2. Define the send function based on provider
 	var sendFn func(sendCtx context.Context) (string, error)
@@ -265,6 +281,11 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 				"status":        models.MessageStatusFailed,
 				"error_message": "Queue full: " + err.Error(),
 			})
+			msg.Status = models.MessageStatusFailed
+			msg.ErrorMessage = "Queue full: " + err.Error()
+			if opts.BroadcastWebSocket && req.Contact != nil {
+				a.broadcastNewMessage(req.Contact.OrganizationID, msg, req.Contact)
+			}
 		}
 	} else if opts.Async {
 		a.wg.Add(1)
@@ -282,10 +303,6 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 	}
 
 	// 4. Immediate actions (before send completes for async)
-	if opts.BroadcastWebSocket && req.Contact != nil {
-		a.broadcastNewMessage(req.Contact.OrganizationID, msg, req.Contact)
-	}
-
 	if opts.TrackSLA {
 		a.UpdateContactChatbotMessage(req.Contact.ID)
 	}
@@ -576,26 +593,25 @@ func (a *App) createOutgoingMessage(req OutgoingMessageRequest, opts MessageSend
 	// Set content based on message type
 	switch req.Type {
 	case models.MessageTypeText:
-		msg.Content = req.Content
+		msg.Content = sanitizer.SanitizeMessageContent(req.Content)
 
 	case models.MessageTypeImage, models.MessageTypeVideo, models.MessageTypeAudio, models.MessageTypeDocument:
-		msg.Content = req.Caption
+		msg.Content = sanitizer.SanitizeMessageContent(req.Caption)
 		msg.MediaURL = req.MediaURL
 		msg.MediaMimeType = req.MediaMimeType
 		msg.MediaFilename = req.MediaFilename
 
 	case models.MessageTypeInteractive:
-		msg.Content = req.BodyText
+		msg.Content = sanitizer.SanitizeMessageContent(req.BodyText)
 		msg.InteractiveData = a.buildInteractiveData(req)
 
 	case models.MessageTypeTemplate:
 		if req.Template != nil {
-			// Store actual rendered content instead of just template name
 			content := templateutil.ReplaceWithStringParams(req.Template.BodyContent, req.BodyParams)
 			if content == "" {
 				content = fmt.Sprintf("[Template: %s]", req.Template.DisplayName)
 			}
-			msg.Content = content
+			msg.Content = sanitizer.SanitizeMessageContent(content)
 			msg.TemplateName = req.Template.Name
 			msg.Metadata = models.JSONB{
 				"template_name": req.Template.Name,
@@ -641,28 +657,34 @@ func (a *App) buildInteractiveData(req OutgoingMessageRequest) models.JSONB {
 	case "cta_url":
 		return models.JSONB{
 			"type":        "cta_url",
-			"body":        req.BodyText,
-			"button_text": req.ButtonText,
+			"body":        sanitizer.SanitizeMessageContent(req.BodyText),
+			"button_text": sanitizer.SanitizeMessageContent(req.ButtonText),
 			"url":         req.URL,
 		}
 	case "list":
 		rows := make([]interface{}, len(req.Buttons))
 		for i, btn := range req.Buttons {
-			rows[i] = map[string]string{"id": btn.ID, "title": btn.Title}
+			rows[i] = map[string]string{
+				"id":    btn.ID,
+				"title": sanitizer.SanitizeMessageContent(btn.Title),
+			}
 		}
 		return models.JSONB{
 			"type": "list",
-			"body": req.BodyText,
+			"body": sanitizer.SanitizeMessageContent(req.BodyText),
 			"rows": rows,
 		}
 	default: // "button"
 		buttons := make([]interface{}, len(req.Buttons))
 		for i, btn := range req.Buttons {
-			buttons[i] = map[string]string{"id": btn.ID, "title": btn.Title}
+			buttons[i] = map[string]string{
+				"id":    btn.ID,
+				"title": sanitizer.SanitizeMessageContent(btn.Title),
+			}
 		}
 		return models.JSONB{
 			"type":    "button",
-			"body":    req.BodyText,
+			"body":    sanitizer.SanitizeMessageContent(req.BodyText),
 			"buttons": buttons,
 		}
 	}
@@ -670,8 +692,6 @@ func (a *App) buildInteractiveData(req OutgoingMessageRequest) models.JSONB {
 
 // finalizeMessageSend updates message status and triggers post-send actions
 func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageRequest, opts MessageSendOptions, wamid string, err error) {
-	// Use Where instead of Model(msg) to avoid mutating the shared msg struct,
-	// which may be read concurrently by the caller when sending is async.
 	if err != nil {
 		errMsg := err.Error()
 
@@ -679,22 +699,19 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 			"status":        models.MessageStatusFailed,
 			"error_message": errMsg,
 		})
+		msg.Status = models.MessageStatusFailed
+		msg.ErrorMessage = errMsg
 		if msg.InstanceID != nil && a.WhatsmeowManager != nil {
 			a.WhatsmeowManager.MarkMessageFailed(*msg.InstanceID)
 		}
 		a.Log.Error("Failed to send message", "error", err, "message_id", msg.ID, "type", msg.MessageType)
 
-		// Broadcast failure status via WebSocket so frontend updates immediately
-		if opts.BroadcastWebSocket && a.WSHub != nil {
-			a.WSHub.BroadcastToOrg(req.Account.OrganizationID, websocket.WSMessage{
-				Type: websocket.TypeStatusUpdate,
-				Payload: map[string]any{
-					"message_id":    msg.ID,
-					"contact_id":    req.Contact.ID,
-					"status":        models.MessageStatusFailed,
-					"error_message": errMsg,
-				},
-			})
+		// Push to retry queue for exponential backoff retry
+		a.pushToOutgoingRetryQueue(msg)
+
+		// Broadcast failure as new message via WebSocket (single authoritative event)
+		if opts.BroadcastWebSocket && req.Contact != nil {
+			a.broadcastNewMessage(req.Contact.OrganizationID, msg, req.Contact)
 		}
 		return
 	}
@@ -704,6 +721,8 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 		"whats_app_message_id": wamid,
 		"error_message":        "",
 	})
+	msg.Status = models.MessageStatusSent
+	msg.WhatsAppMessageID = wamid
 	if msg.InstanceID != nil && a.WhatsmeowManager != nil {
 		a.WhatsmeowManager.MarkMessageSent(*msg.InstanceID)
 	}
@@ -714,17 +733,28 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 		a.dispatchMessageSentWebhook(req.Account, req.Contact, msg)
 	}
 
-	// Broadcast status update via WebSocket
-	if opts.BroadcastWebSocket && a.WSHub != nil && req.Contact != nil {
-		a.WSHub.BroadcastToOrg(req.Contact.OrganizationID, websocket.WSMessage{
-			Type: websocket.TypeStatusUpdate,
-			Payload: map[string]any{
-				"message_id": msg.ID,
-				"contact_id": req.Contact.ID,
-				"status":     models.MessageStatusSent,
-				"wamid":      wamid,
-			},
-		})
+	// Broadcast as new message via WebSocket (single authoritative event after send completes)
+	if opts.BroadcastWebSocket && req.Contact != nil {
+		a.broadcastNewMessage(req.Contact.OrganizationID, msg, req.Contact)
+	}
+}
+
+// pushToOutgoingRetryQueue enqueues a failed outgoing message for retry.
+func (a *App) pushToOutgoingRetryQueue(msg *models.Message) {
+	if a.OutgoingRetryQueue == nil {
+		return
+	}
+
+	entry := &queue.OutgoingRetryEntry{
+		MessageID: msg.ID.String(),
+		OrgID:     msg.OrganizationID.String(),
+	}
+
+	if err := a.OutgoingRetryQueue.Push(context.Background(), entry); err != nil {
+		a.Log.Error("Failed to push to outgoing retry queue",
+			"error", err,
+			"message_id", msg.ID,
+		)
 	}
 }
 
@@ -892,6 +922,44 @@ func (a *App) getMessagePreview(req OutgoingMessageRequest) string {
 		return "[Template]"
 	default:
 		return "[Message]"
+	}
+}
+
+// checkIdempotencyKey returns the existing message if the key was already processed.
+func (a *App) checkIdempotencyKey(ctx context.Context, key string) (*models.Message, bool) {
+	if key == "" || a.Redis == nil {
+		return nil, false
+	}
+
+	redisKey := idempotencyKeyPrefix + key
+	msgIDStr, err := a.Redis.Get(ctx, redisKey).Result()
+	if err != nil {
+		return nil, false
+	}
+
+	msgID, err := uuid.Parse(msgIDStr)
+	if err != nil {
+		return nil, false
+	}
+
+	var msg models.Message
+	if err := a.DB.WithContext(ctx).First(&msg, msgID).Error; err != nil {
+		return nil, false
+	}
+
+	a.Log.Info("Idempotency hit: returning existing message", "key", key, "message_id", msgID)
+	return &msg, true
+}
+
+// recordIdempotencyKey stores the message ID against the idempotency key in Redis.
+func (a *App) recordIdempotencyKey(ctx context.Context, key string, msgID uuid.UUID) {
+	if key == "" || a.Redis == nil {
+		return
+	}
+
+	redisKey := idempotencyKeyPrefix + key
+	if err := a.Redis.Set(ctx, redisKey, msgID.String(), idempotencyKeyTTL).Err(); err != nil {
+		a.Log.Warn("Failed to record idempotency key", "key", key, "error", err)
 	}
 }
 

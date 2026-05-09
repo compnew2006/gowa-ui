@@ -3,7 +3,6 @@ package handlers
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1153,14 +1152,10 @@ func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
 	}
 	defer func() { _ = file.Close() }()
 
-	// Read file content (limit to 16MB)
-	const maxMediaSize = 16 << 20 // 16MB
-	data, err := io.ReadAll(io.LimitReader(file, maxMediaSize+1))
+	maxBytes := a.maxMediaUploadBytes()
+	data, err := readBoundedFile(file, maxBytes)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read file", nil, "")
-	}
-	if len(data) > maxMediaSize {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 16MB", nil, "")
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 
 	// Determine and validate MIME type from file bytes, falling back to safe metadata.

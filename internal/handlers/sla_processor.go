@@ -51,6 +51,10 @@ func (p *SLAProcessor) Stop() {
 	close(p.stopCh)
 }
 
+// defaultOrphanTransferMaxAge is the maximum time a transfer without SLA deadlines
+// is allowed to stay active before being expired.
+const defaultOrphanTransferMaxAge = 24 * time.Hour
+
 // processStaleTransfers checks for transfers that need escalation or auto-close
 func (p *SLAProcessor) processStaleTransfers() {
 	now := time.Now()
@@ -64,6 +68,47 @@ func (p *SLAProcessor) processStaleTransfers() {
 
 	for _, s := range settings {
 		p.processOrganizationSLA(s, now)
+	}
+
+	p.expireOrphanedTransfers(now)
+}
+
+// expireOrphanedTransfers expires active transfers that have no SLA deadlines
+// (expires_at is NULL) and have been active longer than defaultOrphanTransferMaxAge.
+// This catches transfers created in organizations without SLA enabled.
+func (p *SLAProcessor) expireOrphanedTransfers(now time.Time) {
+	cutoff := now.Add(-defaultOrphanTransferMaxAge)
+
+	var transfers []models.AgentTransfer
+	if err := p.app.DB.Where(
+		"status = ? AND expires_at IS NULL AND transferred_at < ?",
+		models.TransferStatusActive, cutoff,
+	).Find(&transfers).Error; err != nil {
+		p.app.Log.Error("Failed to find orphaned transfers for expiration", "error", err)
+		return
+	}
+
+	if len(transfers) == 0 {
+		return
+	}
+
+	expiredCount := 0
+	for _, transfer := range transfers {
+		if err := p.app.DB.Model(&transfer).Updates(map[string]any{
+			"status":     models.TransferStatusExpired,
+			"resumed_at": now,
+			"notes":      transfer.Notes + "\n[Auto-expired: No SLA deadline set, exceeded max age]",
+		}).Error; err != nil {
+			p.app.Log.Error("Failed to expire orphaned transfer", "error", err, "transfer_id", transfer.ID)
+			continue
+		}
+
+		expiredCount++
+		p.broadcastTransferUpdate(transfer, string(models.TransferStatusExpired))
+	}
+
+	if expiredCount > 0 {
+		p.app.Log.Info("Expired orphaned transfers without SLA deadlines", "count", expiredCount)
 	}
 }
 

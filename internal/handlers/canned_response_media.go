@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -172,15 +171,9 @@ func (a *App) persistCannedResponseAttachment(orgID uuid.UUID, fileHeader *multi
 	}
 	defer func() { _ = file.Close() }()
 
-	data, err := io.ReadAll(file)
+	data, err := readBoundedFile(file, int64(maxCannedAttachmentSize))
 	if err != nil {
-		return models.CannedResponseAttachment{}, fmt.Errorf("failed to read attachment data")
-	}
-	if len(data) == 0 {
-		return models.CannedResponseAttachment{}, fmt.Errorf("attachment is empty")
-	}
-	if len(data) > maxCannedAttachmentSize {
-		return models.CannedResponseAttachment{}, fmt.Errorf("attachment exceeds 16MB limit")
+		return models.CannedResponseAttachment{}, err
 	}
 
 	mimeType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))

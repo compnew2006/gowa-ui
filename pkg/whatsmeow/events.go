@@ -117,6 +117,9 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.broadcastInstanceConnected(orgID, instanceID, phoneNumber)
 		cm.logger.Info("Instance paired successfully", "component", "whatsmeow", "event", "pair_success", "instance_id", instanceID, "jid", jid)
 
+	case *events.ChatPresence:
+		cm.handleChatPresence(context.Background(), v, instanceID, orgID)
+
 	case *events.Connected:
 		cm.ClearCachedQRCode(instanceID)
 		phoneNumber := ""

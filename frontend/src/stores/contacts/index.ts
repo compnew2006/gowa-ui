@@ -35,6 +35,7 @@ export function useContactsStore(): ContactsStoreFacade {
     "isLoadingMessages",
     "isLoadingOlderMessages",
     "isMessageAccessRestricted",
+    "messageLoadError",
     "hasMoreMessages",
     "replyingTo",
     "fetchMessages",

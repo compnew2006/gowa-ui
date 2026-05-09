@@ -1,3 +1,4 @@
+import { ref, type Ref } from "vue";
 import { useContactsStore } from "@/stores/contacts";
 import { useTransfersStore } from "@/stores/transfers";
 import { useAuthStore } from "@/stores/auth";
@@ -7,6 +8,10 @@ import { maybeAutoDownloadIncomingMedia } from "@/lib/incoming_media_autodownloa
 import { canUserAccessInstance } from "@/lib/instance-access";
 import { toast } from "vue-sonner";
 import router from "@/router";
+
+export type ConnectionStatus = "connected" | "connecting" | "disconnected" | "reconnected";
+
+const connectionStatus: Ref<ConnectionStatus> = ref("disconnected");
 
 // Notification sound
 let notificationSound: HTMLAudioElement | null = null;
@@ -180,6 +185,9 @@ const WS_TYPE_CAMPAIGN_STATS_UPDATE = "campaign_stats_update";
 // Permission types
 const WS_TYPE_PERMISSIONS_UPDATED = "permissions_updated";
 
+// Typing indicator types
+const WS_TYPE_CONTACT_TYPING = "contact_typing";
+
 // Conversation note types
 const WS_TYPE_CONVERSATION_NOTE_CREATED = "conversation_note_created";
 const WS_TYPE_CONVERSATION_NOTE_UPDATED = "conversation_note_updated";
@@ -201,6 +209,7 @@ class WebSocketService {
   private campaignStatsCallbacks: ((payload: any) => void)[] = [];
   private getTokenFn: (() => Promise<string | null>) | null = null;
   private eventSubscribers: Record<string, Array<(payload: any) => void>> = {};
+  private reconnectedDismissTimer: number | null = null;
 
   private async shouldNotifyIncomingMessageForUser(options: {
     contactId: string;
@@ -303,6 +312,8 @@ class WebSocketService {
       return;
     }
 
+    connectionStatus.value = "connecting";
+
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
     const basePath = ((window as any).__BASE_PATH__ ?? "").replace(/\/$/, "");
@@ -319,7 +330,11 @@ class WebSocketService {
         this.startPing();
 
         if (isReconnection) {
+          connectionStatus.value = "reconnected";
+          this.scheduleReconnectedDismiss();
           this.refreshStaleData();
+        } else {
+          connectionStatus.value = "connected";
         }
       };
 
@@ -343,12 +358,14 @@ class WebSocketService {
 
   disconnect() {
     this.stopPing();
+    this.clearReconnectedDismissTimer();
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
     this.isConnected = false;
     this.reconnectAttempts = this.maxReconnectAttempts; // Prevent reconnect
+    connectionStatus.value = "disconnected";
   }
 
   private handleMessage(data: string) {
@@ -402,6 +419,9 @@ class WebSocketService {
           break;
         case WS_TYPE_CONVERSATION_NOTE_DELETED:
           useNotesStore().onNoteDeleted(message.payload.id);
+          break;
+        case WS_TYPE_CONTACT_TYPING:
+          this.handleContactTyping(message.payload);
           break;
         default:
           // Unknown message type, ignore
@@ -811,8 +831,11 @@ class WebSocketService {
     }
   }
 
+  private handleContactTyping(payload: any) {
+    this.emit(WS_TYPE_CONTACT_TYPING, payload);
+  }
+
   private handleCampaignStatsUpdate(payload: any) {
-    // Notify all registered callbacks
     this.campaignStatsCallbacks.forEach((callback) => callback(payload));
   }
 
@@ -879,10 +902,12 @@ class WebSocketService {
 
   private handleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      connectionStatus.value = "disconnected";
       return;
     }
 
     this.reconnectAttempts++;
+    connectionStatus.value = "connecting";
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
     setTimeout(() => {
@@ -918,19 +943,76 @@ class WebSocketService {
   }
 
   private refreshStaleData() {
-    // Refresh contacts list
     const contactsStore = useContactsStore();
     contactsStore.fetchContacts();
 
-    // Refresh transfers
     const transfersStore = useTransfersStore();
     transfersStore.fetchTransfers();
 
-    // Show subtle notification
+    this.replayMissedMessages();
+
     toast.info("Connection restored", {
       description: "Data has been refreshed",
       duration: 3000,
     });
+  }
+
+  private async replayMissedMessages() {
+    const contactsStore = useContactsStore();
+    const currentContact = contactsStore.currentContact;
+    if (!currentContact) return;
+
+    const currentMessages = contactsStore.messages;
+    if (currentMessages.length === 0) return;
+
+    const lastMessageId = currentMessages[currentMessages.length - 1].id;
+    if (!lastMessageId) return;
+
+    const contactId = currentContact.id;
+
+    try {
+      const response = await chatsService.listMessages(contactId, {
+        after_id: lastMessageId,
+        limit: 100,
+      });
+
+      if (contactsStore.currentContact?.id !== contactId) return;
+
+      const data = unwrapResponse<MessagesListPayload>(response);
+      const missedMessages = data.messages || [];
+      if (missedMessages.length === 0) return;
+
+      for (const msg of missedMessages) {
+        contactsStore.addMessage(msg, { appendToActiveThread: true });
+      }
+
+      const contact = contactsStore.contacts.find((c) => c.id === contactId);
+      if (contact) {
+        contact.unread_count = 0;
+      }
+      if (contactsStore.currentContact?.id === contactId) {
+        contactsStore.currentContact.unread_count = 0;
+      }
+    } catch (error) {
+      console.error("Failed to replay missed messages:", error);
+    }
+  }
+
+  private scheduleReconnectedDismiss() {
+    this.clearReconnectedDismissTimer();
+    this.reconnectedDismissTimer = window.setTimeout(() => {
+      if (connectionStatus.value === "reconnected") {
+        connectionStatus.value = "connected";
+      }
+      this.reconnectedDismissTimer = null;
+    }, 3000);
+  }
+
+  private clearReconnectedDismissTimer() {
+    if (this.reconnectedDismissTimer) {
+      clearTimeout(this.reconnectedDismissTimer);
+      this.reconnectedDismissTimer = null;
+    }
   }
 
   getIsConnected() {
@@ -940,6 +1022,10 @@ class WebSocketService {
 
 // Export singleton instance
 export const wsService = new WebSocketService();
+
+export function useConnectionStatus(): Ref<ConnectionStatus> {
+  return connectionStatus;
+}
 
 declare global {
   interface Window {

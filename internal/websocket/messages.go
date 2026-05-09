@@ -38,6 +38,9 @@ const (
 	TypeChatCollaboratorInvite = "chat_collaborator_invite"
 	TypeChatCollaboratorUpdate = "chat_collaborator_update"
 
+	// Incoming typing indicator
+	TypeContactTyping = "contact_typing"
+
 	// Instance types
 	TypeInstanceQRCode          = "instance_qr_code"
 	TypeInstanceConnected       = "instance_connected"
@@ -98,4 +101,10 @@ type InstanceReconnectFailedPayload struct {
 	InstanceID string `json:"instance_id"`
 	Reason     string `json:"reason"`
 	Message    string `json:"message"`
+}
+
+// ContactTypingPayload is the payload for incoming typing indicator events.
+type ContactTypingPayload struct {
+	ContactID string `json:"contact_id"`
+	State     string `json:"state"`
 }

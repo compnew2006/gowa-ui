@@ -3,9 +3,16 @@ package websocket
 import (
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/zerodha/logf"
+)
+
+const (
+	broadcastBufSize = 4096
+	controlBufSize   = 512
+	clientSendBufSize = 1024
 )
 
 // Hub maintains the set of active clients and broadcasts messages to them
@@ -27,15 +34,18 @@ type Hub struct {
 
 	// logger
 	log logf.Logger
+
+	// dropped counts broadcast messages dropped because the channel was full
+	dropped atomic.Int64
 }
 
 // NewHub creates a new Hub instance
 func NewHub(log logf.Logger) *Hub {
 	return &Hub{
 		clients:    make(map[uuid.UUID]map[uuid.UUID]map[*Client]struct{}),
-		broadcast:  make(chan BroadcastMessage, 256),
-		register:   make(chan *Client, 256),
-		unregister: make(chan *Client, 256),
+		broadcast:  make(chan BroadcastMessage, broadcastBufSize),
+		register:   make(chan *Client, controlBufSize),
+		unregister: make(chan *Client, controlBufSize),
 		log:        log,
 	}
 }
@@ -139,9 +149,11 @@ func (h *Hub) broadcastMessage(msg BroadcastMessage) {
 			select {
 			case client.send <- data:
 			default:
-				h.log.Warn("Client send buffer full, skipping",
+				client.dropped.Add(1)
+				h.log.Warn("client send buffer full, dropping message",
 					"user_id", client.userID,
-					"org_id", client.organizationID)
+					"org_id", client.organizationID,
+					"client_dropped", client.dropped.Load())
 			}
 		}
 		return
@@ -163,10 +175,11 @@ func (h *Hub) broadcastMessage(msg BroadcastMessage) {
 			select {
 			case client.send <- data:
 			default:
-				// Client buffer full, skip
-				h.log.Warn("Client send buffer full, skipping",
+				client.dropped.Add(1)
+				h.log.Warn("client send buffer full, dropping message",
 					"user_id", client.userID,
-					"org_id", client.organizationID)
+					"org_id", client.organizationID,
+					"client_dropped", client.dropped.Load())
 			}
 		}
 	}
@@ -177,7 +190,9 @@ func (h *Hub) Broadcast(msg BroadcastMessage) {
 	select {
 	case h.broadcast <- msg:
 	default:
-		h.log.Warn("Broadcast channel full, dropping message")
+		h.dropped.Add(1)
+		h.log.Warn("broadcast channel full, dropping message",
+			"hub_dropped", h.dropped.Load())
 	}
 }
 
@@ -240,4 +255,15 @@ func (h *Hub) Register(client *Client) {
 // Unregister removes a client from the hub via the unregister channel
 func (h *Hub) Unregister(client *Client) {
 	h.unregister <- client
+}
+
+// DroppedCount returns the total number of broadcast messages dropped due to
+// a full broadcast channel.
+func (h *Hub) DroppedCount() int64 {
+	return h.dropped.Load()
+}
+
+// ResetDroppedCount resets the hub-level dropped counter to zero.
+func (h *Hub) ResetDroppedCount() {
+	h.dropped.Store(0)
 }

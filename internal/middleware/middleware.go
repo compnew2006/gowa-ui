@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
@@ -33,6 +34,18 @@ const (
 
 const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; frame-src 'self' data: blob: https:; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss: blob:"
 const accessTokenSubject = "access"
+
+const (
+	apiKeyAuthMaxFailures = 10
+	apiKeyAuthWindow      = 15 * time.Minute
+)
+
+type apiKeyFailureEntry struct {
+	count    int
+	expiresAt time.Time
+}
+
+var apiKeyFailureLimiter sync.Map
 
 // ContentSecurityPolicyWithNonce returns the default CSP with a script nonce injected.
 func ContentSecurityPolicyWithNonce(nonce string) string {
@@ -300,12 +313,19 @@ func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
 		authHeader := string(r.RequestCtx.Request.Header.Peek("Authorization"))
 		apiKey := string(r.RequestCtx.Request.Header.Peek("X-API-Key"))
 
-		// Try API key authentication first
 		if apiKey != "" && db != nil {
+			clientIP := extractClientIP(r, false)
+			if isAPIKeyRateLimited(clientIP) {
+				_ = r.SendErrorEnvelope(fasthttp.StatusTooManyRequests,
+					"Too many failed API key attempts. Please try again later.", nil, "")
+				return nil
+			}
+
 			if validateAPIKey(r, apiKey, db) {
 				return r
 			}
-			// API key was provided but invalid
+
+			recordAPIKeyFailure(clientIP)
 			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid API key", nil, "")
 			return nil
 		}
@@ -421,6 +441,34 @@ func validateAPIKey(r *fastglue.Request, key string, db *gorm.DB) bool {
 	}
 
 	return false
+}
+
+func isAPIKeyRateLimited(clientIP string) bool {
+	now := time.Now()
+	if v, ok := apiKeyFailureLimiter.Load(clientIP); ok {
+		entry := v.(*apiKeyFailureEntry)
+		if now.Before(entry.expiresAt) && entry.count >= apiKeyAuthMaxFailures {
+			return true
+		}
+	}
+	return false
+}
+
+func recordAPIKeyFailure(clientIP string) {
+	now := time.Now()
+	newEntry := &apiKeyFailureEntry{count: 1, expiresAt: now.Add(apiKeyAuthWindow)}
+
+	actual, _ := apiKeyFailureLimiter.LoadOrStore(clientIP, newEntry)
+	entry := actual.(*apiKeyFailureEntry)
+
+	if actual != newEntry {
+		if now.After(entry.expiresAt) {
+			entry.count = 1
+			entry.expiresAt = now.Add(apiKeyAuthWindow)
+		} else {
+			entry.count++
+		}
+	}
 }
 
 // OrganizationContext loads organization and user from database

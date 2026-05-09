@@ -85,7 +85,7 @@ export function useChatActions(
         action.id,
         currentContact.value.id,
       );
-      let result: ActionResult = (response.data as any).data || response.data;
+      const result: ActionResult = (response.data as any).data || response.data;
 
       if (result.redirect_url) {
         let redirectUrl = result.redirect_url;

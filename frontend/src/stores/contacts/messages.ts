@@ -20,6 +20,7 @@ export const useMessagesStore = defineStore("messages", () => {
   const isLoadingOlderMessages = ref(false);
   const isMessageAccessRestricted = ref(false);
   const hasMoreMessages = ref(false);
+  const messageLoadError = ref<string | null>(null);
   let messageFetchSequence = 0;
   let latestMessageFetchSequence = 0;
   const replyingTo = ref<Message | null>(null);
@@ -33,6 +34,7 @@ export const useMessagesStore = defineStore("messages", () => {
     latestMessageFetchSequence = requestSequence;
     isLoadingMessages.value = true;
     isMessageAccessRestricted.value = false;
+    messageLoadError.value = null;
     messages.value = [];
     hasMoreMessages.value = false;
     try {
@@ -60,6 +62,8 @@ export const useMessagesStore = defineStore("messages", () => {
         messages.value = [];
         hasMoreMessages.value = false;
         isMessageAccessRestricted.value = true;
+      } else {
+        messageLoadError.value = error?.message || String(error);
       }
       console.error("Failed to fetch messages:", error);
     } finally {
@@ -251,6 +255,7 @@ export const useMessagesStore = defineStore("messages", () => {
     hasMoreMessages.value = false;
     isMessageAccessRestricted.value = false;
     isLoadingMessages.value = false;
+    messageLoadError.value = null;
     accountFilter.value = null;
   }
 
@@ -266,6 +271,7 @@ export const useMessagesStore = defineStore("messages", () => {
     isLoadingMessages,
     isLoadingOlderMessages,
     isMessageAccessRestricted,
+    messageLoadError,
     hasMoreMessages,
     replyingTo,
     fetchMessages,

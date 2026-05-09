@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,28 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
+
+func (a *App) maxMediaUploadBytes() int64 {
+	mb := a.Config.Server.MaxMediaUploadSizeMB
+	if mb <= 0 {
+		mb = 20
+	}
+	return int64(mb) * 1024 * 1024
+}
+
+func readBoundedFile(file io.Reader, maxBytes int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file data")
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("file is empty")
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("file too large (max %dMB)", maxBytes/(1024*1024))
+	}
+	return data, nil
+}
 
 // getMediaStoragePath returns the base path for media storage
 func (a *App) getMediaStoragePath() string {

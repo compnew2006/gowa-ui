@@ -42,6 +42,7 @@ function handleClose() {
             variant="ghost"
             size="icon"
             class="h-7 w-7 text-white hover:text-white"
+            :aria-label="$t('common.close')"
             @click="handleClose"
           >
             <X class="h-4 w-4" />

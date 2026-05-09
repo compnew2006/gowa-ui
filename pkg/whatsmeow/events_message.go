@@ -296,3 +296,58 @@ func (cm *ConnectionManager) findOrCreateContact(
 
 	return &contact, nil
 }
+
+func (cm *ConnectionManager) sendInboundAutoReadReceipt(
+	ctx context.Context,
+	client *waClient.Client,
+	evt *events.Message,
+	instanceID uuid.UUID,
+	msg *models.Message,
+) {
+	if msg.WhatsAppMessageID == "" {
+		return
+	}
+	instance, err := cm.loadInstance(ctx, instanceID)
+	if err != nil {
+		cm.logger.Debug("Skipping auto-read receipt: could not load instance", "instance_id", instanceID, "error", err)
+		return
+	}
+	if !instance.AutoReadReceipt {
+		return
+	}
+
+	chatJID := evt.Info.Chat
+	senderJID := evt.Info.Sender.ToNonAD()
+	if senderJID.Server == types.HiddenUserServer {
+		if contact := msg.Contact; contact != nil && contact.PhoneNumber != "" {
+			if parsed, parseErr := types.ParseJID(contact.PhoneNumber + "@s.whatsapp.net"); parseErr == nil {
+				senderJID = parsed
+			}
+		}
+	}
+
+	if err := client.MarkRead(ctx, []types.MessageID{types.MessageID(msg.WhatsAppMessageID)}, time.Now(), chatJID, senderJID); err != nil {
+		cm.logger.Error("Failed to send auto-read receipt",
+			"error", err,
+			"instance_id", instanceID,
+			"wa_message_id", msg.WhatsAppMessageID,
+		)
+		return
+	}
+
+	cm.db.WithContext(ctx).
+		Model(&models.Message{}).
+		Where("id = ?", msg.ID).
+		Update("status", models.MessageStatusRead)
+
+	if msg.Contact != nil {
+		cm.db.WithContext(ctx).
+			Model(msg.Contact).
+			Update("is_read", true)
+	}
+
+	cm.logger.Debug("Sent auto-read receipt",
+		"instance_id", instanceID,
+		"wa_message_id", msg.WhatsAppMessageID,
+	)
+}

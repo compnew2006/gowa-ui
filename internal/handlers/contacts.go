@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"go.mau.fi/whatsmeow"
 	waTypes "go.mau.fi/whatsmeow/types"
 	"gorm.io/gorm"
 )
@@ -294,13 +295,99 @@ type contactConversationContext struct {
 	DisplayName    string
 }
 
-// batchResolveConversationContexts resolves conversation contexts for multiple contacts
-// in O(1) queries instead of O(N). Group/channel contacts use metadata; direct contacts
-// get their latest message via a single DISTINCT ON query.
+type channelNameResolution struct {
+	contactIndex   int
+	contact        models.Contact
+	conversationID string
+}
+
+type channelNameUpdate struct {
+	contactID  uuid.UUID
+	profileName string
+	metadata    models.JSONB
+}
+
+func (a *App) batchResolveChannelNames(ctx context.Context, resolutions []channelNameResolution, contacts []models.Contact, result []contactConversationContext) {
+	if a.WhatsmeowManager == nil || len(resolutions) == 0 {
+		return
+	}
+
+	clientCache := make(map[uuid.UUID]*whatsmeow.Client)
+	var updates []channelNameUpdate
+
+	for _, res := range resolutions {
+		c := res.contact
+		conversationID := strings.TrimSpace(res.conversationID)
+		if conversationID == "" || c.InstanceID == nil {
+			continue
+		}
+
+		client, ok := clientCache[*c.InstanceID]
+		if !ok {
+			client = a.WhatsmeowManager.GetClient(*c.InstanceID)
+			clientCache[*c.InstanceID] = client
+		}
+		if client == nil {
+			continue
+		}
+
+		channelJID, err := waTypes.ParseJID(conversationID)
+		if err != nil && !strings.Contains(conversationID, "@") {
+			channelJID, err = waTypes.ParseJID(conversationID + newsletterJIDSuffix)
+		}
+		if err != nil || channelJID.Server != waTypes.NewsletterServer {
+			continue
+		}
+
+		resolveCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		newsletterInfo, err := client.GetNewsletterInfo(resolveCtx, channelJID)
+		cancel()
+		if err != nil || newsletterInfo == nil {
+			continue
+		}
+
+		channelName := strings.TrimSpace(newsletterInfo.ThreadMeta.Name.Text)
+		if channelName == "" {
+			continue
+		}
+
+		idx := res.contactIndex
+		result[idx] = contactConversationContext{
+			ConversationID: conversationID,
+			IsChannelChat:  true,
+			DisplayName:    channelName,
+		}
+
+		metadata := cloneJSONB(c.Metadata)
+		metadata["is_channel_chat"] = true
+		metadata["channel_jid"] = channelJID.String()
+		metadata["channel_name"] = channelName
+		updates = append(updates, channelNameUpdate{
+			contactID:   c.ID,
+			profileName: channelName,
+			metadata:    metadata,
+		})
+	}
+
+	if len(updates) > 0 {
+		for _, u := range updates {
+			if err := a.DB.WithContext(ctx).Model(&models.Contact{}).
+				Where("id = ?", u.contactID).
+				Updates(map[string]any{
+					"profile_name": u.profileName,
+					"metadata":     u.metadata,
+				}).Error; err != nil {
+				a.Log.Warn("Failed to persist resolved channel name", "contact_id", u.contactID, "error", err)
+			}
+		}
+	}
+}
+
 func (a *App) batchResolveConversationContexts(ctx context.Context, orgID uuid.UUID, contacts []models.Contact) []contactConversationContext {
 	result := make([]contactConversationContext, len(contacts))
 	directIndices := make([]int, 0, len(contacts))
 	directIDs := make([]uuid.UUID, 0, len(contacts))
+	var channelResolutions []channelNameResolution
 
 	for i, c := range contacts {
 		if isGroupContact(&c) {
@@ -329,21 +416,27 @@ func (a *App) batchResolveConversationContexts(ctx context.Context, orgID uuid.U
 			if channelName == "" {
 				channelName = strings.TrimSpace(c.ProfileName)
 			}
-			if (channelName == "" || channelName == strings.TrimSpace(c.PhoneNumber)) && conversationID != "" {
-				if resolvedName := a.resolveChannelNameFromWhatsmeow(c, conversationID); resolvedName != "" {
-					channelName = resolvedName
-				}
-			}
 			result[i] = contactConversationContext{
 				ConversationID: conversationID,
 				IsChannelChat:  conversationID != "" || channelName != "",
 				DisplayName:    channelName,
+			}
+			if (channelName == "" || channelName == strings.TrimSpace(c.PhoneNumber)) && conversationID != "" {
+				channelResolutions = append(channelResolutions, channelNameResolution{
+					contactIndex:   i,
+					contact:        c,
+					conversationID: conversationID,
+				})
 			}
 			continue
 		}
 
 		directIndices = append(directIndices, i)
 		directIDs = append(directIDs, c.ID)
+	}
+
+	if len(channelResolutions) > 0 {
+		a.batchResolveChannelNames(ctx, channelResolutions, contacts, result)
 	}
 
 	if len(directIDs) == 0 {
@@ -1312,6 +1405,7 @@ func (a *App) SearchMessages(r *fastglue.Request) error {
 	if searchQuery == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Missing search query parameter 'q'", nil, "")
 	}
+	searchPattern := "%" + escapeLike(searchQuery) + "%"
 
 	ctx, cancel := context.WithTimeout(r.RequestCtx, 10*time.Second)
 	defer cancel()
@@ -1373,12 +1467,12 @@ func (a *App) SearchMessages(r *fastglue.Request) error {
 
 	// Build base query scoped to the contact's messages
 	msgQuery := ctxDB.Where("contact_id = ?", contactID).
-		Where("content ILIKE ?", "%"+searchQuery+"%")
+		Where("content ILIKE ?", searchPattern)
 	if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
 		msgQuery = ctxDB.Where(
 			"(contact_id = ? AND organization_id = ?) OR (conversation_id = ? AND organization_id = ? AND instance_id = ?)",
 			contactID, orgID, conversationContext.ConversationID, orgID, contact.InstanceID,
-		).Where("content ILIKE ?", "%"+searchQuery+"%")
+		).Where("content ILIKE ?", searchPattern)
 	}
 	if deletedAt != nil {
 		msgQuery = msgQuery.Where("created_at > ?", *deletedAt)
@@ -1698,4 +1792,12 @@ func (a *App) markGroupMessagesAsRead(orgID uuid.UUID, conversationID string, in
 			}
 		}
 	}()
+}
+
+// escapeLike escapes ILIKE/LIKE wildcard characters (%, _) and the default escape character (\).
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
 }

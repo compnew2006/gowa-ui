@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/database"
+	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/worker"
 	"github.com/compnew2006/whatomate/pkg/provider"
@@ -112,9 +113,11 @@ func runWorker(args []string) {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	var (
-		inboundWorker *worker.Worker
-		workerScaler  *worker.WorkerScaler
-		errCh         = make(chan error, 2)
+		inboundWorker  *worker.Worker
+		workerScaler   *worker.WorkerScaler
+		dlqRetryWorker *worker.DLQRetyWorker
+		dlqRetryCancel context.CancelFunc
+		errCh          = make(chan error, 2)
 	)
 
 	if cappedWorkers > 0 {
@@ -143,6 +146,19 @@ func runWorker(args []string) {
 		lo.Info("Workers disabled", "campaign_worker_budget", cappedWorkers)
 	}
 
+	dlqRetryWorker = worker.NewDLQRetyWorker(db, rdb, lo, (&handlers.App{
+		DB:         db,
+		Redis:      rdb,
+		Log:        lo,
+		Config:     cfg,
+		License:    licenseService,
+		InboundDLQ: queue.NewInboundDLQ(rdb, lo),
+	}).RetryInboundDLQEntry)
+	var dlqCtx context.Context
+	dlqCtx, dlqRetryCancel = context.WithCancel(context.Background())
+	go dlqRetryWorker.Run(dlqCtx)
+	lo.Info("Inbound DLQ retry worker started")
+
 	// Wait for shutdown signal or error
 	select {
 	case sig := <-quit:
@@ -157,6 +173,10 @@ func runWorker(args []string) {
 
 	// Cleanup
 	lo.Info("Shutting down workers...")
+	if dlqRetryCancel != nil {
+		lo.Info("Stopping DLQ retry worker...")
+		dlqRetryCancel()
+	}
 	if workerScaler != nil {
 		workerScaler.Stop()
 	}

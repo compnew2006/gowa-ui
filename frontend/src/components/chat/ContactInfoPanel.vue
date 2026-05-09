@@ -191,7 +191,7 @@ async function softDeleteChat() {
           size="icon"
           class="h-8 w-8 border border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
           :disabled="isSoftDeletingChat"
-          :title="$t('chat.softDeleteChat')"
+          :aria-label="$t('chat.softDeleteChat')"
           @click="softDeleteChat"
         >
           <Loader2 v-if="isSoftDeletingChat" class="h-4 w-4 animate-spin" />
@@ -203,7 +203,7 @@ async function softDeleteChat() {
           size="icon"
           class="h-8 w-8 border border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
           :disabled="isDeletingChat"
-          title="Delete chat"
+          :aria-label="$t('common.delete')"
           @click="deleteChat"
         >
           <Loader2 v-if="isDeletingChat" class="h-4 w-4 animate-spin" />
@@ -213,6 +213,7 @@ async function softDeleteChat() {
           variant="ghost"
           size="icon"
           class="h-8 w-8"
+          :aria-label="$t('common.close')"
           @click="emit('close')"
         >
           <X class="h-4 w-4" />

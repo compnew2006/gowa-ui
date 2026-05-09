@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,8 +15,6 @@ import (
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
 )
-
-const maxAutoCampaignMediaUploadSize = 16 << 20 // 16MB
 
 // UploadInstanceAutoCampaignMedia uploads a media file used by per-instance auto campaigns.
 func (a *App) UploadInstanceAutoCampaignMedia(r *fastglue.Request) error {
@@ -58,12 +55,10 @@ func (a *App) UploadInstanceAutoCampaignMedia(r *fastglue.Request) error {
 	}
 	defer func() { _ = file.Close() }()
 
-	data, err := io.ReadAll(io.LimitReader(file, maxAutoCampaignMediaUploadSize+1))
+	maxBytes := a.maxMediaUploadBytes()
+	data, err := readBoundedFile(file, maxBytes)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read file", nil, "")
-	}
-	if len(data) > maxAutoCampaignMediaUploadSize {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "File too large. Maximum size is 16MB", nil, "")
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 
 	mimeType, allowed := resolveCampaignUploadMIME(fileHeader.Header.Get("Content-Type"), fileHeader.Filename, data)

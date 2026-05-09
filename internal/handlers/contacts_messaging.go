@@ -13,6 +13,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/sanitizer"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	whatsmeowpkg "github.com/compnew2006/whatomate/pkg/whatsmeow"
@@ -31,6 +32,7 @@ type SendMessageRequest struct {
 	InstanceID       string `json:"instance_id,omitempty"`
 	ReplyToMessageID string `json:"reply_to_message_id,omitempty"`
 	WhatsAppAccount  string `json:"whatsapp_account,omitempty"`
+	IdempotencyKey   string `json:"idempotency_key,omitempty"`
 
 	// Interactive message fields (for type="interactive")
 	Interactive *InteractiveContent `json:"interactive,omitempty"`
@@ -130,21 +132,24 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		}
 	}
 
+	sanitizedBody := sanitizer.SanitizeMessageContent(req.Content.Body)
+
 	// Build request and send using unified sender
 	msgReq := OutgoingMessageRequest{
-		Account:        account,
-		Contact:        &contact,
-		InstanceID:     selectedInstanceID,
-		Type:           req.Type,
-		Content:        req.Content.Body,
-		ReplyToMessage: replyToMessage,
+		Account:         account,
+		Contact:         &contact,
+		InstanceID:      selectedInstanceID,
+		Type:            req.Type,
+		Content:         sanitizedBody,
+		ReplyToMessage:  replyToMessage,
+		IdempotencyKey:  req.IdempotencyKey,
 	}
 
 	// Handle interactive messages
 	if req.Type == models.MessageTypeInteractive && req.Interactive != nil {
 		msgReq.InteractiveType = req.Interactive.Type
-		msgReq.BodyText = req.Interactive.Body
-		msgReq.ButtonText = req.Interactive.ButtonText
+		msgReq.BodyText = sanitizer.SanitizeMessageContent(req.Interactive.Body)
+		msgReq.ButtonText = sanitizer.SanitizeMessageContent(req.Interactive.ButtonText)
 		msgReq.URL = req.Interactive.URL
 
 		// Convert buttons
@@ -743,6 +748,95 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]any{
 		"message_id": message.ID.String(),
 		"reactions":  newReactions,
+	})
+}
+
+// MarkConversationAsRead marks all unread incoming messages for a contact as read.
+// POST /api/contacts/{id}/read
+func (a *App) MarkConversationAsRead(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	var contact models.Contact
+	query := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+		query = applyAgentVisibleChatAccessFilter(query, userID)
+	}
+	if err := query.First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+
+	var unreadMessages []models.Message
+	if err := requestDB.Where("contact_id = ? AND organization_id = ? AND direction = ? AND status != ?",
+		contactID, orgID, models.DirectionIncoming, models.MessageStatusRead).
+		Find(&unreadMessages).Error; err != nil {
+		a.Log.Error("Failed to find unread messages", "error", err, "contact_id", contactID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to find unread messages", nil, "")
+	}
+
+	if len(unreadMessages) == 0 {
+		return r.SendEnvelope(map[string]any{
+			"status":  "ok",
+			"updated": 0,
+		})
+	}
+
+	if err := requestDB.Model(&models.Message{}).
+		Where("contact_id = ? AND organization_id = ? AND direction = ? AND status != ?",
+			contactID, orgID, models.DirectionIncoming, models.MessageStatusRead).
+		Update("status", models.MessageStatusRead).Error; err != nil {
+		a.Log.Error("Failed to mark messages as read", "error", err, "contact_id", contactID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to mark messages as read", nil, "")
+	}
+
+	requestDB.Model(&contact).Update("is_read", true)
+
+	if a.WSHub != nil {
+		for _, msg := range unreadMessages {
+			a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+				Type: websocket.TypeStatusUpdate,
+				Payload: map[string]any{
+					"message_id": msg.ID.String(),
+					"status":     string(models.MessageStatusRead),
+				},
+			})
+		}
+	}
+
+	account, err := a.resolveWhatsAppAccount(orgID, contact.WhatsAppAccount)
+	if err == nil && account.AutoReadReceipt {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		for _, msg := range unreadMessages {
+			if msg.WhatsAppMessageID == "" {
+				continue
+			}
+			if a.isWhatsmeowProvider() && a.MessageProvider != nil && msg.InstanceID != nil {
+				if err := a.MessageProvider.MarkRead(ctx, msg.InstanceID.String(), msg.WhatsAppMessageID); err != nil {
+					a.Log.Error("Failed to send auto-read receipt via provider",
+						"error", err, "message_id", msg.ID)
+				}
+			} else if a.WhatsApp != nil {
+				waAccount := a.toWhatsAppAccount(account)
+				if err := a.WhatsApp.MarkMessageRead(ctx, waAccount, msg.WhatsAppMessageID); err != nil {
+					a.Log.Error("Failed to send auto-read receipt via Meta",
+						"error", err, "message_id", msg.ID)
+				}
+			}
+		}
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"status":  "ok",
+		"updated": len(unreadMessages),
 	})
 }
 

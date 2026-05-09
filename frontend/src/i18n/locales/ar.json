@@ -277,6 +277,8 @@
     "read": "تمت القراءة",
     "failed": "فشل الإرسال",
     "retry": "إعادة المحاولة",
+    "loadErrorTitle": "فشل تحميل الرسائل",
+    "loadErrorDescription": "حدث خطأ أثناء تحميل هذه المحادثة. يرجى المحاولة مرة أخرى.",
     "reply": "رد",
     "replyingTo": "الرد على",
     "cancelReply": "إلغاء الرد",
@@ -287,6 +289,8 @@
     "yesterday": "أمس",
     "online": "متصل",
     "offline": "غير متصل",
+    "connecting": "إعادة الاتصال...",
+    "reconnected": "متصل",
     "typing": "يكتب الآن...",
     "attachment": "مرفق",
     "image": "صورة",
@@ -462,7 +466,12 @@
     "noteUpdateFailed": "فشل تحديث الملاحظة",
     "noteDeleted": "تم حذف الملاحظة",
     "noteDeleteFailed": "فشل حذف الملاحظة",
-    "confirmDeleteNote": "هل أنت متأكد أنك تريد حذف هذه الملاحظة؟"
+    "confirmDeleteNote": "هل أنت متأكد أنك تريد حذف هذه الملاحظة؟",
+    "errorBoundary": {
+      "title": "حدث خطأ ما",
+      "description": "حدث خطأ غير متوقع في المحادثة. يرجى المحاولة مرة أخرى.",
+      "retry": "إعادة تحميل المحادثة"
+    }
   },
   "contacts": {
     "title": "جهات الاتصال",

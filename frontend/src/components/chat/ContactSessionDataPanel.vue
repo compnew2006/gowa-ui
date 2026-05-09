@@ -128,6 +128,7 @@ const sortedSections = computed(() => {
         >
           <CollapsibleTrigger
             class="flex items-center justify-between w-full py-2 text-sm font-medium hover:text-primary transition-colors"
+            :aria-label="`Toggle section: ${section.label}`"
           >
             <span>{{ section.label }}</span>
             <ChevronDown

@@ -84,7 +84,7 @@ async function updateContactTags(tags: string[]) {
       </h5>
       <Popover v-if="canEditTags" v-model:open="tagSelectorOpen">
         <PopoverTrigger as-child>
-          <Button variant="ghost" size="sm" class="h-7 px-2">
+          <Button variant="ghost" size="sm" class="h-7 px-2" aria-label="Add tag">
             <Plus class="h-3.5 w-3.5" />
           </Button>
         </PopoverTrigger>
@@ -136,6 +136,7 @@ async function updateContactTags(tags: string[]) {
             type="button"
             class="ml-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5 transition-colors"
             :disabled="isUpdatingTags"
+            :aria-label="`${$t('common.remove')} ${tagName}`"
             @click.stop="removeTag(tagName)"
           >
             <X class="h-3 w-3" />
