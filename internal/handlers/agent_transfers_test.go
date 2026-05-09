@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+	"github.com/zerodha/fastglue"
 )
 
 // createTestAgent creates a test agent user with agent role in the database.
@@ -919,7 +920,7 @@ func TestApp_TransferContact_ToTeamQueue(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
 	agent := createTestAgent(t, app, org.ID)
 	team := createTestTeam(t, app, org.ID, agent.ID)
@@ -948,7 +949,7 @@ func TestApp_TransferContact_ToTeamQueue(t *testing.T) {
 func TestApp_TransferContact_Unauthorized(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
@@ -1018,7 +1019,7 @@ func TestApp_TransferContact_AgentNotFound(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
@@ -1037,7 +1038,7 @@ func TestApp_TransferContact_AgentUnavailable(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
 	agent := createTestAgent(t, app, org.ID)
 

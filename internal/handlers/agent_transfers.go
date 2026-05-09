@@ -459,6 +459,226 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	})
 }
 
+// TransferContact transfers a contact to an agent or team queue (from contact endpoint).
+func (a *App) TransferContact(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if !a.HasPermission(userID, models.ResourceTransfers, models.ActionWrite, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to create transfers", nil, "")
+	}
+
+	var body struct {
+		AgentID *string `json:"agent_id"`
+		TeamID  *string `json:"team_id"`
+		Notes   string  `json:"notes"`
+	}
+	if err := json.Unmarshal(r.RequestCtx.PostBody(), &body); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	}
+
+	contactIDStr := r.RequestCtx.UserValue("id")
+	if contactIDStr == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Missing contact id", nil, "")
+	}
+	contactID, err := uuid.Parse(contactIDStr.(string))
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid contact id", nil, "")
+	}
+
+	contact, err := findByIDAndOrg[models.Contact](requestDB, r, contactID, orgID, "Contact")
+	if err != nil {
+		return nil
+	}
+
+	var existingCount int64
+	requestDB.
+		Model(&models.AgentTransfer{}).
+		Where("organization_id = ? AND contact_id = ? AND status = ?", orgID, contactID, models.TransferStatusActive).
+		Count(&existingCount)
+	if existingCount > 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact already has an active transfer", nil, "")
+	}
+
+	settings, _ := a.getChatbotSettingsCached(orgID, contact.WhatsAppAccount)
+
+	var teamID *uuid.UUID
+	if body.TeamID != nil && *body.TeamID != "" {
+		parsedTeamID, err := uuid.Parse(*body.TeamID)
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid team_id", nil, "")
+		}
+		var team models.Team
+		if err := requestDB.Where("id = ? AND organization_id = ? AND is_active = ?", parsedTeamID, orgID, true).First(&team).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Team not found or inactive", nil, "")
+		}
+		teamID = &parsedTeamID
+	}
+
+	var agentID *uuid.UUID
+	if body.AgentID != nil && *body.AgentID != "" {
+		parsedAgentID, err := uuid.Parse(*body.AgentID)
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent_id", nil, "")
+		}
+		agent, err := findAssignableOrgUser(a.DB, parsedAgentID, orgID)
+		if err != nil {
+			_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
+			return nil
+		}
+		if !agent.IsAvailable {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Agent is currently away", nil, "")
+		}
+		agentID = &parsedAgentID
+	} else if teamID != nil {
+		agentID = a.assignToTeam(*teamID, orgID)
+	} else if settings != nil && settings.AgentAssignment.AssignToSameAgent && contact.AssignedUserID != nil {
+		var assignedAgent models.User
+		if requestDB.Where("id = ?", contact.AssignedUserID).First(&assignedAgent).Error == nil && assignedAgent.IsAvailable {
+			agentID = contact.AssignedUserID
+		}
+	}
+
+	if err := a.validateTransferAssigneeAccess(orgID, agentID, contact); err != nil {
+		if errors.Is(err, errTransferAssigneeInstanceAccess) {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Assignee does not have access to this WhatsApp account", nil, "")
+		}
+		a.Log.Error("Failed to validate assignee instance access", "error", err, "agent_id", agentID, "contact_id", contact.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate assignee access", nil, "")
+	}
+
+	source := models.TransferSourceManual
+
+	transfer := models.AgentTransfer{
+		BaseModel:           models.BaseModel{ID: uuid.New()},
+		OrganizationID:      orgID,
+		ContactID:           contactID,
+		WhatsAppAccount:     contact.WhatsAppAccount,
+		PhoneNumber:         contact.PhoneNumber,
+		Status:              models.TransferStatusActive,
+		Source:              source,
+		AgentID:             agentID,
+		TeamID:              teamID,
+		TransferredByUserID: &userID,
+		Notes:               body.Notes,
+		TransferredAt:       time.Now(),
+	}
+
+	if settings != nil {
+		a.SetSLADeadlines(&transfer, settings)
+	}
+	if agentID != nil {
+		a.UpdateSLAOnPickup(&transfer)
+	}
+
+	if err := requestDB.Create(&transfer).Error; err != nil {
+		a.Log.Error("Failed to create transfer", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create transfer", nil, "")
+	}
+
+	if agentID != nil {
+		requestDB.
+			Model(contact).Updates(chatAssignmentUpdates(agentID))
+	}
+	requestDB.
+		Model(&models.ChatbotSession{}).
+		Where("organization_id = ? AND contact_id = ? AND status = ?", orgID, contactID, models.SessionStatusActive).
+		Updates(map[string]any{
+			"status":       models.SessionStatusCancelled,
+			"completed_at": time.Now(),
+		})
+
+	a.broadcastTransferCreated(&transfer, contact)
+
+	var agentIDStr *string
+	if transfer.AgentID != nil {
+		idStr := transfer.AgentID.String()
+		agentIDStr = &idStr
+	}
+	a.DispatchWebhook(orgID, models.WebhookEventTransferCreated, TransferEventData{
+		TransferID:      transfer.ID.String(),
+		ContactID:       contact.ID.String(),
+		ContactPhone:    contact.PhoneNumber,
+		ContactName:     contact.ProfileName,
+		Source:          transfer.Source,
+		Reason:          transfer.Notes,
+		AgentID:         agentIDStr,
+		WhatsAppAccount: transfer.WhatsAppAccount,
+	})
+
+	requestDB.
+		Preload("Agent").Preload("Team").Preload("TransferredByUser").First(&transfer, transfer.ID)
+
+	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
+	phoneNumber := transfer.PhoneNumber
+	contactName := contact.ProfileName
+	if shouldMask {
+		phoneNumber = MaskPhoneNumber(phoneNumber)
+		contactName = MaskIfPhoneNumber(contactName)
+	}
+
+	resp := AgentTransferResponse{
+		ID:              transfer.ID.String(),
+		ContactID:       transfer.ContactID.String(),
+		InstanceID:      stringifyInstanceID(contact.InstanceID),
+		ContactName:     contactName,
+		PhoneNumber:     phoneNumber,
+		WhatsAppAccount: transfer.WhatsAppAccount,
+		Status:          transfer.Status,
+		Source:          transfer.Source,
+		Notes:           transfer.Notes,
+		TransferredAt:   transfer.TransferredAt.Format(time.RFC3339),
+	}
+
+	if transfer.AgentID != nil {
+		agentIDStr := transfer.AgentID.String()
+		resp.AgentID = &agentIDStr
+		if transfer.Agent != nil {
+			resp.AgentName = &transfer.Agent.FullName
+		}
+	}
+	if transfer.TeamID != nil {
+		teamIDStr := transfer.TeamID.String()
+		resp.TeamID = &teamIDStr
+		if transfer.Team != nil {
+			resp.TeamName = &transfer.Team.Name
+		}
+	}
+	if transfer.TransferredByUserID != nil {
+		transferredBy := transfer.TransferredByUserID.String()
+		resp.TransferredBy = &transferredBy
+		if transfer.TransferredByUser != nil {
+			resp.TransferredByName = &transfer.TransferredByUser.FullName
+		}
+	}
+
+	resp.SLABreached = transfer.SLA.Breached
+	resp.EscalationLevel = transfer.SLA.EscalationLevel
+	if transfer.SLA.ResponseDeadline != nil {
+		deadline := transfer.SLA.ResponseDeadline.Format(time.RFC3339)
+		resp.SLAResponseDeadline = &deadline
+	}
+	if transfer.SLA.ResolutionDeadline != nil {
+		deadline := transfer.SLA.ResolutionDeadline.Format(time.RFC3339)
+		resp.SLAResolutionDeadline = &deadline
+	}
+	if transfer.SLA.PickedUpAt != nil {
+		pickedUpAt := transfer.SLA.PickedUpAt.Format(time.RFC3339)
+		resp.PickedUpAt = &pickedUpAt
+	}
+	if transfer.SLA.ExpiresAt != nil {
+		expiresAt := transfer.SLA.ExpiresAt.Format(time.RFC3339)
+		resp.ExpiresAt = &expiresAt
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"transfer": resp,
+		"message":  "Contact transferred successfully",
+	})
+}
+
 // CreateAgentTransfer creates a new agent transfer
 func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)

@@ -118,7 +118,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.logger.Info("Instance paired successfully", "component", "whatsmeow", "event", "pair_success", "instance_id", instanceID, "jid", jid)
 
 	case *events.ChatPresence:
-		cm.handleChatPresence(context.Background(), v, instanceID, orgID)
+		cm.handleChatPresence(context.Background(), v, instanceID)
 
 	case *events.Connected:
 		cm.ClearCachedQRCode(instanceID)
@@ -374,4 +374,33 @@ func statusesAtOrAbove(status models.MessageStatus) []models.MessageStatus {
 	default:
 		return nil
 	}
+}
+
+func (cm *ConnectionManager) handleChatPresence(ctx context.Context, evt *events.ChatPresence, instanceID uuid.UUID) {
+	chatJID := evt.Chat.ToNonAD()
+	phoneNumber := chatJID.User
+	if phoneNumber == "" {
+		return
+	}
+
+	var contact models.Contact
+	if err := cm.db.WithContext(ctx).
+		Select("id, organization_id").
+		Where("phone_number = ? AND instance_id = ?", phoneNumber, instanceID).
+		First(&contact).Error; err != nil {
+		return
+	}
+
+	if cm.hub == nil {
+		return
+	}
+
+	state := string(evt.State)
+	cm.hub.BroadcastToOrg(contact.OrganizationID, websocket.WSMessage{
+		Type: websocket.TypeContactTyping,
+		Payload: websocket.ContactTypingPayload{
+			ContactID: contact.ID.String(),
+			State:     state,
+		},
+	})
 }

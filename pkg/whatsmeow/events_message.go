@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
