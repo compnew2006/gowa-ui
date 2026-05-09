@@ -44,12 +44,21 @@ func createAgentAnalyticsTestApp(t *testing.T) (*handlers.App, *models.Organizat
 		// Update admin user with role
 		admin.RoleID = &role.ID
 		require.NoError(t, app.DB.Save(admin).Error)
+
+		// Sync the UserOrganization's RoleID (CreateTestUser sets it before role assignment)
+		require.NoError(t, app.DB.Model(&models.UserOrganization{}).
+			Where("user_id = ? AND organization_id = ?", admin.ID, org.ID).
+			Update("role_id", role.ID).Error)
 	}
+
+	// Create a role for the agent (no analytics permission)
+	agentRole := testutil.CreateTestRole(t, app.DB, org.ID, "Agent Role", []models.Permission{})
 
 	// Create an agent user
 	agent := testutil.CreateTestUser(t, app.DB, org.ID,
 		testutil.WithEmail(testutil.UniqueEmail("agent")),
 		testutil.WithPassword("password"),
+		testutil.WithRoleID(&agentRole.ID),
 	)
 
 	// Create a team and add agent as member
@@ -163,7 +172,7 @@ func TestGetAgentAnalytics_AgentWithoutPermission_SeesOnlyOwnStats(t *testing.T)
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	require.NotNil(t, response.MyStats)
 	assert.Equal(t, agent.ID.String(), response.MyStats.AgentID)
@@ -211,7 +220,7 @@ func TestGetAgentAnalytics_AdminWithFullPermission_SeesAllAgents(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	require.NotNil(t, response.AgentStats)
 	assert.GreaterOrEqual(t, len(response.AgentStats), 2)
@@ -243,7 +252,7 @@ func TestGetAgentAnalytics_WithDateRange_FiltersCorrectly(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	// Should only count the transfer within the date range
 	assert.Equal(t, int64(1), response.Summary.TotalTransfersHandled)
@@ -287,7 +296,7 @@ func TestGetAgentAnalytics_WithInstanceFilter_FiltersByInstance(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	// Should only see stats for instance1
 	assert.Equal(t, int64(1), response.Summary.TotalTransfersHandled)
@@ -337,7 +346,7 @@ func TestGetAgentAnalytics_WithAgentFilter_AsAdmin_ShowsSpecificAgent(t *testing
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	require.NotNil(t, response.MyStats)
 	assert.Equal(t, agent.ID.String(), response.MyStats.AgentID)
@@ -391,7 +400,7 @@ func TestGetAgentAnalytics_WithRatingFilter_FiltersRatings(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	require.NotNil(t, response.RatingSummary)
 	assert.Equal(t, int64(2), response.RatingSummary.TotalRatings)
@@ -455,7 +464,7 @@ func TestGetAgentAnalytics_WithGroupByWeek_AggregatesByWeek(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	assert.NotEmpty(t, response.TrendData)
 }
@@ -477,7 +486,7 @@ func TestGetAgentAnalytics_DefaultsToCurrentMonth(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	assert.GreaterOrEqual(t, response.Summary.TotalTransfersHandled, int64(1))
 }
@@ -684,7 +693,7 @@ func TestGetAgentDetails_WithPermission_ReturnsAgentStats(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response map[string]any
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	agentData, ok := response["agent"].(map[string]any)
 	require.True(t, ok)
@@ -760,7 +769,7 @@ func TestGetAgentComparison_WithPermission_ReturnsAllAgents(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response map[string]any
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	agents, ok := response["agents"].([]any)
 	require.True(t, ok)
@@ -949,7 +958,7 @@ func TestAgentAnalytics_EndToEnd_FullWorkflow(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	// Verify summary
 	assert.GreaterOrEqual(t, response.Summary.TotalTransfersHandled, int64(3))
@@ -981,7 +990,7 @@ func TestAgentAnalytics_EndToEnd_FullWorkflow(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req2))
 
 	var response2 handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req2, &response2)
+	testutil.ParseEnvelopeResponse(t, req2, &response2)
 
 	// Should have filtered results
 	require.NotNil(t, response2.RatingSummary)
@@ -1008,7 +1017,7 @@ func TestAgentAnalytics_RatingFilters_WorkCorrectly(t *testing.T) {
 	require.NoError(t, err)
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	require.NotNil(t, response.RatingSummary)
 	assert.Equal(t, int64(4), response.RatingSummary.TotalRatings) // 7, 8, 9, 10
@@ -1022,7 +1031,7 @@ func TestAgentAnalytics_RatingFilters_WorkCorrectly(t *testing.T) {
 	require.NoError(t, err2)
 
 	var response2 handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req2, &response2)
+	testutil.ParseEnvelopeResponse(t, req2, &response2)
 
 	require.NotNil(t, response2.RatingSummary)
 	assert.Equal(t, int64(4), response2.RatingSummary.TotalRatings) // 1, 2, 3, 4
@@ -1037,7 +1046,7 @@ func TestAgentAnalytics_RatingFilters_WorkCorrectly(t *testing.T) {
 	require.NoError(t, err3)
 
 	var response3 handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req3, &response3)
+	testutil.ParseEnvelopeResponse(t, req3, &response3)
 
 	require.NotNil(t, response3.RatingSummary)
 	assert.Equal(t, int64(3), response3.RatingSummary.TotalRatings) // 5, 6, 7
@@ -1067,7 +1076,7 @@ func TestAgentAnalytics_TrendData_DifferentGroupings(t *testing.T) {
 	require.NoError(t, err)
 
 	var response handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req, &response)
+	testutil.ParseEnvelopeResponse(t, req, &response)
 
 	assert.GreaterOrEqual(t, len(response.TrendData), 14)
 
@@ -1082,7 +1091,7 @@ func TestAgentAnalytics_TrendData_DifferentGroupings(t *testing.T) {
 	require.NoError(t, err2)
 
 	var response2 handlers.AgentAnalyticsResponse
-	testutil.ParseJSONResponse(t, req2, &response2)
+	testutil.ParseEnvelopeResponse(t, req2, &response2)
 
 	assert.GreaterOrEqual(t, len(response2.TrendData), 2)
 	assert.LessOrEqual(t, len(response2.TrendData), 3)
