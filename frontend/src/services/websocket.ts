@@ -157,7 +157,6 @@ function showNotification(title: string, body: string, contactId: string) {
 }
 
 // WebSocket message types
-const WS_TYPE_AUTH = "auth";
 const WS_TYPE_NEW_MESSAGE = "new_message";
 const WS_TYPE_MESSAGE_MEDIA_UPDATED = "message_media_updated";
 const WS_TYPE_STATUS_UPDATE = "status_update";
