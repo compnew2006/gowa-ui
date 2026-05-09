@@ -514,6 +514,7 @@ type Message struct {
 	WhatsAppAccount   string        `gorm:"size:100;index;not null" json:"whatsapp_account"` // References WhatsAppAccount.Name
 	ContactID         uuid.UUID     `gorm:"type:uuid;index;not null" json:"contact_id"`
 	WhatsAppMessageID string        `gorm:"column:whats_app_message_id;size:255;index" json:"whatsapp_message_id"`
+	_                 struct{}      `gorm:"index:idx_messages_contact_created_id,priority:1,columns:contact_id;priority:2,columns:created_at;priority:3,columns:id"`
 	ConversationID    string        `gorm:"size:255;index" json:"conversation_id"`
 	Direction         Direction     `gorm:"size:10;not null" json:"direction"`
 	MessageType       MessageType   `gorm:"size:20;not null" json:"message_type"`

@@ -23,6 +23,8 @@ export interface MessagesListPayload {
   page?: number;
   limit?: number;
   has_more?: boolean;
+  next_cursor?: string;
+  prev_cursor?: string;
 }
 
 export interface RecentContactFetch {

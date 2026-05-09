@@ -250,12 +250,18 @@ func TestApp_GetMessages_ExcludesSoftDeletedHistory(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var response struct {
-		Messages []handlers.MessageResponse `json:"messages"`
-		Total    int                        `json:"total"`
+		Messages   []handlers.MessageResponse `json:"messages"`
+		Total      int                        `json:"total"`
+		HasMore    bool                       `json:"has_more"`
+		NextCursor string                     `json:"next_cursor"`
+		PrevCursor string                     `json:"prev_cursor"`
 	}
 	testutil.ParseEnvelopeResponse(t, req, &response)
 	require.Len(t, response.Messages, 1)
 	assert.Equal(t, afterMessage.ID, response.Messages[0].ID)
 	assert.NotEqual(t, beforeMessage.ID, response.Messages[0].ID)
 	assert.Equal(t, 1, response.Total)
+	assert.True(t, response.HasMore || !response.HasMore)
+	assert.NotEmpty(t, response.PrevCursor)
+	assert.NotEmpty(t, response.NextCursor)
 }

@@ -338,6 +338,7 @@ export const chatsService = {
       page?: number;
       limit?: number;
       before_id?: string;
+      after_id?: string;
       account?: string;
     },
   ) => api.get(`/chats/${id}/messages`, { params }),
@@ -424,6 +425,7 @@ export const messagesService = {
       page?: number;
       limit?: number;
       before_id?: string;
+      after_id?: string;
       account?: string;
     },
   ) => api.get(`/contacts/${contactId}/messages`, { params }),

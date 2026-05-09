@@ -133,6 +133,7 @@ export class WhatomateClient {
     page?: number;
     limit?: number;
     before_id?: string;
+    after_id?: string;
     account?: string;
   }): Promise<PaginatedResult<MessageRecord>> {
     const data = await this.requestEnvelope<Record<string, unknown>>({
