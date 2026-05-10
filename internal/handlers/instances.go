@@ -111,8 +111,12 @@ func (a *App) scopeInstancesQueryToUserRestriction(query *gorm.DB, orgID, userID
 	if err != nil {
 		return nil, err
 	}
-	if len(restrictedInstanceIDs) > 0 {
-		query = query.Where("id IN ?", restrictedInstanceIDs)
+	if restrictedInstanceIDs != nil {
+		if len(restrictedInstanceIDs) > 0 {
+			query = query.Where("id IN ?", restrictedInstanceIDs)
+		} else {
+			query = query.Where("1 = 0")
+		}
 	}
 	return query, nil
 }

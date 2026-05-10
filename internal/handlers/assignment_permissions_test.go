@@ -121,6 +121,35 @@ func TestApp_AssignContact_RejectsAssigneeWithoutInstanceAccess(t *testing.T) {
 	assert.Nil(t, refreshed.AssignedUserID)
 }
 
+func TestApp_AssignContact_RejectsAssigneeWithEmptyInstanceAllowlist(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	assigner := createUserWithPermissionKeys(t, app, org.ID, "chat-assigner-empty-instance", []string{"chat.assign:write"})
+	targetUser := testutil.CreateTestUser(t, app.DB, org.ID)
+	instance := createTestInstance(t, app, org.ID, "Blocked Empty Allowlist Assignment")
+	enableRestrictedInstanceVisibilityWithoutAllowedInstances(t, app, org.ID, targetUser.ID)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, func(c *models.Contact) {
+		c.InstanceID = &instance.ID
+	})
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"user_id": targetUser.ID.String(),
+	})
+	testutil.SetAuthContext(req, org.ID, assigner.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.AssignContact(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusForbidden, "does not have access")
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	assert.Nil(t, refreshed.AssignedUserID)
+}
+
 func TestApp_ListAgentTransfers_IncludesInstanceID(t *testing.T) {
 	t.Parallel()
 

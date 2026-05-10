@@ -886,9 +886,7 @@ onMounted(async () => {
 
   // Fetch users if can assign contacts
   if (canAssignContacts.value) {
-    usersStore.fetchUsers().catch(() => {
-      // Silently fail if user list can't be loaded
-    });
+    usersStore.fetchAllUsers().catch(() => {});
   }
 
   // Fetch custom actions when permitted

@@ -30,6 +30,22 @@ export function getAllowedInstanceIDsFromSettings(settings: unknown): string[] {
   return legacy ? [legacy] : [];
 }
 
+export function getSendRestrictionsEnabled(settings: unknown): boolean {
+  const sendRestrictions = getSendRestrictionsSettings(settings);
+  if (!sendRestrictions) return false;
+
+  const raw = sendRestrictions as Record<string, unknown>;
+  return typeof raw.enabled === "boolean" && raw.enabled;
+}
+
+export function getSendRestrictionsSettings(settings: unknown): Record<string, unknown> | null {
+  if (!settings || typeof settings !== "object") return null;
+  const sendRestrictions = (settings as Record<string, unknown>)
+    .send_restrictions;
+  if (!sendRestrictions || typeof sendRestrictions !== "object") return null;
+  return sendRestrictions as Record<string, unknown>;
+}
+
 export function canAccessInstance(
   settings: unknown,
   instanceId?: string | null,
@@ -39,9 +55,11 @@ export function canAccessInstance(
   if (!normalizedInstanceId) return true;
 
   const allowedInstanceIDs = getAllowedInstanceIDsFromSettings(settings);
-  if (allowedInstanceIDs.length === 0) return true;
+  if (allowedInstanceIDs.length > 0) {
+    return allowedInstanceIDs.includes(normalizedInstanceId);
+  }
 
-  return allowedInstanceIDs.includes(normalizedInstanceId);
+  return getSendRestrictionsSettings(settings) === null;
 }
 
 export function canUserAccessInstance(

@@ -3,6 +3,8 @@ import {
   canAccessInstance,
   canUserAccessInstance,
   getAllowedInstanceIDsFromSettings,
+  getSendRestrictionsEnabled,
+  getSendRestrictionsSettings,
   normalizeAllowedInstanceIDs,
 } from "./instance-access";
 
@@ -83,5 +85,59 @@ describe("instance-access", () => {
         "instance-a",
       ),
     ).toBe(true);
+  });
+
+  it("detects enabled send restrictions", () => {
+    expect(
+      getSendRestrictionsEnabled({
+        send_restrictions: { enabled: true },
+      }),
+    ).toBe(true);
+    expect(
+      getSendRestrictionsEnabled({
+        send_restrictions: { enabled: false },
+      }),
+    ).toBe(false);
+    expect(getSendRestrictionsEnabled({})).toBe(false);
+  });
+
+  it("detects configured send restriction settings even when disabled", () => {
+    expect(
+      getSendRestrictionsSettings({
+        send_restrictions: {
+          enabled: false,
+          allowed_instance_ids: [],
+        },
+      }),
+    ).not.toBeNull();
+    expect(getSendRestrictionsSettings({})).toBeNull();
+  });
+
+  it("blocks access when restrictions are enabled without selected instances", () => {
+    expect(
+      canAccessInstance(
+        {
+          send_restrictions: {
+            enabled: true,
+            allowed_instance_ids: [],
+          },
+        },
+        "instance-a",
+      ),
+    ).toBe(false);
+  });
+
+  it("blocks access when restrictions are configured without selected instances", () => {
+    expect(
+      canAccessInstance(
+        {
+          send_restrictions: {
+            enabled: false,
+            allowed_instance_ids: [],
+          },
+        },
+        "instance-a",
+      ),
+    ).toBe(false);
   });
 });

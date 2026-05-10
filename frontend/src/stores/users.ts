@@ -95,6 +95,34 @@ export const useUsersStore = defineStore('users', () => {
     }
   }
 
+  async function fetchAllUsers(params?: Omit<FetchUsersParams, 'page' | 'limit'>): Promise<User[]> {
+    loading.value = true
+    error.value = null
+    try {
+      const pageSize = 100
+      let page = 1
+      let allUsers: User[] = []
+      let total = 0
+
+      do {
+        const response = await usersService.list({ ...params, page, limit: pageSize })
+        const data = unwrapResponse<FetchUsersResponse>(response)
+        const fetched = data.users || []
+        allUsers = allUsers.concat(fetched)
+        total = data.total ?? allUsers.length
+        page++
+      } while (allUsers.length < total)
+
+      users.value = allUsers
+      return allUsers
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to fetch users'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function deleteUser(id: string): Promise<void> {
     loading.value = true
     error.value = null
@@ -114,6 +142,7 @@ export const useUsersStore = defineStore('users', () => {
     loading,
     error,
     fetchUsers,
+    fetchAllUsers,
     createUser,
     updateUser,
     deleteUser

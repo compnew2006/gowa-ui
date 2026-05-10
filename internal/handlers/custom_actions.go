@@ -23,25 +23,25 @@ import (
 
 // CustomActionRequest represents the request body for creating/updating a custom action
 type CustomActionRequest struct {
-	Name         string                 `json:"name"`
-	Icon         string                 `json:"icon"`
-	ActionType   models.ActionType      `json:"action_type"` // webhook, url, javascript
-	Config       map[string]any `json:"config"`
-	IsActive     bool                   `json:"is_active"`
-	DisplayOrder int                    `json:"display_order"`
+	Name         string            `json:"name"`
+	Icon         string            `json:"icon"`
+	ActionType   models.ActionType `json:"action_type"` // webhook, url, javascript
+	Config       map[string]any    `json:"config"`
+	IsActive     bool              `json:"is_active"`
+	DisplayOrder int               `json:"display_order"`
 }
 
 // CustomActionResponse represents the API response for a custom action
 type CustomActionResponse struct {
-	ID           uuid.UUID              `json:"id"`
-	Name         string                 `json:"name"`
-	Icon         string                 `json:"icon"`
-	ActionType   models.ActionType      `json:"action_type"`
-	Config       map[string]any `json:"config"`
-	IsActive     bool                   `json:"is_active"`
-	DisplayOrder int                    `json:"display_order"`
-	CreatedAt    string                 `json:"created_at"`
-	UpdatedAt    string                 `json:"updated_at"`
+	ID           uuid.UUID         `json:"id"`
+	Name         string            `json:"name"`
+	Icon         string            `json:"icon"`
+	ActionType   models.ActionType `json:"action_type"`
+	Config       map[string]any    `json:"config"`
+	IsActive     bool              `json:"is_active"`
+	DisplayOrder int               `json:"display_order"`
+	CreatedAt    string            `json:"created_at"`
+	UpdatedAt    string            `json:"updated_at"`
 }
 
 // ExecuteActionRequest represents the request to execute a custom action
@@ -51,11 +51,11 @@ type ExecuteActionRequest struct {
 
 // ActionResult represents the result of executing a custom action
 type ActionResult struct {
-	Success     bool                   `json:"success"`
-	Message     string                 `json:"message,omitempty"`
-	RedirectURL string                 `json:"redirect_url,omitempty"`
-	Clipboard   string                 `json:"clipboard,omitempty"`
-	Toast       *ToastConfig           `json:"toast,omitempty"`
+	Success     bool           `json:"success"`
+	Message     string         `json:"message,omitempty"`
+	RedirectURL string         `json:"redirect_url,omitempty"`
+	Clipboard   string         `json:"clipboard,omitempty"`
+	Toast       *ToastConfig   `json:"toast,omitempty"`
 	Data        map[string]any `json:"data,omitempty"`
 }
 
@@ -239,14 +239,18 @@ func (a *App) UpdateCustomAction(r *fastglue.Request) error {
 	updates["is_active"] = req.IsActive
 	updates["display_order"] = req.DisplayOrder
 
-	if err := requestDB.Model(action).Updates(updates).Error; err != nil {
+	if err := a.DB.Model(&models.CustomAction{}).
+		Where("id = ? AND organization_id = ?", actionID, orgID).
+		Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update custom action", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update custom action", nil, "")
 	}
-	requestDB.
 
-		// Reload to get updated values
-		First(action, actionID)
+	// Reload to get updated values.
+	if err := a.DB.Where("id = ? AND organization_id = ?", actionID, orgID).First(action).Error; err != nil {
+		a.Log.Error("Failed to reload custom action", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update custom action", nil, "")
+	}
 
 	a.Log.Info("Custom action updated", "action_id", action.ID)
 	return r.SendEnvelope(customActionToResponse(*action))

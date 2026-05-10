@@ -162,7 +162,7 @@ func (a *App) UpdateConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	_, err = parsePathUUID(r, "id", "contact")
+	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return nil
 	}
@@ -175,6 +175,10 @@ func (a *App) UpdateConversationNote(r *fastglue.Request) error {
 	note, err := findByIDAndOrg[models.ConversationNote](requestDB, r, noteID, orgID, "Note")
 	if err != nil {
 		return nil
+	}
+
+	if note.ContactID != contactID {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Note does not belong to the specified contact", nil, "")
 	}
 
 	// The creator can edit their own notes. Users with chat:delete can manage all notes.
@@ -229,7 +233,7 @@ func (a *App) DeleteConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	_, err = parsePathUUID(r, "id", "contact")
+	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return nil
 	}
@@ -244,14 +248,18 @@ func (a *App) DeleteConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
+	if note.ContactID != contactID {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Note does not belong to the specified contact", nil, "")
+	}
+
 	// The creator can delete their own notes. Users with chat:delete can manage all notes.
 	if note.CreatedByID != userID && !a.HasPermission(userID, models.ResourceChat, models.ActionDelete, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You can only delete your own notes", nil, "")
 	}
 
-	contactID := note.ContactID
-
-	if err := requestDB.Delete(note).Error; err != nil {
+	if err := a.DB.
+		Where("id = ? AND organization_id = ? AND contact_id = ?", note.ID, orgID, contactID).
+		Delete(&models.ConversationNote{}).Error; err != nil {
 		a.Log.Error("Failed to delete conversation note", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError,
 			"Failed to delete note", nil, "")

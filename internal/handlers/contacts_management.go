@@ -97,7 +97,7 @@ func (a *App) canUserSeeContactInstance(orgID, userID uuid.UUID, contact *models
 	if err != nil {
 		return false, err
 	}
-	if len(allowedInstanceIDs) == 0 {
+	if allowedInstanceIDs == nil {
 		return true, nil
 	}
 

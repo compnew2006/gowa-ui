@@ -148,4 +148,24 @@ func TestApp_DeleteConversationNote_Permissions(t *testing.T) {
 		require.NoError(t, app.DB.Unscoped().First(&deleted, "id = ?", fixture.note.ID).Error)
 		assert.True(t, deleted.DeletedAt.Valid)
 	})
+
+	t.Run("rejects note from a different contact", func(t *testing.T) {
+		app := newTestApp(t)
+		fixture := setupConversationNotePermissionFixture(t, app)
+		otherContact := testutil.CreateTestContact(t, app.DB, fixture.org.ID)
+
+		req := testutil.NewRequest(t)
+		req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodDelete)
+		testutil.SetAuthContext(req, fixture.org.ID, fixture.owner.ID)
+		testutil.SetPathParam(req, "id", otherContact.ID.String())
+		testutil.SetPathParam(req, "note_id", fixture.note.ID.String())
+
+		err := app.DeleteConversationNote(req)
+		require.NoError(t, err)
+		testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "Note does not belong")
+
+		var note models.ConversationNote
+		require.NoError(t, app.DB.First(&note, "id = ?", fixture.note.ID).Error)
+		assert.False(t, note.DeletedAt.Valid)
+	})
 }

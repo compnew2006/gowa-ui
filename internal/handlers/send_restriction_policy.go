@@ -64,6 +64,14 @@ type sendRestrictionsSettings struct {
 	AllowUnclaimedChatSend bool
 }
 
+func hasSendRestrictionsSettings(settings models.JSONB) bool {
+	if settings == nil {
+		return false
+	}
+	raw, ok := settings[userSettingSendRestrictions]
+	return ok && raw != nil
+}
+
 func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSettings {
 	cfg := sendRestrictionsSettings{
 		Enabled:                false,
@@ -687,7 +695,7 @@ func (a *App) syncUserRestrictionsWithSources(orgID uuid.UUID, user *models.User
 }
 
 func (a *App) getRestrictedInstancesForUser(orgID, userID uuid.UUID) ([]uuid.UUID, error) {
-	if a == nil || a.DB == nil || orgID == uuid.Nil || userID == uuid.Nil || !a.isWhatsmeowProvider() {
+	if a == nil || a.DB == nil || orgID == uuid.Nil || userID == uuid.Nil {
 		return nil, nil
 	}
 
@@ -701,11 +709,15 @@ func (a *App) getRestrictedInstancesForUser(orgID, userID uuid.UUID) ([]uuid.UUI
 
 	cfg := readSendRestrictionsSettings(user.Settings)
 	allowedInstanceIDs := allowedInstanceIDsForRestrictions(cfg)
-	if len(allowedInstanceIDs) == 0 {
-		return nil, nil
+	if len(allowedInstanceIDs) > 0 {
+		return allowedInstanceIDs, nil
 	}
 
-	return allowedInstanceIDs, nil
+	if cfg.Enabled || hasSendRestrictionsSettings(user.Settings) {
+		return []uuid.UUID{}, nil
+	}
+
+	return nil, nil
 }
 
 func resolveOutgoingInstanceID(req OutgoingMessageRequest) *uuid.UUID {

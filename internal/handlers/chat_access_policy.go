@@ -71,8 +71,11 @@ func applyRestrictedInstanceVisibilityFilter(
 	query *gorm.DB,
 	restrictedInstanceIDs []uuid.UUID,
 ) *gorm.DB {
-	if query == nil || len(restrictedInstanceIDs) == 0 {
+	if query == nil || restrictedInstanceIDs == nil {
 		return query
 	}
-	return query.Where("instance_id IN ?", restrictedInstanceIDs)
+	if len(restrictedInstanceIDs) > 0 {
+		return query.Where("instance_id IN ?", restrictedInstanceIDs)
+	}
+	return query.Where("1 = 0")
 }
