@@ -58,6 +58,7 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 		OrganizationID:    account.OrganizationID,
 		WhatsAppAccount:   account.Name,
 		ContactID:         contact.ID,
+		InstanceID:        contact.InstanceID,
 		WhatsAppMessageID: whatsappMsgID,
 		Direction:         models.DirectionIncoming,
 		MessageType:       models.MessageType(msgType),
@@ -132,9 +133,15 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 		if a.ShouldMaskPhoneNumbers(account.OrganizationID) {
 			profileName = MaskIfPhoneNumber(profileName)
 		}
+		instanceIDStr := ""
+		if message.InstanceID != nil {
+			instanceIDStr = message.InstanceID.String()
+		}
 		wsPayload := map[string]any{
 			"id":               message.ID.String(),
 			"contact_id":       contact.ID.String(),
+			"instance_id":      instanceIDStr,
+			"conversation_id":  message.ConversationID,
 			"assigned_user_id": assignedUserIDStr,
 			"contact_status":   normalizeContactStatus(contact).String(),
 			"profile_name":     profileName,

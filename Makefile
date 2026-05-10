@@ -68,11 +68,11 @@ embed-frontend:
 
 # Run the backend locally
 run:
-	$(GOCMD) run $(BINARY_PATH)/main.go server -config config.toml
+	$(GOCMD) run $(BINARY_PATH) server -config config.toml
 
 # Run with migrations
 run-migrate:
-	$(GOCMD) run $(BINARY_PATH)/main.go server -config config.toml -migrate
+	$(GOCMD) run $(BINARY_PATH) server -config config.toml -migrate
 
 air-install:
 	$(GOCMD) install $(AIR_PACKAGE)
@@ -144,7 +144,7 @@ docker-restart:
 
 # Database migrations
 migrate:
-	$(GOCMD) run $(BINARY_PATH)/main.go server -config config.toml -migrate
+	$(GOCMD) run $(BINARY_PATH) server -config config.toml -migrate
 
 # Frontend commands
 frontend-install:

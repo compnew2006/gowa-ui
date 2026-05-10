@@ -1,0 +1,116 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - link "Skip to main content" [ref=e5] [cursor=pointer]:
+      - /url: "#main-content"
+    - navigation "Main navigation" [ref=e6]:
+      - generic [ref=e7]:
+        - link "Whatomate" [ref=e8] [cursor=pointer]:
+          - /url: /
+          - img [ref=e10]
+          - generic: Whatomate
+        - button:
+          - img
+      - button "Regression Org" [ref=e14] [cursor=pointer]:
+        - img
+      - menubar [ref=e18]:
+        - menuitem "Dashboard" [ref=e19] [cursor=pointer]:
+          - img [ref=e20]
+          - generic: Dashboard
+        - menuitem "Chat" [ref=e25] [cursor=pointer]:
+          - img [ref=e26]
+          - generic: Chat
+        - menuitem "Chatbot" [ref=e28] [cursor=pointer]:
+          - img [ref=e29]
+          - generic: Chatbot
+        - menuitem "Agent Analytics" [ref=e32] [cursor=pointer]:
+          - img [ref=e33]
+          - generic: Agent Analytics
+        - menuitem "Campaigns" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+          - generic: Campaigns
+        - menuitem "Settings" [ref=e39] [cursor=pointer]:
+          - img [ref=e40]
+          - generic: Settings
+      - button "User menu" [ref=e44] [cursor=pointer]:
+        - generic [ref=e46]: A
+        - generic:
+          - generic [ref=e47]: Admin
+          - generic [ref=e48]: admin@admin.com
+    - main [ref=e49]:
+      - generic [ref=e50]:
+        - complementary "chat.contacts" [ref=e51]:
+          - generic [ref=e54]:
+            - generic [ref=e55]:
+              - paragraph [ref=e56]: Statuses
+              - generic [ref=e57]: "2"
+            - generic [ref=e58]:
+              - button "Refresh" [ref=e59] [cursor=pointer]:
+                - img
+              - button "Notifications" [ref=e61] [cursor=pointer]:
+                - img
+              - button "Statuses" [ref=e62] [cursor=pointer]:
+                - img [ref=e63]
+          - generic [ref=e65]:
+            - generic [ref=e66]:
+              - generic [ref=e67]:
+                - img [ref=e68]
+                - textbox "Search contacts" [ref=e71]:
+                  - /placeholder: Search contacts...
+              - button "Add Contact" [ref=e72] [cursor=pointer]:
+                - img
+              - button "Filter by tags" [ref=e73] [cursor=pointer]:
+                - img
+            - generic [ref=e74]:
+              - tab "Assigned chats" [selected] [ref=e75] [cursor=pointer]: Assigned (1)
+              - tab "Pending chats" [ref=e76] [cursor=pointer]: Pending (50)
+          - list "chat.contactsList" [ref=e77]:
+            - listitem "Chat with 201210014264" [ref=e81] [cursor=pointer]:
+              - 'button "Profile photo: 201210014264" [ref=e82]':
+                - generic [ref=e84]: "2"
+              - generic [ref=e85]:
+                - paragraph [ref=e87]: "201210014264"
+                - generic [ref=e88]:
+                  - generic "whatsapp" [ref=e91]:
+                    - generic [ref=e93]: whatsapp
+                  - generic [ref=e94]:
+                    - 'button "Hide chat: 201210014264" [ref=e95]':
+                      - img [ref=e96]
+                    - 'button "Delete chat: 201210014264" [ref=e99]'
+        - main [ref=e102]:
+          - banner "chat.chatHeader" [ref=e103]:
+            - generic [ref=e104]:
+              - 'button "Profile photo: نعمانى مكتبة الأركان المثالية" [ref=e105] [cursor=pointer]':
+                - generic [ref=e107]: نم
+              - generic [ref=e108]:
+                - generic [ref=e109]:
+                  - paragraph [ref=e110]: نعمانى مكتبة الأركان المثالية
+                  - generic [ref=e111]: Pending
+                - paragraph [ref=e112]: "966561853319"
+            - generic [ref=e113]:
+              - button "Assign to agent" [ref=e114] [cursor=pointer]:
+                - img
+              - button "Make chat public (pin for all agents)" [ref=e115] [cursor=pointer]:
+                - img
+              - button "Transfer to Agent" [ref=e116] [cursor=pointer]:
+                - img
+              - button "Notes" [ref=e117] [cursor=pointer]:
+                - img
+              - button "Contact Info" [ref=e118] [cursor=pointer]:
+                - img
+          - log "Messages" [ref=e120]:
+            - generic [ref=e126]: No messages yet
+          - search "chat.sendMessage" [ref=e128]:
+            - button "Emoji picker" [ref=e130] [cursor=pointer]:
+              - img [ref=e131]
+            - button "Canned Responses" [ref=e135] [cursor=pointer]:
+              - img
+            - button "Attach file" [ref=e136] [cursor=pointer]:
+              - img [ref=e137]
+            - button "Merge & Print" [ref=e139] [cursor=pointer]:
+              - img [ref=e140]
+            - textbox "Type a message" [ref=e144]:
+              - /placeholder: Type a message...
+            - button "Send" [disabled] [ref=e145]:
+              - img [ref=e146]
+  - region "Notifications alt+T":
+    - list

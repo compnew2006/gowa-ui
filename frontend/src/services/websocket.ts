@@ -201,7 +201,7 @@ interface WSMessage {
 class WebSocketService {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
+  private maxReconnectAttempts = 10;
   private reconnectDelay = 1000;
   private pingInterval: number | null = null;
   private isConnected = false;
@@ -306,9 +306,13 @@ class WebSocketService {
       this.getTokenFn = getToken;
     }
 
-    // Get a fresh short-lived WS token
     const token = this.getTokenFn ? await this.getTokenFn() : null;
     if (!token) {
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        this.handleReconnect();
+      } else {
+        connectionStatus.value = "disconnected";
+      }
       return;
     }
 
@@ -344,6 +348,7 @@ class WebSocketService {
 
       this.ws.onclose = () => {
         this.isConnected = false;
+        this.ws = null;
         this.stopPing();
         this.handleReconnect();
       };

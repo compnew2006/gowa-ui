@@ -552,11 +552,21 @@ func (a *App) loadUserForSendRestrictions(orgID, userID uuid.UUID) (*models.User
 	}
 
 	var user models.User
+	// First try to find user with organization-specific settings
 	err := a.DB.
 		Select("users.id", "users.settings").
 		Joins("JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL", orgID).
 		Where("users.id = ? AND users.deleted_at IS NULL", userID).
 		First(&user).Error
+
+	// If not found, try to find super admin with global settings
+	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+		err = a.DB.
+			Select("users.id", "users.settings").
+			Where("users.id = ? AND users.deleted_at IS NULL AND users.is_super_admin = ?", userID, true).
+			First(&user).Error
+	}
+
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,88 @@
+- generic [ref=e3]:
+  - generic [ref=e34]:
+    - link "Skip to main content" [ref=e35] [cursor=pointer]:
+      - /url: "#main-content"
+    - navigation "Main navigation" [ref=e36]:
+      - generic [ref=e37]:
+        - link "Whatomate" [ref=e38] [cursor=pointer]:
+          - /url: /
+          - img [ref=e40]
+          - generic: Whatomate
+        - button:
+          - img
+      - button "Regression Org" [ref=e44] [cursor=pointer]:
+        - img
+      - menubar [ref=e48]:
+        - menuitem "Dashboard" [ref=e49] [cursor=pointer]:
+          - img [ref=e50]
+          - generic: Dashboard
+        - menuitem "Chat" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+          - generic: Chat
+        - menuitem "Chatbot" [ref=e58] [cursor=pointer]:
+          - img [ref=e59]
+          - generic: Chatbot
+        - menuitem "Agent Analytics" [ref=e62] [cursor=pointer]:
+          - img [ref=e63]
+          - generic: Agent Analytics
+        - menuitem "Campaigns" [ref=e65] [cursor=pointer]:
+          - img [ref=e66]
+          - generic: Campaigns
+        - menuitem "Settings" [ref=e69] [cursor=pointer]:
+          - img [ref=e70]
+          - generic: Settings
+      - button "User menu" [ref=e74] [cursor=pointer]:
+        - generic [ref=e76]: A
+        - generic:
+          - generic [ref=e77]: Admin
+          - generic [ref=e78]: admin@admin.com
+    - main [ref=e79]:
+      - generic [ref=e80]:
+        - complementary "chat.contacts" [ref=e81]:
+          - generic [ref=e84]:
+            - generic [ref=e85]:
+              - paragraph [ref=e86]: Statuses
+              - generic [ref=e87]: "2"
+            - generic [ref=e88]:
+              - button "Refresh" [ref=e89] [cursor=pointer]:
+                - img
+              - button "Notifications" [ref=e91] [cursor=pointer]:
+                - img
+              - button "Statuses" [ref=e92] [cursor=pointer]:
+                - img [ref=e93]
+          - generic [ref=e95]:
+            - generic [ref=e96]:
+              - generic [ref=e97]:
+                - img [ref=e98]
+                - textbox "Search contacts" [ref=e101]:
+                  - /placeholder: Search contacts...
+              - button "Add Contact" [ref=e102] [cursor=pointer]:
+                - img
+              - button "Filter by tags" [ref=e103] [cursor=pointer]:
+                - img
+            - generic [ref=e104]:
+              - tab "Assigned chats" [selected] [ref=e105] [cursor=pointer]: Assigned (1)
+              - tab "Pending chats" [ref=e106] [cursor=pointer]: Pending (50)
+          - list "chat.contactsList" [ref=e107]:
+            - listitem "Chat with 201210014264" [ref=e111] [cursor=pointer]:
+              - 'button "Profile photo: 201210014264" [ref=e112]':
+                - generic [ref=e114]: "2"
+              - generic [ref=e115]:
+                - paragraph [ref=e117]: "201210014264"
+                - generic [ref=e118]:
+                  - generic "whatsapp" [ref=e121]:
+                    - generic [ref=e123]: whatsapp
+                  - generic [ref=e124]:
+                    - 'button "Hide chat: 201210014264" [ref=e125]':
+                      - img [ref=e126]
+                    - 'button "Delete chat: 201210014264" [ref=e129]'
+        - main [ref=e132]:
+          - generic [ref=e134]:
+            - img [ref=e136]
+            - heading "Select a conversation" [level=3] [ref=e139]
+            - paragraph [ref=e140]: Choose a contact to start chatting
+  - region "Notifications alt+T":
+    - list:
+      - status [ref=e141]:
+        - img [ref=e143]
+        - generic [ref=e146]: Login successful

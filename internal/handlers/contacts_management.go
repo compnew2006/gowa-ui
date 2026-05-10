@@ -232,12 +232,12 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 	}
 
 	// Update contact assignment + lifecycle status
-	if err := requestDB.Model(contact).Updates(chatAssignmentUpdates(req.UserID)).Error; err != nil {
+	if err := a.DB.Model(&models.Contact{}).Where("id = ? AND organization_id = ?", contact.ID, orgID).Updates(chatAssignmentUpdates(req.UserID)).Error; err != nil {
 		a.Log.Error("Failed to assign contact", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to assign contact", nil, "")
 	}
 
-	if err := requestDB.Where("id = ?", contact.ID).First(contact).Error; err != nil {
+	if err := a.DB.Where("id = ? AND organization_id = ?", contact.ID, orgID).First(contact).Error; err != nil {
 		a.Log.Error("Failed to reload contact after assignment", "error", err, "contact_id", contact.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to assign contact", nil, "")
 	}

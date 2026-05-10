@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -72,8 +73,12 @@ func Handler(basePath string) fasthttp.RequestHandler {
 	baseTag := fmt.Sprintf(`<head><base href="%s">`, baseHref)
 	modifiedHTML := strings.Replace(string(indexContent), "<head>", baseTag, 1)
 
-	// Add a nonce placeholder to the inline theme-init script so CSP can allow it.
-	modifiedHTML = strings.Replace(modifiedHTML, "<script>", fmt.Sprintf(`<script nonce="%s">`, cspNoncePlaceholder), 1)
+	// Add nonce placeholders to all inline <script> tags so CSP can allow them.
+	// Only match bare <script> without attributes (inline scripts); external scripts
+	// (<script src="...">) are already allowed by script-src 'self'.
+	nonceScriptTag := fmt.Sprintf(`<script nonce="%s">`, cspNoncePlaceholder)
+	re := regexp.MustCompile(`<script>`)
+	modifiedHTML = re.ReplaceAllString(modifiedHTML, nonceScriptTag)
 
 	// Inject external base path bootstrap script to avoid inline script CSP violations.
 	basePathScriptTag := fmt.Sprintf(`<script src="./%s"></script></head>`, basePathBootstrapScriptName)

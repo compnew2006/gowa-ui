@@ -1,0 +1,30 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - img [ref=e9]
+      - heading "Welcome to Whatomate" [level=2] [ref=e11]
+      - paragraph [ref=e12]: Enter your credentials to access your account
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - generic [ref=e16]: Email
+        - textbox "Email" [ref=e17]:
+          - /placeholder: name@example.com
+          - text: admin@test.com
+      - generic [ref=e18]:
+        - generic [ref=e19]: Password
+        - textbox "Password" [ref=e20]:
+          - /placeholder: Enter your password
+          - text: Password123!
+      - generic [ref=e21]:
+        - checkbox "Remember me" [ref=e22] [cursor=pointer]
+        - generic [ref=e23] [cursor=pointer]: Remember me
+      - button "Sign in" [ref=e24] [cursor=pointer]
+    - paragraph [ref=e26]:
+      - text: Don't have an account?
+      - link "Sign up" [ref=e27] [cursor=pointer]:
+        - /url: /register
+  - region "Notifications alt+T":
+    - list:
+      - status [ref=e28]:
+        - img [ref=e30]
+        - generic [ref=e33]: Invalid credentials

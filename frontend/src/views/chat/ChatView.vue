@@ -2920,6 +2920,16 @@ function handleMediaError(event: Event, mediaType: string) {
                 </div>
               </template>
 
+              <!-- No messages state -->
+              <div
+                v-if="contactsStore.messages.length === 0 && !contactsStore.isLoadingMessages && !contactsStore.messageLoadError"
+                class="flex h-full items-center justify-center text-muted-foreground"
+              >
+                <div class="text-center">
+                  <div class="text-sm">{{ $t("chat.noMessages") }}</div>
+                </div>
+              </div>
+
               <!-- Virtual scroll: bottom spacer for messages below viewport -->
               <div
                 v-if="virtualMessages.bottomSpacer.value > 0"

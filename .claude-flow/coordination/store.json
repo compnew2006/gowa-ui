@@ -1,0 +1,21 @@
+{
+  "topology": {
+    "type": "hierarchical",
+    "maxNodes": 10,
+    "redundancy": 1,
+    "consensusAlgorithm": "raft"
+  },
+  "loadBalance": {
+    "algorithm": "adaptive",
+    "weights": {},
+    "healthCheck": true
+  },
+  "sync": {
+    "lastSync": "2026-05-09T23:28:11.921Z",
+    "syncCount": 0,
+    "conflicts": 0,
+    "pendingChanges": 0
+  },
+  "nodes": {},
+  "version": "3.0.0"
+}

@@ -32,7 +32,7 @@ const (
 	ContextKeyOrganization   = "organization"
 )
 
-const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; frame-src 'self' data: blob: https:; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss: blob:"
+const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; frame-src 'self' data: blob: https:; object-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss: blob:"
 const accessTokenSubject = "access"
 
 const (
