@@ -770,14 +770,15 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 	}
 
 	payload := map[string]any{
-		"id":           msg.ID,
-		"contact_id":   contact.ID.String(),
-		"direction":    msg.Direction,
-		"message_type": msg.MessageType,
-		"content":      map[string]string{"body": contentBody},
-		"status":       msg.Status,
-		"created_at":   msg.CreatedAt,
-		"updated_at":   msg.UpdatedAt,
+		"id":               msg.ID,
+		"contact_id":       contact.ID.String(),
+		"direction":        msg.Direction,
+		"message_type":     msg.MessageType,
+		"content":          map[string]string{"body": contentBody},
+		"status":           msg.Status,
+		"whatsapp_account": msg.WhatsAppAccount,
+		"created_at":       msg.CreatedAt,
+		"updated_at":       msg.UpdatedAt,
 	}
 
 	if msg.ConversationID != "" {

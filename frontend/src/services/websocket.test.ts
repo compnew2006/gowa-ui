@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { wsService } from './websocket'
 import { useContactsStore } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
+import { toast } from 'vue-sonner'
 
 const mocks = vi.hoisted(() => ({
   maybeAutoDownloadIncomingMedia: vi.fn(),
@@ -35,6 +36,9 @@ vi.mock('@/services/api', () => ({
   contactsService: {
     get: vi.fn(),
   },
+  chatsService: {
+    listMessages: vi.fn(),
+  },
 }))
 
 vi.mock('@/lib/incoming_media_autodownload', () => ({
@@ -56,6 +60,16 @@ vi.mock('@/router', () => ({
 describe('websocket message_media_updated', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('Audio', class {
+      volume = 0
+      preload = ''
+      currentTime = 0
+      addEventListener = vi.fn()
+      load = vi.fn()
+      play = vi.fn().mockResolvedValue(undefined)
+
+      constructor(_src?: string) {}
+    })
   })
 
   it('patches message media fields on realtime recovery event', () => {
@@ -286,5 +300,77 @@ describe('websocket message_media_updated', () => {
 
     expect(addMessage).toHaveBeenCalledTimes(1)
     expect(fetchContact).not.toHaveBeenCalled()
+  })
+
+  it('shows a toast for eligible incoming messages even when viewing the active chat', async () => {
+    const addMessage = vi.fn(() => true)
+
+    vi.mocked(useContactsStore).mockReturnValue({
+      currentContact: {
+        id: 'contact-active',
+        assigned_user_id: 'admin-1',
+        status: 'open',
+      },
+      contacts: [
+        {
+          id: 'contact-active',
+          assigned_user_id: 'admin-1',
+          status: 'open',
+        },
+      ],
+      addMessage,
+      fetchContact: vi.fn(),
+      patchContact: vi.fn(),
+      messages: [],
+    } as unknown as ReturnType<typeof useContactsStore>)
+    vi.mocked(useAuthStore).mockReturnValue({
+      user: {
+        id: 'admin-1',
+        role: {
+          name: 'admin',
+        },
+        is_super_admin: false,
+      },
+      userSettings: {
+        new_message_alerts: true,
+      },
+    } as unknown as ReturnType<typeof useAuthStore>)
+
+    ;(wsService as any).handleMessage(JSON.stringify({
+      type: 'new_message',
+      payload: {
+        id: 'message-active',
+        contact_id: 'contact-active',
+        direction: 'incoming',
+        profile_name: 'Customer',
+        content: { body: 'hello from customer' },
+        whatsapp_account: '201007181781',
+        message_type: 'text',
+        status: 'received',
+        assigned_user_id: 'admin-1',
+        contact_status: 'open',
+        created_at: '2026-03-03T10:00:00.000Z',
+        updated_at: '2026-03-03T10:00:00.000Z',
+      },
+    }))
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(addMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'message-active',
+        contact_id: 'contact-active',
+        direction: 'incoming',
+        whatsapp_account: '201007181781',
+      }),
+      { appendToActiveThread: true },
+    )
+    expect(toast.info).toHaveBeenCalledWith(
+      'Customer',
+      expect.objectContaining({
+        description: 'hello from customer',
+      }),
+    )
   })
 })

@@ -122,6 +122,63 @@ function mountBell() {
   });
 }
 
+describe("NotificationBell unread conversations", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.clearAllMocks();
+
+    const authStore = useAuthStore();
+    authStore.user = {
+      id: "admin-1",
+      email: "admin@example.com",
+      full_name: "Admin",
+      organization_id: "org-1",
+      settings: {},
+      role: {
+        id: "role-1",
+        name: "admin",
+        permissions: [],
+      },
+    } as any;
+
+    const pendingContact = {
+      ...buildContact(),
+      id: "contact-pending",
+      name: "Pending Customer",
+      profile_name: "Pending Customer",
+      status: "pending",
+      unread_count: 2,
+      last_message_preview: "Need help",
+      last_message_at: "2026-04-07T10:00:00Z",
+      updated_at: "2026-04-07T10:00:00Z",
+    };
+
+    const contactsStore = useContactsStore();
+    contactsStore.setActiveChatTab("assigned");
+    contactsStore.contacts = [] as any;
+    contactsStore.assignedChats = [] as any;
+    contactsStore.pendingChats = [pendingContact] as any;
+    contactsStore.closedChats = [] as any;
+
+    mocks.notificationsService.list.mockResolvedValue({
+      data: {
+        data: {
+          notifications: [],
+        },
+      },
+    });
+  });
+
+  it("shows unread chats from non-active chat buckets", async () => {
+    const wrapper = mountBell();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Pending Customer");
+    expect(wrapper.text()).toContain("Need help");
+    expect(wrapper.text()).toContain("2");
+  });
+});
+
 describe("NotificationBell soft-delete notifications", () => {
   beforeEach(() => {
     setActivePinia(createPinia());

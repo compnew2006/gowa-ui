@@ -1,95 +1,60 @@
-# ARCH-08 + ARCH-09 — ContactInfoPanel Split & Dead WebSocket Code Cleanup
+# Chat Realtime Message and Notification Fix
 
-**Date**: 2026-05-09
-**Branch**: `agent/arch-08-09-contact-panel-split-ws-cleanup`
-**Commit**: `f797131`
+Date: 2026-05-10
+Branch: `agent/chat-realtime-notifications`
 
-## Summary
+## Task
 
-Split the 963-line `ContactInfoPanel.vue` mega-component into 4 focused sub-components (parent reduced to 271 lines). Removed dead WebSocket unauthenticated client path (function, types, tests, and frontend constant).
+Investigate `http://localhost:8080/chat/e3945298-ea4d-4f2f-890f-e03f30ab7db6`, where incoming messages were reported as not appearing and incoming-message notifications were not visible.
 
-## ARCH-08: ContactInfoPanel Decomposition
+## Findings
 
-**Before**: 1 file, 963 lines
-**After**: 5 files, 1010 total lines (parent: 271 lines)
+- Browser reproduction on the running `localhost:8080` app showed the route loads, `/api/chats/e3945298-ea4d-4f2f-890f-e03f30ab7db6/messages` returns two messages, and the DOM contains the rendered outgoing message text.
+- The notification gap was confirmed in frontend logic: active-chat incoming messages played sound but intentionally suppressed toast notifications, so a user already viewing the conversation saw no visible notification.
+- The notification bell counted unread conversations from `contactsStore.sortedContacts`, which is scoped to the active sidebar tab. Direct-linked pending/unassigned chats can be visible in the main panel while omitted from the assigned-tab sidebar and therefore omitted from the notification bell.
+- Realtime `new_message` events did not consistently carry `whatsapp_account` from backend payload through frontend store insertion, while initial message fetches are account-aware via `/messages?account=...`.
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `ContactInfoPanel.vue` | 271 | Shell: header, resize handle, contact avatar, delete actions |
-| `ContactTagsPanel.vue` | 152 | Tag display, add/remove via popover + command palette |
-| `ContactCollaboratorsPanel.vue` | 319 | Collaborator list, accept/decline/remove, invite dialog |
-| `ContactSessionDataPanel.vue` | 224 | Dynamic session data with collapsible sections |
-| `ContactMetadataPanel.vue` | 44 | Contact metadata primitives and object sections |
+## Changes
 
-### Props Interface
-
-- **ContactTagsPanel**: `contactId`, `contactTags`, `canEditTags` → emits `tagsUpdated`
-- **ContactCollaboratorsPanel**: `contactId`, `instanceId` (self-contained WS subscriptions)
-- **ContactSessionDataPanel**: `sessionData`
-- **ContactMetadataPanel**: `metadata`
-
-### Backward Compatibility
-
-`ChatView.vue` imports `ContactInfoPanel` unchanged — same props (`contact`, `sessionData`), same events (`close`, `tagsUpdated`, `deleted`).
-
-## ARCH-09: Dead WebSocket Code Removal
-
-### Analysis Findings
-
-Contrary to the task description, most WS types ARE used in production:
-- `TypeAgentTransfer/Resume/Assign` — used in `agent_transfers.go`
-- `TypePermissionsUpdated` — used in `cache.go`
-- `StatusUpdatePayload` — used in `whatsmeow/events.go` and `stubs.go`
-
-The ONLY truly dead code was the **unauthenticated client path**:
-- `NewUnauthenticatedClient()` — never called in production, only in tests
-- `AuthenticateFn` type — only for the dead unauthenticated path
-- `handleAuthMessage()` — only for message-based auth (superseded by HTTP handshake auth)
-- `AuthPayload` type — only used by `handleAuthMessage`
-- `TypeAuth` constant — only used by `handleAuthMessage`
-- `authTimeout` constant — only for the auth timeout in ReadPump
-
-### What was removed
-
-| File | Change |
-|------|--------|
-| `internal/websocket/client.go` | Removed `NewUnauthenticatedClient`, `AuthenticateFn`, `authFn` field, `handleAuthMessage`, `authTimeout`, simplified `ReadPump` |
-| `internal/websocket/messages.go` | Removed `TypeAuth` constant, `AuthPayload` type |
-| `internal/websocket/export_test.go` | Removed `ClientHandleAuthMessage` export |
-| `internal/websocket/websocket_test.go` | Removed 12 dead test functions + `successAuthFn`/`failAuthFn` helpers |
-| `frontend/src/services/websocket.ts` | Removed unused `WS_TYPE_AUTH` constant |
-
-## Files Modified/Created
-
-| File | Action |
-|------|--------|
-| `frontend/src/components/chat/ContactTagsPanel.vue` | **Created** |
-| `frontend/src/components/chat/ContactCollaboratorsPanel.vue` | **Created** |
-| `frontend/src/components/chat/ContactSessionDataPanel.vue` | **Created** |
-| `frontend/src/components/chat/ContactMetadataPanel.vue` | **Created** |
-| `frontend/src/components/chat/ContactInfoPanel.vue` | **Modified** (963→271 lines) |
-| `internal/websocket/client.go` | **Modified** (removed dead auth path) |
-| `internal/websocket/messages.go` | **Modified** (removed `TypeAuth`, `AuthPayload`) |
-| `internal/websocket/export_test.go` | **Modified** (removed `ClientHandleAuthMessage`) |
-| `internal/websocket/websocket_test.go` | **Modified** (removed 12 dead tests) |
-| `frontend/src/services/websocket.ts` | **Modified** (removed `WS_TYPE_AUTH`) |
+- `frontend/src/services/websocket.ts`
+  - Always shows a toast for eligible incoming messages, including when the user is already viewing that chat.
+  - Preserves `whatsapp_account` on incoming realtime messages.
+  - Added missing imports for `chatsService`, `unwrapResponse`, and `MessagesListPayload` used by missed-message replay.
+- `frontend/src/components/NotificationBell.vue`
+  - Builds unread chat notifications from all loaded chat buckets (`contacts`, `pendingChats`, `assignedChats`, `closedChats`) instead of only the active sidebar tab.
+  - Deduplicates unread contacts and sorts them by latest message time.
+- `internal/handlers/messages.go`
+  - Includes `whatsapp_account` in outbound realtime `new_message` WebSocket payloads.
+- `internal/handlers/chatbot_message.go`
+  - Includes `whatsapp_account` in inbound realtime `new_message` WebSocket payloads.
+- `frontend/src/services/websocket.test.ts`
+  - Added coverage proving active-chat incoming messages append to the active thread and still show a toast.
+  - Verifies `whatsapp_account` is preserved in the realtime message passed to the store.
+- `frontend/src/components/NotificationBell.test.ts`
+  - Added coverage proving unread pending chats appear in the notification bell even when the sidebar is on Assigned.
 
 ## Verification
 
-- `go build ./cmd/whatomate/... ./internal/websocket/... ./pkg/...` — **passes** (0 errors)
-- `go vet ./internal/websocket/...` — **passes** (0 warnings)
-- `npm run build` (frontend) — **passes** (production build succeeds)
-- `npm run typecheck` — pre-existing errors only (none from our changes)
-- Net change: **862 insertions, 1161 deletions** (−299 lines)
+Passed:
 
-## Key Design Decisions
+- `npx vitest run src/services/websocket.test.ts src/components/NotificationBell.test.ts` — 8 tests passed.
+- `npm run lint` — passed with 4 pre-existing warnings.
+- `npm run build` — passed; Vite emitted existing chunk-size/empty-chunk warnings.
+- `npx playwright test e2e/tests/chat/chat.spec.ts --project=chromium --workers=1` — 20 tests passed.
+- `go test ./internal/handlers -run 'TestApp_(SendMessage|ProcessIncoming|SaveIncoming)|Test.*Message'` — passed.
+- `go test ./cmd/... ./internal/... ./pkg/... ./test/...` — passed.
 
-1. **Tags fetch stays in parent**: `tagsStore.fetchTags()` remains in `ContactInfoPanel` on mount so it's fetched once and shared. The `ContactTagsPanel` reads from the store.
-2. **Collaborators are self-contained**: `ContactCollaboratorsPanel` manages its own WS subscriptions, fetch, and invite dialog — no prop drilling of collaborator state.
-3. **SessionDataPanel owns collapsed state**: The `collapsedSections` ref moved entirely into the session data panel — it's only relevant there.
-4. **Kept `authenticated` guard in WritePump**: Even though all production clients are pre-authenticated, the `if !c.authenticated` check in `WritePump` is retained as defense-in-depth for test clients created with `uuid.Nil`.
+Known pre-existing verification failures:
 
-## Known Limitations
+- `npm run typecheck` still fails on existing TypeScript issues outside this fix, including unused imports in `ChatInputBar.vue`, readonly fixture typing in `ContactInfoPanel.test.ts`, and type/export issues in chatbot/dashboard/settings files. The previous `websocket.ts` missing-import type errors are fixed in this change.
+- `go test ./...` fails only because the repo's `tmp` package contains multiple scratch `main` files (`tmp/gorm_reuse_repro.go`, `tmp/gorm_reuse_dryrun.go`, `tmp/inspect_org_save.go`). Application package tests pass when `tmp` is excluded.
+- A parallel Playwright chat run failed once because the Vite web server became unreachable after worker timeouts; the same chat spec passed serially with one worker.
+- The full Playwright suite exceeded the 120s tool limit before code changes, so final browser verification focused on the chat spec relevant to this task.
 
-- Cannot run full Go test suite (requires PostgreSQL 17 + Redis 7)
-- `WritePump` still has the `authenticated` check — could be removed in a future pass for full simplification
+## Dependencies and Environment
+
+No dependency or configuration changes were required.
+
+## Limitations
+
+The running `localhost:8080` backend served its already-built frontend assets during initial browser reproduction. The source changes were verified through unit tests, Vite production build, and Playwright against the frontend dev server.

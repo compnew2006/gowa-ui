@@ -153,6 +153,7 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 			"media_filename":   message.MediaFilename,
 			"status":           message.Status,
 			"wamid":            message.WhatsAppMessageID,
+			"whatsapp_account": account.Name,
 			"created_at":       message.CreatedAt,
 			"updated_at":       message.UpdatedAt,
 			"metadata":         message.Metadata,

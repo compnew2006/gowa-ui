@@ -1,11 +1,14 @@
 import { ref, type Ref } from "vue";
 import { useContactsStore } from "@/stores/contacts";
+import { chatsService } from "@/services/api";
+import { unwrapResponse } from "@/lib/api-utils";
 import { useTransfersStore } from "@/stores/transfers";
 import { useAuthStore } from "@/stores/auth";
 import { useNotesStore } from "@/stores/notes";
 import { clearMissingMediaPrefetch } from "@/lib/media_prefetch_cache";
 import { maybeAutoDownloadIncomingMedia } from "@/lib/incoming_media_autodownload";
 import { canUserAccessInstance } from "@/lib/instance-access";
+import type { MessagesListPayload } from "@/stores/contacts/helpers";
 import { toast } from "vue-sonner";
 import router from "@/router";
 
@@ -512,6 +515,7 @@ class WebSocketService {
       reply_to_message_id: payload.reply_to_message_id,
       reply_to_message: payload.reply_to_message,
       instance_id: payload.instance_id,
+      whatsapp_account: payload.whatsapp_account,
       metadata: payload.metadata,
       reactions: payload.reactions,
       created_at: payload.created_at,
@@ -586,12 +590,9 @@ class WebSocketService {
             : messagePreview;
         const contactId = payload.contact_id;
 
-        // Always play sound for eligible incoming notifications.
+        // Always surface eligible incoming notifications, including the active chat.
         playNotificationSound();
-        // Keep toast popups suppressed while actively viewing this chat.
-        if (!isViewingThisContact) {
-          showNotification(senderName, preview, contactId);
-        }
+        showNotification(senderName, preview, contactId);
       }
     }
 

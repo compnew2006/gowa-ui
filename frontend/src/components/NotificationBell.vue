@@ -40,9 +40,27 @@ const undismissedInstanceCount = computed(
   () => notifications.value.filter((item) => !item.is_dismissed).length,
 );
 const unreadConversations = computed(() => {
-  const unread = contactsStore.sortedContacts.filter(
-    (item) => (item.unread_count || 0) > 0,
-  );
+  const contactMap = new Map<string, Contact>();
+  for (const contact of [
+    ...contactsStore.contacts,
+    ...contactsStore.pendingChats,
+    ...contactsStore.assignedChats,
+    ...contactsStore.closedChats,
+  ]) {
+    contactMap.set(contact.id, contact);
+  }
+
+  const unread = Array.from(contactMap.values())
+    .filter((item) => (item.unread_count || 0) > 0)
+    .sort((a, b) => {
+      const aTime = a.last_message_at
+        ? new Date(a.last_message_at).getTime()
+        : 0;
+      const bTime = b.last_message_at
+        ? new Date(b.last_message_at).getTime()
+        : 0;
+      return bTime - aTime;
+    });
   const currentUserId = authStore.user?.id;
   const isAgent = authStore.userRole === "agent";
 
