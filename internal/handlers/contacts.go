@@ -302,7 +302,7 @@ type channelNameResolution struct {
 }
 
 type channelNameUpdate struct {
-	contactID  uuid.UUID
+	contactID   uuid.UUID
 	profileName string
 	metadata    models.JSONB
 }
@@ -754,7 +754,11 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		a.Log.Error("Failed to resolve restricted instance for contact list", "error", err, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list contacts", nil, "")
 	}
-	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	if shouldAllowSelfAssignedRestrictedInstanceListBypass(statusFilter, hasAssignedToFilter, assignedToUserID, userID) {
+		query = applyRestrictedInstanceVisibilityFilterWithAssignedBypass(query, restrictedInstanceIDs, userID)
+	} else {
+		query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	}
 
 	var explicitInstanceID *uuid.UUID
 	if instanceIDParam != "" {
@@ -1120,7 +1124,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 		a.Log.Error("Failed to resolve restricted instance for contact read", "error", restrictedErr, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load contact", nil, "")
 	}
-	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	query = applyRestrictedInstanceVisibilityFilterWithAssignedBypass(query, restrictedInstanceIDs, userID)
 
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")

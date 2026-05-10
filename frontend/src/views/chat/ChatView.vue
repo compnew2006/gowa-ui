@@ -30,7 +30,6 @@ import {
 import { useTagsStore } from "@/stores/tags";
 import { TagBadge } from "@/components/ui/tag-badge";
 import { getTagColorClass } from "@/lib/constants";
-import { canUserAccessInstance } from "@/lib/instance-access";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -733,10 +732,7 @@ const { focusedSidebarIndex } = useChatKeyboardNav({
 });
 
 const assignableUsers = computed(() => {
-  const instanceId = contactsStore.currentContact?.instance_id?.trim();
-  return usersStore.users
-    .filter((u) => u.is_active !== false)
-    .filter((u) => canUserAccessInstance(u, instanceId));
+  return usersStore.users.filter((u) => u.is_active !== false);
 });
 
 function getAssignedAgentName(contact: Contact): string {

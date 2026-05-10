@@ -79,3 +79,18 @@ func applyRestrictedInstanceVisibilityFilter(
 	}
 	return query.Where("1 = 0")
 }
+
+func applyRestrictedInstanceVisibilityFilterWithAssignedBypass(
+	query *gorm.DB,
+	restrictedInstanceIDs []uuid.UUID,
+	userID uuid.UUID,
+) *gorm.DB {
+	if query == nil || restrictedInstanceIDs == nil {
+		return query
+	}
+	assignedCondition := "assigned_user_id = ?"
+	if len(restrictedInstanceIDs) > 0 {
+		return query.Where("(instance_id IN ? OR "+assignedCondition+")", restrictedInstanceIDs, userID)
+	}
+	return query.Where(assignedCondition, userID)
+}

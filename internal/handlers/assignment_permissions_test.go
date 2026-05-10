@@ -91,7 +91,7 @@ func TestApp_AssignContact_RejectsWithoutAssignmentPermission(t *testing.T) {
 	testutil.AssertErrorResponse(t, req, fasthttp.StatusForbidden, "permission to assign contacts")
 }
 
-func TestApp_AssignContact_RejectsAssigneeWithoutInstanceAccess(t *testing.T) {
+func TestApp_AssignContact_AllowsAssigneeWithoutInstanceAccess(t *testing.T) {
 	t.Parallel()
 
 	app := newTestApp(t)
@@ -114,14 +114,15 @@ func TestApp_AssignContact_RejectsAssigneeWithoutInstanceAccess(t *testing.T) {
 
 	err := app.AssignContact(req)
 	require.NoError(t, err)
-	testutil.AssertErrorResponse(t, req, fasthttp.StatusForbidden, "does not have access")
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var refreshed models.Contact
 	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
-	assert.Nil(t, refreshed.AssignedUserID)
+	require.NotNil(t, refreshed.AssignedUserID)
+	assert.Equal(t, targetUser.ID, *refreshed.AssignedUserID)
 }
 
-func TestApp_AssignContact_RejectsAssigneeWithEmptyInstanceAllowlist(t *testing.T) {
+func TestApp_AssignContact_AllowsAssigneeWithEmptyInstanceAllowlist(t *testing.T) {
 	t.Parallel()
 
 	app := newTestApp(t)
@@ -143,11 +144,70 @@ func TestApp_AssignContact_RejectsAssigneeWithEmptyInstanceAllowlist(t *testing.
 
 	err := app.AssignContact(req)
 	require.NoError(t, err)
-	testutil.AssertErrorResponse(t, req, fasthttp.StatusForbidden, "does not have access")
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
 	var refreshed models.Contact
 	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
-	assert.Nil(t, refreshed.AssignedUserID)
+	require.NotNil(t, refreshed.AssignedUserID)
+	assert.Equal(t, targetUser.ID, *refreshed.AssignedUserID)
+}
+
+func TestApp_ListContacts_IncludesAssignedChatOutsideAllowedInstances(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	instance := createTestInstance(t, app, org.ID, "Assigned Outside Allowlist")
+	enableRestrictedInstanceVisibilityWithoutAllowedInstances(t, app, org.ID, user.ID)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, func(c *models.Contact) {
+		c.InstanceID = &instance.ID
+		c.AssignedUserID = &user.ID
+		c.Status = models.ChatStatusOpen
+	})
+
+	req := testutil.NewGETRequest(t)
+	req.RequestCtx.QueryArgs().Set("status", string(models.ChatStatusOpen))
+	req.RequestCtx.QueryArgs().Set("assigned_to", "me")
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListContacts(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Contacts []handlers.ContactResponse `json:"contacts"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	require.Len(t, resp.Data.Contacts, 1)
+	assert.Equal(t, contact.ID, resp.Data.Contacts[0].ID)
+}
+
+func TestApp_GetContact_AllowsAssignedChatOutsideAllowedInstances(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	instance := createTestInstance(t, app, org.ID, "Assigned Read Outside Allowlist")
+	enableRestrictedInstanceVisibilityWithoutAllowedInstances(t, app, org.ID, user.ID)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, func(c *models.Contact) {
+		c.InstanceID = &instance.ID
+		c.AssignedUserID = &user.ID
+		c.Status = models.ChatStatusOpen
+	})
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.GetContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 }
 
 func TestApp_ListAgentTransfers_IncludesInstanceID(t *testing.T) {

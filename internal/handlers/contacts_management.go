@@ -207,17 +207,6 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		return nil
 	}
 
-	if req.UserID != nil && *req.UserID != uuid.Nil {
-		allowed, err := a.canUserSeeContactInstance(orgID, *req.UserID, contact)
-		if err != nil {
-			a.Log.Error("Failed to validate assignee instance access", "error", err, "user_id", req.UserID, "contact_id", contact.ID)
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate assignee access", nil, "")
-		}
-		if !allowed {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Assignee does not have access to this WhatsApp account", nil, "")
-		}
-	}
-
 	// If assigning to a user, verify they are available in the same org.
 	if req.UserID != nil {
 		if _, err := findAssignableOrgUser(a.DB, *req.UserID, orgID); err != nil {

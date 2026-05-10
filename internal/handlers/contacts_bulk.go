@@ -17,8 +17,8 @@ type BulkContactIDsRequest struct {
 }
 
 type BulkAssignRequest struct {
-	ContactIDs []uuid.UUID  `json:"contact_ids"`
-	UserID     *uuid.UUID   `json:"user_id"`
+	ContactIDs []uuid.UUID `json:"contact_ids"`
+	UserID     *uuid.UUID  `json:"user_id"`
 }
 
 type BulkContactResult struct {
@@ -241,20 +241,6 @@ func (a *App) BulkAssignChats(r *fastglue.Request) error {
 		if restrictInstances && contact.InstanceID != nil && *contact.InstanceID != uuid.Nil {
 			if !containsRestrictedUUID(restrictedInstanceIDs, *contact.InstanceID) {
 				results = append(results, BulkContactResult{ContactID: contactID, Status: "failed", Error: "No access to this contact's instance"})
-				failedCount++
-				continue
-			}
-		}
-
-		if req.UserID != nil && *req.UserID != uuid.Nil {
-			allowed, err := a.canUserSeeContactInstance(orgID, *req.UserID, &contact)
-			if err != nil {
-				results = append(results, BulkContactResult{ContactID: contactID, Status: "failed", Error: "Failed to validate assignee access"})
-				failedCount++
-				continue
-			}
-			if !allowed {
-				results = append(results, BulkContactResult{ContactID: contactID, Status: "failed", Error: "Assignee does not have access to this WhatsApp account"})
 				failedCount++
 				continue
 			}
