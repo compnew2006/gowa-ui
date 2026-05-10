@@ -2,7 +2,10 @@ package whatsmeow
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/campaignstats"
@@ -15,6 +18,7 @@ import (
 
 // handleEvent processes incoming events from whatsmeow client.
 func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid.UUID) {
+	_ = cm.appendEventDebugLog(evt, instanceID)
 	switch v := evt.(type) {
 	case *events.Message:
 		if cm.handleAnyReaction(context.Background(), v, instanceID, orgID) {
@@ -403,4 +407,44 @@ func (cm *ConnectionManager) handleChatPresence(ctx context.Context, evt *events
 			State:     state,
 		},
 	})
+}
+
+var eventDebugLogMu sync.Mutex
+
+func (cm *ConnectionManager) appendEventDebugLog(evt interface{}, instanceID uuid.UUID) error {
+	eventDebugLogMu.Lock()
+	defer eventDebugLogMu.Unlock()
+
+	f, err := os.OpenFile("/tmp/whatsmeow_events.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	ts := time.Now().Format(time.RFC3339Nano)
+	evtType := fmt.Sprintf("%T", evt)
+	line := fmt.Sprintf("%s instance=%s type=%s", ts, instanceID, evtType)
+
+	switch v := evt.(type) {
+	case *events.Message:
+		info := v.Info
+		line += fmt.Sprintf(" chat=%s sender=%s isFromMe=%v isGroup=%v msgID=%s deviceSentMeta=%v pushName=%s",
+			info.Chat.String(), info.Sender.ToNonAD().String(), info.IsFromMe, info.IsGroup, info.ID, info.DeviceSentMeta != nil, info.PushName)
+	case *events.Receipt:
+		line += fmt.Sprintf(" chat=%s sender=%s type=%s ids=%v", v.Chat.String(), v.Sender.ToNonAD().String(), v.Type, len(v.MessageIDs))
+	case *events.Connected:
+		line += " CONNECTED"
+	case *events.Disconnected:
+		line += " DISCONNECTED"
+	case *events.StreamReplaced:
+		line += " STREAM_REPLACED"
+	case *events.TemporaryBan:
+		line += " TEMP_BAN"
+	case *events.LoggedOut:
+		line += " LOGGED_OUT"
+	}
+
+	line += "\n"
+	_, err = f.WriteString(line)
+	return err
 }
