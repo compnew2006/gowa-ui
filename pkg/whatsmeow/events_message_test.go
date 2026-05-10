@@ -2,13 +2,17 @@ package whatsmeow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
+	appwebsocket "github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -19,6 +23,36 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 )
+
+func whatsmeowTestClientSendChan(client *appwebsocket.Client) <-chan []byte {
+	field := reflect.ValueOf(client).Elem().FieldByName("send")
+	return *(*chan []byte)(unsafe.Pointer(field.UnsafeAddr()))
+}
+
+func waitForWhatsmeowTestHubClientCount(t *testing.T, hub *appwebsocket.Hub, expected int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if hub.GetClientCount() == expected {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for websocket hub client count %d, got %d", expected, hub.GetClientCount())
+}
+
+func waitForWhatsmeowTestWSMessage(t *testing.T, client *appwebsocket.Client) appwebsocket.WSMessage {
+	t.Helper()
+	select {
+	case raw := <-whatsmeowTestClientSendChan(client):
+		var msg appwebsocket.WSMessage
+		require.NoError(t, json.Unmarshal(raw, &msg))
+		return msg
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for websocket message")
+		return appwebsocket.WSMessage{}
+	}
+}
 
 func TestFindOrCreateContact_CreatesSeparateContactsPerInstance(t *testing.T) {
 	db := testutil.SetupTestDB(t)
@@ -552,6 +586,117 @@ func TestPersistParsedMessage_EnqueueFailureMarksMessageMetadata(t *testing.T) {
 	assert.Equal(t, org.ID, storedJob.OrganizationID)
 	assert.Equal(t, instance.ID, storedJob.InstanceID)
 	assert.Equal(t, "document", storedJob.MediaKind)
+}
+
+func TestHandleMessage_PersistsInboundEventWhenRuntimeClientUnavailable(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Runtime Missing Org",
+		Slug:      "runtime-missing-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Runtime Missing Instance",
+		PhoneNumber:    "201007181781",
+		JID:            "201007181781:90@s.whatsapp.net",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	contact := models.Contact{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		InstanceID:      &instance.ID,
+		PhoneNumber:     "966561853319",
+		ProfileName:     "Customer",
+		WhatsAppAccount: instance.PhoneNumber,
+		Metadata:        models.JSONB{},
+	}
+	require.NoError(t, db.Create(&contact).Error)
+	require.NoError(t, db.Exec(
+		"INSERT INTO whatsmeow_lid_map (lid, pn) VALUES (?, ?) ON CONFLICT (lid) DO UPDATE SET pn = excluded.pn",
+		"149641526026409",
+		contact.PhoneNumber,
+	).Error)
+
+	lidJID, err := types.ParseJID("149641526026409@lid")
+	require.NoError(t, err)
+	evt := &events.Message{
+		Info: types.MessageInfo{
+			MessageSource: types.MessageSource{
+				Chat:     lidJID,
+				Sender:   lidJID,
+				IsFromMe: false,
+				IsGroup:  false,
+			},
+			ID:        "A5-runtime-client-missing-1",
+			PushName:  "Customer",
+			Timestamp: time.Now().UTC(),
+		},
+		Message: &waE2E.Message{
+			Conversation: proto.String("reply from phone"),
+		},
+	}
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, nil, t.TempDir())
+	cm.handleMessage(context.Background(), evt, instance.ID, org.ID)
+
+	var saved models.Message
+	require.NoError(t, db.First(&saved, "whats_app_message_id = ?", evt.Info.ID).Error)
+	assert.Equal(t, contact.ID, saved.ContactID)
+	assert.Equal(t, models.DirectionIncoming, saved.Direction)
+	assert.Equal(t, models.MessageTypeText, saved.MessageType)
+	assert.Equal(t, "reply from phone", saved.Content)
+	assert.Equal(t, instance.PhoneNumber, saved.WhatsAppAccount)
+}
+
+func TestPersistParsedMessage_BroadcastIncludesWhatsAppAccount(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Inbound Broadcast Org",
+		Slug:      "inbound-broadcast-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Inbound Broadcast Instance",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	hub := appwebsocket.NewHub(logf.New(logf.Opts{}))
+	go hub.Run()
+	client := appwebsocket.NewClient(hub, nil, uuid.New(), org.ID)
+	hub.Register(client)
+	waitForWhatsmeowTestHubClientCount(t, hub, 1)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{}, hub, t.TempDir())
+	evt := makeInboundDocumentEventForPersistTest(t, "wamid.inbound.broadcast.account.1")
+	message, err := cm.persistParsedMessage(context.Background(), nil, evt, instance.ID, org.ID, persistMessageOptions{
+		Broadcast: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, message)
+
+	wsMsg := waitForWhatsmeowTestWSMessage(t, client)
+	require.Equal(t, appwebsocket.TypeNewMessage, wsMsg.Type)
+	payload, ok := wsMsg.Payload.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, message.WhatsAppAccount, payload["whatsapp_account"])
+	assert.Equal(t, "whatsmeow", payload["whatsapp_account"])
 }
 
 func makeInboundDocumentEventForPersistTest(t *testing.T, waMessageID string) *events.Message {

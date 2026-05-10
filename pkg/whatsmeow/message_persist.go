@@ -122,6 +122,30 @@ func directConversationID(chatJID types.JID, peerIdentity string) string {
 	return peerIdentity + "@s.whatsapp.net"
 }
 
+func (cm *ConnectionManager) resolveInstanceWhatsAppAccount(ctx context.Context, instanceID uuid.UUID) string {
+	if cm == nil || cm.db == nil || instanceID == uuid.Nil {
+		return ""
+	}
+
+	var instance models.WhatsAppInstance
+	if err := cm.db.WithContext(ctx).
+		Select("phone_number", "jid").
+		Where("id = ?", instanceID).
+		First(&instance).Error; err != nil {
+		return ""
+	}
+
+	if account := strings.TrimSpace(instance.PhoneNumber); account != "" {
+		return account
+	}
+	if jid := strings.TrimSpace(instance.JID); jid != "" {
+		if parsed, err := types.ParseJID(jid); err == nil && parsed.User != "" {
+			return parsed.User
+		}
+	}
+	return ""
+}
+
 func (cm *ConnectionManager) persistParsedMessage(
 	ctx context.Context,
 	client *waClient.Client,
@@ -263,6 +287,9 @@ func (cm *ConnectionManager) persistParsedMessage(
 	if client != nil && client.Store != nil && client.Store.ID != nil {
 		myJID = client.Store.ID.String()
 		myAccount = client.Store.ID.User
+	}
+	if myAccount == "" {
+		myAccount = cm.resolveInstanceWhatsAppAccount(ctx, instanceID)
 	}
 	if myAccount == "" {
 		myAccount = "whatsmeow"
@@ -413,7 +440,10 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 
 	result := cm.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "whats_app_message_id"}},
+		Columns: []clause.Column{{Name: "whats_app_message_id"}},
+		TargetWhere: clause.Where{Exprs: []clause.Expression{
+			clause.Neq{Column: clause.Column{Name: "whats_app_message_id"}, Value: ""},
+		}},
 		DoNothing: true,
 	}).Create(&message)
 	if result.Error != nil {
@@ -657,22 +687,23 @@ func (cm *ConnectionManager) broadcastPersistedMessage(
 	}
 
 	wsPayload := map[string]any{
-		"id":              message.ID,
-		"contact_id":      message.ContactID.String(),
-		"instance_id":     message.InstanceID.String(),
-		"conversation_id": message.ConversationID,
-		"is_group_chat":   isGroup,
-		"is_channel_chat": isChannel,
-		"direction":       message.Direction,
-		"message_type":    message.MessageType,
-		"content":         map[string]string{"body": message.Content},
-		"media_url":       message.MediaURL,
-		"media_mime_type": message.MediaMimeType,
-		"media_filename":  message.MediaFilename,
-		"status":          message.Status,
-		"created_at":      message.CreatedAt,
-		"updated_at":      message.UpdatedAt,
-		"metadata":        message.Metadata,
+		"id":               message.ID,
+		"contact_id":       message.ContactID.String(),
+		"instance_id":      message.InstanceID.String(),
+		"conversation_id":  message.ConversationID,
+		"is_group_chat":    isGroup,
+		"is_channel_chat":  isChannel,
+		"direction":        message.Direction,
+		"message_type":     message.MessageType,
+		"content":          map[string]string{"body": message.Content},
+		"media_url":        message.MediaURL,
+		"media_mime_type":  message.MediaMimeType,
+		"media_filename":   message.MediaFilename,
+		"status":           message.Status,
+		"whatsapp_account": message.WhatsAppAccount,
+		"created_at":       message.CreatedAt,
+		"updated_at":       message.UpdatedAt,
+		"metadata":         message.Metadata,
 	}
 	if isGroup {
 		wsPayload["sender_phone"] = senderPhone

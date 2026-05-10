@@ -69,9 +69,12 @@ func (cm *ConnectionManager) handleMessage(ctx context.Context, evt *events.Mess
 
 	client := cm.GetClient(instanceID)
 	if client == nil || client.Store == nil {
-		cm.logger.Error("Client not found or bot not logged in", "instance_id", instanceID)
-		cm.MarkError(instanceID)
-		return
+		cm.logger.Warn(
+			"Runtime client unavailable while handling WhatsApp message; persisting from event payload",
+			"instance_id", instanceID,
+			"wa_message_id", evt.Info.ID,
+			"chat", evt.Info.Chat.String(),
+		)
 	}
 	normalizedEvt := cm.normalizeIncomingEventMessage(ctx, client, evt, instanceID)
 	if normalizedEvt == nil {
