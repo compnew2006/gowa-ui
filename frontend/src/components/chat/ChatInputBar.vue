@@ -82,6 +82,19 @@ const emit = defineEmits<{
 
 const messageInput = defineModel<string>("messageInput", { required: true });
 const messageInputRef = ref<HTMLTextAreaElement | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+function openFilePicker() {
+  fileInputRef.value?.click();
+}
+
+function onFileSelected(event: Event) {
+  emit("handle-file-select", event);
+}
+
+function onEmojiSelect(emoji: any) {
+  emit("insert-emoji", emoji.i || emoji);
+}
 
 function autoResizeTextarea() {
   const textarea = messageInputRef.value;
@@ -218,18 +231,29 @@ defineExpose({ messageInputRef, autoResizeTextarea });
       <Tooltip>
         <TooltipTrigger as-child>
           <span>
-            <Popover>
-              <PopoverTrigger as-child>
-                <button
-                  type="button"
-                  :disabled="isChatSendRestricted"
-                  :aria-label="$t('chat.emojiPicker')"
-                  class="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent"
-                >
-                  <Smile class="h-[18px] w-[18px] text-muted-foreground" />
-                </button>
-              </PopoverTrigger>
-            </Popover>
+      <Popover>
+        <PopoverTrigger as-child>
+          <button
+            type="button"
+            :disabled="isChatSendRestricted"
+            :aria-label="$t('chat.emojiPicker')"
+            class="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent"
+          >
+            <Smile class="h-[18px] w-[18px] text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" side="top" class="w-auto p-0 border-0 shadow-none">
+          <EmojiPicker
+            :native="true"
+            :hide-search="false"
+            :hide-group-icons="false"
+            :hide-group-names="false"
+            :static-texts="{ placeholder: 'Search...' }"
+            :theme="isDark ? 'dark' : 'light'"
+            @select="onEmojiSelect"
+          />
+        </PopoverContent>
+      </Popover>
           </span>
         </TooltipTrigger>
         <TooltipContent>{{ $t("chat.emojiPicker") }}</TooltipContent>
@@ -250,6 +274,14 @@ defineExpose({ messageInputRef, autoResizeTextarea });
         </TooltipTrigger>
         <TooltipContent>{{ $t("chat.cannedResponses") }}</TooltipContent>
       </Tooltip>
+      <input
+        ref="fileInputRef"
+        type="file"
+        multiple
+        accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp,audio/aac,audio/amr,audio/mp3,audio/mp4,audio/ogg,.mp3,.m4a,.ogg,.aac,.amr,.mp4,.3gp,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
+        class="hidden"
+        @change="onFileSelected"
+      />
       <Tooltip>
         <TooltipTrigger as-child>
           <button
@@ -257,7 +289,7 @@ defineExpose({ messageInputRef, autoResizeTextarea });
             :disabled="isChatSendRestricted"
             :aria-label="$t('chat.attachFile')"
             class="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-accent"
-            @click="emit('open-file-picker')"
+            @click="openFilePicker"
           >
             <Paperclip class="h-[18px] w-[18px] text-muted-foreground" />
           </button>

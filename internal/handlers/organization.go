@@ -844,14 +844,14 @@ func (a *App) AddOrganizationMember(r *fastglue.Request) error {
 	if req.RoleID != nil {
 		// Validate role exists and belongs to org
 		var role models.CustomRole
-		if err := requestDB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&role).Error; err != nil {
+		if err := a.DB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&role).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
 		}
 		roleID = req.RoleID
 	} else {
 		// Use org's default role
 		var defaultRole models.CustomRole
-		if err := requestDB.Where("organization_id = ? AND is_default = ?", orgID, true).First(&defaultRole).Error; err == nil {
+		if err := a.DB.Session(&gorm.Session{}).Where("organization_id = ? AND is_default = ?", orgID, true).First(&defaultRole).Error; err == nil {
 			roleID = &defaultRole.ID
 		}
 	}
@@ -942,7 +942,7 @@ func (a *App) UpdateOrganizationMemberRole(r *fastglue.Request) error {
 
 	// Validate role exists and belongs to org
 	var role models.CustomRole
-	if err := requestDB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&role).Error; err != nil {
+	if err := a.DB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&role).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
 	}
 

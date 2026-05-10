@@ -1250,7 +1250,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	if limitChatVisibilityToAgentScope {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
-	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	query = applyRestrictedInstanceVisibilityFilterWithAssignedBypass(query, restrictedInstanceIDs, userID)
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
@@ -1433,7 +1433,7 @@ func (a *App) SearchMessages(r *fastglue.Request) error {
 	if limitChatVisibilityToAgentScope {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
-	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	query = applyRestrictedInstanceVisibilityFilterWithAssignedBypass(query, restrictedInstanceIDs, userID)
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}

@@ -558,14 +558,14 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 	if req.RoleID != nil {
 		// Validate role exists and belongs to org
 		var role models.CustomRole
-		if err := requestDB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&role).Error; err != nil {
+		if err := a.DB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&role).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
 		}
 		roleID = req.RoleID
 	} else {
 		// No role specified, use default role
 		var defaultRole models.CustomRole
-		if err := requestDB.Where("organization_id = ? AND is_default = ?", orgID, true).First(&defaultRole).Error; err == nil {
+		if err := a.DB.Session(&gorm.Session{}).Where("organization_id = ? AND is_default = ?", orgID, true).First(&defaultRole).Error; err == nil {
 			roleID = &defaultRole.ID
 		}
 	}
@@ -738,7 +738,7 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		}
 		// Validate role exists and belongs to org
 		var newRole models.CustomRole
-		if err := requestDB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
+		if err := a.DB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
 		}
 		// Update role in user_organizations only
@@ -789,7 +789,8 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 	if req.RoleID != nil {
 		// Validate role exists and belongs to org
 		var newRole models.CustomRole
-		if err := requestDB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
+		roleDB := a.DB.Session(&gorm.Session{})
+		if err := roleDB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
 		}
 		// Prevent self-demotion from admin

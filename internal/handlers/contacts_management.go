@@ -134,7 +134,7 @@ func (a *App) buildLifecycleContactQuery(
 		return nil, err
 	}
 
-	return applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs), nil
+	return applyRestrictedInstanceVisibilityFilterWithAssignedBypass(query, restrictedInstanceIDs, userID), nil
 }
 
 func (a *App) canEmitChatAssignmentSystemMessage(userID, orgID uuid.UUID) bool {

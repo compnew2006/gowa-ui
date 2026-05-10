@@ -713,7 +713,7 @@ func (a *App) getRestrictedInstancesForUser(orgID, userID uuid.UUID) ([]uuid.UUI
 		return allowedInstanceIDs, nil
 	}
 
-	if cfg.Enabled || hasSendRestrictionsSettings(user.Settings) {
+	if cfg.Enabled {
 		return []uuid.UUID{}, nil
 	}
 

@@ -57,7 +57,7 @@ func (a *App) loadContactForCollaboration(r *fastglue.Request, orgID, userID, co
 	if err != nil {
 		return nil, err
 	}
-	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	query = applyRestrictedInstanceVisibilityFilterWithAssignedBypass(query, restrictedInstanceIDs, userID)
 
 	if err := query.First(&contact).Error; err != nil {
 		return nil, err

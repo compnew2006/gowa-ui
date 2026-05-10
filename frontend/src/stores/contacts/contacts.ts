@@ -16,7 +16,7 @@ import {
   missingContactFetchCooldownMs,
 } from "./helpers";
 import { useChatFiltersStore } from "./chat-filters";
-import { getSendRestrictionsSettings } from "@/lib/instance-access";
+import { getSendRestrictionsEnabled } from "@/lib/instance-access";
 
 export const useContactsStore = defineStore("contacts", () => {
   const authStore = useAuthStore();
@@ -46,7 +46,7 @@ export const useContactsStore = defineStore("contacts", () => {
     extractAllowedInstanceIDsFromUserSettings(authStore.user?.settings),
   );
   const sendRestrictionsConfigured = computed(() =>
-    getSendRestrictionsSettings(authStore.user?.settings) !== null,
+    getSendRestrictionsEnabled(authStore.user?.settings),
   );
   const effectiveInstanceFilterID = computed(() => {
     const selected = filtersStore.selectedInstanceId.trim();
