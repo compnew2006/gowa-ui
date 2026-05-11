@@ -142,56 +142,67 @@ const quickCapabilities = computed(() => [
 </script>
 
 <template>
-  <section class="border-t border-border/50 bg-muted/10 py-20 sm:py-28">
-    <div class="mx-auto max-w-6xl px-4 sm:px-6">
-      <!-- Section Header -->
+  <section class="border-t border-border/40 py-24 sm:py-32">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="mx-auto max-w-2xl text-center">
-        <Badge variant="outline" class="mb-4 gap-1.5 border-primary/25 px-3 py-1 text-xs">
-          <MessageSquare class="h-3 w-3 text-primary" />
+        <Badge
+          variant="outline"
+          class="mb-5 gap-2 rounded-full border-primary/20 bg-primary/5 px-4 py-1.5 text-xs"
+        >
+          <MessageSquare class="h-3.5 w-3.5 text-primary" aria-hidden="true" />
           {{ $t("landingChat.badge") }}
         </Badge>
-        <h2 class="text-2xl font-bold tracking-tight sm:text-3xl">
+        <h2 class="text-3xl font-extrabold tracking-tight sm:text-4xl">
           {{ $t("landingChat.title") }}
         </h2>
-        <p class="mt-3 text-sm leading-7 text-muted-foreground sm:text-base">
+        <p class="mt-4 text-base leading-7 text-muted-foreground sm:text-lg">
           {{ $t("landingChat.subtitle") }}
         </p>
       </div>
 
-      <!-- Feature Cards -->
-      <div class="mt-12 grid gap-5 sm:mt-16 md:grid-cols-2">
+      <div class="mt-16 grid gap-5 md:grid-cols-2">
         <div
           v-for="feature in chatFeatures"
           :key="feature.title"
-          class="group relative rounded-[calc(var(--radius)+0.5rem)] border border-border bg-card p-6 transition-all duration-200 hover:border-primary/20 hover:shadow-md"
+          class="group relative rounded-xl border border-border bg-card p-6 transition-[border-color,box-shadow] duration-300 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5"
         >
           <div class="flex items-start gap-4">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-              <component :is="feature.icon" class="h-5 w-5 text-primary" />
+            <div
+              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10"
+            >
+              <component
+                :is="feature.icon"
+                class="h-5 w-5 text-primary"
+                aria-hidden="true"
+              />
             </div>
             <div class="min-w-0 flex-1">
-              <h3 class="text-sm font-semibold text-foreground">{{ feature.title }}</h3>
-              <p class="mt-1 text-sm leading-6 text-muted-foreground">{{ feature.description }}</p>
-              <ul class="mt-3 space-y-1.5">
+              <h3 class="text-base font-semibold text-foreground">{{ feature.title }}</h3>
+              <p class="mt-1.5 text-sm leading-6 text-muted-foreground">
+                {{ feature.description }}
+              </p>
+              <ul class="mt-3.5 space-y-2">
                 <li
                   v-for="detail in feature.details"
                   :key="detail"
-                  class="flex items-start gap-2 text-xs leading-5 text-muted-foreground"
+                  class="flex items-start gap-2.5 text-sm leading-5 text-muted-foreground"
                 >
-                  <CheckCheck class="mt-0.5 h-3 w-3 shrink-0 text-primary/70" />
+                  <CheckCheck
+                    class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/60"
+                    aria-hidden="true"
+                  />
                   <span>{{ detail }}</span>
                 </li>
               </ul>
             </div>
           </div>
           <div
-            class="absolute inset-x-0 bottom-0 h-px mx-4 bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+            class="absolute inset-x-0 bottom-0 h-0.5 rounded-b-xl bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
           />
         </div>
       </div>
 
-      <!-- Quick Capabilities -->
-      <div class="mt-16">
+      <div class="mt-20">
         <h3 class="text-center text-lg font-semibold text-foreground">
           {{ $t("landingChat.capabilitiesTitle") }}
         </h3>
@@ -199,15 +210,15 @@ const quickCapabilities = computed(() => [
           {{ $t("landingChat.capabilitiesSubtitle") }}
         </p>
         <div
-          class="mt-8 grid grid-cols-2 gap-2.5 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-8"
+          class="mt-8 flex flex-wrap items-center justify-center gap-3"
         >
           <div
             v-for="cap in quickCapabilities"
             :key="cap.label"
-            class="flex flex-col items-center gap-2 rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card p-3 text-center transition-colors hover:border-primary/20 hover:bg-accent/50"
+            class="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm transition-[border-color,background-color] duration-200 hover:border-primary/20 hover:bg-accent/50"
           >
-            <component :is="cap.icon" class="h-4 w-4 text-primary/80" />
-            <span class="text-[11px] font-medium leading-tight text-foreground">{{ cap.label }}</span>
+            <component :is="cap.icon" class="h-4 w-4 text-primary/70" aria-hidden="true" />
+            <span class="font-medium text-foreground">{{ cap.label }}</span>
           </div>
         </div>
       </div>

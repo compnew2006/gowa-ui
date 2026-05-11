@@ -41,12 +41,10 @@ import {
   Heart,
 } from "lucide-vue-next";
 
-const { t, locale } = useI18n();
+const { t } = useI18n();
 const router = useRouter();
 const mobileMenuOpen = ref(false);
 const scrolled = ref(false);
-
-const isRTL = computed(() => locale.value === "ar");
 
 const features = computed(() => [
   {

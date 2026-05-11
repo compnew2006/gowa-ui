@@ -65,40 +65,31 @@ const categories = computed(() => [
 </script>
 
 <template>
-  <section class="border-t border-border/50 bg-muted/20 py-20 sm:py-28">
-    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+  <section class="border-t border-border/40 bg-muted/30 py-24 sm:py-32">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div class="mx-auto max-w-2xl text-center">
-        <Badge variant="outline" class="mb-4 gap-1.5 border-sky-500/25 bg-sky-500/10 px-3 py-1 text-xs text-sky-600">
-          <Code2 class="h-3 w-3" />
+        <Badge variant="outline" class="mb-5 gap-2 rounded-full border-sky-500/20 bg-sky-500/5 px-4 py-1.5 text-xs text-sky-600">
+          <Code2 class="h-3.5 w-3.5" aria-hidden="true" />
           {{ $t("landingTech.badge") }}
         </Badge>
-        <h2 class="text-2xl font-bold tracking-tight sm:text-3xl">
-          {{ $t("landingTech.title") }}
-        </h2>
-        <p class="mt-3 text-sm leading-7 text-muted-foreground sm:text-base">
-          {{ $t("landingTech.subtitle") }}
-        </p>
+        <h2 class="text-3xl font-extrabold tracking-tight sm:text-4xl">{{ $t("landingTech.title") }}</h2>
+        <p class="mt-4 text-base leading-7 text-muted-foreground sm:text-lg">{{ $t("landingTech.subtitle") }}</p>
       </div>
-
-      <div class="mt-12 grid gap-5 sm:mt-16 md:grid-cols-2 lg:grid-cols-3">
+      <div class="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <div
           v-for="category in categories"
           :key="category.title"
-          class="rounded-[calc(var(--radius)+0.5rem)] border border-border bg-card p-5"
+          class="rounded-xl border border-border bg-card p-6"
         >
-          <h3 class="mb-4 text-sm font-semibold text-foreground">{{ category.title }}</h3>
-          <div class="space-y-3">
-            <div
-              v-for="item in category.items"
-              :key="item.name"
-              class="flex items-start gap-3"
-            >
-              <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-xs font-bold text-sky-600 dark:text-sky-400">
+          <h3 class="mb-5 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{{ category.title }}</h3>
+          <div class="space-y-4">
+            <div v-for="item in category.items" :key="item.name" class="flex items-start gap-3">
+              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-xs font-bold text-sky-600 dark:text-sky-400">
                 {{ item.name.substring(0, 2).toUpperCase() }}
               </div>
               <div class="min-w-0 flex-1">
                 <div class="flex items-baseline gap-2">
-                  <span class="text-sm font-medium text-foreground">{{ item.name }}</span>
+                  <span class="text-sm font-semibold text-foreground">{{ item.name }}</span>
                   <span v-if="item.desc" class="text-xs text-muted-foreground">{{ item.desc }}</span>
                 </div>
                 <p class="mt-0.5 text-xs leading-5 text-muted-foreground">{{ item.detail }}</p>
