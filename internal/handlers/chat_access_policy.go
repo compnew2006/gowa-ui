@@ -94,3 +94,20 @@ func applyRestrictedInstanceVisibilityFilterWithAssignedBypass(
 	}
 	return query.Where(assignedCondition, userID)
 }
+
+// shouldRedactInstanceInfoForAgent determines whether instance details (instance_id,
+// whatsapp_account) should be hidden from an agent user. Instance info is redacted
+// when the chat is assigned to another user and the agent is neither the assignee
+// nor a collaborator.
+func shouldRedactInstanceInfoForAgent(contact models.Contact, userID uuid.UUID, isCollaborator bool) bool {
+	if contact.AssignedUserID == nil {
+		return false
+	}
+	if *contact.AssignedUserID == userID {
+		return false
+	}
+	if isCollaborator {
+		return false
+	}
+	return true
+}

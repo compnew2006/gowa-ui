@@ -745,7 +745,8 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	}
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
-	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+	agentScope := a.shouldRestrictChatVisibilityToAgentScope(userID, orgID)
+	if agentScope {
 		query = applyAgentVisibleChatListFilter(query, userID)
 	}
 
@@ -1086,6 +1087,12 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			CreatedAt:          c.CreatedAt,
 			UpdatedAt:          c.UpdatedAt,
 		}
+
+		// Redact instance details for agent users on chats assigned to other agents.
+		if agentScope && shouldRedactInstanceInfoForAgent(c, userID, isCollaborator) {
+			response[i].InstanceID = nil
+			response[i].WhatsAppAccount = ""
+		}
 	}
 
 	return r.SendEnvelope(map[string]any{
@@ -1116,7 +1123,8 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	query := ctxDB.Preload("ClosedByUser").Preload("AssignedUser").Where("id = ? AND organization_id = ?", contactID, orgID)
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
-	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
+	agentScope := a.shouldRestrictChatVisibilityToAgentScope(userID, orgID)
+	if agentScope {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
 	restrictedInstanceIDs, restrictedErr := a.getRestrictedInstancesForUser(orgID, userID)
@@ -1214,6 +1222,12 @@ func (a *App) GetContact(r *fastglue.Request) error {
 		ServiceWindowOpen:  serviceWindowOpen,
 		CreatedAt:          contact.CreatedAt,
 		UpdatedAt:          contact.UpdatedAt,
+	}
+
+	// Redact instance details for agent users on chats assigned to other agents.
+	if agentScope && shouldRedactInstanceInfoForAgent(contact, userID, isCollaborator) {
+		response.InstanceID = nil
+		response.WhatsAppAccount = ""
 	}
 
 	return r.SendEnvelope(response)

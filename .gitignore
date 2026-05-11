@@ -91,7 +91,10 @@ test-results/
 .claude/settings.local.json
 .claude/*.local.json
 .agent/
+.claude/
 .agents/
+.agents/
+.claude-flow/
 .kilocode/
 .kilo/
 # Code health tool artifacts
