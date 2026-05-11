@@ -1,413 +1,395 @@
 <div align="center">
 
+<img src="https://placehold.co/120x120/25D366/white?text=W&font=montserrat" alt="Whatomate Logo" width="90" height="90" />
+
 # Whatomate
 
-**Comprehensive WhatsApp Business Messaging Platform**
+### WhatsApp Business Messaging Platform
 
-Chat with customers, automate responses with AI chatbots, run campaigns, and gain insights — all in one place.
+**Chat · Automate · Campaign · Analyze — All in One Place**
 
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go)](https://go.dev/)
-[![Vue](https://img.shields.io/badge/Vue-3.4-4FC08D?style=flat-square&logo=vue.js)](https://vuejs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis)](https://redis.io/)
-[![License](https://img.shields.io/badge/License-Proprietary-blue?style=flat-square)]()
+<br/>
 
-[Getting Started](#getting-started) · [Features](#features) · [Deep Dives](#deep-dive) · [Tech Stack](#tech-stack) · [Development](#development)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/)
+[![Vue](https://img.shields.io/badge/Vue-3.4-4FC08D?style=flat-square&logo=vue.js&logoColor=white)](https://vuejs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/License-Proprietary-6B7280?style=flat-square)](#license)
+[![Uptime](https://img.shields.io/badge/Uptime_SLA-99.9%25-22C55E?style=flat-square)]()
+
+<br/>
+
+[**Quick Start**](#-quick-start) · [**Features**](#-features) · [**Architecture**](#-architecture) · [**Tech Stack**](#-tech-stack) · [**Development**](#-development) · [**Deployment**](#-deployment)
 
 </div>
 
 ---
 
-## Trust & Compliance
+## Overview
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| **AES-256 Encrypted** | **Open Architecture** | **GDPR Ready** | **Enterprise Grade** |
+Whatomate is a production-ready, multi-tenant WhatsApp Business platform built for teams that communicate with customers at scale. It combines a real-time live chat inbox, an AI-powered chatbot engine, bulk campaign tools, and a customizable analytics dashboard — all delivered from a single Go binary with an embedded Vue 3 SPA.
 
----
+<br/>
 
-## Stats
+<div align="center">
 
-| Metric | Value |
-|--------|-------|
-| Messages delivered | 10M+ |
-| Uptime SLA | 99.9% |
-| Countries supported | 50+ |
-| Customer support | 24/7 |
+| 10M+ Messages Delivered | 99.9% Uptime SLA | 50+ Countries | AES-256 Encrypted |
+|:-:|:-:|:-:|:-:|
+| Enterprise throughput | Battle-tested reliability | Global reach | Security-first design |
+
+</div>
 
 ---
 
-## Features
+## ✨ Features
 
-> A complete suite of tools designed for teams that communicate with customers at scale through WhatsApp.
+<details open>
+<summary><strong>🗨️ Live Chat</strong></summary>
 
-### 01 · Live Chat
-Real-time messaging with customers. Assign conversations, add internal notes, and collaborate across teams.
+<br/>
 
-### 02 · AI Chatbot
-Build intelligent chatbots with keyword matching, flow builders, and AI-powered contexts for automated responses.
+Real-time WebSocket-powered inbox with full conversation lifecycle management and team collaboration.
 
-### 03 · Custom Dashboard
-Create personalized dashboards with draggable widgets, charts, and real-time analytics for your KPIs.
+| Capability | Details |
+|---|---|
+| **Real-Time Messaging** | Instant delivery, read receipts, typing indicators, auto-reconnect with heartbeat |
+| **Rich Media Support** | Images, videos, audio, documents — drag-and-drop upload with full-screen viewer |
+| **Smart Contact Sidebar** | Multi-account toggle, real-time search, status filters, resizable compact/wide views |
+| **Chat Lifecycle** | Assign, transfer, claim, close, reopen — with bulk operations and auto-reset schedules |
+| **Smart Messaging Tools** | Canned responses with media, emoji picker, quick reactions, WhatsApp Flows, templates |
+| **Contact Info Panel** | Color-coded tags, collaborators, conversation notes, session data, internal annotations |
+| **WhatsApp Status Stories** | View, reply, and compose WhatsApp Status updates from within the chat interface |
+| **CSAT Ratings** | Automated 1–10 satisfaction surveys on chat close with multi-language templates |
 
-### 04 · Campaigns
-Send bulk WhatsApp campaigns with templates. Track delivery, reads, and responses in real time.
+</details>
 
-### 05 · WhatsApp Flows
-Design interactive WhatsApp flows with rich UI components for surveys, appointments, and more.
+<details>
+<summary><strong>📢 Campaigns</strong></summary>
 
-### 06 · Agent Analytics
-Monitor agent performance, response times, conversation volumes, and customer satisfaction metrics.
+<br/>
 
-### 07 · Team Management
-Organize agents into teams, assign conversations automatically, and manage permissions with fine-grained RBAC.
+Send bulk WhatsApp messages with template support, recipient management, scheduling, and live progress tracking.
 
-### 08 · Enterprise Security
-AES-256 encryption, JWT + API key authentication, SSO support, and comprehensive audit logging.
+| Capability | Details |
+|---|---|
+| **Campaign Creation** | Approved WhatsApp templates with header media; supports Meta Cloud API and whatsmeow |
+| **Recipient Management** | CSV import with auto-detection; up to 10,000 recipients with per-recipient parameters |
+| **Full Lifecycle Control** | Start, pause, cancel, retry — resume without re-sending already delivered messages |
+| **Real-Time Tracking** | WebSocket live counters: sent, delivered, read, failed — per recipient |
+| **Scheduled Sending** | Future-date scheduling with automatic background scheduler activation |
+| **Safety Guard Rails** | Inbound-only mode, draft-only policy, instance validation, send-block detection |
+| **Rate Limiting** | Redis Lua distributed throttling; randomized 20–45 s delays for compliance |
+| **Error Recovery** | Per-recipient retry, automatic campaign completion, DLQ-based resilience |
 
----
+</details>
 
-## Deep Dive
+<details>
+<summary><strong>🤖 Chatbot & Automation</strong></summary>
 
-### Chat
+<br/>
 
-A powerful real-time messaging interface with multi-provider support, team collaboration, and enterprise-grade chat management.
+Build intelligent auto-responders with a visual flow builder, LLM integration, and seamless human handoff.
 
-| Feature | Description |
-|---------|-------------|
-| **Real-Time Messaging** | WebSocket-powered live messaging with instant delivery, read receipts, and typing indicators. Live WebSocket connection with auto-reconnect and heartbeat. Message status tracking: sent, delivered, read, failed. Typing presence indicators for both agents and customers. |
-| **Rich Media Support** | Send and receive images, videos, audio, and documents with in-chat preview and viewer. Image, video, audio, and document upload with drag-and-drop. Full-screen media viewer with zoom and download. Configurable media retention policies. |
-| **Smart Contact Sidebar** | Unified sidebar with multi-account toggle, search, status filters, and tag-based filtering. Multi-account / multi-instance toggle. Real-time search across contacts and messages. Status filters with unread count badges. Resizable sidebar with compact and wide view modes. |
-| **Chat Assignment & Lifecycle** | Full chat lifecycle management with assignment, transfer, claim, close, and reopen workflows. Assign chats to agents or teams. Transfer chats between agents. Bulk close, assign, and reopen operations. Automatic chat assignment reset on configurable schedules. |
-| **Smart Messaging Tools** | Canned responses, emoji picker, quick reactions, and AI-powered chatbot integration. Canned responses with media attachments. Emoji picker with custom skin tone. Quick reactions on messages. Message templates and WhatsApp Flows. |
-| **Contact Info Panel** | Rich contact details with tags, collaborators, metadata, session data, and conversation notes. Tag management with color-coded labels. Collaborator panel for multi-agent visibility. Conversation notes for internal team communication. Session data panel showing chatbot flow context. |
-| **WhatsApp Status Stories** | View, reply to, and manage WhatsApp status stories from within the chat interface. Compose and send WhatsApp Status updates. View incoming contact statuses with media viewer. Reply to status messages directly. |
-| **Chat Close Ratings** | Automated customer satisfaction surveys with 1–10 rating scales on chat close. Rating request sent automatically when agent closes a chat. Multi-language rating templates. Automated follow-up reminders. Per-agent CSAT score analytics. |
+| Capability | Details |
+|---|---|
+| **Visual Flow Builder** | Drag-and-drop multi-step flows: text, buttons, input validation, API fetch, WhatsApp Flows |
+| **AI-Powered Responses** | OpenAI, Anthropic Claude, and Google Gemini — configurable temperature, system prompt, history |
+| **Keyword Auto-Responses** | Exact, contains, starts_with, regex matching with time-based and tag-based conditions |
+| **Agent Transfer Queue** | Chatbot-to-human handoff with team-based queue pickup and real-time WebSocket notifications |
+| **SLA Tracking** | First response, resolution, and escalation timers with automatic breach detection |
+| **Business Hours** | Per-day schedules with timezone support and custom out-of-hours messages |
+| **Inactivity Management** | Configurable auto-remind and auto-close for inactive conversations |
+| **Session Inspector** | Admin tool for debugging active chatbot sessions in real time |
 
-**Chat capabilities:** Reply · Reactions · Revoke · Emoji · Canned Responses · Print · Tags · Notes · Search · RTL Support · Custom Actions · Access Control · Auto-Reset · Templates · Flows · Bulk Operations
+</details>
 
----
+<details>
+<summary><strong>📊 Analytics</strong></summary>
 
-### Campaigns
+<br/>
 
-Send bulk WhatsApp messages with template support, recipient management, scheduling, and real-time progress tracking.
+Customizable dashboards, agent performance metrics, CSAT analytics, and real-time operational insights.
 
-| Feature | Description |
-|---------|-------------|
-| **Campaign Creation** | Create campaigns using approved WhatsApp templates with header media and configurable settings. Select from approved WhatsApp templates with rich text body editor. Attach header media for visual campaign messages. Dual provider: Meta Cloud API templates or whatsmeow body messages. |
-| **Recipient Management** | Import recipients via CSV or select from existing contacts with personalized template parameters. CSV import with column auto-detection and parameter mapping. Import from existing contacts filtered by creation date. Per-recipient template parameters for personalized messages. Configurable import limit (default 10,000 recipients). |
-| **Campaign Execution** | Full lifecycle control with start, pause, cancel, and retry actions. Start campaigns instantly or resume paused campaigns. Pause running campaigns to review progress. Cancel campaigns with automatic cleanup. Retry failed recipients without re-sending already delivered ones. |
-| **Real-Time Progress Tracking** | Live progress updates via WebSocket with per-recipient delivery and read status. Live counters: sent, delivered, read, failed. Per-recipient status tracking with error details. Progress bar visualization in campaign list. |
-| **Scheduled Sending** | Schedule campaigns for future execution with automatic start via background scheduler. Set date/time for automatic campaign start. Scheduler runs periodically, marks due campaigns as scheduled then starts them. Batch processing with configurable concurrency. |
-| **Safety Policies & Guard Rails** | Organization-level policy enforcement, inbound-only mode, and WhatsApp connection validation. Organization-level draft-only policy. Strict inbound-only mode blocks campaigns without prior inbound messages. WhatsApp instance connection validation. Instance send-block detection with descriptive error messages. |
-| **Rate Limiting & Send Delay** | Redis-based distributed rate limiting with randomized send delays between messages. Redis Lua script ensures consistent delays across multiple worker instances. Configurable min/max delay range (default 20–45 seconds). Strict mode enforces minimum delay floor for compliance. |
-| **Error Recovery & Resilience** | Automatic error handling with per-recipient retry and campaign status management. Retry only failed recipients. Automatic campaign completion when all recipients are processed. |
+| Capability | Details |
+|---|---|
+| **Custom Dashboard** | Drag-and-drop widgets with persistent per-user layout — numbers, charts, pie, bar, line |
+| **Agent Performance** | Response time, resolution rate, volume, CSAT ratings — with side-by-side comparison |
+| **Chatbot Analytics** | Session counts, flow completion rates, drop-off points, transfer rate tracking |
+| **CSAT Surveys** | Automated surveys with multi-language support, follow-up reminders, aggregate scoring |
+| **Message Volume** | Inbound/outbound trends, delivery status breakdown, per-instance tracking |
+| **Data Export** | CSV export for ratings, contacts, campaigns — structured for external BI tools |
+| **Meta Insights** | Message cost, conversation category, and account-level WhatsApp Business metrics |
+| **Live Counters** | WebSocket-driven active chat count, pending queue length, agent availability |
 
-**Campaign capabilities:** CSV Import · Contact Import · Templates · Header Media · Per-Recipient Params · Live Progress · Recipient Viewer · Pause/Resume · Retry Failed · Scheduling · Inbound Policy · Auto-Template
+</details>
 
----
+<details>
+<summary><strong>🔒 Security & Auth</strong></summary>
 
-### Settings
+<br/>
 
-Full control over users, roles, teams, WhatsApp instances, integrations, templates, and organization configuration.
+Enterprise-grade authentication, encryption, rate limiting, and multi-tenant data isolation.
 
-| Feature | Description |
-|---------|-------------|
-| **User Management** | Complete user lifecycle management with role assignment, send restrictions, and activity controls. Create, edit, and deactivate users with full profile management. Assign roles and teams with granular permission inheritance. Configure per-user send restrictions. Activity status tracking across the platform. |
-| **Roles & Permissions** | Role-based access control with a full permission matrix editor covering every platform action. Create custom roles with a checkbox matrix. Pre-built roles: Admin, Manager, Agent. Permission scoping per module. |
-| **WhatsApp Instance Management** | Connect and manage WhatsApp instances with health monitoring, QR pairing, and settings control. QR code pairing for whatsmeow instances. Meta Cloud API account linking with token management. Real-time health dashboard with connection status. Per-instance send delay, auto-reply, and webhook configuration. |
-| **Team Management** | Organize agents into teams for efficient chat assignment and workload distribution. Create teams and assign agents. Configure team-specific chat routing and auto-assignment rules. Team performance visibility in analytics. |
-| **WhatsApp Message Templates** | Manage WhatsApp-approved message templates for campaigns and automated messaging. Sync templates directly from Meta Business Manager. Template preview with header media, body text, and buttons. Language and category filtering. |
-| **Canned Responses** | Pre-written response templates with media attachments for fast, consistent replies. Create rich canned responses with text, images, videos, and documents. Quick-search and keyboard shortcut insertion. Shared across teams. |
-| **Integrations & API** | Webhooks, API keys, SSO, and custom actions to extend and automate your workflow. Webhook endpoints for chat events and campaign status. API key management with scoped permissions. SAML/SSO integration for enterprise identity providers. Custom action buttons for the chat header. |
-| **Organization & Preferences** | Organization profile, appearance, notifications, chat background, and license management. Organization name, logo, and workspace branding. Light/dark theme with custom chat wallpaper. Desktop and in-app notification preferences. License key activation with seat management. |
+| Capability | Details |
+|---|---|
+| **Single Sign-On** | Google, Microsoft, GitHub, Facebook + custom OIDC; domain restrictions, nonce validation |
+| **API Key Auth** | bcrypt-hashed keys with configurable expiry, permission scoping, and usage tracking |
+| **AES-256 Encryption** | AES-256-GCM with Argon2 key derivation for all secrets; CLI migration tool included |
+| **CSRF Protection** | Double-submit cookie pattern; auto-skipped for Bearer/API key authentication |
+| **Rate Limiting** | Redis atomic distributed rate limiting per endpoint — consistent across instances |
+| **Security Headers** | Per-request CSP nonce injection, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy |
+| **Multi-Org Isolation** | Database-level tenant scoping via middleware; users can belong to multiple orgs |
+| **Granular RBAC** | 25+ permission resources × read/write/execute/import/export; custom role editor |
 
-**Settings capabilities:** Users · Roles & RBAC · Teams · Instances · Health Monitor · Templates · Flows · Canned Replies · Contact Tags · API Keys · Webhooks · SSO/SAML · Chatbot Config · License · Notifications · Appearance
+</details>
 
----
+<details>
+<summary><strong>⚙️ Platform & Infrastructure</strong></summary>
 
-### Chatbot & Automation
+<br/>
 
-Build intelligent auto-responders, visual conversation flows, AI-powered replies, and seamless agent transfer queues.
+Auto-scaling workers, message resilience queues, media lifecycle management, and full observability.
 
-| Feature | Description |
-|---------|-------------|
-| **Visual Flow Builder** | Design multi-step chatbot conversations with a drag-and-drop visual editor and rich step types. Step types: text, template, buttons, input validation, API fetch, WhatsApp Flows. Per-step input validation with regex, retry limits, and custom error messages. Define contact info panel sections from collected flow data. Conditional branching based on user input, time, and contact attributes. |
-| **AI-Powered Responses** | Integrate LLMs for intelligent, context-aware auto-replies with conversation history. Support for OpenAI, Anthropic (Claude), and Google (Gemini). Configurable temperature, system prompt, and conversation history window. Static or API-fetched AI contexts for domain-specific knowledge injection. |
-| **Keyword Auto-Responses** | Set up rule-based automatic replies triggered by exact, partial, regex, or prefix matching. Four match modes: exact, contains, starts_with, regex. Conditions: time-based activation, contact tag filters, instance scope. Respond with text, templates, or trigger a full chatbot flow. |
-| **Agent Transfer Queue** | Seamless handoff from chatbot to human agents with a team-based pickup queue system. Transfer steps in flows route customers to available agent teams. Queue-based pickup — agents claim next available transfer. Real-time transfer notifications via WebSocket. |
-| **SLA Tracking & Escalation** | Enforce response and resolution deadlines with automatic breach detection and escalation. First response, resolution, and escalation deadline timers per transfer. Automatic breach warnings and configurable escalation actions. Auto-close transfers that exceed resolution SLA thresholds. |
-| **Business Hours** | Define operating hours per day of the week with custom out-of-hours messages. Per-day schedule with open/close times and timezone support. Custom greeting and fallback message for outside business hours. Automatic chatbot behavior toggle based on business hour status. |
-| **Client Inactivity Management** | Auto-remind and auto-close inactive customer conversations to free agent capacity. Configurable inactivity timeout with automatic reminder messages. Auto-close conversations after extended inactivity period. Per-instance inactivity settings for different service levels. |
-| **Chatbot Configuration** | Fine-grained control over chatbot behavior, sessions, and fallback strategies. Per-account enable/disable toggle with default response and greeting buttons. Configurable session timeout and phone number exclusion list. Admin session inspector for debugging active chatbot conversations. |
+| Capability | Details |
+|---|---|
+| **Multi-Language & RTL** | English, Spanish, Arabic shipped; full RTL layout support with per-user preference |
+| **Worker Auto-Scaling** | Per-tenant scaling by Redis queue depth with global budget cap to prevent exhaustion |
+| **Message Resilience** | Exponential backoff retry, dead letter queue, idempotency keys, inbound media self-heal |
+| **Media Management** | Configurable retention policies, cleanup workers, legacy media restore before deletion |
+| **License Management** | Ed25519-signed JWT with HWID binding, quota enforcement, and post-expiry grace period |
+| **Observability** | `/health` + `/ready` probes, optional Prometheus metrics, Go pprof profiling |
+| **MCP Server Sidecar** | Node.js Model Context Protocol package for LLM tool integration and AI automation |
+| **Single Binary Deploy** | Embedded Vue SPA compiled into a single Go binary via `//go:embed` |
 
-**Chatbot capabilities:** Flow Builder · AI Responses · Keywords · Agent Transfers · SLA Tracking · Business Hours · Inactivity Mgmt · Session Timeout · Greeting Buttons · Template Steps · Queue Pickup · Fallback Msgs · AI Contexts · Session Inspector · Per-Account Toggle · Input Validation
-
----
-
-### Analytics
-
-Customizable dashboards, agent performance metrics, CSAT ratings, and real-time operational insights.
-
-| Feature | Description |
-|---------|-------------|
-| **Customizable Dashboard** | Build your own analytics dashboard with drag-and-drop widgets and live data. Drag-and-drop widget layout with persistent per-user positioning. Widget types: number, percentage, line chart, bar chart, pie chart. Data sources: messages, contacts, campaigns, transfers, sessions. Real-time data refresh with configurable update intervals. |
-| **Agent Performance Analytics** | Deep-dive into individual and team agent metrics with comparison views. Per-agent metrics: response time, resolution rate, chat volume, ratings. Side-by-side agent comparison for performance benchmarking. CSAT ratings export to CSV for external reporting. |
-| **Chatbot Analytics** | Monitor chatbot session volume, flow completion rates, and transfer rates. Session counts, flow completion rates, and drop-off points. Keyword trigger frequency and response effectiveness. Transfer rate tracking from chatbot to human agents. |
-| **CSAT Ratings & Surveys** | Automated customer satisfaction surveys with multi-language rating requests. 1–10 scale rating requests sent automatically on chat close. Multi-language rating templates. Automated follow-up reminders for unanswered ratings. Aggregate and per-agent CSAT score analytics. |
-| **Message Volume Analytics** | Track inbound/outbound message trends, delivery rates, and status distribution. Message volume by direction: inbound vs outbound over time. Delivery status breakdown: sent, delivered, read, failed. Per-instance and per-account message volume tracking. |
-| **Data Export & Reporting** | Export analytics data and contact records for external reporting and compliance. CSV export for agent ratings, contact lists, and campaign results. Import/export contacts with per-table configuration. Structured data formats for integration with external BI tools. |
-| **Meta Insights (Cloud API)** | WhatsApp Business API analytics for message costs, status, and conversation metrics. Message cost tracking and billing analytics from Meta. Conversation category analytics. Account-level WhatsApp Business metrics and trends. |
-| **Real-Time Operational Metrics** | Live counters and WebSocket-driven updates for instant operational awareness. Live active chat count, pending queue length, and agent availability. Real-time campaign progress via WebSocket push updates. Instance connection status and notification event streaming. |
-
-**Analytics capabilities:** Custom Widgets · Charts & Graphs · Agent Compare · CSAT Surveys · Message Volume · Chatbot Stats · CSV Export · Meta Insights · Contact Metrics · Campaign Stats · Transfer Stats · Custom Layout · Data Sources · Live Counters · Performance · Trend Analysis
+</details>
 
 ---
 
-### Security & Auth
+## 🏗️ Architecture
 
-Enterprise-grade authentication, encryption, rate limiting, and multi-tenant isolation.
+```
+whatomate/
+├── cmd/
+│   └── whatomate/              # Entrypoint — server, worker, crypto-migrate subcommands
+├── internal/
+│   ├── config/                 # Config loading & validation (koanf + TOML/ENV)
+│   ├── crypto/                 # AES-256-GCM encryption for secrets at rest
+│   ├── database/               # GORM + PostgreSQL 17 setup and auto-migrations
+│   ├── frontend/dist/          # Embedded Vue SPA (populated by `make build-prod`)
+│   ├── handlers/               # All HTTP API route handlers
+│   ├── middleware/              # JWT + API key auth, CSRF, CORS, rate limiting
+│   ├── models/                 # GORM data models
+│   ├── queue/                  # Redis Streams consumer groups
+│   ├── websocket/              # WebSocket hub/client via fasthttp
+│   ├── worker/                 # Background jobs — campaign sends, media recovery
+│   └── license/                # License enforcement and quota management
+├── pkg/
+│   ├── provider/               # MessageProvider interface (dual-provider abstraction)
+│   ├── whatsapp/               # Meta Cloud API adapter
+│   └── whatsmeow/              # WhatsApp Web protocol adapter
+├── frontend/                   # Vue 3 + TypeScript SPA
+└── mcp-server/                 # MCP sidecar (separate Node.js package)
+```
 
-| Feature | Description |
-|---------|-------------|
-| **Single Sign-On (SSO)** | OAuth2/OIDC integration with major identity providers and custom configurations. Built-in providers: Google, Microsoft, GitHub, Facebook. Custom OIDC provider support for enterprise identity systems. Domain restrictions and default role assignment for SSO users. State token validation, nonce checking, and secure callback handling. |
-| **API Key Authentication** | Programmatic access with secure, scoped API keys and usage tracking. bcrypt-hashed keys with configurable expiry and permission scoping. Per-key rate limiting and organization-level access control. Usage tracking and audit logging for all API key requests. |
-| **AES-256 Encryption at Rest** | Military-grade encryption for all sensitive secrets stored in the database. AES-256-GCM encryption with Argon2 key derivation. Encrypts access tokens, app secrets, SSO credentials, and AI keys. CLI migration tool for upgrading legacy encryption schemes. |
-| **CSRF Protection** | Double-submit cookie pattern to prevent cross-site request forgery attacks. Double-submit cookie (whm_csrf) with X-CSRF-Token header validation. Automatically skipped for Bearer token and API key authentication. Per-request token generation with secure SameSite cookie attributes. |
-| **Per-Endpoint Rate Limiting** | Redis-based distributed rate limiting to protect against abuse and brute force. Login, register, token refresh, and SSO endpoint throttling. Webhook outbound and campaign mutation rate limits. Per-endpoint configurable limits with Redis atomic counters. Distributed — consistent across multiple server instances. |
-| **Security Headers & CSP** | Comprehensive HTTP security headers with per-request Content Security Policy. CSP with per-request nonce injection for inline script protection. HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy. Permissions-Policy for browser feature control. |
-| **Multi-Organization Isolation** | Complete data isolation between organizations with scoped database queries. Per-request tenant scoping via X-Organization-ID header middleware. Users can belong to multiple organizations with instant switching. Database-level query scoping prevents cross-org data leakage. |
-| **Granular RBAC Permission System** | 25+ permission resources with fine-grained read/write/execute/import/export actions. 25+ permission resources covering every platform module. Route-level permission middleware for API endpoint protection. Pre-built system roles: Admin, Manager, Agent. Custom role creation with full permission matrix editor. |
+### Provider Architecture
 
-**Security capabilities:** SSO/OIDC · API Keys · AES-256 · CSRF Guard · Rate Limiting · Security Headers · Multi-Org · RBAC · JWT Tokens · CORS Policy · Webhook HMAC · Password Policy · Panic Recovery · Permission Guard · Tenant Scope · Signed Invites
+Whatomate supports two WhatsApp backends, switchable via a single config key:
+
+```toml
+[whatsapp]
+provider = "meta"       # Official Meta Cloud API — highest reliability, template-enforced
+# provider = "whatsmeow"  # WhatsApp Web protocol — full feature parity, no template requirement
+```
+
+### Data Flow
+
+```
+Inbound Message
+    │
+    ▼
+Meta Cloud API / whatsmeow
+    │
+    ▼
+Redis Streams (consumer groups)
+    │
+    ├──► Chatbot Engine → Flow Executor → Agent Transfer Queue
+    │
+    ├──► WebSocket Hub → Connected Agents (real-time)
+    │
+    └──► Persistence Layer (PostgreSQL 17)
+```
 
 ---
 
-### Platform & Infrastructure
-
-Multi-language support, license management, auto-scaling workers, resilience queues, and observability.
-
-| Feature | Description |
-|---------|-------------|
-| **Multi-Language & RTL Support** | Full internationalization with three shipped locales and right-to-left layout support. Three shipped locales: English, Spanish, Arabic with complete UI translations. Full RTL (right-to-left) layout support for Arabic with automatic direction switching. Language switcher component with persistent per-user preference. |
-| **Themes & Customization** | Light and dark mode with per-user chat background and accent color preferences. System-aware light/dark theme toggle with smooth transitions. Per-user custom chat wallpaper upload. Configurable organization branding, appearance, and notification preferences. |
-| **Dynamic Worker Auto-Scaling** | Per-tenant worker scaling based on queue depth with global budget allocation. Automatic worker scaling per organization based on Redis queue depth. Global worker budget prevents resource exhaustion across all tenants. Per-org worker count, max queue size, and max instance configuration. Campaign send delay with Redis Lua script for consistent throttling. |
-| **Message Resilience & Queues** | Multi-layer retry system with dead letter queues, idempotency, and self-healing. Outgoing message retry with exponential backoff on transient failures. Dead letter queue (DLQ) for permanent failure recovery and replay. Idempotency keys prevent duplicate message processing across retries. Inbound media self-heal loop reconciles stale queued downloads. |
-| **Media Management & Retention** | Automated media lifecycle with retention policies, cleanup workers, and storage control. Configurable media retention policies with automatic expiry deletion. Uploads cleanup worker removes transient local files past retention window. Legacy media restore re-downloads expired Meta media before deletion. |
-| **License Management** | Ed25519-signed JWT licenses with HWID binding, quota enforcement, and grace periods. Ed25519-signed JWT license tokens with machine HWID fingerprint binding. Quota enforcement: max organizations, users, endpoints, and storage per tier. Post-expiry grace period before platform lockout. Quota overage cleanup — admin must reduce usage before continuing. |
-| **Observability & Infrastructure** | Health checks, Prometheus metrics, pprof profiling, and Docker deployment support. Liveness (/health) and readiness (/ready) probe endpoints. Optional Prometheus metrics and Go pprof profiling endpoints. Docker Compose setup for PostgreSQL 17, Redis 7, and the application. |
-| **MCP Server Sidecar** | Model Context Protocol sidecar for AI tool integration and extended automation. Node.js MCP server package for connecting AI systems to Whatomate. Tool and resource provider interface for LLM-powered workflows. Extensible architecture for adding new AI integration capabilities. |
-
-**Platform capabilities:** Multi-Language · Dark Mode · RTL Support · Auto-Scaling · Redis Streams · Auto-Retry · Dead Letter Queue · Media Retention · License Mgmt · HWID Binding · Health Checks · Prometheus · WebSocket Hub · Single Binary · MCP Sidecar · Marketing URLs
-
----
-
-## Tech Stack
-
-A carefully chosen stack optimized for performance, security, and developer experience.
+## 🛠️ Tech Stack
 
 ### Backend
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
+| Technology | Version | Role |
+|---|---|---|
 | **Go** | 1.25 | High-performance backend with goroutine concurrency |
-| **fasthttp** | — | Fast HTTP server — 10x faster than net/http |
-| **GORM** | — | Type-safe ORM with auto-migrations |
-| **PostgreSQL** | 17 | Advanced relational database with JSONB |
+| **fasthttp** | latest | HTTP server — 10× throughput vs net/http |
+| **GORM** | latest | Type-safe ORM with auto-migrations |
+| **PostgreSQL** | 17 | Primary database with JSONB support |
+| **Redis** | 7 | Streams, pub/sub, distributed rate limiting, queues |
 
 ### Frontend
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **Vue 3** | Composition API | Reactive state with Composition API |
-| **TypeScript** | — | Strict mode with full type safety |
-| **Vite** | — | Lightning-fast HMR and builds |
-| **Tailwind CSS** | v3 | Utility-first CSS framework |
-
-### Infrastructure
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **Redis** | 7 | Streams, pub/sub, rate limiting, queues |
-| **WebSocket** | — | Real-time org-scoped pub/sub messaging |
-| **Docker** | — | Containerized deployment with Compose |
-| **GitHub Actions** | — | Automated build, test, and release pipeline |
+| Technology | Version | Role |
+|---|---|---|
+| **Vue 3** | 3.4 | Reactive UI with Composition API |
+| **TypeScript** | strict | Full type safety across the SPA |
+| **Vite** | latest | Lightning-fast HMR and production builds |
+| **Tailwind CSS** | v3 | Utility-first styling |
+| **Pinia** | latest | State management with devtools |
+| **shadcn-vue** | latest | Accessible, composable component library |
 
 ### WhatsApp Integration
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **Meta Cloud API** | — | Official Cloud API for business messaging |
-| **whatsmeow** | — | WhatsApp Web protocol — full feature parity |
-| **goja** | — | Server-side JavaScript runtime for custom actions |
-| **MCP Server** | Node.js | AI tool integration via Model Context Protocol |
+| Technology | Role |
+|---|---|
+| **Meta Cloud API** | Official WhatsApp Business messaging |
+| **whatsmeow** | WhatsApp Web protocol — full feature parity |
+| **goja** | Server-side JavaScript runtime for custom actions |
+| **MCP Server** | AI tool integration via Model Context Protocol |
 
-### UI Libraries
+### Tooling
 
-| Technology | Purpose |
-|------------|---------|
-| **shadcn-vue** | Accessible, composable component library |
-| **Pinia** | State management with devtools support |
-| **vue-i18n** | Multi-language with RTL layout support |
-| **Chart.js** | Charts and graphs for analytics dashboards |
-
-### Tooling & Quality
-
-| Technology | Purpose |
-|------------|---------|
+| Technology | Role |
+|---|---|
 | **koanf** | Flexible TOML/ENV configuration |
 | **golangci-lint** | Comprehensive Go code quality enforcement |
-| **Playwright** | End-to-end browser testing automation |
+| **Playwright** | End-to-end browser automation testing |
 | **Vitest** | Fast unit testing with Vite integration |
+| **GitHub Actions** | Automated build, test, and release pipeline |
 
 ---
 
-## Platform Capabilities
-
-From API integrations to multi-language support, Whatomate adapts to your business needs.
-
-| | | | | |
-|:---|:---|:---|:---|:---|
-| Message Templates | API Keys | Webhooks | Multi-Provider | Multi-Language |
-| Role-Based Access | Contact Tags | Canned Responses | Custom Actions | SSO / SAML |
-
----
-
-## Architecture
-
-```
-cmd/whatomate/              # Entrypoint (server, worker, crypto-migrate, etc.)
-internal/
-  config/                   # Config loading + validation (koanf)
-  crypto/                   # AES-256 encrypt/decrypt for secrets at rest
-  database/                 # GORM + PostgreSQL 17 setup, migrations
-  frontend/dist/            # Embedded Vue SPA (populated by make build-prod)
-  handlers/                 # All API handlers
-  middleware/                # Auth (JWT + API key), CSRF, CORS, rate limiting
-  models/                   # GORM models
-  queue/                    # Redis Streams consumer groups
-  websocket/                # Hub/client WS via fasthttp/websocket
-  worker/                   # Job processing (campaign sends, media recovery)
-  license/                  # License enforcement
-pkg/
-  provider/                 # MessageProvider interface
-  whatsapp/                 # Meta Cloud API adapter
-  whatsmeow/                # WhatsApp Web protocol adapter
-frontend/                   # Vue 3 SPA
-mcp-server/                 # MCP sidecar (separate Node.js package)
-```
-
-**Dual provider:** `config.toml` → `[whatsapp].provider` = `meta` (Cloud API) or `whatsmeow` (Web protocol).
-
-**Frontend embedding:** `//go:embed all:dist` in `internal/frontend/embed.go`. For production, `make build-prod` copies `frontend/dist/` into the embed directory before compiling.
-
----
-
-## Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- **Go** 1.25.x
-- **Node.js** >=20.19 or >=22.12
-- **PostgreSQL** 17 + **Redis** 7
+| Requirement | Version |
+|---|---|
+| Go | 1.25.x |
+| Node.js | ≥ 20.19 or ≥ 22.12 |
+| PostgreSQL | 17 |
+| Redis | 7 |
 
-### Quick Start
+### 1. Start Infrastructure
 
 ```bash
-# Start infrastructure
 docker compose -f docker/docker-compose.yml up -d db redis
-
-# Backend (port 8080)
-make run-migrate
-
-# Frontend (port 3000) — in a separate terminal
-cd frontend && npm install && npm run dev
-
-# Or run both concurrently
-make dev
 ```
 
-### Production Build
+### 2. Configure
 
 ```bash
-make build-prod    # Builds frontend, copies to embed dir, compiles standalone binary
-./whatomate server -config config.toml
+cp config.example.toml config.toml
 ```
 
-### Configuration
-
-Copy `config.example.toml` to `config.toml` and configure:
+Edit `config.toml`:
 
 ```toml
 [app]
 port = 8080
 
 [database]
-host = "localhost"
-port = 5432
+host     = "localhost"
+port     = 5432
+name     = "whatomate"
+user     = "postgres"
+password = "your-password"
 
 [redis]
 addr = "localhost:6379"
 
 [whatsapp]
-provider = "meta"    # "meta" for Cloud API, "whatsmeow" for Web protocol
+provider = "meta"    # "meta" for Cloud API · "whatsmeow" for Web protocol
 ```
+
+### 3. Run
+
+```bash
+# Backend — apply migrations and start server (port 8080)
+make run-migrate
+
+# Frontend — in a separate terminal (port 3000)
+cd frontend && npm install && npm run dev
+
+# Or run both concurrently
+make dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) — that's it.
 
 ---
 
-## Development
+## 💻 Development
 
-### Backend
+### Backend Commands
 
 ```bash
-make run                # Run server
-make run-migrate        # Run with DB migrations
-make backend-watch      # Hot-reload with air
-make lint               # golangci-lint
-make test               # All tests
+make run              # Start server
+make run-migrate      # Start server with DB migrations
+make backend-watch    # Hot-reload with air
+make lint             # golangci-lint
+make test             # Full test suite
 ```
 
-### Frontend
+### Frontend Commands
 
 ```bash
 cd frontend
-npm run dev             # Dev server (port 3000)
-npm run build           # Production build
-npm run lint            # ESLint
-npm run typecheck       # vue-tsc --noEmit
-npm run test:unit       # Vitest
-npm run test:e2e        # Playwright
+
+npm run dev           # Dev server (port 3000)
+npm run build         # Production build
+npm run lint          # ESLint
+npm run typecheck     # vue-tsc --noEmit
+npm run test:unit     # Vitest unit tests
+npm run test:e2e      # Playwright end-to-end tests
 ```
 
-### Testing
+### Running Tests
+
+Go tests require a live PostgreSQL and Redis instance:
 
 ```bash
-# Go tests (require PostgreSQL + Redis)
 export TEST_DATABASE_URL="postgres://test:test@127.0.0.1:5432/test?sslmode=disable"
 export TEST_REDIS_URL="redis://127.0.0.1:6379/1"
+
 go test -v -race -p 1 ./...
 
-# Ephemeral test database
+# Or use the ephemeral test database helper
 make test-db
-
-# Frontend tests
-cd frontend && npm run test:unit
-cd frontend && npm run test:e2e
 ```
 
 ---
 
-## Deployment
+## 📦 Deployment
 
-### Docker
+### Docker Compose (Recommended)
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-### Release
+This starts PostgreSQL 17, Redis 7, and the Whatomate application container.
 
-Push a tag `v*` to trigger the GitHub Actions pipeline (binary + Docker image).
+### Single Binary
+
+```bash
+# Build: compiles frontend, embeds SPA, produces single binary
+make build-prod
+
+# Run
+./whatomate server -config config.toml
+```
+
+### Release Pipeline
+
+Push a version tag to trigger the automated GitHub Actions pipeline (binary artifact + Docker image):
 
 ```bash
 git tag v1.0.0
@@ -416,12 +398,30 @@ git push origin v1.0.0
 
 ---
 
+## Security
+
+Whatomate is built with security at every layer:
+
+- **Encryption at rest** — AES-256-GCM with Argon2 key derivation for all stored secrets
+- **Transport security** — HTTPS-enforced with HSTS and comprehensive security headers
+- **Authentication** — JWT sessions + API keys (bcrypt-hashed) + SSO/OIDC
+- **Multi-tenant isolation** — Database-level query scoping; no cross-org data leakage
+- **Rate limiting** — Redis-based distributed limiting on all sensitive endpoints
+- **Audit logging** — Full audit trail for API key usage and administrative actions
+
+To report a security vulnerability, please contact the maintainers privately. Do not open a public issue.
+
+---
+
+## License
+
+Whatomate is proprietary software. All rights reserved.
+Unauthorized copying, distribution, or modification is strictly prohibited.
+
+---
+
 <div align="center">
 
-**Ready to transform your WhatsApp communications?**
-
-Join thousands of businesses using Whatomate to deliver exceptional customer experiences at scale.
-
-Whatomate — WhatsApp Business Messaging Platform
+**Whatomate** — Built for teams that take customer communication seriously.
 
 </div>
