@@ -540,7 +540,8 @@ func getIndexes() []string {
 		// pg_trgm extension + GIN trigram index for fast message content search (ILIKE)
 		`CREATE EXTENSION IF NOT EXISTS pg_trgm`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_content_trgm ON messages USING GIN (content gin_trgm_ops)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_wamid_unique ON messages(whats_app_message_id) WHERE whats_app_message_id <> ''`,
+		`DROP INDEX IF EXISTS idx_messages_wamid_unique`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_wamid_lookup ON messages(organization_id, whats_app_message_id) WHERE whats_app_message_id <> ''`,
 	}
 }
 

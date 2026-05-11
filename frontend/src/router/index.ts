@@ -48,6 +48,12 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
+      path: "/welcome",
+      name: "landing",
+      component: () => import("@/views/public/LandingView.vue"),
+      meta: { requiresAuth: false },
+    },
+    {
       path: "/pricing",
       alias: ["/plans", "/offer"],
       name: "marketing-redirect",
@@ -411,6 +417,9 @@ router.beforeEach(async (to, _from, next) => {
       // Try to restore session from localStorage
       const restored = await authStore.restoreSession();
       if (!restored) {
+        if (to.name !== "landing" && to.name !== "login" && to.name !== "register") {
+          return next({ name: "landing", query: { redirect: to.fullPath } });
+        }
         return next({ name: "login", query: { redirect: to.fullPath } });
       }
     }
@@ -455,7 +464,7 @@ router.beforeEach(async (to, _from, next) => {
     if (
       !licenseStore.isLocked &&
       authStore.isAuthenticated &&
-      (to.name === "login" || to.name === "register")
+      (to.name === "login" || to.name === "register" || to.name === "landing")
     ) {
       if (licenseStore.showQuotaOverage) {
         return next({ name: "license-cleanup" });

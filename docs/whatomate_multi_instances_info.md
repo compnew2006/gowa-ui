@@ -1965,6 +1965,79 @@ Updated: 2026-05-05 10:30:20 UTC
 - VPS frontend build completed successfully.
 - VPS npm install/build reported the same existing audit findings as the previous deployment: 4 vulnerabilities (`2 moderate`, `1 high`, `1 critical`), not blocking the production build.
 
+## Green Deployment Update
+
+Updated: 2026-05-11 03:31:46 EEST / 2026-05-11 00:31:46 UTC
+
+- Deployment type: green binary deployment with blue rollback preserved.
+- VPS: `31.97.192.53` (`root`, Ubuntu)
+- Source revision on deploy: `6b8628f2` with local uncommitted/untracked workspace changes.
+- Backup before deployment: `/root/whatomate_backups/whatomate-green-predeploy-20260510_235254.tar.gz`
+- Blue rollback binary: `/opt/whatomate/bin/whatomate.blue.20260511_002729`
+- Blue SHA256: `3533aaf7abbe19de384ca35073f055f9722d90d763e11b59854142575cf0342e`
+- Active green binary: `/opt/whatomate/bin/whatomate.green.20260511_002922`
+- Green SHA256: `bc57ac0764b7712089f11eeb09e2ac949a8f3f8263479761c9e1abcca876fc9a`
+- Active binary path: `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green.20260511_002922`
+- Active version: `Whatomate 6b8628f2-green-20260511_002922 (built 2026-05-11_00:29:59)`
+- License key ID verified: `deploy-20260416`
+
+### Rollback Command
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.blue.20260511_002729 /opt/whatomate/bin/whatomate && systemctl restart whatomate whatomate@holol-wenjaz whatomate@alarkan-almthalia whatomate@matbaat-ruya
+```
+
+### Deployment Notes
+
+- Canary restart was run first on `whatomate@holol-wenjaz`.
+- The first green canary exposed a production migration failure on `idx_messages_wamid_unique` because existing production data has duplicate `whats_app_message_id` values.
+- Fixed the migration in `internal/database/postgres.go` by replacing the global unique WAMID index with a non-unique organization-scoped lookup index:
+  - `DROP INDEX IF EXISTS idx_messages_wamid_unique`
+  - `CREATE INDEX IF NOT EXISTS idx_messages_wamid_lookup ON messages(organization_id, whats_app_message_id) WHERE whats_app_message_id <> ''`
+- Canary was rolled back to blue immediately after the failure, then redeployed with the corrected green binary.
+- Temporary build source and keyring were removed after deployment:
+  - `/tmp/whatomate-green-src`
+  - `/tmp/whatomate-green-keyring.json`
+
+### Services Restarted
+
+- Canary first: `whatomate@holol-wenjaz`
+- Remaining services after canary passed:
+  - `whatomate`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+
+### Post-Deploy Verification
+
+- All services returned `active`:
+  - `whatomate`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+- License bootstrap verification:
+  - `:18123` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+  - `:18124` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+  - `:18125` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+  - `:18126` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com` -> `200`
+  - `https://www.ofuqalmadenah.com` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com` -> `200`
+- Chrome DevTools MCP browser verification:
+  - opened `https://holol-wenjaz.ofuqalmadenah.com/settings/license`
+  - app redirected to `/login` normally
+  - browser-side `fetch('/api/license/bootstrap')` returned `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+  - screenshot saved locally at `tmp/green-deploy-verify-20260511.png`
+
+### Local Pre-Deploy Checks
+
+- Passed:
+  - `go test ./internal/database ./internal/handlers ./internal/config ./internal/crypto ./internal/license ./pkg/whatsapp ./pkg/whatsmeow`
+  - `cd frontend && npm run build`
+- VPS production build completed successfully with frontend embedded.
+
 ## Deployment Update
 
 Updated: 2026-05-05 10:57:10 UTC
