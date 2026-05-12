@@ -1820,3 +1820,223 @@ Updated: 2026-04-15 22:21:06 UTC
 - native Go + Vite build orchestration on Ubuntu/amd64
 - production license activation and per-instance verification
 - browser and HTTP smoke verification against live HTTPS routes
+
+## Green Replacement Deployment
+
+Updated: 2026-05-12 15:30:34 EEST / 2026-05-12 12:30:34 UTC
+
+- Deployment type: replace green sandbox build while keeping public blue live.
+- VPS: `31.97.192.53` (`root`, Ubuntu)
+- Source revision deployed to green: `a1f143cc`
+- Public blue remains active:
+  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.blue.20260511_002729`
+  - blue version: `Whatomate 8f155d2-deploy-20260505c (built 2026-05-05_10:56:48)`
+  - blue SHA256: `3533aaf7abbe19de384ca35073f055f9722d90d763e11b59854142575cf0342e`
+- New green sandbox binary:
+  - `/opt/whatomate/bin/whatomate.green.20260512_122534`
+  - version: `Whatomate a1f143cc-green-20260512_122534 (built 2026-05-12_12:27:39)`
+  - SHA256: `9ef7a2fed8b40516f8a957c5fa37e2190d669ede31110896cdd592641d3a8361`
+- Green sandbox service:
+  - `whatomate-sandbox`
+  - port: `127.0.0.1:18127`
+  - URL: `https://sandbox.ofuqalmadenah.com`
+- Pre-deploy backup:
+  - `/root/whatomate_backups/whatomate-green-replace-predeploy-20260512_122115.tar.gz`
+
+### One-Line Switch Commands
+
+Promote green to live and stop sandbox:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.green.20260512_122534 /opt/whatomate/bin/whatomate && systemctl stop whatomate-sandbox && systemctl restart whatomate whatomate@holol-wenjaz whatomate@alarkan-almthalia whatomate@matbaat-ruya
+```
+
+Switch back to blue and run green as sandbox:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.blue.20260511_002729 /opt/whatomate/bin/whatomate && systemctl restart whatomate whatomate@holol-wenjaz whatomate@alarkan-almthalia whatomate@matbaat-ruya && systemctl restart whatomate-sandbox
+```
+
+### Cleanup
+
+- Removed temporary/source paths after build:
+  - `/tmp/whatomate-green-src`
+  - `/tmp/whatomate-green-keyring.json`
+  - `/tmp/whatomate-chunk.aa`
+  - `/tmp/whatomate-linux-amd64.gz`
+  - `/opt/whatomate-sandbox/src`
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-sandbox/.cache`
+  - `/opt/whatomate-sandbox/.gopath`
+- Removed old green binaries after the new green sandbox was verified:
+  - `/opt/whatomate/bin/whatomate.green.20260511_002522`
+  - `/opt/whatomate/bin/whatomate.green.20260511_002922`
+  - `/opt/whatomate/bin/whatomate.green.20260512_083647`
+- Retained only runtime/config/upload directories and binaries under `/opt/whatomate`.
+
+### Verification
+
+- Local checks passed:
+  - `go test ./internal/database ./internal/handlers ./internal/config ./internal/crypto ./internal/license ./pkg/whatsapp ./pkg/whatsmeow`
+  - `cd frontend && npm run build`
+- VPS build passed:
+  - `make build-prod`
+  - explicit Go build with embedded `license.EmbeddedPublicKeyRingBase64`
+- Services active:
+  - `whatomate`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+  - `whatomate-sandbox`
+- License bootstrap:
+  - `:18123` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+  - `:18124` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+  - `:18125` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+  - `:18126` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+  - `:18127` -> `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`
+- HTTPS smoke:
+  - `https://ofuqalmadenah.com` -> `200`
+  - `https://www.ofuqalmadenah.com` -> `200`
+  - `https://sandbox.ofuqalmadenah.com` -> `200`
+- Blue/green API parity using authenticated admin session:
+  - pending chats: blue `total=16342`, green `total=16342`, first page IDs match
+  - open chats: blue `total=38`, green `total=38`, IDs match
+  - sample chat messages: blue `total=166`, green `total=166`, first 100 IDs match
+- Chrome DevTools MCP browser verification:
+  - sandbox login page loaded
+  - browser-side login returned `200`
+  - browser-side `/api/license/bootstrap` returned active license
+  - browser-side pending chat API returned `200`
+  - screenshot saved locally at `tmp/green-replace-verify-20260512.png`
+
+### Skills And Competencies Applied
+
+- Skills selected: `devops-engineer`
+- Competencies applied:
+  - blue/green deployment with public blue preserved
+  - Ubuntu systemd service override management
+  - native Go/Vite production builds on Ubuntu amd64
+  - embedded license keyring verification
+  - HTTP/API/browser smoke verification
+  - VPS cleanup of temporary source artifacts
+
+## 2026-05-12 15:24 UTC - Green Deployment Update `a73f45b1`
+
+### Task
+
+- Deployed the current project as a new green build after fixing:
+  - chat transfer creation failures on `POST /api/chatbot/transfers`
+  - notification dismissal failures on `PUT /api/notifications/{id}/dismiss`
+  - missing close control on system notification toasts
+- Kept the current live binary unchanged and installed the new build as the updated green target for sandbox verification.
+
+### Code Version
+
+- Git branch: `agent/fix-transfer-notifications-green-deploy`
+- Git commit: `a73f45b1`
+- Green version string: `a73f45b1-green-20260512_145748`
+- Green binary:
+  - path: `/opt/whatomate/bin/whatomate.green.20260512_145748`
+  - sha256: `099d7af1d761c4efb6fdbbf7f3763b81d72accdd79acced9d6e5e5f9c9e35260`
+
+### Backup
+
+- Pre-deploy backup created before changing runtime artifacts:
+  - path: `/root/whatomate_backups/whatomate-installed-pre-green-20260512_145705.tar.gz`
+  - sha256: `4dea9425a271d5ccbfead3c364c576b5df7faa5f95616837b6ab5baee1753fb6`
+  - size: `197M`
+- Backup scope: `/opt/whatomate/bin`, service units/drop-ins, config files, license/keyring artifacts, and deployment info files. Media/upload data was not archived because `/opt/whatomate` is about `53G`.
+
+### Blue/Green Layout
+
+- Current live symlink remains unchanged:
+  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green.20260512_122534`
+- New green alias:
+  - `/opt/whatomate/bin/whatomate.green -> /opt/whatomate/bin/whatomate.green.20260512_145748`
+- Blue rollback alias:
+  - `/opt/whatomate/bin/whatomate.blue -> /opt/whatomate/bin/whatomate.blue.20260511_002729`
+- Green sandbox:
+  - service: `whatomate-sandbox`
+  - binary: `/opt/whatomate/bin/whatomate.green`
+  - bind: `127.0.0.1:18127`
+  - URL: `https://sandbox.ofuqalmadenah.com`
+
+### Switch Command
+
+Use the same command with the target color:
+
+```bash
+whatomate-switch green
+whatomate-switch blue
+```
+
+From a local machine:
+
+```bash
+ssh root@31.97.192.53 'whatomate-switch green'
+```
+
+The helper updates `/opt/whatomate/bin/whatomate`, restarts the live services, and stops the sandbox when green is promoted. Switching back to blue restarts the sandbox so green can continue to be tested separately.
+
+### License
+
+- The first green rebuild started but reported `stored_token_invalid` because `/root/whatomate-keyring.json` contained a stale `vendor-1` public key only.
+- Extracted the working embedded public key ring from the active binaries and replaced `/root/whatomate-keyring.json`.
+- Corrected keyring sha256:
+  - `7458085bb0a2af587dddba22c5784e42fa85b8f266a4de7629b81e13bc72ffbe`
+- Rebuilt the green binary with embedded `license.EmbeddedPublicKeyRingBase64`.
+- Final license state on sandbox:
+  - `enabled=true`
+  - `status=active`
+  - `locked=false`
+  - `key_id=deploy-20260416`
+  - `tier=production`
+  - `duration_label=lifetime`
+
+### Cleanup
+
+- Removed temporary/source runtime paths after the verified install:
+  - `/tmp/whatomate-green-src-20260512_145748`
+  - `/opt/whatomate-sandbox/src`
+  - `/root/whatomate_temp_build_*`
+  - `/root/whatomate-green-src-*`
+  - `/root/whatomate_src_*`
+  - `/root/whatomate-source-*`
+- Runtime binary/config/data directories were preserved.
+
+### Verification
+
+- Local backend verification:
+  - `go test ./cmd/... ./internal/... ./pkg/... ./test/...` passed
+  - targeted handler tests passed but DB-backed cases skipped when local `TEST_DATABASE_URL` was unset
+- Local frontend verification:
+  - `npm run test:unit -- --run src/lib/media_prefetch_cache.test.ts src/services/websocket.test.ts` passed
+  - `npm run build` passed
+  - `make build-prod` passed locally
+  - `npm run typecheck` still has pre-existing unrelated TypeScript errors outside this change
+- VPS build verification:
+  - native Go build on Ubuntu amd64 passed
+  - final binary version: `Whatomate a73f45b1-green-20260512_145748`
+- VPS service verification:
+  - `whatomate`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`, and `whatomate-sandbox` are active
+- API verification:
+  - `https://ofuqalmadenah.com/api/license/bootstrap` returned active license on the unchanged live service
+  - `https://sandbox.ofuqalmadenah.com/api/license/bootstrap` returned active license on the new green sandbox
+- Browser verification:
+  - Playwright MCP loaded `https://sandbox.ofuqalmadenah.com/login`
+  - login UI rendered
+  - no browser console warnings or errors after navigation
+  - `/api/license/bootstrap` returned `200`
+  - unauthenticated `/api/me` and refresh requests returned expected `401`
+
+### Skills And Competencies Applied
+
+- Skills selected: `debugging-wizard`, `test-master`, `devops-engineer`
+- Competencies applied:
+  - production log triage and SQL/GORM failure isolation
+  - focused backend handler repair
+  - Vue UI notification behavior update
+  - native Linux production build and systemd drop-in management
+  - license keyring recovery and embedded-key rebuild
+  - blue/green deployment with rollback aliasing
+  - API and browser smoke verification

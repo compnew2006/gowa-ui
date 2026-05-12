@@ -1,70 +1,109 @@
+# Session Summary - 2026-05-12
+
 ## Task
 
-Investigate and fix Uploads Cleanup behavior where Retention (days) set to 5 and Run Cleanup Now did not remove old files from `/opt/whatomate/uploads`, and change Daily Cleanup Hour from an integer field to a time-format field.
+Fix production failures when transferring a chat to another agent and dismissing system notifications, add a close button to popup notifications, then deploy the current project as a new green build on the VPS while preserving blue/rollback capability and keeping the license system active.
 
-## Root Cause
+## Skills And Tools
 
-Uploads cleanup only scanned legacy root-level media folders:
+- Selected skills: `debugging-wizard`, `test-master`, `devops-engineer`.
+- Applied competencies: production log triage, backend handler repair, Vue UI update, native Linux build, systemd blue/green deployment, embedded license keyring recovery, API/browser smoke verification.
+- Serena, codebase-memory-mcp, and ruflo/claude-flow were requested but were not available as callable tools in this session; ruflo/claude-flow discovery returned a closed transport.
 
-- `audio/`
-- `documents/`
-- `images/`
-- `stickers/`
-- `videos/`
+## Code Changes
 
-Current local media uploads are saved under organization-scoped paths like `orgs/<organization-id>/documents/...` via `organizationMediaSubdir`, so Run Cleanup Now could complete successfully while leaving old production files under `/opt/whatomate/uploads/orgs/...` untouched.
+- `internal/handlers/agent_transfers.go`
+  - Fixed transfer creation by isolating read queries with fresh GORM sessions.
+  - Writes now use an unscoped base DB session with explicit `organization_id` filters to avoid tenant-scope statement bleed into inserts/updates.
+  - Falls back to the contact WhatsApp account when the frontend does not send `whatsapp_account`.
+- `internal/handlers/notifications.go`
+  - Fixed notification dismissal by updating `instance_notifications` through a fresh model query scoped by `id` and `organization_id`, avoiding duplicate table references.
+- `frontend/src/App.vue`
+  - Enabled `closeButton` on the global Sonner toaster.
+- `frontend/src/views/chat/ChatView.vue`
+  - Sends a resolved WhatsApp account for transfer creation, using selected account first and contact account as fallback.
+- Tests:
+  - Added `internal/handlers/notifications_test.go`.
+  - Added transfer fallback coverage in `internal/handlers/agent_transfers_test.go`.
 
-## Approach And Key Decisions
+## Local Verification
 
-- Kept the backend storage/API representation as `uploads_cleanup_schedule_hour: number` for compatibility.
-- Changed the UI control to `type="time"` and display/persist values as `HH:MM` whole-hour times.
-- Accepted legacy schedule inputs such as `3` or `03:00`, but rejected non-whole-hour values such as `03:30`.
-- Extended cleanup to scan `uploads/orgs/<org-id>/<media-type>` for the existing transient media target folders only.
-- Preserved safety constraints: missing directories are ignored, symlinks are skipped, and non-target directories such as `chat-backgrounds` are not cleaned.
+- Passed: `go test ./cmd/... ./internal/... ./pkg/... ./test/...`
+- Passed: targeted handler test command ran; DB-backed cases skipped because local `TEST_DATABASE_URL` was unset.
+- Passed: `cd frontend && npm run test:unit -- --run src/lib/media_prefetch_cache.test.ts src/services/websocket.test.ts`
+- Passed: `cd frontend && npm run build`
+- Passed: `make build-prod`
+- Known pre-existing issue: `cd frontend && npm run typecheck` still fails on unrelated TypeScript errors outside this change.
 
-## Files Modified / Created
+## VPS Deployment
 
-- `internal/handlers/uploads_cleanup_worker.go`
-- `internal/handlers/uploads_cleanup_worker_test.go`
-- `frontend/src/views/settings/SettingsView.vue`
-- `frontend/src/views/settings/SettingsView.test.ts`
-- `frontend/e2e/tests/settings/general-settings.spec.ts`
-- `frontend/e2e/tests/settings/uploads-cleanup.spec.ts` (new)
-- `frontend/src/i18n/locales/en.json`
-- `frontend/src/i18n/locales/ar.json`
-- `summary.md`
+- VPS: `31.97.192.53`
+- Backup created before deployment:
+  - `/root/whatomate_backups/whatomate-installed-pre-green-20260512_145705.tar.gz`
+  - sha256: `4dea9425a271d5ccbfead3c364c576b5df7faa5f95616837b6ab5baee1753fb6`
+  - size: `197M`
+- New green binary:
+  - `/opt/whatomate/bin/whatomate.green.20260512_145748`
+  - version: `a73f45b1-green-20260512_145748`
+  - sha256: `099d7af1d761c4efb6fdbbf7f3763b81d72accdd79acced9d6e5e5f9c9e35260`
+- Current live binary was left unchanged:
+  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green.20260512_122534`
+- Green alias:
+  - `/opt/whatomate/bin/whatomate.green -> /opt/whatomate/bin/whatomate.green.20260512_145748`
+- Blue alias:
+  - `/opt/whatomate/bin/whatomate.blue -> /opt/whatomate/bin/whatomate.blue.20260511_002729`
+- Green sandbox:
+  - service: `whatomate-sandbox`
+  - URL: `https://sandbox.ofuqalmadenah.com`
+  - bind: `127.0.0.1:18127`
 
-## Dependencies Or Env Changes
+## License
 
-No dependency or environment changes.
+- The green build initially started with licensing enabled but locked because `/root/whatomate-keyring.json` contained only a stale `vendor-1` key.
+- Extracted the working embedded public key ring from the active binaries, replaced `/root/whatomate-keyring.json`, and rebuilt green with embedded `license.EmbeddedPublicKeyRingBase64`.
+- Corrected keyring sha256: `7458085bb0a2af587dddba22c5784e42fa85b8f266a4de7629b81e13bc72ffbe`
+- Final sandbox license bootstrap: `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`.
 
-## Tests Added / Updated
+## VPS Verification
 
-- Added backend regression `TestUploadsCleanupWorker_RunManualCleanup_DeletesOrganizationScopedUploads` covering deletion under `orgs/<org-id>/documents`, preservation of fresh files, and preservation of `chat-backgrounds`.
-- Updated Vue unit coverage so uploads cleanup schedule renders as a time input, displays `03:00`, and sends backend hour `4` for `04:00`.
-- Added Playwright Chromium smoke `frontend/e2e/tests/settings/uploads-cleanup.spec.ts` with mocked API calls to verify the real settings page time input and save payload.
-- Updated existing settings E2E expectations from integer hour value `4` to time value `04:00`.
+- Active services: `whatomate`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`, `whatomate-sandbox`.
+- Live license API remained active: `https://ofuqalmadenah.com/api/license/bootstrap`.
+- Green sandbox license API active: `https://sandbox.ofuqalmadenah.com/api/license/bootstrap`.
+- Playwright MCP browser smoke:
+  - loaded `https://sandbox.ofuqalmadenah.com/login`
+  - login UI rendered
+  - no console warnings/errors after navigation
+  - `/api/license/bootstrap` returned `200`
+  - unauthenticated `/api/me` and refresh returned expected `401`
 
-## Verification Results
+## Cleanup
 
-- Baseline before fix:
-  - `go test ./internal/handlers -run 'Test.*UploadsCleanup' -count=1` passed before adding regressions.
-  - New backend regression failed before implementation because org-scoped expired files were not deleted.
-  - New frontend unit regression failed before implementation because the schedule field was still `type="number"`.
-- After fix:
-  - `go test ./internal/handlers -run 'Test.*UploadsCleanup|TestApp_(Get|Update)OrganizationSettings' -count=1` passed.
-  - `go test ./internal/handlers -count=1` passed.
-  - `go test ./...` passed all tested packages except pre-existing `github.com/compnew2006/whatomate/tmp` build failure from multiple `main` functions in tmp repro files.
-  - `cd frontend && npx vitest run src/views/settings/SettingsView.test.ts` passed.
-  - `cd frontend && npm run lint` passed with one pre-existing warning in `frontend/e2e/tests/chat/soft-delete.spec.ts`.
-  - `cd frontend && npm run build` passed with existing large chunk warnings.
-  - `cd frontend && npm run typecheck` failed on existing unrelated TypeScript errors outside the changed files.
-  - `cd frontend && npx playwright test --project=chromium e2e/tests/settings/uploads-cleanup.spec.ts --reporter=list --timeout=30000 --workers=1` passed in Chromium. Global setup logged `localhost:8080` connection refusals because the backend was not running, but the mocked browser test itself passed.
-  - Existing `general-settings.spec.ts` Playwright run was attempted and exceeded the 120s tool limit in this local environment because it depends on live backend login/setup.
+- Removed VPS temporary/source paths:
+  - `/tmp/whatomate-green-src-20260512_145748`
+  - `/opt/whatomate-sandbox/src`
+  - `/root/whatomate_temp_build_*`
+  - `/root/whatomate-green-src-*`
+  - `/root/whatomate_src_*`
+  - `/root/whatomate-source-*`
+- Runtime binary/config/data directories were preserved.
 
-## Known Limitations
+## Switch Command
 
-- Full repo `go test ./...` is still blocked only by the pre-existing `tmp` package duplicate-main build issue.
-- Frontend typecheck is still blocked by unrelated pre-existing type errors already present in chat, contacts, chatbot, dashboard, and teams files.
-- Playwright global setup expects a backend on `localhost:8080`; the added smoke avoids backend dependency by mocking browser API calls, but global setup still logs refused backend connections when no backend is running.
-- Serena tools `initial_instructions`, `project_overview`, `style_and_conventions`, `suggested_commands`, and `done_checklist` were not active in this session. Project memories and available Serena tools were used instead, and this summary records the manual completion checklist.
+Use the installed helper on the VPS:
+
+```bash
+whatomate-switch green
+whatomate-switch blue
+```
+
+From local:
+
+```bash
+ssh root@31.97.192.53 'whatomate-switch green'
+```
+
+## Files Updated
+
+- Source/tests committed in `a73f45b1`.
+- Deployment docs updated locally: `docs/whatomate_multi_instances_info.md`.
+- This summary written to `summary.md`.
