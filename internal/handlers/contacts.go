@@ -523,7 +523,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		a.Log.Error("Failed to resolve restricted instance for contact list", "error", err, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list contacts", nil, "")
 	}
-	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs, userID)
 
 	var explicitInstanceID *uuid.UUID
 	if instanceIDParam != "" {
@@ -890,7 +890,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 		a.Log.Error("Failed to resolve restricted instance for contact read", "error", restrictedErr, "org_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load contact", nil, "")
 	}
-	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs, userID)
 
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
@@ -1016,7 +1016,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	if limitChatVisibilityToAgentScope {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
-	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs, userID)
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}

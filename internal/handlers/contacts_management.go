@@ -120,7 +120,7 @@ func (a *App) buildLifecycleContactQuery(
 		return nil, err
 	}
 
-	return applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs), nil
+	return applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs, userID), nil
 }
 
 func (a *App) canEmitChatAssignmentSystemMessage(userID, orgID uuid.UUID) bool {
@@ -163,6 +163,24 @@ func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUser
 	)
 }
 
+
+// userBelongsToOrg checks whether a user is a member of the given organization.
+// It checks both the user's home organization (users.organization_id) and
+// the user_organizations membership table, matching the same logic used by
+// ListUsers (buildUsersListBaseQuery) so the assign dialog and assignment
+// handler agree on who is visible.
+func (a *App) userBelongsToOrg(db *gorm.DB, userID, orgID uuid.UUID) bool {
+	var count int64
+	db.Raw(
+		"SELECT COUNT(*) FROM users WHERE id = ? AND deleted_at IS NULL AND ("+
+			"organization_id = ? "+
+			"OR EXISTS (SELECT 1 FROM user_organizations WHERE user_id = ? AND organization_id = ? AND deleted_at IS NULL)"+
+			")",
+		userID, orgID, userID, orgID,
+	).Scan(&count)
+	return count > 0
+}
+
 // AssignContact assigns a contact to a user (agent)
 // Only users with assignment permission can assign contacts
 func (a *App) AssignContact(r *fastglue.Request) error {
@@ -193,7 +211,10 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		return nil
 	}
 
-	if req.UserID != nil && *req.UserID != uuid.Nil {
+	// Admins/managers can assign chats from restricted instances to any user.
+	// The bridge rule in applyRestrictedInstanceVisibilityFilter will then grant
+	// the assignee read access to instance metadata for this specific chat.
+	if req.UserID != nil && *req.UserID != uuid.Nil && !a.canBypassPendingChatRestriction(userID, orgID) {
 		allowed, err := a.canUserSeeContactInstance(orgID, *req.UserID, contact)
 		if err != nil {
 			a.Log.Error("Failed to validate assignee instance access", "error", err, "user_id", req.UserID, "contact_id", contact.ID)
@@ -204,12 +225,19 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		}
 	}
 
-	// If assigning to a user, verify they exist in the same org
-	if req.UserID != nil {
-		var user models.User
-		if err := requestDB.Where("id = ? AND organization_id = ?", req.UserID, orgID).First(&user).Error; err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User not found", nil, "")
+	// If assigning to a user, verify they belong to the organization.
+	// Uses the same membership check as ListUsers (user_organizations JOIN)
+	// so that any user visible in the assign dialog is also valid here.
+	if req.UserID != nil && *req.UserID != uuid.Nil {
+		if !a.userBelongsToOrg(requestDB, *req.UserID, orgID) {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User is not a member of this organization", nil, "")
 		}
+	}
+
+	// Guard: cannot assign or unassign a closed chat.
+	status := normalizeContactStatus(contact)
+	if status == models.ChatStatusClosed {
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Cannot assign or unassign a closed chat. Reopen it first.", nil, "")
 	}
 
 	var previousAssignedUserID *uuid.UUID
@@ -218,13 +246,16 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		previousAssignedUserID = &prev
 	}
 
-	// Update contact assignment + lifecycle status
-	if err := requestDB.Model(contact).Updates(chatAssignmentUpdates(req.UserID)).Error; err != nil {
+	// Update contact assignment + lifecycle status.
+	// Use a.DB directly to avoid tenant-scoped query producing
+	// "table name specified more than once" when GORM combines the
+	// scope's WHERE clause with Model().Updates().
+	if err := a.DB.Model(contact).Updates(chatAssignmentUpdates(req.UserID)).Error; err != nil {
 		a.Log.Error("Failed to assign contact", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to assign contact", nil, "")
 	}
 
-	if err := requestDB.Where("id = ?", contact.ID).First(contact).Error; err != nil {
+	if err := a.DB.Where("id = ?", contact.ID).First(contact).Error; err != nil {
 		a.Log.Error("Failed to reload contact after assignment", "error", err, "contact_id", contact.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to assign contact", nil, "")
 	}

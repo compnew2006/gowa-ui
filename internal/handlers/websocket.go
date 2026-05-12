@@ -150,7 +150,7 @@ func (a *App) canSubscribeToContactUpdates(userID, orgID, contactID uuid.UUID) b
 		return false
 	}
 
-	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
+	query = applyRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs, userID)
 	if err := query.First(&contact).Error; err != nil {
 		return false
 	}

@@ -94,5 +94,7 @@ test-results/
 .agents/
 .kilocode/
 .kilo/
+.claude-flow/
+.claude/
 # Code health tool artifacts
 .desloppify/

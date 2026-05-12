@@ -3,6 +3,7 @@ package handlers_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+	"github.com/google/uuid"
 )
 
 func TestApp_AssignContact_AllowsContactsWritePermission(t *testing.T) {
@@ -376,4 +378,162 @@ func TestApp_AssignAgentTransfer_RejectsAssigneeWithoutInstanceAccess(t *testing
 	var refreshed models.AgentTransfer
 	require.NoError(t, app.DB.Where("id = ?", transfer.ID).First(&refreshed).Error)
 	assert.Nil(t, refreshed.AgentID)
+}
+
+// --- Multi-org and lifecycle tests ---
+
+func TestApp_AssignContact_AllowsMultiOrgUser(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	homeOrg := testutil.CreateTestOrganization(t, app.DB)
+	targetOrg := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create a user whose home org is homeOrg but who is also a member of targetOrg
+	// via user_organizations.
+	homeUser := testutil.CreateTestUser(t, app.DB, homeOrg.ID)
+
+	// Add a user_organizations entry for targetOrg so the user appears in the
+	// targetOrg's user list (like ListUsers does).
+	userOrg := &models.UserOrganization{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		UserID:         homeUser.ID,
+		OrganizationID: targetOrg.ID,
+		IsDefault:      false,
+	}
+	require.NoError(t, app.DB.Create(userOrg).Error)
+
+	assigner := createUserWithPermissionKeys(t, app, targetOrg.ID, "contacts-writer-multi", []string{"contacts:write"})
+	contact := testutil.CreateTestContact(t, app.DB, targetOrg.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"user_id": homeUser.ID.String(),
+	})
+	testutil.SetAuthContext(req, targetOrg.ID, assigner.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.AssignContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	require.NotNil(t, refreshed.AssignedUserID)
+	assert.Equal(t, homeUser.ID, *refreshed.AssignedUserID)
+}
+
+func TestApp_AssignContact_RejectsUserNotInOrg(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	otherOrg := testutil.CreateTestOrganization(t, app.DB)
+
+	// Create a user in otherOrg only — no membership in org at all.
+	otherOrgUser := testutil.CreateTestUser(t, app.DB, otherOrg.ID)
+
+	assigner := createUserWithPermissionKeys(t, app, org.ID, "contacts-writer-reject", []string{"contacts:write"})
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"user_id": otherOrgUser.ID.String(),
+	})
+	testutil.SetAuthContext(req, org.ID, assigner.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.AssignContact(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "not a member")
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	assert.Nil(t, refreshed.AssignedUserID)
+}
+
+func TestApp_AssignContact_UnassignOpenChat(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	assigner := createUserWithPermissionKeys(t, app, org.ID, "contacts-writer-unassign", []string{"contacts:write"})
+	targetUser := testutil.CreateTestUser(t, app.DB, org.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	// First, assign the contact
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"assigned_user_id": targetUser.ID,
+		"status":           models.ChatStatusOpen,
+	}).Error)
+
+	// Now unassign by sending user_id: null
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"user_id": nil,
+	})
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPut)
+	testutil.SetAuthContext(req, org.ID, assigner.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.AssignContact(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var refreshed models.Contact
+	require.NoError(t, app.DB.Where("id = ?", contact.ID).First(&refreshed).Error)
+	assert.Nil(t, refreshed.AssignedUserID)
+	assert.Equal(t, string(models.ChatStatusPending), refreshed.Status)
+}
+
+func TestApp_AssignContact_RejectsAssignClosedChat(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	assigner := createUserWithPermissionKeys(t, app, org.ID, "contacts-writer-closed", []string{"contacts:write"})
+	targetUser := testutil.CreateTestUser(t, app.DB, org.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	// Close the contact
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":            models.ChatStatusClosed,
+		"assigned_user_id":  targetUser.ID,
+		"closed_at":         time.Now().UTC(),
+		"closed_by_user_id": assigner.ID,
+	}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"user_id": targetUser.ID.String(),
+	})
+	testutil.SetAuthContext(req, org.ID, assigner.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.AssignContact(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusConflict, "closed chat")
+}
+
+func TestApp_AssignContact_RejectsUnassignClosedChat(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	assigner := createUserWithPermissionKeys(t, app, org.ID, "contacts-writer-unassign-closed", []string{"contacts:write"})
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	// Close the contact
+	require.NoError(t, app.DB.Model(contact).Updates(map[string]any{
+		"status":            models.ChatStatusClosed,
+		"closed_at":         time.Now().UTC(),
+		"closed_by_user_id": assigner.ID,
+	}).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"user_id": nil,
+	})
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodPut)
+	testutil.SetAuthContext(req, org.ID, assigner.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.AssignContact(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusConflict, "closed chat")
 }

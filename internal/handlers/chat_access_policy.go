@@ -70,9 +70,12 @@ func shouldAllowSelfAssignedRestrictedInstanceListBypass(
 func applyRestrictedInstanceVisibilityFilter(
 	query *gorm.DB,
 	restrictedInstanceIDs []uuid.UUID,
+	userID uuid.UUID,
 ) *gorm.DB {
 	if query == nil || len(restrictedInstanceIDs) == 0 {
 		return query
 	}
-	return query.Where("instance_id IN ?", restrictedInstanceIDs)
+	// Bridge rule: assigned chats are always visible to the assignee,
+	// even if they don't have general access to the parent instance.
+	return query.Where("(instance_id IN ? OR assigned_user_id = ?)", restrictedInstanceIDs, userID)
 }
