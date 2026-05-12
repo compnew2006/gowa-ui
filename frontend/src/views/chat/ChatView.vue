@@ -2912,9 +2912,15 @@ async function transferToAgent() {
 
   isTransferring.value = true;
   try {
+    const currentContact = contactsStore.currentContact as any;
+    const activeAccountFilter = selectedAccountFilter(selectedAccount.value);
+    const fallbackAccount =
+      typeof currentContact.whatsapp_account === "string"
+        ? currentContact.whatsapp_account.trim()
+        : "";
     await chatbotService.createTransfer({
-      contact_id: contactsStore.currentContact.id,
-      whatsapp_account: (contactsStore.currentContact as any).whatsapp_account,
+      contact_id: currentContact.id,
+      whatsapp_account: activeAccountFilter || fallbackAccount,
       source: "manual",
     });
     toast.success(t("chat.transferSuccess"), {

@@ -78,7 +78,10 @@ func (a *App) DismissNotification(r *fastglue.Request) error {
 	}
 
 	if !notification.IsDismissed {
-		if err := requestDB.Model(&notification).Update("is_dismissed", true).Error; err != nil {
+		if err := a.DB.Session(&gorm.Session{}).
+			Model(&models.InstanceNotification{}).
+			Where("id = ? AND organization_id = ?", id, orgID).
+			Update("is_dismissed", true).Error; err != nil {
 			a.Log.Error("Failed to dismiss notification", "error", err, "notification_id", id)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to dismiss notification", nil, "")
 		}

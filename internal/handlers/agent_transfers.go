@@ -462,6 +462,11 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 // CreateAgentTransfer creates a new agent transfer
 func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
+	newQuery := func() *gorm.DB {
+		return requestDB.Session(&gorm.Session{})
+	}
+	writeDB := a.DB.Session(&gorm.Session{})
+
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -485,14 +490,19 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	}
 
 	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](requestDB, r, contactID, orgID, "Contact")
+	contact, err := findByIDAndOrg[models.Contact](newQuery(), r, contactID, orgID, "Contact")
 	if err != nil {
 		return nil
 	}
 
+	whatsAppAccount := strings.TrimSpace(req.WhatsAppAccount)
+	if whatsAppAccount == "" {
+		whatsAppAccount = strings.TrimSpace(contact.WhatsAppAccount)
+	}
+
 	// Check for existing active transfer
 	var existingCount int64
-	requestDB.
+	newQuery().
 		Model(&models.AgentTransfer{}).
 		Where("organization_id = ? AND contact_id = ? AND status = ?", orgID, contactID, models.TransferStatusActive).
 		Count(&existingCount)
@@ -502,7 +512,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	}
 
 	// Get chatbot settings to check AssignToSameAgent (use cache)
-	settings, _ := a.getChatbotSettingsCached(orgID, req.WhatsAppAccount)
+	settings, _ := a.getChatbotSettingsCached(orgID, whatsAppAccount)
 
 	// Parse team_id if provided
 	var teamID *uuid.UUID
@@ -513,7 +523,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		}
 		// Verify team exists and is active
 		var team models.Team
-		if err := requestDB.Where("id = ? AND organization_id = ? AND is_active = ?", parsedTeamID, orgID, true).First(&team).Error; err != nil {
+		if err := newQuery().Where("id = ? AND organization_id = ? AND is_active = ?", parsedTeamID, orgID, true).First(&team).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Team not found or inactive", nil, "")
 		}
 		teamID = &parsedTeamID
@@ -529,7 +539,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent_id", nil, "")
 		}
 		// Verify agent exists and is available
-		agent, err := findByIDAndOrg[models.User](requestDB, r, parsedAgentID, orgID, "Agent")
+		agent, err := findByIDAndOrg[models.User](newQuery(), r, parsedAgentID, orgID, "Agent")
 		if err != nil {
 			return nil
 		}
@@ -543,7 +553,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	} else if settings != nil && settings.AgentAssignment.AssignToSameAgent && contact.AssignedUserID != nil {
 		// Auto-assign to contact's existing assigned agent (if setting enabled and agent is available)
 		var assignedAgent models.User
-		if requestDB.Where("id = ?", contact.AssignedUserID).First(&assignedAgent).Error == nil && assignedAgent.IsAvailable {
+		if newQuery().Where("id = ?", contact.AssignedUserID).First(&assignedAgent).Error == nil && assignedAgent.IsAvailable {
 			agentID = contact.AssignedUserID
 		}
 		// If agent is not available, falls through to queue (agentID remains nil)
@@ -569,7 +579,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		BaseModel:           models.BaseModel{ID: uuid.New()},
 		OrganizationID:      orgID,
 		ContactID:           contactID,
-		WhatsAppAccount:     req.WhatsAppAccount,
+		WhatsAppAccount:     whatsAppAccount,
 		PhoneNumber:         contact.PhoneNumber,
 		Status:              models.TransferStatusActive,
 		Source:              source,
@@ -590,17 +600,19 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		a.UpdateSLAOnPickup(&transfer)
 	}
 
-	if err := requestDB.Create(&transfer).Error; err != nil {
+	if err := writeDB.Create(&transfer).Error; err != nil {
 		a.Log.Error("Failed to create agent transfer", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create transfer", nil, "")
 	}
 
 	// Update contact assignment if agent assigned
 	if agentID != nil {
-		requestDB.
-			Model(contact).Updates(chatAssignmentUpdates(agentID))
+		writeDB.
+			Model(&models.Contact{}).
+			Where("id = ? AND organization_id = ?", contact.ID, orgID).
+			Updates(chatAssignmentUpdates(agentID))
 	}
-	requestDB.
+	writeDB.
 
 		// End any active chatbot session
 		Model(&models.ChatbotSession{}).
@@ -631,7 +643,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		AgentName:       agentName,
 		WhatsAppAccount: transfer.WhatsAppAccount,
 	})
-	requestDB.
+	newQuery().
 
 		// Load relations for response
 		Preload("Agent").Preload("Team").Preload("TransferredByUser").First(&transfer, transfer.ID)

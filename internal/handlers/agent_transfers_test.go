@@ -266,6 +266,29 @@ func TestApp_CreateAgentTransfer_Success(t *testing.T) {
 	assert.Equal(t, models.TransferSourceManual, result.Data.Transfer.Source)
 }
 
+func TestApp_CreateAgentTransfer_FallsBackToContactAccount(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"contact_id": contact.ID.String(),
+		"source":     models.TransferSourceManual,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.CreateAgentTransfer(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var transfer models.AgentTransfer
+	require.NoError(t, app.DB.Where("organization_id = ? AND contact_id = ?", org.ID, contact.ID).First(&transfer).Error)
+	assert.Equal(t, account.Name, transfer.WhatsAppAccount)
+}
+
 func TestApp_CreateAgentTransfer_WithAgent(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
