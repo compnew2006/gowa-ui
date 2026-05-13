@@ -61,6 +61,7 @@ export const RESOURCE_LABELS: Record<string, string> = {
   "chatbot.ai": "AI Contexts",
   chat: "Chat",
   "chat.assign": "Chat Assignment",
+  "chat.bypass_claim": "Bypass Chat Claim",
   contacts: "Contacts",
   canned_responses: "Canned Responses",
   tags: "Tags",

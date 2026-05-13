@@ -63,6 +63,7 @@ const (
 	ResourceChat                   = "chat"
 	ResourceChatAssign             = "chat.assign"
 	ResourceChatCollaborators      = "chat.collaborators"
+	ResourceChatBypassClaim      = "chat.bypass_claim"
 	ResourceContacts               = "contacts"
 	ResourceTags                   = "tags"
 	ResourceAnalytics              = "analytics"
@@ -163,6 +164,7 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceChatAssign, Action: ActionWrite, Description: "Assign conversations to agents"},
 		{Resource: ResourceChatCollaborators, Action: ActionRead, Description: "View chat collaborators"},
 		{Resource: ResourceChatCollaborators, Action: ActionWrite, Description: "Invite and manage chat collaborators"},
+		{Resource: ResourceChatBypassClaim, Action: ActionRead, Description: "View unassigned chats without claiming"},
 
 		// Contacts
 		{Resource: ResourceContacts, Action: ActionRead, Description: "View contacts"},
@@ -214,7 +216,7 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceOrganizations, Action: ActionDelete, Description: "Delete organizations"},
 		{Resource: ResourceOrganizations, Action: ActionAssign, Description: "Manage organization members"},
 	}
-}
+}}
 
 // SystemRolePermissions returns the default permission mappings for system roles
 func SystemRolePermissions() map[string][]string {
@@ -245,6 +247,7 @@ func SystemRolePermissions() map[string][]string {
 		// Chat
 		"chat:read", "chat:write", "chat:prefix", "chat.assign:write",
 		"chat.collaborators:read", "chat.collaborators:write",
+		"chat.bypass_claim:read",
 		// Contacts
 		"contacts:read", "contacts:write", "contacts:delete", "contacts:soft_delete", "contacts:import", "contacts:export",
 		// Tags
@@ -284,4 +287,5 @@ func SystemRolePermissions() map[string][]string {
 		"manager": managerPermissions,
 		"agent":   agentPermissions,
 	}
+}
 }

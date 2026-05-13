@@ -148,11 +148,7 @@ func (a *App) canBypassPendingChatRestriction(userID, orgID uuid.UUID) bool {
 		return true
 	}
 
-	perms, err := a.getUserPermissionsCached(userID, orgID)
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(perms.RoleName, "admin")
+	return a.HasPermission(userID, models.ResourceChatBypassClaim, models.ActionRead, orgID)
 }
 
 func (a *App) canReadAllContacts(userID, orgID uuid.UUID) bool {

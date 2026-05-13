@@ -194,7 +194,7 @@ function getGroupMessages(groupId: string): Message[] {
 const isAdminUser = computed(
   () =>
     authStore.user?.is_super_admin === true ||
-    (authStore.userRole || "").toLowerCase() === "admin",
+    authStore.hasPermission("chat.bypass_claim", "read"),
 );
 const isAgentUser = computed(
   () => (authStore.userRole || "").toLowerCase() === "agent",
