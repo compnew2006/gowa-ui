@@ -558,7 +558,7 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 	if req.RoleID != nil {
 		// Validate role exists and belongs to org
 		var role models.CustomRole
-		if err := requestDB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&role).Error; err != nil {
+		if err := a.DB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&role).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
 		}
 		roleID = req.RoleID
@@ -738,11 +738,11 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		}
 		// Validate role exists and belongs to org
 		var newRole models.CustomRole
-		if err := requestDB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
+		if err := a.DB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
 		}
 		// Update role in user_organizations only
-		if err := requestDB.Model(&models.UserOrganization{}).
+		if err := a.DB.Model(&models.UserOrganization{}).
 			Where("user_id = ? AND organization_id = ?", id, orgID).
 			Update("role_id", req.RoleID).Error; err != nil {
 			a.Log.Error("Failed to update member role", "error", err)
@@ -789,7 +789,7 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 	if req.RoleID != nil {
 		// Validate role exists and belongs to org
 		var newRole models.CustomRole
-		if err := requestDB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
+		if err := a.DB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
 		}
 		// Prevent self-demotion from admin
@@ -836,14 +836,14 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 
 	// Invalidate permissions cache if role changed
 	if roleChanged {
-		requestDB.
+		a.DB.
 			// Sync role change to UserOrganization for this org
 			Model(&models.UserOrganization{}).
 			Where("user_id = ? AND organization_id = ?", user.ID, orgID).
 			Update("role_id", user.RoleID)
 		a.InvalidateUserPermissionsCache(user.ID)
 	}
-	requestDB.
+	a.DB.
 
 		// Load role for response
 		Preload("Role").First(&user, user.ID)

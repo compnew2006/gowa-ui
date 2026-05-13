@@ -50,8 +50,10 @@
   - 📄 semgrep_summary.json
   - 📄 serve_acp_with_proxy.py
   - 📄 summary.md
+  - 📄 summery.md
   - 📄 test_run_results.txt
   - 📄 whatomate
+  - 📄 whatomate-linux-amd64
 - 📁 **cmd/**
   - 📁 **whatomate-license-studio/**
     - 📄 main.go
@@ -1198,6 +1200,8 @@
     - 📄 suggested_commands.md
     - 📁 **settings/**
       - 📄 route-analysis.md
+    - 📁 **chat-assign/**
+      - 📄 bridge-rule-instance-access-2026-05-11.md
     - 📁 **auth/**
       - 📁 **sso/**
         - 📄 security-hardening-2026-04-15.md
@@ -2923,6 +2927,7 @@
     - 📄 messages_test.go
     - 📄 meta_analytics.go
     - 📄 notifications.go
+    - 📄 notifications_test.go
     - 📄 organization.go
     - 📄 organization_delete_test.go
     - 📄 organization_members_test.go
@@ -3662,12 +3667,16 @@
         - 📄 scaling.md
         - 📄 security.md
 - 📁 **uploads/**
+  - 📁 **images/**
+    - 📄 a60bb45d-ef5b-4676-8318-7018e0009e1d.jpg
+    - 📄 b66a218e-f3e7-4850-95a8-58375c68a1fb.jpg
   - 📁 **videos/**
     - 📄 578b8d41-bdc0-4259-af0b-7b10a4655204.mp4
     - 📄 57976573-726e-4aff-b89d-de0796697067.mp4
     - 📄 85952abb-7c58-4ef9-bbd2-d200b4f78df0.mp4
     - 📄 903dd7a6-b3b8-4508-aced-b1412afde776.mp4
     - 📄 bce07dcf-9045-4818-b069-439f981928cd.mp4
+    - 📄 e76b7a83-4b8e-4bc1-8c46-1b6f63011ff3.mp4
   - 📁 **whatsmeow/**
     - 📁 **media/**
       - 📁 **61/**
@@ -5669,6 +5678,21 @@
   - 📄 query.json
   - 📄 state-go.json
   - 📄 state-go.json.bak
+- 📁 **Tutorial_ ExpenseMeter/**
+  - 📄 01_business_logic_services_.md
+  - 📄 02_data_models__mongodb_schemas__.md
+  - 📄 03_api_controllers_.md
+  - 📄 04_api_routing_.md
+  - 📄 05_authentication___security_middleware_.md
+  - 📄 06_server_initialization_.md
+  - 📄 07_statistics___reporting_.md
+  - 📄 08_scheduled_tasks__cron_jobs__.md
+  - 📄 index.md
+- 📁 **.swarm/**
+  - 📄 memory.db
+  - 📄 memory.db-shm
+  - 📄 memory.db-wal
+  - 📄 schema.sql
 - 📁 **pkg/**
   - 📁 **provider/**
     - 📄 context.go
