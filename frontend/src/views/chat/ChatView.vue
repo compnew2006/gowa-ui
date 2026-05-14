@@ -108,6 +108,7 @@ import {
   RotateCw,
   Filter,
   StickyNote,
+  RefreshCw,
 } from "lucide-vue-next";
 import { getInitials, getAvatarGradient } from "@/lib/utils";
 import { getMessageSenderPhone, isGroupContact } from "@/lib/group-chat";
@@ -120,6 +121,7 @@ import {
   getCachedMediaBlob,
   prefetchMediaBlob,
   storeMediaBlobInPersistentCache,
+  clearMissingMediaPrefetch,
 } from "@/lib/media_prefetch_cache";
 import {
   resolveWhatsAppMediaCategoryForFile,
@@ -1481,7 +1483,7 @@ onMounted(async () => {
 
   // Fetch users if can assign contacts
   if (canAssignContacts.value) {
-    usersStore.fetchUsers().catch(() => {
+    usersStore.fetchUsers({ limit: 100 }).catch(() => {
       // Silently fail if user list can't be loaded
     });
   }
@@ -3280,6 +3282,42 @@ function getMediaBlobUrl(message: Message): string {
 
 function isMediaLoading(message: Message): boolean {
   return mediaLoadingStates.value[message.id] || false;
+}
+
+function canRetryMediaDownload(message: Message): boolean {
+  if (!message.metadata) return false;
+  const mediaID = (message.metadata as Record<string, unknown>)
+    ?.legacy_media_recovery_media_id;
+  return !!mediaID;
+}
+
+async function retryMediaDownload(message: Message) {
+  mediaLoadingStates.value[message.id] = true;
+  try {
+    const resp = await fetch(
+      `/api/media/${encodeURIComponent(message.id)}/retry-download`,
+      { method: "POST" },
+    );
+    if (!resp.ok) {
+      if (resp.status === 410) {
+        toast.error(t("common.mediaDownloadExpired"));
+      } else {
+        const data = await resp.json().catch(() => null);
+        toast.error(
+          data?.message || t("common.mediaDownloadExpired"),
+        );
+      }
+      return;
+    }
+    // Re-fetch the media blob now that the file is restored
+    clearMissingMediaPrefetch(message.id);
+    delete mediaBlobUrls.value[message.id];
+    await loadMediaForMessage(message);
+  } catch {
+    toast.error(t("common.mediaDownloadExpired"));
+  } finally {
+    mediaLoadingStates.value[message.id] = false;
+  }
 }
 
 function getAttachmentFilename(message: Message): string {
@@ -5085,9 +5123,19 @@ async function sendMediaMessage() {
                         class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg"
                       >
                         <FileText class="h-5 w-5 text-muted-foreground" />
-                        <span class="text-sm text-muted-foreground"
-                          >[Document]</span
+                        <span class="text-sm text-muted-foreground">{{
+                          $t("common.mediaExpired")
+                        }}</span>
+                        <Button
+                          v-if="canRetryMediaDownload(message)"
+                          variant="ghost"
+                          size="xs"
+                          class="h-7 px-2 text-[11px]"
+                          @click.stop="retryMediaDownload(message)"
                         >
+                          <RefreshCw class="h-3.5 w-3.5 mr-1" />
+                          {{ $t("common.retryDownload") }}
+                        </Button>
                       </div>
                     </div>
                     <!-- Location message -->
@@ -5772,40 +5820,48 @@ async function sendMediaMessage() {
       v-model:open="isAssignDialogOpen"
       @update:open="(open) => !open && (assignSearchQuery = '')"
     >
-      <DialogContent class="max-w-sm">
+      <DialogContent class="max-w-md sm:max-w-lg min-w-[340px]" resizable>
         <DialogHeader>
           <DialogTitle>{{ $t("chat.assignContact") }}</DialogTitle>
           <DialogDescription>
             {{ $t("chat.assignContactDesc") }}
           </DialogDescription>
         </DialogHeader>
-        <div class="py-4 space-y-3">
+        <div class="py-3 space-y-3">
           <!-- Search input -->
           <div class="relative">
             <Search
-              class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"
+              class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
             />
             <Input
               v-model="assignSearchQuery"
               :placeholder="$t('chat.searchUsers') + '...'"
-              class="pl-9 h-9"
+              class="pl-9 h-9 bg-muted/50"
             />
           </div>
-          <Button
+          <div
             v-if="contactsStore.currentContact?.assigned_user_id"
-            variant="outline"
-            class="w-full justify-start"
-            @click="
-              assignContactToUser(null);
-              isAssignDialogOpen = false;
-            "
+            class="space-y-2"
           >
-            <UserMinus class="mr-2 h-4 w-4" />
-            {{ $t("chat.unassignContact") }}
-          </Button>
-          <Separator />
-          <ScrollArea class="max-h-[280px]">
-            <div class="space-y-1">
+            <Button
+              variant="outline"
+              class="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+              @click="
+                assignContactToUser(null);
+                isAssignDialogOpen = false;
+              "
+            >
+              <UserMinus class="mr-2 h-4 w-4" />
+              {{ $t("chat.unassignContact") }}
+            </Button>
+            <Separator />
+          </div>
+          <p class="text-xs text-muted-foreground font-medium px-1">
+            {{ filteredAssignableUsers.length }}
+            {{ filteredAssignableUsers.length === 1 ? 'user' : 'users' }} available
+          </p>
+          <ScrollArea class="max-h-[420px]">
+            <div class="space-y-0.5">
               <Button
                 v-for="user in filteredAssignableUsers"
                 :key="user.id"
@@ -5814,27 +5870,41 @@ async function sendMediaMessage() {
                     ? 'secondary'
                     : 'ghost'
                 "
-                class="w-full justify-start"
+                class="w-full justify-start h-auto py-2.5 px-3 transition-colors"
+                :class="
+                  contactsStore.currentContact?.assigned_user_id === user.id
+                    ? 'bg-primary/10 border border-primary/20'
+                    : 'hover:bg-muted'
+                "
                 @click="
                   assignContactToUser(user.id);
                   isAssignDialogOpen = false;
                 "
               >
-                <User class="mr-2 h-4 w-4" />
-                <span>{{ user.full_name }}</span>
-                <Check
-                  v-if="
-                    contactsStore.currentContact?.assigned_user_id === user.id
-                  "
-                  class="ml-auto h-4 w-4 text-primary"
-                />
-                <Badge v-else variant="outline" class="ml-auto text-xs">
-                  {{ user.role?.name }}
-                </Badge>
+                <div class="flex items-center w-full gap-3">
+                  <div
+                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium"
+                  >
+                    {{ user.full_name?.charAt(0)?.toUpperCase() || '?' }}
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium truncate">{{ user.full_name }}</div>
+                    <div class="text-xs text-muted-foreground truncate">{{ user.email }}</div>
+                  </div>
+                  <Check
+                    v-if="
+                      contactsStore.currentContact?.assigned_user_id === user.id
+                    "
+                    class="h-4 w-4 text-primary shrink-0"
+                  />
+                  <Badge v-else variant="outline" class="text-xs shrink-0">
+                    {{ user.role?.name }}
+                  </Badge>
+                </div>
               </Button>
               <p
                 v-if="filteredAssignableUsers.length === 0"
-                class="text-sm text-muted-foreground text-center py-4"
+                class="text-sm text-muted-foreground text-center py-8"
               >
                 {{ $t("chat.noUsersFound") }}
               </p>

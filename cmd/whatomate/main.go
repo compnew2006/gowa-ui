@@ -1415,6 +1415,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Media (serves media files for messages, auth-protected)
 	g.GET("/api/media/{message_id}", app.ServeMedia)
+	g.POST("/api/media/{message_id}/retry-download", app.RetryMediaDownload)
 
 	// Templates (Meta only)
 	meta := func(h fastglue.FastRequestHandler) fastglue.FastRequestHandler { return app.ProviderGuard("meta", h) }

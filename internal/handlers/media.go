@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
@@ -235,6 +236,12 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 				if restoredMessage, restored := a.maybeRestoreLegacyMedia(r.RequestCtx, requestDB, &message); restored && restoredMessage != nil {
 					message = *restoredMessage
 					relativePath = strings.TrimSpace(message.MediaURL)
+				} else {
+					// File is gone and restore failed — mark media as deleted
+					// so the API stops returning media_url for this message.
+					_ = requestDB.Model(&models.Message{}).
+						Where("id = ? AND media_deleted_at IS NULL", message.ID).
+						Update("media_deleted_at", time.Now().UTC()).Error
 				}
 			}
 			if filename := strings.TrimSpace(message.MediaFilename); filename != "" {
@@ -271,6 +278,77 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	}
 	r.RequestCtx.SetBodyStream(reader, int(objectInfo.Size))
 	return nil
+}
+
+// RetryMediaDownload attempts to re-download media for a message whose local
+// file has been deleted. It checks if the WhatsApp download URL is still
+// eligible (within the 30-day TTL) and if so, re-downloads and restores the file.
+func (a *App) RetryMediaDownload(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
+
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceChat, models.ActionRead); err != nil {
+		return nil
+	}
+
+	messageIDValue := r.RequestCtx.UserValue("message_id")
+	messageIDStr, ok := messageIDValue.(string)
+	if !ok || messageIDStr == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid message ID", nil, "")
+	}
+	messageID, err := uuid.Parse(messageIDStr)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid message ID", nil, "")
+	}
+
+	var message models.Message
+	if err := requestDB.WithContext(r.RequestCtx).
+		Preload("WhatsAppAccount").
+		Where("id = ? AND organization_id = ?", messageID, orgID).
+		First(&message).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
+	}
+
+	// Check if recovery is still eligible
+	_, eligible, reason := inspectLegacyMediaRecovery(&message, time.Now().UTC())
+	if !eligible {
+		status := fasthttp.StatusGone
+		msg := "Media download link has expired"
+		if reason == "missing_metadata" {
+			status = fasthttp.StatusNotFound
+			msg = "No recovery information available for this media"
+		}
+		return r.SendErrorEnvelope(status, msg, nil, "")
+	}
+
+	// Attempt to re-download
+	result, err, _ := a.legacyMediaRestoreGroup.Do(message.ID.String(), func() (any, error) {
+		recoveryInfo, _, _ := inspectLegacyMediaRecovery(&message, time.Now().UTC())
+		msg, _, err := a.performLegacyMediaRestore(r.RequestCtx, requestDB, message, recoveryInfo)
+		return msg, err
+	})
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to download media", nil, "")
+	}
+
+	restoreResult, ok := result.(*models.Message)
+	if !ok || restoreResult == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to restore media", nil, "")
+	}
+
+	// Clear media_deleted_at
+	_ = requestDB.Model(&models.Message{}).
+		Where("id = ?", message.ID).
+		Update("media_deleted_at", nil).Error
+
+	return r.SendErrorEnvelope(fasthttp.StatusOK, "Media downloaded successfully", map[string]any{
+		"media_url":      restoreResult.MediaURL,
+		"media_filename": restoreResult.MediaFilename,
+		"media_mimetype": restoreResult.MediaMimeType,
+	}, "")
 }
 
 func (a *App) serveLocalMediaFile(r *fastglue.Request, relativePath, mimeHint string) error {
