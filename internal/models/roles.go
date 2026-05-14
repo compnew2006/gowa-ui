@@ -216,7 +216,7 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceOrganizations, Action: ActionDelete, Description: "Delete organizations"},
 		{Resource: ResourceOrganizations, Action: ActionAssign, Description: "Manage organization members"},
 	}
-}}
+}
 
 // SystemRolePermissions returns the default permission mappings for system roles
 func SystemRolePermissions() map[string][]string {
@@ -287,5 +287,4 @@ func SystemRolePermissions() map[string][]string {
 		"manager": managerPermissions,
 		"agent":   agentPermissions,
 	}
-}
 }
