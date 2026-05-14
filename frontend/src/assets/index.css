@@ -1050,3 +1050,71 @@
   --v3-picker-input-focus-border: rgb(var(--primary));
   --v3-picker-emoji-hover: hsl(210 40% 96.1%);
 }
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Empty state floating animation */
+@keyframes gentle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-float {
+  animation: gentle-float 3s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float {
+    animation: none;
+  }
+}
+
+/* Button press feedback */
+.active\:scale-\[0\.97\]:active {
+  transform: scale(0.97);
+}
+
+/* Message entrance animations */
+@keyframes message-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes message-in-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes message-in-center {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.chat-bubble-outgoing {
+  animation: message-in-right 0.2s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+.chat-bubble-incoming {
+  animation: message-in-left 0.2s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+.chat-bubble-system {
+  animation: message-in-center 0.2s cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-bubble-outgoing,
+  .chat-bubble-incoming,
+  .chat-bubble-system {
+    animation: none;
+  }
+}

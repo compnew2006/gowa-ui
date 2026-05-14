@@ -158,6 +158,7 @@ import { useInstancesStore } from "@/stores/instances";
 import { useNotesStore } from "@/stores/notes";
 import { CreateContactDialog } from "@/components/shared";
 import { Info } from "lucide-vue-next";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useMediaGroups } from "@/composables/useMediaGroups";
 import { resolveChatBackgroundStyle } from "@/lib/chat-backgrounds";
 
@@ -226,6 +227,7 @@ const messageInput = ref("");
 const messagesEndRef = ref<HTMLElement | null>(null);
 const messageInputRef = ref<HTMLTextAreaElement | null>(null);
 const isSending = ref(false);
+const showSendConfirm = ref(false);
 let typingPauseTimer: ReturnType<typeof setTimeout> | null = null;
 const typingLastComposeAt = ref(0);
 const typingLastState = ref<TypingPresenceState | null>(null);
@@ -1423,10 +1425,19 @@ async function executeCustomAction(action: CustomAction) {
 
 // Search state for assignment dialog
 const assignSearchQuery = ref("");
+const debouncedAssignSearchQuery = ref("");
+let assignSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(assignSearchQuery, (val) => {
+  if (assignSearchTimer) clearTimeout(assignSearchTimer);
+  assignSearchTimer = setTimeout(() => {
+    debouncedAssignSearchQuery.value = val;
+  }, 150);
+});
 
 // Filtered users for assignment dialog
 const filteredAssignableUsers = computed(() => {
-  const query = assignSearchQuery.value.toLowerCase().trim();
+  const query = debouncedAssignSearchQuery.value.toLowerCase().trim();
   if (!query) return assignableUsers.value;
   return assignableUsers.value.filter(
     (u) =>
@@ -2253,6 +2264,8 @@ async function sendMessage() {
     pendingCannedResponse.value = null;
     contactsStore.clearReplyingTo();
     resetTextareaHeight();
+    showSendConfirm.value = true;
+    setTimeout(() => { showSendConfirm.value = false; }, 800);
     await nextTick();
     scrollToBottom();
   } catch (error: any) {
@@ -2771,9 +2784,16 @@ async function assignContactToUser(userId: string | null) {
 
   try {
     await contactsService.assign(contactsStore.currentContact.id, userId);
-    toast.success(
-      userId ? t("chat.contactAssigned") : t("chat.contactUnassigned"),
-    );
+    if (userId) {
+      const assignedUser = filteredAssignableUsers.value.find(u => u.id === userId);
+      toast.success(
+        assignedUser
+          ? t("chat.assignedToName", { name: assignedUser.full_name })
+          : t("chat.contactAssigned"),
+      );
+    } else {
+      toast.success(t("chat.contactUnassigned"));
+    }
     // Update current contact with new assignment
     contactsStore.currentContact = {
       ...contactsStore.currentContact,
@@ -4192,7 +4212,7 @@ async function sendMediaMessage() {
             v-for="entry in sidebarContacts"
             :key="entry.key"
             :class="[
-              'group flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors hover:bg-sidebar-accent/80',
+              'group flex cursor-pointer items-center gap-2 px-3 py-2 transition-all duration-150 hover:bg-sidebar-accent/80',
               isSidebarEntryActive(entry) &&
                 'bg-sidebar-accent text-sidebar-accent-foreground',
             ]"
@@ -4406,32 +4426,19 @@ async function sendMediaMessage() {
             />
           </div>
 
-          <div
+          <EmptyState
             v-if="sidebarContacts.length === 0"
-            class="flex flex-col items-center gap-2 p-6 text-center"
-            role="status"
-            aria-live="polite"
-          >
-            <div
-              class="flex h-10 w-10 items-center justify-center rounded-full bg-muted/80"
-            >
-              <User class="h-5 w-5 text-muted-foreground/60" />
-            </div>
-            <p class="text-sm font-medium text-muted-foreground">
-              {{
-                contactsStore.activeChatTab === "pending"
-                  ? $t("chat.noPendingChats")
-                  : $t("chat.noAssignedChats")
-              }}
-            </p>
-            <p class="text-xs text-muted-foreground/70">
-              {{
-                contactsStore.activeChatTab === "pending"
-                  ? $t("chat.noPendingChatsDesc")
-                  : $t("chat.noAssignedChatsDesc")
-              }}
-            </p>
-          </div>
+            :icon="User"
+            size="compact"
+            variant="primary"
+            animated
+            :title="contactsStore.activeChatTab === 'pending'
+              ? $t('chat.noPendingChats')
+              : $t('chat.noAssignedChats')"
+            :description="contactsStore.activeChatTab === 'pending'
+              ? $t('chat.noPendingChatsDesc')
+              : $t('chat.noAssignedChatsDesc')"
+          />
         </div>
       </ScrollArea>
       <div
@@ -4452,22 +4459,21 @@ async function sendMediaMessage() {
         v-if="!contactsStore.currentContact"
         class="flex flex-1 items-center justify-center text-muted-foreground"
       >
-        <div class="text-center">
-          <div
-            class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/12 shadow-sm"
-          >
-            <Send class="h-8 w-8 text-primary" />
-          </div>
-          <h3 class="mb-1 text-lg font-medium text-foreground">
-            {{ $t("chat.selectConversation") }}
-          </h3>
-          <p class="text-sm text-muted-foreground">
-            {{ $t("chat.chooseContact") }}
-          </p>
-          <p class="mt-2 text-xs text-muted-foreground/60">
-            {{ $t("chat.selectConversationHint") }}
-          </p>
-        </div>
+        <EmptyState
+          :icon="Send"
+          size="hero"
+          variant="primary"
+          animated
+          :title="$t('chat.selectConversation')"
+          :description="$t('chat.chooseContact')"
+          class="flex-1 items-center justify-center"
+        >
+          <template #action>
+            <p class="text-xs text-muted-foreground/60">
+              {{ $t("chat.selectConversationHint") }}
+            </p>
+          </template>
+        </EmptyState>
       </div>
 
       <!-- Chat Interface -->
@@ -4519,21 +4525,21 @@ async function sendMediaMessage() {
                 </Badge>
                 <Badge
                   v-if="contactsStore.currentContact.status === 'pending'"
-                  class="h-5 border-0 bg-accent text-[10px] text-accent-foreground"
+                  class="h-5 border-0 bg-primary/10 text-[10px] text-primary"
                 >
-                  Pending
+                  {{ $t("chat.pendingStatus") }}
                 </Badge>
                 <Badge
                   v-if="contactsStore.currentContact.status === 'closed'"
                   class="h-5 border-0 bg-muted text-[10px] text-muted-foreground"
                 >
-                  Closed
+                  {{ $t("chat.closedStatus") }}
                 </Badge>
                 <Badge
                   v-if="activeTransferId"
-                  class="h-5 border-0 bg-accent text-[10px] text-primary"
+                  class="h-5 border-0 bg-accent text-[10px] text-accent-foreground"
                 >
-                  Paused
+                  {{ $t("chat.pausedStatus") }}
                 </Badge>
               </div>
               <p class="text-[11px] text-muted-foreground">
@@ -5527,22 +5533,15 @@ async function sendMediaMessage() {
                   :blob-urls="mediaBlobUrls"
                 />
               </template>
-              <div
+              <EmptyState
                 v-if="!contactsStore.isLoadingMessages && contactsStore.messages.length === 0"
-                class="flex flex-col items-center justify-center py-12 text-center"
-                role="status"
-                aria-live="polite"
-              >
-                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted/80">
-                  <Send class="h-5 w-5 text-muted-foreground/50" />
-                </div>
-                <p class="mt-3 text-sm font-medium text-muted-foreground">
-                  {{ $t("chat.noMessagesYet") }}
-                </p>
-                <p class="mt-1 text-xs text-muted-foreground/60">
-                  {{ $t("chat.noMessagesHint") }}
-                </p>
-              </div>
+                :icon="Send"
+                size="compact"
+                variant="primary"
+                animated
+                :title="$t('chat.noMessagesYet')"
+                :description="$t('chat.noMessagesHint')"
+              />
               <div ref="messagesEndRef" />
             </div>
           </ScrollArea>
@@ -5802,12 +5801,23 @@ async function sendMediaMessage() {
             />
             <button
               type="submit"
-              class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-all duration-200 hover:bg-primary/90 active:scale-[0.93] disabled:opacity-50"
               :disabled="
                 isCurrentChatSendRestricted || !canSendMessage || isSending
               "
             >
-              <Send class="w-4 h-4 text-primary-foreground" />
+              <transition
+                enter-active-class="transition-all duration-150"
+                enter-from-class="scale-0 opacity-0"
+                enter-to-class="scale-100 opacity-100"
+                leave-active-class="transition-all duration-100"
+                leave-from-class="scale-100 opacity-100"
+                leave-to-class="scale-0 opacity-0"
+                mode="out-in"
+              >
+                <Check v-if="showSendConfirm" key="check" class="w-4 h-4" />
+                <Send v-else key="send" class="w-4 h-4" />
+              </transition>
             </button>
           </form>
         </div>
@@ -5840,7 +5850,7 @@ async function sendMediaMessage() {
     <!-- Assign Contact Dialog -->
     <Dialog
       v-model:open="isAssignDialogOpen"
-      @update:open="(open) => !open && (assignSearchQuery = '')"
+      @update:open="(open) => { if (!open) { assignSearchQuery = ''; debouncedAssignSearchQuery = ''; } }"
     >
       <DialogContent class="w-[calc(100vw-2rem)] max-w-md sm:max-w-lg" resizable>
         <DialogHeader>
@@ -5849,7 +5859,7 @@ async function sendMediaMessage() {
             {{ $t("chat.assignContactDesc") }}
           </DialogDescription>
         </DialogHeader>
-        <div class="py-3 space-y-3">
+        <div class="pt-1 pb-2 space-y-2">
           <!-- Search input -->
           <div class="relative">
             <Search
@@ -5880,7 +5890,7 @@ async function sendMediaMessage() {
             </Button>
             <Separator />
           </div>
-          <p class="text-xs text-muted-foreground font-medium px-1">
+          <p class="text-xs text-muted-foreground font-medium px-1 mt-2">
             {{ $t('chat.usersAvailable', { count: filteredAssignableUsers.length }) }}
           </p>
           <ScrollArea class="max-h-[420px]">
@@ -5909,7 +5919,7 @@ async function sendMediaMessage() {
               >
                 <div class="flex items-center w-full gap-3">
                   <div
-                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium"
+                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/8 text-xs font-medium text-primary"
                     aria-hidden="true"
                   >
                     {{ user.full_name?.charAt(0)?.toUpperCase() || '?' }}
