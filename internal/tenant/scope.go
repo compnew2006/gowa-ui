@@ -54,7 +54,7 @@ func ScopedDB(db *gorm.DB, orgID uuid.UUID) *gorm.DB {
 		}
 
 		return tx.Where(clause.Eq{
-			Column: clause.Column{Table: clause.CurrentTable, Name: field.DBName},
+			Column: clause.Column{Table: tx.Statement.Schema.Table, Name: field.DBName},
 			Value:  orgID,
 		})
 	})

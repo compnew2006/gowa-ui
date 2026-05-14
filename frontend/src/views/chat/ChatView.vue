@@ -4975,7 +4975,7 @@ async function sendMediaMessage() {
                           (configStore.showPrintButtons ||
                             configStore.showDownloadButtons)
                         "
-                        class="mt-2 flex flex-wrap items-center gap-1.5"
+                        class="mt-1 flex flex-wrap items-center gap-1.5"
                       >
                         <Button
                           v-if="configStore.showPrintButtons"

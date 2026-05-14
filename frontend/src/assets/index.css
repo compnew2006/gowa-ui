@@ -882,9 +882,6 @@
 .chat-bubble-time {
   @apply text-[10px] mt-1 flex items-center gap-1.5 float-right;
   margin-left: 8px;
-  margin-bottom: -4px;
-  position: relative;
-  top: 4px;
 }
 
 .chat-bubble-time span {

@@ -310,17 +310,13 @@ func (a *App) decryptAccountSecrets(account *models.WhatsAppAccount) error {
 			allowLegacy = *a.Config.App.AllowLegacyEncryption
 		}
 	}
-	if account.AccessToken != "" && !crypto.IsEncrypted(account.AccessToken) {
-		return fmt.Errorf("failed to decrypt access token for account %s: %w", account.Name, crypto.ErrNotEncrypted)
-	}
+	// Let DecryptWithPolicy handle unencrypted (legacy) values transparently.
 	if dec, err := crypto.DecryptWithPolicy(account.AccessToken, encKey, allowLegacy); err == nil {
 		account.AccessToken = dec
 	} else if account.AccessToken != "" {
 		return fmt.Errorf("failed to decrypt access token for account %s: %w", account.Name, err)
 	}
-	if account.AppSecret != "" && !crypto.IsEncrypted(account.AppSecret) {
-		return fmt.Errorf("failed to decrypt app secret for account %s: %w", account.Name, crypto.ErrNotEncrypted)
-	}
+
 	if dec, err := crypto.DecryptWithPolicy(account.AppSecret, encKey, allowLegacy); err == nil {
 		account.AppSecret = dec
 	} else if account.AppSecret != "" {

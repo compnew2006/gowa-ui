@@ -761,12 +761,7 @@ func (w *Worker) decryptAccountSecrets(account *models.WhatsAppAccount) error {
 			allowLegacy = *w.Config.App.AllowLegacyEncryption
 		}
 	}
-	if account.AccessToken != "" && !crypto.IsEncrypted(account.AccessToken) {
-		return fmt.Errorf("access token is not encrypted")
-	}
-	if account.AppSecret != "" && !crypto.IsEncrypted(account.AppSecret) {
-		return fmt.Errorf("app secret is not encrypted")
-	}
+
 	if dec, err := crypto.DecryptWithPolicy(account.AccessToken, key, allowLegacy); err != nil {
 		return fmt.Errorf("failed to decrypt access token: %w", err)
 	} else {
