@@ -231,6 +231,7 @@ const typingLastComposeAt = ref(0);
 const typingLastState = ref<TypingPresenceState | null>(null);
 const typingLastContactID = ref<string | null>(null);
 const isAssignDialogOpen = ref(false);
+const isAssigning = ref(false);
 const isTransferring = ref(false);
 const isResuming = ref(false);
 const isInfoPanelOpen = ref(false);
@@ -2765,7 +2766,8 @@ watch(messageInput, (val) => {
 });
 
 async function assignContactToUser(userId: string | null) {
-  if (!contactsStore.currentContact) return;
+  if (!contactsStore.currentContact || isAssigning.value) return;
+  isAssigning.value = true;
 
   try {
     await contactsService.assign(contactsStore.currentContact.id, userId);
@@ -2783,6 +2785,8 @@ async function assignContactToUser(userId: string | null) {
   } catch (error: any) {
     const message = error.response?.data?.message || t("chat.assignFailed");
     toast.error(message);
+  } finally {
+    isAssigning.value = false;
   }
 }
 
@@ -2794,10 +2798,10 @@ async function claimCurrentChat() {
       contactsStore.currentContact.id,
     );
     if (!updated) {
-      toast.error("Failed to claim chat");
+      toast.error(t("chat.chatClaimFailed"));
       return;
     }
-    toast.success("Chat claimed successfully");
+    toast.success(t("chat.chatClaimedSuccess"));
     contactsStore.setActiveChatTab("assigned");
     await refreshContactsSidebar();
     const selectionSequence = ++contactSelectionSequence;
@@ -4404,14 +4408,27 @@ async function sendMediaMessage() {
 
           <div
             v-if="sidebarContacts.length === 0"
-            class="p-3 text-center text-muted-foreground"
+            class="flex flex-col items-center gap-2 p-6 text-center"
+            role="status"
+            aria-live="polite"
           >
-            <User class="h-6 w-6 mx-auto mb-1.5 opacity-50" />
-            <p class="text-sm">
+            <div
+              class="flex h-10 w-10 items-center justify-center rounded-full bg-muted/80"
+            >
+              <User class="h-5 w-5 text-muted-foreground/60" />
+            </div>
+            <p class="text-sm font-medium text-muted-foreground">
               {{
                 contactsStore.activeChatTab === "pending"
-                  ? "No pending chats"
-                  : "No assigned chats"
+                  ? $t("chat.noPendingChats")
+                  : $t("chat.noAssignedChats")
+              }}
+            </p>
+            <p class="text-xs text-muted-foreground/70">
+              {{
+                contactsStore.activeChatTab === "pending"
+                  ? $t("chat.noPendingChatsDesc")
+                  : $t("chat.noAssignedChatsDesc")
               }}
             </p>
           </div>
@@ -4446,6 +4463,9 @@ async function sendMediaMessage() {
           </h3>
           <p class="text-sm text-muted-foreground">
             {{ $t("chat.chooseContact") }}
+          </p>
+          <p class="mt-2 text-xs text-muted-foreground/60">
+            {{ $t("chat.selectConversationHint") }}
           </p>
         </div>
       </div>
@@ -5361,7 +5381,7 @@ async function sendMediaMessage() {
                     >
                       <AlertCircle class="h-3 w-3" />
                       <span>{{
-                        message.error_message || "Failed to send"
+                        message.error_message || $t("chat.failedToSend")
                       }}</span>
                     </span>
                     <!-- Failed template message indicator (no retry) -->
@@ -5375,7 +5395,7 @@ async function sendMediaMessage() {
                     >
                       <AlertCircle class="h-3 w-3" />
                       <span>{{
-                        message.error_message || "Failed to send"
+                        message.error_message || $t("chat.failedToSend")
                       }}</span>
                     </span>
                   </div>
@@ -5487,7 +5507,7 @@ async function sendMediaMessage() {
                       class="h-6 w-6 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
                       :disabled="retryingMessageId === message.id"
                       @click="retryMessage(message)"
-                      title="Retry sending"
+                      :title="$t('chat.retrySending')"
                     >
                       <Loader2
                         v-if="retryingMessageId === message.id"
@@ -5507,6 +5527,22 @@ async function sendMediaMessage() {
                   :blob-urls="mediaBlobUrls"
                 />
               </template>
+              <div
+                v-if="!contactsStore.isLoadingMessages && contactsStore.messages.length === 0"
+                class="flex flex-col items-center justify-center py-12 text-center"
+                role="status"
+                aria-live="polite"
+              >
+                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-muted/80">
+                  <Send class="h-5 w-5 text-muted-foreground/50" />
+                </div>
+                <p class="mt-3 text-sm font-medium text-muted-foreground">
+                  {{ $t("chat.noMessagesYet") }}
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground/60">
+                  {{ $t("chat.noMessagesHint") }}
+                </p>
+              </div>
               <div ref="messagesEndRef" />
             </div>
           </ScrollArea>
@@ -5516,10 +5552,7 @@ async function sendMediaMessage() {
           v-if="isCurrentChatClosed && !isCurrentChatRestricted"
           class="flex items-center justify-between gap-3 border-t border-border bg-muted/55 px-4 py-2 text-xs text-muted-foreground"
         >
-          <span
-            >This chat is closed. You can view message history in read-only
-            mode.</span
-          >
+          <span>{{ $t("chat.chatClosedReadonly") }}</span>
           <Button
             v-if="canReopenCurrentChat"
             size="sm"
@@ -5533,19 +5566,8 @@ async function sendMediaMessage() {
               class="mr-1.5 h-3 w-3 animate-spin"
             />
             <RotateCw v-else class="mr-1.5 h-3 w-3" />
-            Reopen Chat
+            {{ $t("chat.reopenChat") }}
           </Button>
-        </div>
-
-        <!-- Service window expired banner -->
-        <div
-          v-if="isServiceWindowExpired"
-          class="flex items-center gap-2 border-t border-destructive/20 bg-destructive/10 px-4 py-2.5"
-        >
-          <Clock class="h-4 w-4 text-red-500 shrink-0" />
-          <span class="text-sm text-red-500 flex-1">{{
-            $t("chat.serviceWindowExpired")
-          }}</span>
         </div>
 
         <!-- Reply indicator -->
@@ -5785,7 +5807,7 @@ async function sendMediaMessage() {
                 isCurrentChatSendRestricted || !canSendMessage || isSending
               "
             >
-              <Send class="w-4 h-4 text-white" />
+              <Send class="w-4 h-4 text-primary-foreground" />
             </button>
           </form>
         </div>
@@ -5820,7 +5842,7 @@ async function sendMediaMessage() {
       v-model:open="isAssignDialogOpen"
       @update:open="(open) => !open && (assignSearchQuery = '')"
     >
-      <DialogContent class="max-w-md sm:max-w-lg min-w-[340px]" resizable>
+      <DialogContent class="w-[calc(100vw-2rem)] max-w-md sm:max-w-lg" resizable>
         <DialogHeader>
           <DialogTitle>{{ $t("chat.assignContact") }}</DialogTitle>
           <DialogDescription>
@@ -5837,6 +5859,7 @@ async function sendMediaMessage() {
               v-model="assignSearchQuery"
               :placeholder="$t('chat.searchUsers') + '...'"
               class="pl-9 h-9 bg-muted/50"
+              :aria-label="$t('chat.searchUsers')"
             />
           </div>
           <div
@@ -5846,6 +5869,7 @@ async function sendMediaMessage() {
             <Button
               variant="outline"
               class="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+              :disabled="isAssigning"
               @click="
                 assignContactToUser(null);
                 isAssignDialogOpen = false;
@@ -5857,11 +5881,10 @@ async function sendMediaMessage() {
             <Separator />
           </div>
           <p class="text-xs text-muted-foreground font-medium px-1">
-            {{ filteredAssignableUsers.length }}
-            {{ filteredAssignableUsers.length === 1 ? 'user' : 'users' }} available
+            {{ $t('chat.usersAvailable', { count: filteredAssignableUsers.length }) }}
           </p>
           <ScrollArea class="max-h-[420px]">
-            <div class="space-y-0.5">
+            <div class="space-y-0.5" role="listbox" :aria-label="$t('chat.assignContact')">
               <Button
                 v-for="user in filteredAssignableUsers"
                 :key="user.id"
@@ -5876,6 +5899,9 @@ async function sendMediaMessage() {
                     ? 'bg-primary/10 border border-primary/20'
                     : 'hover:bg-muted'
                 "
+                role="option"
+                :aria-selected="contactsStore.currentContact?.assigned_user_id === user.id"
+                :disabled="isAssigning"
                 @click="
                   assignContactToUser(user.id);
                   isAssignDialogOpen = false;
@@ -5884,6 +5910,7 @@ async function sendMediaMessage() {
                 <div class="flex items-center w-full gap-3">
                   <div
                     class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium"
+                    aria-hidden="true"
                   >
                     {{ user.full_name?.charAt(0)?.toUpperCase() || '?' }}
                   </div>
@@ -5898,7 +5925,7 @@ async function sendMediaMessage() {
                     class="h-4 w-4 text-primary shrink-0"
                   />
                   <Badge v-else variant="outline" class="text-xs shrink-0">
-                    {{ user.role?.name }}
+                    {{ user.role?.name || $t("chat.noRole") }}
                   </Badge>
                 </div>
               </Button>
@@ -5928,7 +5955,7 @@ async function sendMediaMessage() {
         >
           <div class="flex items-center justify-between gap-3">
             <DialogTitle class="text-sm font-medium text-white truncate">
-              {{ chatMediaViewerTitle || "Media Preview" }}
+              {{ chatMediaViewerTitle || t("chat.mediaPreview") }}
             </DialogTitle>
             <Button
               variant="ghost"
@@ -5972,7 +5999,7 @@ async function sendMediaMessage() {
               rel="noopener noreferrer"
               class="text-sm text-white underline underline-offset-4"
             >
-              Open media in new tab
+              {{ $t("chat.openMediaNewTab") }}
             </a>
           </div>
         </div>
