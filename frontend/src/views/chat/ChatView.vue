@@ -108,6 +108,8 @@ import {
   RotateCw,
   Filter,
   StickyNote,
+  Video,
+  Music,
   RefreshCw,
 } from "lucide-vue-next";
 import { getInitials, getAvatarGradient } from "@/lib/utils";
@@ -3318,27 +3320,18 @@ function canRetryMediaDownload(message: Message): boolean {
 async function retryMediaDownload(message: Message) {
   mediaLoadingStates.value[message.id] = true;
   try {
-    const resp = await fetch(
-      `/api/media/${encodeURIComponent(message.id)}/retry-download`,
-      { method: "POST" },
-    );
-    if (!resp.ok) {
-      if (resp.status === 410) {
-        toast.error(t("common.mediaDownloadExpired"));
-      } else {
-        const data = await resp.json().catch(() => null);
-        toast.error(
-          data?.message || t("common.mediaDownloadExpired"),
-        );
-      }
+    const resp = await contactsService.retryMediaDownload(message.id);
+    if (resp.status !== "success") {
+      toast.error(resp.message || t("common.mediaDownloadExpired"));
       return;
     }
     // Re-fetch the media blob now that the file is restored
     clearMissingMediaPrefetch(message.id);
     delete mediaBlobUrls.value[message.id];
     await loadMediaForMessage(message);
-  } catch {
-    toast.error(t("common.mediaDownloadExpired"));
+  } catch (error: any) {
+    const msg = error?.response?.data?.message;
+    toast.error(msg || t("common.mediaDownloadExpired"));
   } finally {
     mediaLoadingStates.value[message.id] = false;
   }
@@ -4963,11 +4956,22 @@ async function sendMediaMessage() {
                       />
                       <div
                         v-else
-                        class="w-[200px] h-[150px] bg-muted rounded-lg flex items-center justify-center"
+                        class="w-[200px] h-[150px] bg-muted rounded-lg flex flex-col items-center justify-center gap-1"
                       >
-                        <span class="text-muted-foreground text-sm"
-                          >[Image]</span
+                        <ImageIcon class="h-5 w-5 text-muted-foreground" />
+                        <span
+                          class="text-sm text-muted-foreground cursor-pointer hover:text-foreground underline decoration-dotted"
+                          @click.stop="retryMediaDownload(message)"
+                        >{{ $t("common.mediaExpired") }}</span>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          class="h-7 px-2 text-[11px]"
+                          @click.stop="retryMediaDownload(message)"
                         >
+                          <RefreshCw class="h-3.5 w-3.5 mr-1" />
+                          {{ $t("common.retryDownload") }}
+                        </Button>
                       </div>
                       <div
                         v-if="
@@ -5025,11 +5029,22 @@ async function sendMediaMessage() {
                       />
                       <div
                         v-else
-                        class="w-[128px] h-[128px] bg-muted rounded-lg flex items-center justify-center"
+                        class="w-[128px] h-[128px] bg-muted rounded-lg flex flex-col items-center justify-center gap-1"
                       >
-                        <span class="text-muted-foreground text-sm"
-                          >[Sticker]</span
+                        <ImageIcon class="h-5 w-5 text-muted-foreground" />
+                        <span
+                          class="text-xs text-muted-foreground cursor-pointer hover:text-foreground underline decoration-dotted text-center"
+                          @click.stop="retryMediaDownload(message)"
+                        >{{ $t("common.mediaExpired") }}</span>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          class="h-7 px-2 text-[11px]"
+                          @click.stop="retryMediaDownload(message)"
                         >
+                          <RefreshCw class="h-3.5 w-3.5 mr-1" />
+                          {{ $t("common.retryDownload") }}
+                        </Button>
                       </div>
                     </div>
                     <!-- Video message -->
@@ -5056,11 +5071,22 @@ async function sendMediaMessage() {
                       />
                       <div
                         v-else
-                        class="w-[200px] h-[150px] bg-muted rounded-lg flex items-center justify-center"
+                        class="w-[200px] h-[150px] bg-muted rounded-lg flex flex-col items-center justify-center gap-1"
                       >
-                        <span class="text-muted-foreground text-sm"
-                          >[Video]</span
+                        <Video class="h-5 w-5 text-muted-foreground" />
+                        <span
+                          class="text-sm text-muted-foreground cursor-pointer hover:text-foreground underline decoration-dotted"
+                          @click.stop="retryMediaDownload(message)"
+                        >{{ $t("common.mediaExpired") }}</span>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          class="h-7 px-2 text-[11px]"
+                          @click.stop="retryMediaDownload(message)"
                         >
+                          <RefreshCw class="h-3.5 w-3.5 mr-1" />
+                          {{ $t("common.retryDownload") }}
+                        </Button>
                       </div>
                     </div>
                     <!-- Audio message -->
@@ -5081,8 +5107,21 @@ async function sendMediaMessage() {
                         class="max-w-[280px]"
                         @error="handleMediaError($event, 'audio')"
                       />
-                      <div v-else class="text-muted-foreground text-sm">
-                        [Audio]
+                      <div v-else class="flex items-center gap-2 flex-wrap">
+                        <Music class="h-4 w-4 text-muted-foreground" />
+                        <span
+                          class="text-sm text-muted-foreground cursor-pointer hover:text-foreground underline decoration-dotted"
+                          @click.stop="retryMediaDownload(message)"
+                        >{{ $t("common.mediaExpired") }}</span>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          class="h-7 px-2 text-[11px]"
+                          @click.stop="retryMediaDownload(message)"
+                        >
+                          <RefreshCw class="h-3.5 w-3.5 mr-1" />
+                          {{ $t("common.retryDownload") }}
+                        </Button>
                       </div>
                     </div>
                     <!-- Document message -->
@@ -5149,11 +5188,48 @@ async function sendMediaMessage() {
                         class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg"
                       >
                         <FileText class="h-5 w-5 text-muted-foreground" />
-                        <span class="text-sm text-muted-foreground">{{
+                        <span
+                          class="text-sm text-muted-foreground cursor-pointer hover:text-foreground underline decoration-dotted"
+                          @click.stop="retryMediaDownload(message)"
+                        >{{
                           $t("common.mediaExpired")
                         }}</span>
                         <Button
-                          v-if="canRetryMediaDownload(message)"
+                          variant="ghost"
+                          size="xs"
+                          class="h-7 px-2 text-[11px]"
+                          @click.stop="retryMediaDownload(message)"
+                        >
+                          <RefreshCw class="h-3.5 w-3.5 mr-1" />
+                          {{ $t("common.retryDownload") }}
+                        </Button>
+                      </div>
+                    </div>
+                    <!-- Deleted/expired media fallback (media type but no media_url) -->
+                    <div
+                      v-else-if="isMediaMessage(message) && !message.media_url"
+                      class="mb-2"
+                    >
+                      <div
+                        class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg"
+                      >
+                        <component
+                          :is="
+                            message.message_type === 'image' || message.message_type === 'sticker'
+                              ? ImageIcon
+                              : message.message_type === 'video'
+                                ? Video
+                                : message.message_type === 'audio'
+                                  ? Music
+                                  : FileText
+                          "
+                          class="h-5 w-5 text-muted-foreground"
+                        />
+                        <span
+                          class="text-sm text-muted-foreground cursor-pointer hover:text-foreground underline decoration-dotted"
+                          @click.stop="retryMediaDownload(message)"
+                        >{{ $t("common.mediaExpired") }}</span>
+                        <Button
                           variant="ghost"
                           size="xs"
                           class="h-7 px-2 text-[11px]"

@@ -2040,3 +2040,33 @@ The helper updates `/opt/whatomate/bin/whatomate`, restarts the live services, a
   - license keyring recovery and embedded-key rebuild
   - blue/green deployment with rollback aliasing
   - API and browser smoke verification
+
+## Blue-Green Deployment Update
+
+Updated: 2026-05-15 01:12:00 UTC
+
+- Deployment type: Blue-Green
+- Active slot: GREEN
+- Green binary: /opt/whatomate/bin/whatomate.green.20260515_011030
+- Blue binary (rollback): /opt/whatomate/bin/whatomate.blue.20260515_010659
+- Version: Whatomate green-20260515_011000 (built 2026-05-15_01:10:13)
+- Switch command on VPS: `whatomate-switch` (toggles between blue and green)
+
+### Changes in this deploy
+
+- Frontend: Added "File no longer available" clickable text with retry download for all media types (image, video, audio, sticker, document)
+- Frontend: Added Video and Music icons from lucide-vue-next for expired media indicators
+- License key ring embedded at build time from /root/whatomate-keyring.json
+
+### Post-Deploy Verification
+
+- All 4 services: active
+- License status: enabled=True, status=active, locked=False (all 4 ports)
+- All HTTPS endpoints returning 200
+
+### One-command switch
+
+```bash
+# On the VPS, run:
+whatomate-switch
+```

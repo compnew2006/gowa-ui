@@ -311,6 +311,8 @@ export const contactsService = {
     api.put(`/contacts/${id}/collaborators/${userId}/decline`, {}),
   removeCollaborator: (id: string, userId: string) =>
     api.delete(`/contacts/${id}/collaborators/${userId}`),
+  retryMediaDownload: (messageId: string) =>
+    api.post(`/media/${encodeURIComponent(messageId)}/retry-download`),
 };
 
 export const chatsService = {
