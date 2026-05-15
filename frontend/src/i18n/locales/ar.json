@@ -485,7 +485,13 @@
     "pendingStatus": "قيد الانتظار",
     "closedStatus": "مغلقة",
     "pausedStatus": "متوقفة مؤقتاً",
-    "assignedToName": "تم التعيين إلى {name}"
+    "assignedToName": "تم التعيين إلى {name}",
+    "exportChat": "تصدير المحادثة",
+    "exportAsPDF": "تصدير كـ PDF",
+    "exportAsText": "تصدير كنص",
+    "exportingChat": "جارٍ تصدير المحادثة...",
+    "exportChatEmpty": "لا توجد رسائل للتصدير",
+    "exportChatTooltip": "تصدير نص المحادثة"
   },
   "contacts": {
     "title": "جهات الاتصال",

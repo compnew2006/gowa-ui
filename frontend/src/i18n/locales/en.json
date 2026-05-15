@@ -507,7 +507,13 @@
     "pendingStatus": "Pending",
     "closedStatus": "Closed",
     "pausedStatus": "Paused",
-    "assignedToName": "Assigned to {name}"
+    "assignedToName": "Assigned to {name}",
+    "exportChat": "Export Chat",
+    "exportAsPDF": "Export as PDF",
+    "exportAsText": "Export as Text",
+    "exportingChat": "Exporting chat...",
+    "exportChatEmpty": "No messages to export",
+    "exportChatTooltip": "Export chat transcript"
   },
   "contacts": {
     "title": "Contacts",

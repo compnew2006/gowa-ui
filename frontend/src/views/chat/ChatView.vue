@@ -113,6 +113,13 @@ import {
   RefreshCw,
 } from "lucide-vue-next";
 import { getInitials, getAvatarGradient } from "@/lib/utils";
+import {
+  fetchAllMessages,
+  buildTextExport,
+  buildHtmlForPrint,
+  downloadTextFile,
+  downloadHtmlAsPdf,
+} from "@/lib/chat-export";
 import { getMessageSenderPhone, isGroupContact } from "@/lib/group-chat";
 import {
   downloadMessageMedia,
@@ -627,6 +634,8 @@ const mediaUploadProgress = ref<{ current: number; total: number } | null>(
   null,
 );
 const isPreparingBatchPrint = ref(false);
+const isExportingChat = ref(false);
+const isExportMenuOpen = ref(false);
 const isBatchPrintSelectionMode = ref(false);
 const selectedBatchPrintMessageIds = ref<string[]>([]);
 const selectedMediaCount = computed(() => selectedMediaUploads.value.length);
@@ -1471,6 +1480,9 @@ function handleCollaboratorUpdate(payload: any) {
 
 // Fetch contacts on mount (WebSocket is connected in AppLayout)
 onMounted(async () => {
+  document.addEventListener("click", () => {
+    if (isExportMenuOpen.value) isExportMenuOpen.value = false;
+  });
   refreshChatSidebarViewModePreference();
   window.addEventListener("storage", refreshChatSidebarViewModePreference);
 
@@ -3686,6 +3698,51 @@ function openBatchPrintPicker() {
   void mergeSelectedMessageBubblesAndPrint();
 }
 
+async function exportChatAsText() {
+  const contact = contactsStore.currentContact;
+  if (!contact) return;
+  if (contactsStore.messages.length === 0) {
+    toast.error(t("chat.exportChatEmpty"));
+    return;
+  }
+  isExportingChat.value = true;
+  isExportMenuOpen.value = false;
+  try {
+    const account = selectedAccountFilter(selectedAccount.value);
+    const allMsgs = await fetchAllMessages(contact.id, account);
+    const text = buildTextExport(contact, allMsgs);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const safeName = (contact.name || contact.phone_number).replace(/[^a-zA-Z0-9؀-ۿ]/g, "_");
+    downloadTextFile(text, `${safeName}_${dateStr}.txt`);
+  } catch (error: any) {
+    toast.error(error?.message || "Export failed");
+  } finally {
+    isExportingChat.value = false;
+  }
+}
+
+async function exportChatAsPDF() {
+  const contact = contactsStore.currentContact;
+  if (!contact) return;
+  if (contactsStore.messages.length === 0) {
+    toast.error(t("chat.exportChatEmpty"));
+    return;
+  }
+  isExportingChat.value = true;
+  isExportMenuOpen.value = false;
+  try {
+    const account = selectedAccountFilter(selectedAccount.value);
+    const allMsgs = await fetchAllMessages(contact.id, account);
+    const locale = localStorage.getItem("locale") || "en";
+    const html = buildHtmlForPrint(contact, allMsgs, locale);
+    downloadHtmlAsPdf(html);
+  } catch (error: any) {
+    toast.error(error?.message || "Export failed");
+  } finally {
+    isExportingChat.value = false;
+  }
+}
+
 function getMediaSizeErrorKey(category: WhatsAppMediaCategory) {
   if (category === "image") {
     return "chat.fileTooLargeImageDesc";
@@ -4473,7 +4530,7 @@ async function sendMediaMessage() {
       <template v-else>
         <!-- Chat Header -->
         <div
-          class="flex h-14 flex-shrink-0 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur"
+          class="relative z-50 flex h-14 flex-shrink-0 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur"
         >
           <div class="flex items-center gap-2">
             <button
@@ -4697,6 +4754,45 @@ async function sendMediaMessage() {
               </TooltipTrigger>
               <TooltipContent>{{ $t("chat.internalNotes") }}</TooltipContent>
             </Tooltip>
+            <div class="relative">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    :disabled="isExportingChat"
+                    @click.stop="isExportMenuOpen = !isExportMenuOpen"
+                  >
+                    <Loader2 v-if="isExportingChat" class="h-4 w-4 animate-spin" />
+                    <Download v-else class="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{{ $t("chat.exportChatTooltip") }}</TooltipContent>
+              </Tooltip>
+              <div
+                v-if="isExportMenuOpen"
+                class="absolute right-0 top-full mt-1 z-[9999] min-w-[160px] rounded-md border border-border bg-popover p-1 shadow-md"
+                @click.stop
+              >
+                <button
+                  class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  :disabled="isExportingChat"
+                  @click="exportChatAsPDF()"
+                >
+                  <FileText class="h-4 w-4" />
+                  {{ $t("chat.exportAsPDF") }}
+                </button>
+                <button
+                  class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  :disabled="isExportingChat"
+                  @click="exportChatAsText()"
+                >
+                  <Download class="h-4 w-4" />
+                  {{ $t("chat.exportAsText") }}
+                </button>
+              </div>
+            </div>
             <Tooltip>
               <TooltipTrigger as-child>
                 <Button
