@@ -98,3 +98,5 @@ test-results/
 .claude/
 # Code health tool artifacts
 .desloppify/
+# CocoIndex Code (ccc)
+/.cocoindex_code/

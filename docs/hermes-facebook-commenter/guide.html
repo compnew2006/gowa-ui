@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hermes Facebook Commenter — API Reference</title>
+<style>
+:root {
+  --bg: oklch(0.15 0.01 260);
+  --bg2: oklch(0.19 0.015 260);
+  --bg3: oklch(0.23 0.02 260);
+  --surface: oklch(0.26 0.025 260);
+  --border: oklch(0.32 0.03 260);
+  --text: oklch(0.88 0.015 260);
+  --text2: oklch(0.68 0.025 260);
+  --text3: oklch(0.55 0.03 260);
+  --accent: oklch(0.65 0.18 240);
+  --accent2: oklch(0.55 0.15 240);
+  --code-bg: oklch(0.12 0.01 260);
+  --code-text: oklch(0.83 0.04 140);
+  --table-border: oklch(0.3 0.025 260);
+  --table-alt: oklch(0.22 0.02 260);
+  --success: oklch(0.6 0.15 150);
+  --warn: oklch(0.7 0.15 80);
+  --sidebar-w: 280px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  display: flex;
+  min-height: 100vh;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent2); text-decoration: underline; }
+
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  top: 0; left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  z-index: 100;
+  padding: 0;
+}
+.sidebar-header {
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  z-index: 2;
+}
+.sidebar-section { border-bottom: 1px solid var(--border); }
+.sidebar-section-title {
+  padding: 10px 16px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+}
+.sidebar-link {
+  display: block;
+  padding: 5px 16px 5px 20px;
+  font-size: 0.8rem;
+  color: var(--text2);
+  border-left: 2px solid transparent;
+  transition: border-color 0.15s, color 0.15s;
+}
+.sidebar-link:hover {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  text-decoration: none;
+}
+.sidebar-link.fn { padding-left: 28px; font-size: 0.76rem; }
+
+/* Menu toggle for mobile */
+.menu-toggle {
+  display: none;
+  position: fixed;
+  top: 12px; left: 12px;
+  z-index: 200;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 40px; height: 40px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar-overlay { display: none; }
+
+/* Main content */
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  max-width: 900px;
+  padding: 40px 48px 80px;
+}
+.main > * { max-width: 72ch; }
+
+/* Typography */
+h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+h1 + .subtitle {
+  color: var(--text3);
+  font-size: 0.92rem;
+  margin-bottom: 32px;
+}
+h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 40px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--accent);
+  scroll-margin-top: 20px;
+}
+h2 .src-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--text3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: 10px;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 28px 0 8px;
+  color: var(--text);
+  scroll-margin-top: 20px;
+}
+h3 .fn-kind {
+  font-size: 0.6rem;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--text3);
+  padding: 2px 7px;
+  border-radius: 3px;
+  margin-left: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}
+h4 {
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin: 20px 0 6px;
+  color: var(--text2);
+}
+p, li { font-size: 0.88rem; color: var(--text2); line-height: 1.7; }
+p { margin-bottom: 10px; }
+
+/* Architecture diagram */
+.arch-wrap {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 20px 0;
+  overflow-x: auto;
+}
+.arch-wrap pre {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+/* Code blocks */
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--code-text);
+  position: relative;
+  margin: 10px 0 16px;
+}
+pre .copy-btn {
+  position: absolute;
+  top: 6px; right: 6px;
+  background: oklch(0.3 0.03 260 / 0.5);
+  border: 1px solid var(--border);
+  color: var(--text3);
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+pre:hover .copy-btn { opacity: 1; }
+pre .copy-btn:hover { background: var(--surface); color: var(--text); }
+
+/* Inline code */
+code {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 0.8em;
+  background: var(--code-bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: oklch(0.8 0.04 140);
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 16px;
+  font-size: 0.82rem;
+}
+th, td {
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--table-border);
+}
+th {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+td { color: var(--text2); }
+td code { font-size: 0.78rem; }
+tr:nth-child(even) td { background: var(--table-alt); }
+
+/* Lists */
+ul { margin: 8px 0 12px 20px; }
+li { margin-bottom: 4px; }
+
+/* Description / behavior boxes */
+.desc-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin: 10px 0 16px;
+}
+.desc-box p { margin-bottom: 6px; }
+.desc-box p:last-child { margin-bottom: 0; }
+
+/* Cross-reference */
+.xref { color: var(--accent); font-size: 0.82rem; }
+.xref::before { content: "⤷ "; }
+
+/* Print */
+@media print {
+  .sidebar { display: none; }
+  .menu-toggle { display: none; }
+  .main { margin-left: 0; padding: 20px; }
+  body { background: oklch(1 0 0); color: oklch(0.15 0.01 260); }
+  pre { background: oklch(0.95 0.005 260); border-color: oklch(0.85 0.01 260); color: oklch(0.2 0.02 260); }
+  table { border-color: oklch(0.85 0.01 260); }
+  th { background: oklch(0.92 0.01 260); }
+  td { color: oklch(0.25 0.015 260); }
+  tr:nth-child(even) td { background: oklch(0.96 0.005 260); }
+  .desc-box { background: oklch(0.96 0.005 260); border-color: oklch(0.85 0.01 260); }
+  .arch-wrap { background: oklch(0.96 0.005 260); }
+  a { color: oklch(0.4 0.15 240); }
+  h1, h2, h3 { color: oklch(0.15 0.01 260); }
+  .subtitle { color: oklch(0.4 0.02 260); }
+  .sidebar-header, .sidebar-section-title, .src-badge, .fn-kind { color: oklch(0.4 0.02 260); }
+  code { color: oklch(0.3 0.06 140); }
+  --text2: oklch(0.35 0.015 260);
+  --text3: oklch(0.45 0.02 260);
+  --border: oklch(0.85 0.01 260);
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .menu-toggle { display: flex; }
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: oklch(0 0 0 / 0.4);
+    z-index: 99;
+  }
+  .sidebar-overlay.show { display: block; }
+  .main {
+    margin-left: 0;
+    padding: 60px 18px 40px;
+  }
+}
+
+/* Scrollbar */
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation">☰</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">Hermes Facebook Commenter<br><span style="font-weight:400;font-size:0.72rem;color:var(--text3)">API Reference</span></div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">facebook.py</div>
+    <a class="sidebar-link fn" href="#fb-publish_post">publish_post()</a>
+    <a class="sidebar-link fn" href="#fb-get_comments">get_comments()</a>
+    <a class="sidebar-link fn" href="#fb-reply_to_comment">reply_to_comment()</a>
+    <a class="sidebar-link fn" href="#fb-get_all_posts">get_all_posts()</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">multi_business_facebook.py</div>
+    <a class="sidebar-link" href="#mb-BusinessConfig">BusinessConfig</a>
+    <a class="sidebar-link" href="#mb-init">__init__()</a>
+    <a class="sidebar-link fn" href="#mb-load_all_businesses">load_all_businesses()</a>
+    <a class="sidebar-link fn" href="#mb-get_business">get_business()</a>
+    <a class="sidebar-link fn" href="#mb-get_business_by_page_id">get_business_by_page_id()</a>
+    <a class="sidebar-link fn" href="#mb-add_business">add_business()</a>
+    <a class="sidebar-link fn" href="#mb-publish_post">publish_post()</a>
+    <a class="sidebar-link fn" href="#mb-get_comments">get_comments()</a>
+    <a class="sidebar-link fn" href="#mb-reply_to_comment">reply_to_comment()</a>
+    <a class="sidebar-link fn" href="#mb-get_all_posts">get_all_posts()</a>
+    <a class="sidebar-link fn" href="#mb-save_business_memory">save_business_memory()</a>
+    <a class="sidebar-link fn" href="#mb-get_business_memory">get_business_memory()</a>
+    <a class="sidebar-link fn" href="#mb-learn_from_interaction">learn_from_interaction()</a>
+    <a class="sidebar-link fn" href="#mb-generate_reply">generate_reply()</a>
+    <a class="sidebar-link fn" href="#mb-detect_language">detect_language()</a>
+    <a class="sidebar-link fn" href="#mb-generate_price_reply">generate_price_reply()</a>
+    <a class="sidebar-link fn" href="#mb-generate_hours_reply">generate_hours_reply()</a>
+    <a class="sidebar-link fn" href="#mb-generate_location_reply">generate_location_reply()</a>
+    <a class="sidebar-link fn" href="#mb-generate_services_reply">generate_services_reply()</a>
+    <a class="sidebar-link fn" href="#mb-list_businesses">list_businesses()</a>
+    <a class="sidebar-link" href="#mb-convenience">Convenience Functions</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">facebook_webhook.py</div>
+    <a class="sidebar-link fn" href="#wh-verify">verify_webhook()</a>
+    <a class="sidebar-link fn" href="#wh-handler">webhook()</a>
+    <a class="sidebar-link fn" href="#wh-handle_comment">handle_comment_event()</a>
+    <a class="sidebar-link fn" href="#wh-handle_feed">handle_feed_event()</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">facebook_webhook_gunicorn.py</div>
+    <a class="sidebar-link fn" href="#whp-health">health_check()</a>
+    <a class="sidebar-link fn" href="#whp-verify">verify_webhook()</a>
+    <a class="sidebar-link fn" href="#whp-handler">webhook()</a>
+    <a class="sidebar-link fn" href="#whp-handle_comment">handle_comment_event()</a>
+    <a class="sidebar-link fn" href="#whp-handle_feed">handle_feed_event()</a>
+    <a class="sidebar-link fn" href="#whp-forward">forward_to_hermes()</a>
+    <a class="sidebar-link fn" href="#whp-queue">queue_for_retry()</a>
+    <a class="sidebar-link fn" href="#whp-log">log_event()</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">multi_business_webhook.py</div>
+    <a class="sidebar-link fn" href="#mw-health">health_check()</a>
+    <a class="sidebar-link fn" href="#mw-list">list_businesses()</a>
+    <a class="sidebar-link fn" href="#mw-details">get_business()</a>
+    <a class="sidebar-link fn" href="#mw-verify">verify_webhook()</a>
+    <a class="sidebar-link fn" href="#mw-handler">webhook()</a>
+    <a class="sidebar-link fn" href="#mw-handle_comment">handle_comment_event()</a>
+    <a class="sidebar-link fn" href="#mw-handle_feed">handle_feed_event()</a>
+    <a class="sidebar-link fn" href="#mw-forward">forward_to_hermes()</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">add_business.py</div>
+    <a class="sidebar-link fn" href="#ab-interactive">add_business_interactive()</a>
+    <a class="sidebar-link fn" href="#ab-main">main()</a>
+  </div>
+</nav>
+
+<main class="main">
+
+<h1>Hermes Facebook Commenter</h1>
+<p class="subtitle">API Reference — generated from plugin documentation</p>
+
+<h2 style="border:none;margin-top:0">Architecture</h2>
+
+<div class="arch-wrap">
+<pre>                     ┌──────────────────────┐
+                     │   Meta Graph API     │
+                     │  (Facebook servers)  │
+                     └──────┬───────────────┘
+                            │ Webhook Events
+                            ▼
+               ┌──────────────────────────┐
+               │ multi_business_webhook.py│ (Flask, port 5000)
+               │  POST /webhook           │
+               │  GET  /health            │
+               │  GET  /webhook           │
+               └──────┬───────────────────┘
+                      │ auto-reply + route by page_id
+                      ▼
+          ┌──────────────────────────┐
+          │ multi_business_facebook  │
+          │ .py (Business Manager)   │
+          └──┬───────┬───────┬───────┘
+             │       │       │
+             ▼       ▼       ▼
+       Business  Business  Business
+       Config 1  Config 2  Config N
+    (~/.hermes/businesses/*.json)
+
+          ┌──────────────────────────┐
+          │  Hermes API              │
+          │  (AI processing)         │
+          └──────────────────────────┘</pre>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION: facebook.py -->
+<!-- ============================================================ -->
+<h2 id="fb">facebook.py <span class="src-badge">4 functions</span></h2>
+<p>Simple single-page Facebook API wrapper. Raw API calls to the Meta Graph API v19.0 using the <code>requests</code> library. Configured via environment variables <code>FB_PAGE_ACCESS_TOKEN</code> and <code>FB_PAGE_ID</code>.</p>
+
+<h3 id="fb-publish_post">publish_post() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Publishes a new text post to the configured Facebook page via the Meta Graph API (v19.0).</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def publish_post(message: str) -> dict</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>message</code></td><td><code>str</code></td><td>The text content of the post</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>dict</code> — JSON response from the Graph API. On success contains an <code>id</code> field with the new post ID.</p>
+<h4>API Call</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>POST https://graph.facebook.com/v19.0/{PAGE_ID}/feed</pre>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>from facebook import publish_post
+
+result = publish_post("Hello from Hermes!")
+print(result)
+# {'id': '123456789_987654321'}</pre>
+
+<h3 id="fb-get_comments">get_comments() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Retrieves all comments on a specific Facebook post using the Meta Graph API.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def get_comments(post_id: str) -> list</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>post_id</code></td><td><code>str</code></td><td>The Facebook post ID</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>list</code> — A list of comment objects. Each comment contains <code>id</code>, <code>message</code>, <code>from</code> (author info), <code>created_time</code>.</p>
+<h4>API Call</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>GET https://graph.facebook.com/v19.0/{post_id}/comments?fields=id,message,from,created_time</pre>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>from facebook import get_comments
+
+comments = get_comments("123456789_987654321")
+for c in comments:
+    print(f"{c['from']['name']}: {c['message']}")</pre>
+
+<h3 id="fb-reply_to_comment">reply_to_comment() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Replies directly to a specific Facebook comment as the page.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def reply_to_comment(comment_id: str, message: str) -> dict</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>comment_id</code></td><td><code>str</code></td><td>The comment ID</td></tr>
+<tr><td><code>message</code></td><td><code>str</code></td><td>The reply text</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>dict</code> — JSON response from the Graph API. Contains <code>id</code> on success.</p>
+<h4>API Call</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>POST https://graph.facebook.com/v19.0/{comment_id}/replies</pre>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>from facebook import reply_to_comment
+
+result = reply_to_comment("987654321", "Thank you for your feedback!")
+print(result)</pre>
+
+<h3 id="fb-get_all_posts">get_all_posts() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Retrieves recent posts from the configured Facebook page, including their comments.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def get_all_posts() -> list</pre>
+<h4>Parameters</h4>
+<p>None. Uses environment variables <code>FB_PAGE_ACCESS_TOKEN</code> and <code>FB_PAGE_ID</code>.</p>
+<h4>Returns</h4>
+<p><code>list</code> — A list of post objects. Each post contains <code>id</code>, <code>message</code>, <code>created_time</code>, <code>comments</code>.</p>
+<h4>API Call</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>GET https://graph.facebook.com/v19.0/{PAGE_ID}/posts?fields=id,message,created_time,comments{message,from}</pre>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>from facebook import get_all_posts
+
+posts = get_all_posts()
+for post in posts:
+    print(f"[{post['id']}] {post['message'][:50]}")</pre>
+
+
+<!-- ============================================================ -->
+<!-- SECTION: multi_business_facebook.py -->
+<!-- ============================================================ -->
+<h2 id="mb">multi_business_facebook.py <span class="src-badge">BusinessConfig + Manager + convenience</span></h2>
+<p>Multi-business Facebook manager with per-business memory, auto-reply, language detection, and independent learning. See also the <a href="#mw">multi_business_webhook.py</a> section for the webhook that drives it.</p>
+
+<h3 id="mb-BusinessConfig">BusinessConfig <span class="fn-kind">class</span></h3>
+<div class="desc-box"><p>Holds configuration data for one business/page pair. Used by <code>MultiBusinessFacebookManager</code> to store per-business settings, services, prices, location, hours, and FAQs.</p></div>
+<h4>Constructor</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def __init__(self, business_id: str, config: dict)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>Unique identifier for the business</td></tr>
+<tr><td><code>config</code></td><td><code>dict</code></td><td>Configuration dictionary (from JSON file)</td></tr>
+</tbody>
+</table>
+<h4>Config Fields</h4>
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>name</code></td><td><code>str</code></td><td><code>'Unknown Business'</code></td><td>Business display name</td></tr>
+<tr><td><code>page_id</code></td><td><code>str</code></td><td><code>None</code></td><td>Facebook Page ID</td></tr>
+<tr><td><code>page_access_token</code></td><td><code>str</code></td><td><code>None</code></td><td>Page-scoped access token</td></tr>
+<tr><td><code>page_name</code></td><td><code>str</code></td><td><code>''</code></td><td>Facebook page name</td></tr>
+<tr><td><code>auto_reply</code></td><td><code>bool</code></td><td><code>True</code></td><td>Enable auto-reply on comments</td></tr>
+<tr><td><code>auto_post</code></td><td><code>bool</code></td><td><code>False</code></td><td>Enable scheduled auto-posting</td></tr>
+<tr><td><code>post_schedule</code></td><td><code>dict</code></td><td><code>{}</code></td><td>Cron-style posting schedule</td></tr>
+<tr><td><code>reply_language</code></td><td><code>str</code></td><td><code>'auto'</code></td><td>Reply language (<code>auto</code>, <code>en</code>, <code>ar</code>)</td></tr>
+<tr><td><code>services</code></td><td><code>list</code></td><td><code>[]</code></td><td>List of service names</td></tr>
+<tr><td><code>prices</code></td><td><code>dict</code></td><td><code>{}</code></td><td><code>{service_name: price}</code> map</td></tr>
+<tr><td><code>location</code></td><td><code>dict</code></td><td><code>{}</code></td><td><code>{address, phone, landmark}</code></td></tr>
+<tr><td><code>hours</code></td><td><code>dict</code></td><td><code>{}</code></td><td><code>{general: "hours string"}</code></td></tr>
+<tr><td><code>faqs</code></td><td><code>list</code></td><td><code>[]</code></td><td>FAQ entries</td></tr>
+<tr><td><code>tone</code></td><td><code>str</code></td><td><code>'professional'</code></td><td>Reply tone (professional, friendly)</td></tr>
+</tbody>
+</table>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>config = BusinessConfig("bakery", {
+    "name": "Al-Arkan Bakery",
+    "page_id": "123456789",
+    "services": ["Croissant", "Baguette"],
+    "prices": {"Croissant": "$3", "Baguette": "$5"},
+    "tone": "friendly"
+})</pre>
+
+<h3 id="mb-init">MultiBusinessFacebookManager.__init__() <span class="fn-kind">constructor</span></h3>
+<div class="desc-box"><p>Creates the multi-business manager. Sets up config and memory directories under <code>~/.hermes/businesses/</code>, then loads all existing business configurations from JSON files.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def __init__(self)</pre>
+<h4>Behavior</h4>
+<ul>
+<li>Creates <code>~/.hermes/businesses/</code> directory if not exists</li>
+<li>Creates <code>~/.hermes/businesses/memory/</code> directory if not exists</li>
+<li>Calls <a href="#mb-load_all_businesses"><code>load_all_businesses()</code></a> to load all <code>.json</code> files</li>
+</ul>
+<h4>Directory Structure</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>~/.hermes/businesses/
+├── maktabat_al_arkan.json       # Business config
+├── restaurant.json              # Business config
+└── memory/
+    ├── maktabat_al_arkan_posts.jsonl
+    ├── maktabat_al_arkan_replies.jsonl
+    └── restaurant_posts.jsonl</pre>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>from multi_business_facebook import MultiBusinessFacebookManager
+manager = MultiBusinessFacebookManager()
+# ✓ Loaded business: Maktabat Al-Arkan
+# ✓ Loaded business: Restaurant</pre>
+
+<h3 id="mb-load_all_businesses">load_all_businesses() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Scans the config directory (<code>~/.hermes/businesses/</code>) for all <code>.json</code> files and loads each one as a <code>BusinessConfig</code> instance into the <code>self.businesses</code> dictionary.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def load_all_businesses(self)</pre>
+<h4>Behavior</h4>
+<ul>
+<li>Iterates over <code>*.json</code> files in <code>~/.hermes/businesses/</code></li>
+<li>Uses the filename stem (without <code>.json</code>) as <code>business_id</code></li>
+<li>On success: prints <code>✓ Loaded business: {name}</code></li>
+<li>On failure: prints <code>✗ Failed to load {business_id}: {error}</code></li>
+</ul>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>manager.load_all_businesses()
+# ✓ Loaded business: Maktabat Al-Arkan
+# ✓ Loaded business: Restaurant</pre>
+
+<h3 id="mb-get_business">get_business() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Retrieves a <code>BusinessConfig</code> instance by its unique business identifier.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def get_business(self, business_id: str) -> Optional[BusinessConfig]</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>Unique business identifier</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>BusinessConfig</code> if found, <code>None</code> otherwise.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>business = manager.get_business("maktabat_al_arkan")
+if business:
+    print(business.name)
+    # "مكتبة الأركان"</pre>
+
+<h3 id="mb-get_business_by_page_id">get_business_by_page_id() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Looks up which business owns a given Facebook Page ID. Critical for routing incoming webhook events to the correct business context. See <a href="#mw-handle_comment"><code>handle_comment_event()</code></a>.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def get_business_by_page_id(self, page_id: str) -> Optional[BusinessConfig]</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>page_id</code></td><td><code>str</code></td><td>The Facebook Page ID to look up</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>BusinessConfig</code> if a business with this <code>page_id</code> is found, <code>None</code> otherwise.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>business = manager.get_business_by_page_id("123456789")
+if business:
+    print(f"Found: {business.name}")</pre>
+
+<h3 id="mb-add_business">add_business() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Adds a new business by saving its configuration as a JSON file to <code>~/.hermes/businesses/{business_id}.json</code> and creating a <code>BusinessConfig</code> instance in memory.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def add_business(self, business_id: str, config: dict) -> bool</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>Unique identifier (used as filename)</td></tr>
+<tr><td><code>config</code></td><td><code>dict</code></td><td>Business configuration (see <a href="#mb-BusinessConfig"><code>BusinessConfig</code></a>)</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>True</code> on success, <code>False</code> on failure.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>config = {
+    "name": "My New Shop",
+    "page_id": "123",
+    "page_access_token": "EAA...",
+    "services": ["Printing"],
+    "prices": {"Business Card": "50 EGP"},
+    "location": {"address": "Cairo", "phone": "01000"},
+    "hours": {"general": "Daily 9am-9pm"},
+    "tone": "professional"
+}
+manager.add_business("my_shop", config)</pre>
+
+<h3 id="mb-publish_post">publish_post() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Publishes a post on a specific business's Facebook page using that business's access token. The post action is saved to the business's memory.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def publish_post(self, business_id: str, message: str) -> dict</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>The business identifier</td></tr>
+<tr><td><code>message</code></td><td><code>str</code></td><td>Post text content</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>dict</code> — Graph API response (contains <code>id</code> on success) or <code>{"error": "Business not found"}</code>.</p>
+<h4>Side Effects</h4>
+<p>Saves a "post" memory entry via <a href="#mb-save_business_memory"><code>save_business_memory()</code></a> to <code>{business_id}_posts.jsonl</code>.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>result = manager.publish_post("maktabat_al_arkan", "Special offer today!")
+if "id" in result:
+    print("Post published!")</pre>
+
+<h3 id="mb-get_comments">get_comments() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Fetches all comments on a specific post for a specific business.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def get_comments(self, business_id: str, post_id: str) -> list</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>The business identifier</td></tr>
+<tr><td><code>post_id</code></td><td><code>str</code></td><td>The Facebook post ID</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>list</code> — List of comment objects, or empty list if business not found.</p>
+<h4>API Call</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>GET https://graph.facebook.com/v19.0/{post_id}/comments?fields=id,message,from,created_time</pre>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>comments = manager.get_comments("maktabat_al_arkan", "123_456")
+for c in comments:
+    print(c['message'])</pre>
+
+<h3 id="mb-reply_to_comment">reply_to_comment() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Replies to a specific comment using a specific business's Facebook page identity and access token. The reply is saved to the business's memory.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def reply_to_comment(self, business_id: str, comment_id: str, message: str) -> dict</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>The business identifier</td></tr>
+<tr><td><code>comment_id</code></td><td><code>str</code></td><td>The comment ID to reply to</td></tr>
+<tr><td><code>message</code></td><td><code>str</code></td><td>The reply text</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>dict</code> — Graph API response or <code>{"error": "Business not found"}</code>.</p>
+<h4>Side Effects</h4>
+<p>Saves a "reply" memory entry via <a href="#mb-save_business_memory"><code>save_business_memory()</code></a> to <code>{business_id}_replies.jsonl</code>.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>result = manager.reply_to_comment(
+    "maktabat_al_arkan",
+    "987654321",
+    "شكراً لتواصلك معنا!"
+)</pre>
+
+<h3 id="mb-get_all_posts">get_all_posts() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Retrieves all recent posts from a specific business's Facebook page, including nested comments.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def get_all_posts(self, business_id: str) -> list</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>The business identifier</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>list</code> — List of post objects (each with <code>id</code>, <code>message</code>, <code>created_time</code>, <code>comments</code>), or empty list if business not found.</p>
+<h4>API Call</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>GET https://graph.facebook.com/v19.0/{page_id}/posts?fields=id,message,created_time,comments{message,from}</pre>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>posts = manager.get_all_posts("maktabat_al_arkan")
+for post in posts:
+    print(post['message'])</pre>
+
+<h3 id="mb-save_business_memory">save_business_memory() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Appends a JSON line to the business-specific memory file. Each business has separate memory files per type (posts, replies, learnings).</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def save_business_memory(self, business_id: str, memory_type: str, data: dict)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>The business identifier</td></tr>
+<tr><td><code>memory_type</code></td><td><code>str</code></td><td>Memory category (<code>"post"</code>, <code>"reply"</code>, <code>"learning"</code>)</td></tr>
+<tr><td><code>data</code></td><td><code>dict</code></td><td>The data to save (appended as JSON line)</td></tr>
+</tbody>
+</table>
+<h4>File Format</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>~/.hermes/businesses/memory/{business_id}_{memory_type}s.jsonl</pre>
+<p>Each line is a JSON object.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>manager.save_business_memory("bakery", "post", {
+    "message": "Fresh bread available!",
+    "timestamp": "2026-05-16T10:00:00"
+})</pre>
+
+<h3 id="mb-get_business_memory">get_business_memory() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Reads back stored memories for a business. If a specific <code>memory_type</code> is provided, returns only that type's entries. Otherwise returns all memory types.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def get_business_memory(self, business_id: str, memory_type: str = None) -> Union[list, dict]</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>The business identifier</td></tr>
+<tr><td><code>memory_type</code></td><td><code>str</code></td><td>Optional filter (<code>"post"</code>, <code>"reply"</code>, <code>"learning"</code>)</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p>If <code>memory_type</code> specified: <code>list</code> of dicts. If <code>None</code>: <code>dict</code> of <code>{memory_type_plural: [entries]}</code>.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button># Get all replies for a business
+replies = manager.get_business_memory("bakery", "reply")
+for r in replies:
+    print(r['message'])
+
+# Get all memory types
+all_mem = manager.get_business_memory("bakery")
+print(all_mem.keys())  # dict_keys(['posts', 'replies', 'learnings'])</pre>
+
+<h3 id="mb-learn_from_interaction">learn_from_interaction() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Processes a customer interaction to extract business knowledge. Strengthens associations between services mentioned in comments and stores learning data.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def learn_from_interaction(self, business_id: str, interaction: dict)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>The business identifier</td></tr>
+<tr><td><code>interaction</code></td><td><code>dict</code></td><td>Interaction data (<code>message</code>, <code>from</code>, <code>timestamp</code>)</td></tr>
+</tbody>
+</table>
+<h4>Behavior</h4>
+<ul>
+<li>Checks if any known services appear in the message</li>
+<li>Checks if any known price keywords appear in the message</li>
+<li>Saves a "learning" memory entry</li>
+</ul>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>manager.learn_from_interaction("bakery", {
+    "message": "How much is the croissant?",
+    "from": "John",
+    "timestamp": "2026-05-16T10:00:00"
+})</pre>
+
+<h3 id="mb-generate_reply">generate_reply() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Generates a smart, contextual reply based on the comment content and the business's knowledge. Detects language and routes to the appropriate specialized reply generator.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def generate_reply(self, business_id: str, comment: str, customer_name: str = None) -> str</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>The business identifier</td></tr>
+<tr><td><code>comment</code></td><td><code>str</code></td><td>The customer's comment text</td></tr>
+<tr><td><code>customer_name</code></td><td><code>str</code></td><td>Optional customer name for personalization</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>str</code> — The generated reply text.</p>
+<h4>Reply Routing Logic</h4>
+<table>
+<thead><tr><th>Comment Contains</th><th>Generator Used</th></tr></thead>
+<tbody>
+<tr><td><code>price</code>, <code>cost</code>, <code>how much</code>, <code>سعر</code>, <code>كم</code></td><td><a href="#mb-generate_price_reply"><code>generate_price_reply()</code></a></td></tr>
+<tr><td><code>hours</code>, <code>open</code>, <code>time</code>, <code>ساعة</code>, <code>مواعيد</code></td><td><a href="#mb-generate_hours_reply"><code>generate_hours_reply()</code></a></td></tr>
+<tr><td><code>location</code>, <code>where</code>, <code>address</code>, <code>موقع</code>, <code>عنوان</code></td><td><a href="#mb-generate_location_reply"><code>generate_location_reply()</code></a></td></tr>
+<tr><td><code>service</code>, <code>offer</code>, <code>ماذا</code>, <code>خدمات</code></td><td><a href="#mb-generate_services_reply"><code>generate_services_reply()</code></a></td></tr>
+<tr><td>None of the above</td><td>Default friendly greeting</td></tr>
+</tbody>
+</table>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>reply = manager.generate_reply(
+    "bakery",
+    "كم سعر الكرواسون؟",
+    "أحمد"
+)
+# "📍 أسعارنا في Bakery:\n• كرواسون: ٣ دولار\n..."</pre>
+
+<h3 id="mb-detect_language">detect_language() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Detects whether a text is primarily Arabic or English by counting Arabic Unicode characters (U+0600–U+06FF).</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def detect_language(self, text: str) -> str</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>text</code></td><td><code>str</code></td><td>The text to analyze</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>'ar'</code> if more than 30% of characters are Arabic, <code>'en'</code> otherwise.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>lang = manager.detect_language("مرحباً")  # 'ar'
+lang = manager.detect_language("Hello")  # 'en'</pre>
+
+<h3 id="mb-generate_price_reply">generate_price_reply() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Generates a formatted reply listing all prices from the business's config, in the detected language.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def generate_price_reply(self, business: BusinessConfig, language: str) -> str</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business</code></td><td><code>BusinessConfig</code></td><td>The business configuration</td></tr>
+<tr><td><code>language</code></td><td><code>str</code></td><td><code>'ar'</code> for Arabic, <code>'en'</code> for English</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>str</code> — Formatted price list.</p>
+<h4>Example Output (Arabic)</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>📍 أسعارنا في مكتبة الأركان:
+
+• بطاقة أعمال: ٥٠ جنيه
+• بانر للمتر: ٣٥ جنيه
+
+للإستفسار عن خدمات أخرى، تواصل معنا! 📞</pre>
+<h4>Example Output (English)</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>📍 Our prices at Maktabat Al-Arkan:
+
+• Business Card: 50 EGP
+• Banner per meter: 35 EGP
+
+For other services, contact us! 📞</pre>
+
+<h3 id="mb-generate_hours_reply">generate_hours_reply() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Generates a reply about the business's operating hours in the appropriate language.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def generate_hours_reply(self, business: BusinessConfig, language: str) -> str</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business</code></td><td><code>BusinessConfig</code></td><td>The business configuration</td></tr>
+<tr><td><code>language</code></td><td><code>str</code></td><td><code>'ar'</code> or <code>'en'</code></td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>str</code> — Formatted hours reply.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button># Arabic
+reply = manager.generate_hours_reply(business, 'ar')
+# "⏰ ساعات العمل في مكتبة الأركان: يومياً ٩ ص - ٩ م"
+
+# English
+reply = manager.generate_hours_reply(business, 'en')
+# "⏰ Business hours at Maktabat Al-Arkan: Daily 9am - 9pm"</pre>
+
+<h3 id="mb-generate_location_reply">generate_location_reply() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Generates a reply about the business's location/address in the appropriate language.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def generate_location_reply(self, business: BusinessConfig, language: str) -> str</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business</code></td><td><code>BusinessConfig</code></td><td>The business configuration</td></tr>
+<tr><td><code>language</code></td><td><code>str</code></td><td><code>'ar'</code> or <code>'en'</code></td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>str</code> — Formatted location reply.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button># Arabic
+reply = manager.generate_location_reply(business, 'ar')
+# "📍 موقعنا: دشنا، قنا، مصر"
+
+# English
+reply = manager.generate_location_reply(business, 'en')
+# "📍 Our location: Dashna, Qena, Egypt"</pre>
+
+<h3 id="mb-generate_services_reply">generate_services_reply() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Generates a formatted reply listing all services from the business's configuration.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def generate_services_reply(self, business: BusinessConfig, language: str) -> str</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business</code></td><td><code>BusinessConfig</code></td><td>The business configuration</td></tr>
+<tr><td><code>language</code></td><td><code>str</code></td><td><code>'ar'</code> or <code>'en'</code></td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>str</code> — Formatted services list.</p>
+<h4>Example Output (Arabic)</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>✨ خدماتنا في مكتبة الأركان:
+
+• طباعة بطاقات أعمال
+• طباعة بانرات
+• تصميم جرافيك</pre>
+<h4>Example Output (English)</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>✨ Our services at Maktabat Al-Arkan:
+
+• Business Card Printing
+• Banner Printing
+• Graphic Design</pre>
+
+<h3 id="mb-list_businesses">list_businesses() <span class="fn-kind">method</span></h3>
+<div class="desc-box"><p>Returns a summary list of all configured businesses with key metadata.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def list_businesses(self) -> List[dict]</pre>
+<h4>Returns</h4>
+<p><code>list</code> of dicts, each containing <code>id</code>, <code>name</code>, <code>page_name</code>, <code>page_id</code>, <code>auto_reply</code>, <code>auto_post</code>.</p>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>for b in manager.list_businesses():
+    print(f"{b['name']} (auto-reply: {b['auto_reply']})")</pre>
+
+<h3 id="mb-convenience">Module-Level Convenience Functions <span class="fn-kind">module</span></h3>
+<div class="desc-box"><p>The module exposes a global <code>manager = MultiBusinessFacebookManager()</code> instance and several convenience functions that delegate to it, allowing simple <code>from multi_business_facebook import publish_post</code> usage.</p></div>
+
+<table>
+<thead><tr><th>Function</th><th>Signature</th><th>Delegates To</th></tr></thead>
+<tbody>
+<tr><td><code>publish_post()</code></td><td><code>(business_id, message) -> dict</code></td><td><code>manager.publish_post()</code></td></tr>
+<tr><td><code>reply_to_comment()</code></td><td><code>(business_id, comment_id, message) -> dict</code></td><td><code>manager.reply_to_comment()</code></td></tr>
+<tr><td><code>get_comments()</code></td><td><code>(business_id, post_id) -> list</code></td><td><code>manager.get_comments()</code></td></tr>
+<tr><td><code>get_all_posts()</code></td><td><code>(business_id) -> list</code></td><td><code>manager.get_all_posts()</code></td></tr>
+<tr><td><code>add_business()</code></td><td><code>(business_id, config) -> bool</code></td><td><code>manager.add_business()</code></td></tr>
+<tr><td><code>generate_reply()</code></td><td><code>(business_id, comment, customer_name=None) -> str</code></td><td><code>manager.generate_reply()</code></td></tr>
+<tr><td><code>list_businesses()</code></td><td><code>() -> list</code></td><td><code>manager.list_businesses()</code></td></tr>
+<tr><td><code>get_business_info()</code></td><td><code>(business_id) -> dict</code></td><td>Returns <code>{name, page_name, services, prices, location, hours, tone}</code></td></tr>
+</tbody>
+</table>
+<h4>Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>from multi_business_facebook import publish_post, list_businesses
+
+publish_post("bakery", "Fresh bread available!")
+for b in list_businesses():
+    print(b['name'])</pre>
+
+
+<!-- ============================================================ -->
+<!-- SECTION: facebook_webhook.py -->
+<!-- ============================================================ -->
+<h2 id="wh">facebook_webhook.py <span class="src-badge">4 functions</span></h2>
+<p>Basic Flask webhook for receiving Meta webhook events. Uses <code>print()</code> for logging. For the production version with structured logging, see <a href="#whp">facebook_webhook_gunicorn.py</a>.</p>
+
+<h3 id="wh-verify">verify_webhook() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Handles the Meta webhook verification challenge (GET /webhook). Validates the token and returns the challenge to confirm the endpoint is owned by you.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/webhook', methods=['GET'])
+def verify_webhook()</pre>
+<h4>Query Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Source</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>hub.mode</code></td><td>Meta</td><td>Must be <code>"subscribe"</code></td></tr>
+<tr><td><code>hub.verify_token</code></td><td>Meta</td><td>Compared against <code>FB_WEBHOOK_VERIFY_TOKEN</code> env var (default: <code>"hermes_facebook_verify"</code>)</td></tr>
+<tr><td><code>hub.challenge</code></td><td>Meta</td><td>Random string to echo back</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>200</code> with challenge string on success, <code>403</code> on failure.</p>
+<h4>Example Meta Setup</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>Callback URL: https://your-domain.com/webhook
+Verify Token: hermes_facebook_verify</pre>
+
+<h3 id="wh-handler">webhook() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Receives incoming webhook events from Meta (POST /webhook). Processes page updates and routes comment and feed events to the appropriate handlers.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/webhook', methods=['POST'])
+def webhook()</pre>
+<h4>Request Body</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>{
+  "object": "page",
+  "entry": [
+    {
+      "changes": [
+        {
+          "field": "comments",
+          "value": { ... }
+        }
+      ]
+    }
+  ]
+}</pre>
+<h4>Behavior</h4>
+<ul>
+<li>Validates <code>data.get('object') == 'page'</code></li>
+<li>Iterates over entries and their changes</li>
+<li>Routes to <a href="#wh-handle_comment"><code>handle_comment_event()</code></a> for field <code>"comments"</code></li>
+<li>Routes to <a href="#wh-handle_feed"><code>handle_feed_event()</code></a> for field <code>"feed"</code></li>
+<li>Always returns <code>"OK", 200</code></li>
+</ul>
+
+<h3 id="wh-handle_comment">handle_comment_event() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Processes a new comment event from the webhook. Extracts comment details and forwards the event to the Hermes API for AI-powered processing.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def handle_comment_event(value)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>value</code></td><td><code>dict</code></td><td>The comment change value from Meta</td></tr>
+</tbody>
+</table>
+<h4>Value Fields</h4>
+<table>
+<thead><tr><th>Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>id</code></td><td>Comment ID</td></tr>
+<tr><td><code>post_id</code></td><td>Parent post ID</td></tr>
+<tr><td><code>message</code></td><td>Comment text</td></tr>
+<tr><td><code>from.name</code></td><td>Commenter's display name</td></tr>
+<tr><td><code>verb</code></td><td>Action type (e.g. <code>"added"</code>)</td></tr>
+</tbody>
+</table>
+<h4>Forwarded Payload</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>{
+  "type": "new_comment",
+  "comment_id": "123",
+  "post_id": "456",
+  "message": "Great post!",
+  "from": "John Doe",
+  "raw": { ... }
+}</pre>
+
+<h3 id="wh-handle_feed">handle_feed_event() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Processes feed change events from the webhook. Handles the alternative comment format that sometimes comes through the <code>feed</code> field instead of <code>comments</code>.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def handle_feed_event(value)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>value</code></td><td><code>dict</code></td><td>The feed change value from Meta</td></tr>
+</tbody>
+</table>
+<h4>Forwarded Payload</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>{
+  "type": "new_comment",
+  "comment_id": "123",
+  "post_id": "456",
+  "message": "Nice!",
+  "from": "Unknown",
+  "raw": { ... }
+}</pre>
+
+
+<!-- ============================================================ -->
+<!-- SECTION: facebook_webhook_gunicorn.py -->
+<!-- ============================================================ -->
+<h2 id="whp">facebook_webhook_gunicorn.py <span class="src-badge">8 functions</span></h2>
+<p>Production Flask webhook server designed to run behind gunicorn + nginx. Features structured logging, event persistence, retry queue, and Hermes API forwarding with failure handling.</p>
+
+<h3 id="whp-health">health_check() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Production health check endpoint (GET /health). Returns service status and configuration state.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/health', methods=['GET'])
+def health_check()</pre>
+<h4>Returns</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>{
+  "status": "healthy",
+  "service": "facebook-webhook",
+  "page_configured": true
+}</pre>
+
+<h3 id="whp-verify">verify_webhook() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Production-ready Meta webhook verification (GET /webhook). Same logic as the basic version but uses structured logging instead of <code>print</code>.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/webhook', methods=['GET'])
+def verify_webhook()</pre>
+<h4>Query Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>hub.mode</code></td><td>Must be <code>"subscribe"</code></td></tr>
+<tr><td><code>hub.verify_token</code></td><td>Compared against <code>FB_WEBHOOK_VERIFY_TOKEN</code> env var (default: <code>"hermes_facebook_verify"</code>)</td></tr>
+<tr><td><code>hub.challenge</code></td><td>Echoed back on success</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>200</code> with challenge on success, <code>403</code> with <code>"Forbidden"</code> on failure. Logs verification success/failure via <code>logger.info</code> / <code>logger.warning</code>.</p>
+
+<h3 id="whp-handler">webhook() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Production-ready webhook receiver (POST /webhook). Includes structured logging, event logging to file, and graceful handling of unknown fields.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/webhook', methods=['POST'])
+def webhook()</pre>
+<h4>Behavior</h4>
+<ul>
+<li>Logs raw event to file via <a href="#whp-log"><code>log_event()</code></a></li>
+<li>Validates <code>object == 'page'</code></li>
+<li>Routes to <a href="#whp-handle_comment"><code>handle_comment_event()</code></a> or <a href="#whp-handle_feed"><code>handle_feed_event()</code></a></li>
+<li>Logs unhandled fields via <code>logger.info</code></li>
+</ul>
+
+<h3 id="whp-handle_comment">handle_comment_event() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Production version of comment event handling. Includes logging, event file logging, and forwards to Hermes via <code>forward_to_hermes()</code>.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def handle_comment_event(value)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>value</code></td><td><code>dict</code></td><td>Comment change value from Meta</td></tr>
+</tbody>
+</table>
+<h4>Improvements Over Basic</h4>
+<ul>
+<li>Captures <code>verb</code> field (added, edited, etc.)</li>
+<li>Uses <a href="#whp-log"><code>log_event()</code></a> for persistent event logging</li>
+<li>Calls <a href="#whp-forward"><code>forward_to_hermes()</code></a> instead of inline requests</li>
+</ul>
+
+<h3 id="whp-handle_feed">handle_feed_event() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Production version of feed event handling. Uses structured logging and the centralized <code>forward_to_hermes()</code> function.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def handle_feed_event(value)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>value</code></td><td><code>dict</code></td><td>Feed change value from Meta</td></tr>
+</tbody>
+</table>
+<h4>Behavior</h4>
+<p>Only processes <code>value.get('item') == 'comment'</code>. Extracts <code>comment_id</code>, <code>message</code>, <code>post_id</code>, <code>sender_name</code> and forwards via <a href="#whp-forward"><code>forward_to_hermes()</code></a>.</p>
+
+<h3 id="whp-forward">forward_to_hermes() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Forwards a webhook event to the Hermes API endpoint for AI processing. Handles failures by queueing events for retry.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def forward_to_hermes(payload)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>payload</code></td><td><code>dict</code></td><td>The event data to forward</td></tr>
+</tbody>
+</table>
+<h4>Behavior</h4>
+<ul>
+<li>POSTs to <code>HERMES_API_URL/webhook/facebook</code> with 5-second timeout</li>
+<li>Logs success or failure via <code>logger</code></li>
+<li>On failure (connection error), calls <a href="#whp-queue"><code>queue_for_retry(payload)</code></a></li>
+</ul>
+<h4>Environment</h4>
+<p><code>HERMES_API_URL</code> — Hermes API base URL (default: <code>http://localhost:8080</code>)</p>
+
+<h3 id="whp-queue">queue_for_retry() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Saves failed webhook events to a retry queue directory on disk for later reprocessing.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def queue_for_retry(payload)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>payload</code></td><td><code>dict</code></td><td>The event that failed to forward</td></tr>
+</tbody>
+</table>
+<h4>Behavior</h4>
+<ul>
+<li>Creates <code>~/.hermes/webhook_queue/</code> directory if needed</li>
+<li>Saves payload as <code>{timestamp}_{comment_id}.json</code></li>
+<li>Logs the queue file path</li>
+</ul>
+<h4>File Format</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>~/.hermes/webhook_queue/1715850000_123456789.json
+
+{
+  "type": "new_comment",
+  "comment_id": "123",
+  "post_id": "456",
+  "message": "Hello!",
+  "from": "John",
+  "raw": { ... }
+}</pre>
+
+<h3 id="whp-log">log_event() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Appends a log entry for each webhook event to a persistent file for debugging and audit trails.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def log_event(event_data)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>event_data</code></td><td><code>str</code></td><td>The event string to log</td></tr>
+</tbody>
+</table>
+<h4>Behavior</h4>
+<ul>
+<li>Ensures log directory <code>~/.hermes/</code> exists</li>
+<li>Appends the event string to <code>~/.hermes/webhook_events.log</code></li>
+<li>Each line is a separate event</li>
+</ul>
+<h4>Example Log File</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>EVENT: {"object": "page", "entry": [...]}
+COMMENT: John Doe: Great post!
+EVENT: {"object": "page", "entry": [...]}
+COMMENT: Jane: Thanks!</pre>
+
+
+<!-- ============================================================ -->
+<!-- SECTION: multi_business_webhook.py -->
+<!-- ============================================================ -->
+<h2 id="mw">multi_business_webhook.py <span class="src-badge">8 functions</span></h2>
+<p>Multi-business webhook server with auto-reply routing. Routes incoming events by <code>page_id</code> to the correct business, generates contextual auto-replies, learns from interactions, and forwards to Hermes. See also <a href="#mb">multi_business_facebook.py</a> for the manager that powers it.</p>
+
+<h3 id="mw-health">health_check() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Returns service health status including the number of configured businesses and their details (GET /health).</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/health', methods=['GET'])
+def health_check()</pre>
+<h4>Returns</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>{
+  "status": "healthy",
+  "service": "multi-business-facebook-webhook",
+  "total_businesses": 2,
+  "businesses": [
+    {"id": "bakery", "name": "Bakery", "auto_reply": true},
+    {"id": "restaurant", "name": "Restaurant", "auto_reply": true}
+  ]
+}</pre>
+
+<h3 id="mw-list">list_businesses() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Lists all configured businesses with their IDs and metadata (GET /businesses).</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/businesses', methods=['GET'])
+def list_businesses()</pre>
+<h4>Returns</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>{
+  "total": 2,
+  "businesses": [
+    {"id": "bakery", "name": "Bakery", "page_name": "...", "auto_reply": true, ...}
+  ]
+}</pre>
+
+<h3 id="mw-details">get_business() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Returns detailed information for a specific business (GET /businesses/&lt;business_id&gt;).</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/businesses/<business_id>', methods=['GET'])
+def get_business(business_id)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Source</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>URL path</td><td>Unique business identifier</td></tr>
+</tbody>
+</table>
+<h4>Returns</h4>
+<p><code>200</code> with business details (name, services, prices, location, hours, tone), or <code>404</code> with <code>{"error": "Business not found"}</code>.</p>
+
+<h3 id="mw-verify">verify_webhook() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Same webhook verification as the standard version but with multi-business verify token (GET /webhook). Used by Meta to validate the webhook endpoint.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/webhook', methods=['GET'])
+def verify_webhook()</pre>
+<h4>Verification Token</h4>
+<p>Default: <code>"hermes_multi_business_verify"</code> (from <code>FB_WEBHOOK_VERIFY_TOKEN</code> env var)</p>
+<h4>Returns</h4>
+<p><code>200</code> with challenge on success, <code>403</code> on failure.</p>
+
+<h3 id="mw-handler">webhook() <span class="fn-kind">endpoint</span></h3>
+<div class="desc-box"><p>Receives Meta webhook events and routes them to the correct business based on <code>page_id</code> (POST /webhook). Logs all raw events to disk.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>@app.route('/webhook', methods=['POST'])
+def webhook()</pre>
+<h4>Behavior</h4>
+<ul>
+<li>Logs raw event via <code>log_event("raw", data)</code></li>
+<li>Validates <code>object == 'page'</code></li>
+<li>Routes changes to <a href="#mw-handle_comment"><code>handle_comment_event()</code></a> or <a href="#mw-handle_feed"><code>handle_feed_event()</code></a></li>
+<li>Always returns <code>"OK", 200</code></li>
+</ul>
+
+<h3 id="mw-handle_comment">handle_comment_event() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>The most sophisticated comment handler. Looks up the business by <code>page_id</code>, generates an auto-reply using the business's context, sends the reply, learns from the interaction, and forwards to Hermes.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def handle_comment_event(value)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>value</code></td><td><code>dict</code></td><td>Comment change value from Meta</td></tr>
+</tbody>
+</table>
+<h4>Behavior Flow</h4>
+<ol>
+<li>Extracts <code>page_id</code> from the event value</li>
+<li>Looks up business via <code>manager.get_business_by_page_id(page_id)</code></li>
+<li>If business not found, logs error and returns</li>
+<li>Extracts comment details (id, post_id, message, from_name, verb)</li>
+<li>If <code>business.auto_reply</code> is enabled:
+<ol>
+<li>Generates contextual reply via <code>manager.generate_reply()</code></li>
+<li>Sends reply via <code>manager.reply_to_comment()</code></li>
+<li>Logs success/failure</li>
+<li>Learns from interaction via <code>manager.learn_from_interaction()</code></li>
+</ol>
+</li>
+<li>Always forwards event to Hermes API</li>
+</ol>
+
+<h3 id="mw-handle_feed">handle_feed_event() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Handles feed events for multi-business setup. Looks up the business by <code>page_id</code> and generates auto-replies when enabled.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def handle_feed_event(value)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>value</code></td><td><code>dict</code></td><td>Feed change value from Meta</td></tr>
+</tbody>
+</table>
+<h4>Behavior</h4>
+<ol>
+<li>Only processes <code>value.get('item') == 'comment'</code></li>
+<li>Extracts <code>page_id</code>, finds business via <code>manager.get_business_by_page_id()</code></li>
+<li>If auto_reply enabled: generates contextual reply, sends reply, logs</li>
+</ol>
+
+<h3 id="mw-forward">forward_to_hermes() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Forwards a business-scoped webhook event to the Hermes API for additional processing.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def forward_to_hermes(business_id, payload)</pre>
+<h4>Parameters</h4>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>business_id</code></td><td><code>str</code></td><td>Business identifier for logging</td></tr>
+<tr><td><code>payload</code></td><td><code>dict</code></td><td>Event data with business context</td></tr>
+</tbody>
+</table>
+<h4>Forwarded Payload Includes</h4>
+<p><code>business_id</code>, <code>business_name</code> for context, plus all standard comment/event fields.</p>
+
+
+<!-- ============================================================ -->
+<!-- SECTION: add_business.py -->
+<!-- ============================================================ -->
+<h2 id="ab">add_business.py <span class="src-badge">2 functions</span></h2>
+<p>Interactive CLI tool for adding and managing businesses. Creates JSON configuration files in <code>~/.hermes/businesses/</code>.</p>
+
+<h3 id="ab-interactive">add_business_interactive() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Runs an interactive wizard that collects all business information via command-line prompts and saves it as a JSON configuration file.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def add_business_interactive()</pre>
+<h4>Interactive Prompts</h4>
+<table>
+<thead><tr><th>Prompt</th><th>Field</th></tr></thead>
+<tbody>
+<tr><td>Business ID</td><td><code>business_id</code> (used as filename)</td></tr>
+<tr><td>Business name</td><td><code>name</code></td></tr>
+<tr><td>Facebook page name</td><td><code>page_name</code></td></tr>
+<tr><td>Facebook Page ID</td><td><code>page_id</code></td></tr>
+<tr><td>Facebook Page Access Token</td><td><code>page_access_token</code></td></tr>
+<tr><td>Enable auto-reply?</td><td><code>auto_reply</code></td></tr>
+<tr><td>Enable auto-post?</td><td><code>auto_post</code></td></tr>
+<tr><td>Services (one per line)</td><td><code>services[]</code></td></tr>
+<tr><td>Prices (item - price)</td><td><code>prices{}</code></td></tr>
+<tr><td>Address</td><td><code>location.address</code></td></tr>
+<tr><td>Landmark</td><td><code>location.landmark</code></td></tr>
+<tr><td>Phone</td><td><code>location.phone</code></td></tr>
+<tr><td>General hours</td><td><code>hours.general</code></td></tr>
+</tbody>
+</table>
+<h4>Output</h4>
+<p>Saves config to <code>~/.hermes/businesses/{business_id}.json</code>.</p>
+<h4>Example Run</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>$ python3 add_business.py
+
+🏪 Add New Business to Multi-Business Facebook Manager
+============================================================
+
+Business ID (unique identifier, e.g., maktabat_al_arkan): my_bakery
+Business name (e.g., Maktabat Al-Arkan): My Bakery
+...
+✅ Business 'My Bakery' added successfully!
+📁 Config saved to: /root/.hermes/businesses/my_bakery.json</pre>
+
+<h3 id="ab-main">main() <span class="fn-kind">function</span></h3>
+<div class="desc-box"><p>Entry point that supports three modes: interactive business addition, listing all businesses, and testing business auto-replies.</p></div>
+<h4>Signature</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>def main()</pre>
+<h4>CLI Usage</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button># Interactive mode (add a business)
+python3 add_business.py
+
+# List all businesses
+python3 add_business.py --list
+
+# Test a business's auto-replies
+python3 add_business.py --test &lt;business_id&gt;</pre>
+<h4>--list Output Example</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>📊 Total businesses: 2
+
+🏪 Maktabat Al-Arkan
+   ID: maktabat_al_arkan
+   Page: مكتبة الأركان
+   Auto-reply: ✅
+   Auto-post: ❌
+...</pre>
+<h4>--test Behavior</h4>
+<ol>
+<li>Loads business from config</li>
+<li>Shows business info (services, prices)</li>
+<li>Tests auto-reply generation with sample queries</li>
+<li>Displays generated replies</li>
+</ol>
+<h4>Example Test Output</h4>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>🏪 Testing business: Maktabat Al-Arkan
+   Services: طباعة بطاقات أعمال, طباعة بانرات...
+   Prices: 2 items
+
+🤖 Testing auto-replies:
+
+   Question: كم سعر البطاقة؟
+   Reply: 📍 أسعارنا في مكتبة الأركان:\n...</pre>
+
+</main>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.closest('pre');
+  const code = pre.textContent.replace('Copy', '').trim();
+  navigator.clipboard.writeText(code).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+document.getElementById('menuToggle').addEventListener('click', function() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('show');
+});
+
+document.getElementById('sidebarOverlay').addEventListener('click', function() {
+  document.getElementById('sidebar').classList.remove('open');
+  this.classList.remove('show');
+});
+
+document.querySelectorAll('.sidebar-link').forEach(function(link) {
+  link.addEventListener('click', function() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('show');
+  });
+});
+</script>
+
+</body>
+</html>
