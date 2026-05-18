@@ -250,6 +250,50 @@ func TestServeMedia_StreamsLegacyLocalMedia(t *testing.T) {
 	assert.Equal(t, "legacy-pdf", string(req.RequestCtx.Response.Body()))
 }
 
+func TestRetryMediaDownload_ReturnsExistingMedia(t *testing.T) {
+	app := newTestApp(t)
+	testutil.TruncateTables(app.DB)
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "chat-reader", []string{"chat:read"})
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	message := models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       contact.ID,
+		WhatsAppAccount: "whatsmeow",
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeDocument,
+		Content:         "Existing document",
+		MediaURL:        "/api/media/" + uuid.NewString(),
+		MediaMimeType:   "application/pdf",
+		MediaFilename:   "existing.pdf",
+		Status:          models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(&message).Error)
+
+	req := testutil.NewJSONRequest(t, nil)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.RetryMediaDownload(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var data struct {
+		MediaURL      string `json:"media_url"`
+		MediaFilename string `json:"media_filename"`
+		MediaMimeType string `json:"media_mime_type"`
+		MediaMimetype string `json:"media_mimetype"`
+	}
+	testutil.ParseEnvelopeResponse(t, req, &data)
+	assert.Equal(t, message.MediaURL, data.MediaURL)
+	assert.Equal(t, "existing.pdf", data.MediaFilename)
+	assert.Equal(t, "application/pdf", data.MediaMimeType)
+	assert.Equal(t, "application/pdf", data.MediaMimetype)
+}
+
 func TestServeMedia_ReturnsNotFoundForMissingLegacyLocalMedia(t *testing.T) {
 	app := newTestApp(t)
 	testutil.TruncateTables(app.DB)
@@ -682,7 +726,7 @@ func TestServeMedia_RollsBackRestoredFileWhenMessageUpdateFails(t *testing.T) {
 		if tx.Statement.Schema == nil || tx.Statement.Schema.Table != "messages" {
 			return
 		}
-		tx.AddError(errors.New("forced restore update failure"))
+		_ = tx.AddError(errors.New("forced restore update failure"))
 	}))
 	defer func() {
 		require.NoError(t, app.DB.Callback().Update().Remove(callbackName))
