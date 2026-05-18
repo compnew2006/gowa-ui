@@ -125,7 +125,7 @@ import {
   downloadMessageMedia,
   resolveMediaFilename,
 } from "@/lib/media-actions";
-import { getErrorMessage } from "@/lib/api-utils";
+import { getErrorMessage, unwrapResponse } from "@/lib/api-utils";
 import {
   getCachedMediaBlob,
   prefetchMediaBlob,
@@ -3324,23 +3324,52 @@ function isMediaLoading(message: Message): boolean {
 
 function canRetryMediaDownload(message: Message): boolean {
   if (!message.metadata) return false;
-  const mediaID = (message.metadata as Record<string, unknown>)
-    ?.legacy_media_recovery_media_id;
-  return !!mediaID;
+  const meta = message.metadata as Record<string, unknown>;
+  if (meta?.legacy_media_recovery_media_id) return true;
+  if (meta?.inbound_media_async_job) return true;
+  return false;
+}
+
+interface MediaRetryResponse {
+  status?: string;
+  message?: string;
+  media_url?: string;
+  media_filename?: string;
+  media_mime_type?: string;
+  media_mimetype?: string;
 }
 
 async function retryMediaDownload(message: Message) {
+  if (!message.media_url && !canRetryMediaDownload(message)) {
+    toast.error(t("common.mediaDownloadExpired"));
+    return;
+  }
   mediaLoadingStates.value[message.id] = true;
   try {
     const resp = await contactsService.retryMediaDownload(message.id);
-    if (resp.status !== "success") {
-      toast.error(resp.message || t("common.mediaDownloadExpired"));
+    const data = unwrapResponse<MediaRetryResponse>(resp);
+    if (data?.status === "queued") {
+      clearMissingMediaPrefetch(message.id);
+      toast.info(t("common.mediaExpired") + " — retrying...");
       return;
     }
-    // Re-fetch the media blob now that the file is restored
+    if (!data?.media_url) {
+      toast.error(data?.message || t("common.mediaDownloadExpired"));
+      return;
+    }
+    const updatedMessage: Message = {
+      ...message,
+      media_url: data.media_url,
+      media_filename: data.media_filename || message.media_filename,
+      media_mime_type:
+        data.media_mime_type || data.media_mimetype || message.media_mime_type,
+      error_message: "",
+    };
+    contactsStore.patchMessage(updatedMessage);
     clearMissingMediaPrefetch(message.id);
     delete mediaBlobUrls.value[message.id];
-    await loadMediaForMessage(message);
+    mediaLoadingStates.value[message.id] = false;
+    await loadMediaForMessage(updatedMessage);
   } catch (error: any) {
     const msg = error?.response?.data?.message;
     toast.error(msg || t("common.mediaDownloadExpired"));

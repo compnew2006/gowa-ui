@@ -1,109 +1,44 @@
-# Session Summary - 2026-05-12
+# Session Summary
 
 ## Task
+Fix media retry behavior for chat messages that show "File no longer available" and return "Message not found" when retrying download, observed on chat URL /chat/82edad6a-708a-4ce9-af2b-6c8f72b27cac around 07:14 PM.
 
-Fix production failures when transferring a chat to another agent and dismissing system notifications, add a close button to popup notifications, then deploy the current project as a new green build on the VPS while preserving blue/rollback capability and keeping the license system active.
+## Approach and Key Decisions
+- Proceeded with available MCP after Serena/codebase-memory were unavailable and the user approved that fallback.
+- Used the debugging workflow to reproduce the backend failure before changing code.
+- Proved the backend 404 came from `RetryMediaDownload` preloading a non-existent `WhatsAppAccount` association on `models.Message`; GORM returned `unsupported relations for schema Message`, and the handler masked every query error as `Message not found`.
+- Removed the invalid preload and changed query error handling so only `gorm.ErrRecordNotFound` returns 404; unexpected database/query failures now log and return a 500.
+- Kept existing media restore behavior, while ensuring successful retry responses include both `media_mime_type` and legacy `media_mimetype` keys for frontend compatibility.
+- Updated the chat UI retry flow to unwrap API envelopes, patch the message media fields after a successful retry, clear stale missing-media cache state, and support queued async Whatsmeow recovery metadata.
 
-## Skills And Tools
+## Files Modified
+- `internal/handlers/media.go`: fixed retry message lookup, error handling, existing-media response, and MIME key compatibility.
+- `internal/handlers/media_stream_test.go`: added coverage for retrying a message that already has recoverable media, and fixed an errcheck lint issue in the same test file.
+- `frontend/src/views/chat/ChatView.vue`: fixed retry response unwrapping/message patching and async retry UI handling.
+- `summary.md`: overwritten with this session record.
 
-- Selected skills: `debugging-wizard`, `test-master`, `devops-engineer`.
-- Applied competencies: production log triage, backend handler repair, Vue UI update, native Linux build, systemd blue/green deployment, embedded license keyring recovery, API/browser smoke verification.
-- Serena, codebase-memory-mcp, and ruflo/claude-flow were requested but were not available as callable tools in this session; ruflo/claude-flow discovery returned a closed transport.
+## Dependencies or Environment Changes
+- Ran `npm install` in `frontend/` after Vite/Rollup failed due a missing optional Rollup package. No package lock changes remained in git status.
+- Frontend verification required the bundled Node runtime at `/Users/airm2/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin` because the system Node is v18.19.0 and this frontend requires Node 20.19+ or 22.12+.
+- No application dependency files were intentionally changed.
 
-## Code Changes
+## Tests Added
+- `TestRetryMediaDownload_ReturnsExistingMedia` in `internal/handlers/media_stream_test.go` verifies that retrying a message with existing media returns `media_url`, `media_filename`, `media_mime_type`, and `media_mimetype`. The test follows the repo database-test pattern and skips when `TEST_DATABASE_URL` is unset.
+- No new Playwright spec was added because the local E2E suite requires a running backend on `localhost:8080`; the failure is environmental and not specific enough for a reliable new UI regression test in this session.
 
-- `internal/handlers/agent_transfers.go`
-  - Fixed transfer creation by isolating read queries with fresh GORM sessions.
-  - Writes now use an unscoped base DB session with explicit `organization_id` filters to avoid tenant-scope statement bleed into inserts/updates.
-  - Falls back to the contact WhatsApp account when the frontend does not send `whatsapp_account`.
-- `internal/handlers/notifications.go`
-  - Fixed notification dismissal by updating `instance_notifications` through a fresh model query scoped by `id` and `organization_id`, avoiding duplicate table references.
-- `frontend/src/App.vue`
-  - Enabled `closeButton` on the global Sonner toaster.
-- `frontend/src/views/chat/ChatView.vue`
-  - Sends a resolved WhatsApp account for transfer creation, using selected account first and contact account as fallback.
-- Tests:
-  - Added `internal/handlers/notifications_test.go`.
-  - Added transfer fallback coverage in `internal/handlers/agent_transfers_test.go`.
+## Verification Results
+- Repro script before the fix confirmed GORM error: `WhatsAppAccount: unsupported relations for schema Message`.
+- `go test ./internal/handlers -run TestRetryMediaDownload_ReturnsExistingMedia -count=1 -v`: PASS with test skipped because `TEST_DATABASE_URL` is unset.
+- `go test ./...`: PASS.
+- `frontend: npx vitest run src/lib/media_prefetch_cache.test.ts src/services/websocket.test.ts` with bundled Node: PASS, 2 files / 13 tests.
+- `frontend: npm run test:unit -- --run` with bundled Node: PASS, 31 files / 149 tests.
+- `frontend: npm run build` with bundled Node: PASS.
+- `frontend: npm run typecheck` with bundled Node: FAILS on preexisting TypeScript issues including readonly test tags, missing global mock properties, deep toast type instantiation, existing `body` access on `{}`, and unrelated store/view export/type mismatches.
+- `make lint`: FAILS on preexisting Go lint issues after the touched-file errcheck issue was fixed; remaining issues include unused functions/types, ineffectual assignments, deprecated Redis/whatsmeow calls, and unchecked JSON encoder calls in unrelated tests.
+- `frontend: npm run lint -- --no-fix`: FAILS on preexisting frontend lint issue `src/lib/chat-export.ts no-useless-escape` plus warnings in existing temp/e2e files and an unused `isServiceWindowExpired` symbol.
+- `frontend: npx playwright test --project=chromium` with bundled Node: BLOCKED/FAILED because Playwright global setup and Vite proxy could not connect to backend `127.0.0.1:8080` (ECONNREFUSED). The run was stopped after repeated backend-connection timeouts.
 
-## Local Verification
-
-- Passed: `go test ./cmd/... ./internal/... ./pkg/... ./test/...`
-- Passed: targeted handler test command ran; DB-backed cases skipped because local `TEST_DATABASE_URL` was unset.
-- Passed: `cd frontend && npm run test:unit -- --run src/lib/media_prefetch_cache.test.ts src/services/websocket.test.ts`
-- Passed: `cd frontend && npm run build`
-- Passed: `make build-prod`
-- Known pre-existing issue: `cd frontend && npm run typecheck` still fails on unrelated TypeScript errors outside this change.
-
-## VPS Deployment
-
-- VPS: `31.97.192.53`
-- Backup created before deployment:
-  - `/root/whatomate_backups/whatomate-installed-pre-green-20260512_145705.tar.gz`
-  - sha256: `4dea9425a271d5ccbfead3c364c576b5df7faa5f95616837b6ab5baee1753fb6`
-  - size: `197M`
-- New green binary:
-  - `/opt/whatomate/bin/whatomate.green.20260512_145748`
-  - version: `a73f45b1-green-20260512_145748`
-  - sha256: `099d7af1d761c4efb6fdbbf7f3763b81d72accdd79acced9d6e5e5f9c9e35260`
-- Current live binary was left unchanged:
-  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green.20260512_122534`
-- Green alias:
-  - `/opt/whatomate/bin/whatomate.green -> /opt/whatomate/bin/whatomate.green.20260512_145748`
-- Blue alias:
-  - `/opt/whatomate/bin/whatomate.blue -> /opt/whatomate/bin/whatomate.blue.20260511_002729`
-- Green sandbox:
-  - service: `whatomate-sandbox`
-  - URL: `https://sandbox.ofuqalmadenah.com`
-  - bind: `127.0.0.1:18127`
-
-## License
-
-- The green build initially started with licensing enabled but locked because `/root/whatomate-keyring.json` contained only a stale `vendor-1` key.
-- Extracted the working embedded public key ring from the active binaries, replaced `/root/whatomate-keyring.json`, and rebuilt green with embedded `license.EmbeddedPublicKeyRingBase64`.
-- Corrected keyring sha256: `7458085bb0a2af587dddba22c5784e42fa85b8f266a4de7629b81e13bc72ffbe`
-- Final sandbox license bootstrap: `enabled=true`, `status=active`, `locked=false`, `key_id=deploy-20260416`, `tier=production`, `duration_label=lifetime`.
-
-## VPS Verification
-
-- Active services: `whatomate`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`, `whatomate-sandbox`.
-- Live license API remained active: `https://ofuqalmadenah.com/api/license/bootstrap`.
-- Green sandbox license API active: `https://sandbox.ofuqalmadenah.com/api/license/bootstrap`.
-- Playwright MCP browser smoke:
-  - loaded `https://sandbox.ofuqalmadenah.com/login`
-  - login UI rendered
-  - no console warnings/errors after navigation
-  - `/api/license/bootstrap` returned `200`
-  - unauthenticated `/api/me` and refresh returned expected `401`
-
-## Cleanup
-
-- Removed VPS temporary/source paths:
-  - `/tmp/whatomate-green-src-20260512_145748`
-  - `/opt/whatomate-sandbox/src`
-  - `/root/whatomate_temp_build_*`
-  - `/root/whatomate-green-src-*`
-  - `/root/whatomate_src_*`
-  - `/root/whatomate-source-*`
-- Runtime binary/config/data directories were preserved.
-
-## Switch Command
-
-Use the installed helper on the VPS:
-
-```bash
-whatomate-switch green
-whatomate-switch blue
-```
-
-From local:
-
-```bash
-ssh root@31.97.192.53 'whatomate-switch green'
-```
-
-## Files Updated
-
-- Source/tests committed in `a73f45b1`.
-- Deployment docs updated locally: `docs/whatomate_multi_instances_info.md`.
-- This summary written to `summary.md`.
+## Known Limitations and Follow-Up
+- Full E2E verification still needs PostgreSQL/Redis/configured backend running on port 8080.
+- Full lint/typecheck gates are not clean in the current repo because of preexisting unrelated issues listed above.
+- Ruflo/AgentDB generated local state files remain dirty and should not be included in the code review commit.

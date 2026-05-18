@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,10 +11,12 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // getMediaStoragePath returns the base path for media storage
@@ -280,9 +284,10 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	return nil
 }
 
-// RetryMediaDownload attempts to re-download media for a message whose local
-// file has been deleted. It checks if the WhatsApp download URL is still
-// eligible (within the 30-day TTL) and if so, re-downloads and restores the file.
+// RetryMediaDownload attempts to re-download media for a message whose file
+// is missing. It supports two recovery paths:
+//  1. Legacy (Meta Cloud API): re-downloads synchronously from Meta CDN within 30-day TTL.
+//  2. Whatsmeow async: re-enqueues the stored protobuf payload for worker-driven recovery.
 func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
 
@@ -306,25 +311,46 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 
 	var message models.Message
 	if err := requestDB.WithContext(r.RequestCtx).
-		Preload("WhatsAppAccount").
 		Where("id = ? AND organization_id = ?", messageID, orgID).
 		First(&message).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
-	}
-
-	// Check if recovery is still eligible
-	_, eligible, reason := inspectLegacyMediaRecovery(&message, time.Now().UTC())
-	if !eligible {
-		status := fasthttp.StatusGone
-		msg := "Media download link has expired"
-		if reason == "missing_metadata" {
-			status = fasthttp.StatusNotFound
-			msg = "No recovery information available for this media"
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
 		}
-		return r.SendErrorEnvelope(status, msg, nil, "")
+		a.Log.Error("Failed to load message for media retry", "message_id", messageID, "organization_id", orgID, "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load message", nil, "")
 	}
 
-	// Attempt to re-download
+	if strings.TrimSpace(message.MediaURL) != "" && message.MediaDeletedAt == nil {
+		return r.SendEnvelope(map[string]any{
+			"media_url":       message.MediaURL,
+			"media_filename":  message.MediaFilename,
+			"media_mimetype":  message.MediaMimeType,
+			"media_mime_type": message.MediaMimeType,
+		})
+	}
+
+	_, eligible, reason := inspectLegacyMediaRecovery(&message, time.Now().UTC())
+	if eligible {
+		return a.retryLegacyMediaDownload(r, requestDB, message)
+	}
+
+	if a.retryWhatsmeowMediaRecovery(r.RequestCtx, requestDB, &message) {
+		return r.SendEnvelope(map[string]any{
+			"status":  "queued",
+			"message": "Media recovery re-queued",
+		})
+	}
+
+	status := fasthttp.StatusGone
+	msg := "Media download link has expired"
+	if reason == "missing_metadata" {
+		status = fasthttp.StatusNotFound
+		msg = "No recovery information available for this media"
+	}
+	return r.SendErrorEnvelope(status, msg, nil, "")
+}
+
+func (a *App) retryLegacyMediaDownload(r *fastglue.Request, requestDB *gorm.DB, message models.Message) error {
 	result, err, _ := a.legacyMediaRestoreGroup.Do(message.ID.String(), func() (any, error) {
 		recoveryInfo, _, _ := inspectLegacyMediaRecovery(&message, time.Now().UTC())
 		msg, _, err := a.performLegacyMediaRestore(r.RequestCtx, requestDB, message, recoveryInfo)
@@ -339,16 +365,86 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to restore media", nil, "")
 	}
 
-	// Clear media_deleted_at
 	_ = requestDB.Model(&models.Message{}).
 		Where("id = ?", message.ID).
 		Update("media_deleted_at", nil).Error
 
-	return r.SendErrorEnvelope(fasthttp.StatusOK, "Media downloaded successfully", map[string]any{
-		"media_url":      restoreResult.MediaURL,
-		"media_filename": restoreResult.MediaFilename,
-		"media_mimetype": restoreResult.MediaMimeType,
-	}, "")
+	return r.SendEnvelope(map[string]any{
+		"media_url":       restoreResult.MediaURL,
+		"media_filename":  restoreResult.MediaFilename,
+		"media_mimetype":  restoreResult.MediaMimeType,
+		"media_mime_type": restoreResult.MediaMimeType,
+	})
+}
+
+const inboundMediaAsyncJobMetaKey = "inbound_media_async_job"
+
+func (a *App) retryWhatsmeowMediaRecovery(ctx context.Context, db *gorm.DB, message *models.Message) bool {
+	if message == nil || message.Metadata == nil {
+		return false
+	}
+	if strings.TrimSpace(message.MediaURL) != "" {
+		return false
+	}
+
+	rawJob, ok := message.Metadata[inboundMediaAsyncJobMetaKey]
+	if !ok || rawJob == nil {
+		return false
+	}
+
+	jobBytes, err := json.Marshal(rawJob)
+	if err != nil {
+		a.Log.Warn("retryWhatsmeowMediaRecovery: failed to marshal stored job", "message_id", message.ID, "error", err)
+		return false
+	}
+
+	var job queue.InboundMediaJob
+	if err := json.Unmarshal(jobBytes, &job); err != nil {
+		a.Log.Warn("retryWhatsmeowMediaRecovery: failed to decode stored job", "message_id", message.ID, "error", err)
+		return false
+	}
+
+	if strings.TrimSpace(job.MediaPayloadBase64) == "" {
+		a.Log.Warn("retryWhatsmeowMediaRecovery: stored job missing payload", "message_id", message.ID)
+		return false
+	}
+
+	if a.Queue == nil {
+		a.Log.Warn("retryWhatsmeowMediaRecovery: job queue not available")
+		return false
+	}
+
+	job.EnqueuedAt = time.Now().UTC()
+	job.LastError = ""
+
+	if err := a.Queue.EnqueueInboundMedia(ctx, &job); err != nil {
+		a.Log.Warn("retryWhatsmeowMediaRecovery: failed to enqueue job", "message_id", message.ID, "error", err)
+		return false
+	}
+
+	nextMetadata := make(models.JSONB, len(message.Metadata))
+	for k, v := range message.Metadata {
+		nextMetadata[k] = v
+	}
+	nextMetadata["inbound_media_async_status"] = "queued"
+	nextMetadata["inbound_media_async_enqueued_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	delete(nextMetadata, "inbound_media_async_enqueue_error")
+	nextMetadata["inbound_media_async_last_error"] = ""
+
+	_ = db.WithContext(ctx).
+		Model(&models.Message{}).
+		Where("id = ? AND organization_id = ?", message.ID, message.OrganizationID).
+		Updates(map[string]any{
+			"media_deleted_at": nil,
+			"metadata":         nextMetadata,
+			"error_message":    "",
+		}).Error
+
+	a.Log.Info("retryWhatsmeowMediaRecovery: re-queued inbound media recovery job",
+		"message_id", message.ID,
+		"instance_id", job.InstanceID,
+	)
+	return true
 }
 
 func (a *App) serveLocalMediaFile(r *fastglue.Request, relativePath, mimeHint string) error {
