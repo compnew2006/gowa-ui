@@ -33,6 +33,7 @@ import (
 
 type handlerFakeStorage struct {
 	getCalls int
+	getFunc  func(ctx context.Context, key string) (io.ReadCloser, objectstorage.ObjectInfo, error)
 }
 
 type legacyRestoreFixture struct {
@@ -150,6 +151,9 @@ func (s *handlerFakeStorage) PutObject(ctx context.Context, key string, body io.
 
 func (s *handlerFakeStorage) GetObject(ctx context.Context, key string) (io.ReadCloser, objectstorage.ObjectInfo, error) {
 	s.getCalls++
+	if s.getFunc != nil {
+		return s.getFunc(ctx, key)
+	}
 	return io.NopCloser(strings.NewReader("streamed-body")), objectstorage.ObjectInfo{
 		Size:        int64(len("streamed-body")),
 		ContentType: "application/pdf",
@@ -292,6 +296,55 @@ func TestRetryMediaDownload_ReturnsExistingMedia(t *testing.T) {
 	assert.Equal(t, "existing.pdf", data.MediaFilename)
 	assert.Equal(t, "application/pdf", data.MediaMimeType)
 	assert.Equal(t, "application/pdf", data.MediaMimetype)
+}
+
+func TestRetryMediaDownload_ObjectBackedMissingMediaDoesNotReturnExistingMedia(t *testing.T) {
+	app := newTestApp(t)
+	testutil.TruncateTables(app.DB)
+
+	app.ObjectStorage = &handlerFakeStorage{
+		getFunc: func(ctx context.Context, key string) (io.ReadCloser, objectstorage.ObjectInfo, error) {
+			return nil, objectstorage.ObjectInfo{}, objectstorage.ErrObjectNotFound
+		},
+	}
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "chat-reader", []string{"chat:read"})
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	asset := models.MediaAsset{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		FileHash:  "missing-object-hash",
+		S3Key:     "whatsmeow/media/mi/ss/missing-object-hash",
+		MimeType:  "application/pdf",
+		Size:      123,
+	}
+	require.NoError(t, app.DB.Create(&asset).Error)
+
+	message := models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       contact.ID,
+		WhatsAppAccount: "whatsmeow",
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeDocument,
+		Content:         "Object-backed document",
+		MediaAssetID:    &asset.ID,
+		MediaURL:        "/api/media/" + uuid.NewString(),
+		MediaMimeType:   "application/pdf",
+		MediaFilename:   "object-backed.pdf",
+		Status:          models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(&message).Error)
+
+	req := testutil.NewJSONRequest(t, nil)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", message.ID.String())
+
+	err := app.RetryMediaDownload(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "No recovery information available")
 }
 
 func TestServeMedia_ReturnsNotFoundForMissingLegacyLocalMedia(t *testing.T) {

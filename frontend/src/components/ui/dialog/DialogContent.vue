@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DialogContentEmits, DialogContentProps } from "reka-ui"
-import type { HTMLAttributes } from "vue"
+import type { ComponentPublicInstance, HTMLAttributes } from "vue"
 import { ref } from "vue"
 import { reactiveOmit } from "@vueuse/core"
 import { Cross2Icon } from '@radix-icons/vue'
@@ -21,7 +21,7 @@ const delegatedProps = reactiveOmit(props, "class", "resizable")
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 
-const contentRef = ref<HTMLElement | null>(null)
+const contentRef = ref<HTMLElement | ComponentPublicInstance | null>(null)
 const { onPointerDown } = useResizable(contentRef)
 </script>
 

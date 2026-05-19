@@ -151,28 +151,34 @@ func (s *MediaService) handleDownloadable(
 	err = s.db.WithContext(ctx).
 		Where("file_hash = ?", fileHash).
 		First(&existing).Error
+	var restorable *models.MediaAsset
 	if err == nil {
-		return &HandledMedia{
-			MediaAssetID: existing.ID,
-			MimeType:     coalesceMediaValue(existing.MimeType, descriptor.MimeType, "application/octet-stream"),
-			Filename:     descriptor.Filename,
-			Size:         coalesceMediaSize(existing.Size, downloadableSize(descriptor.Downloadable)),
-			WasDedupHit:  true,
-		}, nil
+		if s.mediaAssetObjectExists(ctx, &existing) {
+			return &HandledMedia{
+				MediaAssetID: existing.ID,
+				MimeType:     coalesceMediaValue(existing.MimeType, descriptor.MimeType, "application/octet-stream"),
+				Filename:     descriptor.Filename,
+				Size:         coalesceMediaSize(existing.Size, downloadableSize(descriptor.Downloadable)),
+				WasDedupHit:  true,
+			}, nil
+		}
+		s.logger.Warn("Deduplicated media asset is missing from object storage; restoring from inbound payload", "asset_id", existing.ID, "file_hash", fileHash, "s3_key", existing.S3Key)
+		restorable = &existing
 	}
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("lookup media asset by hash: %w", err)
 	}
 
-	var restorable *models.MediaAsset
-	var deleted models.MediaAsset
-	if err := s.db.WithContext(ctx).
-		Unscoped().
-		Where("file_hash = ? AND deleted_at IS NOT NULL", fileHash).
-		First(&deleted).Error; err == nil {
-		restorable = &deleted
-	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, fmt.Errorf("lookup deleted media asset by hash: %w", err)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		var deleted models.MediaAsset
+		if err := s.db.WithContext(ctx).
+			Unscoped().
+			Where("file_hash = ? AND deleted_at IS NOT NULL", fileHash).
+			First(&deleted).Error; err == nil {
+			restorable = &deleted
+		} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("lookup deleted media asset by hash: %w", err)
+		}
 	}
 
 	if s.clientResolver == nil {
@@ -282,6 +288,20 @@ func (s *MediaService) handleDownloadable(
 		Filename:     descriptor.Filename,
 		Size:         asset.Size,
 	}, nil
+}
+
+func (s *MediaService) mediaAssetObjectExists(ctx context.Context, asset *models.MediaAsset) bool {
+	if s == nil || s.storage == nil || asset == nil || strings.TrimSpace(asset.S3Key) == "" {
+		return false
+	}
+	reader, _, err := s.storage.GetObject(ctx, asset.S3Key)
+	if err != nil {
+		return false
+	}
+	if reader != nil {
+		_ = reader.Close()
+	}
+	return true
 }
 
 func nativeMediaFileHash(media waClient.DownloadableMessage) (string, error) {

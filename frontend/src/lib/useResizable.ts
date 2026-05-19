@@ -1,11 +1,26 @@
-import { ref, onUnmounted, type Ref } from "vue"
+import { ref, onUnmounted, type ComponentPublicInstance, type Ref } from "vue"
+
+type ResizableTarget = HTMLElement | ComponentPublicInstance | null
+
+function resolveResizableElement(target: ResizableTarget): HTMLElement | null {
+  if (typeof HTMLElement !== "undefined" && target instanceof HTMLElement) {
+    return target
+  }
+
+  const maybeElement = (target as ComponentPublicInstance | null)?.$el
+  if (typeof HTMLElement !== "undefined" && maybeElement instanceof HTMLElement) {
+    return maybeElement
+  }
+
+  return null
+}
 
 /**
  * Minimal resize-from-corner composable for fixed-position dialogs.
  * Handles pointer events, respects min dimensions, and cleans up on unmount.
  */
 export function useResizable(
-  target: Ref<HTMLElement | null>,
+  target: Ref<ResizableTarget>,
   opts: { minWidth?: number; minHeight?: number } = {},
 ) {
   const { minWidth = 280, minHeight = 200 } = opts
@@ -16,12 +31,13 @@ export function useResizable(
   let startH = 0
 
   function onPointerDown(e: PointerEvent) {
-    if (!target.value) return
+    const element = resolveResizableElement(target.value)
+    if (!element) return
     e.preventDefault()
     isResizing.value = true
     startX = e.clientX
     startY = e.clientY
-    const rect = target.value.getBoundingClientRect()
+    const rect = element.getBoundingClientRect()
     startW = rect.width
     startH = rect.height
     document.addEventListener("pointermove", onPointerMove)
@@ -29,11 +45,12 @@ export function useResizable(
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (!target.value || !isResizing.value) return
+    const element = resolveResizableElement(target.value)
+    if (!element || !isResizing.value) return
     const dw = e.clientX - startX
     const dh = e.clientY - startY
-    target.value.style.width = `${Math.max(minWidth, startW + dw)}px`
-    target.value.style.height = `${Math.max(minHeight, startH + dh)}px`
+    element.style.width = `${Math.max(minWidth, startW + dw)}px`
+    element.style.height = `${Math.max(minHeight, startH + dh)}px`
   }
 
   function onPointerUp() {
