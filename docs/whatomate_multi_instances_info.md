@@ -2070,3 +2070,17 @@ Updated: 2026-05-15 01:12:00 UTC
 # On the VPS, run:
 whatomate-switch
 ```
+
+## Green Uploads Cleanup Deployment
+
+Updated: 2026-05-22 23:49:00 UTC
+
+- Active slot: GREEN
+- Green binary: `/opt/whatomate/bin/whatomate.green.20260522_234238`
+- Version: `Whatomate green-20260522_234238-0d74527-uploads-cleanup`
+- Backup before install: `/root/whatomate_backup_before_uploads_cleanup_20260522_234238`
+- Fix: Settings uploads cleanup now includes WhatsMeow inbound media under `/opt/whatomate/uploads/whatsmeow/media`.
+- Verification: `/api/org/uploads-cleanup/run` returned `deleted_files=2337` with `retention_days=5`; no files older than 5 days remained in `/opt/whatomate/uploads/whatsmeow/media`.
+- Services verified active: `whatomate.service`, `whatomate@alarkan-almthalia.service`, `whatomate@holol-wenjaz.service`, `whatomate@matbaat-ruya.service`.
+- Login checks on ports `18123`, `18124`, `18125`, and `18126` returned `200`.
+- Operational note: `/usr/local/bin/whatomate-housekeeping.sh` now tolerates optional missing disk-snapshot paths; the service reran with status `0/SUCCESS`.

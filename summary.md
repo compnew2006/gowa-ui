@@ -1,59 +1,75 @@
-# Whatomate close-rating WhatsMeow send fix
+# Whatomate Session Summary - Uploads Cleanup WhatsMeow Media
+
+Date: 2026-05-22
+Branch: `agent/fix-uploads-cleanup-whatsmeow-media`
 
 ## Task
 
-Investigate why closing chat `34b44787-b6cb-4925-9095-af2b3ebce445` on `https://ofuqalmadenah.com` showed the Chat Close Rating message but failed to send with `failed to send text message: server returned error 400`, then fix and deploy the green version.
+Fix the Uploads Cleanup system from `/settings` so it cleans `/opt/whatomate/uploads/whatsmeow/media/`, explain why both `/opt/whatomate/uploads/` and `/opt/whatomate/uploads/whatsmeow/media/` exist, deploy the fixed green build to the VPS, and verify production behavior.
 
-## Approach and key decisions
+## Skills and MCPs Applied
 
-- Reproduced the issue in the internal browser on the target chat. The two old close-rating bubbles at 09:17 PM and 09:33 PM were failed with the WhatsMeow 400 error.
-- Confirmed in production PostgreSQL that the failed rating rows were real provider-send failures, not UI-only failures.
-- Compared successful and failed close-rating content. The prompt contains multilingual text, emoji, and a Google review link.
-- Found that plain WhatsMeow text sends used the legacy `Conversation` protobuf field, while replies/status text already used `ExtendedTextMessage`.
-- Changed plain WhatsMeow `SendText` to build an `ExtendedTextMessage` payload so rich text prompts use the safer WhatsApp text envelope.
+- Skills: `debugging-wizard`, `golang-pro`, `ccc`, `browser`.
+- MCPs/tools: CocoIndex code search for code discovery, Ruflo memory search/store workflow, Chrome DevTools/browser smoke verification, shell only for tests, build, git, and VPS deployment.
 
-## Files changed
+## Root Cause
 
-- `pkg/whatsmeow/adapter_send.go`
-  - `SendText` now sends `buildTextMessage(text)`.
-  - `buildTextMessage` constructs an `ExtendedTextMessage`.
-- `pkg/whatsmeow/adapter_send_test.go`
-  - Added regression coverage proving close-rating-style text is preserved and no bare `Conversation` payload is used.
-- `summary.md`
-  - Updated this session record.
+The configured storage root is `/opt/whatomate/uploads`. General transient uploads are stored directly below this root in category directories such as `images`, `videos`, `audio`, `documents`, and `stickers`. WhatsMeow inbound received-media files are also stored under the same root, but in a nested provider-specific directory: `/opt/whatomate/uploads/whatsmeow/media`.
 
-## Tests and verification
+The cleanup worker only swept the top-level category directories and organization-scoped equivalents. It did not include `whatsmeow/media`, so the Settings cleanup action could complete successfully while leaving WhatsMeow received-media files untouched.
 
-- Baseline before change: `go test ./pkg/whatsmeow` passed.
-- Focused verification after change:
-  - `go test ./pkg/whatsmeow` passed.
+## Code Changes
+
+- `internal/handlers/uploads_cleanup_settings.go`
+  - Added `filepath.Join("whatsmeow", "media")` to `uploadsCleanupTargetDirs`.
+- `internal/handlers/uploads_cleanup_worker_test.go`
+  - Extended the cleanup worker test to prove expired WhatsMeow media is deleted and fresh WhatsMeow media is retained.
+- `docs/whatomate_multi_instances_info.md`
+  - Added the production green deployment and verification note.
+
+## VPS Changes
+
+- Built and deployed green binary:
+  - `/opt/whatomate/bin/whatomate.green.20260522_234238`
+  - Version: `Whatomate green-20260522_234238-0d74527-uploads-cleanup`
+- Active symlink now resolves to:
+  - `/opt/whatomate/bin/whatomate.green.20260522_234238`
+- Backup created before install:
+  - `/root/whatomate_backup_before_uploads_cleanup_20260522_234238`
+- Updated VPS notes:
+  - `/root/whatomate_multi_instances_info.md`
+  - `/root/whatomate_production_info.md`
+- Operational fix on VPS:
+  - `/usr/local/bin/whatomate-housekeeping.sh` disk snapshot now tolerates optional missing paths, then reran successfully with exit status `0/SUCCESS`.
+
+## Verification
+
+- Local tests:
+  - `go test ./internal/handlers -run 'TestUploadsCleanupWorker|TestApp_RunUploadsCleanupNow'` passed.
   - `go test ./internal/handlers ./pkg/whatsmeow` passed.
   - `go test ./...` passed.
-- Frontend production build:
+- Frontend build:
   - `cd frontend && npm run build` passed.
-- Green deployment verification:
-  - Active binary: `/opt/whatomate/bin/whatomate.green.20260522_190123`
-  - Version: `Whatomate green-20260522_190123-ba27e62-close-rating-text`
-  - Local login smoke passed on ports `18123`, `18124`, `18125`, `18126`.
-  - License bootstrap on all four ports reported `enabled=True`, `status=active`, `locked=False`.
-- Internal browser verification:
-  - Reopened and closed chat `34b44787-b6cb-4925-9095-af2b3ebce445`.
-  - New close-rating bubble at 10:12 PM rendered with no new `server returned error 400`.
-  - Database row `837f9278-f749-440c-a454-0b4b2f1d564b` has status `delivered`, has a WhatsApp message ID, and no error message.
-  - Journal log shows `Message sent` for `837f9278-f749-440c-a454-0b4b2f1d564b`.
+- Production API verification:
+  - Logged in on port `18123`.
+  - Settings returned `uploads_cleanup_retention_days=5`.
+  - Created an old throwaway file in `/opt/whatomate/uploads/whatsmeow/media/`.
+  - Called `/api/org/uploads-cleanup/run`.
+  - Response returned `deleted_files=2337`, `retention_days=5`.
+  - The throwaway file was removed.
+  - Follow-up check found `whatsmeow_media_old_gt5d=0`.
+- Production service verification:
+  - `whatomate.service`: active.
+  - `whatomate@alarkan-almthalia.service`: active.
+  - `whatomate@holol-wenjaz.service`: active.
+  - `whatomate@matbaat-ruya.service`: active.
+  - Login checks on ports `18123`, `18124`, `18125`, `18126`: HTTP `200`.
+- Browser/DevTools verification:
+  - Opened `https://ofuqalmadenah.com/settings`.
+  - Confirmed Uploads Cleanup controls are visible with retention set to `5`.
+  - Chrome DevTools reported no console messages.
 
-## Deployment details
+## Known Limitations
 
-- Branch: `agent/fix-close-rating-whatsmeow-text`
-- Commit: `ba27e62 Fix whatsmeow text payload for close ratings`
-- Backup created before replacing green:
-  - `/root/whatomate_backup_before_close_rating_20260522_190123`
-- Blue binary was left untouched.
-- Active symlink was corrected to the green slot:
-  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green -> /opt/whatomate/bin/whatomate.green.20260522_190123`
-
-## Known limitations
-
-- The two old failed close-rating rows remain visible as historical failed messages. They were not edited or deleted.
-- The failed-row Retry button does not resend while the chat is closed; the verified path was the actual reopen-and-close lifecycle.
-- Existing unrelated local memory DB changes remain in the worktree.
+- No Playwright suite was run against production because the production verification was performed through the live API plus the in-app browser/Chrome DevTools smoke check.
+- Cleanup only deletes files older than the configured retention. For the verified organization, retention is `5` days, so files newer than that remain by design.
