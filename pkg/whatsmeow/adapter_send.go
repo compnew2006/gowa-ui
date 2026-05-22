@@ -25,14 +25,20 @@ func (a *WhatsmeowAdapter) SendText(ctx context.Context, instanceID string, to s
 	}
 	a.simulateTypingIndicator(ctx, client, jid, text)
 
-	resp, err := client.SendMessage(ctx, jid, &waE2E.Message{
-		Conversation: proto.String(text),
-	})
+	resp, err := client.SendMessage(ctx, jid, buildTextMessage(text))
 	if err != nil {
 		return "", fmt.Errorf("failed to send text message: %w", err)
 	}
 
 	return resp.ID, nil
+}
+
+func buildTextMessage(text string) *waE2E.Message {
+	return &waE2E.Message{
+		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text: proto.String(text),
+		},
+	}
 }
 
 // SendTextReply sends a text message as a quoted reply to a specific message.
