@@ -1,44 +1,59 @@
-# Session Summary
+# Whatomate close-rating WhatsMeow send fix
 
 ## Task
-Fix media retry behavior for chat messages that show "File no longer available" and return "Message not found" when retrying download, observed on chat URL /chat/82edad6a-708a-4ce9-af2b-6c8f72b27cac around 07:14 PM.
 
-## Approach and Key Decisions
-- Proceeded with available MCP after Serena/codebase-memory were unavailable and the user approved that fallback.
-- Used the debugging workflow to reproduce the backend failure before changing code.
-- Proved the backend 404 came from `RetryMediaDownload` preloading a non-existent `WhatsAppAccount` association on `models.Message`; GORM returned `unsupported relations for schema Message`, and the handler masked every query error as `Message not found`.
-- Removed the invalid preload and changed query error handling so only `gorm.ErrRecordNotFound` returns 404; unexpected database/query failures now log and return a 500.
-- Kept existing media restore behavior, while ensuring successful retry responses include both `media_mime_type` and legacy `media_mimetype` keys for frontend compatibility.
-- Updated the chat UI retry flow to unwrap API envelopes, patch the message media fields after a successful retry, clear stale missing-media cache state, and support queued async Whatsmeow recovery metadata.
+Investigate why closing chat `34b44787-b6cb-4925-9095-af2b3ebce445` on `https://ofuqalmadenah.com` showed the Chat Close Rating message but failed to send with `failed to send text message: server returned error 400`, then fix and deploy the green version.
 
-## Files Modified
-- `internal/handlers/media.go`: fixed retry message lookup, error handling, existing-media response, and MIME key compatibility.
-- `internal/handlers/media_stream_test.go`: added coverage for retrying a message that already has recoverable media, and fixed an errcheck lint issue in the same test file.
-- `frontend/src/views/chat/ChatView.vue`: fixed retry response unwrapping/message patching and async retry UI handling.
-- `summary.md`: overwritten with this session record.
+## Approach and key decisions
 
-## Dependencies or Environment Changes
-- Ran `npm install` in `frontend/` after Vite/Rollup failed due a missing optional Rollup package. No package lock changes remained in git status.
-- Frontend verification required the bundled Node runtime at `/Users/airm2/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin` because the system Node is v18.19.0 and this frontend requires Node 20.19+ or 22.12+.
-- No application dependency files were intentionally changed.
+- Reproduced the issue in the internal browser on the target chat. The two old close-rating bubbles at 09:17 PM and 09:33 PM were failed with the WhatsMeow 400 error.
+- Confirmed in production PostgreSQL that the failed rating rows were real provider-send failures, not UI-only failures.
+- Compared successful and failed close-rating content. The prompt contains multilingual text, emoji, and a Google review link.
+- Found that plain WhatsMeow text sends used the legacy `Conversation` protobuf field, while replies/status text already used `ExtendedTextMessage`.
+- Changed plain WhatsMeow `SendText` to build an `ExtendedTextMessage` payload so rich text prompts use the safer WhatsApp text envelope.
 
-## Tests Added
-- `TestRetryMediaDownload_ReturnsExistingMedia` in `internal/handlers/media_stream_test.go` verifies that retrying a message with existing media returns `media_url`, `media_filename`, `media_mime_type`, and `media_mimetype`. The test follows the repo database-test pattern and skips when `TEST_DATABASE_URL` is unset.
-- No new Playwright spec was added because the local E2E suite requires a running backend on `localhost:8080`; the failure is environmental and not specific enough for a reliable new UI regression test in this session.
+## Files changed
 
-## Verification Results
-- Repro script before the fix confirmed GORM error: `WhatsAppAccount: unsupported relations for schema Message`.
-- `go test ./internal/handlers -run TestRetryMediaDownload_ReturnsExistingMedia -count=1 -v`: PASS with test skipped because `TEST_DATABASE_URL` is unset.
-- `go test ./...`: PASS.
-- `frontend: npx vitest run src/lib/media_prefetch_cache.test.ts src/services/websocket.test.ts` with bundled Node: PASS, 2 files / 13 tests.
-- `frontend: npm run test:unit -- --run` with bundled Node: PASS, 31 files / 149 tests.
-- `frontend: npm run build` with bundled Node: PASS.
-- `frontend: npm run typecheck` with bundled Node: FAILS on preexisting TypeScript issues including readonly test tags, missing global mock properties, deep toast type instantiation, existing `body` access on `{}`, and unrelated store/view export/type mismatches.
-- `make lint`: FAILS on preexisting Go lint issues after the touched-file errcheck issue was fixed; remaining issues include unused functions/types, ineffectual assignments, deprecated Redis/whatsmeow calls, and unchecked JSON encoder calls in unrelated tests.
-- `frontend: npm run lint -- --no-fix`: FAILS on preexisting frontend lint issue `src/lib/chat-export.ts no-useless-escape` plus warnings in existing temp/e2e files and an unused `isServiceWindowExpired` symbol.
-- `frontend: npx playwright test --project=chromium` with bundled Node: BLOCKED/FAILED because Playwright global setup and Vite proxy could not connect to backend `127.0.0.1:8080` (ECONNREFUSED). The run was stopped after repeated backend-connection timeouts.
+- `pkg/whatsmeow/adapter_send.go`
+  - `SendText` now sends `buildTextMessage(text)`.
+  - `buildTextMessage` constructs an `ExtendedTextMessage`.
+- `pkg/whatsmeow/adapter_send_test.go`
+  - Added regression coverage proving close-rating-style text is preserved and no bare `Conversation` payload is used.
+- `summary.md`
+  - Updated this session record.
 
-## Known Limitations and Follow-Up
-- Full E2E verification still needs PostgreSQL/Redis/configured backend running on port 8080.
-- Full lint/typecheck gates are not clean in the current repo because of preexisting unrelated issues listed above.
-- Ruflo/AgentDB generated local state files remain dirty and should not be included in the code review commit.
+## Tests and verification
+
+- Baseline before change: `go test ./pkg/whatsmeow` passed.
+- Focused verification after change:
+  - `go test ./pkg/whatsmeow` passed.
+  - `go test ./internal/handlers ./pkg/whatsmeow` passed.
+  - `go test ./...` passed.
+- Frontend production build:
+  - `cd frontend && npm run build` passed.
+- Green deployment verification:
+  - Active binary: `/opt/whatomate/bin/whatomate.green.20260522_190123`
+  - Version: `Whatomate green-20260522_190123-ba27e62-close-rating-text`
+  - Local login smoke passed on ports `18123`, `18124`, `18125`, `18126`.
+  - License bootstrap on all four ports reported `enabled=True`, `status=active`, `locked=False`.
+- Internal browser verification:
+  - Reopened and closed chat `34b44787-b6cb-4925-9095-af2b3ebce445`.
+  - New close-rating bubble at 10:12 PM rendered with no new `server returned error 400`.
+  - Database row `837f9278-f749-440c-a454-0b4b2f1d564b` has status `delivered`, has a WhatsApp message ID, and no error message.
+  - Journal log shows `Message sent` for `837f9278-f749-440c-a454-0b4b2f1d564b`.
+
+## Deployment details
+
+- Branch: `agent/fix-close-rating-whatsmeow-text`
+- Commit: `ba27e62 Fix whatsmeow text payload for close ratings`
+- Backup created before replacing green:
+  - `/root/whatomate_backup_before_close_rating_20260522_190123`
+- Blue binary was left untouched.
+- Active symlink was corrected to the green slot:
+  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green -> /opt/whatomate/bin/whatomate.green.20260522_190123`
+
+## Known limitations
+
+- The two old failed close-rating rows remain visible as historical failed messages. They were not edited or deleted.
+- The failed-row Retry button does not resend while the chat is closed; the verified path was the actual reopen-and-close lifecycle.
+- Existing unrelated local memory DB changes remain in the worktree.
