@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -22,6 +23,7 @@ var uploadsCleanupTargetDirs = []string{
 	"images",
 	"stickers",
 	"videos",
+	filepath.Join("whatsmeow", "media"),
 }
 
 func parseUploadsCleanupRetentionDays(settings models.JSONB) int {

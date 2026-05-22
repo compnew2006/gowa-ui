@@ -80,18 +80,26 @@ func TestUploadsCleanupWorker_SweepExpiredUploads_DeletesOnlyExpiredTransientFil
 
 	oldDocument := writeAgedUploadFixture(t, uploadRoot, filepath.Join("documents", "expired.pdf"), now.Add(-6*24*time.Hour))
 	freshVideo := writeAgedUploadFixture(t, uploadRoot, filepath.Join("videos", "fresh.mp4"), now.Add(-2*24*time.Hour))
+	oldWhatsmeowMedia := writeAgedUploadFixture(t, uploadRoot, filepath.Join("whatsmeow", "media", "expired.bin"), now.Add(-6*24*time.Hour))
+	freshWhatsmeowMedia := writeAgedUploadFixture(t, uploadRoot, filepath.Join("whatsmeow", "media", "fresh.bin"), now.Add(-2*24*time.Hour))
 	excludedBackground := writeAgedUploadFixture(t, uploadRoot, filepath.Join("chat-backgrounds", "user-1", "bg.png"), now.Add(-10*24*time.Hour))
 
 	result, err := worker.sweepExpiredUploads(context.Background(), now)
 	require.NoError(t, err)
-	assert.Equal(t, 1, result.DeletedFiles)
+	assert.Equal(t, 2, result.DeletedFiles)
 	assert.Equal(t, 5, result.RetentionDays)
 
 	_, oldErr := os.Stat(oldDocument)
 	assert.ErrorIs(t, oldErr, os.ErrNotExist)
 
+	_, oldWhatsmeowErr := os.Stat(oldWhatsmeowMedia)
+	assert.ErrorIs(t, oldWhatsmeowErr, os.ErrNotExist)
+
 	_, freshErr := os.Stat(freshVideo)
 	assert.NoError(t, freshErr)
+
+	_, freshWhatsmeowErr := os.Stat(freshWhatsmeowMedia)
+	assert.NoError(t, freshWhatsmeowErr)
 
 	_, excludedErr := os.Stat(excludedBackground)
 	assert.NoError(t, excludedErr)
