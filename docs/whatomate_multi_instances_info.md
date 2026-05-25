@@ -2071,6 +2071,108 @@ Updated: 2026-05-15 01:12:00 UTC
 whatomate-switch
 ```
 
+## Green Deployment Update
+
+Updated: 2026-05-18 21:45 UTC
+
+- Deployed source revision: `b42becc` from local workspace `/Users/airm2/Downloads/whatomate`.
+- Deployment strategy: blue/green binary slots under `/opt/whatomate/bin`.
+- Verified pre-deployment backup: `/root/whatomate_backups/20260518_212737_pre_green_deploy`.
+  - Backup size: 424M.
+  - Backup contents: live binaries, switch scripts, runtime configs, remote docs, systemd/nginx definitions, and 5 PostgreSQL dumps.
+- Native VPS build directory: `/root/whatomate_temp_build_20260518_213500`.
+- Native build command: `GOTOOLCHAIN=go1.25.9+auto VERSION=green-20260518_214000-b42becc-license LICENSE_KEY_RING_FILE=/root/whatomate-keyring.json make build-prod`.
+- License key-ring validation: `/root/whatomate-keyring.json` parsed successfully with 3 Ed25519 public keys before embedding.
+- Installed green binary: `/opt/whatomate/bin/whatomate.green.20260518_214000`.
+- Active binary symlink: `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green.20260518_214000`.
+- Blue rollback symlink: `/opt/whatomate/bin/whatomate.blue -> /opt/whatomate/bin/whatomate.blue.predeploy_20260518_214000`.
+- Installed version: `Whatomate green-20260518_214000-b42becc-license (built 2026-05-18_21:40:11)`.
+- Installed SHA256: `41207f7a75e17f366c75d06835e60f0ae4e891a320c72ff6b6b7f2811bdbda4e`.
+
+### Rollout Notes
+
+- First green cutover attempt was automatically rolled back because the first build lacked usable embedded license public keys and exited with `license is enabled but no usable public keys are configured or embedded`.
+- The final green build embedded the validated production public key ring and passed all service and license checks.
+- The one-command switch is installed at `/usr/local/sbin/whatomate-switch` and linked from `/opt/whatomate/bin/switch-blue-green.sh`.
+- To toggle active deployment between green and blue, run on the VPS:
+
+```bash
+whatomate-switch
+```
+
+### License Verification
+
+Final local license bootstrap state:
+
+- `127.0.0.1:18123` -> `enabled = true`, `status = active`, `locked = false`
+- `127.0.0.1:18124` -> `enabled = true`, `status = active`, `locked = false`
+- `127.0.0.1:18125` -> `enabled = true`, `status = active`, `locked = false`
+- `127.0.0.1:18126` -> `enabled = true`, `status = active`, `locked = false`
+
+Browser-side bootstrap from `https://ofuqalmadenah.com` returned HTTP 200 with `enabled=true`, `status=active`, `locked=false`.
+
+### Verification
+
+- Services active: `whatomate.service`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`.
+- Local listeners active: `127.0.0.1:18123`, `127.0.0.1:18124`, `127.0.0.1:18125`, `127.0.0.1:18126`.
+- Local login smoke: all four ports returned `200`.
+- Public HTTPS login smoke:
+  - `https://ofuqalmadenah.com/login` -> `200`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login` -> `200`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login` -> `200`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login` -> `200`
+- Chrome DevTools MCP browser verification confirmed rendered login pages on the main domain and all three tenant domains with title `Whatomate`, heading `Welcome to Whatomate`, and a visible `Sign in` button.
+- Chrome DevTools console check reported no errors/warnings on the final tenant login page.
+- Browser screenshot saved locally at `/Users/airm2/Downloads/whatomate/deploy-verify-login.png`.
+
+### Cleanup
+
+Removed VPS source-code deployment sandboxes after successful verification:
+
+- `/root/whatomate`
+- `/root/whatomate_temp_build_20260518_213000`
+- `/root/whatomate_temp_build_20260518_213500`
+- `/opt/whatomate-sandbox`
+- temporary build logs and failed partial backup attempts from this session
+
+Remaining expected Whatomate paths:
+
+- `/opt/whatomate` runtime, configs, uploads, and binaries
+- `/root/whatomate_backups` verified backups
+- `/root/ops_backups/whatomate_incident_20260412_193101` historical backup material
+
+## 2026-05-19 Green Media / Resize Fix Deployment
+
+Active green was replaced with:
+
+- Binary: `/opt/whatomate/bin/whatomate.green.20260519_002559`
+- Version: `Whatomate green-20260519_032337-f3575f3-media-dedup-resize (built 2026-05-19_00:23:37)`
+- Branch: `agent/media-dedup-resize-fix`
+- Commits:
+  - `d1a9b62` - `Fix missing media dedup recovery and resizable refs`
+  - `f3575f3` - `Clarify active license quota copy`
+
+Backup before final replacement:
+
+- `/root/whatomate_backups/20260519_002559_pre_green_copy_tweak`
+
+Switch command:
+
+- `whatomate-switch status`
+- `whatomate-switch green`
+- `whatomate-switch blue`
+- `whatomate-switch` toggles between latest green and latest blue.
+
+Final verification:
+
+- All four services are active and running `/opt/whatomate/bin/whatomate.green.20260519_002559`.
+- Local login smoke on ports `18123`, `18124`, `18125`, `18126` returned HTTP `200`.
+- Production Playwright verified the 07:14 PM two-file bubble, correct unrecoverable retry response, Assign Contact resize without fatal error, and License overview as `Active`.
+
+Known limitation:
+
+- The two historical 07:14 PM PDFs still cannot display because their object blobs are absent from live uploads/backups and the rows do not contain WhatsMeow recovery payloads. The deployed fix prevents stale dedup reuse for future inbound WhatsMeow media and prevents retry from returning fake success.
+
 ## Green Uploads Cleanup Deployment
 
 Updated: 2026-05-22 23:49:00 UTC

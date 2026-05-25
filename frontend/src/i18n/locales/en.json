@@ -2724,7 +2724,7 @@
       "whatsAppEndpointsPerOrg": "WA Endpoints / Org",
       "storagePerOrg": "Storage / Org",
       "subscriptionDays": "Subscription Days",
-      "notEnforced": "Limit not enforced while licensing is disabled",
+      "notEnforced": "Limit not enforced for this quota",
       "notEnforcedShort": "Off",
       "overBy": "Over by {count}",
       "withinCapacity": "Within licensed capacity"

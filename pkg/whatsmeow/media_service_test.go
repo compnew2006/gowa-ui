@@ -1,6 +1,7 @@
 package whatsmeow
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -109,6 +110,12 @@ func TestMediaService_HandleIncomingMedia_DedupHitSkipsUpload(t *testing.T) {
 	var streamCalls atomic.Int32
 	var uploadCalls atomic.Int32
 	service := NewMediaService(db, &fakeObjectStorage{
+		getFunc: func(ctx context.Context, key string) (io.ReadCloser, objectstorage.ObjectInfo, error) {
+			return io.NopCloser(bytes.NewReader([]byte("stored"))), objectstorage.ObjectInfo{
+				Size:        existingAsset.Size,
+				ContentType: existingAsset.MimeType,
+			}, nil
+		},
 		putFunc: func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
 			uploadCalls.Add(1)
 			return nil
@@ -126,6 +133,62 @@ func TestMediaService_HandleIncomingMedia_DedupHitSkipsUpload(t *testing.T) {
 	assert.Equal(t, existingAsset.ID, result.MediaAssetID)
 	assert.Equal(t, int32(0), streamCalls.Load())
 	assert.Equal(t, int32(0), uploadCalls.Load())
+}
+
+func TestMediaService_HandleIncomingMedia_RestoresMissingDedupAsset(t *testing.T) {
+	t.Parallel()
+
+	db := newMediaServiceTestDB(t)
+	fileHash := stringsRepeatByte(0x12, 32)
+	payload := []byte("restored-pdf")
+	hashHex, err := nativeMediaFileHash(newMediaServiceTestEvent(fileHash, uint64(len(payload))).Message.GetDocumentMessage())
+	require.NoError(t, err)
+
+	existingAsset := models.MediaAsset{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		FileHash:  hashHex,
+		S3Key:     buildMediaObjectKey(hashHex),
+		MimeType:  "application/pdf",
+		Size:      99,
+	}
+	require.NoError(t, db.Create(&existingAsset).Error)
+
+	var uploadedKey string
+	var uploadedData []byte
+	var streamCalls atomic.Int32
+	var uploadCalls atomic.Int32
+	service := NewMediaService(db, &fakeObjectStorage{
+		getFunc: func(ctx context.Context, key string) (io.ReadCloser, objectstorage.ObjectInfo, error) {
+			return nil, objectstorage.ObjectInfo{}, objectstorage.ErrObjectNotFound
+		},
+		putFunc: func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
+			uploadCalls.Add(1)
+			uploadedKey = key
+			var err error
+			uploadedData, err = io.ReadAll(body)
+			return err
+		},
+	}, logf.New(logf.Opts{}), func(uuid.UUID) *waClient.Client { return &waClient.Client{} })
+	service.streamDownload = func(ctx context.Context, client *waClient.Client, media waClient.DownloadableMessage, dst io.Writer) (int64, error) {
+		streamCalls.Add(1)
+		n, err := dst.Write(payload)
+		return int64(n), err
+	}
+
+	result, err := service.HandleIncomingMedia(WithMediaInstanceID(context.Background(), uuid.New()), newMediaServiceTestEvent(fileHash, uint64(len(payload))))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.WasDedupHit)
+	assert.Equal(t, existingAsset.ID, result.MediaAssetID)
+	assert.Equal(t, int32(1), streamCalls.Load())
+	assert.Equal(t, int32(1), uploadCalls.Load())
+	assert.Equal(t, buildMediaObjectKey(hashHex), uploadedKey)
+	assert.Equal(t, payload, uploadedData)
+
+	var refreshed models.MediaAsset
+	require.NoError(t, db.First(&refreshed, "id = ?", existingAsset.ID).Error)
+	assert.Equal(t, int64(len(payload)), refreshed.Size)
+	assert.Equal(t, buildMediaObjectKey(hashHex), refreshed.S3Key)
 }
 
 func TestMediaService_HandleIncomingMedia_StoresNewAssetWithDeterministicKey(t *testing.T) {

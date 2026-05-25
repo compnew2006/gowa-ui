@@ -311,6 +311,7 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 
 	var message models.Message
 	if err := requestDB.WithContext(r.RequestCtx).
+		Preload("MediaAsset").
 		Where("id = ? AND organization_id = ?", messageID, orgID).
 		First(&message).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -321,12 +322,29 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 	}
 
 	if strings.TrimSpace(message.MediaURL) != "" && message.MediaDeletedAt == nil {
-		return r.SendEnvelope(map[string]any{
-			"media_url":       message.MediaURL,
-			"media_filename":  message.MediaFilename,
-			"media_mimetype":  message.MediaMimeType,
-			"media_mime_type": message.MediaMimeType,
-		})
+		mediaAvailable := true
+		if message.MediaAssetID != nil {
+			mediaAvailable = false
+			if message.MediaAsset != nil && strings.TrimSpace(message.MediaAsset.S3Key) != "" && a.ObjectStorage != nil {
+				reader, _, err := a.ObjectStorage.GetObject(r.RequestCtx, message.MediaAsset.S3Key)
+				if err == nil {
+					if reader != nil {
+						_ = reader.Close()
+					}
+					mediaAvailable = true
+				} else {
+					a.Log.Warn("Object-backed media is missing during retry", "message_id", message.ID, "organization_id", orgID, "media_asset_id", message.MediaAssetID, "s3_key", message.MediaAsset.S3Key, "error", err)
+				}
+			}
+		}
+		if mediaAvailable {
+			return r.SendEnvelope(map[string]any{
+				"media_url":       message.MediaURL,
+				"media_filename":  message.MediaFilename,
+				"media_mimetype":  message.MediaMimeType,
+				"media_mime_type": message.MediaMimeType,
+			})
+		}
 	}
 
 	_, eligible, reason := inspectLegacyMediaRecovery(&message, time.Now().UTC())
@@ -381,9 +399,6 @@ const inboundMediaAsyncJobMetaKey = "inbound_media_async_job"
 
 func (a *App) retryWhatsmeowMediaRecovery(ctx context.Context, db *gorm.DB, message *models.Message) bool {
 	if message == nil || message.Metadata == nil {
-		return false
-	}
-	if strings.TrimSpace(message.MediaURL) != "" {
 		return false
 	}
 
