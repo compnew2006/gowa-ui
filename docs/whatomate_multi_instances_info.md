@@ -2186,3 +2186,106 @@ Updated: 2026-05-22 23:49:00 UTC
 - Services verified active: `whatomate.service`, `whatomate@alarkan-almthalia.service`, `whatomate@holol-wenjaz.service`, `whatomate@matbaat-ruya.service`.
 - Login checks on ports `18123`, `18124`, `18125`, and `18126` returned `200`.
 - Operational note: `/usr/local/bin/whatomate-housekeeping.sh` now tolerates optional missing disk-snapshot paths; the service reran with status `0/SUCCESS`.
+
+## Green Text Send Fix Deployment
+
+Updated: 2026-05-25 20:15:55 UTC
+
+- Deployment type: blue/green replacement of the active green slot.
+- Deployed source revision: `c1e34cd` (`Fix whatsmeow plain text sends`).
+- Active slot after deploy: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260525_200333`.
+- Version: `Whatomate green-20260525_200333-c1e34cd-text-send (built 2026-05-25_20:07:08)`.
+- SHA256: `fd8a6947d335531d4ee8ac85f2e2fb35a134d9351dbda972692bfbfb3797f18d`.
+- Blue rollback binary left untouched: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260525_192630_pre_green_text_send_fix` (`759M`).
+
+### Fix
+
+- WhatsMeow plain text messages now use the simple `Conversation` protobuf payload.
+- Messages containing URLs still use `ExtendedTextMessage`, preserving the close-rating review-link behavior.
+- The failing production chat showed historical `server returned error 400` rows before this deploy; no live retry was triggered from the browser to avoid sending a real customer message without explicit approval.
+
+### License Verification
+
+- `127.0.0.1:18123` -> `enabled=true`, `status=active`, `locked=false`.
+- `127.0.0.1:18124` -> `enabled=true`, `status=active`, `locked=false`.
+- `127.0.0.1:18125` -> `enabled=true`, `status=active`, `locked=false`.
+- `127.0.0.1:18126` -> `enabled=true`, `status=active`, `locked=false`.
+- Chrome DevTools verification on `https://ofuqalmadenah.com/settings/license` showed `License overview` as `Active`, not `Disabled`.
+
+### Verification
+
+- Local tests passed before deployment:
+  - `go test ./pkg/whatsmeow`
+  - `go test ./internal/handlers -run 'TestSendViaProvider|TestApp_SendOutgoingMessage'`
+  - `go test ./pkg/whatsmeow ./internal/handlers`
+  - `go test ./...`
+  - `git diff --check`
+- VPS build passed:
+  - `GOTOOLCHAIN=go1.25.9+auto VERSION=green-20260525_200333-c1e34cd-text-send LICENSE_KEY_RING_FILE=/root/whatomate-keyring.json make build-prod`
+- Services active:
+  - `whatomate.service`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+- Local login smoke on ports `18123`, `18124`, `18125`, and `18126` returned `200`.
+- Public HTTPS login smoke returned `200` for:
+  - `https://ofuqalmadenah.com/login`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login`
+- Chrome DevTools loaded the affected chat and the License page; the only console/network noise observed was the expected initial unauthenticated `/api/me` `401` before token refresh.
+- Screenshot saved locally: `/Users/airm2/Downloads/whatomate/deploy-license-active-20260525.png`.
+
+### Switch Command
+
+Use this one command on the VPS to toggle between active green and blue:
+
+```bash
+whatomate-switch
+```
+
+Explicit commands are also available:
+
+```bash
+whatomate-switch status
+whatomate-switch green
+whatomate-switch blue
+```
+
+From a local machine:
+
+```bash
+ssh root@31.97.192.53 'whatomate-switch'
+```
+
+### Cleanup
+
+- Removed temporary VPS build/source directories after deployment:
+  - `/root/whatomate_temp_build_*`
+  - `/root/whatomate-green-src-*`
+  - `/root/whatomate_src_*`
+  - `/root/whatomate-source-*`
+  - `/root/whatomate`
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-sandbox/src`
+- Remaining expected runtime paths:
+  - `/opt/whatomate/bin`
+  - `/opt/whatomate/config.toml`
+  - `/opt/whatomate/instances`
+  - `/opt/whatomate/uploads`
+  - `/root/whatomate_backups`
+  - `/root/whatomate_multi_instances_info.md`
+  - `/root/whatomate_production_info.md`
+
+### Skills And Competencies Applied
+
+- Skills selected: `devops-engineer`, `debugging-wizard`.
+- Competencies applied:
+  - blue/green deployment and rollback preservation
+  - native Ubuntu Go/Vue production build
+  - systemd service restart and health checks
+  - license keyring embedding and license-state verification
+  - Chrome DevTools browser verification
+  - production source cleanup while preserving runtime binaries, configs, uploads, and backups

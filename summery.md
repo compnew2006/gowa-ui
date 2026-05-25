@@ -88,3 +88,71 @@ Fix and deploy the green Whatomate version for:
 ## Known Limitations
 
 The two already-broken 07:14 PM PDFs still cannot display because the referenced blobs are absent from `/opt/whatomate/uploads` and backups checked during the investigation, and the affected rows have no stored WhatsMeow recovery payload. The deployed fix prevents this stale-dedup path from recurring for future inbound WhatsMeow media and stops retry from returning fake success for unrecoverable historical media.
+
+# 2026-05-25 - Green Text Send Fix Deployment
+
+## Task
+
+Deploy the current project to the VPS as the new green slot, preserve the blue rollback slot, fix the WhatsMeow text-send `400` failure seen on chat `8b04fdf4-3f6c-4226-a003-c0ade8c7b75d`, verify that the license overview is active, remove temporary/source codebases from the VPS after deployment, update the deployment documentation, and keep a one-command blue/green switch.
+
+## Skills and MCPs Applied
+
+- Skills: `devops-engineer`, `debugging-wizard`.
+- MCPs/tools: Chrome DevTools for production UI verification, shell/SSH for build and systemd verification.
+
+## Deployment
+
+- Deployed source revision: `c1e34cd` (`Fix whatsmeow plain text sends`).
+- Active slot: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260525_200333`.
+- Version: `Whatomate green-20260525_200333-c1e34cd-text-send (built 2026-05-25_20:07:08)`.
+- SHA256: `fd8a6947d335531d4ee8ac85f2e2fb35a134d9351dbda972692bfbfb3797f18d`.
+- Blue rollback binary left untouched: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260525_192630_pre_green_text_send_fix` (`759M`).
+
+## Fix
+
+- Plain WhatsMeow text messages now build a simple `Conversation` payload.
+- Text messages containing URLs still use `ExtendedTextMessage` to preserve close-rating review-link delivery.
+- The affected chat page still shows historical failed rows from before the deploy; no production Retry/send was triggered from the browser because that would send a real customer message.
+
+## Verification
+
+- Local tests passed:
+  - `go test ./pkg/whatsmeow`
+  - `go test ./internal/handlers -run 'TestSendViaProvider|TestApp_SendOutgoingMessage'`
+  - `go test ./pkg/whatsmeow ./internal/handlers`
+  - `go test ./...`
+  - `git diff --check`
+- VPS production build passed with embedded license keyring:
+  - `GOTOOLCHAIN=go1.25.9+auto VERSION=green-20260525_200333-c1e34cd-text-send LICENSE_KEY_RING_FILE=/root/whatomate-keyring.json make build-prod`
+- Services active:
+  - `whatomate.service`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+- Local ports `18123`, `18124`, `18125`, and `18126` returned `/login` HTTP `200`.
+- Public HTTPS login checks returned `200` for the main domain and all three tenant domains.
+- License bootstrap on all four local ports returned `enabled=true`, `status=active`, and `locked=false`.
+- Chrome DevTools confirmed `https://ofuqalmadenah.com/settings/license` displays `License overview` as `Active`.
+- Chrome DevTools loaded the affected chat page; old `400` failures are visible as historical rows.
+- Screenshot saved locally: `/Users/airm2/Downloads/whatomate/deploy-license-active-20260525.png`.
+
+## Switch Command
+
+- `whatomate-switch` toggles between green and blue.
+- `whatomate-switch status` shows active, green, and blue binaries.
+- `whatomate-switch green` promotes green explicitly.
+- `whatomate-switch blue` rolls back to blue explicitly.
+
+## Cleanup
+
+- Removed temporary/source VPS paths after the verified install:
+  - `/root/whatomate_temp_build_*`
+  - `/root/whatomate-green-src-*`
+  - `/root/whatomate_src_*`
+  - `/root/whatomate-source-*`
+  - `/root/whatomate`
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-sandbox/src`
+- Preserved runtime binaries, configs, uploads, docs, and backups.
