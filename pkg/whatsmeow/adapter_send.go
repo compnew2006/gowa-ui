@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"mime"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	waTypes "go.mau.fi/whatsmeow/types"
 	"google.golang.org/protobuf/proto"
 )
+
+var textURLPattern = regexp.MustCompile(`(?i)\b(?:https?://|www\.)\S+`)
 
 // SendText sends a text message.
 func (a *WhatsmeowAdapter) SendText(ctx context.Context, instanceID string, to string, text string) (string, error) {
@@ -34,11 +38,21 @@ func (a *WhatsmeowAdapter) SendText(ctx context.Context, instanceID string, to s
 }
 
 func buildTextMessage(text string) *waE2E.Message {
-	return &waE2E.Message{
-		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String(text),
-		},
+	if shouldUseExtendedTextMessage(text) {
+		return &waE2E.Message{
+			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+				Text: proto.String(text),
+			},
+		}
 	}
+
+	return &waE2E.Message{
+		Conversation: proto.String(text),
+	}
+}
+
+func shouldUseExtendedTextMessage(text string) bool {
+	return textURLPattern.MatchString(strings.TrimSpace(text))
 }
 
 // SendTextReply sends a text message as a quoted reply to a specific message.
