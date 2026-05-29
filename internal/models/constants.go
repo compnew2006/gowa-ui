@@ -134,10 +134,11 @@ const (
 type TransferSource string
 
 const (
-	TransferSourceManual          TransferSource = "manual"
-	TransferSourceFlow            TransferSource = "flow"
-	TransferSourceKeyword         TransferSource = "keyword"
-	TransferSourceChatbotDisabled TransferSource = "chatbot_disabled"
+	TransferSourceManual            TransferSource = "manual"
+	TransferSourceFlow              TransferSource = "flow"
+	TransferSourceKeyword           TransferSource = "keyword"
+	TransferSourceChatbotDisabled   TransferSource = "chatbot_disabled"
+	TransferSourceCustomerSelection TransferSource = "customer_selection"
 )
 
 // CampaignStatus represents bulk message campaign states

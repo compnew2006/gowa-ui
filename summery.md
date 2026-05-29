@@ -156,3 +156,140 @@ Deploy the current project to the VPS as the new green slot, preserve the blue r
   - `/opt/whatomate-src`
   - `/opt/whatomate-sandbox/src`
 - Preserved runtime binaries, configs, uploads, docs, and backups.
+
+# 2026-05-27 - Green Current Project Deployment
+
+## Result
+
+- Active slot: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260527_174500`.
+- Version: `Whatomate green-20260527_174500-09191c2-csp (built 2026-05-27_17:42:53)`.
+- SHA256: `a140bc30a10d018f05ff1da97bc9505f7ff1d82d241721b78ae74281bd948ff0`.
+- Blue rollback preserved: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260527_172753_pre_green_current_project`.
+
+## Verification
+
+- `go test ./...` passed.
+- `cd frontend && npm run typecheck` passed.
+- `git diff --check` passed.
+- `GOCACHE=/private/tmp/whatomate-gocache go test ./cmd/whatomate ./internal/middleware ./internal/frontend` passed.
+- VPS build passed with embedded `/root/whatomate-keyring.json`.
+- Services active: `whatomate.service`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`.
+- License bootstrap on `18123`, `18124`, `18125`, and `18126`: `enabled=true`, `status=active`, `locked=false`.
+- Public login checks returned `200` for all production domains.
+- Chrome DevTools verified `License overview` is `Active`.
+- Chrome DevTools initially found a CSP nonce regression; it was fixed and redeployed.
+- Final Chrome DevTools reload showed no console messages and all listed network requests returned `200`.
+
+## Switch
+
+```bash
+whatomate-switch
+```
+
+Explicit:
+
+```bash
+whatomate-switch status
+whatomate-switch green
+whatomate-switch blue
+```
+
+# 2026-05-28 - Green Agent Selection UI Polish Deployment
+
+## Result
+
+- Active slot: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+- Version: `Whatomate green-20260528_111523-09191c2-agent-ui (built 2026-05-28_11:18:57)`.
+- SHA256: `4abd7096755d01623a54c4e56290fce386ecf256c45f098b521bd518ef08c921`.
+- Blue rollback preserved: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260528_111523_pre_agent_ui_polish`.
+- All four production services are running from the new green binary:
+  - `whatomate.service`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+
+## Verification
+
+- `cd frontend && npm run typecheck` passed.
+- `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers -run 'TestAgentSelectionSettingsAppliesToInstance|TestSelectedRenderedOption|TestSessionHasProcessedInbound|TestNormalizeStringArray'` passed.
+- `git diff --check` passed.
+- VPS build passed with embedded `/root/whatomate-keyring.json`.
+- Each service process executable resolves to `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+- License bootstrap on `18123`, `18124`, `18125`, and `18126`: `enabled=true`, `status=active`, `locked=false`.
+- Public `/login` checks returned `200` for all production domains:
+  - `https://ofuqalmadenah.com`
+  - `https://holol-wenjaz.ofuqalmadenah.com`
+  - `https://alarkan-almthalia.ofuqalmadenah.com`
+  - `https://matbaat-ruya.ofuqalmadenah.com`
+- HSTS and CSP headers are present on production responses.
+
+## Switch
+
+```bash
+whatomate-switch
+```
+
+Explicit:
+
+```bash
+whatomate-switch status
+whatomate-switch green
+whatomate-switch blue
+```
+
+## Cleanup
+
+- Removed VPS temporary/source paths after verification:
+  - `/root/whatomate-green-src-*`
+  - `/root/whatomate_temp_build_*`
+  - `/root/whatomate_src_*`
+  - `/root/whatomate-source-*`
+  - `/root/whatomate`
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-sandbox/src`
+- Preserved runtime binaries, configs, uploads, docs, license keyring, and backups.
+
+# 2026-05-28 - Green Agent Scope Deployment
+
+## Result
+
+- Active slot: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260528_020100`.
+- Version: `Whatomate green-20260528_020100-09191c2-agent-scope (built 2026-05-28_02:00:01)`.
+- SHA256: `4cbcfa440a67fba3d568b25e43f77e7a0352ebf71a0acd74bfbea0a3a1d2eabf`.
+- Blue rollback preserved: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260527_181332_pre_green_instance_scope`.
+- All four production services are running from the new green binary, replacing the older running green version.
+
+## Verification
+
+- `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers -run 'TestAgentSelectionSettingsAppliesToInstance|TestSelectedRenderedOption|TestSessionHasProcessedInbound|TestNormalizeStringArray'` passed.
+- `cd frontend && npm run typecheck` passed.
+- `git diff --check` passed.
+- VPS build passed with embedded `/root/whatomate-keyring.json`.
+- Services active: `whatomate.service`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`.
+- Each service process executable resolves to `/opt/whatomate/bin/whatomate.green.20260528_020100`.
+- License bootstrap on `18123`, `18124`, `18125`, and `18126`: `enabled=true`, `status=active`, `locked=false`.
+- Public `/login` checks returned `200` for all production domains.
+- HSTS and CSP headers are present on production responses.
+- Chrome DevTools verified `License overview` is `Active`.
+- Chrome DevTools verified the new Customer routing `Instance scope` UI at `/settings/agent-selection`; all related network requests returned `200`.
+- Chrome DevTools found no JavaScript console errors; it reported only non-blocking accessibility issues for existing form labels.
+
+## Switch
+
+```bash
+whatomate-switch
+```
+
+Explicit:
+
+```bash
+whatomate-switch status
+whatomate-switch green
+whatomate-switch blue
+```

@@ -156,6 +156,15 @@
 - Resolved Database Connection String (DSN) Injection vulnerabilities in `postgres.go` and `redis.go` by replacing `fmt.Sprintf` with safe builders (`url.URL` and `net.JoinHostPort`) that automatically handle URL encoding, IPv6 formats, and special characters in passwords.
 
 
+## 2026-05-26
+
+### Added
+
+- Added the Customer Agent Selection for WhatsMeow backend foundation, including additive models, migrations, permissions, APIs, delayed prompt processor, inbound WhatsMeow hook, menu rendering, selection sessions, and audit events.
+- Added the Customer Routing settings page with agent participant management, team/queue options, WhatsMeow menu preview, session monitoring, and audit event browsing.
+- Added a full feature specification at `specs/customer-agent-selection.spec.md`.
+- Added focused backend tests for customer selection snapshot parsing, idempotency helpers, and keyword normalization.
+
 ## 2026-03-02 [Testing Session]
 
 ### Added

@@ -244,6 +244,12 @@ const router = createRouter({
           meta: { permission: "teams" },
         },
         {
+          path: "settings/agent-selection",
+          name: "agent-selection",
+          component: () => import("@/views/settings/AgentSelectionView.vue"),
+          meta: { permission: "agent_selection" },
+        },
+        {
           path: "settings/api-keys",
           name: "api-keys",
           component: () => import("@/views/settings/APIKeysView.vue"),
@@ -318,6 +324,7 @@ const navigationOrder = [
       { path: "/settings/closed-chats", permission: "chat" },
       { path: "/settings/tags", permission: "tags" },
       { path: "/settings/teams", permission: "teams" },
+      { path: "/settings/agent-selection", permission: "agent_selection" },
       { path: "/settings/users", permission: "users" },
       { path: "/settings/roles", permission: "roles" },
       { path: "/settings/api-keys", permission: "api_keys" },

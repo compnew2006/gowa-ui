@@ -143,6 +143,11 @@ func GetMigrationModels() []MigrationModel {
 		{"ChatbotSessionMessage", &models.ChatbotSessionMessage{}},
 		{"AIContext", &models.AIContext{}},
 		{"AgentTransfer", &models.AgentTransfer{}},
+		{"AgentSelectionSettings", &models.AgentSelectionSettings{}},
+		{"AgentSelectionParticipant", &models.AgentSelectionParticipant{}},
+		{"AgentSelectionOption", &models.AgentSelectionOption{}},
+		{"AgentSelectionSession", &models.AgentSelectionSession{}},
+		{"AgentSelectionAuditEvent", &models.AgentSelectionAuditEvent{}},
 
 		// User tracking
 		{"UserAvailabilityLog", &models.UserAvailabilityLog{}},

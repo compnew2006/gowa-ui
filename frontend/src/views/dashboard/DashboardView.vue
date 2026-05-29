@@ -329,6 +329,13 @@ const availableShortcutKeys = computed(() =>
 const getVisibleShortcutKeys = (keys: string[] = []) =>
   keys.filter((key) => isShortcutAccessible(key));
 
+const getWidgetShortcutKeys = (widget?: DashboardWidget) => {
+  const shortcuts = widget?.config?.shortcuts;
+  return Array.isArray(shortcuts)
+    ? shortcuts.filter((key): key is string => typeof key === "string")
+    : [];
+};
+
 // Color options
 const colorOptions = computed(() => [
   {
@@ -1753,7 +1760,7 @@ onMounted(() => {
                 >
                   <template
                     v-for="key in getVisibleShortcutKeys(
-                      getWidgetById(item.i)!.config?.shortcuts || [],
+                      getWidgetShortcutKeys(getWidgetById(item.i)),
                     )"
                     :key="key"
                   >

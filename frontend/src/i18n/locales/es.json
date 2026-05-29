@@ -29,7 +29,8 @@
     "contacts": "Contactos",
     "analytics": "Analíticas",
     "settings": "Configuración",
-    "license": "Licencia"
+    "license": "Licencia",
+    "customerRouting": "Enrutamiento de clientes"
   },
   "licenseSettings": {
     "licenseKind": {

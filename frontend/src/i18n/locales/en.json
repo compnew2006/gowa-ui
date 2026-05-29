@@ -237,6 +237,7 @@
     "cannedResponses": "Canned Responses",
     "tags": "Tags",
     "teams": "Teams",
+    "customerRouting": "Customer Routing",
     "users": "Users",
     "roles": "Roles",
     "apiKeys": "API Keys",
@@ -808,6 +809,10 @@
   "closedChats": {
     "title": "Closed Chats",
     "subtitle": "Review resolved conversations in read-only mode.",
+    "filters": "Filters",
+    "filtersDesc": "Narrow the archive by contact, agent, instance, or close date.",
+    "clearFilters": "Clear filters",
+    "search": "Search",
     "searchPlaceholder": "Search by contact, phone, or closed by...",
     "agentFilterPlaceholder": "Filter by agent name or ID...",
     "allAgents": "All Agents",
@@ -830,9 +835,12 @@
     "actions": "Actions",
     "loading": "Loading closed chats...",
     "empty": "No closed chats found.",
+    "emptyDesc": "Closed conversations will appear here when they match the current filters.",
     "reopen": "Reopen",
     "reopenedSuccess": "Chat reopened and moved to pending queue",
-    "reopenFailed": "Failed to reopen chat"
+    "reopenFailed": "Failed to reopen chat",
+    "loadAgentsFailed": "Failed to load agents",
+    "loadInstancesFailed": "Failed to load WhatsApp instances"
   },
   "users": {
     "title": "User Management",

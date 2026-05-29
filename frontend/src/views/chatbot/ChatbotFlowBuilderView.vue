@@ -131,10 +131,21 @@ interface PanelConfig {
 }
 
 interface WhatsAppFlow {
+  [key: string]: unknown
   id: string
   name: string
   status: string
   meta_flow_id: string
+}
+
+function isPublishedWhatsAppFlow(flow: unknown): flow is WhatsAppFlow {
+  if (!flow || typeof flow !== 'object') return false
+  const candidate = flow as Partial<WhatsAppFlow>
+  return Boolean(
+    candidate.meta_flow_id &&
+    typeof candidate.status === 'string' &&
+    candidate.status.toUpperCase() === 'PUBLISHED'
+  )
 }
 
 const route = useRoute()
@@ -396,9 +407,10 @@ async function fetchWhatsAppFlows() {
     const response = await flowsService.list()
     const data = response.data
     const allFlows = data.flows || []
-    whatsappFlows.value = allFlows.filter(
-      (f: WhatsAppFlow) => f.meta_flow_id && f.status?.toUpperCase() === 'PUBLISHED'
+    const publishedFlows: WhatsAppFlow[] = allFlows.filter(
+      (flow): flow is WhatsAppFlow => isPublishedWhatsAppFlow(flow)
     )
+    whatsappFlows.value = publishedFlows
   } catch (error) {
     console.error('Failed to load WhatsApp flows:', error)
     whatsappFlows.value = []

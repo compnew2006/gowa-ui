@@ -45,10 +45,11 @@ import { PageHeader } from "@/components/shared";
 import { chatbotService, type Team } from "@/services/api";
 import {
   useTransfersStore,
-  type AgentTransfer,
   getSLAStatus,
 } from "@/stores/transfers";
-import { useAuthStore, type UserSettings } from "@/stores/auth";
+import type { AgentTransfer } from "@/types/transfers";
+import { useAuthStore } from "@/stores/auth";
+import type { UserSettings } from "@/types/auth";
 import { useUsersStore } from "@/stores/users";
 import { useTeamsStore } from "@/stores/teams";
 import { toast } from "vue-sonner";

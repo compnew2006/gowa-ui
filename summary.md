@@ -1,5 +1,50 @@
 # Whatomate Session Summaries
 
+## 2026-05-26 - Customer Agent Selection for WhatsMeow
+
+### Task
+
+Implement the planned feature that lets WhatsMeow customers choose a specific visible agent, team, queue, or custom final option after a configurable delay, while preserving the current pending assignment behavior and adding audit coverage.
+
+### Skills and MCPs Applied
+
+- Skills: `ccc`, `architecture-guardian`, `feature-forge`, `test-master`.
+- MCPs/tools: CocoIndex code search/indexing via `ccc`, shell-based Go verification.
+
+### Code Changes
+
+- Added additive Customer Agent Selection models:
+  - `AgentSelectionSettings`
+  - `AgentSelectionParticipant`
+  - `AgentSelectionOption`
+  - `AgentSelectionSession`
+  - `AgentSelectionAuditEvent`
+- Added backend APIs under `/api/agent-selection` for settings, participants, options, preview, sessions, cancellation, and audit.
+- Added a delayed background processor that sends the WhatsMeow text menu only while a chat is still pending and unassigned.
+- Added a WhatsMeow inbound hook before normal chatbot routing to schedule delayed menus and process active customer replies.
+- Added `customer_selection` as a transfer source.
+- Added `agent_selection:read/write` permissions.
+- Added focused backend tests for snapshot parsing, idempotency helpers, and keyword normalization.
+- Added full feature spec in `specs/customer-agent-selection.spec.md`.
+- Added frontend API service and Pinia store for Customer Agent Selection.
+- Added `/settings/agent-selection` Customer Routing UI with settings, agents, options, preview, sessions, and audit tabs.
+- Added navigation and localized labels for Customer Routing.
+
+### Verification
+
+- `go test ./internal/handlers -run 'TestSelectedRenderedOption|TestSessionHasProcessedInbound|TestNormalizeStringArray'` passed.
+- `go test ./cmd/whatomate ./internal/models ./internal/database ./internal/handlers -run TestNonExistent` passed.
+- `go test ./...` passed.
+- `ccc index` completed successfully after adding the new files.
+- `cd frontend && ./node_modules/.bin/eslint src/views/settings/AgentSelectionView.vue src/stores/agentSelection.ts src/services/api.ts src/router/index.ts src/components/layout/navigation.ts` passed.
+- `cd frontend && npm run build` passed with the existing chunk-size warning.
+- `cd frontend && npm run typecheck` is still blocked by pre-existing project-wide TypeScript errors outside this feature.
+
+### Remaining Work
+
+- Add DB-backed integration tests for delayed prompt sending and full assignment/transfer commits.
+- Add WhatsMeow staging smoke verification after enabling the feature for one instance.
+
 ## 2026-05-19 - Media Dedup / Resize Fix
 
 ### Task
@@ -217,6 +262,45 @@ Deploy the current project to the VPS as the new green slot, preserve the blue r
 - `whatomate-switch green` promotes green explicitly.
 - `whatomate-switch blue` rolls back to blue explicitly.
 
+## 2026-05-28 - Green Agent Selection UI Polish Deployment
+
+### Task
+
+Deploy the current UI polish changes to the main Whatomate service and the three dedicated tenants: `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, and `whatomate@matbaat-ruya`.
+
+### Skills and Tools Applied
+
+- Skill selected: `devops-engineer`.
+- Tools used: SSH, rsync, native VPS build, systemd, curl.
+
+### Deployment
+
+- Active slot: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+- Version: `Whatomate green-20260528_111523-09191c2-agent-ui (built 2026-05-28_11:18:57)`.
+- SHA256: `4abd7096755d01623a54c4e56290fce386ecf256c45f098b521bd518ef08c921`.
+- Blue rollback preserved: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260528_111523_pre_agent_ui_polish`.
+
+### Verification
+
+- Local checks passed:
+  - `cd frontend && npm run typecheck`
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers -run 'TestAgentSelectionSettingsAppliesToInstance|TestSelectedRenderedOption|TestSessionHasProcessedInbound|TestNormalizeStringArray'`
+  - `git diff --check`
+- VPS build passed with embedded license keyring.
+- Services active and all running from `/opt/whatomate/bin/whatomate.green.20260528_111523`: `whatomate.service`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`.
+- License bootstrap on ports `18123`, `18124`, `18125`, and `18126`: `enabled=true`, `status=active`, `locked=false`.
+- Public `/login` checks returned `200` for the main domain and all three tenant domains.
+- HSTS and CSP headers are present on production.
+
+### Switch Command
+
+- `whatomate-switch` toggles between green and blue.
+- `whatomate-switch status` shows active, green, and blue binaries.
+- `whatomate-switch green` promotes green explicitly.
+- `whatomate-switch blue` rolls back to blue explicitly.
+
 ### Cleanup
 
 - Removed temporary/source VPS paths after the verified install:
@@ -228,3 +312,121 @@ Deploy the current project to the VPS as the new green slot, preserve the blue r
   - `/opt/whatomate-src`
   - `/opt/whatomate-sandbox/src`
 - Preserved runtime binaries, configs, uploads, docs, and backups.
+
+## 2026-05-27 - Security Headers Fix
+
+### Task
+
+Fix missing HSTS and CSP security findings.
+
+### Changes
+
+- Added `Strict-Transport-Security: max-age=31536000; includeSubDomains`.
+- Ensured `Content-Security-Policy` is set whenever it is missing instead of skipping SPA-style paths.
+- Preserved the existing frontend nonce CSP when the embedded SPA serves `index.html`.
+- Applied security headers from the fasthttp CORS wrapper so preflight `OPTIONS` responses receive the same protections.
+
+### Verification
+
+- `go test ./internal/middleware -run 'TestSecurityHeaders|TestSetSecurityHeadersPreservesExistingCSP'`
+- `go test ./cmd/whatomate -run TestCorsWrapperAppliesSecurityHeadersToPreflight`
+- `go test ./internal/frontend`
+- `go test ./cmd/whatomate ./internal/middleware`
+- `git diff --check`
+
+## 2026-05-27 - Green Current Project Deployment
+
+### Task
+
+Deploy the current working project as the new green slot on VPS `31.97.192.53`, keep blue rollback side-by-side, make the license overview active, clean source code from the VPS, update docs, and provide a one-command switch.
+
+### Skills and Tools Applied
+
+- Skills selected: `devops-engineer`, `debugging-wizard`.
+- MCP/tooling: Chrome DevTools for production browser verification; SSH/systemd/curl for server verification.
+
+### Deployment
+
+- Active slot: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260527_174500`.
+- Version: `Whatomate green-20260527_174500-09191c2-csp (built 2026-05-27_17:42:53)`.
+- SHA256: `a140bc30a10d018f05ff1da97bc9505f7ff1d82d241721b78ae74281bd948ff0`.
+- Blue rollback preserved: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260527_172753_pre_green_current_project`.
+
+### Verification
+
+- Local checks passed:
+  - `go test ./...`
+  - `cd frontend && npm run typecheck`
+  - `git diff --check`
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./cmd/whatomate ./internal/middleware ./internal/frontend`
+- VPS build passed with embedded license keyring.
+- Services active: `whatomate.service`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`.
+- License bootstrap on ports `18123`, `18124`, `18125`, and `18126`: `enabled=true`, `status=active`, `locked=false`.
+- Public login checks returned `200` for the main domain and all three tenant domains.
+- Chrome DevTools verified `License overview` is `Active`.
+- Chrome DevTools initially caught a CSP nonce regression; fixed and redeployed as `green-20260527_174500-09191c2-csp`.
+- Final Chrome DevTools reload reported no console messages and all listed network requests returned `200`.
+- Production document response includes nonce-based CSP plus HSTS.
+
+### Switch Command
+
+- `whatomate-switch` toggles between green and blue.
+- `whatomate-switch status` shows active, green, and blue binaries.
+- `whatomate-switch green` promotes green explicitly.
+- `whatomate-switch blue` rolls back to blue explicitly.
+
+### Cleanup
+
+- Removed temporary/source VPS paths after verification:
+  - `/root/whatomate-green-src-*`
+  - `/root/whatomate_temp_build_*`
+  - `/root/whatomate_src_*`
+  - `/root/whatomate-source-*`
+  - `/root/whatomate`
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-sandbox/src`
+- Preserved runtime binaries, configs, uploads, docs, license keyring, and backups.
+
+## 2026-05-28 - Green Agent Scope Deployment
+
+### Task
+
+Continue the interrupted green deployment, make the newly built project replace all currently running VPS instances, keep blue rollback available, verify license state, update docs, and clean temporary source code.
+
+### Skills and Tools Applied
+
+- Skill selected: `devops-engineer`.
+- MCP/tooling: Chrome DevTools for production browser verification; SSH/systemd/curl for server verification.
+
+### Deployment
+
+- Active slot: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260528_020100`.
+- Version: `Whatomate green-20260528_020100-09191c2-agent-scope (built 2026-05-28_02:00:01)`.
+- SHA256: `4cbcfa440a67fba3d568b25e43f77e7a0352ebf71a0acd74bfbea0a3a1d2eabf`.
+- Blue rollback preserved: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260527_181332_pre_green_instance_scope`.
+
+### Verification
+
+- Local checks passed:
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers -run 'TestAgentSelectionSettingsAppliesToInstance|TestSelectedRenderedOption|TestSessionHasProcessedInbound|TestNormalizeStringArray'`
+  - `cd frontend && npm run typecheck`
+  - `git diff --check`
+- VPS build passed with embedded license keyring.
+- Services active and all running from `/opt/whatomate/bin/whatomate.green.20260528_020100`: `whatomate.service`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`.
+- License bootstrap on ports `18123`, `18124`, `18125`, and `18126`: `enabled=true`, `status=active`, `locked=false`.
+- Public `/login` checks returned `200` for the main domain and all three tenant domains.
+- HSTS and CSP headers are present on production.
+- Chrome DevTools verified `License overview` is `Active`.
+- Chrome DevTools verified `/settings/agent-selection` loads the new `Instance scope` UI and related API calls return `200`.
+- Chrome DevTools found no JavaScript console errors; it only reported non-blocking accessibility issues for existing form labels.
+
+### Switch Command
+
+- `whatomate-switch` toggles between green and blue.
+- `whatomate-switch status` shows active, green, and blue binaries.
+- `whatomate-switch green` promotes green explicitly.
+- `whatomate-switch blue` rolls back to blue explicitly.

@@ -8,12 +8,15 @@ import {
   ChevronsUpDown,
   Loader2,
   RotateCw,
+  Search,
 } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { useDebounceFn } from "@vueuse/core";
 import { PageHeader } from "@/components/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -96,6 +99,14 @@ const hasInvalidDateRange = computed(
     closedTo.value !== "" &&
     closedFrom.value > closedTo.value,
 );
+const hasActiveFilters = computed(
+  () =>
+    searchQuery.value.trim() !== "" ||
+    selectedAgentId.value !== "all" ||
+    selectedInstanceId.value !== "all" ||
+    closedFrom.value !== "" ||
+    closedTo.value !== "",
+);
 
 function formatClosedDate(value?: string): string {
   if (!value) return "—";
@@ -110,6 +121,14 @@ function getClosedByLabel(chat: Contact): string {
   if (chat.closed_by_user_id) return chat.closed_by_user_id;
   if (chat.assigned_user_id) return chat.assigned_user_id;
   return "—";
+}
+
+function clearFilters() {
+  searchQuery.value = "";
+  selectedAgentId.value = "all";
+  selectedInstanceId.value = "all";
+  closedFrom.value = "";
+  closedTo.value = "";
 }
 
 async function loadClosedChats() {
@@ -156,16 +175,16 @@ async function loadAgents() {
     agents.value = usersStore.users
       .map((user) => ({ id: user.id, full_name: user.full_name }))
       .sort((left, right) => left.full_name.localeCompare(right.full_name));
-  } catch (error) {
-    console.error("Failed to load users for closed chats filter:", error);
+  } catch {
+    toast.error(t("closedChats.loadAgentsFailed"));
   }
 }
 
 async function loadInstances() {
   try {
     await instancesStore.fetchInstances();
-  } catch (error) {
-    console.error("Failed to load instances for closed chats filter:", error);
+  } catch {
+    toast.error(t("closedChats.loadInstancesFailed"));
   }
 }
 
@@ -248,197 +267,278 @@ onMounted(() => {
       :title="$t('closedChats.title')"
       :subtitle="$t('closedChats.subtitle')"
       :icon="Archive"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
       back-link="/settings"
       :breadcrumbs="[
         { label: $t('settings.title'), href: '/settings' },
         { label: $t('closedChats.title') },
       ]"
-    />
-
-    <div class="p-6">
-      <div class="mx-auto max-w-6xl space-y-4">
-      <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-7">
-        <Input
-          v-model="searchQuery"
-          :placeholder="$t('closedChats.searchPlaceholder')"
-          class="xl:col-span-2 bg-background"
-          data-testid="closed-chats-search"
-        />
-        <Popover v-model:open="agentComboboxOpen">
-          <PopoverTrigger as-child>
-            <Button
-              variant="outline"
-              role="combobox"
-              :aria-expanded="agentComboboxOpen"
-              class="h-10 justify-between bg-background"
-              data-testid="closed-chats-agent-filter"
-            >
-              <span class="truncate text-left">{{ selectedAgentName }}</span>
-              <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent class="w-[var(--radix-popover-trigger-width)] p-0">
-            <Command>
-              <CommandInput
-                :placeholder="$t('closedChats.searchAgent')"
-                data-testid="closed-chats-agent-search"
-              />
-              <CommandList>
-                <CommandEmpty>{{
-                  $t("closedChats.noAgentFound")
-                }}</CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    value="all"
-                    data-testid="closed-chats-agent-option-all"
-                    @select="
-                      () => {
-                        selectedAgentId = 'all';
-                        agentComboboxOpen = false;
-                      }
-                    "
-                  >
-                    <Check
-                      :class="[
-                        'mr-2 h-4 w-4',
-                        selectedAgentId === 'all' ? 'opacity-100' : 'opacity-0',
-                      ]"
-                    />
-                    {{ $t("closedChats.allAgents") }}
-                  </CommandItem>
-                  <CommandItem
-                    v-for="agent in agents"
-                    :key="agent.id"
-                    :value="`${agent.full_name} ${agent.id}`"
-                    :data-testid="`closed-chats-agent-option-${agent.id}`"
-                    @select="
-                      () => {
-                        selectedAgentId = agent.id;
-                        agentComboboxOpen = false;
-                      }
-                    "
-                  >
-                    <Check
-                      :class="[
-                        'mr-2 h-4 w-4',
-                        selectedAgentId === agent.id
-                          ? 'opacity-100'
-                          : 'opacity-0',
-                      ]"
-                    />
-                    <div class="flex min-w-0 flex-col">
-                      <span class="truncate">{{ agent.full_name }}</span>
-                      <span class="truncate text-xs text-muted-foreground">{{
-                        agent.id
-                      }}</span>
-                    </div>
-                  </CommandItem>
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-        <Select v-model="selectedInstanceId">
-          <SelectTrigger
-            class="h-10 bg-background"
-            data-testid="closed-chats-instance-filter"
-          >
-            <SelectValue :placeholder="$t('chat.filterByInstance')" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{{ $t("chat.allInstances") }}</SelectItem>
-            <SelectItem
-              v-for="instance in availableInstances"
-              :key="instance.id"
-              :value="instance.id"
-            >
-              {{ instance.name }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        <Input
-          v-model="closedFrom"
-          type="date"
-          :placeholder="$t('closedChats.dateFrom')"
-          class="bg-background"
-          data-testid="closed-chats-date-from"
-        />
-        <Input
-          v-model="closedTo"
-          type="date"
-          :placeholder="$t('closedChats.dateTo')"
-          class="bg-background"
-          data-testid="closed-chats-date-to"
-        />
-        <Select v-model="pageSize">
-          <SelectTrigger
-            class="h-10 bg-background"
-            data-testid="closed-chats-page-size"
-          >
-            <SelectValue :placeholder="$t('closedChats.pageSize')" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              v-for="size in pageSizeOptions"
-              :key="size"
-              :value="String(size)"
-            >
-              {{ size }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div class="flex items-center justify-between gap-2">
-        <p class="text-xs text-muted-foreground">
-          {{
-            $t("closedChats.resultsSummary", {
-              start: pageStart,
-              end: pageEnd,
-              total: totalClosedChats,
-            })
-          }}
-        </p>
-        <Button
-          size="sm"
-          @click="loadClosedChats"
-          :disabled="isLoading"
-        >
-          {{
-            isLoading ? $t("closedChats.refreshing") : $t("closedChats.refresh")
-          }}
+    >
+      <template #actions>
+        <Button variant="outline" :disabled="isLoading" @click="loadClosedChats">
+          <Loader2 v-if="isLoading" class="me-2 h-4 w-4 animate-spin" />
+          <RotateCw v-else class="me-2 h-4 w-4" />
+          {{ isLoading ? $t("closedChats.refreshing") : $t("closedChats.refresh") }}
         </Button>
-      </div>
+      </template>
+    </PageHeader>
 
-      <div
-        class="rounded-[calc(var(--radius)+0.25rem)] overflow-hidden border border-border bg-card/95 shadow-sm"
-      >
+    <div class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+      <div class="mx-auto max-w-6xl space-y-5">
+        <section class="rounded-xl border bg-card p-4 shadow-sm">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="space-y-1">
+              <h2 class="text-sm font-semibold text-foreground">
+                {{ $t("closedChats.filters") }}
+              </h2>
+              <p class="text-xs leading-5 text-muted-foreground">
+                {{ $t("closedChats.filtersDesc") }}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              :disabled="!hasActiveFilters"
+              @click="clearFilters"
+            >
+              {{ $t("closedChats.clearFilters") }}
+            </Button>
+          </div>
+
+          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-12">
+            <div class="space-y-2 xl:col-span-3">
+              <Label for="closed-chats-search">
+                {{ $t("closedChats.search") }}
+              </Label>
+              <div class="relative">
+                <Search class="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="closed-chats-search"
+                  v-model="searchQuery"
+                  name="closed-chats-search"
+                  :placeholder="$t('closedChats.searchPlaceholder')"
+                  class="bg-background ps-9"
+                  data-testid="closed-chats-search"
+                />
+              </div>
+            </div>
+
+            <div class="space-y-2 xl:col-span-2">
+              <Label for="closed-chats-agent-filter">
+                {{ $t("closedChats.closedBy") }}
+              </Label>
+              <Popover v-model:open="agentComboboxOpen">
+                <PopoverTrigger as-child>
+                  <Button
+                    id="closed-chats-agent-filter"
+                    variant="outline"
+                    role="combobox"
+                    :aria-expanded="agentComboboxOpen"
+                    class="h-10 w-full justify-between bg-background"
+                    data-testid="closed-chats-agent-filter"
+                  >
+                    <span class="truncate text-start">{{ selectedAgentName }}</span>
+                    <ChevronsUpDown class="ms-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent class="w-[var(--radix-popover-trigger-width)] p-0">
+                  <Command>
+                    <CommandInput
+                      :placeholder="$t('closedChats.searchAgent')"
+                      data-testid="closed-chats-agent-search"
+                    />
+                    <CommandList>
+                      <CommandEmpty>{{
+                        $t("closedChats.noAgentFound")
+                      }}</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="all"
+                          data-testid="closed-chats-agent-option-all"
+                          @select="
+                            () => {
+                              selectedAgentId = 'all';
+                              agentComboboxOpen = false;
+                            }
+                          "
+                        >
+                          <Check
+                            :class="[
+                              'me-2 h-4 w-4',
+                              selectedAgentId === 'all' ? 'opacity-100' : 'opacity-0',
+                            ]"
+                          />
+                          {{ $t("closedChats.allAgents") }}
+                        </CommandItem>
+                        <CommandItem
+                          v-for="agent in agents"
+                          :key="agent.id"
+                          :value="`${agent.full_name} ${agent.id}`"
+                          :data-testid="`closed-chats-agent-option-${agent.id}`"
+                          @select="
+                            () => {
+                              selectedAgentId = agent.id;
+                              agentComboboxOpen = false;
+                            }
+                          "
+                        >
+                          <Check
+                            :class="[
+                              'me-2 h-4 w-4',
+                              selectedAgentId === agent.id
+                                ? 'opacity-100'
+                                : 'opacity-0',
+                            ]"
+                          />
+                          <div class="flex min-w-0 flex-col">
+                            <span class="truncate">{{ agent.full_name }}</span>
+                            <span class="truncate text-xs text-muted-foreground">{{
+                              agent.id
+                            }}</span>
+                          </div>
+                        </CommandItem>
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div class="space-y-2 xl:col-span-2">
+              <Label for="closed-chats-instance-filter">
+                {{ $t("chat.instance") }}
+              </Label>
+              <Select v-model="selectedInstanceId">
+                <SelectTrigger
+                  id="closed-chats-instance-filter"
+                  class="h-10 bg-background"
+                  data-testid="closed-chats-instance-filter"
+                >
+                  <SelectValue :placeholder="$t('chat.filterByInstance')" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{{ $t("chat.allInstances") }}</SelectItem>
+                  <SelectItem
+                    v-for="instance in availableInstances"
+                    :key="instance.id"
+                    :value="instance.id"
+                  >
+                    {{ instance.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div class="space-y-2 xl:col-span-2">
+              <Label for="closed-chats-date-from">
+                {{ $t("closedChats.dateFrom") }}
+              </Label>
+              <Input
+                id="closed-chats-date-from"
+                v-model="closedFrom"
+                name="closed-chats-date-from"
+                type="date"
+                class="bg-background"
+                data-testid="closed-chats-date-from"
+              />
+            </div>
+
+            <div class="space-y-2 xl:col-span-2">
+              <Label for="closed-chats-date-to">
+                {{ $t("closedChats.dateTo") }}
+              </Label>
+              <Input
+                id="closed-chats-date-to"
+                v-model="closedTo"
+                name="closed-chats-date-to"
+                type="date"
+                class="bg-background"
+                data-testid="closed-chats-date-to"
+              />
+            </div>
+
+            <div class="space-y-2 xl:col-span-1">
+              <Label for="closed-chats-page-size">
+                {{ $t("closedChats.pageSize") }}
+              </Label>
+              <Select v-model="pageSize">
+                <SelectTrigger
+                  id="closed-chats-page-size"
+                  class="h-10 bg-background"
+                  data-testid="closed-chats-page-size"
+                >
+                  <SelectValue :placeholder="$t('closedChats.pageSize')" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="size in pageSizeOptions"
+                    :key="size"
+                    :value="String(size)"
+                  >
+                    {{ size }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <p
+            v-if="hasInvalidDateRange"
+            class="mt-3 text-xs font-medium text-destructive"
+          >
+            {{ $t("closedChats.invalidDateRange") }}
+          </p>
+        </section>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <Badge variant="secondary" class="rounded-full px-3 py-1">
+            {{
+              $t("closedChats.resultsSummary", {
+                start: pageStart,
+                end: pageEnd,
+                total: totalClosedChats,
+              })
+            }}
+          </Badge>
+          <span class="text-xs text-muted-foreground" data-testid="closed-chats-page-summary">
+            {{
+              $t("closedChats.pageLabel", {
+                page: currentPage,
+                total: totalPages,
+              })
+            }}
+          </span>
+        </div>
+
         <div
-          class="max-h-[62vh] overflow-auto"
-          data-testid="closed-chats-scroll"
+          class="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
         >
+        <div class="max-h-[62vh] overflow-auto" data-testid="closed-chats-scroll">
           <table class="w-full text-sm">
             <thead class="sticky top-0 z-10 bg-muted/60 backdrop-blur">
               <tr>
-                <th class="px-4 py-3 text-left font-medium text-muted-foreground">
+                <th class="px-4 py-3 text-start font-medium text-muted-foreground">
                   {{ $t("closedChats.contactName") }}
                 </th>
-                <th class="px-4 py-3 text-left font-medium text-muted-foreground">
+                <th class="px-4 py-3 text-start font-medium text-muted-foreground">
                   {{ $t("closedChats.closedBy") }}
                 </th>
-                <th class="px-4 py-3 text-left font-medium text-muted-foreground">
+                <th class="px-4 py-3 text-start font-medium text-muted-foreground">
                   {{ $t("closedChats.dateClosed") }}
                 </th>
-                <th class="px-4 py-3 text-right font-medium text-muted-foreground">
+                <th class="px-4 py-3 text-end font-medium text-muted-foreground">
                   {{ $t("closedChats.actions") }}
                 </th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="isLoading">
-                <td colspan="4" class="px-4 py-8 text-center text-muted-foreground">
-                  {{ $t("closedChats.loading") }}
+                <td colspan="4" class="px-4 py-12 text-center text-muted-foreground">
+                  <div class="flex items-center justify-center gap-2">
+                    <Loader2 class="h-4 w-4 animate-spin" />
+                    {{ $t("closedChats.loading") }}
+                  </div>
                 </td>
               </tr>
               <tr
@@ -461,7 +561,7 @@ onMounted(() => {
                 <td class="px-4 py-3 text-foreground/85">
                   {{ formatClosedDate(chat.closed_at || chat.updated_at) }}
                 </td>
-                <td class="px-4 py-3 text-right">
+                <td class="px-4 py-3 text-end">
                   <Button
                     size="sm"
                     class="h-8 px-3"
@@ -470,16 +570,28 @@ onMounted(() => {
                   >
                     <Loader2
                       v-if="reopeningChatId === chat.id"
-                      class="mr-1.5 h-3 w-3 animate-spin"
+                      class="me-1.5 h-3 w-3 animate-spin"
                     />
-                    <RotateCw v-else class="mr-1.5 h-3 w-3" />
+                    <RotateCw v-else class="me-1.5 h-3 w-3" />
                     {{ $t("closedChats.reopen") }}
                   </Button>
                 </td>
               </tr>
               <tr v-if="!isLoading && contactsStore.closedChats.length === 0">
-                <td colspan="4" class="px-4 py-8 text-center text-muted-foreground">
-                  {{ $t("closedChats.empty") }}
+                <td colspan="4" class="px-4 py-14 text-center">
+                  <div class="mx-auto flex max-w-sm flex-col items-center gap-3 text-muted-foreground">
+                    <span class="rounded-full border bg-muted/40 p-3">
+                      <Archive class="h-5 w-5" />
+                    </span>
+                    <div class="space-y-1">
+                      <p class="font-medium text-foreground">
+                        {{ $t("closedChats.empty") }}
+                      </p>
+                      <p class="text-xs leading-5">
+                        {{ $t("closedChats.emptyDesc") }}
+                      </p>
+                    </div>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -487,7 +599,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="flex items-center justify-end gap-2">
+        <div class="flex items-center justify-end gap-2">
         <Button
           variant="outline"
           size="sm"
@@ -516,7 +628,7 @@ onMounted(() => {
         >
           {{ $t("closedChats.next") }}
         </Button>
-      </div>
+        </div>
       </div>
     </div>
   </div>

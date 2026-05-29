@@ -44,8 +44,9 @@ import {
   type Column,
 } from "@/components/shared";
 import { useTeamsStore } from "@/stores/teams";
-import { useUsersStore, type User } from "@/stores/users";
+import { useUsersStore } from "@/stores/users";
 import { useAuthStore } from "@/stores/auth";
+import type { User } from "@/types/auth";
 import { useOrganizationsStore } from "@/stores/organizations";
 import { type Team, type TeamMember } from "@/services/api";
 import { toast } from "vue-sonner";

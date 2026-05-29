@@ -407,6 +407,7 @@ func TestSecurityHeaders(t *testing.T) {
 	require.NotNil(t, result, "SecurityHeaders middleware should return request")
 
 	headers := &result.RequestCtx.Response.Header
+	assert.Equal(t, "max-age=31536000; includeSubDomains", string(headers.Peek("Strict-Transport-Security")))
 	assert.Equal(t, "nosniff", string(headers.Peek("X-Content-Type-Options")))
 	assert.Equal(t, "DENY", string(headers.Peek("X-Frame-Options")))
 	assert.Equal(t, "strict-origin-when-cross-origin", string(headers.Peek("Referrer-Policy")))
@@ -423,6 +424,36 @@ func TestSecurityHeaders(t *testing.T) {
 	assert.Contains(t, csp, "img-src 'self' data: blob: https:")
 	assert.Contains(t, csp, "media-src 'self' data: blob: https:")
 	assert.Contains(t, csp, "connect-src 'self' ws: wss: blob:")
+}
+
+func TestSetSecurityHeadersPreservesExistingCSP(t *testing.T) {
+	t.Parallel()
+
+	var ctx fasthttp.RequestCtx
+	ctx.Response.Header.Set("Content-Security-Policy", "default-src 'none'")
+
+	middleware.SetSecurityHeaders(&ctx)
+
+	headers := &ctx.Response.Header
+	assert.Equal(t, "default-src 'none'", string(headers.Peek("Content-Security-Policy")))
+	assert.Equal(t, "max-age=31536000; includeSubDomains", string(headers.Peek("Strict-Transport-Security")))
+	assert.Equal(t, "nosniff", string(headers.Peek("X-Content-Type-Options")))
+}
+
+func TestSecurityHeadersDefersCSPForSPARoutes(t *testing.T) {
+	t.Parallel()
+
+	req := newTestRequest()
+	req.RequestCtx.Request.SetRequestURI("/settings/license")
+
+	securityHeadersMiddleware := middleware.SecurityHeaders()
+	result := securityHeadersMiddleware(req)
+
+	require.NotNil(t, result)
+	headers := &result.RequestCtx.Response.Header
+	assert.Empty(t, string(headers.Peek("Content-Security-Policy")))
+	assert.Equal(t, "max-age=31536000; includeSubDomains", string(headers.Peek("Strict-Transport-Security")))
+	assert.Equal(t, "nosniff", string(headers.Peek("X-Content-Type-Options")))
 }
 
 func TestAuth_ValidJWT(t *testing.T) {

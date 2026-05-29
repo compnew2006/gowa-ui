@@ -4,6 +4,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { defineComponent } from "vue";
+import type { Contact } from "@/types/contacts";
 
 const mocks = vi.hoisted(() => ({
   api: {
@@ -98,7 +99,7 @@ const commandItemStub = defineComponent({
   template: `<div v-bind="$attrs" @click="$emit('select', $event)"><slot /></div>`,
 });
 
-function buildContact() {
+function buildContact(): Contact {
   return {
     id: "contact-1",
     phone_number: "+12025550100",
@@ -111,7 +112,7 @@ function buildContact() {
     unread_count: 0,
     created_at: "2026-04-07T08:00:00Z",
     updated_at: "2026-04-07T08:05:00Z",
-  } as const;
+  };
 }
 
 function mountPanel() {

@@ -154,7 +154,15 @@ function getMessageBody(message: Message): string {
   if (typeof message.content === "string") {
     return message.content;
   }
-  return typeof message.content?.body === "string" ? message.content.body : "";
+  if (
+    message.content &&
+    typeof message.content === "object" &&
+    "body" in message.content
+  ) {
+    const body = (message.content as { body?: unknown }).body;
+    return typeof body === "string" ? body : "";
+  }
+  return "";
 }
 
 function isPlaceholderMessageBody(body: string): boolean {

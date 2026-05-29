@@ -31,6 +31,7 @@ const (
 )
 
 const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; frame-src 'self' data: blob: https:; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss: blob:"
+const defaultStrictTransportSecurity = "max-age=31536000; includeSubDomains"
 const accessTokenSubject = "access"
 
 // ContentSecurityPolicyWithNonce returns the default CSP with a script nonce injected.
@@ -42,7 +43,7 @@ func ContentSecurityPolicyWithNonce(nonce string) string {
 	return strings.Replace(defaultContentSecurityPolicy, "script-src 'self';", "script-src 'self' 'nonce-"+nonce+"';", 1)
 }
 
-func shouldSkipCSP(path string) bool {
+func shouldDeferCSPToFrontend(path string) bool {
 	if path == "" {
 		return false
 	}
@@ -52,10 +53,7 @@ func shouldSkipCSP(path string) bool {
 	if strings.HasPrefix(path, "/api") {
 		return false
 	}
-	if strings.Contains(path, ".") {
-		return false
-	}
-	return true
+	return !strings.Contains(path, ".")
 }
 
 // JWTClaims represents JWT claims
@@ -250,17 +248,33 @@ func CORS(allowedOrigins map[string]bool) fastglue.FastMiddleware {
 // SecurityHeaders adds standard security headers to every response.
 func SecurityHeaders() fastglue.FastMiddleware {
 	return func(r *fastglue.Request) *fastglue.Request {
-		h := &r.RequestCtx.Response.Header
-		if !shouldSkipCSP(string(r.RequestCtx.Path())) {
-			h.Set("Content-Security-Policy", defaultContentSecurityPolicy)
-		}
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "DENY")
-		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		h.Set("X-XSS-Protection", "0") // Disabled per OWASP recommendation (use CSP instead)
+		SetSecurityHeadersForPath(r.RequestCtx, string(r.RequestCtx.Path()))
 		return r
 	}
+}
+
+// SetSecurityHeaders applies defense-in-depth browser security headers.
+func SetSecurityHeaders(ctx *fasthttp.RequestCtx) {
+	setSecurityHeaders(ctx, true)
+}
+
+// SetSecurityHeadersForPath lets the embedded SPA attach nonce-based CSP for
+// client-side routes while keeping all other security headers global.
+func SetSecurityHeadersForPath(ctx *fasthttp.RequestCtx, path string) {
+	setSecurityHeaders(ctx, !shouldDeferCSPToFrontend(path))
+}
+
+func setSecurityHeaders(ctx *fasthttp.RequestCtx, includeCSP bool) {
+	h := &ctx.Response.Header
+	if includeCSP && len(h.Peek("Content-Security-Policy")) == 0 {
+		h.Set("Content-Security-Policy", defaultContentSecurityPolicy)
+	}
+	h.Set("Strict-Transport-Security", defaultStrictTransportSecurity)
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+	h.Set("X-XSS-Protection", "0") // Disabled per OWASP recommendation (use CSP instead)
 }
 
 // Recovery recovers from panics

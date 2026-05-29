@@ -22,6 +22,7 @@ import {
   Smartphone,
   Archive,
   ShieldAlert,
+  Route,
 } from "lucide-vue-next";
 import type { Component } from "vue";
 
@@ -139,6 +140,7 @@ export const navigationItems: NavItem[] = [
       "canned_responses",
       "tags",
       "teams",
+      "agent_selection",
       "users",
       "roles",
       "api_keys",
@@ -200,6 +202,12 @@ export const navigationItems: NavItem[] = [
         path: "/settings/teams",
         icon: Users,
         permission: "teams",
+      },
+      {
+        name: "nav.customerRouting",
+        path: "/settings/agent-selection",
+        icon: Route,
+        permission: "agent_selection",
       },
       {
         name: "nav.users",

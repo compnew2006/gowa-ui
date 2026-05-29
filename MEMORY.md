@@ -1,5 +1,47 @@
 # MEMORY.md
 
+## 2026-05-26 23:37
+
+### Work Summary
+- Implemented the first backend slice of Customer Agent Selection for WhatsMeow.
+- Added additive database models for routing settings, customer-visible participants, non-agent options, delayed selection sessions, and immutable audit events.
+- Added settings, participant, option, preview, session, cancel, and audit APIs under `/api/agent-selection`.
+- Added a delayed processor that sends a text menu after the configured delay only if the chat is still pending and unassigned.
+- Added a WhatsMeow inbound hook that handles active menu replies before normal chatbot routing and schedules delayed sessions for eligible pending chats.
+
+### Architectural Decisions
+- Preserved existing chat lifecycle behavior by reusing `chatAssignmentUpdates`, existing transfer helpers, existing WhatsMeow send path, and existing websocket lifecycle broadcasts.
+- Kept the feature disabled by default and scoped to WhatsMeow to avoid changing Meta provider behavior.
+- Stored customer-visible agent labels in `agent_selection_participants` so admins can control the public list without changing user identity.
+- Added `customer_selection` as a transfer source for team/queue choices.
+
+### Current Project State
+- Go verification passes:
+  - `go test ./internal/handlers -run 'TestSelectedRenderedOption|TestSessionHasProcessedInbound|TestNormalizeStringArray'`
+  - `go test ./cmd/whatomate ./internal/models ./internal/database ./internal/handlers -run TestNonExistent`
+  - `go test ./...`
+- Frontend UI for the settings page is not implemented yet; the backend API and preview endpoint are ready for it.
+
+## 2026-05-27 00:22
+
+### Work Summary
+- Added the frontend Customer Routing settings page at `/settings/agent-selection`.
+- Added `agentSelectionService` and `useAgentSelectionStore` to centralize Customer Agent Selection API calls.
+- Added navigation and route entries gated by `agent_selection` permission.
+- Added localized navigation labels for English, Arabic, and Spanish.
+- The page now supports settings save, dynamic WhatsMeow menu preview, adding/removing customer-visible agents, adding/removing team/queue options, viewing sessions, cancelling active sessions, and browsing audit events.
+
+### Architectural Decisions
+- Kept Customer Routing UI as a standalone settings page instead of expanding the existing chatbot settings surface.
+- Reused existing users and teams stores for selectable agents and teams.
+- Kept API response handling inside a dedicated Pinia store to avoid direct endpoint coupling throughout the view.
+
+### Current Project State
+- Frontend build passes: `cd frontend && npm run build`.
+- Targeted eslint for Customer Routing files passes.
+- Frontend `npm run typecheck` still fails on pre-existing project-wide TypeScript errors outside the new files.
+- Backend tests still pass: `go test ./...`.
+
 ## 2026-04-10 22:10
 
 ### Work Summary

@@ -712,14 +712,6 @@ const executingActionId = ref<string | null>(null);
 // Tags filter state
 const isTagFilterOpen = ref(false);
 
-// Service window state
-const isServiceWindowExpired = computed(() => {
-  const contact = contactsStore.currentContact;
-  if (!contact) return false;
-  if (configStore.isWhatsmeow) return false;
-  return contact.service_window_open === false;
-});
-
 const hasPendingCannedAttachments = computed(() => {
   return (pendingCannedResponse.value?.attachments.length ?? 0) > 0;
 });
@@ -2386,49 +2378,48 @@ function resetTextareaHeight() {
   textarea.style.height = "auto";
 }
 
+function getContentBody(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (content && typeof content === "object" && "body" in content) {
+    const body = (content as { body?: unknown }).body;
+    return typeof body === "string" ? body : "";
+  }
+  return "";
+}
+
 function getReplyPreviewContent(message: Message): string {
   if (!message.reply_to_message) return "";
   const reply = message.reply_to_message;
   if (reply.message_type === "text") {
-    const rawBody =
-      typeof reply.content === "string"
-        ? reply.content
-        : reply.content?.body || "";
+    const rawBody = getContentBody(reply.content);
     const body = applyMentionDisplayNames(normalizeDeletedMessageText(rawBody));
     return body.length > 50 ? body.substring(0, 50) + "..." : body;
   }
   if (reply.message_type === "button_reply") {
-    const body =
-      typeof reply.content === "string"
-        ? reply.content
-        : reply.content?.body || "";
+    const body = getContentBody(reply.content);
     const displayBody = applyMentionDisplayNames(body);
     return displayBody.length > 50
       ? displayBody.substring(0, 50) + "..."
       : displayBody;
   }
   if (reply.message_type === "interactive") {
-    const body =
-      typeof reply.content === "string"
-        ? reply.content
-        : (reply as any).interactive_data?.body || reply.content?.body || "";
+    const body = getContentBody(reply.content);
     const displayBody = applyMentionDisplayNames(body);
     return displayBody.length > 50
       ? displayBody.substring(0, 50) + "..."
       : displayBody;
   }
   if (reply.message_type === "template") {
-    const body = reply.content?.body || "";
+    const body = getContentBody(reply.content);
     const displayBody = applyMentionDisplayNames(body);
     return displayBody.length > 50
       ? displayBody.substring(0, 50) + "..."
       : displayBody;
   }
   if (reply.message_type === "image") {
-    const body =
-      typeof reply.content === "string"
-        ? reply.content
-        : reply.content?.body || "";
+    const body = getContentBody(reply.content);
     const displayBody = applyMentionDisplayNames(body);
     if (displayBody.trim() !== "") {
       return displayBody.length > 50
@@ -3128,27 +3119,20 @@ function shouldShowDateSeparator(index: number): boolean {
 
 function getMessageContentRaw(message: Message): string {
   if (message.message_type === "text") {
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "";
+    return getContentBody(message.content);
   }
   if (message.message_type === "button_reply") {
     // Button reply stores the selected button title in content
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "";
+    return getContentBody(message.content);
   }
   if (message.message_type === "interactive") {
     // Interactive messages store body text in content (string) or content.body or interactive_data.body
-    if (typeof message.content === "string") {
-      return message.content;
-    }
+    const body = getContentBody(message.content);
+    if (body) return body;
     if (message.interactive_data?.body) {
       return message.interactive_data.body;
     }
-    return message.content?.body || "[Interactive Message]";
+    return "[Interactive Message]";
   }
   // For media messages, return caption if available (media is displayed inline)
   if (
@@ -3156,26 +3140,17 @@ function getMessageContentRaw(message: Message): string {
     message.message_type === "video" ||
     message.message_type === "sticker"
   ) {
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "";
+    return getContentBody(message.content);
   }
   if (message.message_type === "audio") {
     return ""; // Audio doesn't have captions
   }
   if (message.message_type === "document") {
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "";
+    return getContentBody(message.content);
   }
   if (message.message_type === "template") {
     // Show actual content if available (campaign messages), otherwise fallback
-    if (typeof message.content === "string") {
-      return message.content;
-    }
-    return message.content?.body || "[Template Message]";
+    return getContentBody(message.content) || "[Template Message]";
   }
   if (message.message_type === "location") {
     return ""; // Location is displayed as a map/card, not text
@@ -3214,7 +3189,7 @@ function getLocationData(message: Message): LocationData | null {
   if (message.message_type !== "location") return null;
   try {
     // Content is stored as JSON string in body
-    const body = message.content?.body || message.content;
+    const body = getContentBody(message.content) || message.content;
     if (typeof body === "string") {
       return JSON.parse(body);
     }
@@ -3229,7 +3204,7 @@ function getContactsData(message: Message): ContactData[] {
     return [];
   try {
     // Content is stored as JSON string in body
-    const body = message.content?.body || message.content;
+    const body = getContentBody(message.content) || message.content;
     if (typeof body === "string") {
       return JSON.parse(body);
     }
@@ -5073,7 +5048,7 @@ async function sendMediaMessage() {
                       <img
                         v-else-if="getMediaBlobUrl(message)"
                         :src="getMediaBlobUrl(message)"
-                        :alt="message.content?.body || 'Image'"
+                        :alt="getContentBody(message.content) || 'Image'"
                         class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
                         @click="openMediaPreview(message, $event)"
                         @error="handleImageError($event)"

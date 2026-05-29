@@ -2260,6 +2260,90 @@ From a local machine:
 ssh root@31.97.192.53 'whatomate-switch'
 ```
 
+## Deployment Update
+
+Updated: 2026-05-28 14:20:00 Africa/Cairo
+
+### Scope
+
+- Deployed the current project as the new GREEN slot on VPS `31.97.192.53`.
+- This deployment includes the final layout and polish pass for `/settings/agent-selection`.
+- The old BLUE rollback slot was preserved side by side.
+- The main service and all three dedicated tenants were restarted onto the new GREEN binary.
+
+### Skills And Competencies Applied
+
+- Skill selected: `devops-engineer`.
+- Tools used: SSH, rsync, native VPS build, systemd, curl.
+- Competencies applied:
+  - blue/green deployment
+  - pre-deployment backup
+  - production Linux build with embedded license keyring
+  - systemd service verification
+  - license and security-header verification
+  - post-deploy source cleanup
+
+### Deployment
+
+- Active slot: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+- Version: `Whatomate green-20260528_111523-09191c2-agent-ui (built 2026-05-28_11:18:57)`.
+- SHA256: `4abd7096755d01623a54c4e56290fce386ecf256c45f098b521bd518ef08c921`.
+- Blue rollback preserved: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260528_111523_pre_agent_ui_polish`.
+
+### Running Services
+
+All services are active and running from `/opt/whatomate/bin/whatomate.green.20260528_111523`:
+
+- `whatomate.service`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Verification
+
+- Local pre-deploy checks passed:
+  - `cd frontend && npm run typecheck`
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers -run 'TestAgentSelectionSettingsAppliesToInstance|TestSelectedRenderedOption|TestSessionHasProcessedInbound|TestNormalizeStringArray'`
+  - `git diff --check`
+- Local ports returned `/login` HTTP `200`:
+  - `18123`
+  - `18124`
+  - `18125`
+  - `18126`
+- License bootstrap on all four local ports returned `enabled=true`, `status=active`, and `locked=false`.
+- Public HTTPS `/login` returned `200` for:
+  - `https://ofuqalmadenah.com`
+  - `https://holol-wenjaz.ofuqalmadenah.com`
+  - `https://alarkan-almthalia.ofuqalmadenah.com`
+  - `https://matbaat-ruya.ofuqalmadenah.com`
+- Production security headers confirmed:
+  - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+  - `Content-Security-Policy` present.
+
+### Switch Command
+
+Use this one command on the VPS to toggle active deployment between green and blue:
+
+```bash
+whatomate-switch
+```
+
+Explicit commands:
+
+```bash
+whatomate-switch status
+whatomate-switch green
+whatomate-switch blue
+```
+
+From a local machine:
+
+```bash
+ssh root@31.97.192.53 'whatomate-switch'
+```
+
 ### Cleanup
 
 - Removed temporary VPS build/source directories after deployment:
@@ -2289,3 +2373,208 @@ ssh root@31.97.192.53 'whatomate-switch'
   - license keyring embedding and license-state verification
   - Chrome DevTools browser verification
   - production source cleanup while preserving runtime binaries, configs, uploads, and backups
+
+## Green Current Project Deployment
+
+Updated: 2026-05-27 17:45:00 UTC
+
+- Deployment type: blue/green replacement of the active green slot.
+- Deployed local revision: `09191c2` plus uncommitted working-tree changes for customer agent selection, TypeScript fixes, and security headers.
+- Active slot after deploy: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260527_174500`.
+- Version: `Whatomate green-20260527_174500-09191c2-csp (built 2026-05-27_17:42:53)`.
+- SHA256: `a140bc30a10d018f05ff1da97bc9505f7ff1d82d241721b78ae74281bd948ff0`.
+- Blue rollback binary left untouched: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Previous green kept as rollback artifact: `/opt/whatomate/bin/whatomate.green.20260527_173000` and `/opt/whatomate/bin/whatomate.green.20260525_200333`.
+- Backup before deployment: `/root/whatomate_backups/20260527_172753_pre_green_current_project`.
+
+### Backup Scope
+
+- Runtime/config/bin tar: `/root/whatomate_backups/20260527_172753_pre_green_current_project/runtime-configs-and-bin.tar.gz`.
+- PostgreSQL dumps:
+  - `whatomate.sql.gz`
+  - `whatomate_holol_wenjaz.sql.gz`
+  - `whatomate_alarkan_almthalia.sql.gz`
+  - `whatomate_matbaat_ruya.sql.gz`
+- Backup preserved binaries, switch helper, configs, systemd/nginx definitions, production docs, and license keyring.
+
+### Build
+
+- Temporary build path: `/root/whatomate-green-src-20260527_173000` (removed after verification).
+- Build command:
+
+```bash
+GOTOOLCHAIN=go1.25.9+auto VERSION=green-20260527_174500-09191c2-csp LICENSE_KEY_RING_FILE=/root/whatomate-keyring.json make build-prod
+```
+
+- Build environment: Go `1.25.9`, Node `20.19.6`, npm `10.8.2`.
+- License keyring sha256: `7458085bb0a2af587dddba22c5784e42fa85b8f266a4de7629b81e13bc72ffbe`.
+
+### License Verification
+
+- `127.0.0.1:18123` -> `enabled=true`, `status=active`, `locked=false`.
+- `127.0.0.1:18124` -> `enabled=true`, `status=active`, `locked=false`.
+- `127.0.0.1:18125` -> `enabled=true`, `status=active`, `locked=false`.
+- `127.0.0.1:18126` -> `enabled=true`, `status=active`, `locked=false`.
+- Chrome DevTools verified `https://ofuqalmadenah.com/settings/license` shows `License overview` as `Active`.
+
+### Verification
+
+- Local pre-deploy checks:
+  - `go test ./...`
+  - `cd frontend && npm run typecheck`
+  - `git diff --check`
+- CSP nonce regression found by Chrome DevTools during smoke test and fixed before final green build.
+- Focused post-fix checks:
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./cmd/whatomate ./internal/middleware ./internal/frontend`
+  - `cd frontend && npm run typecheck`
+  - `git diff --check`
+- Services active:
+  - `whatomate.service`
+  - `whatomate@holol-wenjaz`
+  - `whatomate@alarkan-almthalia`
+  - `whatomate@matbaat-ruya`
+- Local login smoke on ports `18123`, `18124`, `18125`, and `18126` returned `200`.
+- Public HTTPS login smoke returned `200` for:
+  - `https://ofuqalmadenah.com/login`
+  - `https://holol-wenjaz.ofuqalmadenah.com/login`
+  - `https://alarkan-almthalia.ofuqalmadenah.com/login`
+  - `https://matbaat-ruya.ofuqalmadenah.com/login`
+- Security headers confirmed on production:
+  - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+  - `Content-Security-Policy` present.
+  - SPA document CSP includes a per-response `nonce-*` and Chrome DevTools reported no console messages after reload.
+
+### Switch Command
+
+Use this one command on the VPS to toggle active deployment between green and blue:
+
+```bash
+whatomate-switch
+```
+
+Explicit commands:
+
+```bash
+whatomate-switch status
+whatomate-switch green
+whatomate-switch blue
+```
+
+From a local machine:
+
+```bash
+ssh root@31.97.192.53 'whatomate-switch'
+```
+
+### Cleanup
+
+- Removed temporary/source VPS paths after verification:
+  - `/root/whatomate-green-src-*`
+  - `/root/whatomate_temp_build_*`
+  - `/root/whatomate_src_*`
+  - `/root/whatomate-source-*`
+  - `/root/whatomate`
+  - `/opt/whatomate-src`
+  - `/opt/whatomate-sandbox/src`
+- Preserved runtime binaries, configs, uploads, docs, license keyring, and backups.
+
+### Skills And Competencies Applied
+
+- Skills selected: `devops-engineer`, `debugging-wizard`, and browser/Chrome DevTools verification.
+- Competencies applied:
+  - blue/green production deployment
+  - backup and rollback planning
+  - native Ubuntu build with embedded license keyring
+  - systemd health checks
+  - license activation verification
+  - CSP/HSTS security header validation
+  - production source cleanup without touching runtime data
+
+## Deployment Update
+
+Updated: 2026-05-28 02:10:00 Africa/Cairo
+
+### Scope
+
+- Deployed the current project as the new GREEN slot on VPS `31.97.192.53`.
+- The deployed version includes the Customer routing instance-scope feature, allowing agent selection to run only for selected WhatsMeow instances.
+- The old BLUE rollback slot was preserved side by side.
+- All running production services were restarted onto the new GREEN binary, so no service is running an older green binary.
+
+### Skills And Competencies Applied
+
+- Skill selected: `devops-engineer`.
+- Tools used: SSH/systemd/curl for deployment and verification; Chrome DevTools for production browser verification.
+- Competencies applied:
+  - blue/green deployment
+  - pre-deployment backup
+  - production Linux build with embedded license keyring
+  - systemd service verification
+  - license and security-header verification
+  - post-deploy source cleanup
+
+### Deployment
+
+- Active slot: GREEN.
+- Active binary: `/opt/whatomate/bin/whatomate.green.20260528_020100`.
+- Version: `Whatomate green-20260528_020100-09191c2-agent-scope (built 2026-05-28_02:00:01)`.
+- SHA256: `4cbcfa440a67fba3d568b25e43f77e7a0352ebf71a0acd74bfbea0a3a1d2eabf`.
+- Blue rollback preserved: `/opt/whatomate/bin/whatomate.blue.20260521_161500`.
+- Backup before deployment: `/root/whatomate_backups/20260527_181332_pre_green_instance_scope`.
+
+### Running Services
+
+All services are active and running from `/opt/whatomate/bin/whatomate.green.20260528_020100`:
+
+- `whatomate.service`
+- `whatomate@holol-wenjaz`
+- `whatomate@alarkan-almthalia`
+- `whatomate@matbaat-ruya`
+
+### Verification
+
+- Local pre-deploy checks passed:
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers -run 'TestAgentSelectionSettingsAppliesToInstance|TestSelectedRenderedOption|TestSessionHasProcessedInbound|TestNormalizeStringArray'`
+  - `cd frontend && npm run typecheck`
+  - `git diff --check`
+- Local ports returned `/login` HTTP `200`:
+  - `18123`
+  - `18124`
+  - `18125`
+  - `18126`
+- License bootstrap on all four local ports returned `enabled=true`, `status=active`, and `locked=false`.
+- Public HTTPS `/login` returned `200` for:
+  - `https://ofuqalmadenah.com`
+  - `https://holol-wenjaz.ofuqalmadenah.com`
+  - `https://alarkan-almthalia.ofuqalmadenah.com`
+  - `https://matbaat-ruya.ofuqalmadenah.com`
+- Production security headers confirmed:
+  - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+  - `Content-Security-Policy` present.
+- Chrome DevTools verified:
+  - `https://ofuqalmadenah.com/settings/license` shows `License overview` as `Active`.
+  - `https://ofuqalmadenah.com/settings/agent-selection` loads the new `Instance scope` UI and the related API calls return `200`.
+  - No JavaScript console errors were found; Chrome reported non-blocking accessibility issues for existing form labels.
+
+### Switch Command
+
+Use this one command on the VPS to toggle active deployment between green and blue:
+
+```bash
+whatomate-switch
+```
+
+Explicit commands:
+
+```bash
+whatomate-switch status
+whatomate-switch green
+whatomate-switch blue
+```
+
+From a local machine:
+
+```bash
+ssh root@31.97.192.53 'whatomate-switch'
+```

@@ -433,6 +433,8 @@ func runServer(args []string) {
 		mediaRetentionCancel       context.CancelFunc
 		uploadsCleanupWorker       *handlers.UploadsCleanupWorker
 		uploadsCleanupCancel       context.CancelFunc
+		agentSelectionProcessor    *handlers.AgentSelectionProcessor
+		agentSelectionCancel       context.CancelFunc
 	)
 	if sandboxMode {
 		lo.Warn("Sandbox mode: skipping recurring background workers")
@@ -475,6 +477,12 @@ func runServer(args []string) {
 		uploadsCleanupCtx, uploadsCleanupCancel = context.WithCancel(context.Background())
 		go uploadsCleanupWorker.Start(uploadsCleanupCtx)
 		lo.Info("Uploads cleanup worker started")
+
+		agentSelectionProcessor = handlers.NewAgentSelectionProcessor(app, time.Minute)
+		var agentSelectionCtx context.Context
+		agentSelectionCtx, agentSelectionCancel = context.WithCancel(context.Background())
+		go agentSelectionProcessor.Start(agentSelectionCtx)
+		lo.Info("Customer agent selection processor started")
 	}
 
 	// Start embedded workers
@@ -585,6 +593,13 @@ func runServer(args []string) {
 		uploadsCleanupCancel()
 		uploadsCleanupWorker.Stop()
 		lo.Info("Uploads cleanup worker stopped")
+	}
+
+	if agentSelectionCancel != nil && agentSelectionProcessor != nil {
+		lo.Info("Stopping customer agent selection processor...")
+		agentSelectionCancel()
+		agentSelectionProcessor.Stop()
+		lo.Info("Customer agent selection processor stopped")
 	}
 
 	// Stop workers first
@@ -1489,6 +1504,22 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/chatbot/transfers/{id}/resume", app.ResumeFromTransfer)
 	g.PUT("/api/chatbot/transfers/{id}/assign", app.AssignAgentTransfer)
 
+	// Customer Agent Selection
+	g.GET("/api/agent-selection/settings", app.GetAgentSelectionSettings)
+	g.PUT("/api/agent-selection/settings", app.UpdateAgentSelectionSettings)
+	g.GET("/api/agent-selection/participants", app.ListAgentSelectionParticipants)
+	g.POST("/api/agent-selection/participants", app.CreateAgentSelectionParticipant)
+	g.PUT("/api/agent-selection/participants/{id}", app.UpdateAgentSelectionParticipant)
+	g.DELETE("/api/agent-selection/participants/{id}", app.DeleteAgentSelectionParticipant)
+	g.GET("/api/agent-selection/options", app.ListAgentSelectionOptions)
+	g.POST("/api/agent-selection/options", app.CreateAgentSelectionOption)
+	g.PUT("/api/agent-selection/options/{id}", app.UpdateAgentSelectionOption)
+	g.DELETE("/api/agent-selection/options/{id}", app.DeleteAgentSelectionOption)
+	g.POST("/api/agent-selection/preview", app.PreviewAgentSelectionMenu)
+	g.GET("/api/agent-selection/audit", app.ListAgentSelectionAudit)
+	g.GET("/api/agent-selection/sessions", app.ListAgentSelectionSessions)
+	g.POST("/api/agent-selection/sessions/{id}/cancel", app.CancelAgentSelectionSession)
+
 	// Teams (admin/manager - access control in handler)
 	g.GET("/api/teams", app.ListTeams)
 	g.POST("/api/teams", app.CreateTeam)
@@ -1645,6 +1676,7 @@ func outboundRateLimitUserKey(r *fastglue.Request, clientIP string) string {
 // This ensures CORS headers are set even for auto-handled OPTIONS requests.
 func corsWrapper(next fasthttp.RequestHandler, allowedOrigins map[string]bool) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
+		middleware.SetSecurityHeadersForPath(ctx, string(ctx.Path()))
 		origin := string(ctx.Request.Header.Peek("Origin"))
 
 		if origin != "" && middleware.IsOriginAllowedForRequest(origin, allowedOrigins, string(ctx.Host()), ctx.IsTLS()) {
@@ -1659,10 +1691,12 @@ func corsWrapper(next fasthttp.RequestHandler, allowedOrigins map[string]bool) f
 
 		// Handle preflight OPTIONS requests
 		if string(ctx.Method()) == "OPTIONS" {
+			middleware.SetSecurityHeaders(ctx)
 			ctx.SetStatusCode(fasthttp.StatusNoContent)
 			return
 		}
 
 		next(ctx)
+		middleware.SetSecurityHeaders(ctx)
 	}
 }

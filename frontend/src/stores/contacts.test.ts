@@ -161,7 +161,7 @@ describe("useContactsStore", () => {
     const store = useContactsStore();
     const fetchedContact = makeContact({ id: "contact-fetch" });
 
-    let resolveRequest: ((value: unknown) => void) | null = null;
+    let resolveRequest!: (value: unknown) => void;
     mocks.contactsService.get.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveRequest = resolve;
@@ -174,7 +174,7 @@ describe("useContactsStore", () => {
     expect(mocks.contactsService.get).toHaveBeenCalledTimes(1);
     expect(mocks.contactsService.get).toHaveBeenCalledWith("contact-fetch");
 
-    resolveRequest?.({ data: { data: fetchedContact } });
+    resolveRequest({ data: { data: fetchedContact } });
 
     await expect(firstRequest).resolves.toEqual(
       expect.objectContaining({ id: "contact-fetch" }),

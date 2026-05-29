@@ -63,12 +63,13 @@ const (
 	ResourceChat                   = "chat"
 	ResourceChatAssign             = "chat.assign"
 	ResourceChatCollaborators      = "chat.collaborators"
-	ResourceChatBypassClaim      = "chat.bypass_claim"
+	ResourceChatBypassClaim        = "chat.bypass_claim"
 	ResourceContacts               = "contacts"
 	ResourceTags                   = "tags"
 	ResourceAnalytics              = "analytics"
 	ResourceAnalyticsAgents        = "analytics.agents"
 	ResourceTransfers              = "transfers"
+	ResourceAgentSelection         = "agent_selection"
 	ResourceWebhooks               = "webhooks"
 	ResourceAPIKeys                = "api_keys"
 	ResourceCannedResponses        = "canned_responses"
@@ -190,6 +191,10 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceTransfers, Action: ActionWrite, Description: "Create transfers"},
 		{Resource: ResourceTransfers, Action: ActionPickup, Description: "Pickup transfers from queue"},
 
+		// Customer agent selection
+		{Resource: ResourceAgentSelection, Action: ActionRead, Description: "View customer agent selection settings and audit"},
+		{Resource: ResourceAgentSelection, Action: ActionWrite, Description: "Manage customer agent selection routing"},
+
 		// Webhooks
 		{Resource: ResourceWebhooks, Action: ActionRead, Description: "View webhooks"},
 		{Resource: ResourceWebhooks, Action: ActionWrite, Description: "Create and edit webhooks"},
@@ -256,6 +261,8 @@ func SystemRolePermissions() map[string][]string {
 		"analytics:read", "analytics.agents:read",
 		// Transfers
 		"transfers:read", "transfers:write", "transfers:pickup",
+		// Customer agent selection
+		"agent_selection:read", "agent_selection:write",
 		// Webhooks
 		"webhooks:read", "webhooks:write", "webhooks:delete",
 		// Canned Responses

@@ -131,10 +131,8 @@ describe("CreateContactDialog", () => {
         mode: "chat",
       },
       global: {
-        config: {
-          globalProperties: {
-            $t: (key: string) => key,
-          },
+        mocks: {
+          $t: (key: string) => key,
         },
         stubs: {
           Button: ButtonStub,

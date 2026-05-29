@@ -771,6 +771,194 @@ export const chatbotService = {
     }),
 };
 
+export type AgentSelectionTriggerMode =
+  | "first_pending_message"
+  | "keyword"
+  | "after_office_hours"
+  | "chatbot_step"
+  | "manual_test";
+
+export type AgentSelectionCustomAction =
+  | "send_only"
+  | "keep_pending"
+  | "close_chat"
+  | "assign_to_team";
+
+export type AgentSelectionOptionType = "agent" | "team" | "queue" | "custom";
+
+export interface AgentSelectionSettings {
+  id: string;
+  organization_id: string;
+  instance_id?: string | null;
+  allowed_instance_ids?: string[];
+  enabled: boolean;
+  trigger_mode: AgentSelectionTriggerMode;
+  trigger_keywords?: string[];
+  prompt_delay_minutes: number;
+  selection_timeout_minutes: number;
+  max_invalid_attempts: number;
+  menu_header_text: string;
+  menu_footer_text: string;
+  invalid_reply_text: string;
+  timeout_response_text: string;
+  unavailable_agent_text: string;
+  custom_final_option_enabled: boolean;
+  custom_final_option_text: string;
+  custom_final_option_response: string;
+  custom_final_option_action: AgentSelectionCustomAction;
+  custom_final_option_team_id?: string | null;
+  hide_unavailable_agents: boolean;
+}
+
+export interface AgentSelectionParticipant {
+  id: string;
+  organization_id: string;
+  settings_id: string;
+  user_id: string;
+  display_name: string;
+  description?: string;
+  is_enabled: boolean;
+  sort_order: number;
+  show_only_when_available: boolean;
+  max_open_chats?: number | null;
+  user?: {
+    id: string;
+    email: string;
+    full_name: string;
+    is_active: boolean;
+    is_available: boolean;
+  };
+}
+
+export interface AgentSelectionOption {
+  id: string;
+  organization_id: string;
+  settings_id: string;
+  option_type: AgentSelectionOptionType;
+  user_id?: string | null;
+  team_id?: string | null;
+  label: string;
+  description?: string;
+  is_enabled: boolean;
+  sort_order: number;
+  action?: string;
+}
+
+export interface AgentSelectionRenderedOption {
+  number: number;
+  option_id: string;
+  type: AgentSelectionOptionType;
+  label: string;
+  description?: string;
+  user_id?: string;
+  team_id?: string;
+  action?: string;
+  response?: string;
+}
+
+export interface AgentSelectionMenuPreview {
+  text: string;
+  options: AgentSelectionRenderedOption[];
+}
+
+export interface AgentSelectionAuditEvent {
+  id: string;
+  event_type: string;
+  actor_type: string;
+  contact_id?: string | null;
+  session_id?: string | null;
+  selected_agent_id?: string | null;
+  selected_team_id?: string | null;
+  reason?: string;
+  created_at: string;
+}
+
+export interface AgentSelectionSession {
+  id: string;
+  contact_id: string;
+  status: string;
+  whatsapp_account: string;
+  prompt_due_at: string;
+  menu_sent_at?: string | null;
+  expires_at?: string | null;
+  invalid_attempts: number;
+  created_at: string;
+}
+
+export const agentSelectionService = {
+  getSettings: (params?: { instance_id?: string }) =>
+    api.get<{ settings: AgentSelectionSettings }>("/agent-selection/settings", {
+      params,
+    }),
+  updateSettings: (data: Partial<AgentSelectionSettings>) =>
+    api.put<{ settings: AgentSelectionSettings }>(
+      "/agent-selection/settings",
+      data,
+    ),
+  listParticipants: (params?: { settings_id?: string }) =>
+    api.get<{ participants: AgentSelectionParticipant[] }>(
+      "/agent-selection/participants",
+      { params },
+    ),
+  createParticipant: (
+    data: Omit<
+      AgentSelectionParticipant,
+      "id" | "organization_id" | "user"
+    >,
+  ) => api.post<{ participant: AgentSelectionParticipant }>(
+    "/agent-selection/participants",
+    data,
+  ),
+  updateParticipant: (
+    id: string,
+    data: Partial<AgentSelectionParticipant>,
+  ) =>
+    api.put<{ participant: AgentSelectionParticipant }>(
+      `/agent-selection/participants/${id}`,
+      data,
+    ),
+  deleteParticipant: (id: string) =>
+    api.delete(`/agent-selection/participants/${id}`),
+  listOptions: (params?: { settings_id?: string }) =>
+    api.get<{ options: AgentSelectionOption[] }>("/agent-selection/options", {
+      params,
+    }),
+  createOption: (
+    data: Omit<AgentSelectionOption, "id" | "organization_id">,
+  ) => api.post<{ option: AgentSelectionOption }>("/agent-selection/options", data),
+  updateOption: (id: string, data: Partial<AgentSelectionOption>) =>
+    api.put<{ option: AgentSelectionOption }>(
+      `/agent-selection/options/${id}`,
+      data,
+    ),
+  deleteOption: (id: string) => api.delete(`/agent-selection/options/${id}`),
+  preview: (data: { settings_id?: string; contact_id?: string }) =>
+    api.post<{ menu: AgentSelectionMenuPreview }>(
+      "/agent-selection/preview",
+      data,
+    ),
+  listAudit: (params?: {
+    event_type?: string;
+    contact_id?: string;
+    session_id?: string;
+    page?: number;
+    limit?: number;
+  }) =>
+    api.get<{ events: AgentSelectionAuditEvent[]; total?: number }>(
+      "/agent-selection/audit",
+      { params },
+    ),
+  listSessions: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get<{ sessions: AgentSelectionSession[]; total?: number }>(
+      "/agent-selection/sessions",
+      { params },
+    ),
+  cancelSession: (id: string) =>
+    api.post<{ session: AgentSelectionSession }>(
+      `/agent-selection/sessions/${id}/cancel`,
+    ),
+};
+
 export interface CannedResponse {
   id: string;
   name: string;
