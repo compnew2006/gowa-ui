@@ -222,6 +222,195 @@ func (q *RedisQueue) EnqueueContactRepair(ctx context.Context, job *ContactRepai
 	return nil
 }
 
+// EnqueueWhatsAppFilter adds a single WhatsApp filter job to the queue.
+func (q *RedisQueue) EnqueueWhatsAppFilter(ctx context.Context, job *WhatsAppFilterJob) error {
+	if job == nil {
+		return fmt.Errorf("whatsapp filter job is nil")
+	}
+	if job.OrganizationID == uuid.Nil {
+		return fmt.Errorf("whatsapp filter job missing organization_id")
+	}
+	if job.EnqueuedAt.IsZero() {
+		job.EnqueuedAt = time.Now()
+	}
+
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal whatsapp filter job: %w", err)
+	}
+
+	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: CampaignStreamName(job.OrganizationID),
+		Values: map[string]interface{}{
+			"type":    string(JobTypeWhatsAppFilter),
+			"payload": string(payload),
+		},
+	}).Result()
+	if err != nil {
+		return fmt.Errorf("failed to enqueue whatsapp filter job: %w", err)
+	}
+
+	return nil
+}
+
+// EnqueueGroupJoin adds a single group join job to the queue.
+func (q *RedisQueue) EnqueueGroupJoin(ctx context.Context, job *GroupJoinJob) error {
+	if job == nil {
+		return fmt.Errorf("group join job is nil")
+	}
+	if job.OrganizationID == uuid.Nil {
+		return fmt.Errorf("group join job missing organization_id")
+	}
+	if job.EnqueuedAt.IsZero() {
+		job.EnqueuedAt = time.Now()
+	}
+
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal group join job: %w", err)
+	}
+
+	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: CampaignStreamName(job.OrganizationID),
+		Values: map[string]interface{}{
+			"type":    string(JobTypeGroupJoin),
+			"payload": string(payload),
+		},
+	}).Result()
+	if err != nil {
+		return fmt.Errorf("failed to enqueue group join job: %w", err)
+	}
+
+	return nil
+}
+
+// EnqueueGroupJoins adds multiple group join jobs to the queue using pipeline.
+func (q *RedisQueue) EnqueueGroupJoins(ctx context.Context, jobs []*GroupJoinJob) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	pipe := q.client.Pipeline()
+	now := time.Now()
+
+	for _, job := range jobs {
+		if job == nil {
+			return fmt.Errorf("group join job is nil")
+		}
+		if job.OrganizationID == uuid.Nil {
+			return fmt.Errorf("group join job missing organization_id")
+		}
+		if job.EnqueuedAt.IsZero() {
+			job.EnqueuedAt = now
+		}
+
+		payload, err := json.Marshal(job)
+		if err != nil {
+			return fmt.Errorf("failed to marshal group join job: %w", err)
+		}
+
+		pipe.XAdd(ctx, &redis.XAddArgs{
+			Stream: CampaignStreamName(job.OrganizationID),
+			Values: map[string]interface{}{
+				"type":    string(JobTypeGroupJoin),
+				"payload": string(payload),
+			},
+		})
+	}
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to enqueue group join jobs: %w", err)
+	}
+
+	q.log.Info("Group join jobs enqueued", "count", len(jobs), "campaign_id", jobs[0].CampaignID)
+	return nil
+}
+
+func (q *RedisQueue) EnqueueMessageExtraction(ctx context.Context, job *MessageExtractionJob) error {
+	if job == nil {
+		return fmt.Errorf("message extraction job is nil")
+	}
+	if job.OrganizationID == uuid.Nil {
+		return fmt.Errorf("message extraction job missing organization_id")
+	}
+	if job.EnqueuedAt.IsZero() {
+		job.EnqueuedAt = time.Now()
+	}
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal message extraction job: %w", err)
+	}
+	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: CampaignStreamName(job.OrganizationID),
+		Values: map[string]interface{}{
+			"type":    string(JobTypeMessageExtraction),
+			"payload": string(payload),
+		},
+	}).Result()
+	if err != nil {
+		return fmt.Errorf("failed to enqueue message extraction job: %w", err)
+	}
+	q.log.Info("Message extraction job enqueued", "campaign_id", job.CampaignID, "instance_id", job.InstanceID)
+	return nil
+}
+
+func (q *RedisQueue) EnqueueGroupExtraction(ctx context.Context, job *GroupExtractionJob) error {
+	if job == nil {
+		return fmt.Errorf("group extraction job is nil")
+	}
+	if job.OrganizationID == uuid.Nil {
+		return fmt.Errorf("group extraction job missing organization_id")
+	}
+	if job.EnqueuedAt.IsZero() {
+		job.EnqueuedAt = time.Now()
+	}
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal group extraction job: %w", err)
+	}
+	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: CampaignStreamName(job.OrganizationID),
+		Values: map[string]interface{}{
+			"type":    string(JobTypeGroupExtraction),
+			"payload": string(payload),
+		},
+	}).Result()
+	if err != nil {
+		return fmt.Errorf("failed to enqueue group extraction job: %w", err)
+	}
+	q.log.Info("Group extraction job enqueued", "campaign_id", job.CampaignID, "instance_id", job.InstanceID)
+	return nil
+}
+
+func (q *RedisQueue) EnqueueMemberExtraction(ctx context.Context, job *MemberExtractionJob) error {
+	if job == nil {
+		return fmt.Errorf("member extraction job is nil")
+	}
+	if job.OrganizationID == uuid.Nil {
+		return fmt.Errorf("member extraction job missing organization_id")
+	}
+	if job.EnqueuedAt.IsZero() {
+		job.EnqueuedAt = time.Now()
+	}
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal member extraction job: %w", err)
+	}
+	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: CampaignStreamName(job.OrganizationID),
+		Values: map[string]interface{}{
+			"type":    string(JobTypeMemberExtraction),
+			"payload": string(payload),
+		},
+	}).Result()
+	if err != nil {
+		return fmt.Errorf("failed to enqueue member extraction job: %w", err)
+	}
+	q.log.Info("Member extraction job enqueued", "campaign_id", job.CampaignID, "instance_id", job.InstanceID, "group_jid", job.GroupJID)
+	return nil
+}
+
 // Close closes the queue connection.
 func (q *RedisQueue) Close() error {
 	return nil // Redis client is managed externally.
@@ -510,6 +699,46 @@ func (c *RedisConsumer) processMessage(ctx context.Context, msg redis.XMessage, 
 		}
 		c.log.Debug("Processing contact repair job", "stream", c.streamName, "contact_id", job.ContactID, "organization_id", job.OrganizationID, "redis_message_id", msg.ID)
 		return handler.HandleContactRepairJob(ctx, &job)
+
+	case JobTypeWhatsAppFilter:
+		var job WhatsAppFilterJob
+		if err := json.Unmarshal([]byte(payload), &job); err != nil {
+			return newPermanentProcessError(fmt.Errorf("failed to unmarshal whatsapp filter job: %w", err))
+		}
+		c.log.Debug("Processing whatsapp filter job", "stream", c.streamName, "batch_id", job.BatchID, "organization_id", job.OrganizationID, "redis_message_id", msg.ID)
+		return handler.HandleWhatsAppFilterJob(ctx, &job)
+
+	case JobTypeGroupJoin:
+		var job GroupJoinJob
+		if err := json.Unmarshal([]byte(payload), &job); err != nil {
+			return newPermanentProcessError(fmt.Errorf("failed to unmarshal group join job: %w", err))
+		}
+		c.log.Debug("Processing group join job", "stream", c.streamName, "campaign_id", job.CampaignID, "recipient_id", job.RecipientID, "redis_message_id", msg.ID)
+		return handler.HandleGroupJoinJob(ctx, &job)
+
+	case JobTypeMessageExtraction:
+		var job MessageExtractionJob
+		if err := json.Unmarshal([]byte(payload), &job); err != nil {
+			return newPermanentProcessError(fmt.Errorf("failed to unmarshal message extraction job: %w", err))
+		}
+		c.log.Debug("Processing message extraction job", "stream", c.streamName, "campaign_id", job.CampaignID, "redis_message_id", msg.ID)
+		return handler.HandleMessageExtractionJob(ctx, &job)
+
+	case JobTypeGroupExtraction:
+		var job GroupExtractionJob
+		if err := json.Unmarshal([]byte(payload), &job); err != nil {
+			return newPermanentProcessError(fmt.Errorf("failed to unmarshal group extraction job: %w", err))
+		}
+		c.log.Debug("Processing group extraction job", "stream", c.streamName, "campaign_id", job.CampaignID, "redis_message_id", msg.ID)
+		return handler.HandleGroupExtractionJob(ctx, &job)
+
+	case JobTypeMemberExtraction:
+		var job MemberExtractionJob
+		if err := json.Unmarshal([]byte(payload), &job); err != nil {
+			return newPermanentProcessError(fmt.Errorf("failed to unmarshal member extraction job: %w", err))
+		}
+		c.log.Debug("Processing member extraction job", "stream", c.streamName, "campaign_id", job.CampaignID, "group_jid", job.GroupJID, "redis_message_id", msg.ID)
+		return handler.HandleMemberExtractionJob(ctx, &job)
 
 	default:
 		return newPermanentProcessError(fmt.Errorf("unknown job type: %s", jobType))

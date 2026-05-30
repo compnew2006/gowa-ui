@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,6 +116,46 @@ var exportConfigs = map[string]ExportConfig{
 			"color":       "Color",
 			"description": "Description",
 			"created_at":  "Created At",
+		},
+	},
+	"extracted_messages": {
+		Model:    &models.Contact{},
+		Resource: "contacts",
+		AllowedColumns: []string{
+			"phone_number", "profile_name", "last_message_at",
+			"last_message_preview", "unread_count", "message_count",
+		},
+		DefaultColumns: []string{"phone_number", "profile_name", "last_message_at", "message_count"},
+		ColumnLabels: map[string]string{
+			"phone_number":       "Phone Number",
+			"profile_name":       "Name",
+			"last_message_at":    "Last Message At",
+			"last_message_preview": "Last Message",
+			"unread_count":       "Unread Count",
+			"message_count":      "Message Count",
+		},
+		ColumnTransform: map[string]func(interface{}) string{
+			"last_message_at": func(v interface{}) string {
+				if v == nil {
+					return ""
+				}
+				if t, ok := v.(*time.Time); ok && t != nil {
+					return t.Format(time.RFC3339)
+				}
+				return ""
+			},
+			"unread_count": func(v interface{}) string {
+				if v == nil {
+					return "0"
+				}
+				if n, ok := v.(int); ok {
+					return strconv.Itoa(n)
+				}
+				return fmt.Sprintf("%v", v)
+			},
+			"message_count": func(v interface{}) string {
+				return ""
+			},
 		},
 	},
 }
@@ -342,7 +383,7 @@ func (a *App) ExportData(r *fastglue.Request) error {
 	filename := fmt.Sprintf("%s_export_%s.csv", req.Table, time.Now().Format("20060102_150405"))
 	r.RequestCtx.Response.Header.Set("Content-Type", "text/csv")
 	r.RequestCtx.Response.Header.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	r.RequestCtx.SetBody([]byte(buf.String()))
+	r.RequestCtx.SetBody(append([]byte("\xEF\xBB\xBF"), []byte(buf.String())...))
 
 	return nil
 }
@@ -751,6 +792,20 @@ func snakeToPascal(s string) string {
 	return strings.Join(parts, "")
 }
 
+// looksLikeNumericString returns true if s is a long numeric-only string
+// (typical for phone numbers or IDs) that Excel would convert to scientific notation.
+func looksLikeNumericString(s string) bool {
+	if len(s) < 10 {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // Helper function to format values for CSV export
 func formatExportValue(v interface{}, colType interface{}) string {
 	if v == nil {
@@ -759,9 +814,17 @@ func formatExportValue(v interface{}, colType interface{}) string {
 
 	switch val := v.(type) {
 	case string:
+		// Prefix long numeric strings with tab so Excel stores as text
+		if looksLikeNumericString(val) {
+			return "\t" + val
+		}
 		return val
 	case []byte:
-		return string(val)
+		s := string(val)
+		if looksLikeNumericString(s) {
+			return "\t" + s
+		}
+		return s
 	case int, int32, int64:
 		return fmt.Sprintf("%d", val)
 	case float32, float64:

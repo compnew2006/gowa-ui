@@ -75,6 +75,8 @@ const (
 	ResourceCannedResponses        = "canned_responses"
 	ResourceCustomActions          = "custom_actions"
 	ResourceOrganizations          = "organizations"
+	ResourceWhatsAppFilter         = "wa_filter"
+	ResourceSavedContents          = "saved_contents"
 )
 
 // PermissionAction constants for available actions
@@ -220,6 +222,17 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceOrganizations, Action: ActionWrite, Description: "Create organizations"},
 		{Resource: ResourceOrganizations, Action: ActionDelete, Description: "Delete organizations"},
 		{Resource: ResourceOrganizations, Action: ActionAssign, Description: "Manage organization members"},
+
+		// WhatsApp Filter
+		{Resource: ResourceWhatsAppFilter, Action: ActionRead, Description: "View phone registration filters"},
+		{Resource: ResourceWhatsAppFilter, Action: ActionWrite, Description: "Create and run phone registration filters"},
+		{Resource: ResourceWhatsAppFilter, Action: ActionDelete, Description: "Delete phone registration filters"},
+
+		// Saved Contents (Content Library)
+		{Resource: ResourceSavedContents, Action: ActionRead, Description: "View saved contents"},
+		{Resource: ResourceSavedContents, Action: ActionWrite, Description: "Create and edit saved contents"},
+		{Resource: ResourceSavedContents, Action: ActionDelete, Description: "Delete saved contents"},
+		{Resource: ResourceSavedContents, Action: ActionImport, Description: "Import saved contents"},
 	}
 }
 
@@ -271,6 +284,10 @@ func SystemRolePermissions() map[string][]string {
 		"custom_actions:read", "custom_actions:write", "custom_actions:delete",
 		// Organizations (read only)
 		"organizations:read",
+		// WhatsApp Filter
+		"wa_filter:read", "wa_filter:write", "wa_filter:delete",
+		// Saved Contents
+		"saved_contents:read", "saved_contents:write", "saved_contents:delete", "saved_contents:import",
 	}
 
 	agentPermissions := []string{
@@ -287,6 +304,8 @@ func SystemRolePermissions() map[string][]string {
 		"transfers:read", "transfers:write", "transfers:pickup",
 		// Canned Responses (read only)
 		"canned_responses:read",
+		// Saved Contents (read only)
+		"saved_contents:read",
 	}
 
 	return map[string][]string{

@@ -1,5 +1,21 @@
 # CHANGELOG.md
 
+## 2026-05-30
+
+### Added
+- **Facebook Tools Sidebar & Pages**: Added a new premium sidebar navigation group `Facebook Tools` below `WhatsApp Tools` with 8 highly interactive, glassmorphic placeholder views: Page Search, People Search, Group Search, Extract Likes, Page Messengers, Extract Data, Auto Share, and Retargeting.
+- **SelectableDataTable Component**: Created a highly reusable, accessible, and RTL-optimized table component supporting row checkboxes, indeterminate headers, paginated navigation, and page limit adjustments.
+- **useSelectableTable Composable**: Created a generic composition utility for handling pagination state, checkbox selection sets, client-side/server-side matching logic, and debounced keyword searches.
+- **Localization support**: Added translation keys and descriptive prompts for Facebook tools, selection states, and table pagination across English, Spanish, and Arabic (`en.json`, `es.json`, `ar.json`).
+- **Unit Tests**: Developed a comprehensive Vitest suite verifying table renders, checkbox triggers, matching count banners, and events.
+- Implemented **Phone Number Validation & WhatsApp Registration Check (wa_filter)** feature.
+- Implemented GORM database models `WhatsAppFilterBatch` and `WhatsAppFilterResult` with specialized indexes, fully integrated with multi-tenant system permission roles.
+- Created robust async background worker batching validation checking (whatsmeow `IsOnWhatsApp` and Meta Cloud API `contacts` checking) with sub-batching (50 numbers) and atomic db updates.
+- Added fastglue API routes for campaign creation, listing, results retrieval, streaming CSV export, and deletion.
+- Developed a beautiful shadcn Vue 3 settings view `/settings/whatsapp-filter` for bulk verification, live progress tracking, paginated result tables, status filters, and contacts integration.
+- Added thorough test suites `internal/handlers/whatsapp_filter_test.go` and `internal/worker/whatsapp_filter_test.go` to guarantee high stability.
+- Added Playwright E2E Page Object Model `WhatsAppFilterPage.ts` and E2E test spec `whatsapp-filter.spec.ts` under settings to enable comprehensive UI and integration validation.
+
 ## 2026-04-10
 
 ### Added

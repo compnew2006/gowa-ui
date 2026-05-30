@@ -509,6 +509,7 @@ func runServer(args []string) {
 		if err != nil {
 			lo.Fatal("Failed to create inbound media worker", "error", err)
 		}
+		inboundWorker.SetWhatsmeowManager(whatsmeowManager)
 		var inboundCtx context.Context
 		inboundCtx, inboundWorkerCancel = context.WithCancel(context.Background())
 		inboundWorkerDone = make(chan error, 1)
@@ -521,7 +522,7 @@ func runServer(args []string) {
 			inboundWorkerDone <- err
 		}()
 
-		workerScaler = worker.NewWorkerScaler(cfg, db, rdb, lo, app.MessageProvider, licenseService, *numWorkers)
+		workerScaler = worker.NewWorkerScaler(cfg, db, rdb, lo, app.MessageProvider, licenseService, *numWorkers, whatsmeowManager)
 		var scalerCtx context.Context
 		scalerCtx, workerScalerCancel = context.WithCancel(context.Background())
 		workerScalerDone = make(chan error, 1)
@@ -705,6 +706,7 @@ func runWorker(args []string) {
 	}
 
 	var messageProvider provider.MessageProvider
+	var whatsmeowManager *whatsmeow.ConnectionManager
 	if cfg.WhatsApp.Provider == "whatsmeow" {
 		sqlDB, err := db.DB()
 		if err != nil {
@@ -715,7 +717,7 @@ func runWorker(args []string) {
 			lo.Fatal("Failed to upgrade whatsmeow store", "error", err)
 		}
 
-		whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
+		whatsmeowManager = whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
 		whatsmeowQueue := queue.NewRedisQueue(rdb, lo)
 		whatsmeowManager.SetInboundMediaQueue(whatsmeowQueue)
 		whatsmeowManager.SetCampaignStatsPublisher(queue.NewPublisher(rdb, lo))
@@ -783,8 +785,9 @@ func runWorker(args []string) {
 		if err != nil {
 			lo.Fatal("Failed to create inbound media worker", "error", err)
 		}
+		inboundWorker.SetWhatsmeowManager(whatsmeowManager)
 
-		workerScaler = worker.NewWorkerScaler(cfg, db, rdb, lo, messageProvider, licenseService, *workerCount)
+		workerScaler = worker.NewWorkerScaler(cfg, db, rdb, lo, messageProvider, licenseService, *workerCount, whatsmeowManager)
 
 		go func() {
 			lo.Info("Inbound media worker started")
@@ -1381,6 +1384,12 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/export/{table}/config", app.GetExportConfig)
 	g.GET("/api/import/{table}/config", app.GetImportConfig)
 
+	// Message Extraction (whatsmeow)
+	g.GET("/api/extract/contacts", app.ListExtractableContacts)
+	g.POST("/api/extract/contacts/export", app.ExportExtractedContacts)
+	g.GET("/api/extract/stats", app.GetExtractionStats)
+	g.POST("/api/extract/sync", app.TriggerHistorySync)
+
 	// Tags
 	g.GET("/api/tags", app.ListTags)
 	g.POST("/api/tags", app.CreateTag)
@@ -1416,6 +1425,14 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/instances/{id}/reconnect", app.ReconnectInstance)
 	g.POST("/api/instances/{id}/status/send", app.SendStatus)
 	g.POST("/api/instances/{id}/auto-campaign/media", app.UploadInstanceAutoCampaignMedia)
+
+	// Facebook Accounts
+	g.GET("/api/facebook/accounts", app.ListFBAccounts)
+	g.POST("/api/facebook/accounts", app.CreateFBAccount)
+	g.GET("/api/facebook/accounts/{id}", app.GetFBAccount)
+	g.PUT("/api/facebook/accounts/{id}", app.UpdateFBAccount)
+	g.DELETE("/api/facebook/accounts/{id}", app.DeleteFBAccount)
+
 	g.GET("/api/notifications", app.ListNotifications)
 	g.PUT("/api/notifications/{id}/dismiss", app.DismissNotification)
 
@@ -1471,6 +1488,88 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.DELETE("/api/campaigns/{id}/recipients/{recipientId}", deleteCampaignRecipientHandler)
 	g.POST("/api/campaigns/{id}/media", uploadCampaignMediaHandler)
 	g.GET("/api/campaigns/{id}/media", app.ServeCampaignMedia)
+
+	// Campaign Group Targeting (whatsmeow only)
+	g.GET("/api/accounts/{instanceId}/groups", app.ListInstanceGroups)
+	g.POST("/api/campaigns/{id}/groups/validate", app.ValidateGroupJIDs)
+	g.POST("/api/campaigns/{id}/groups", app.AddCampaignGroups)
+	g.GET("/api/campaigns/{id}/groups", app.ListCampaignGroups)
+	g.DELETE("/api/campaigns/{id}/groups/{recipientId}", app.DeleteCampaignGroup)
+
+	// Group Directory
+	g.GET("/api/groups/directory", app.SearchGroupDirectory)
+	g.POST("/api/groups/directory", app.CreateGroupDirectory)
+	g.PUT("/api/groups/directory/{id}", app.UpdateGroupDirectory)
+	g.DELETE("/api/groups/directory/{id}", app.DeleteGroupDirectory)
+	g.GET("/api/groups/directory/categories", app.GetGroupDirectoryCategories)
+	g.GET("/api/groups/directory/countries", app.GetGroupDirectoryCountries)
+	g.POST("/api/groups/directory/preview", app.PreviewGroupFromLink)
+	g.POST("/api/groups/directory/import", app.ImportDirectoryGroupsToCampaign)
+
+	// Group Participant Management (whatsmeow only)
+	g.GET("/api/groups/participants", app.ListGroupMembers)
+	g.POST("/api/groups/participants/add", app.AddGroupMembers)
+	g.POST("/api/groups/participants/remove", app.RemoveGroupMembers)
+	g.POST("/api/groups/participants/promote", app.PromoteGroupMembers)
+	g.POST("/api/groups/participants/demote", app.DemoteGroupMembers)
+
+	// Group Join Campaigns (whatsmeow only)
+	g.GET("/api/group-join-campaigns", app.ListGroupJoinCampaigns)
+	g.POST("/api/group-join-campaigns", app.CreateGroupJoinCampaign)
+	g.GET("/api/group-join-campaigns/{id}", app.GetGroupJoinCampaign)
+	g.PUT("/api/group-join-campaigns/{id}", app.UpdateGroupJoinCampaign)
+	g.DELETE("/api/group-join-campaigns/{id}", app.DeleteGroupJoinCampaign)
+	g.POST("/api/group-join-campaigns/{id}/start", app.StartGroupJoinCampaign)
+	g.POST("/api/group-join-campaigns/{id}/pause", app.PauseGroupJoinCampaign)
+	g.GET("/api/group-join-campaigns/{id}/stats", app.GroupJoinCampaignStats)
+	g.GET("/api/group-join-campaigns/{id}/recipients", app.ListGroupJoinRecipients)
+	g.POST("/api/group-join-campaigns/{id}/recipients", app.UploadGroupJoinRecipients)
+	g.DELETE("/api/group-join-campaigns/{id}/recipients/{recipientId}", app.DeleteGroupJoinRecipient)
+	g.POST("/api/group-join-campaigns/{id}/import-directory", app.ImportDirectoryGroupsToJoinCampaign)
+
+	// WhatsApp Filter (Validation)
+	g.POST("/api/whatsapp-filter/batches", app.CreateWhatsAppFilterBatch)
+	g.GET("/api/whatsapp-filter/batches", app.ListWhatsAppFilterBatches)
+	g.GET("/api/whatsapp-filter/batches/{id}", app.GetWhatsAppFilterBatch)
+	g.GET("/api/whatsapp-filter/batches/{id}/results", app.GetWhatsAppFilterBatchResults)
+	g.GET("/api/whatsapp-filter/batches/{id}/export", app.ExportWhatsAppFilterResults)
+	g.DELETE("/api/whatsapp-filter/batches/{id}", app.DeleteWhatsAppFilterBatch)
+
+	// Message Extraction Campaigns
+	g.GET("/api/message-extraction-campaigns", app.ListMessageExtractionCampaigns)
+	g.POST("/api/message-extraction-campaigns", app.CreateMessageExtractionCampaign)
+	g.GET("/api/message-extraction-campaigns/{id}", app.GetMessageExtractionCampaign)
+	g.PUT("/api/message-extraction-campaigns/{id}", app.UpdateMessageExtractionCampaign)
+	g.DELETE("/api/message-extraction-campaigns/{id}", app.DeleteMessageExtractionCampaign)
+	g.POST("/api/message-extraction-campaigns/{id}/start", app.StartMessageExtractionCampaign)
+	g.POST("/api/message-extraction-campaigns/{id}/pause", app.PauseMessageExtractionCampaign)
+	g.GET("/api/message-extraction-campaigns/{id}/stats", app.GetMessageExtractionCampaignStats)
+	g.GET("/api/message-extraction-campaigns/{id}/results", app.GetMessageExtractionCampaignResults)
+	g.GET("/api/message-extraction-campaigns/{id}/export", app.ExportMessageExtractionCampaignResults)
+
+	// Group Extraction Campaigns
+	g.GET("/api/group-extraction-campaigns", app.ListGroupExtractionCampaigns)
+	g.POST("/api/group-extraction-campaigns", app.CreateGroupExtractionCampaign)
+	g.GET("/api/group-extraction-campaigns/{id}", app.GetGroupExtractionCampaign)
+	g.PUT("/api/group-extraction-campaigns/{id}", app.UpdateGroupExtractionCampaign)
+	g.DELETE("/api/group-extraction-campaigns/{id}", app.DeleteGroupExtractionCampaign)
+	g.POST("/api/group-extraction-campaigns/{id}/start", app.StartGroupExtractionCampaign)
+	g.POST("/api/group-extraction-campaigns/{id}/pause", app.PauseGroupExtractionCampaign)
+	g.GET("/api/group-extraction-campaigns/{id}/stats", app.GetGroupExtractionCampaignStats)
+	g.GET("/api/group-extraction-campaigns/{id}/results", app.GetGroupExtractionCampaignResults)
+	g.GET("/api/group-extraction-campaigns/{id}/export", app.ExportGroupExtractionCampaignResults)
+
+	// Member Extraction Campaigns
+	g.GET("/api/member-extraction-campaigns", app.ListMemberExtractionCampaigns)
+	g.POST("/api/member-extraction-campaigns", app.CreateMemberExtractionCampaign)
+	g.GET("/api/member-extraction-campaigns/{id}", app.GetMemberExtractionCampaign)
+	g.PUT("/api/member-extraction-campaigns/{id}", app.UpdateMemberExtractionCampaign)
+	g.DELETE("/api/member-extraction-campaigns/{id}", app.DeleteMemberExtractionCampaign)
+	g.POST("/api/member-extraction-campaigns/{id}/start", app.StartMemberExtractionCampaign)
+	g.POST("/api/member-extraction-campaigns/{id}/pause", app.PauseMemberExtractionCampaign)
+	g.GET("/api/member-extraction-campaigns/{id}/stats", app.GetMemberExtractionCampaignStats)
+	g.GET("/api/member-extraction-campaigns/{id}/results", app.GetMemberExtractionCampaignResults)
+	g.GET("/api/member-extraction-campaigns/{id}/export", app.ExportMemberExtractionCampaignResults)
 
 	// Chatbot Settings
 	g.GET("/api/chatbot/settings", app.GetChatbotSettings)
@@ -1538,6 +1637,18 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.DELETE("/api/canned-responses/{id}", app.DeleteCannedResponse)
 	g.POST("/api/canned-responses/{id}/send", sendCannedResponseHandler)
 	g.POST("/api/canned-responses/{id}/use", app.IncrementCannedResponseUsage)
+
+	// Saved Contents (Content Library)
+	g.GET("/api/saved-contents", app.ListSavedContents)
+	g.POST("/api/saved-contents", app.CreateSavedContent)
+	g.GET("/api/saved-contents/categories", app.ListSavedContentCategories)
+	g.GET("/api/saved-contents/{id}", app.GetSavedContent)
+	g.PUT("/api/saved-contents/{id}", app.UpdateSavedContent)
+	g.DELETE("/api/saved-contents/{id}", app.DeleteSavedContent)
+	g.GET("/api/saved-contents/{id}/preview", app.PreviewSavedContent)
+	g.POST("/api/saved-contents/import", app.ImportSavedContents)
+	g.POST("/api/saved-contents/{id}/media", app.UploadSavedContentMedia)
+	g.GET("/api/saved-contents/{id}/media", app.ServeSavedContentMedia)
 
 	// Sessions (admin/debug)
 	g.GET("/api/chatbot/sessions", app.ListChatbotSessions)

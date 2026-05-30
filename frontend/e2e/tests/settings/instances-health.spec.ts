@@ -68,7 +68,7 @@ test.describe('Instance Health Dashboard', () => {
       })
     })
 
-    await page.goto('/settings/instances/health')
+    await page.goto('/instances/health')
 
     await expect(page.getByText('Instance Health Dashboard')).toBeVisible()
     await expect(page.getByText(instance.name)).toBeVisible()
@@ -114,7 +114,7 @@ test.describe('Instance Health Dashboard', () => {
       })
     })
 
-    await page.goto('/settings/instances/health')
+    await page.goto('/instances/health')
     await expect.poll(() => healthRequests).toBeGreaterThan(0)
     const beforeRefresh = healthRequests
     await page.getByRole('button', { name: 'Refresh' }).click()
@@ -164,7 +164,7 @@ test.describe('Instance Health Dashboard', () => {
     await page.evaluate(() => {
       localStorage.setItem('selected_organization_id', 'org-a')
     })
-    await page.goto('/settings/instances/health')
+    await page.goto('/instances/health')
 
     await expect(page.getByText('Org A Instance')).toBeVisible()
     await expect(page.getByText('55')).toBeVisible()

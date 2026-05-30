@@ -639,6 +639,17 @@ export const campaignsService = {
   },
   getMedia: (campaignId: string) =>
     api.get(`/campaigns/${campaignId}/media`, { responseType: "arraybuffer" }),
+  // Group targeting (whatsmeow only)
+  listInstanceGroups: (instanceId: string, query?: string) =>
+    api.get(`/accounts/${instanceId}/groups`, { params: query ? { q: query } : {} }),
+  validateGroupJIDs: (campaignId: string, data: { group_jids: string[]; campaign_id: string; instance_id: string }) =>
+    api.post(`/campaigns/${campaignId}/groups/validate`, data),
+  addGroups: (campaignId: string, groups: Array<{ jid: string; name: string; participant_count: number }>) =>
+    api.post(`/campaigns/${campaignId}/groups`, { groups }),
+  getGroups: (id: string) =>
+    api.get(`/campaigns/${id}/groups`),
+  deleteGroup: (campaignId: string, recipientId: string) =>
+    api.delete(`/campaigns/${campaignId}/groups/${recipientId}`),
 };
 
 // Whatsmeow Instances
@@ -691,6 +702,31 @@ export const instancesService = {
       },
     );
   },
+};
+
+// Facebook Accounts
+export const fbAccountsService = {
+  list: () => api.get("/facebook/accounts"),
+  get: (id: string) => api.get(`/facebook/accounts/${id}`),
+  create: (data: {
+    name: string;
+    account_uid?: string;
+    method?: "cookies" | "credentials";
+    cookies_text?: string;
+    data?: Record<string, unknown>;
+  }) => api.post("/facebook/accounts", data),
+  update: (
+    id: string,
+    data: {
+      name?: string;
+      account_uid?: string;
+      status?: "active" | "inactive" | "closed";
+      method?: "cookies" | "credentials";
+      cookies_text?: string;
+      data?: Record<string, unknown>;
+    },
+  ) => api.put(`/facebook/accounts/${id}`, data),
+  delete: (id: string) => api.delete(`/facebook/accounts/${id}`),
 };
 
 export const notificationsService = {
@@ -1049,6 +1085,69 @@ export const cannedResponsesService = {
   ) => api.post(`/canned-responses/${id}/send`, data),
   delete: (id: string) => api.delete(`/canned-responses/${id}`),
   use: (id: string) => api.post(`/canned-responses/${id}/use`),
+};
+
+export interface SavedContent {
+  id: string;
+  name: string;
+  body: string;
+  variables: string[];
+  category: string;
+  preview: string;
+  media_id?: string;
+  media_filename?: string;
+  media_mime_type?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const savedContentsService = {
+  list: (params?: {
+    category?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) =>
+    api.get<{ saved_contents: SavedContent[]; total?: number }>(
+      "/saved-contents",
+      { params },
+    ),
+  create: (data: {
+    name: string;
+    body: string;
+    category?: string;
+  }) => api.post("/saved-contents", data),
+  get: (id: string) =>
+    api.get<{ saved_content: SavedContent }>(`/saved-contents/${id}`),
+  update: (
+    id: string,
+    data: { name?: string; body?: string; category?: string },
+  ) => api.put(`/saved-contents/${id}`, data),
+  delete: (id: string) => api.delete(`/saved-contents/${id}`),
+  categories: () =>
+    api.get<{ categories: string[] }>("/saved-contents/categories"),
+  preview: (id: string) =>
+    api.get<{ preview: string; variables: string[] }>(
+      `/saved-contents/${id}/preview`,
+    ),
+  import: (items: { name: string; body: string; category?: string }[]) =>
+    api.post("/saved-contents/import", items),
+  uploadMedia: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const csrfToken = getCookie("whm_csrf");
+    return axios.post(
+      `${api.defaults.baseURL}/saved-contents/${id}/media`,
+      formData,
+      {
+        withCredentials: true,
+        headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {},
+      },
+    );
+  },
+  getMedia: (id: string) =>
+    api.get(`/saved-contents/${id}/media`, { responseType: "arraybuffer" }),
 };
 
 export const agentAnalyticsService = {
@@ -1626,6 +1725,355 @@ export const notesService = {
     api.put<ConversationNote>(`/contacts/${contactId}/notes/${noteId}`, data),
   delete: (contactId: string, noteId: string) =>
     api.delete(`/contacts/${contactId}/notes/${noteId}`),
+};
+
+// WhatsApp Filter
+export interface WhatsAppFilterBatch {
+  id: string;
+  organization_id: string;
+  created_by: string;
+  whatsapp_account: string;
+  instance_id?: string | null;
+  status: "pending" | "processing" | "completed" | "failed";
+  total_numbers: number;
+  valid_numbers: number;
+  invalid_numbers: number;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
+export interface WhatsAppFilterResult {
+  id: string;
+  batch_id: string;
+  phone_number: string;
+  contact_name?: string;
+  is_valid: boolean;
+  error_message?: string;
+  checked_at?: string;
+  created_at: string;
+}
+
+export interface WhatsAppFilterResultsPage {
+  data: WhatsAppFilterResult[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export function unwrapWhatsAppFilterResultsPage(payload: any): WhatsAppFilterResultsPage {
+  const page = payload?.status === "success" && payload.data ? payload.data : payload;
+  if (Array.isArray(page)) {
+    return {
+      data: page,
+      total: page.length,
+      page: 1,
+      limit: page.length,
+    };
+  }
+  return {
+    data: Array.isArray(page?.data) ? page.data : [],
+    total: Number(page?.total ?? 0),
+    page: Number(page?.page ?? 1),
+    limit: Number(page?.limit ?? 0),
+  };
+}
+
+export const whatsappFilterService = {
+  list: (params?: { page?: number; limit?: number }) =>
+    api.get<{ data: WhatsAppFilterBatch[]; total: number; page: number; limit: number }>("/whatsapp-filter/batches", { params }),
+  get: (id: string) =>
+    api.get<WhatsAppFilterBatch>(`/whatsapp-filter/batches/${id}`),
+  listResults: (id: string, params?: { page?: number; limit?: number; status?: "all" | "valid" | "invalid"; q?: string }) =>
+    api.get<WhatsAppFilterResultsPage>(`/whatsapp-filter/batches/${id}/results`, { params })
+      .then((response) => {
+        response.data = unwrapWhatsAppFilterResultsPage(response.data);
+        return response;
+      }),
+  createJSON: (data: { connection_id: string; phones: string[]; names?: string[] }) =>
+    api.post<WhatsAppFilterBatch>("/whatsapp-filter/batches", data),
+  createCSV: (connectionId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("connection_id", connectionId);
+    formData.append("file", file);
+    return api.post<WhatsAppFilterBatch>("/whatsapp-filter/batches", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+  exportCSV: async (id: string, params?: { status?: "all" | "valid" | "invalid"; q?: string }) => {
+    return api.get(`/whatsapp-filter/batches/${id}/export`, {
+      params,
+      responseType: "blob",
+    });
+  },
+  delete: (id: string) =>
+    api.delete<{ success: boolean }>(`/whatsapp-filter/batches/${id}`),
+};
+
+export const groupDirectoryService = {
+  search: (params: {
+    q?: string;
+    country?: string;
+    category?: string;
+    page?: number;
+    limit?: number;
+  }) => api.get("/groups/directory", { params }),
+  create: (data: {
+    group_jid: string;
+    name: string;
+    description?: string;
+    country?: string;
+    language?: string;
+    category?: string;
+    image_url?: string;
+    join_link?: string;
+    participant_count?: number;
+  }) => api.post("/groups/directory", data),
+  update: (id: string, data: Partial<{
+    name: string;
+    description: string;
+    country: string;
+    language: string;
+    category: string;
+    image_url: string;
+    join_link: string;
+    participant_count: number;
+  }>) => api.put(`/groups/directory/${id}`, data),
+  delete: (id: string) => api.delete(`/groups/directory/${id}`),
+  getCategories: () => api.get<string[]>("/groups/directory/categories"),
+  getCountries: () => api.get<string[]>("/groups/directory/countries"),
+  previewFromLink: (instanceId: string, inviteLink: string) =>
+    api.post("/groups/directory/preview", { instance_id: instanceId, invite_link: inviteLink }),
+  importToCampaign: (campaignId: string, groupIds: string[]) =>
+    api.post("/groups/directory/import", { campaign_id: campaignId, group_ids: groupIds }),
+};
+
+export interface GroupParticipant {
+  jid: string;
+  phone_number: string;
+  is_admin: boolean;
+  is_super_admin: boolean;
+}
+
+export const groupParticipantsService = {
+  list: (instanceId: string, groupJid: string) =>
+    api.get<{ participants: GroupParticipant[]; total: number }>(
+      "/groups/participants",
+      { params: { instance_id: instanceId, group_jid: groupJid } },
+    ),
+  add: (instanceId: string, groupJid: string, participants: string[]) =>
+    api.post<{ action: string; participants: GroupParticipant[]; affected: number }>(
+      "/groups/participants/add",
+      { instance_id: instanceId, group_jid: groupJid, participants },
+    ),
+  remove: (instanceId: string, groupJid: string, participants: string[]) =>
+    api.post<{ action: string; participants: GroupParticipant[]; affected: number }>(
+      "/groups/participants/remove",
+      { instance_id: instanceId, group_jid: groupJid, participants },
+    ),
+  promote: (instanceId: string, groupJid: string, participants: string[]) =>
+    api.post<{ action: string; participants: GroupParticipant[]; affected: number }>(
+      "/groups/participants/promote",
+      { instance_id: instanceId, group_jid: groupJid, participants },
+    ),
+  demote: (instanceId: string, groupJid: string, participants: string[]) =>
+    api.post<{ action: string; participants: GroupParticipant[]; affected: number }>(
+      "/groups/participants/demote",
+      { instance_id: instanceId, group_jid: groupJid, participants },
+    ),
+};
+
+// Group Join Campaigns
+export interface GroupJoinCampaign {
+  id: string;
+  organization_id: string;
+  name: string;
+  accounts: string[];
+  speed: "slow" | "fast";
+  status: "draft" | "processing" | "paused" | "completed" | "failed" | "cancelled";
+  total_recipients: number;
+  joined_count: number;
+  failed_count: number;
+  skipped_count: number;
+  started_at?: string;
+  completed_at?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupJoinRecipient {
+  id: string;
+  campaign_id: string;
+  invite_link: string;
+  group_name: string;
+  group_jid: string;
+  participant_count: number;
+  status: "pending" | "joined" | "failed" | "skipped" | "duplicate";
+  error_message: string;
+  processed_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const groupJoinCampaignsService = {
+  list: (params?: { status?: string; search?: string; page?: number; limit?: number }) =>
+    api.get<{ data: GroupJoinCampaign[]; total: number }>("/group-join-campaigns", { params }),
+  create: (data: { name: string; accounts: string[]; speed: string }) =>
+    api.post<GroupJoinCampaign>("/group-join-campaigns", data),
+  get: (id: string) => api.get<GroupJoinCampaign>(`/group-join-campaigns/${id}`),
+  update: (id: string, data: { name?: string; accounts?: string[]; speed?: string }) =>
+    api.put(`/group-join-campaigns/${id}`, data),
+  delete: (id: string) => api.delete(`/group-join-campaigns/${id}`),
+  start: (id: string) => api.post(`/group-join-campaigns/${id}/start`),
+  pause: (id: string) => api.post(`/group-join-campaigns/${id}/pause`),
+  getStats: (id: string) =>
+    api.get<{ total_recipients: number; joined_count: number; failed_count: number; skipped_count: number; status: string }>(
+      `/group-join-campaigns/${id}/stats`,
+    ),
+  getRecipients: (id: string, params?: { status?: string; page?: number; limit?: number }) =>
+    api.get<{ data: GroupJoinRecipient[]; total: number }>(`/group-join-campaigns/${id}/recipients`, { params }),
+  addRecipients: (id: string, data: { invite_links: string[] }) =>
+    api.post(`/group-join-campaigns/${id}/recipients`, data),
+  uploadRecipientsCSV: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post(`/group-join-campaigns/${id}/recipients`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  deleteRecipient: (campaignId: string, recipientId: string) =>
+    api.delete(`/group-join-campaigns/${campaignId}/recipients/${recipientId}`),
+  importDirectory: (id: string, groupIds: string[]) =>
+    api.post(`/group-join-campaigns/${id}/import-directory`, { campaign_id: id, group_ids: groupIds }),
+};
+
+export interface ExtractionCampaign {
+  id: string;
+  organization_id: string;
+  name: string;
+  instance_id: string;
+  instance_name: string;
+  status: string;
+  total_chats?: number;
+  total_groups?: number;
+  total_members?: number;
+  extracted_count: number;
+  failed_count: number;
+  group_jid?: string;
+  group_name?: string;
+  started_at?: string;
+  completed_at?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageExtractionResult {
+  id: string;
+  campaign_id: string;
+  chat_jid: string;
+  phone_number: string;
+  profile_name: string;
+  push_name: string;
+  is_group: boolean;
+  group_name: string;
+  group_jid: string;
+  unread_count: number;
+  is_me: boolean;
+  last_message_at?: string;
+  status: string;
+  created_at: string;
+}
+
+export interface GroupExtractionResult {
+  id: string;
+  campaign_id: string;
+  group_jid: string;
+  group_name: string;
+  participant_count: number;
+  is_admin: boolean;
+  description: string;
+  status: string;
+  created_at: string;
+}
+
+export interface MemberExtractionResult {
+  id: string;
+  campaign_id: string;
+  participant_jid: string;
+  phone_number: string;
+  push_name: string;
+  is_admin: boolean;
+  is_super_admin: boolean;
+  status: string;
+  created_at: string;
+}
+
+export const messageExtractionService = {
+  list: (params?: { status?: string; search?: string; page?: number; limit?: number }) =>
+    api.get<{ data: ExtractionCampaign[]; total: number }>("/message-extraction-campaigns", { params }),
+  create: (data: { name: string; instance_id: string }) =>
+    api.post<ExtractionCampaign>("/message-extraction-campaigns", data),
+  get: (id: string) => api.get<ExtractionCampaign>(`/message-extraction-campaigns/${id}`),
+  update: (id: string, data: { name?: string; instance_id?: string }) =>
+    api.put(`/message-extraction-campaigns/${id}`, data),
+  delete: (id: string) => api.delete(`/message-extraction-campaigns/${id}`),
+  start: (id: string) => api.post(`/message-extraction-campaigns/${id}/start`),
+  pause: (id: string) => api.post(`/message-extraction-campaigns/${id}/pause`),
+  getStats: (id: string) =>
+    api.get<{ total_chats: number; extracted_count: number; failed_count: number; status: string }>(
+      `/message-extraction-campaigns/${id}/stats`,
+    ),
+  getResults: (id: string, params?: { status?: string; search?: string; page?: number; limit?: number }) =>
+    api.get<{ data: MessageExtractionResult[]; total: number }>(`/message-extraction-campaigns/${id}/results`, { params }),
+  exportCSV: (id: string) =>
+    api.get(`/message-extraction-campaigns/${id}/export`, { responseType: "blob" }),
+};
+
+export const groupExtractionService = {
+  list: (params?: { status?: string; search?: string; page?: number; limit?: number }) =>
+    api.get<{ data: ExtractionCampaign[]; total: number }>("/group-extraction-campaigns", { params }),
+  create: (data: { name: string; instance_id: string }) =>
+    api.post<ExtractionCampaign>("/group-extraction-campaigns", data),
+  get: (id: string) => api.get<ExtractionCampaign>(`/group-extraction-campaigns/${id}`),
+  update: (id: string, data: { name?: string; instance_id?: string }) =>
+    api.put(`/group-extraction-campaigns/${id}`, data),
+  delete: (id: string) => api.delete(`/group-extraction-campaigns/${id}`),
+  start: (id: string) => api.post(`/group-extraction-campaigns/${id}/start`),
+  pause: (id: string) => api.post(`/group-extraction-campaigns/${id}/pause`),
+  getStats: (id: string) =>
+    api.get<{ total_groups: number; extracted_count: number; failed_count: number; status: string }>(
+      `/group-extraction-campaigns/${id}/stats`,
+    ),
+  getResults: (id: string, params?: { status?: string; search?: string; page?: number; limit?: number }) =>
+    api.get<{ data: GroupExtractionResult[]; total: number }>(`/group-extraction-campaigns/${id}/results`, { params }),
+  exportCSV: (id: string) =>
+    api.get(`/group-extraction-campaigns/${id}/export`, { responseType: "blob" }),
+};
+
+export const memberExtractionService = {
+  list: (params?: { status?: string; search?: string; page?: number; limit?: number }) =>
+    api.get<{ data: ExtractionCampaign[]; total: number }>("/member-extraction-campaigns", { params }),
+  create: (data: { name: string; instance_id: string; group_jid: string }) =>
+    api.post<ExtractionCampaign>("/member-extraction-campaigns", data),
+  get: (id: string) => api.get<ExtractionCampaign>(`/member-extraction-campaigns/${id}`),
+  update: (id: string, data: { name?: string; instance_id?: string; group_jid?: string }) =>
+    api.put(`/member-extraction-campaigns/${id}`, data),
+  delete: (id: string) => api.delete(`/member-extraction-campaigns/${id}`),
+  start: (id: string) => api.post(`/member-extraction-campaigns/${id}/start`),
+  pause: (id: string) => api.post(`/member-extraction-campaigns/${id}/pause`),
+  getStats: (id: string) =>
+    api.get<{ total_members: number; extracted_count: number; failed_count: number; status: string }>(
+      `/member-extraction-campaigns/${id}/stats`,
+    ),
+  getResults: (id: string, params?: { status?: string; search?: string; page?: number; limit?: number }) =>
+    api.get<{ data: MemberExtractionResult[]; total: number }>(`/member-extraction-campaigns/${id}/results`, { params }),
+  exportCSV: (id: string) =>
+    api.get(`/member-extraction-campaigns/${id}/export`, { responseType: "blob" }),
 };
 
 export default api;

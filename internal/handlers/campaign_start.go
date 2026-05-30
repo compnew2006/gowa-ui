@@ -144,6 +144,8 @@ func (a *App) StartCampaignByID(ctx context.Context, db *gorm.DB, orgID, campaig
 			PhoneNumber:    recipient.PhoneNumber,
 			RecipientName:  recipient.RecipientName,
 			TemplateParams: recipient.TemplateParams,
+			RecipientType:  recipient.RecipientType,
+			GroupJID:       recipient.GroupJID,
 		}
 	}
 	if err := a.Queue.EnqueueRecipients(ctx, jobs); err != nil {

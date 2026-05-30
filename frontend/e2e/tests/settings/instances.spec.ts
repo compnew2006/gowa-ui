@@ -338,7 +338,7 @@ test.describe("WhatsApp Instances", () => {
 
     await mockInstancesApi(page, instances);
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     const cards = page.locator('[data-testid="instance-card"]');
     await expect(cards).toHaveCount(8);
 
@@ -368,7 +368,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.getByRole("heading", { name: /WhatsApp Instances/i }),
     ).toBeVisible();
@@ -417,7 +417,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.locator("h3").filter({ hasText: originalInstance.name }),
     ).toBeVisible();
@@ -466,7 +466,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.locator("h3").filter({ hasText: deletingInstance.name }),
     ).toBeVisible();
@@ -518,7 +518,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.locator("h3").filter({ hasText: deletingInstance.name }),
     ).toBeVisible();
@@ -566,7 +566,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.locator("h3").filter({ hasText: instance.name }),
     ).toBeVisible();
@@ -614,7 +614,7 @@ test.describe("WhatsApp Instances", () => {
 
     await mockInstancesApi(page, instances);
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.getByRole("button", { name: /^Disconnect$/i }).first(),
     ).toBeVisible();
@@ -660,7 +660,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await page
       .getByRole("button", { name: /Connect \/ Scan QR/i })
       .first()
@@ -699,7 +699,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.locator("h3").filter({ hasText: instance.name }),
     ).toBeVisible();
@@ -744,7 +744,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await page
       .getByRole("button", { name: "Configure auto campaign" })
       .first()
@@ -821,7 +821,7 @@ test.describe("WhatsApp Instances", () => {
 
     await mockInstancesApi(page, [instance]);
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await page
       .getByRole("button", { name: "Configure auto campaign" })
       .first()
@@ -864,7 +864,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await page
       .getByRole("button", { name: "Configure auto campaign" })
       .first()
@@ -919,7 +919,7 @@ test.describe("WhatsApp Instances", () => {
       }),
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(page.getByText("777")).toBeVisible();
 
     await emitWS(page, "instance_connected", {
@@ -959,7 +959,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.locator("h3").filter({ hasText: instance.name }),
     ).toBeVisible();
@@ -1014,7 +1014,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.locator("h3").filter({ hasText: instance.name }),
     ).toBeVisible();
@@ -1067,7 +1067,7 @@ test.describe("WhatsApp Instances", () => {
       }),
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
     await expect(
       page.locator("h3").filter({ hasText: instance.name }),
     ).toBeVisible();
@@ -1116,7 +1116,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
 
     await page
       .getByRole("button", { name: "Configure Rating Message" })
@@ -1200,7 +1200,7 @@ test.describe("WhatsApp Instances", () => {
       },
     });
 
-    await page.goto("/settings/instances");
+    await page.goto("/instances");
 
     await page
       .getByRole("button", { name: "Configure assigned chat reset" })

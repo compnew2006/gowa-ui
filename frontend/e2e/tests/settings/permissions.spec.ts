@@ -441,11 +441,11 @@ test.describe("Role with Accounts Access", () => {
     if (roleId) await api.deleteRole(roleId).catch(() => {});
   });
 
-  test("user with accounts:read can access /settings/instances", async () => {
-    await page.goto("/settings/instances");
+  test("user with accounts:read can access /instances", async () => {
+    await page.goto("/instances");
     await page.waitForLoadState("networkidle");
 
-    expect(page.url()).toContain("/settings/instances");
+    expect(page.url()).toContain("/instances");
   });
 });
 

@@ -12,3 +12,7 @@ export { useConditionEvaluator } from './useConditionEvaluator'
 
 // Media grouping composable
 export { useMediaGroups, readMediaGroupWindow, saveMediaGroupWindow, MEDIA_GROUP_WINDOW_KEY, MEDIA_GROUP_WINDOW_DEFAULT, type MediaGroup } from './useMediaGroups'
+
+// Selectable Table composables
+export { useSelectableTable, type UseSelectableTableOptions, type UseSelectableTableResult } from './useSelectableTable'
+

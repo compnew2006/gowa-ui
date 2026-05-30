@@ -41,6 +41,12 @@ func (BulkMessageCampaign) TableName() string {
 	return "bulk_message_campaigns"
 }
 
+// RecipientType distinguishes individual vs group campaign targets.
+const (
+	RecipientTypeIndividual = "individual"
+	RecipientTypeGroup      = "group"
+)
+
 // BulkMessageRecipient represents a recipient in a bulk message campaign
 type BulkMessageRecipient struct {
 	BaseModel
@@ -56,6 +62,10 @@ type BulkMessageRecipient struct {
 	SentAt            *time.Time    `json:"sent_at,omitempty"`
 	DeliveredAt       *time.Time    `json:"delivered_at,omitempty"`
 	ReadAt            *time.Time    `json:"read_at,omitempty"`
+	RecipientType     string        `gorm:"size:20;index;default:'individual'" json:"recipient_type"` // individual, group
+	GroupJID          string        `gorm:"size:100;index" json:"group_jid,omitempty"`               // e.g. "1203631234567-1601234567@g.us"
+	GroupName         string        `gorm:"size:255" json:"group_name,omitempty"`
+	ParticipantCount  int           `json:"participant_count"`
 
 	// Relations
 	Campaign *BulkMessageCampaign `gorm:"foreignKey:CampaignID" json:"campaign,omitempty"`

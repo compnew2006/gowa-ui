@@ -5,8 +5,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
+export function formatDate(date: string | Date | undefined | null, options?: Intl.DateTimeFormatOptions): string {
+  if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date
+  if (isNaN(d.getTime())) return '—'
   return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -15,8 +17,10 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
   })
 }
 
-export function formatTime(date: string | Date): string {
+export function formatTime(date: string | Date | undefined | null): string {
+  if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date
+  if (isNaN(d.getTime())) return '—'
   return d.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit'

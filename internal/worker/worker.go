@@ -44,6 +44,7 @@ type Worker struct {
 	InboundConsumer queue.Consumer
 	Publisher       *queue.Publisher
 	License         *license.Service
+	whatsmeowMgr     *waprovider.ConnectionManager
 }
 
 // WorkerOptions configures which consumers a worker should start.
@@ -108,6 +109,10 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, me
 		Publisher:       publisher,
 		License:         licenseService,
 	}, nil
+}
+
+func (w *Worker) SetWhatsmeowManager(mgr *waprovider.ConnectionManager) {
+	w.whatsmeowMgr = mgr
 }
 
 // Run starts the worker and processes jobs until context is cancelled
@@ -223,6 +228,11 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", reason)
 		w.incrementCampaignCount(job.CampaignID, "failed_count")
 		return nil
+	}
+
+	// Group recipients follow a separate path that skips contact creation.
+	if existingRecipient.RecipientType == models.RecipientTypeGroup {
+		return w.handleGroupRecipientJob(ctx, job, existingRecipient, campaign)
 	}
 
 	// Get or create contact for this recipient

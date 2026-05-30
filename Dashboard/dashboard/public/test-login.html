@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <title>Test Login</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px; }
+        input { width: 100%; padding: 10px; margin: 10px 0; }
+        button { width: 100%; padding: 10px; background: #4f46e5; color: white; border: none; cursor: pointer; }
+        button:hover { background: #4338ca; }
+        #result { margin-top: 20px; padding: 10px; background: #f0f0f0; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h2>Test Login</h2>
+    <input type="email" id="email" placeholder="Email" value="admin@example.com">
+    <input type="password" id="password" placeholder="Password" value="AdminSecure2026!">
+    <button onclick="testLogin()">Login</button>
+    <div id="result"></div>
+
+    <script>
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('result');
+
+            resultDiv.innerHTML = 'Loading...';
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `<div class="success">Success! User: ${data.user.email}</div>`;
+                    resultDiv.innerHTML += `<p>Redirecting to home...</p>`;
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Error: ${data.detail || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

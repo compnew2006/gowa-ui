@@ -118,6 +118,7 @@ func GetMigrationModels() []MigrationModel {
 		{"CustomAction", &models.CustomAction{}},
 		{"WhatsAppAccount", &models.WhatsAppAccount{}},
 		{"WhatsAppInstance", &models.WhatsAppInstance{}},
+		{"FacebookAccount", &models.FacebookAccount{}},
 		{"InstanceNotification", &models.InstanceNotification{}},
 		{"Contact", &models.Contact{}},
 		{"MediaAsset", &models.MediaAsset{}},
@@ -165,6 +166,30 @@ func GetMigrationModels() []MigrationModel {
 		// Conversation Notes
 		{"ConversationNote", &models.ConversationNote{}},
 		{"ContactCollaborator", &models.ContactCollaborator{}},
+		{"WhatsAppFilterBatch", &models.WhatsAppFilterBatch{}},
+		{"WhatsAppFilterResult", &models.WhatsAppFilterResult{}},
+
+		// Group Directory
+		{"GroupDirectory", &models.GroupDirectory{}},
+
+		// Group Join Campaigns
+		{"GroupJoinCampaign", &models.GroupJoinCampaign{}},
+		{"GroupJoinRecipient", &models.GroupJoinRecipient{}},
+
+		// Message Extraction Campaigns
+		{"MessageExtractionCampaign", &models.MessageExtractionCampaign{}},
+		{"MessageExtractionResult", &models.MessageExtractionResult{}},
+
+		// Group Extraction Campaigns
+		{"GroupExtractionCampaign", &models.GroupExtractionCampaign{}},
+		{"GroupExtractionResult", &models.GroupExtractionResult{}},
+
+		// Member Extraction Campaigns
+		{"MemberExtractionCampaign", &models.MemberExtractionCampaign{}},
+		{"MemberExtractionResult", &models.MemberExtractionResult{}},
+
+		// Content Library
+		{"SavedContent", &models.SavedContent{}},
 	}
 }
 
@@ -312,6 +337,40 @@ func applyPreMigrationFixes(db *gorm.DB) error {
 	}
 	if err := normalizeWhatsAppStatusRows(db); err != nil {
 		return fmt.Errorf("failed to normalize whatsapp statuses: %w", err)
+	}
+	if err := fixSavedContentsUniqueIndex(db); err != nil {
+		return fmt.Errorf("failed to fix saved contents unique index: %w", err)
+	}
+	return nil
+}
+
+func fixSavedContentsUniqueIndex(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&models.SavedContent{}) {
+		return nil
+	}
+	// Drop existing single-column unique indexes on the saved_contents table.
+	indexRows, err := db.Raw(`SELECT indexname FROM pg_indexes WHERE tablename = 'saved_contents' AND indexname LIKE '%saved_content%'`).Rows()
+	if err != nil {
+		return err
+	}
+	indexNames := make([]string, 0)
+	for indexRows.Next() {
+		var idxName string
+		if err := indexRows.Scan(&idxName); err != nil {
+			indexRows.Close()
+			return err
+		}
+		indexNames = append(indexNames, idxName)
+	}
+	indexRows.Close()
+
+	for _, idxName := range indexNames {
+		_ = db.Exec("DROP INDEX IF EXISTS " + idxName).Error
+	}
+	_ = db.Exec("ALTER TABLE saved_contents DROP CONSTRAINT IF EXISTS idx_saved_contents_org_name").Error
+
+	if err := db.Exec("CREATE UNIQUE INDEX idx_saved_contents_org_name ON saved_contents(organization_id, name) WHERE deleted_at IS NULL").Error; err != nil {
+		return err
 	}
 	return nil
 }
@@ -536,6 +595,12 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_org_closed ON chat_closure_ratings(organization_id, closed_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_contact_state ON chat_closure_ratings(contact_id, state, closed_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_chat_closure_ratings_agent_rated ON chat_closure_ratings(agent_user_id, rated_at DESC) WHERE state = 'rated'`,
+		`CREATE INDEX IF NOT EXISTS idx_wa_filter_results_batch_phone ON whatsapp_filter_results(batch_id, phone_number)`,
+		`CREATE INDEX IF NOT EXISTS idx_wa_filter_results_batch_is_valid ON whatsapp_filter_results(batch_id, is_valid)`,
+		`CREATE INDEX IF NOT EXISTS idx_wa_filter_batches_org ON whatsapp_filter_batches(organization_id)`,
+		// Group Directory trigram index for name search
+		`CREATE EXTENSION IF NOT EXISTS pg_trgm`,
+		`CREATE INDEX IF NOT EXISTS idx_gd_name_trgm ON group_directories USING GIN (name gin_trgm_ops)`,
 	}
 }
 

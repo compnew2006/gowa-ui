@@ -108,3 +108,8 @@ func (a *WhatsmeowAdapter) parseJID(to string) (types.JID, error) {
 func isGroupJID(jidStr string) bool {
 	return strings.HasSuffix(jidStr, "@g.us")
 }
+
+// GetClient retrieves the underlying connected whatsmeow client for a given instance ID.
+func (a *WhatsmeowAdapter) GetClient(ctx context.Context, instanceID string) (*whatsmeow.Client, error) {
+	return a.getClient(ctx, instanceID)
+}

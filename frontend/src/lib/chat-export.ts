@@ -205,7 +205,7 @@ export function buildHtmlForPrint(
   ${messageRows}
   <div class="separator"></div>
   <div class="meta">End of export</div>
-  <script>window.onload=function(){window.print();}<\/script>
+  <script>window.onload=function(){window.print();}</script>
 </body>
 </html>`;
 }

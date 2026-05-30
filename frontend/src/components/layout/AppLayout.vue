@@ -39,6 +39,8 @@ const sidebarOverlayOpenState = ref({
   organization: false,
   userMenu: false,
 });
+
+const expandedGroups = ref<Set<string>>(new Set());
 const isMobileMenuOpen = ref(false);
 const isRTL = computed(() => localeDirectionManager.isRTL(locale.value));
 const hasDesktopOverlayOpen = computed(
@@ -340,6 +342,7 @@ const navigation = computed(() => {
     .map((item) => {
       // Filter children that are Meta-only
       let filteredChildren = item.children?.filter((child) => {
+        if (child.path === "/campaigns" && !f.campaigns) return false;
         if (metaOnlyChildPaths.has(child.path) && !f.business_profile)
           return false;
         if (child.adminOnly && !isAdminUser.value) return false;
@@ -366,7 +369,9 @@ const navigation = computed(() => {
           ? route.name === "dashboard"
           : originalPath === "/chat"
             ? route.name === "chat" || route.name === "chat-conversation"
-            : route.path.startsWith(originalPath);
+            : item.activeMatchPaths
+              ? item.activeMatchPaths.some((p) => route.path.startsWith(p))
+              : route.path.startsWith(originalPath);
 
       return {
         ...item,
@@ -376,6 +381,19 @@ const navigation = computed(() => {
       };
     });
 });
+
+const toggleGroup = (path: string) => {
+  if (expandedGroups.value.has(path)) {
+    expandedGroups.value.delete(path);
+  } else {
+    expandedGroups.value.add(path);
+  }
+};
+
+const isGroupExpanded = (item: { path: string; children?: unknown[] }) => {
+  if (expandedGroups.value.has(item.path)) return true;
+  return false;
+};
 
 const handleDesktopSidebarMouseEnter = () => {
   if (pinnedClosed.value) {
@@ -571,20 +589,25 @@ const handleLogout = async () => {
       <ScrollArea class="flex-1 py-2">
         <nav class="space-y-0.5 px-2" role="menubar">
           <template v-for="item in navigation" :key="item.path">
-            <RouterLink
-              :to="item.path"
+            <component
+              :is="item.children && item.children.length > 0 ? 'button' : 'RouterLink'"
+              v-bind="item.children && item.children.length > 0
+                ? { type: 'button' }
+                : { to: item.path }
+              "
               :class="[
-                'flex items-center rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200',
+                'flex items-center rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200 w-full',
                 item.active
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                   : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground',
                 isSidebarExpanded ? 'gap-2.5' : 'justify-center gap-0',
                 isRTL && isSidebarExpanded && 'text-right flex-row-reverse',
               ]"
-              role="menuitem"
-              :aria-current="item.active ? 'page' : undefined"
+              :role="item.children && item.children.length > 0 ? 'menuitem' : undefined"
+              :aria-current="!item.children || item.children.length === 0 ? (item.active ? 'page' : undefined) : undefined"
+              :aria-expanded="item.children && item.children.length > 0 ? isGroupExpanded(item) : undefined"
               :title="!isSidebarExpanded ? $t(item.name) : undefined"
-              @click="isMobileMenuOpen = false"
+              @click="item.children && item.children.length > 0 ? toggleGroup(item.path) : (isMobileMenuOpen = false)"
             >
               <component
                 :is="item.icon"
@@ -602,10 +625,24 @@ const handleLogout = async () => {
               >
                 {{ $t(item.name) }}
               </span>
-            </RouterLink>
+              <component
+                :is="item.children && item.children.length > 0 && isSidebarExpanded ? 'svg' : 'span'"
+                v-if="item.children && item.children.length > 0 && isSidebarExpanded"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                :class="[
+                  'h-3.5 w-3.5 shrink-0 transition-transform duration-200',
+                  isGroupExpanded(item) ? 'rotate-180' : '',
+                  isRTL ? 'mr-auto' : 'ml-auto',
+                ]"
+              >
+                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+              </component>
+            </component>
 
             <!-- Submenu items -->
-            <template v-if="item.children && item.active && isSidebarExpanded">
+            <template v-if="item.children && item.children.length > 0 && isGroupExpanded(item) && isSidebarExpanded">
               <RouterLink
                 v-for="child in item.children"
                 :key="child.path"

@@ -14,6 +14,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/pkg/provider"
+	waprovider "github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodha/logf"
@@ -97,6 +98,7 @@ type WorkerScaler struct {
 	log             logf.Logger
 	messageProvider provider.MessageProvider
 	license         *license.Service
+	whatsmeowMgr    *waprovider.ConnectionManager
 	globalBudget    int
 	interval        time.Duration
 	now             func() time.Time
@@ -119,6 +121,7 @@ func NewWorkerScaler(
 	messageProvider provider.MessageProvider,
 	licenseService *license.Service,
 	globalBudget int,
+	whatsmeowMgr *waprovider.ConnectionManager,
 ) *WorkerScaler {
 	scaler := &WorkerScaler{
 		cfg:             cfg,
@@ -127,6 +130,7 @@ func NewWorkerScaler(
 		log:             log,
 		messageProvider: messageProvider,
 		license:         licenseService,
+		whatsmeowMgr:    whatsmeowMgr,
 		globalBudget:    max(0, globalBudget),
 		interval:        defaultWorkerScalerInterval,
 		now:             time.Now,
@@ -134,11 +138,16 @@ func NewWorkerScaler(
 		events:          make(chan workerRuntimeEvent, 256),
 	}
 	scaler.newWorker = func(orgID uuid.UUID) (scalerManagedWorker, error) {
-		return New(cfg, db, rdb, log, messageProvider, licenseService, WorkerOptions{
+		w, err := New(cfg, db, rdb, log, messageProvider, licenseService, WorkerOptions{
 			CampaignOrganizationID: orgID,
 			EnableCampaignConsumer: true,
 			EnableInboundMedia:     false,
 		})
+		if err != nil {
+			return nil, err
+		}
+		w.SetWhatsmeowManager(whatsmeowMgr)
+		return w, nil
 	}
 	return scaler
 }

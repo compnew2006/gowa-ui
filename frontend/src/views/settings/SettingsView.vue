@@ -2107,7 +2107,7 @@ onBeforeRouteLeave(() => {
                   </div>
                   <div class="grid gap-2 sm:grid-cols-1">
                     <RouterLink
-                      to="/settings/closed-chats"
+                      to="/closed-chats"
                       class="rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground hover:bg-accent"
                     >
                       <span class="inline-flex items-center gap-1.5 font-medium"

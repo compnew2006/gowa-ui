@@ -46,3 +46,62 @@ type ReplyProvider interface {
 	// SendTextReply sends a text message as a reply to a specific message
 	SendTextReply(ctx context.Context, instanceID string, to string, text string, replyToMsgID string) (string, error)
 }
+
+// GroupInfo holds metadata for a WhatsApp group.
+type GroupInfo struct {
+	JID              string
+	Name             string
+	ParticipantCount int
+}
+
+// GroupProvider is an optional extension to MessageProvider for adapters that
+// support WhatsApp group operations (e.g. whatsmeow). The Meta Cloud API does
+// not implement this interface. Callers should type-assert to check support.
+type GroupProvider interface {
+	GetGroups(ctx context.Context, instanceID string) ([]GroupInfo, error)
+	VerifyGroupMembership(ctx context.Context, instanceID string, groupJID string) (*GroupInfo, error)
+}
+
+// GroupParticipant holds info about a single group participant.
+type GroupParticipant struct {
+	JID          string
+	PhoneNumber  string
+	IsAdmin      bool
+	IsSuperAdmin bool
+}
+
+// GroupParticipantProvider is an optional extension for adapters that support
+// managing group participants (add/remove/promote/demote). Only whatsmeow
+// implements this; Meta Cloud API does not.
+type GroupParticipantProvider interface {
+	// AddGroupParticipants adds one or more participants to a group.
+	AddGroupParticipants(ctx context.Context, instanceID string, groupJID string, participantJIDs []string) ([]GroupParticipant, error)
+
+	// RemoveGroupParticipants removes one or more participants from a group.
+	RemoveGroupParticipants(ctx context.Context, instanceID string, groupJID string, participantJIDs []string) ([]GroupParticipant, error)
+
+	// PromoteGroupParticipants promotes participants to group admin.
+	PromoteGroupParticipants(ctx context.Context, instanceID string, groupJID string, participantJIDs []string) ([]GroupParticipant, error)
+
+	// DemoteGroupParticipants demotes participants from group admin.
+	DemoteGroupParticipants(ctx context.Context, instanceID string, groupJID string, participantJIDs []string) ([]GroupParticipant, error)
+
+	// GetGroupParticipants returns all participants of a group.
+	GetGroupParticipants(ctx context.Context, instanceID string, groupJID string) ([]GroupParticipant, error)
+}
+
+// JoinGroupProvider is an optional extension for adapters that support joining
+// WhatsApp groups via invite link. Only the whatsmeow adapter implements this.
+type JoinGroupProvider interface {
+	// JoinGroupWithLink joins a WhatsApp group using an invite link/code.
+	// Returns the group JID on success.
+	JoinGroupWithLink(ctx context.Context, instanceID string, inviteLink string) (string, error)
+}
+
+// GroupInfoProvider is an optional extension for adapters that can fetch
+// group metadata from an invite link without joining. Only whatsmeow implements this.
+type GroupInfoProvider interface {
+	// GetGroupInfoFromLink fetches group metadata from an invite link code.
+	// Does NOT join the group — returns preview info only.
+	GetGroupInfoFromLink(ctx context.Context, instanceID string, inviteLink string) (*GroupInfo, error)
+}

@@ -261,12 +261,14 @@ type MockQueue struct {
 	Jobs              []*queue.RecipientJob
 	InboundMediaJobs  []*queue.InboundMediaJob
 	ContactRepairJobs []*queue.ContactRepairJob
+	FilterJobs         []*queue.WhatsAppFilterJob
 
 	// Configurable behavior
 	EnqueueFunc        func(ctx context.Context, job *queue.RecipientJob) error
 	EnqueuesFunc       func(ctx context.Context, jobs []*queue.RecipientJob) error
 	EnqueueInboundFunc func(ctx context.Context, job *queue.InboundMediaJob) error
 	EnqueueContactFunc func(ctx context.Context, job *queue.ContactRepairJob) error
+	EnqueueFilterFunc  func(ctx context.Context, job *queue.WhatsAppFilterJob) error
 
 	// Error to return
 	Error error
@@ -278,6 +280,7 @@ func NewMockQueue() *MockQueue {
 		Jobs:              make([]*queue.RecipientJob, 0),
 		InboundMediaJobs:  make([]*queue.InboundMediaJob, 0),
 		ContactRepairJobs: make([]*queue.ContactRepairJob, 0),
+		FilterJobs:         make([]*queue.WhatsAppFilterJob, 0),
 	}
 }
 
@@ -349,8 +352,49 @@ func (m *MockQueue) EnqueueContactRepair(ctx context.Context, job *queue.Contact
 	return nil
 }
 
+// EnqueueWhatsAppFilter mocks enqueueing a single WhatsApp filter job.
+func (m *MockQueue) EnqueueWhatsAppFilter(ctx context.Context, job *queue.WhatsAppFilterJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+
+	m.FilterJobs = append(m.FilterJobs, job)
+
+	if m.EnqueueFilterFunc != nil {
+		return m.EnqueueFilterFunc(ctx, job)
+	}
+	return nil
+}
+
 // Close is a no-op for the mock.
 func (m *MockQueue) Close() error {
+	return nil
+}
+
+// EnqueueGroupJoin mocks enqueueing a single group join job.
+func (m *MockQueue) EnqueueGroupJoin(ctx context.Context, job *queue.GroupJoinJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+
+	return nil
+}
+
+// EnqueueGroupJoins mocks enqueueing multiple group join jobs.
+func (m *MockQueue) EnqueueGroupJoins(ctx context.Context, jobs []*queue.GroupJoinJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+
 	return nil
 }
 
@@ -378,6 +422,7 @@ func (m *MockQueue) Reset() {
 	m.Jobs = m.Jobs[:0]
 	m.InboundMediaJobs = m.InboundMediaJobs[:0]
 	m.ContactRepairJobs = m.ContactRepairJobs[:0]
+	m.FilterJobs = m.FilterJobs[:0]
 	m.Error = nil
 }
 
@@ -388,9 +433,11 @@ type MockJobHandler struct {
 	Processed         []*queue.RecipientJob
 	InboundProcessed  []*queue.InboundMediaJob
 	ContactProcessed  []*queue.ContactRepairJob
+	FilterProcessed   []*queue.WhatsAppFilterJob
 	HandleFunc        func(ctx context.Context, job *queue.RecipientJob) error
 	HandleInboundFunc func(ctx context.Context, job *queue.InboundMediaJob) error
 	HandleContactFunc func(ctx context.Context, job *queue.ContactRepairJob) error
+	HandleFilterFunc  func(ctx context.Context, job *queue.WhatsAppFilterJob) error
 	Error             error
 }
 
@@ -401,6 +448,7 @@ func NewMockJobHandler() *MockJobHandler {
 		Processed:        make([]*queue.RecipientJob, 0),
 		InboundProcessed: make([]*queue.InboundMediaJob, 0),
 		ContactProcessed: make([]*queue.ContactRepairJob, 0),
+		FilterProcessed:   make([]*queue.WhatsAppFilterJob, 0),
 	}
 }
 
@@ -451,6 +499,21 @@ func (m *MockJobHandler) HandleContactRepairJob(ctx context.Context, job *queue.
 	}
 	if m.HandleContactFunc != nil {
 		return m.HandleContactFunc(ctx, job)
+	}
+	return nil
+}
+
+// HandleWhatsAppFilterJob mocks handling a WhatsApp filter job.
+func (m *MockJobHandler) HandleWhatsAppFilterJob(ctx context.Context, job *queue.WhatsAppFilterJob) error {
+	m.mu.Lock()
+	m.FilterProcessed = append(m.FilterProcessed, job)
+	m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+	if m.HandleFilterFunc != nil {
+		return m.HandleFilterFunc(ctx, job)
 	}
 	return nil
 }

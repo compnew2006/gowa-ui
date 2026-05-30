@@ -26,3 +26,4 @@ export { ChatbotSettingsPage } from "./ChatbotSettingsPage";
 export { ChatbotHubPage } from "./ChatbotHubPage";
 export { AgentTransfersPage } from "./AgentTransfersPage";
 export { ChatPage } from "./ChatPage";
+export { WhatsAppFilterPage } from "./WhatsAppFilterPage";

@@ -1,0 +1,29 @@
+# LiteLLM Proxy Configuration
+# GLM-4 via z.ai is primary (no GPU/OpenAI required)
+
+model_list:
+  # Primary: GLM-4 via z.ai (ZhipuAI compatible endpoint)
+  - model_name: glm-4
+    litellm_params:
+      model: openai/glm-4
+      api_base: https://api.z.ai/api/coding/paas/v4
+      api_key: os.environ/GLM_API_KEY
+      timeout: 30
+      max_tokens: 512
+
+router_settings:
+  routing_strategy: least-busy
+  num_retries: 2
+  retry_after: 5
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  success_callback: ["prometheus"]
+  failure_callback: ["sentry"]
+  cache: true
+  cache_params:
+    type: redis
+    host: redis
+    port: 6379

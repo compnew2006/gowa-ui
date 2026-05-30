@@ -23,6 +23,18 @@ import {
   Archive,
   ShieldAlert,
   Route,
+  Filter,
+  Facebook,
+  Search,
+  UserCheck,
+  UsersRound,
+  ThumbsUp,
+  MessageCircle,
+  Database,
+  Share2,
+  Target,
+  BookOpen,
+  UserRoundCog,
 } from "lucide-vue-next";
 import type { Component } from "vue";
 
@@ -35,6 +47,7 @@ export interface NavItem {
   managerOrAdminOnly?: boolean;
   childPermissions?: string[];
   children?: NavItem[];
+  activeMatchPaths?: string[];
 }
 
 export const navigationItems: NavItem[] = [
@@ -51,10 +64,37 @@ export const navigationItems: NavItem[] = [
     permission: "chat",
   },
   {
+    name: "nav.agentAnalytics",
+    path: "/analytics/agents",
+    icon: BarChart3,
+    permission: "analytics.agents",
+  },
+  {
+    name: "nav.metaInsights",
+    path: "/analytics/meta-insights",
+    icon: LineChart,
+    permission: "analytics",
+  },
+  {
+    name: "nav.templates",
+    path: "/templates",
+    icon: FileText,
+    permission: "templates",
+  },
+  {
+    name: "nav.flows",
+    path: "/flows",
+    icon: Workflow,
+    permission: "flows.whatsapp",
+  },
+  {
     name: "nav.chatbot",
     path: "/chatbot",
     icon: Bot,
     permission: "settings.chatbot",
+    activeMatchPaths: [
+      "/chatbot",
+    ],
     childPermissions: [
       "settings.chatbot",
       "chatbot.keywords",
@@ -96,48 +136,187 @@ export const navigationItems: NavItem[] = [
     ],
   },
   {
-    name: "nav.agentAnalytics",
-    path: "/analytics/agents",
-    icon: BarChart3,
-    permission: "analytics.agents",
-  },
-  {
-    name: "nav.metaInsights",
-    path: "/analytics/meta-insights",
-    icon: LineChart,
-    permission: "analytics",
-  },
-  {
-    name: "nav.templates",
-    path: "/templates",
-    icon: FileText,
-    permission: "templates",
-  },
-  {
-    name: "nav.flows",
-    path: "/flows",
-    icon: Workflow,
-    permission: "flows.whatsapp",
-  },
-  {
-    name: "nav.campaigns",
+    name: "nav.whatsappTools",
     path: "/campaigns",
-    icon: Megaphone,
+    icon: Smartphone,
     permission: "campaigns",
+    activeMatchPaths: [
+      "/campaigns",
+      "/contacts",
+      "/canned-responses",
+      "/saved-contents",
+      "/closed-chats",
+      "/whatsapp-filter",
+      "/extract",
+      "/instances",
+    ],
+    childPermissions: [
+      "campaigns",
+      "contacts",
+      "canned_responses",
+      "saved_contents",
+      "wa_filter",
+      "chat",
+      "accounts",
+    ],
+    children: [
+      {
+        name: "nav.campaigns",
+        path: "/campaigns",
+        icon: Megaphone,
+        permission: "campaigns",
+      },
+      {
+        name: "nav.whatsappAccounts",
+        path: "/instances",
+        icon: Smartphone,
+        permission: "accounts",
+      },
+      {
+        name: "nav.contacts",
+        path: "/contacts",
+        icon: Contact,
+        permission: "contacts",
+      },
+      {
+        name: "nav.cannedResponses",
+        path: "/canned-responses",
+        icon: MessageSquareText,
+        permission: "canned_responses",
+      },
+      {
+        name: "nav.savedContents",
+        path: "/saved-contents",
+        icon: BookOpen,
+        permission: "saved_contents",
+      },
+      {
+        name: "nav.closedChats",
+        path: "/closed-chats",
+        icon: Archive,
+        permission: "chat",
+      },
+      {
+        name: "nav.whatsappFilter",
+        path: "/whatsapp-filter",
+        icon: Filter,
+        permission: "wa_filter",
+      },
+      {
+        name: "nav.groupSearch",
+        path: "/group-search",
+        icon: Users,
+        permission: "campaigns",
+      },
+      {
+        name: "nav.groupJoinCampaigns",
+        path: "/group-join-campaigns",
+        icon: Users,
+        permission: "campaigns",
+      },
+      {
+        name: "nav.groupParticipants",
+        path: "/group-participants",
+        icon: Users,
+        permission: "campaigns",
+      },
+      {
+        name: "nav.extract",
+        path: "/extract",
+        icon: MessageSquareText,
+        permission: "campaigns",
+      },
+      {
+        name: "nav.groupExtraction",
+        path: "/group-extraction",
+        icon: Users,
+        permission: "campaigns",
+      },
+      {
+        name: "nav.memberExtraction",
+        path: "/member-extraction",
+        icon: Users,
+        permission: "campaigns",
+      },
+    ],
+  },
+  {
+    name: "nav.facebookTools",
+    path: "/facebook/page-search",
+    icon: Facebook,
+    activeMatchPaths: [
+      "/facebook",
+    ],
+    children: [
+      {
+        name: "nav.facebookPageSearch",
+        path: "/facebook/page-search",
+        icon: Search,
+      },
+      {
+        name: "nav.facebookPeopleSearch",
+        path: "/facebook/people-search",
+        icon: UserCheck,
+      },
+      {
+        name: "nav.facebookGroupSearch",
+        path: "/facebook/group-search",
+        icon: UsersRound,
+      },
+      {
+        name: "nav.facebookExtractLikes",
+        path: "/facebook/extract-likes",
+        icon: ThumbsUp,
+      },
+      {
+        name: "nav.facebookPageMessengers",
+        path: "/facebook/page-messengers",
+        icon: MessageCircle,
+      },
+      {
+        name: "nav.facebookExtractData",
+        path: "/facebook/extract-data",
+        icon: Database,
+      },
+      {
+        name: "nav.facebookAutoShare",
+        path: "/facebook/auto-share",
+        icon: Share2,
+      },
+      {
+        name: "nav.facebookRetargeting",
+        path: "/facebook/retargeting",
+        icon: Target,
+      },
+      {
+        name: "nav.facebookAccounts",
+        path: "/facebook/accounts",
+        icon: UserRoundCog,
+      },
+    ],
   },
   {
     name: "nav.settings",
     path: "/settings",
     icon: Settings,
     permission: "settings.general",
+    activeMatchPaths: [
+      "/settings",
+      "/settings/accounts",
+      "/settings/tags",
+      "/settings/teams",
+      "/settings/agent-selection",
+      "/settings/users",
+      "/settings/roles",
+      "/settings/api-keys",
+      "/settings/webhooks",
+      "/settings/custom-actions",
+      "/settings/sso",
+      "/settings/license",
+    ],
     childPermissions: [
       "settings.general",
       "settings.uploads_cleanup",
-      "settings.chatbot",
-      "accounts",
-      "contacts",
-      "chat",
-      "canned_responses",
       "tags",
       "teams",
       "agent_selection",
@@ -156,40 +335,10 @@ export const navigationItems: NavItem[] = [
         permission: "settings.general",
       },
       {
-        name: "nav.chatbot",
-        path: "/settings/chatbot",
-        icon: Bot,
-        permission: "settings.chatbot",
-      },
-      {
-        name: "WhatsApp",
-        path: "/settings/instances",
-        icon: Smartphone,
-        permission: "accounts",
-      },
-      {
         name: "nav.accounts",
         path: "/settings/accounts",
         icon: Users,
         permission: "accounts",
-      },
-      {
-        name: "nav.contacts",
-        path: "/settings/contacts",
-        icon: Contact,
-        permission: "contacts",
-      },
-      {
-        name: "nav.closedChats",
-        path: "/settings/closed-chats",
-        icon: Archive,
-        permission: "chat",
-      },
-      {
-        name: "nav.cannedResponses",
-        path: "/settings/canned-responses",
-        icon: MessageSquareText,
-        permission: "canned_responses",
       },
       {
         name: "nav.tags",

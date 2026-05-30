@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hermes Webhook Feature Guide</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --paper: #fffdf9;
+      --ink: #1f2933;
+      --muted: #52606d;
+      --accent: #9c4a1a;
+      --accent-soft: #fde6d8;
+      --line: #e6d7c8;
+      --ok: #245c36;
+      --warn: #8a5a00;
+      --code: #231f1a;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, #f9d6c0 0, transparent 28%),
+        linear-gradient(180deg, #f8f2ea 0%, var(--bg) 100%);
+      line-height: 1.6;
+    }
+
+    .shell {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(156, 74, 26, 0.97), rgba(73, 30, 8, 0.93));
+      color: #fff8f3;
+      padding: 28px;
+      border-radius: 24px;
+      box-shadow: 0 22px 60px rgba(54, 28, 10, 0.18);
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      line-height: 1.05;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 760px;
+      font-size: 1.03rem;
+      color: #ffe8da;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .nav,
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: 0 12px 35px rgba(58, 42, 29, 0.06);
+    }
+
+    .nav {
+      position: sticky;
+      top: 20px;
+      padding: 18px;
+    }
+
+    .nav h2,
+    .card h2 {
+      margin-top: 0;
+    }
+
+    .nav a {
+      display: block;
+      text-decoration: none;
+      color: var(--ink);
+      padding: 10px 12px;
+      border-radius: 12px;
+      margin-bottom: 6px;
+      background: transparent;
+    }
+
+    .nav a:hover {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .content {
+      display: grid;
+      gap: 18px;
+    }
+
+    .card {
+      padding: 22px;
+    }
+
+    h2, h3 {
+      color: #2c1a0e;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 999px;
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+    }
+
+    .note,
+    .warn,
+    .ok {
+      padding: 14px 16px;
+      border-radius: 16px;
+      margin-top: 14px;
+    }
+
+    .note {
+      background: #f9f1ea;
+      border: 1px solid var(--line);
+    }
+
+    .warn {
+      background: #fff1d8;
+      border: 1px solid #f1c979;
+      color: var(--warn);
+    }
+
+    .ok {
+      background: #e9f7ee;
+      border: 1px solid #b7dfc0;
+      color: var(--ok);
+    }
+
+    code, pre {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      color: var(--code);
+    }
+
+    pre {
+      margin: 0;
+      padding: 16px;
+      border-radius: 16px;
+      background: #1b1713;
+      color: #fff3ea;
+      overflow-x: auto;
+      font-size: 0.92rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--accent);
+      font-size: 0.92rem;
+    }
+
+    ul {
+      padding-left: 20px;
+      margin-bottom: 0;
+    }
+
+    .step {
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fffaf4;
+    }
+
+    .step strong {
+      color: var(--accent);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .nav {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <h1>Hermes Webhook Feature Guide</h1>
+      <p>
+        This page documents the new Hermes webhook behavior: KB-constrained public replies,
+        instant human-reply learning for unknown comments, and Facebook comment-to-Messenger
+        private replies with predefined templates or mirrored learned human replies, plus Telegram teaching commands.
+      </p>
+      <div class="pill-row">
+        <span class="pill">KB Grounding</span>
+        <span class="pill">Instant Human Learning</span>
+        <span class="pill">Predefined DM Templates</span>
+        <span class="pill">Telegram Teach</span>
+        <span class="pill">Arabic + English</span>
+        <span class="pill">Safe Fallbacks</span>
+      </div>
+    </section>
+
+    <div class="grid">
+      <aside class="nav">
+        <h2>Guide</h2>
+        <a href="#overview">Overview</a>
+        <a href="#reply-flow">Public Reply Flow</a>
+        <a href="#human-learning">Instant Human Learning</a>
+        <a href="#private-replies">Private Messenger Replies</a>
+        <a href="#telegram-teach">Telegram Teaching</a>
+        <a href="#config">Configuration</a>
+        <a href="#logs">Files and Logs</a>
+        <a href="#testing">Testing</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+      </aside>
+
+      <main class="content">
+        <section class="card" id="overview">
+          <h2>Overview</h2>
+          <div class="two-col">
+            <div>
+              <h3>What the system does</h3>
+              <ul>
+                <li>Answers factual customer questions only from the markdown knowledge base.</li>
+                <li>Uses strict fallbacks when the answer is not in the KB.</li>
+                <li>Can learn safe human public replies instantly when a comment originally used the exact unknown fallback.</li>
+                <li>Can send a private Messenger reply after a valid public comment reply.</li>
+                <li>Pushes a Telegram alert when a new human reply is learned successfully.</li>
+                <li>Lets the owner teach, list, and remove learned replies directly from Telegram.</li>
+              </ul>
+            </div>
+            <div>
+              <h3>What it does not do</h3>
+              <ul>
+                <li>It does not write customer interactions into the authoritative KB.</li>
+                <li>It does not reuse learned replies when the KB already has an answer.</li>
+                <li>It does not learn suspicious, unsafe, or case-specific human replies.</li>
+                <li>It does not send private DMs for raw unknown fallbacks that have not been learned yet.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="note">
+            The safest model is: the KB always answers supported business questions first, and learned
+            human replies are used only when the bot would otherwise send the exact unknown fallback.
+          </div>
+        </section>
+
+        <section class="card" id="reply-flow">
+          <h2>Public Reply Flow</h2>
+          <div class="step">
+            <strong>1. Customer comment arrives</strong>
+            The webhook receives a Facebook Page <code>feed</code> comment event.
+          </div>
+          <div class="step">
+            <strong>2. The responder classifies the message</strong>
+            It checks the KB-backed categories first and falls back only when the message is not supported by the approved knowledge sections.
+          </div>
+          <div class="step">
+            <strong>3. KB answer first</strong>
+            If the answer exists in the approved KB sections, the reply is generated from that data only.
+          </div>
+          <div class="step">
+            <strong>4. Exact fallback when unsupported</strong>
+            If the answer is not in the KB, the public reply stays the fixed unknown-answer phrase.
+          </div>
+          <div class="ok">
+            Public replies remain plain text only. Internal analysis never appears to the customer.
+          </div>
+        </section>
+
+        <section class="card" id="human-learning">
+          <h2>Instant Human Learning</h2>
+          <p>
+            This is the part that fixes your VPS case. The learning is immediate and automatic.
+            No user action, no restart, and no manual retraining step is needed.
+          </p>
+
+          <h3>How it works</h3>
+          <div class="step">
+            <strong>1. The bot replies publicly</strong>
+            If the comment is unsupported, it may reply with the exact unknown fallback.
+          </div>
+          <div class="step">
+            <strong>2. A human agent replies publicly to the same comment</strong>
+            The webhook receives the page’s own comment event with a <code>parent_id</code> pointing
+            to the original customer comment.
+          </div>
+          <div class="step">
+            <strong>3. The server links the human reply to the original customer text</strong>
+            The original customer comment text is already stored in a separate comment context log.
+          </div>
+          <div class="step">
+            <strong>4. The next exact-normalized unknown comment reuses the human reply</strong>
+            If another customer writes the same unknown message after normalization, the learned human reply is applied instantly.
+          </div>
+
+          <div class="ok">
+            Example: a customer asks an unsupported question, the bot sends the exact unknown fallback,
+            then a human replies publicly with the correct answer. The next customer who sends the same
+            normalized unknown message can get that learned human reply automatically.
+          </div>
+
+          <div class="note">
+            When a new learned reply is saved successfully, Hermes also pushes a Telegram notification to the configured page owner chat with the original customer comment, the learned reply text, and the parent comment reference.
+          </div>
+
+          <div class="warn">
+            Learning only activates when the original bot reply was the exact unknown fallback.
+            The learned reply must also pass safety checks and expires after 90 days. KB answers always win.
+          </div>
+        </section>
+
+        <section class="card" id="private-replies">
+          <h2>Private Messenger Replies</h2>
+          <p>
+            The webhook can send a private Messenger reply after a successful public reply, but only
+            for supported KB-grounded intents or safe learned human replies.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Rule</th>
+                <th>Behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Scope</td>
+                <td>Facebook Page post comments only</td>
+              </tr>
+              <tr>
+                <td>Allowed intents</td>
+                <td><code>pricing</code>, <code>location</code>, <code>hours</code>, <code>services</code>, <code>contact</code>, <code>greeting</code></td>
+              </tr>
+              <tr>
+                <td>Message source</td>
+                <td>KB-grounded intents use predefined templates. Learned human replies mirror the same public reply text in Messenger.</td>
+              </tr>
+              <tr>
+                <td>Template placeholders</td>
+                <td><code>{customer_name}</code> and <code>{public_reply}</code> only</td>
+              </tr>
+              <tr>
+                <td>Language</td>
+                <td>Matches the detected comment language, with English fallback for the same intent</td>
+              </tr>
+              <tr>
+                <td>Duplicate protection</td>
+                <td>One private DM per comment via a dedicated private-reply log</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="warn">
+            The DM feature should remain disabled until the live Meta app permissions and the
+            current Graph API private-reply edge are confirmed in production.
+          </div>
+        </section>
+
+        <section class="card" id="telegram-teach">
+          <h2>Telegram Teaching</h2>
+          <p>
+            The page owner can teach Hermes directly from Telegram. Taught replies are saved to the same
+            live learned-reply store and become active immediately for the next exact-normalized fallback match.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Command</th>
+                <th>Behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>/teach سلام عليكم =&gt; وعليكم السلام ورحمة الله وبركاته كيف اقدر اساعدك</code></td>
+                <td>Teach a new reply instantly for the current page.</td>
+              </tr>
+              <tr>
+                <td><code>/teach</code><br><code>q: سلام عليكم</code><br><code>a: وعليكم السلام ورحمة الله وبركاته كيف اقدر اساعدك</code></td>
+                <td>Multiline version of the same teach command.</td>
+              </tr>
+              <tr>
+                <td><code>/learned</code></td>
+                <td>Show active taught replies for the page.</td>
+              </tr>
+              <tr>
+                <td><code>/remove سلام عليكم</code></td>
+                <td>Deactivate the active taught reply for that normalized phrase immediately.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="note">
+            Telegram teaching is owner-chat-only, page-scoped, and still fallback-only. If the KB has an answer,
+            the KB continues to win over Telegram-taught replies.
+          </div>
+        </section>
+
+        <section class="card" id="config">
+          <h2>Configuration</h2>
+          <h3>Page config keys</h3>
+          <pre>{
+  "human_reply_learning_enabled": true,
+  "human_reply_learning_max_age_days": 90,
+  "human_reply_learning_match_mode": "exact_normalized",
+  "telegram_teach_enabled": true,
+  "public_webhook_base_url": "https://fbwebhook.ofuqalmadenah.com",
+  "messenger_private_replies_enabled": true,
+  "messenger_private_reply_question_types": [
+    "pricing",
+    "location",
+    "hours",
+    "services",
+    "contact",
+    "greeting"
+  ],
+  "messenger_private_reply_public_and_private": true,
+  "messenger_private_reply_templates": {
+    "pricing": {
+      "en": "Hi {customer_name}, thanks for your comment. {public_reply} Send us a message here if you'd like to continue.",
+      "ar": "أهلاً {customer_name}، شكراً على تعليقك. {public_reply} ابعت لنا رسالة هنا لو تحب نكمل التفاصيل."
+    },
+    "greeting": {
+      "en": "{public_reply}",
+      "ar": "{public_reply}"
+    }
+  }
+}</pre>
+
+          <h3>Runtime environment variables</h3>
+          <ul>
+            <li><code>HERMES_WEBHOOK_ROOT</code></li>
+            <li><code>HERMES_PAGES_CONFIG</code></li>
+            <li><code>HERMES_NOTIFICATION_CONFIG</code></li>
+            <li><code>HERMES_LOG_DIR</code></li>
+            <li><code>HERMES_INTERACTION_LOG_DIR</code></li>
+            <li><code>HERMES_PUBLIC_WEBHOOK_BASE_URL</code> (optional override)</li>
+            <li><code>HERMES_TEST_MODE</code></li>
+            <li><code>HERMES_ENABLE_LLM_REPHRASE</code></li>
+          </ul>
+        </section>
+
+        <section class="card" id="logs">
+          <h2>Files and Logs</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>facebook_webhook.log</code></td>
+                <td>Main webhook server log</td>
+              </tr>
+              <tr>
+                <td><code>webhook_events.log</code></td>
+                <td>Raw incoming Meta webhook payloads</td>
+              </tr>
+              <tr>
+                <td><code>replied_comments.txt</code></td>
+                <td>Deduplication for public auto replies</td>
+              </tr>
+              <tr>
+                <td><code>private_replied_comments.txt</code></td>
+                <td>Deduplication for private Messenger replies</td>
+              </tr>
+              <tr>
+                <td><code>{page_id}.jsonl</code></td>
+                <td>Interaction log for customer comment and final public reply</td>
+              </tr>
+              <tr>
+                <td><code>{page_id}_comment_contexts.jsonl</code></td>
+                <td>Stored customer comment context including the bot reply text and whether the exact unknown fallback was used</td>
+              </tr>
+              <tr>
+                <td><code>{page_id}_learned_replies.jsonl</code></td>
+                <td>Active and superseded learned human replies for exact-normalized unknown messages</td>
+              </tr>
+              <tr>
+                <td><code>{page_id}_auto_public_replies.jsonl</code></td>
+                <td>Signatures used to avoid learning the bot’s own public reply as if it were human</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="card" id="testing">
+          <h2>Testing</h2>
+          <h3>Automated</h3>
+          <pre>pytest -q /Users/noiemany/Downloads/Hermes/hermes-webhook/tests</pre>
+
+          <h3>Manual local preview</h3>
+          <pre>PORT=5001 \
+HERMES_WEBHOOK_ROOT=/Users/noiemany/Downloads/Hermes/hermes-webhook \
+HERMES_PAGES_CONFIG=/Users/noiemany/Downloads/Hermes/hermes-webhook/pages_config.json \
+HERMES_NOTIFICATION_CONFIG=/Users/noiemany/Downloads/Hermes/hermes-webhook/notification_config.json \
+HERMES_LOG_DIR=/Users/noiemany/Downloads/Hermes/hermes-webhook/logs \
+HERMES_INTERACTION_LOG_DIR=/Users/noiemany/Downloads/Hermes/hermes-webhook/interaction-logs \
+HERMES_TEST_MODE=1 \
+python3 /Users/noiemany/Downloads/Hermes/hermes-webhook/facebook_webhook_gunicorn.py</pre>
+
+          <h3>What to verify</h3>
+          <ul>
+            <li><code>GET /health</code> returns healthy JSON.</li>
+            <li><code>POST /debug/reply-preview</code> returns grounded KB replies.</li>
+            <li>An unknown comment uses the learned human reply only after a Page public reply is received for the original fallback thread.</li>
+            <li>Punctuation-only or Arabic-variant formatting changes still match, but reordered wording does not.</li>
+          </ul>
+        </section>
+
+        <section class="card" id="troubleshooting">
+          <h2>Troubleshooting</h2>
+          <h3>If the bot does not learn from the human reply</h3>
+          <ul>
+            <li>Check that the human reply actually appears as a Page <code>feed</code> comment webhook event.</li>
+            <li>Check that the page reply event contains a valid <code>parent_id</code> pointing to the original customer comment.</li>
+            <li>Check <code>webhook_events.log</code> for the page reply event.</li>
+            <li>Check that a new row appears in <code>{page_id}_learned_replies.jsonl</code>.</li>
+            <li>Check that the parent comment context recorded <code>used_unknown_fallback: true</code>.</li>
+            <li>Check that the human reply does not contain blocked content such as URLs, phone numbers, fraud warnings, or case-specific promises.</li>
+            <li>Check that the learned reply is not older than 90 days.</li>
+          </ul>
+
+          <h3>If private DMs do not send</h3>
+          <ul>
+            <li>Confirm <code>messenger_private_replies_enabled</code> is set to <code>true</code>.</li>
+            <li>Confirm the intent is one of the configured DM question types.</li>
+            <li>Confirm the public reply was successful first.</li>
+            <li>Confirm the page has the needed Meta messaging permissions in production.</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

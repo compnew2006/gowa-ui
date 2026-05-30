@@ -106,6 +106,8 @@ type mockHandler struct {
 	jobs             []*queue.RecipientJob
 	inboundMediaJobs []*queue.InboundMediaJob
 	contactJobs      []*queue.ContactRepairJob
+	filterJobs       []*queue.WhatsAppFilterJob
+	groupJoinJobs    []*queue.GroupJoinJob
 	err              error // if set, handler returns this error
 }
 
@@ -127,6 +129,20 @@ func (h *mockHandler) HandleContactRepairJob(_ context.Context, job *queue.Conta
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.contactJobs = append(h.contactJobs, job)
+	return h.err
+}
+
+func (h *mockHandler) HandleWhatsAppFilterJob(_ context.Context, job *queue.WhatsAppFilterJob) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.filterJobs = append(h.filterJobs, job)
+	return h.err
+}
+
+func (h *mockHandler) HandleGroupJoinJob(_ context.Context, job *queue.GroupJoinJob) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.groupJoinJobs = append(h.groupJoinJobs, job)
 	return h.err
 }
 

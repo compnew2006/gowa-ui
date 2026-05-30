@@ -6,4 +6,7 @@ export { default as CrudFormDialog } from './CrudFormDialog.vue'
 export { default as DataTable } from './DataTable.vue'
 export { default as CreateContactDialog } from './CreateContactDialog.vue'
 export { default as ImportExportDialog } from './ImportExportDialog.vue'
+export { default as SelectableDataTable } from './SelectableDataTable.vue'
 export type { Column } from './DataTable.vue'
+export type { SelectableTableColumn } from '@/types/selectable-table'
+

@@ -1,126 +1,31 @@
-## 2026-04-10 22:10 Issue: Streaming media dedup can deadlock or resurrect a deleted hash incorrectly
+# Ralph Memory
 
-- The Trap: Assuming `io.Pipe` automatically tears down both sides on upload failure, and assuming a hash that once existed can simply be inserted again after retention cleanup.
-- The Reality: If the uploader returns first and the reader side is not closed with the upload error, the downloader goroutine can block forever on the pipe writer. Separately, if retention deletes the S3 object but the `media_assets.file_hash` uniqueness constraint remains, naive re-insert logic races into duplicate-key failures or links new messages to a purged asset.
-- The Fix: Explicitly cancel the streaming context, propagate errors with `CloseWithError` on both sides of the pipe, and reload-or-restore soft-deleted `media_assets` rows when a known hash reappears after retention cleanup.
-- The Law: In duplex streaming pipelines, treat both the producer and consumer as failure sources that must actively unblock each other, and never design dedup keys without a lifecycle plan for post-retention resurrection.
+## 2026-05-30 Issue: Whatsmeow adapter concrete type assertion in async background worker and test suite compilation
 
-## [2026-04-05] Issue: MkDocs Config Value 'docs_dir' Error
+- **The Trap:** Type asserting `w.MessageProvider` to concrete `*whatsmeow.WhatsmeowAdapter` inside the background worker prevented constructing elegant unit tests without having to instantiate complex database connections, connection pools, and redis clients for whatsmeow adapter's dependencies. Furthermore, `MockQueue` and `MockJobHandler` in the shared `testutil` package were missing the newly added `EnqueueWhatsAppFilter` and `HandleWhatsAppFilterJob` queue method signatures, causing broad test suite compilation failures.
+- **The Reality:** The background worker only needs to query the `whatsmeow.Client` from the provider. Type-asserting to a local, minimal interface `interface { GetClient(ctx context.Context, instanceID string) (*whatsmeow.Client, error) }` decouples the worker cleanly, allowing test harnesses to supply mock providers. `MockQueue` and `MockJobHandler` need to maintain perfect synchronization with the master `Queue` and `JobHandler` interface signatures.
+- **The Fix:** Changed the concrete type assertion in `checkWhatsmeowContacts` to a local `whatsmeowClientGetter` interface assertion. Implemented `EnqueueWhatsAppFilter` on `MockQueue` and `HandleWhatsAppFilterJob` on `MockJobHandler` in `test/testutil/mocks.go`, completely resolving compile errors. Created dedicated handler and worker test suites running and compiling with 100% success.
+- **The Law:** Always use local interface assertions instead of concrete provider type assertions for multi-provider adapters in async tasks to ensure clean mock-ability, and keep the test suite mocks fully in sync with standard interface signature expansions.
 
-- **The Trap:** Setting `docs_dir: .` in `mkdocs.yml` to keep all files in a single flat directory for simplicity.
-- **The Reality:** MkDocs 1.6+ and the `mkdocs-static-i18n` plugin (with `docs_structure: folder`) often fail to resolve this because they expect a dedicated sub-directory for source files, or they collide with the configuration file itself when scanning the root.
-- **The Fix:** Created a dedicated `docs/` subdirectory inside `docs/wiki/`, moved all markdown source folders (`en/`, `ar/`) into it, and updated `mkdocs.yml` to `docs_dir: docs`.
-- **The Law:** Always separate your `mkdocs.yml` from your Markdown source files by placing the latter in a `docs/` subdirectory; never use `docs_dir: .` for production-grade, multi-plugin documentation projects.
+## 2026-05-30 Issue: Vue 3 Generic computed ref type inference compiler limits inside custom pagination composable
 
-## 2026-03-17 00:00 Issue: Assignment permissions ignored chat.assign
+- **The Trap:** Attempting to store selection objects with a generic type `ref<Map<string | number, T>>` caused severe `UnwrapRefSimple<T>` compiler errors under Vue 3's strict type checker, since the generic type parameter cannot be parsed automatically for nested UnwrapRef structures inside maps.
+- **The Reality:** Vue's type-wrapper systems have strict limitations when generic parameters are nested inside Map or Set templates inside reactive references. We can declare the Map value type as `any` locally to allow flawless reactive setter and getter calls, while exposing the mapped values list via a strongly typed computed list casted as `T[]` to preserve downstream type safety.
+- **The Fix:** Changed the Map generic type in `useSelectableTable.ts` from `Map<string | number, T>` to `Map<string | number, any>`, and safely typecast the computed array return using `as T[]`.
+- **The Law:** Never map raw generic parameters directly inside reactive Map/Set references in Vue 3 composables; use clean internal `any` maps and cast exposed computed arrays to retain type safety while bypassing UnwrapRef compilation limits.
+
+## 2026-05-30 Issue: Playwright E2E Nested API Interception Failures and Strict Selector Collisions
+
+- **The Trap:** Playwright's standard glob path matcher `*` matches any sequence of characters *except* a slash `/`. A pattern like `**/api/whatsapp-filter/batches*` did not intercept nested results requests like `/api/whatsapp-filter/batches/batch-12345678/results`. In addition, matching text locators such as `page.locator("text=Contact Name 1")` or `page.getByRole("checkbox", { name: "Select row 1" })` resolve to multiple elements (e.g. `Contact Name 10`, `Select row 11`) and trigger strict-mode violations in Playwright.
+- **The Reality:** Playwright needs a robust RegExp route interceptor: `page.route(/\/api\/whatsapp-filter\/batches/, ...)` which cleanly intercepts all sub-routes without escaping boundaries. We must enforce exact matches on all dynamic indices by leveraging `{ exact: true }` parameters inside Playwright locator queries.
+- **The Fix:** Refactored mock interceptors in `whatsapp-filter.spec.ts` to use explicit RegExps and passed exact matcher arguments into Playwright role selection locators.
+- **The Law:** Always use regular expression patterns instead of standard globs when routing nested sub-routes in Playwright, and apply `{ exact: true }` on cell and checkbox selectors containing indexed values to eliminate strict-mode element collisions.
+
+## 2026-05-30 Issue: Strict Typechecking Mismatch on UI Components and Mismatched Pagination Props in Existing Views
+
+- **The Trap:** Existing Vue components such as `GroupSearch.vue` failed typecheck validation because class attributes inside custom `<Card>` wrapper components were bound using objects (e.g. `:class="{ 'ring-2 ring-primary': active }"`) which are rejected by strict typescript definitions expecting simple `string` types. Furthermore, standard pagination subcomponents were wired with incorrect prop names (e.g. `:page` instead of `:current-page`), leading to typescript compilation blockages.
+- **The Reality:** External/custom wrapped shadcn-vue components often enforce a strict `string` signature on class attributes. Changing bindings to conditional strings ensures flawless type check alignment. Shared subcomponents like `PaginationControls` must have their prop bindings mapped exactly to the declared types (`currentPage`, `totalPages`, `totalItems`, `pageSize`).
+- **The Fix:** Refactored object class bindings on `<Card>` inside `GroupSearch.vue` to conditional string expressions, and updated the `PaginationControls` props and emits to exactly match their typed signatures.
+- **The Law:** Always use conditional string expressions instead of class objects when binding classes on custom UI wrappers, and double-check shared subcomponent definitions to ensure prop names align precisely with their typescript definitions.
 
 
-- The Trap: Assuming contact assignment was controlled by `contacts:write` and role names, so `chat.assign:write` changes in `/settings/roles` would work.
-- The Reality: The backend and frontend checked different permission keys, so role changes did not grant assignment; instance restrictions were also not enforced on assignments.
-- The Fix: Centralized assignment authorization on `chat.assign:write` (or `contacts:write` fallback) and enforced assignee instance access for contacts and transfers, with UI filtering on allowed instance IDs.
-- The Law: Align UI and server authorization checks to the same permission keys, and enforce access restrictions server-side even when the UI filters lists.
-
-## [2026-03-01] Issue: Mask phone numbers in chat messages
-
-- **The Trap:** Focusing only on the REST API response (`buildMessagesResponse`) to apply data modifiers like phone number masking.
-- **The Reality:** Real-time applications concurrently stream state updates via WebSockets (`broadcastNewMessage`), completely bypassing the HTTP response formatters.
-- **The Fix:** Duplicated the `MaskPhoneNumbersInText` masking logic directly inside the WebSocket payload factory `messages.go:broadcastNewMessage`.
-- **The Law:** Always verify if a data mutation must be applied to both the HTTP REST rendering pipeline AND the WebSocket real-time event pipeline.
-
-## [2026-03-01] Issue: Chat New Message Collision
-
-- **The Trap:** I assumed `fetchContact` only fetched and stored contact metadata in the background, unaware that it unconditionally overwrites the active UI state (`currentContact`).
-- **The Reality:** When a WebSocket message arrives from an unknown contact, `contactsStore.fetchContact` is triggered in the background, immediately hijacking the active screen.
-- **The Fix:** Modified `fetchContact` to selectively update `currentContact` only if the fetched ID matches the currently active ID. Added an E2E test.
-- **The Law:** Background data fetches must never mutate active UI focus state without explicit comparison against the currently viewed entity.
-
-## [2026-03-01] Issue: Chat Image Load Scroll Jump
-
-- **The Trap:** When opening a chat, `scrollToBottom` correctly positions the user, but subsequently loading images append height, pushing the scroll window back up relatively.
-- **The Reality:** The browser maintains `scrollTop` without an `overflow-anchor: auto` effect available, meaning any async block-level expansion shifts the viewport.
-- **The Fix:** Bound native `@load` listeners onto all chat `<img>` renders that re-trigger an instant `scrollToBottom` _only if_ the user's viewport is still near the bottom when the event fires.
-- **The Law:** Async-rendered media inside a reverse-chronological view must strictly preserve scroll anchor intent (bottom-pinning) via explicit resize/load handlers.
-
-## [2026-03-02] Issue: Build failure after handler refactoring
-
-- **The Trap:** Splitting large files (auth.go, sso.go) based on surface-level usage, assuming all types and methods were moved correctly.
-- **The Reality:** Significant handlers (CreateRegisterInvite) and specific request types (SwitchOrgRequest, LogoutRequest) were missed, leading to build errors in cmd/main.go and missing symbols in handlers.
-- **The Fix:** Restored missing handlers from the original file (via git), defined missing request types in auth_types.go, and verified with a full project build.
-- **The Law:** Never delete the original monolithic or critical file until a full project build (go build ./cmd/...) confirms no undefined symbols or broken dependencies.
-
-## [2026-03-02] Issue: Low test coverage due to skipped database tests
-
-- **The Trap:** Assuming `go test ./...` provides a comprehensive view of quality.
-- **The Reality:** Many critical database and repository tests are silently skipped if `TEST_DATABASE_URL` is not provided, masking potential regressions in persistence logic. 
-- **The Fix:** Conducted a comprehensive audit of tests, identifying 0% coverage in `internal/database` and `internal/contactutil` due to environment constraints.
-- **The Law:** Always verify test skip conditions in CI/CD and local environments; "Green" tests do not guarantee safety if critical paths are skipped.
-
-## [2026-03-02] Issue: XSS in v-html and SQLi in dynamic column filters
-
-- **The Trap:** Using Vue's `v-html` with naive string replacements for HTML escaping and dynamically forming SQL `WHERE` clauses from JSON keys without explicitly strict regular expression whitelists.
-- **The Reality:** GORM query builders and basic HTML replacement chains are routinely vulnerable to injection (XSS/SQLi) if user-provided keys or data are interpolated or unhandled efficiently. Even when utilizing `DOMPurify.sanitize()`, `v-html` still presents security surface area and code smell.
-- **The Fix:** Removed `v-html` and `DOMPurify` entirely from Vue components (`CampaignsView.vue`, `TemplatesView.vue`). Replaced them with custom regex parsers (`parseFormatPreview`, `parseTemplateParams`) that output an array of distinct tokens, which are safely rendered via `<template v-for>` using Vue's native HTML interpolation defenses.
-- **The Law:** Never trust user input with `v-html` or dynamic SQL interpolation; use native structured parsing or standard escaping mechanisms.
-
-## [2026-03-02] Issue: DSN Injection and IPv6 Formatting Bugs in Database Connection Config
-
-- **The Trap:** Constructing database connection strings using `fmt.Sprintf` with raw configuration metrics, assuming the user's password and hostname will never contain spaces, special characters, or be in an IPv6 format.
-- **The Reality:** Standard string formatting fails completely when passwords contain special characters (like `@` or `?`) or if an IPv6 address lacks `[]` encapsulation, leading to connection failures or DSN injection attacks.
-- **The Fix:** Replaced `fmt.Sprintf` with standard library URL builders (`url.URL` for Postgres) and host/port combinations (`net.JoinHostPort` for Redis and Postgres) to automatically format connection strings appropriately.
-- **The Law:** Always use native standard library builders (such as `url.URL` or `net.JoinHostPort`) for construction of URLs or network addresses instead of raw string interpolation.
-- **The Law:** Never output user data inside `v-html` directives; always construct arrays of atomic data chunks and render them using Vue's safe interpolation syntax `{{ }}` sequentially to maintain styling contexts securely.
-
-## [2026-03-05] Issue: WebSocket Connection Dropped on Auth Subprotocol
-
-- **The Trap:** Changing the frontend to send the WebSocket authentication token via the `Sec-WebSocket-Protocol` header (e.g., `Sec-WebSocket-Protocol: whm.v1, auth.token`) without configuring the backend `fastHTTPUpgrader` to echo back the agreed subprotocol.
-- **The Reality:** According to the WebSocket RFC, if the client sends a list of subprotocols, the server MUST explicitly select and return one in the HTTP 101 Switching Protocols response (e.g., `Sec-WebSocket-Protocol: whm.v1`). If it doesn't, strict clients (browsers, Playwright) instantly terminate the connection.
-- **The Fix:** Explicitly set `up.Subprotocols = []string{"whm.v1"}` in the `fastHTTPUpgrader` configuration right before calling `Upgrade()`.
-- **The Law:** Always echo the negotiated `Sec-WebSocket-Protocol` during the WS handshake if the client requests one, otherwise the client will inevitably sever the connection.
-
-## [2026-03-11] Issue: Nil pointer dereference in database migrations
-
-- **The Trap:** Assuming the `*gorm.DB` connection passed to migration and seeding functions is always initialized and non-nil.
-- **The Reality:** Unit tests often pass nil ORM instances or simulate edge cases where the database connection fails early, leading to immediate panics during `AutoMigrate` or `RunMigrationWithProgress`.
-- **The Fix:** Added explicit `if db == nil { return fmt.Errorf("database connection is nil") }` checks to all major database lifecycle functions in `postgres.go`.
-- **The Law:** Never assume a shared dependency like a database handle is non-nil in lifecycle or migration logic; always guard against initialization failures.
-
-## [2026-03-11] Issue: Flaky Redis tests due to hardcoded port conflicts
-
-- **The Trap:** Hardcoding `Addr: "localhost:6379"` in Redis client tests, assuming the port is always available and points to the `miniredis` mock.
-- **The Reality:** Parallel test execution or existing local Redis instances cause connection collisions, leading to "address already in use" or tests accidentally connecting to a real local database instead of the mock.
-- **The Fix:** Created a `getMockRedisConfig` helper that dynamically retrieves the random port assigned by `miniredis.Run()` and injects it into the client configuration.
-- **The Law:** Always use dynamic port allocation for mock services in unit tests to ensure isolation and prevent environmental cross-contamination.
-
-## [2026-03-30] Issue: Frontend E2E tests target wrong port or blank screens
-
-- **The Trap:** Relying on the development server (localhost:8080) for automated frontend testing, assuming it's identical to the production build.
-- **The Reality:** The dev server often has different routing, HMR overhead, or proxy behaviors that can cause hydration/blank screen issues (404 on valid routes or blank pages) under automated load.
-- **The Fix:** Switched to the production preview server (`npm run preview` on port 3000). This provides a stable, minified environment that more accurately reflects the user experience and reduces Vite-side hydration timing issues.
-- **The Law:** Always use `npm run build && npm run preview` (production mode) when running comprehensive automated E2E or AI-driven tests to ensure environment stability and realistic performance.
-## [2026-03-30] Issue: Frontend Blank Screens from Permission Mismatches
-
-- **The Trap:** Frontend permission checks (`hasPermission`) only matched `Permission` objects (resource/action). However, some backend responses or creation workflows use raw string keys like `"resource:action"`.
-- **The Reality:** When the frontend encountered a string instead of an object, the check failed, triggering an unauthorized redirect to a potentially unauthorized "blank" route.
-- **The Fix:** Refactor `authStore.hasPermission` in `auth.ts` to handle both object and string formats using a centralized `targetKey` mapping.
-- **The Law:** Always design permission guards to handle both granular objects and flat string keys to ensure resilience across different API synchronization stages.
-
-## [2026-04-01] Issue: Integrating PostHog into a Vue 3/Vite project
-
-- **The Trap:** Initializing PostHog directly in `main.ts` without checking for environment variables, which can lead to console errors or app crashes in environments where PostHog is not yet configured.
-- **The Reality:** Vite's `import.meta.env` requires explicit typing in `env.d.ts` for safety, and PostHog's automatic pageview tracking can sometimes conflict with single-page app (SPA) routers if not handled via a navigation guard.
-- **The Fix:** Created a fault-tolerant initialization utility in `src/lib/posthog.ts` that includes a `DEV` mode warning and integrated a `router.afterEach` guard in `main.ts` for consistent page-level capture.
-- **The Law:** Always use a dedicated initialization utility with environment guards for third-party analytics to ensure the core application remains resilient even if the service is missing or fails.
-
-## 2026-04-02 19:08 Issue: Removing public pricing routes without a handoff seam
-
-- The Trap: Deleting `PricingLandingView.vue` and the `/pricing` aliases directly, assuming the marketing sidecar would be wired everywhere in the same rollout.
-- The Reality: `/pricing`, `/plans`, and `/offer` are stable public entry URLs and part of the lead-capture boundary, so hard deletion would create broken links and a brittle migration.
-- The Fix: Replaced the routes with a configurable sidecar-handoff view, removed the old page content, and generalized lead-source validation while keeping lead storage/admin handling in the monolith.
-- The Law: When moving public pages to a sidecar, preserve the public URLs first and migrate ownership through a redirect or proxy seam instead of a hard delete.
-
-## 2026-04-10 22:15 Issue: Production build failures due to missing internal/frontend/dist
-
-- The Trap: Assuming the internal/frontend/dist directory exists or will be auto-created by cp -r when copying frontend assets.
-- The Reality: The Makefile used rm -rf internal/frontend/dist/* and then cp -r frontend/dist/* internal/frontend/dist/. If dist was missing from the repository (e.g., ignored and deleted), cp would fail as it needs a pre-existing destination directory for a wild-card glob copy.
-- The Fix: Updated the Makefile's embed-frontend target to explicitly run mkdir -p internal/frontend/dist before clearing and copying.
-- The Law: Always ensure the destination directory exists (using mkdir -p) before performing wildcard copies or relative directory synchronization in build scripts.

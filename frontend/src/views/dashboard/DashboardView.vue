@@ -176,7 +176,7 @@ const SHORTCUT_REGISTRY = computed(() => ({
   },
   contacts: {
     label: t("nav.contacts"),
-    to: "/settings/contacts",
+    to: "/contacts",
     icon: Contact,
     gradient: "from-cyan-500 to-blue-600",
   },
@@ -218,7 +218,7 @@ const SHORTCUT_REGISTRY = computed(() => ({
   },
   cannedResponses: {
     label: t("nav.cannedResponses"),
-    to: "/settings/canned-responses",
+    to: "/canned-responses",
     icon: MessageSquareText,
     gradient: "from-amber-500 to-yellow-600",
   },

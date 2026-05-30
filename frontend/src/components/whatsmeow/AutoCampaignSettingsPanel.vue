@@ -286,7 +286,7 @@ function formatScheduleValue(value?: string) {
                 ref="fileInput"
                 type="file"
                 class="hidden"
-                accept="*/*"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp,audio/aac,audio/mpeg,audio/ogg,audio/mp4,.pdf,.xlsx,.docx,.pptx"
                 @change="handleFileSelected"
               />
               <Button

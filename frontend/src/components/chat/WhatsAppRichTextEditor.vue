@@ -7,10 +7,12 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   rows?: number
   disabled?: boolean
+  id?: string
 }>(), {
   placeholder: '',
   rows: 6,
-  disabled: false
+  disabled: false,
+  id: undefined
 })
 
 const emit = defineEmits<{
@@ -108,6 +110,7 @@ function insertToken(token: string) {
 
     <textarea
       ref="textareaRef"
+      :id="id"
       :value="modelValue"
       :placeholder="placeholder"
       :rows="rows"

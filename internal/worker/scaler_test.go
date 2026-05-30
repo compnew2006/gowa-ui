@@ -127,7 +127,7 @@ func TestWorkerScaler_FreezesDisconnectedTenantAndResumesAfterRecovery(t *testin
 		RecipientName:  "Tenant User",
 	}))
 
-	scaler := NewWorkerScaler(nil, db, client, log, nil, nil, 4)
+	scaler := NewWorkerScaler(nil, db, client, log, nil, nil, 4, nil)
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
 	scaler.now = func() time.Time { return now }
 
@@ -194,7 +194,7 @@ func TestWorkerScaler_FreezesAfterRepeatedStartFailures(t *testing.T) {
 		RecipientName:  "Tenant User",
 	}))
 
-	scaler := NewWorkerScaler(nil, db, client, log, nil, nil, 2)
+	scaler := NewWorkerScaler(nil, db, client, log, nil, nil, 2, nil)
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	scaler.ctx = runCtx

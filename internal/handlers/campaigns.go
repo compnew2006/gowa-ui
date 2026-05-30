@@ -371,7 +371,7 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 
 	if a.isWhatsmeowProvider() && strings.TrimSpace(req.BodyContent) != "" {
 		trimmedBody := strings.TrimSpace(req.BodyContent)
-		if err := requestDB.Model(&models.Template{}).
+		if err := a.DB.Model(&models.Template{}).
 			Where("id = ? AND organization_id = ?", campaign.TemplateID, orgID).
 			Update("body_content", trimmedBody).Error; err != nil {
 			a.Log.Error("Failed to update campaign message body", "error", err, "campaign_id", campaign.ID)
@@ -379,14 +379,13 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 		}
 	}
 
-	if err := requestDB.Model(campaign).Updates(updates).Error; err != nil {
+	if err := a.DB.Model(&models.BulkMessageCampaign{}).Where("id = ? AND organization_id = ?", campaign.ID, orgID).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update campaign", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update campaign", nil, "")
 	}
-	requestDB.
 
-		// Reload campaign
-		Where("id = ?", id).Preload("Template").First(campaign)
+	// Reload campaign
+	a.DB.Where("id = ? AND organization_id = ?", id, orgID).Preload("Template").First(campaign)
 
 	response := CampaignResponse{
 		ID:                  campaign.ID,
