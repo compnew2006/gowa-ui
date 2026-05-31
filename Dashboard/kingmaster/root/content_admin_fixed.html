@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>King Master - إدارة المحتوى النصي</title>
+    
+    <!-- الخطوط -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <!-- أنماط CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/rtl-ltr.css">
+    
+    <style>
+        /* تحسينات إضافية للصفحة */
+        .content-admin-container {
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .main-content {
+            padding: 0;
+            padding-right: 0;
+        }
+        
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .content-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-light);
+            margin: 0;
+        }
+        
+        .content-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .search-box {
+            position: relative;
+            min-width: 300px;
+        }
+        
+        .search-box input {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 3rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+        
+        .search-box i {
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-light-dark);
+        }
+        
+        .add-content-btn {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .add-content-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-light);
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        
+        .stat-label {
+            color: var(--text-light-dark);
+            font-size: 0.9rem;
+        }
+        
+        .filter-section {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+        }
+        
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            align-items: end;
+        }
+        
+        .filter-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-light);
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+        
+        /* Fix select dropdown contrast (dark theme) */
+        :root { color-scheme: dark; }
+        .filter-group select,
+        .form-group select {
+            background-color: rgba(17, 24, 39, 0.85);
+            color: var(--text-light);
+        }
+        .filter-group select option,
+        .form-group select option,
+        .filter-group select optgroup,
+        .form-group select optgroup {
+            background-color: #111827;
+            color: #F3F4F6;
+        }
+        .filter-group select:focus,
+        .form-group select:focus {
+            background-color: rgba(17, 24, 39, 0.95);
+            border-color: var(--primary);
+        }
+        
+        .filter-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-direction: column;
+        }
+        
+        .filter-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            text-align: center;
+        }
+        
+        
+        .btn-delete-selected {
+            background: rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+            border-color: #EF4444;
+        }
+        
+        .btn-delete-selected:hover {
+            background: #EF4444;
+            color: white;
+        }
+        
+        .count-display {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+        
+        .count-number {
+            color: var(--text-light);
+            font-weight: 600;
+            font-size: 1.2rem;
+            min-width: 40px;
+            text-align: center;
+            padding: 0.5rem;
+            background: rgba(108, 92, 231, 0.2);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--primary);
+        }
+        
+        .contents-table-container {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+        
+        .contents-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .contents-table th,
+        .contents-table td {
+            padding: 1rem;
+            text-align: right;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .contents-table th {
+            background: rgba(108, 92, 231, 0.1);
+            color: var(--text-light);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .contents-table td {
+            color: var(--text-light-dark);
+        }
+        
+        .contents-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .checkbox-cell {
+            width: 40px;
+            text-align: center;
+        }
+        
+        .checkbox-cell input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+        
+        .content-info {
+            max-width: 300px;
+        }
+        
+        .content-title-cell {
+            color: var(--text-light);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+        
+        .content-preview {
+            font-size: 0.8rem;
+            color: var(--text-light-dark);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: var(--radius-full);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-active {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10B981;
+            border: 1px solid #10B981;
+        }
+        
+        .status-inactive {
+            background: rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+            border: 1px solid #EF4444;
+        }
+        
+        .category-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: var(--radius-full);
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(6, 214, 160, 0.2);
+            color: #06D6A0;
+            border: 1px solid #06D6A0;
+        }
+        
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+        }
+        
+        .tag-badge {
+            padding: 0.2rem 0.5rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.7rem;
+            background: rgba(59, 130, 246, 0.2);
+            color: #3B82F6;
+            border: 1px solid #3B82F6;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .action-btn {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.8rem;
+        }
+        
+        .btn-edit {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3B82F6;
+            border: 1px solid #3B82F6;
+        }
+        
+        .btn-edit:hover {
+            background: #3B82F6;
+            color: white;
+        }
+        
+        .btn-preview {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10B981;
+            border: 1px solid #10B981;
+        }
+        
+        .btn-preview:hover {
+            background: #10B981;
+            color: white;
+        }
+        
+        .btn-delete {
+            background: rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+            border: 1px solid #EF4444;
+        }
+        
+        .btn-delete:hover {
+            background: #EF4444;
+            color: white;
+        }
+        
+        .table-loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-light-dark);
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 2rem;
+            height: 2rem;
+            border: 3px solid rgba(108, 92, 231, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 1rem;
+        }
+        
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .modal {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(20px);
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: scale(0.8);
+            transition: all 0.3s ease;
+        }
+        
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+        
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-title {
+            margin: 0;
+            color: var(--text-light);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-light-dark);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-sm);
+            transition: all 0.3s ease;
+        }
+        
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-light);
+        }
+        
+        .modal-body {
+            padding: 1.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            color: var(--text-light);
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+        }
+        
+        .form-group textarea {
+            min-height: 120px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        
+        .tag-input {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            min-height: 38px;
+            padding: 0.5rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            cursor: text;
+        }
+        
+        .tag-item {
+            background: var(--primary);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        .tag-remove {
+            cursor: pointer;
+            font-weight: bold;
+            opacity: 0.8;
+        }
+        
+        .tag-remove:hover {
+            opacity: 1;
+        }
+        
+        .tag-input input {
+            border: none;
+            background: transparent;
+            outline: none;
+            flex: 1;
+            min-width: 100px;
+            color: var(--text-light);
+        }
+        
+        .emoji-tools {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .emoji-btn, .spintax-btn {
+            padding: 0.5rem 1rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            color: var(--text-light-dark);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.8rem;
+        }
+        
+        .emoji-btn:hover, .spintax-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .emoji-picker {
+            display: none;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 1rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            margin-top: 0.5rem;
+        }
+        
+        .emoji-item {
+            padding: 0.5rem;
+            text-align: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            transition: all 0.3s ease;
+        }
+        
+        .emoji-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .preview-section {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+        }
+        
+        .preview-section h6 {
+            margin: 0 0 0.5rem;
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+        
+        .preview-content {
+            color: var(--text-light-dark);
+            font-size: 0.9rem;
+            line-height: 1.4;
+            min-height: 40px;
+        }
+        
+        .modal-footer {
+            padding: 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .btn-secondary {
+            background: var(--glass-bg);
+            color: var(--text-light-dark);
+            border: 1px solid var(--glass-border);
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-light);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 1200px) {
+            .stats-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+            .content-info { max-width: 100%; }
+        }
+
+        @media (max-width: 992px) {
+            .dashboard-container .main-content { padding: 1rem !important; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .search-box { min-width: 0; width: 100%; }
+        }
+
+        @media (max-width: 768px) {
+            .content-header { flex-direction: column; align-items: stretch; }
+            .content-actions { width: 100%; }
+            .filter-row { grid-template-columns: 1fr; }
+            .filter-actions { flex-direction: row; flex-wrap: wrap; }
+            .contents-table-container { overflow-x: auto; }
+            .contents-table { min-width: 900px; }
+            .emoji-picker { grid-template-columns: repeat(6, 1fr); }
+            .modal { max-width: 95vw; width: 95vw; }
+        }
+
+        @media (max-width: 600px) {
+            .contents-table { min-width: 750px; }
+            /* Hide less critical columns on small screens: Tags (4), Created (7) */
+            .contents-table th:nth-child(4), .contents-table td:nth-child(4),
+            .contents-table th:nth-child(7), .contents-table td:nth-child(7) {
+                display: none;
+            }
+            .emoji-picker { grid-template-columns: repeat(5, 1fr); }
+        }
+
+        @media (max-width: 480px) {
+            .contents-table { min-width: 650px; }
+            /* Also hide Category (3) on extra small screens */
+            .contents-table th:nth-child(3), .contents-table td:nth-child(3) {
+                display: none;
+            }
+            .emoji-picker { grid-template-columns: repeat(4, 1fr); }
+            .add-content-btn { width: 100%; justify-content: center; }
+            .stats-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body class="rtl ar">
+    <!-- خلفية التدرج -->
+    <div class="bg-gradient"></div>
+    
+    <!-- المحتوى الرئيسي -->
+    <div class="dashboard-container content-admin-container">
+        <div class="main-content" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+            
+            <!-- الهيدر -->
+            <div class="content-header">
+                <div class="content-title">
+                    <i class="fas fa-file-alt" style="margin-left: 0.5rem;"></i>
+                    إدارة المحتوى النصي
+                </div>
+                <div class="content-actions">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="البحث في المحتوى...">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <button class="add-content-btn" onclick="showAddModal()">
+                        <i class="fas fa-plus"></i>
+                        إضافة محتوى
+                    </button>
+                </div>
+            </div>
+            
+            <!-- إحصائيات سريعة -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalContents">0</div>
+                    <div class="stat-label">إجمالي المحتويات</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="activeContents">0</div>
+                    <div class="stat-label">المحتويات النشطة</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalWords">0</div>
+                    <div class="stat-label">إجمالي الكلمات المعروضة</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="lastUpdateTime">--</div>
+                    <div class="stat-label">آخر تحديث</div>
+                </div>
+            </div>
+            
+            <!-- فلاتر البحث -->
+            <div class="filter-section">
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label>الفئة</label>
+                        <select id="categoryFilter">
+                            <option value="">كل الفئات</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>الحالة</label>
+                        <select id="statusFilter">
+                            <option value="">كل الحالات</option>
+                            <option value="1">نشط</option>
+                            <option value="0">غير نشط</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>عدد المحتويات</label>
+                        <div class="count-display">
+                            <span class="count-number" id="displayCount">0</span>
+                            <span>محتوى</span>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="filter-btn btn-delete-selected" onclick="deleteSelected()">
+                            <i class="fas fa-trash"></i> حذف المحدد
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- جدول المحتويات -->
+            <div class="contents-table-container">
+                <table class="contents-table">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-cell">
+                                <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                            </th>
+                            <th>العنوان والمحتوى</th>
+                            <th>الفئة</th>
+                            <th>الوسوم</th>
+                            <th>الحالة</th>
+                            <th>الإحصائيات</th>
+                            <th>تاريخ الإنشاء</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contentsTableBody">
+                        <tr>
+                            <td colspan="8" class="table-loading">
+                                <div class="loading-spinner"></div>
+                                <div>جاري تحميل المحتويات...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- Modal إضافة/تعديل محتوى -->
+    <div class="modal-overlay" id="contentModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">إضافة محتوى جديد</h3>
+                <button class="modal-close" onclick="hideModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="contentForm">
+                    <input type="hidden" id="contentId">
+                    
+                    <div class="form-group">
+                        <label for="contentTitle">عنوان المحتوى *</label>
+                        <input type="text" id="contentTitle" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contentCategory">الفئة</label>
+                        <input type="text" id="contentCategory" placeholder="مثال: ترحيب، تسويق، إعلان">
+                    </div>
+
+                    <div class="form-group">
+                        <label>الوسوم (Tags)</label>
+                        <div class="tag-input" id="tagsContainer" onclick="focusTagInput()">
+                            <input type="text" id="tagInput" placeholder="اكتب وسم واضغط Enter...">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contentText">المحتوى النصي *</label>
+                        <div class="emoji-tools">
+                            <small style="color: var(--text-light-dark);">استخدم {خيار١|خيار٢|خيار٣} للـ Spintax</small>
+                            <button type="button" class="emoji-btn" onclick="toggleEmojiPicker()">
+                                <i class="fas fa-smile"></i> إيموجي
+                            </button>
+                            <button type="button" class="spintax-btn" onclick="insertSpintaxTemplate()">
+                                <i class="fas fa-magic"></i> Spintax
+                            </button>
+                        </div>
+                        <textarea id="contentText" required></textarea>
+                        <div id="emojiPicker" class="emoji-picker"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="isActive" checked style="margin-left: 0.5rem;">
+                            محتوى نشط
+                        </label>
+                    </div>
+
+                    <div class="preview-section">
+                        <h6>معاينة النص مع Spintax:</h6>
+                        <div id="contentPreview" class="preview-content"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideModal()">إلغاء</button>
+                <button type="button" class="btn btn-primary" onclick="saveContent()">
+                    <i class="fas fa-save"></i>حفظ المحتوى
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let contents = [];
+        let selectedContents = [];
+        let currentTags = [];
+        let filteredContents = [];
+
+        // Helpers: normalize types and compute counts
+        function toActiveBool(v) {
+            if (typeof v === 'boolean') return v;
+            if (typeof v === 'number') return v === 1;
+            if (typeof v === 'string') {
+                const s = v.trim().toLowerCase();
+                return s === '1' || s === 'true' || s === 'نشط' || s === 'active';
+            }
+            return Boolean(v);
+        }
+
+        function safeWordCount(val, text) {
+            const n = parseInt(val, 10);
+            if (!isNaN(n)) return n;
+            if (typeof text === 'string') {
+                const t = text.trim();
+                return t ? t.split(/\s+/).length : 0;
+            }
+            return 0;
+        }
+
+        function safeCharCount(val, text) {
+            const n = parseInt(val, 10);
+            if (!isNaN(n)) return n;
+            if (typeof text === 'string') return text.length;
+            return 0;
+        }
+
+        function normalizeTags(tags) {
+            if (Array.isArray(tags)) return tags;
+            if (typeof tags === 'string') return tags.split(',').map(s => s.trim()).filter(Boolean);
+            return [];
+        }
+
+        // الإيموجي الشائعة
+        const popularEmojis = [
+            '😀', '😃', '😄', '😁', '😊', '😍', '🥰', '😘', 
+            '😂', '🤣', '😭', '😱', '😡', '🤔', '🙄', '😴',
+            '👍', '👎', '👏', '🙌', '🤝', '💪', '🤞', '🤟',
+            '❤️', '💙', '💚', '💛', '🧡', '💜', '🤍', '🖤',
+            '🔥', '⭐', '🌟', '✨', '💎', '🎉', '🎊', '🎈',
+            '📱', '💻', '📧', '📞', '📊', '📈', '💰', '🎯'
+        ];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadContents();
+            setupEventListeners();
+            createEmojiPicker();
+            setLastUpdate();
+        });
+
+        function setupEventListeners() {
+            // البحث المباشر
+            document.getElementById('searchInput').addEventListener('input', filterContents);
+            document.getElementById('categoryFilter').addEventListener('change', filterContents);
+            document.getElementById('statusFilter').addEventListener('change', filterContents);
+
+            // إدخال الوسوم
+            document.getElementById('tagInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && this.value.trim()) {
+                    addTag(this.value.trim());
+                    this.value = '';
+                    e.preventDefault();
+                }
+            });
+
+            // معاينة المحتوى أثناء الكتابة
+            document.getElementById('contentText').addEventListener('input', updatePreview);
+        }
+
+        function createEmojiPicker() {
+            const emojiPicker = document.getElementById('emojiPicker');
+            popularEmojis.forEach(emoji => {
+                const div = document.createElement('div');
+                div.className = 'emoji-item';
+                div.textContent = emoji;
+                div.onclick = () => insertEmoji(emoji);
+                emojiPicker.appendChild(div);
+            });
+        }
+
+        function toggleEmojiPicker() {
+            const picker = document.getElementById('emojiPicker');
+            picker.style.display = picker.style.display === 'grid' ? 'none' : 'grid';
+        }
+
+        function insertEmoji(emoji) {
+            const textArea = document.getElementById('contentText');
+            const cursorPos = textArea.selectionStart;
+            const textBefore = textArea.value.substring(0, cursorPos);
+            const textAfter = textArea.value.substring(textArea.selectionEnd);
+            
+            textArea.value = textBefore + emoji + textAfter;
+            textArea.selectionStart = textArea.selectionEnd = cursorPos + emoji.length;
+            textArea.focus();
+            updatePreview();
+        }
+
+        function insertSpintaxTemplate() {
+            const template = '{خيار١|خيار٢|خيار٣}';
+            const textArea = document.getElementById('contentText');
+            const cursorPos = textArea.selectionStart;
+            const textBefore = textArea.value.substring(0, cursorPos);
+            const textAfter = textArea.value.substring(textArea.selectionEnd);
+            
+            textArea.value = textBefore + template + textAfter;
+            textArea.selectionStart = cursorPos + 1;
+            textArea.selectionEnd = cursorPos + 7;
+            textArea.focus();
+            updatePreview();
+        }
+
+        function addTag(tagText) {
+            if (!currentTags.includes(tagText)) {
+                currentTags.push(tagText);
+                renderTags();
+            }
+        }
+
+        function removeTag(tagText) {
+            currentTags = currentTags.filter(tag => tag !== tagText);
+            renderTags();
+        }
+
+        function renderTags() {
+            const container = document.getElementById('tagsContainer');
+            const input = document.getElementById('tagInput');
+            
+            container.innerHTML = '';
+            
+            currentTags.forEach(tag => {
+                const tagElement = document.createElement('span');
+                tagElement.className = 'tag-item';
+                tagElement.innerHTML = `${tag} <span class="tag-remove" onclick="removeTag('${tag}')">&times;</span>`;
+                container.appendChild(tagElement);
+            });
+            
+            container.appendChild(input);
+        }
+
+        function focusTagInput() {
+            document.getElementById('tagInput').focus();
+        }
+
+        function updatePreview() {
+            const content = document.getElementById('contentText').value;
+            const preview = processSpintax(content);
+            document.getElementById('contentPreview').innerHTML = preview.replace(/\n/g, '<br>');
+        }
+
+        function processSpintax(text) {
+            return text.replace(/\{([^}]+)\}/g, function(match, options) {
+                const choices = options.split('|');
+                return choices[Math.floor(Math.random() * choices.length)];
+            });
+        }
+
+        async function loadContents() {
+            try {
+                const response = await fetch('api/content_api.php');
+                const data = await response.json();
+                
+                if (data.success) {
+                    contents = data.data.map(c => ({
+                        ...c,
+                        is_active: toActiveBool(c.is_active),
+                        tags: normalizeTags(c.tags),
+                        word_count: safeWordCount(c.word_count, c.content),
+                        char_count: safeCharCount(c.char_count, c.content)
+                    }));
+                    filteredContents = contents;
+                    renderContentsTable();
+                    updateStats();
+                    updateCategoryFilter();
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'خطأ',
+                        text: data.message || 'خطأ في تحميل المحتويات'
+                    });
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'خطأ في الاتصال',
+                    text: 'فشل في الاتصال بالخادم'
+                });
+            }
+        }
+
+        function renderContentsTable() {
+            const tbody = document.getElementById('contentsTableBody');
+            
+            if (filteredContents.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="table-loading">
+                            <i class="fas fa-file-alt fa-3x" style="color: var(--text-light-dark); margin-bottom: 1rem;"></i>
+                            <div>لا توجد محتويات</div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = filteredContents.map(content => `
+                <tr>
+                    <td class="checkbox-cell">
+                        <input type="checkbox" onchange="toggleContentSelection(${content.id}, this.checked)" 
+                               ${selectedContents.includes(content.id) ? 'checked' : ''}>
+                    </td>
+                    <td>
+                        <div class="content-info">
+                            <div class="content-title-cell">${content.title}</div>
+                            <div class="content-preview">${content.content}</div>
+                        </div>
+                    </td>
+                    <td>
+                        ${content.category ? `<span class="category-badge">${content.category}</span>` : '<span style="color: var(--text-light-dark);">غير محدد</span>'}
+                    </td>
+                    <td>
+                        <div class="tag-list">
+                            ${content.tags.map(tag => `<span class="tag-badge">${tag}</span>`).join('')}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="status-badge ${content.is_active ? 'status-active' : 'status-inactive'}">
+                            ${content.is_active ? 'نشط' : 'غير نشط'}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="font-size: 0.8rem; color: var(--text-light-dark);">
+                            📝 ${safeWordCount(null, content.content)} كلمة<br>
+                            📊 ${safeCharCount(null, content.content)} حرف
+                        </div>
+                    </td>
+                    <td style="font-size: 0.8rem; color: var(--text-light-dark);">
+                        ${formatDate(content.created_at)}
+                        ${content.updated_at !== content.created_at ? `<br><small>محدث: ${formatDate(content.updated_at)}</small>` : ''}
+                    </td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="action-btn btn-edit" onclick="editContent(${content.id})" title="تعديل">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-btn btn-preview" onclick="previewContent(${content.id})" title="معاينة">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="action-btn btn-delete" onclick="deleteContent(${content.id})" title="حذف">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('totalContents').textContent = contents.length;
+            document.getElementById('activeContents').textContent = contents.filter(c => c.is_active === true).length;
+            document.getElementById('totalWords').textContent = filteredContents.reduce((sum, c) => sum + safeWordCount(null, c.content), 0);
+            document.getElementById('displayCount').textContent = filteredContents.length;
+        }
+
+        function updateCategoryFilter() {
+            const categories = [...new Set(contents.map(c => c.category).filter(Boolean))];
+            const select = document.getElementById('categoryFilter');
+            
+            select.innerHTML = '<option value="">كل الفئات</option>';
+            categories.forEach(category => {
+                select.innerHTML += `<option value="${category}">${category}</option>`;
+            });
+        }
+
+        function filterContents() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const categoryFilter = document.getElementById('categoryFilter').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+
+            filteredContents = contents.filter(content => {
+                const matchesSearch = content.title.toLowerCase().includes(searchTerm) ||
+                                    content.content.toLowerCase().includes(searchTerm);
+                const matchesCategory = !categoryFilter || content.category === categoryFilter;
+                const matchesStatus = (statusFilter === '') ? true : (statusFilter === '1' ? content.is_active === true : content.is_active === false);
+                
+                return matchesSearch && matchesCategory && matchesStatus;
+            });
+
+            renderContentsTable();
+            updateStats();
+        }
+
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('#contentsTableBody input[type="checkbox"]');
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAll.checked;
+                const contentId = parseInt(checkbox.getAttribute('onchange').match(/\d+/)[0]);
+                toggleContentSelection(contentId, checkbox.checked);
+            });
+        }
+
+        function toggleContentSelection(contentId, isSelected) {
+            if (isSelected) {
+                selectedContents.push(contentId);
+            } else {
+                selectedContents = selectedContents.filter(id => id !== contentId);
+            }
+        }
+
+        function showAddModal() {
+            document.getElementById('modalTitle').textContent = 'إضافة محتوى جديد';
+            document.getElementById('contentForm').reset();
+            document.getElementById('contentId').value = '';
+            currentTags = [];
+            renderTags();
+            document.getElementById('contentPreview').innerHTML = '';
+            document.getElementById('contentModal').classList.add('active');
+        }
+
+        function hideModal() {
+            document.getElementById('contentModal').classList.remove('active');
+        }
+
+        function editContent(contentId) {
+            const content = contents.find(c => c.id === contentId);
+            if (!content) return;
+
+            document.getElementById('modalTitle').textContent = 'تعديل المحتوى';
+            document.getElementById('contentId').value = content.id;
+            document.getElementById('contentTitle').value = content.title;
+            document.getElementById('contentCategory').value = content.category;
+            document.getElementById('contentText').value = content.content;
+            document.getElementById('isActive').checked = content.is_active;
+            
+            currentTags = [...content.tags];
+            renderTags();
+            updatePreview();
+            
+            document.getElementById('contentModal').classList.add('active');
+        }
+
+        function previewContent(contentId) {
+            const content = contents.find(c => c.id === contentId);
+            if (!content) return;
+
+            const processed = processSpintax(content.content);
+            Swal.fire({
+                title: 'معاينة المحتوى مع Spintax',
+                html: `<div style="text-align: right; line-height: 1.6; white-space: pre-wrap;">${processed}</div>`,
+                width: 600,
+                customClass: {
+                    popup: 'rtl-popup'
+                }
+            });
+        }
+
+        async function saveContent() {
+            // التحقق من البيانات المطلوبة
+            const title = document.getElementById('contentTitle').value.trim();
+            const content = document.getElementById('contentText').value.trim();
+            
+            if (!title || !content) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'خطأ في البيانات',
+                    text: 'يرجى ملء جميع الحقول المطلوبة'
+                });
+                return;
+            }
+            
+            const contentData = {
+                title: title,
+                content: content,
+                category: document.getElementById('contentCategory').value.trim(),
+                tags: currentTags,
+                is_active: document.getElementById('isActive').checked
+            };
+
+            const contentId = document.getElementById('contentId').value;
+            if (contentId) {
+                contentData.id = parseInt(contentId);
+            }
+
+            try {
+                // عرض مؤشر التحميل
+                Swal.fire({
+                    title: 'جاري الحفظ...',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+                
+                const url = 'api/content_api.php';
+                const method = contentId ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(contentData)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    hideModal();
+                    loadContents();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'تم بنجاح!',
+                        text: 'تم حفظ المحتوى بنجاح',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'خطأ',
+                        text: result.message
+                    });
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'خطأ في الاتصال',
+                    text: 'فشل في الاتصال بالخادم'
+                });
+            }
+        }
+
+        async function deleteContent(contentId) {
+            const content = contents.find(c => c.id === contentId);
+            if (!content) return;
+
+            const result = await Swal.fire({
+                title: 'حذف المحتوى',
+                html: `هل أنت متأكد من حذف المحتوى:<br><strong>${content.title}</strong>؟`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'نعم، احذف',
+                cancelButtonText: 'إلغاء'
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                // عرض مؤشر التحميل
+                Swal.fire({
+                    title: 'جاري الحذف...',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+                
+                const response = await fetch(`api/content_api.php/${contentId}`, {
+                    method: 'DELETE'
+                });
+
+                const deleteResult = await response.json();
+                
+                if (deleteResult.success) {
+                    selectedContents = selectedContents.filter(id => id !== contentId);
+                    loadContents();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'تم الحذف!',
+                        text: 'تم حذف المحتوى بنجاح',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'خطأ',
+                        text: deleteResult.message
+                    });
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'خطأ في الاتصال',
+                    text: 'فشل في الاتصال بالخادم'
+                });
+            }
+        }
+
+        async function deleteSelected() {
+            if (selectedContents.length === 0) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'لم يتم تحديد محتويات',
+                    text: 'يرجى تحديد محتويات للحذف'
+                });
+                return;
+            }
+
+            const result = await Swal.fire({
+                title: 'حذف متعدد',
+                html: `هل أنت متأكد من حذف <strong>${selectedContents.length}</strong> محتوى؟`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'نعم، احذف الكل',
+                cancelButtonText: 'إلغاء'
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                // عرض مؤشر التحميل
+                Swal.fire({
+                    title: 'جاري الحذف...',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+                
+                const response = await fetch('api/content_api.php', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ ids: selectedContents })
+                });
+
+                const deleteResult = await response.json();
+                
+                if (deleteResult.success) {
+                    selectedContents = [];
+                    document.getElementById('selectAll').checked = false;
+                    loadContents();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'تم الحذف!',
+                        text: deleteResult.message,
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'خطأ',
+                        text: deleteResult.message
+                    });
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'خطأ في الاتصال',
+                    text: 'فشل في الاتصال بالخادم'
+                });
+            }
+        }
+
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: '2-digit', 
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+
+        function setLastUpdate() {
+            const now = new Date();
+            document.getElementById('lastUpdateTime').textContent = now.toLocaleTimeString('en-GB', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+    </script>
+</body>
+</html>

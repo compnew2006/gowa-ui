@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>شرح نظام MLM</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 { color: #667eea; margin-bottom: 30px; }
+        h2 { color: #764ba2; margin: 30px 0 15px; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+        .example {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #667eea;
+        }
+        .level {
+            margin: 10px 0 10px 20px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+        .direct { color: #4ade80; font-weight: 600; }
+        .indirect { color: #60a5fa; font-weight: 600; }
+        ul { margin: 15px 0; padding-right: 20px; }
+        li { margin: 10px 0; line-height: 1.6; }
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 شرح نظام التسويق متعدد المستويات (MLM)</h1>
+        
+        <h2>🎯 كيف يعمل النظام؟</h2>
+        <ul>
+            <li><strong class="direct">إحالة مباشرة:</strong> الأشخاص اللي أنت جبتهم شخصياً بكود الإحالة الخاص بك</li>
+            <li><strong class="indirect">إحالة غير مباشرة:</strong> الأشخاص اللي جابهم فريقك (الأشخاص المباشرين عندك)</li>
+            <li><strong>إجمالي الفريق:</strong> المباشر + غير المباشر = كل الأشخاص تحتك</li>
+        </ul>
+
+        <h2>🌳 نظام الـ 5 مستويات</h2>
+        <div class="note">
+            <strong>⚠️ مهم جداً:</strong> كل فرع له حد أقصى <strong>5 مستويات</strong> فقط للعمولات غير المباشرة.
+            بعد المستوى الخامس في نفس الفرع، لا تُحسب عمولات.
+        </div>
+
+        <div class="example">
+            <h3>مثال توضيحي:</h3>
+            
+            <div class="level">
+                <strong>أنت (المستوى 0)</strong>
+            </div>
+            
+            <div class="level">
+                ↓ <span class="direct">مباشر</span><br>
+                <strong>X (المستوى 1)</strong> - يُحسب لك: مباشر ✅
+            </div>
+            
+            <div class="level">
+                ↓ <span class="indirect">غير مباشر</span><br>
+                <strong>B (المستوى 2)</strong> - يُحسب لك: غير مباشر ✅
+            </div>
+            
+            <div class="level">
+                ↓ <span class="indirect">غير مباشر</span><br>
+                <strong>C (المستوى 3)</strong> - يُحسب لك: غير مباشر ✅
+            </div>
+            
+            <div class="level">
+                ↓ <span class="indirect">غير مباشر</span><br>
+                <strong>D (المستوى 4)</strong> - يُحسب لك: غير مباشر ✅
+            </div>
+            
+            <div class="level">
+                ↓ <span class="indirect">غير مباشر</span><br>
+                <strong>E (المستوى 5)</strong> - يُحسب لك: غير مباشر ✅
+            </div>
+            
+            <div class="level" style="opacity: 0.5;">
+                ↓ ❌ <strong>توقف هنا</strong><br>
+                <strong>F (المستوى 6)</strong> - <span style="color: red;">لا يُحسب لك ❌</span>
+            </div>
+        </div>
+
+        <h2>💰 كيف تكسب أكثر؟</h2>
+        <ul>
+            <li>جِب أشخاص <strong class="direct">مباشرين</strong> جدد = فروع جديدة = 5 مستويات جديدة لكل فرع</li>
+            <li>كل شخص مباشر = فرصة جديدة لـ 5 مستويات</li>
+            <li>كلما زاد عدد الفروع المباشرة، زادت الأرباح</li>
+        </ul>
+
+        <div class="example">
+            <h3>مثال: إذا عندك 3 أشخاص مباشرين</h3>
+            <ul>
+                <li><strong>الفرع 1 (X):</strong> 5 مستويات تحته ✅</li>
+                <li><strong>الفرع 2 (Y):</strong> 5 مستويات تحته ✅</li>
+                <li><strong>الفرع 3 (Z):</strong> 5 مستويات تحته ✅</li>
+            </ul>
+            <p><strong>المجموع:</strong> 3 فروع × 5 مستويات = 15 مستوى نشط للعمولات!</p>
+        </div>
+
+        <h2>📈 نسب العمولات</h2>
+        <ul>
+            <li>المستوى 1 (مباشر): 10%</li>
+            <li>المستوى 2: 5%</li>
+            <li>المستوى 3: 3%</li>
+            <li>المستوى 4: 2%</li>
+            <li>المستوى 5: 1%</li>
+        </ul>
+
+        <div style="text-align: center; margin-top: 40px;">
+            <button onclick="window.location.href='mlm_login.html'" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 15px 40px; border-radius: 10px; font-size: 16px; cursor: pointer;">
+                انتقل إلى الشجرة
+            </button>
+        </div>
+    </div>
+</body>
+</html>

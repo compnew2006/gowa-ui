@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة تحكم المنتجات | Kingmaster</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    :root {
+      --primary: #6c5ce7;
+      --primary-light: #a29bfe;
+      --glass-bg: rgba(255, 255, 255, 0.1);
+      --glass-border: rgba(255, 255, 255, 0.2);
+    }
+    body {
+      font-family: 'Cairo', sans-serif;
+      background: #0f172a;
+      color: #f5f6fa;
+    }
+    .bg-gradient {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image: radial-gradient(circle at top right, rgba(108, 92, 231, 0.15), transparent 40%),
+                        radial-gradient(circle at bottom left, rgba(0, 206, 201, 0.1), transparent 40%);
+    }
+    .container { max-width: 1600px; margin: 0 auto; padding: 2rem; }
+    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+    .header-title { font-size: 1.8rem; font-weight: 700; display: flex; align-items: center; gap: 0.6rem; }
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s;
+      font-family: 'Cairo', sans-serif;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3); }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-success { background: #10b981; color: white; }
+    .btn-sm { padding: 0.5rem 1rem; font-size: 0.875rem; }
+    .table-container {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      backdrop-filter: blur(14px);
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      background: rgba(108, 92, 231, 0.2);
+      padding: 1rem;
+      text-align: right;
+      font-weight: 600;
+      border-bottom: 2px solid var(--glass-border);
+    }
+    td {
+      padding: 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    tr:hover { background: rgba(255, 255, 255, 0.03); }
+    .product-img { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; }
+    .badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-success { background: #10b981; color: white; }
+    .badge-warning { background: #f59e0b; color: white; }
+    .badge-danger { background: #ef4444; color: white; }
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: #1e293b;
+      border-radius: 20px;
+      padding: 2rem;
+      max-width: 800px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .form-group { margin-bottom: 1.5rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      color: white;
+      font-family: 'Cairo', sans-serif;
+    }
+    .form-group textarea { min-height: 100px; resize: vertical; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .checkbox-group { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+    }
+    .checkbox-label input { width: auto; cursor: pointer; }
+    .colors-input, .sizes-input {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+    .tag {
+      background: var(--primary);
+      padding: 0.4rem 0.8rem;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+    }
+    .tag button {
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      padding: 0;
+    }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="container">
+    <div class="header-bar">
+      <h1 class="header-title">
+        <i class="fas fa-boxes"></i>
+        إدارة المنتجات
+      </h1>
+      <div style="display: flex; gap: 1rem;">
+        <button class="btn btn-primary" onclick="openAddModal()">
+          <i class="fas fa-plus"></i> إضافة منتج
+        </button>
+        <button class="btn" style="background: var(--glass-bg); color: white;" onclick="window.location.href='products.html'">
+          <i class="fas fa-store"></i> عرض المنتجات
+        </button>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <table id="productsTable">
+        <thead>
+          <tr>
+            <th>الصورة</th>
+            <th>الاسم</th>
+            <th>السعر</th>
+            <th>الخصم</th>
+            <th>المخزون</th>
+            <th>النوع</th>
+            <th>الحالة</th>
+            <th>التقييم</th>
+            <th>الإجراءات</th>
+          </tr>
+        </thead>
+        <tbody id="productsBody">
+          <tr><td colspan="9" style="text-align: center;">جارِ التحميل...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal" id="productModal">
+    <div class="modal-content">
+      <h2 style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+        <span id="modalTitle">إضافة منتج جديد</span>
+        <button onclick="closeModal()" style="background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer;">&times;</button>
+      </h2>
+      
+      <form id="productForm">
+        <input type="hidden" id="productId">
+        
+        <div class="form-group">
+          <label>اسم المنتج *</label>
+          <input type="text" id="productName" required>
+        </div>
+
+        <div class="form-group">
+          <label>الوصف</label>
+          <textarea id="productDescription"></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>السعر *</label>
+            <input type="number" id="productPrice" step="0.01" required>
+          </div>
+          <div class="form-group">
+            <label>نسبة الخصم (%)</label>
+            <input type="number" id="productDiscount" step="0.01" min="0" max="100" value="0">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>الكمية المتاحة</label>
+            <input type="number" id="productStock" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>الفئة</label>
+            <input type="text" id="productCategory" placeholder="مثال: ملابس">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>رابط الصورة</label>
+          <input type="url" id="productImage" placeholder="https://example.com/image.jpg">
+        </div>
+
+        <div class="form-group">
+          <label>خصائص المنتج</label>
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="isDigital" onchange="togglePhysicalFields()">
+              منتج رقمي
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="isNew">
+              منتج جديد
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="isFeatured">
+              منتج مميز
+            </label>
+          </div>
+        </div>
+
+        <div id="physicalFields">
+          <div class="form-group">
+            <label>الألوان المتاحة</label>
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+              <input type="text" id="colorName" placeholder="اسم اللون" style="width: 40%;">
+              <input type="color" id="colorHex" style="width: 30%;">
+              <button type="button" class="btn btn-success btn-sm" onclick="addColor()">إضافة</button>
+            </div>
+            <div class="colors-input" id="colorsList"></div>
+          </div>
+
+          <div class="form-group">
+            <label>المقاسات المتاحة</label>
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+              <input type="text" id="sizeName" placeholder="مثال: L">
+              <button type="button" class="btn btn-success btn-sm" onclick="addSize()">إضافة</button>
+            </div>
+            <div class="sizes-input" id="sizesList"></div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+          <button type="submit" class="btn btn-primary" style="flex: 1;">
+            <i class="fas fa-save"></i> حفظ
+          </button>
+          <button type="button" class="btn" onclick="closeModal()" style="background: #64748b; color: white;">
+            إلغاء
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    let products = [];
+    let colors = [];
+    let sizes = [];
+    let editMode = false;
+
+    // تحميل المنتجات
+    async function loadProducts() {
+      try {
+        const response = await fetch('api/get_products.php?category=all');
+        const data = await response.json();
+        
+        if (data.success) {
+          products = data.products;
+          renderTable();
+        }
+      } catch (error) {
+        Swal.fire('خطأ', 'فشل تحميل المنتجات', 'error');
+      }
+    }
+
+    // رسم الجدول
+    function renderTable() {
+      const tbody = document.getElementById('productsBody');
+      tbody.innerHTML = '';
+
+      products.forEach(product => {
+        const row = `
+          <tr>
+            <td><img src="${product.image_url}" class="product-img" onerror="this.src='https://via.placeholder.com/60'"></td>
+            <td>${product.name}</td>
+            <td>${parseFloat(product.price).toFixed(2)} ر.س</td>
+            <td>${product.discount_percentage}%</td>
+            <td>${product.is_digital == 1 ? 'رقمي' : product.stock_quantity}</td>
+            <td><span class="badge ${product.is_digital == 1 ? 'badge-warning' : 'badge-success'}">${product.is_digital == 1 ? 'رقمي' : 'فيزيائي'}</span></td>
+            <td><span class="badge badge-success">${product.status}</span></td>
+            <td>${product.rating} ⭐</td>
+            <td>
+              <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-sm" style="background: #3b82f6; color: white;" onclick="editProduct(${product.id})">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="deleteProduct(${product.id})">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+        tbody.innerHTML += row;
+      });
+    }
+
+    // فتح نافذة الإضافة
+    function openAddModal() {
+      editMode = false;
+      document.getElementById('modalTitle').textContent = 'إضافة منتج جديد';
+      document.getElementById('productForm').reset();
+      document.getElementById('productId').value = '';
+      colors = [];
+      sizes = [];
+      document.getElementById('colorsList').innerHTML = '';
+      document.getElementById('sizesList').innerHTML = '';
+      document.getElementById('productModal').classList.add('active');
+    }
+
+    // تعديل منتج
+    async function editProduct(id) {
+      try {
+        const response = await fetch('api/manage_product.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'get', id: id })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          const p = data.product;
+          editMode = true;
+          document.getElementById('modalTitle').textContent = 'تعديل المنتج';
+          document.getElementById('productId').value = p.id;
+          document.getElementById('productName').value = p.name;
+          document.getElementById('productDescription').value = p.description || '';
+          document.getElementById('productPrice').value = p.price;
+          document.getElementById('productDiscount').value = p.discount_percentage;
+          document.getElementById('productStock').value = p.stock_quantity;
+          document.getElementById('productCategory').value = p.category || '';
+          document.getElementById('productImage').value = p.image_url || '';
+          document.getElementById('isDigital').checked = p.is_digital == 1;
+          document.getElementById('isNew').checked = p.is_new == 1;
+          document.getElementById('isFeatured').checked = p.is_featured == 1;
+          
+          colors = p.colors || [];
+          sizes = p.sizes || [];
+          
+          renderColors();
+          renderSizes();
+          togglePhysicalFields();
+          
+          document.getElementById('productModal').classList.add('active');
+        }
+      } catch (error) {
+        Swal.fire('خطأ', 'فشل تحميل بيانات المنتج', 'error');
+      }
+    }
+
+    // حذف منتج
+    function deleteProduct(id) {
+      Swal.fire({
+        title: 'تأكيد الحذف',
+        text: 'هل أنت متأكد من حذف هذا المنتج؟',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'نعم، احذف',
+        cancelButtonText: 'إلغاء'
+      }).then(async (result) => {
+        if (result.isConfirmed) {
+          try {
+            const response = await fetch('api/manage_product.php', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'delete', id: id })
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+              Swal.fire('تم!', data.message, 'success');
+              loadProducts();
+            } else {
+              Swal.fire('خطأ', data.message, 'error');
+            }
+          } catch (error) {
+            Swal.fire('خطأ', 'فشل حذف المنتج', 'error');
+          }
+        }
+      });
+    }
+
+    // حفظ المنتج
+    document.getElementById('productForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const productData = {
+        action: editMode ? 'update' : 'add',
+        id: document.getElementById('productId').value,
+        name: document.getElementById('productName').value,
+        description: document.getElementById('productDescription').value,
+        price: document.getElementById('productPrice').value,
+        discount_percentage: document.getElementById('productDiscount').value,
+        stock_quantity: document.getElementById('productStock').value,
+        category: document.getElementById('productCategory').value,
+        image_url: document.getElementById('productImage').value,
+        is_digital: document.getElementById('isDigital').checked ? 1 : 0,
+        is_new: document.getElementById('isNew').checked ? 1 : 0,
+        is_featured: document.getElementById('isFeatured').checked ? 1 : 0,
+        colors: colors,
+        sizes: sizes
+      };
+
+      try {
+        const response = await fetch('api/manage_product.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productData)
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          Swal.fire('نجح!', data.message, 'success');
+          closeModal();
+          loadProducts();
+        } else {
+          Swal.fire('خطأ', data.message, 'error');
+        }
+      } catch (error) {
+        Swal.fire('خطأ', 'فشل حفظ المنتج', 'error');
+      }
+    });
+
+    // إضافة لون
+    function addColor() {
+      const name = document.getElementById('colorName').value.trim();
+      const hex = document.getElementById('colorHex').value;
+      
+      if (name) {
+        colors.push({ name: name, hex: hex });
+        renderColors();
+        document.getElementById('colorName').value = '';
+      }
+    }
+
+    function renderColors() {
+      const list = document.getElementById('colorsList');
+      list.innerHTML = colors.map((c, i) => `
+        <div class="tag">
+          <div style="width: 20px; height: 20px; border-radius: 50%; background: ${c.hex};"></div>
+          ${c.name}
+          <button onclick="removeColor(${i})">×</button>
+        </div>
+      `).join('');
+    }
+
+    function removeColor(index) {
+      colors.splice(index, 1);
+      renderColors();
+    }
+
+    // إضافة مقاس
+    function addSize() {
+      const size = document.getElementById('sizeName').value.trim();
+      if (size && !sizes.includes(size)) {
+        sizes.push(size);
+        renderSizes();
+        document.getElementById('sizeName').value = '';
+      }
+    }
+
+    function renderSizes() {
+      const list = document.getElementById('sizesList');
+      list.innerHTML = sizes.map((s, i) => `
+        <div class="tag">
+          ${s}
+          <button onclick="removeSize(${i})">×</button>
+        </div>
+      `).join('');
+    }
+
+    function removeSize(index) {
+      sizes.splice(index, 1);
+      renderSizes();
+    }
+
+    // إظهار/إخفاء حقول المنتج الفيزيائي
+    function togglePhysicalFields() {
+      const isDigital = document.getElementById('isDigital').checked;
+      document.getElementById('physicalFields').style.display = isDigital ? 'none' : 'block';
+    }
+
+    function closeModal() {
+      document.getElementById('productModal').classList.remove('active');
+    }
+
+    // تحميل عند فتح الصفحة
+    loadProducts();
+  </script>
+</body>
+</html>

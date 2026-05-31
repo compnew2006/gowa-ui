@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>King Master - إدارة الوسائط</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/rtl-ltr.css">
+
+    <style>
+        .content-admin-container { min-height: 100vh; position: relative; z-index: 1; }
+        .main-content { padding: 0; padding-right: 0; }
+        .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
+        .content-title { font-size: 2rem; font-weight: 700; color: var(--text-light); margin: 0; }
+        .content-actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+        .search-box { position: relative; min-width: 300px; }
+        .search-box input { width: 100%; padding: 0.75rem 1rem 0.75rem 3rem; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-md); color: var(--text-light); font-size: 0.9rem; }
+        .search-box i { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-light-dark); }
+        .add-content-btn { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: var(--radius-md); font-weight: 600; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; transition: all 0.3s ease; }
+        .add-content-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 1.5rem; text-align: center; backdrop-filter: blur(10px); }
+        .stat-number { font-size: 2rem; font-weight: 700; color: var(--primary-light); margin-bottom: 0.5rem; display: block; }
+        .stat-label { color: var(--text-light-dark); font-size: 0.9rem; }
+
+        .filter-section { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 2rem; backdrop-filter: blur(10px); }
+        .filter-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end; }
+        .filter-group label { display: block; margin-bottom: 0.5rem; color: var(--text-light); font-weight: 500; font-size: 0.9rem; }
+        .filter-group select, .filter-group input { width: 100%; padding: 0.75rem; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-md); color: var(--text-light); font-size: 0.9rem; }
+
+        :root { color-scheme: dark; }
+        .filter-group select, .form-group select { background-color: rgba(17, 24, 39, 0.85); color: var(--text-light); }
+        .filter-group select option, .form-group select option, .filter-group select optgroup, .form-group select optgroup { background-color: #111827; color: #F3F4F6; }
+        .filter-group select:focus, .form-group select:focus { background-color: rgba(17, 24, 39, 0.95); border-color: var(--primary); }
+
+        .filter-actions { display: flex; gap: 0.5rem; flex-direction: column; }
+        .filter-btn { padding: 0.5rem 1rem; border: 1px solid var(--glass-border); border-radius: var(--radius-md); cursor: pointer; transition: all 0.3s ease; font-size: 0.8rem; white-space: nowrap; text-align: center; }
+        .btn-delete-selected { background: rgba(239, 68, 68, 0.2); color: #EF4444; border-color: #EF4444; }
+        .btn-delete-selected:hover { background: #EF4444; color: white; }
+        .btn-delete-all { background: rgba(239, 68, 68, 0.15); color: #EF4444; border-color: #EF4444; }
+        .btn-delete-all:hover { background: #EF4444; color: #fff; }
+
+        .contents-table-container { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); overflow: hidden; backdrop-filter: blur(10px); }
+        .contents-table { width: 100%; border-collapse: collapse; }
+        .contents-table th, .contents-table td { padding: 1rem; text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        .contents-table th { background: rgba(108, 92, 231, 0.1); color: var(--text-light); font-weight: 600; position: sticky; top: 0; z-index: 10; }
+        .contents-table td { color: var(--text-light-dark); }
+        .contents-table tr:hover { background: rgba(255, 255, 255, 0.05); }
+        .checkbox-cell { width: 40px; text-align: center; }
+        .checkbox-cell input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); }
+        .preview-thumb { width: 64px; height: 48px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--glass-border); background: rgba(255,255,255,0.05); display: block; }
+        .file-icon { font-size: 1.5rem; color: var(--primary-light); }
+        .action-buttons { display: flex; gap: 0.5rem; align-items: center; }
+        .action-btn { width: 32px; height: 32px; border: none; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s ease; font-size: 0.8rem; }
+        .btn-edit { background: rgba(59,130,246,0.2); color: #3B82F6; border: 1px solid #3B82F6; }
+        .btn-edit:hover { background: #3B82F6; color: white; }
+.btn-preview { background: rgba(16,185,129,0.2); color: #10B981; border: 1px solid #10B981; }
+        .btn-preview:hover { background: #10B981; color: white; }
+        .btn-download { background: rgba(99, 102, 241, 0.2); color: #6366F1; border: 1px solid #6366F1; }
+        .btn-download:hover { background: #6366F1; color: white; }
+        .btn-delete { background: rgba(239,68,68,0.2); color: #EF4444; border: 1px solid #EF4444; }
+        .btn-delete:hover { background: #EF4444; color: white; }
+        .table-loading { text-align: center; padding: 3rem; color: var(--text-light-dark); }
+
+        /* Modal */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.3s ease; }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); backdrop-filter: blur(20px); max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; transform: scale(0.8); transition: all 0.3s ease; }
+        .modal-overlay.active .modal { transform: scale(1); }
+        .modal-header { padding: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { margin: 0; color: var(--text-light); font-size: 1.25rem; font-weight: 600; }
+        .modal-close { background: none; border: none; color: var(--text-light-dark); font-size: 1.5rem; cursor: pointer; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); transition: all 0.3s ease; }
+        .modal-close:hover { background: rgba(255,255,255,0.1); color: var(--text-light); }
+        .modal-body { padding: 1.5rem; }
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-light); font-weight: 500; }
+        .form-group input, .form-group select { width: 100%; padding: 0.75rem; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-md); color: var(--text-light); font-size: 0.9rem; transition: all 0.3s ease; }
+        .modal-footer { padding: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 1rem; justify-content: flex-end; }
+        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: var(--radius-md); font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; }
+        .btn-secondary { background: var(--glass-bg); color: var(--text-light-dark); border: 1px solid var(--glass-border); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); color: var(--text-light); }
+
+        /* Responsive */
+        @media (max-width: 992px) { .dashboard-container .main-content { padding: 1rem !important; } .stats-grid { grid-template-columns: repeat(2, 1fr); } .search-box { min-width: 0; width: 100%; } }
+        @media (max-width: 768px) { .content-header { flex-direction: column; align-items: stretch; } .content-actions { width: 100%; } .filter-row { grid-template-columns: 1fr; } .filter-actions { flex-direction: row; flex-wrap: wrap; } .contents-table-container { overflow-x: auto; } .contents-table { min-width: 900px; } .modal { max-width: 95vw; width: 95vw; } }
+        @media (max-width: 600px) { .contents-table { min-width: 750px; } .contents-table th:nth-child(5), .contents-table td:nth-child(5) { display: none; } }
+        @media (max-width: 480px) { .contents-table { min-width: 650px; } .add-content-btn { width: 100%; justify-content: center; } .stats-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body class="rtl ar">
+    <div class="bg-gradient"></div>
+    <div class="dashboard-container content-admin-container">
+        <div class="main-content" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+            <div class="content-header">
+                <div class="content-title">
+                    <i class="fa-solid fa-film fa-beat" style="margin-left: 0.5rem;"></i>
+                    إدارة الوسائط
+                </div>
+                <div class="content-actions">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="البحث في الملفات...">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <button class="add-content-btn" onclick="showUploadModal()">
+                        <i class="fa-solid fa-upload fa-bounce"></i>
+                        رفع ملفات
+                    </button>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalFiles">0</div>
+                    <div class="stat-label">إجمالي الملفات</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="imageFiles">0</div>
+                    <div class="stat-label">الصور</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="videoFiles">0</div>
+                    <div class="stat-label">الفيديوهات</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="pdfFiles">0</div>
+                    <div class="stat-label">ملفات PDF</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalSize">0</div>
+                    <div class="stat-label">إجمالي المساحة</div>
+                </div>
+            </div>
+
+            <div class="filter-section">
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label>النوع</label>
+                        <select id="typeFilter">
+                            <option value="">الكل</option>
+                            <option value="image">صور</option>
+                            <option value="video">فيديو</option>
+                            <option value="pdf">PDF</option>
+                            <option value="file">أخرى</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>عدد الملفات المعروضة</label>
+                        <div class="count-display">
+                            <span class="count-number" id="displayCount">0</span>
+                            <span>ملف</span>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="filter-btn btn-delete-selected" onclick="deleteSelected()">
+                            <i class="fas fa-trash"></i> حذف المحدد
+                        </button>
+                        <button class="filter-btn" onclick="downloadSelected()">
+                            <i class="fas fa-download"></i> تنزيل المحدد
+                        </button>
+                        <button class="filter-btn btn-delete-all" onclick="deleteAll()">
+                            <i class="fas fa-ban"></i> حذف الكل
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="contents-table-container">
+                <table class="contents-table">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-cell"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+                            <th>معاينة</th>
+                            <th>الاسم والتفاصيل</th>
+                            <th>النوع</th>
+                            <th>الحجم</th>
+                            <th>تاريخ الإنشاء</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="filesTableBody">
+                        <tr>
+                            <td colspan="7" class="table-loading">
+                                <div class="loading-spinner"></div>
+                                <div>جاري تحميل الملفات...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="uploadModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">رفع ملفات</h3>
+                <button class="modal-close" onclick="hideUploadModal()"><i class="fa-solid fa-upload fa-bounce"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>اختر الملفات (صور، فيديو، PDF)</label>
+                    <input type="file" id="fileInput" multiple accept="image/*,video/mp4,video/webm,application/pdf">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideUploadModal()">إلغاء</button>
+                <button type="button" class="btn btn-primary" onclick="uploadFiles()"><i class="fas fa-upload"></i>رفع</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let files = [];
+        let filtered = [];
+        let selected = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadFiles();
+            document.getElementById('searchInput').addEventListener('input', applyFilters);
+            document.getElementById('typeFilter').addEventListener('change', applyFilters);
+        });
+
+        async function loadFiles() {
+            try {
+                const res = await fetch('api/files_api.php');
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'fail');
+                files = data.data || [];
+                filtered = files;
+                renderTable();
+                updateStats();
+            } catch (e) {
+                Swal.fire({ icon:'error', title:'خطأ', text:'فشل تحميل الملفات' });
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('filesTableBody');
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="table-loading">
+                            <i class="fas fa-folder-open fa-3x" style="color: var(--text-light-dark); margin-bottom: 1rem;"></i>
+                            <div>لا توجد ملفات</div>
+                        </td>
+                    </tr>`;
+                return;
+            }
+            tbody.innerHTML = filtered.map(f => `
+                <tr>
+                    <td class="checkbox-cell">
+                        <input type="checkbox" onchange="toggleSelection(${f.id}, this.checked)" ${selected.includes(f.id) ? 'checked' : ''}>
+                    </td>
+                    <td>
+                        ${renderPreviewCell(f)}
+                    </td>
+                    <td>
+                        <div style="max-width: 360px;">
+                            <div class="content-title-cell" style="color: var(--text-light); font-weight:600;">${escapeHtml(f.title || f.original_name || f.filename)}</div>
+                            <div style="font-size:0.8rem; color: var(--text-light-dark);">${escapeHtml(f.original_name)}<br><small>${escapeHtml(f.mime_type)}</small></div>
+                        </div>
+                    </td>
+                    <td><span class="category-badge">${f.type}</span></td>
+                    <td>${f.size_human || humanSize(f.size)}</td>
+                    <td style="font-size: 0.8rem; color: var(--text-light-dark);">${formatDate(f.created_at)}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="action-btn btn-edit" onclick="editTitle(${f.id})" title="تعديل"><i class="fas fa-edit"></i></button>
+                            <button class="action-btn btn-preview" onclick="previewFile(${f.id})" title="معاينة"><i class="fas fa-eye"></i></button>
+                            <button class="action-btn btn-download" onclick="downloadFile(${f.id})" title="تنزيل"><i class="fas fa-download"></i></button>
+                            <button class="action-btn btn-delete" onclick="deleteFile(${f.id})" title="حذف"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>`).join('');
+        }
+
+        function renderPreviewCell(f) {
+            if (f.type === 'image') {
+                return `<img class="preview-thumb" src="${f.url}" alt="img">`;
+            } else if (f.type === 'video') {
+                return `<video class="preview-thumb" src="${f.url}" muted></video>`;
+            } else if (f.type === 'pdf') {
+                return `<i class="fa-regular fa-file-pdf file-icon"></i>`;
+            }
+            return `<i class="fa-regular fa-file file-icon"></i>`;
+        }
+
+        function applyFilters() {
+            const q = document.getElementById('searchInput').value.toLowerCase();
+            const type = document.getElementById('typeFilter').value;
+            filtered = files.filter(f => {
+                const matchesQ = (f.title || '').toLowerCase().includes(q) || (f.original_name || '').toLowerCase().includes(q) || (f.filename || '').toLowerCase().includes(q);
+                const matchesT = !type || f.type === type;
+                return matchesQ && matchesT;
+            });
+            renderTable();
+            updateStats();
+        }
+
+        function updateStats() {
+            document.getElementById('totalFiles').textContent = files.length;
+            document.getElementById('imageFiles').textContent = files.filter(f => f.type === 'image').length;
+            document.getElementById('videoFiles').textContent = files.filter(f => f.type === 'video').length;
+            document.getElementById('pdfFiles').textContent = files.filter(f => f.type === 'pdf').length;
+            document.getElementById('displayCount').textContent = filtered.length;
+            const totalBytes = files.reduce((sum, f) => sum + (Number(f.size) || 0), 0);
+            document.getElementById('totalSize').textContent = humanSize(totalBytes);
+        }
+
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('#filesTableBody input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = selectAll.checked;
+                const id = parseInt(cb.getAttribute('onchange').match(/\d+/)[0]);
+                toggleSelection(id, cb.checked);
+            });
+        }
+        function toggleSelection(id, checked) {
+            if (checked) { if (!selected.includes(id)) selected.push(id); }
+            else { selected = selected.filter(x => x !== id); }
+        }
+
+        function showUploadModal() { document.getElementById('uploadModal').classList.add('active'); }
+        function hideUploadModal() { document.getElementById('uploadModal').classList.remove('active'); document.getElementById('fileInput').value = ''; }
+
+        async function uploadFiles() {
+            const input = document.getElementById('fileInput');
+            if (!input.files || input.files.length === 0) {
+                Swal.fire({ icon:'warning', title:'تنبيه', text:'اختر ملفات أولاً' });
+                return;
+            }
+            const fd = new FormData();
+            for (const f of input.files) fd.append('files[]', f);
+            Swal.showLoading();
+            try {
+                const res = await fetch('api/files_api.php', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'فشل الرفع');
+                hideUploadModal();
+                await loadFiles();
+                Swal.fire({ icon:'success', title:'تم', text:'تم رفع الملفات' });
+            } catch (e) {
+                Swal.fire({ icon:'error', title:'خطأ', text:e.message || 'فشل الرفع' });
+            }
+        }
+
+        async function editTitle(id) {
+            const file = files.find(x => x.id === id);
+            if (!file) return;
+            const { value: newTitle } = await Swal.fire({
+                title: 'تعديل العنوان',
+                input: 'text',
+                inputLabel: 'العنوان',
+                inputValue: file.title || '',
+                showCancelButton: true,
+                inputValidator: (v) => !v ? 'أدخل عنواناً' : undefined
+            });
+            if (!newTitle) return;
+            try {
+                const res = await fetch('api/files_api.php', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, title: newTitle }) });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'فشل التعديل');
+                await loadFiles();
+                Swal.fire({ icon:'success', title:'تم', text:'تم التعديل' });
+            } catch (e) {
+                Swal.fire({ icon:'error', title:'خطأ', text:e.message || 'فشل التعديل' });
+            }
+        }
+
+        function previewFile(id) {
+            const f = files.find(x => x.id === id);
+            if (!f) return;
+            if (f.type === 'image') {
+                Swal.fire({ title: f.title || f.original_name, imageUrl: f.url, imageAlt: 'image', width: 800 });
+            } else if (f.type === 'video') {
+                Swal.fire({
+                    title: f.title || f.original_name,
+                    html: `<video src="${f.url}" controls style="width:100%; max-height:70vh;"></video>`,
+                    width: 800
+                });
+            } else if (f.type === 'pdf') {
+                window.open(f.url, '_blank');
+            } else {
+                window.open(f.url, '_blank');
+            }
+        }
+
+        async function deleteFile(id) {
+            const file = files.find(x => x.id === id);
+            if (!file) return;
+            const result = await Swal.fire({ title:'حذف الملف', html:`هل تريد حذف <strong>${escapeHtml(file.title || file.original_name)}</strong>?`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' });
+            if (!result.isConfirmed) return;
+            try {
+                const res = await fetch(`api/files_api.php/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'فشل الحذف');
+                selected = selected.filter(x => x !== id);
+                await loadFiles();
+                Swal.fire({ icon:'success', title:'تم', text:'تم الحذف' });
+            } catch (e) {
+                Swal.fire({ icon:'error', title:'خطأ', text:e.message || 'فشل الحذف' });
+            }
+        }
+
+        function downloadFile(id) {
+            const f = files.find(x => x.id === id);
+            if (!f) return;
+            const a = document.createElement('a');
+            a.href = f.url;
+            // Prefer original_name to keep extension; fallback to filename
+            const name = (f.original_name && f.original_name.trim()) ? f.original_name : f.filename;
+            a.download = name || '';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        async function downloadSelected() {
+            if (selected.length === 0) { Swal.fire({ icon:'warning', title:'تنبيه', text:'اختر ملفات للتنزيل' }); return; }
+            try {
+                const res = await fetch('api/files_download.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: selected })
+                });
+                if (!res.ok) { throw new Error('فشل إنشاء الملف المضغوط'); }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const ts = new Date().toISOString().replace(/[:T]/g,'-').split('.')[0];
+                a.href = url;
+                a.download = `media_selected_${ts}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                Swal.fire({ icon:'error', title:'خطأ', text: e.message || 'تعذر تنزيل الملفات' });
+            }
+        }
+
+        async function deleteSelected() {
+            if (selected.length === 0) { Swal.fire({ icon:'warning', title:'تنبيه', text:'اختر ملفات للحذف' }); return; }
+            const result = await Swal.fire({ title:'حذف متعدد', html:`سيتم حذف <strong>${selected.length}</strong> ملف. متابعة؟`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' });
+            if (!result.isConfirmed) return;
+            try {
+                const res = await fetch('api/files_api.php', { method:'DELETE', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ ids: selected }) });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'فشل الحذف');
+                selected = [];
+                document.getElementById('selectAll').checked = false;
+                await loadFiles();
+                Swal.fire({ icon:'success', title:'تم', text:'تم حذف الملفات المحددة' });
+            } catch (e) {
+                Swal.fire({ icon:'error', title:'خطأ', text:e.message || 'فشل الحذف' });
+            }
+        }
+
+        async function deleteAll() {
+            if (files.length === 0) { Swal.fire({ icon:'info', title:'لا توجد ملفات' }); return; }
+            const result = await Swal.fire({ title:'حذف الكل', html:`سيتم حذف <strong>جميع</strong> الملفات. لا يمكن التراجع.`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف الكل', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' });
+            if (!result.isConfirmed) return;
+            try {
+                const res = await fetch('api/files_api.php?all=1', { method: 'DELETE' });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'فشل الحذف');
+                selected = [];
+                document.getElementById('selectAll').checked = false;
+                await loadFiles();
+                Swal.fire({ icon:'success', title:'تم', text:'تم حذف جميع الملفات' });
+            } catch (e) {
+                Swal.fire({ icon:'error', title:'خطأ', text:e.message || 'فشل الحذف' });
+            }
+        }
+
+        function formatDate(s) { if (!s) return '--'; const d = new Date(s); return d.toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:false }); }
+        function humanSize(bytes){ const u=['B','KB','MB','GB','TB']; let i=0,b=Math.max(0,Number(bytes)||0); while(b>=1024 && i<u.length-1){ b/=1024; i++; } return (Math.round(b*100)/100)+' '+u[i]; }
+        function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[m])); }
+    </script>
+</body>
+</html>

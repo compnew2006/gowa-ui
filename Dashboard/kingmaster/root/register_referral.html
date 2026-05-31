@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>التسجيل عبر الإحالة | Kingmaster</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary: #6c5ce7;
+      --primary-light: #a29bfe;
+      --secondary: #00cec9;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --glass-bg: rgba(255, 255, 255, 0.1);
+      --glass-border: rgba(255, 255, 255, 0.2);
+      --text-light: #f5f6fa;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Cairo', sans-serif;
+      background: #0f172a;
+      color: var(--text-light);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .bg-gradient {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image: radial-gradient(circle at top right, rgba(108, 92, 231, 0.15), transparent 40%),
+                        radial-gradient(circle at bottom left, rgba(0, 206, 201, 0.1), transparent 40%);
+    }
+
+    .container {
+      max-width: 600px;
+      width: 100%;
+    }
+
+    .card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      backdrop-filter: blur(14px);
+      padding: 2.5rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .header-icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+      font-size: 2.5rem;
+      color: white;
+    }
+
+    .header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      color: #9ca3af;
+      font-size: 0.95rem;
+    }
+
+    .search-section {
+      margin-bottom: 2rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-wrapper input {
+      width: 100%;
+      padding: 1rem 3.5rem 1rem 1rem;
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      color: white;
+      font-family: 'Cairo', sans-serif;
+      font-size: 1rem;
+      transition: all 0.3s;
+    }
+
+    .input-wrapper input:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .input-wrapper .search-btn {
+      position: absolute;
+      left: 0.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border: none;
+      color: white;
+      width: 45px;
+      height: 45px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .input-wrapper .search-btn:hover {
+      transform: translateY(-50%) scale(1.05);
+      box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4);
+    }
+
+    .input-wrapper .search-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .spinner {
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-top: 3px solid white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .result-section {
+      display: none;
+      animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .user-card {
+      background: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(118, 75, 162, 0.1));
+      border: 2px solid var(--primary);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .user-avatar {
+      width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      color: white;
+      font-weight: 700;
+    }
+
+    .user-details h3 {
+      font-size: 1.3rem;
+      margin-bottom: 0.3rem;
+      color: var(--text-light);
+    }
+
+    .user-details p {
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+
+    .user-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary-light);
+      display: block;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      margin-top: 0.3rem;
+    }
+
+    .confirmation-box {
+      background: rgba(16, 185, 129, 0.1);
+      border: 2px solid var(--success);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .confirmation-box .icon {
+      font-size: 2.5rem;
+      color: var(--success);
+      margin-bottom: 0.5rem;
+    }
+
+    .confirmation-box h4 {
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .confirmation-box p {
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+
+    .btn {
+      padding: 1rem 2rem;
+      border-radius: 12px;
+      border: none;
+      font-family: 'Cairo', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(108, 92, 231, 0.4);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-light);
+      border: 1px solid var(--glass-border);
+      margin-top: 1rem;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .alert {
+      padding: 1rem;
+      border-radius: 12px;
+      margin-bottom: 1.5rem;
+      display: none;
+      animation: slideDown 0.3s ease;
+    }
+
+    .alert-error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+    }
+
+    .alert-info {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid #3b82f6;
+      color: #93c5fd;
+    }
+
+    .hint-text {
+      text-align: center;
+      color: #9ca3af;
+      font-size: 0.85rem;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 640px) {
+      .card {
+        padding: 1.5rem;
+      }
+
+      .header h1 {
+        font-size: 1.5rem;
+      }
+
+      .user-info {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .user-stats {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-gradient"></div>
+
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <div class="header-icon">
+          <i class="fas fa-user-plus"></i>
+        </div>
+        <h1>التسجيل عبر الإحالة</h1>
+        <p>ابحث عن الشخص الذي تريد التسجيل من خلاله</p>
+      </div>
+
+      <div id="alertBox" class="alert alert-error"></div>
+
+      <div class="search-section">
+        <div class="form-group">
+          <label for="searchInput">
+            <i class="fas fa-search"></i>
+            كود الإحالة أو البريد الإلكتروني
+          </label>
+          <div class="input-wrapper">
+            <input 
+              type="text" 
+              id="searchInput" 
+              placeholder="أدخل كود الإحالة أو البريد الإلكتروني"
+              autocomplete="off"
+            >
+            <button class="search-btn" id="searchBtn" onclick="searchUser()">
+              <i class="fas fa-search"></i>
+            </button>
+          </div>
+        </div>
+        <div class="hint-text">
+          <i class="fas fa-info-circle"></i>
+          يمكنك البحث بكود الإحالة (مثال: REF000001) أو البريد الإلكتروني
+        </div>
+      </div>
+
+      <div class="result-section" id="resultSection">
+        <div class="user-card" id="userCard">
+          <!-- سيتم ملؤها ديناميكياً -->
+        </div>
+
+        <div class="confirmation-box">
+          <div class="icon">
+            <i class="fas fa-check-circle"></i>
+          </div>
+          <h4>هل تريد التسجيل من خلال هذا الشخص؟</h4>
+          <p>سيصبح هذا الشخص هو المُحيل الخاص بك</p>
+        </div>
+
+        <button class="btn btn-primary" onclick="confirmRegistration()">
+          <i class="fas fa-check"></i>
+          نعم، أريد التسجيل
+        </button>
+        <button class="btn btn-secondary" onclick="resetSearch()">
+          <i class="fas fa-times"></i>
+          بحث عن شخص آخر
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    let selectedUser = null;
+
+    // البحث عن المستخدم
+    async function searchUser() {
+      const input = document.getElementById('searchInput').value.trim();
+      const searchBtn = document.getElementById('searchBtn');
+      const alertBox = document.getElementById('alertBox');
+      
+      // إخفاء النتائج السابقة
+      document.getElementById('resultSection').style.display = 'none';
+      alertBox.style.display = 'none';
+
+      if (!input) {
+        showAlert('يرجى إدخال كود الإحالة أو البريد الإلكتروني', 'error');
+        return;
+      }
+
+      // تعطيل الزر وإظهار التحميل
+      searchBtn.disabled = true;
+      searchBtn.innerHTML = '<div class="spinner"></div>';
+
+      try {
+        const response = await fetch('api/verify_referral.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: input })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          selectedUser = data.user;
+          displayUser(data.user);
+          document.getElementById('resultSection').style.display = 'block';
+        } else {
+          showAlert(data.message, 'error');
+        }
+      } catch (error) {
+        showAlert('حدث خطأ في الاتصال. يرجى المحاولة لاحقاً', 'error');
+      } finally {
+        // إعادة تفعيل الزر
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = '<i class="fas fa-search"></i>';
+      }
+    }
+
+    // عرض بيانات المستخدم
+    function displayUser(user) {
+      const firstLetter = user.full_name.charAt(0).toUpperCase();
+      const userCard = document.getElementById('userCard');
+      
+      userCard.innerHTML = `
+        <div class="user-info">
+          <div class="user-avatar">${firstLetter}</div>
+          <div class="user-details">
+            <h3>${user.full_name}</h3>
+            <p><i class="fas fa-user"></i> ${user.username}</p>
+          </div>
+        </div>
+        <div class="user-stats">
+          <div class="stat-item">
+            <span class="stat-value">
+              <i class="fas fa-envelope"></i>
+            </span>
+            <div class="stat-label">${user.email}</div>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">
+              <i class="fas fa-link"></i>
+            </span>
+            <div class="stat-label">${user.referral_code}</div>
+          </div>
+        </div>
+        <div class="user-stats">
+          <div class="stat-item">
+            <span class="stat-value">${user.total_referrals}</span>
+            <div class="stat-label">عدد الإحالات</div>
+          </div>
+          ${user.phone ? `
+          <div class="stat-item">
+            <span class="stat-value">
+              <i class="fas fa-phone"></i>
+            </span>
+            <div class="stat-label">${user.phone}</div>
+          </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    // عرض التنبيهات
+    function showAlert(message, type) {
+      const alertBox = document.getElementById('alertBox');
+      alertBox.className = `alert alert-${type}`;
+      alertBox.innerHTML = `
+        <i class="fas fa-${type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+        ${message}
+      `;
+      alertBox.style.display = 'block';
+    }
+
+    // تأكيد التسجيل
+    function confirmRegistration() {
+      if (!selectedUser) return;
+
+      Swal.fire({
+        title: 'تأكيد التسجيل',
+        html: `
+          <div style="text-align: right; padding: 1rem;">
+            <p style="font-size: 1.1rem; margin-bottom: 1rem;">
+              سيتم تسجيلك كعضو تحت إشراف:
+            </p>
+            <div style="background: rgba(108, 92, 231, 0.1); padding: 1rem; border-radius: 12px; margin-bottom: 1rem;">
+              <h3 style="color: #6c5ce7; margin-bottom: 0.5rem;">${selectedUser.full_name}</h3>
+              <p style="color: #9ca3af; font-size: 0.9rem;">
+                <strong>البريد:</strong> ${selectedUser.email}<br>
+                <strong>كود الإحالة:</strong> ${selectedUser.referral_code}
+              </p>
+            </div>
+            <p style="color: #9ca3af; font-size: 0.9rem;">
+              هل أنت متأكد من المتابعة؟
+            </p>
+          </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#6c5ce7',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: '<i class="fas fa-check"></i> نعم، متابعة',
+        cancelButtonText: 'إلغاء',
+        width: '600px'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // هنا يمكن إضافة كود التسجيل الفعلي
+          // يمكن التوجيه لصفحة التسجيل مع بيانات المُحيل
+          
+          Swal.fire({
+            title: 'ممتاز!',
+            html: `
+              <div style="text-align: right;">
+                <p>سيتم توجيهك الآن لإكمال التسجيل</p>
+                <p style="color: #9ca3af; margin-top: 0.5rem;">المُحيل: ${selectedUser.full_name}</p>
+              </div>
+            `,
+            icon: 'success',
+            confirmButtonColor: '#6c5ce7',
+            confirmButtonText: 'متابعة'
+          }).then(() => {
+            // التوجيه لصفحة التسجيل مع معرف المُحيل
+            window.location.href = `register.html?referrer_id=${selectedUser.id}&referral_code=${selectedUser.referral_code}`;
+          });
+        }
+      });
+    }
+
+    // إعادة تعيين البحث
+    function resetSearch() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('resultSection').style.display = 'none';
+      document.getElementById('alertBox').style.display = 'none';
+      selectedUser = null;
+    }
+
+    // البحث عند الضغط على Enter
+    document.getElementById('searchInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        searchUser();
+      }
+    });
+  </script>
+</body>
+</html>

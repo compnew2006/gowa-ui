@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة الباقات - King Master</title>
+    
+    <!-- الخطوط -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <!-- أنماط CSS -->
+    <style>
+        :root {
+            --primary: #6c5ce7;
+            --primary-light: #a29bfe;
+            --secondary: #fd79a8;
+            --success: #00b894;
+            --warning: #fdcb6e;
+            --error: #e17055;
+            --text-light: #ffffff;
+            --text-light-dark: rgba(255, 255, 255, 0.8);
+            --bg-dark: #0f0f23;
+            --bg-dark-light: #1a1a2e;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.18);
+            --spacing-sm: 0.5rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+            --spacing-xl: 2rem;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-dark-light) 100%);
+            color: var(--text-light);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .admin-title {
+            font-size: 2rem;
+            color: var(--primary-light);
+        }
+
+        .add-btn {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: var(--text-light);
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: var(--radius-lg);
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: transform 0.3s ease;
+        }
+
+        .add-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .packages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+
+        .package-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+            position: relative;
+        }
+
+        .package-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .package-card.popular {
+            border: 2px solid var(--primary);
+            background: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(108, 92, 231, 0.05));
+        }
+
+        .package-card.popular::before {
+            content: 'شعبية';
+            position: absolute;
+            top: -10px;
+            right: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: var(--text-light);
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .package-header h3 {
+            color: var(--text-light);
+            margin-bottom: 0.5rem;
+            font-size: 1.4rem;
+        }
+
+        .package-badge {
+            background: var(--secondary);
+            color: var(--text-light);
+            padding: 0.25rem 0.5rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+
+        .package-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin: 1rem 0;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius-md);
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--text-light-dark);
+        }
+
+        .stat-item i {
+            color: var(--primary-light);
+        }
+
+        .package-platforms {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+
+        .package-platforms i {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-light);
+            transition: all 0.3s ease;
+        }
+
+        .package-platforms i:hover {
+            background: var(--primary);
+            transform: scale(1.1);
+        }
+
+        .package-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-edit {
+            background: var(--secondary);
+            color: var(--text-light);
+        }
+
+        .btn-edit:hover {
+            background: #e17dc1;
+        }
+
+        .btn-popular {
+            background: var(--warning);
+            color: var(--text-light);
+        }
+
+        .btn-popular:hover {
+            background: #e6b93d;
+        }
+
+        .btn-delete {
+            background: var(--error);
+            color: var(--text-light);
+        }
+
+        .btn-delete:hover {
+            background: #d63031;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-light-dark);
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+            backdrop-filter: blur(5px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            backdrop-filter: blur(15px);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .modal-title {
+            color: var(--text-light);
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-light-dark);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .close-btn:hover {
+            color: var(--text-light);
+            transform: scale(1.1);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            color: var(--text-light);
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-light);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-light-dark);
+        }
+
+        .language-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .tab-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-light-dark);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: var(--text-light);
+            border-color: var(--primary);
+        }
+
+        .platforms-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .form-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+        }
+
+        .form-checkbox:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .form-checkbox input {
+            width: auto;
+            margin: 0;
+        }
+
+        .form-checkbox label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .features-container {
+            margin-top: 1rem;
+        }
+
+        .feature-item {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            align-items: center;
+        }
+
+        .feature-item input {
+            flex: 1;
+        }
+
+        .remove-feature-btn {
+            background: var(--error);
+            color: var(--text-light);
+            border: none;
+            padding: 0.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .add-feature-btn {
+            background: var(--success);
+            color: var(--text-light);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+            justify-content: flex-end;
+        }
+
+        .btn-cancel {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-light-dark);
+            border: 1px solid var(--glass-border);
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+        }
+
+        .btn-cancel:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: var(--text-light);
+        }
+
+        .btn-save {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: var(--text-light);
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+        }
+
+        .btn-save:hover {
+            background: linear-gradient(135deg, var(--primary-light), var(--primary));
+        }
+        
+        /* Discount Styles */
+        .discount-section {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            margin-top: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .discount-section.show {
+            display: block !important;
+        }
+        
+        .discount-info {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid #EF4444;
+            border-radius: var(--radius-md);
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            color: #FCA5A5;
+        }
+        
+        .original-price {
+            text-decoration: line-through;
+            color: #9CA3AF;
+            font-size: 0.9rem;
+        }
+        
+        .discounted-price {
+            color: #EF4444;
+            font-weight: bold;
+        }
+        
+        .discount-badge {
+            background: #EF4444;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .admin-header {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+            
+            .packages-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .modal-content {
+                width: 95%;
+                padding: 1rem;
+            }
+            
+            .platforms-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="admin-header">
+            <h1 class="admin-title">إدارة الباقات - King Master</h1>
+            <button class="add-btn" onclick="openAddModal()">
+                <i class="fas fa-plus"></i>
+                إضافة باقة جديدة
+            </button>
+        </div>
+
+        <div id="loading" class="loading">
+            <i class="fas fa-spinner fa-spin fa-2x"></i>
+            <p>جاري تحميل الباقات...</p>
+        </div>
+
+        <div id="packages-container" class="packages-grid" style="display: none;">
+            <!-- سيتم ملؤها ديناميكياً -->
+        </div>
+    </div>
+
+    <!-- Modal for Add/Edit Package -->
+    <div id="package-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modal-title">إضافة باقة جديدة</h3>
+                <button class="close-btn" onclick="closeModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <form id="package-form">
+                <input type="hidden" id="package-id">
+                
+                <!-- الأسماء متعددة اللغات -->
+                <div class="form-group">
+                    <label class="form-label">اسم الباقة</label>
+                    <div class="language-tabs">
+                        <button type="button" class="tab-btn active" data-lang="ar">العربية</button>
+                        <button type="button" class="tab-btn" data-lang="en">English</button>
+                        <button type="button" class="tab-btn" data-lang="fr">Français</button>
+                    </div>
+                    <input type="text" class="form-input" id="name-ar" placeholder="اسم الباقة بالعربية" required>
+                    <input type="text" class="form-input" id="name-en" placeholder="Package name in English" style="display: none;" required>
+                    <input type="text" class="form-input" id="name-fr" placeholder="Nom du package en français" style="display: none;" required>
+                </div>
+                
+                <!-- الشارات متعددة اللغات -->
+                <div class="form-group">
+                    <label class="form-label">شارة الباقة</label>
+                    <input type="text" class="form-input" id="badge-ar" placeholder="مثال: أساسية" required>
+                    <input type="text" class="form-input" id="badge-en" placeholder="Example: Basic" style="display: none;" required>
+                    <input type="text" class="form-input" id="badge-fr" placeholder="Exemple: Basique" style="display: none;" required>
+                </div>
+                
+                <!-- الأسعار -->
+                <div class="form-group">
+                    <label class="form-label">السعر الشهري</label>
+                    <input type="number" class="form-input" id="monthly-price" placeholder="99.00" step="0.01" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">السعر السنوي</label>
+                    <input type="number" class="form-input" id="yearly-price" placeholder="990.00" step="0.01" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">العملة</label>
+                    <input type="text" class="form-input" id="currency" placeholder="ريال" value="ريال">
+                </div>
+                
+                <!-- الحقول الجديدة -->
+                <div class="form-group">
+                    <label class="form-label">عدد النقاط</label>
+                    <input type="number" class="form-input" id="points" placeholder="1000" min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">عدد الرسائل</label>
+                    <input type="number" class="form-input" id="messages" placeholder="500" min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">عدد الحسابات</label>
+                    <input type="number" class="form-input" id="accounts" placeholder="1" min="1" value="1">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">المنصات المدعومة</label>
+                    <div class="platforms-container">
+                        <div class="form-checkbox">
+                            <input type="checkbox" id="platform-facebook" value="facebook">
+                            <label for="platform-facebook"><i class="fab fa-facebook-f"></i> فيسبوك</label>
+                        </div>
+                        <div class="form-checkbox">
+                            <input type="checkbox" id="platform-whatsapp" value="whatsapp">
+                            <label for="platform-whatsapp"><i class="fab fa-whatsapp"></i> واتساب</label>
+                        </div>
+                        <div class="form-checkbox">
+                            <input type="checkbox" id="platform-instagram" value="instagram">
+                            <label for="platform-instagram"><i class="fab fa-instagram"></i> انستجرام</label>
+                        </div>
+                        <div class="form-checkbox">
+                            <input type="checkbox" id="platform-telegram" value="telegram">
+                            <label for="platform-telegram"><i class="fab fa-telegram-plane"></i> تليجرام</label>
+                        </div>
+                        <div class="form-checkbox">
+                            <input type="checkbox" id="platform-b2b" value="b2b">
+                            <label for="platform-b2b"><i class="fas fa-building"></i> B2B</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- المميزات -->
+                <div class="form-group">
+                    <label class="form-label">مميزات الباقة</label>
+                    <div class="features-container" id="features-container">
+                        <!-- سيتم ملؤها ديناميكياً -->
+                    </div>
+                    <button type="button" class="add-feature-btn" onclick="addFeature()">
+                        <i class="fas fa-plus"></i> إضافة ميزة
+                    </button>
+                </div>
+                
+                <!-- نظام الخصومات -->
+                <div class="form-group">
+                    <div class="form-checkbox">
+                        <input type="checkbox" id="has-discount" onchange="toggleDiscountFields()">
+                        <label for="has-discount">تفعيل الخصم على هذه الباقة</label>
+                    </div>
+                </div>
+                
+                <div id="discount-fields" class="discount-section" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label">خصم السعر الشهري</label>
+                        <input type="number" class="form-input" id="monthly-discount" placeholder="20.00" step="0.01" min="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">نسبة خصم السعر الشهري (%)</label>
+                        <input type="number" class="form-input" id="monthly-discount-percentage" placeholder="20" step="0.01" min="0" max="100">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">خصم السعر السنوي</label>
+                        <input type="number" class="form-input" id="yearly-discount" placeholder="200.00" step="0.01" min="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">نسبة خصم السعر السنوي (%)</label>
+                        <input type="number" class="form-input" id="yearly-discount-percentage" placeholder="20" step="0.01" min="0" max="100">
+                    </div>
+                </div>
+                
+                <!-- خيارات إضافية -->
+                <div class="form-group">
+                    <div class="form-checkbox">
+                        <input type="checkbox" id="is-popular">
+                        <label for="is-popular">باقة شعبية</label>
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" onclick="closeModal()">إلغاء</button>
+                    <button type="submit" class="btn-save">حفظ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // متغيرات عامة
+        let packages = [];
+        let currentPackage = null;
+        let currentLanguageTab = 'ar';
+
+        // تحميل الباقات
+        async function loadPackages() {
+            console.log('بدء تحميل الباقات...');
+            
+            try {
+                const response = await fetch('api/packages_api.php');
+                const data = await response.json();
+                
+                if (data.success) {
+                    packages = data.data || [];
+                    console.log('تم تحميل', packages.length, 'باقة');
+                    
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('packages-container').style.display = 'grid';
+                    
+                    renderPackages();
+                } else {
+                    showError('فشل في تحميل الباقات: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('خطأ في الاتصال بالخادم');
+            }
+        }
+
+        // عرض الباقات
+        function renderPackages() {
+            const container = document.getElementById('packages-container');
+            container.innerHTML = '';
+
+            if (packages.length === 0) {
+                container.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 3rem;">
+                        <i class="fas fa-box-open fa-3x" style="color: var(--text-light-dark); margin-bottom: 1rem;"></i>
+                        <p>لا توجد باقات حالياً</p>
+                        <button class="add-btn" onclick="openAddModal()">
+                            <i class="fas fa-plus"></i>
+                            إضافة باقة جديدة
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            packages.forEach(package => {
+                const packageCard = createPackageCard(package);
+                container.appendChild(packageCard);
+            });
+        }
+
+        // إنشاء بطاقة الباقة
+        function createPackageCard(package) {
+            const div = document.createElement('div');
+            div.className = `package-card ${package.is_popular == 1 ? 'popular' : ''}`;
+
+            const features = Array.isArray(package.features?.ar) ? 
+                package.features.ar.slice(0, 3) : [];
+
+            div.innerHTML = `
+                <div class="package-header">
+                    <h3>${package.name_ar}</h3>
+                    <div class="package-badge">${package.badge_ar}</div>
+                </div>
+                
+                <div style="margin: 1rem 0;">
+                    ${package.has_discount && package.monthly_discount > 0 ? `
+                        <div class="discount-badge">خصم ${Math.round(package.monthly_discount_percentage)}%</div>
+                        <div class="original-price" style="margin-bottom: 0.25rem;">
+                            ${package.monthly_price} ${package.currency}
+                        </div>
+                        <div class="discounted-price" style="font-size: 1.5rem; font-weight: 700;">
+                            ${(package.monthly_price - package.monthly_discount).toFixed(2)} ${package.currency}
+                        </div>
+                    ` : `
+                        <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary-light);">
+                            ${package.monthly_price} ${package.currency}
+                        </div>
+                    `}
+                    
+                    ${package.has_discount && package.yearly_discount > 0 ? `
+                        <div style="color: var(--text-light-dark); font-size: 0.9rem; margin-top: 0.5rem;">
+                            سنوياً: 
+                            <span class="original-price">${package.yearly_price} ${package.currency}</span>
+                            <span class="discounted-price">${(package.yearly_price - package.yearly_discount).toFixed(2)} ${package.currency}</span>
+                        </div>
+                    ` : `
+                        <div style="color: var(--text-light-dark); font-size: 0.9rem; margin-top: 0.5rem;">
+                            سنوياً: ${package.yearly_price} ${package.currency}
+                        </div>
+                    `}
+                </div>
+                
+                <div class="package-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-star"></i>
+                        <span>${package.points || 0} نقطة</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-envelope"></i>
+                        <span>${package.messages || 0} رسالة</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-user"></i>
+                        <span>${package.accounts || 1} حساب</span>
+                    </div>
+                </div>
+                
+                <div class="package-platforms">
+                    ${(package.supported_platforms || []).map(platform => {
+                        const platformIcons = {
+                            facebook: 'fab fa-facebook-f',
+                            whatsapp: 'fab fa-whatsapp',
+                            instagram: 'fab fa-instagram',
+                            telegram: 'fab fa-telegram-plane',
+                            b2b: 'fas fa-building'
+                        };
+                        return `<i class="${platformIcons[platform] || 'fas fa-question'}" title="${platform}"></i>`;
+                    }).join('')}
+                </div>
+                
+                <ul style="list-style: none; padding: 0; margin: 1rem 0;">
+                    ${features.map(feature => `
+                        <li style="padding: 0.25rem 0; color: var(--text-light-dark);">
+                            <i class="fas fa-check" style="color: var(--success); margin-left: 0.5rem;"></i>
+                            ${feature}
+                        </li>
+                    `).join('')}
+                    ${features.length > 3 ? '<li style="padding: 0.25rem 0; color: var(--text-light-dark);"><i class="fas fa-ellipsis-h" style="color: var(--primary-light); margin-left: 0.5rem;"></i> والمزيد...</li>' : ''}
+                </ul>
+                
+                <div class="package-actions">
+                    <button class="btn-sm btn-edit" onclick="editPackage(${package.id})">
+                        <i class="fas fa-edit"></i> تعديل
+                    </button>
+                    <button class="btn-sm" style="background: ${package.has_discount == 1 ? '#EF4444' : '#06D6A0'}; color: white;" onclick="toggleDiscount(${package.id}, ${package.has_discount})">
+                        <i class="fas ${package.has_discount == 1 ? 'fa-times' : 'fa-percent'}"></i> ${package.has_discount == 1 ? 'إزالة الخصم' : 'إضافة خصم'}
+                    </button>
+                    <button class="btn-sm btn-popular" onclick="togglePopular(${package.id}, ${package.is_popular})">
+                        <i class="fas fa-star"></i> ${package.is_popular == 1 ? 'إزالة الشعبية' : 'جعلها شعبية'}
+                    </button>
+                    <button class="btn-sm btn-delete" onclick="deletePackage(${package.id})">
+                        <i class="fas fa-trash"></i> حذف
+                    </button>
+                </div>
+            `;
+
+            return div;
+        }
+
+        // فتح modal للإضافة
+        function openAddModal() {
+            currentPackage = null;
+            document.getElementById('modal-title').textContent = 'إضافة باقة جديدة';
+            clearForm();
+            showModal();
+        }
+
+        // تعديل الباقة
+        async function editPackage(id) {
+            try {
+                const response = await fetch(`api/packages_api.php/${id}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentPackage = data.data;
+                    document.getElementById('modal-title').textContent = 'تعديل الباقة';
+                    fillForm(currentPackage);
+                    showModal();
+                } else {
+                    showError('فشل في تحميل بيانات الباقة');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('خطأ في تحميل البيانات');
+            }
+        }
+
+        // حذف الباقة
+        async function deletePackage(id) {
+            const result = await Swal.fire({
+                title: 'هل أنت متأكد؟',
+                text: 'لن تتمكن من استرجاع هذه الباقة!',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'نعم، احذفها',
+                cancelButtonText: 'إلغاء',
+                confirmButtonColor: '#e17055',
+                background: 'var(--glass-bg)',
+                color: 'var(--text-light)',
+                customClass: {
+                    popup: 'swal-rtl'
+                }
+            });
+            
+            if (!result.isConfirmed) return;
+            
+            try {
+                const response = await fetch(`api/packages_api.php/${id}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    Swal.fire({
+                        title: 'تم الحذف!',
+                        text: 'تم حذف الباقة بنجاح',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false,
+                        toast: true,
+                        position: 'top-end'
+                    });
+                    loadPackages();
+                } else {
+                    showError('فشل في حذف الباقة: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('خطأ في حذف الباقة');
+            }
+        }
+
+        // تبديل الشعبية
+        async function togglePopular(id, isPopular) {
+            try {
+                let response;
+                if (isPopular == 1) {
+                    // إزالة الشعبية
+                    const packageData = packages.find(p => p.id == id);
+                    response = await fetch(`api/packages_api.php/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...packageData, is_popular: false })
+                    });
+                } else {
+                    // جعلها شعبية
+                    response = await fetch(`api/packages_api.php/${id}?action=set_popular`, {
+                        method: 'POST'
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    Swal.fire({
+                        text: isPopular == 1 ? 'تم إزالة الشعبية' : 'تم جعل الباقة شعبية ⭐',
+                        icon: 'success',
+                        timer: 1500,
+                        showConfirmButton: false,
+                        toast: true,
+                        position: 'top-end'
+                    });
+                    loadPackages();
+                } else {
+                    showError('فشل في تحديث الباقة');
+                }
+            } catch (error) {
+                showError('خطأ في التحديث');
+            }
+        }
+        
+        // تبديل الخصم
+        async function toggleDiscount(id, hasDiscount) {
+            const packageData = packages.find(p => p.id == id);
+            if (!packageData) {
+                showError('لم يتم العثور على بيانات الباقة');
+                return;
+            }
+            
+            if (hasDiscount == 1) {
+                // إزالة الخصم
+                const result = await Swal.fire({
+                    title: 'إزالة الخصم',
+                    text: 'هل تريد إزالة جميع الخصومات من هذه الباقة؟',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'نعم، إزالة الخصم',
+                    cancelButtonText: 'إلغاء',
+                    confirmButtonColor: '#EF4444',
+                    background: 'var(--glass-bg)',
+                    color: 'var(--text-light)',
+                    customClass: { popup: 'swal-rtl' }
+                });
+                
+                if (!result.isConfirmed) return;
+                
+                try {
+                    const response = await fetch(`api/packages_api.php/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ...packageData,
+                            has_discount: false,
+                            monthly_discount: 0,
+                            yearly_discount: 0,
+                            monthly_discount_percentage: 0,
+                            yearly_discount_percentage: 0
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        Swal.fire({
+                            text: 'تم إزالة الخصم بنجاح ✓',
+                            icon: 'success',
+                            timer: 1500,
+                            showConfirmButton: false,
+                            toast: true,
+                            position: 'top-end'
+                        });
+                        loadPackages();
+                    } else {
+                        showError('فشل في إزالة الخصم');
+                    }
+                } catch (error) {
+                    showError('خطأ في إزالة الخصم');
+                }
+            } else {
+                // إضافة خصم سريع
+                const { value: discountData } = await Swal.fire({
+                    title: 'إضافة خصم',
+                    html: `
+                        <div style="text-align: right; margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px;">خصم شهري (ريال):</label>
+                            <input id="quick-monthly-discount" type="number" class="swal2-input" placeholder="20.00" step="0.01" min="0" style="margin: 0;">
+                        </div>
+                        <div style="text-align: right; margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px;">نسبة الخصم الشهري (%):</label>
+                            <input id="quick-monthly-percentage" type="number" class="swal2-input" placeholder="20" step="0.01" min="0" max="100" style="margin: 0;">
+                        </div>
+                        <div style="text-align: right; margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px;">خصم سنوي (ريال):</label>
+                            <input id="quick-yearly-discount" type="number" class="swal2-input" placeholder="200.00" step="0.01" min="0" style="margin: 0;">
+                        </div>
+                        <div style="text-align: right;">
+                            <label style="display: block; margin-bottom: 5px;">نسبة الخصم السنوي (%):</label>
+                            <input id="quick-yearly-percentage" type="number" class="swal2-input" placeholder="20" step="0.01" min="0" max="100" style="margin: 0;">
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    confirmButtonText: 'إضافة الخصم',
+                    cancelButtonText: 'إلغاء',
+                    confirmButtonColor: '#06D6A0',
+                    background: 'var(--glass-bg)',
+                    color: 'var(--text-light)',
+                    customClass: { popup: 'swal-rtl' },
+                    preConfirm: () => {
+                        const monthlyDiscount = parseFloat(document.getElementById('quick-monthly-discount').value) || 0;
+                        const monthlyPercentage = parseFloat(document.getElementById('quick-monthly-percentage').value) || 0;
+                        const yearlyDiscount = parseFloat(document.getElementById('quick-yearly-discount').value) || 0;
+                        const yearlyPercentage = parseFloat(document.getElementById('quick-yearly-percentage').value) || 0;
+                        
+                        if (monthlyDiscount === 0 && monthlyPercentage === 0 && yearlyDiscount === 0 && yearlyPercentage === 0) {
+                            Swal.showValidationMessage('يجب إدخال قيمة خصم واحدة على الأقل');
+                            return false;
+                        }
+                        
+                        return {
+                            monthlyDiscount,
+                            monthlyPercentage,
+                            yearlyDiscount,
+                            yearlyPercentage
+                        };
+                    }
+                });
+                
+                if (discountData) {
+                    try {
+                        const response = await fetch(`api/packages_api.php/${id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                ...packageData,
+                                has_discount: true,
+                                monthly_discount: discountData.monthlyDiscount,
+                                yearly_discount: discountData.yearlyDiscount,
+                                monthly_discount_percentage: discountData.monthlyPercentage,
+                                yearly_discount_percentage: discountData.yearlyPercentage
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            Swal.fire({
+                                text: 'تم إضافة الخصم بنجاح 🎉',
+                                icon: 'success',
+                                timer: 1500,
+                                showConfirmButton: false,
+                                toast: true,
+                                position: 'top-end'
+                            });
+                            loadPackages();
+                        } else {
+                            showError('فشل في إضافة الخصم');
+                        }
+                    } catch (error) {
+                        showError('خطأ في إضافة الخصم');
+                    }
+                }
+            }
+        }
+
+        // إعداد علامات التبويب
+        function setupLanguageTabs() {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    switchLanguageTab(this.dataset.lang);
+                });
+            });
+        }
+
+        // تبديل علامة التبويب
+        function switchLanguageTab(lang) {
+            currentLanguageTab = lang;
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.lang === lang);
+            });
+            
+            ['name', 'badge'].forEach(field => {
+                ['ar', 'en', 'fr'].forEach(l => {
+                    const element = document.getElementById(`${field}-${l}`);
+                    if (element) {
+                        element.style.display = l === lang ? 'block' : 'none';
+                    }
+                });
+            });
+        }
+
+        // إعداد النموذج
+        function setupForm() {
+            document.getElementById('package-form').addEventListener('submit', handleFormSubmit);
+        }
+
+        // معالجة إرسال النموذج
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            
+            const formData = getFormData();
+            if (!validateForm(formData)) return;
+            
+            const submitBtn = e.target.querySelector('.btn-save');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الحفظ...';
+            
+            try {
+                const url = currentPackage ? 
+                    `api/packages_api.php/${currentPackage.id}` : 
+                    'api/packages_api.php';
+                
+                const method = currentPackage ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const message = currentPackage ? 'تم تحديث الباقة بنجاح' : 'تم إضافة الباقة بنجاح';
+                    
+                    Swal.fire({
+                        title: 'تم بنجاح!',
+                        text: message,
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false,
+                        toast: true,
+                        position: 'top-end'
+                    });
+                    
+                    closeModal();
+                    loadPackages();
+                } else {
+                    showError('فشل في حفظ الباقة: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('خطأ في حفظ البيانات');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'حفظ';
+            }
+        }
+
+        // جلب بيانات النموذج
+        function getFormData() {
+            return {
+                name_ar: document.getElementById('name-ar').value.trim(),
+                name_en: document.getElementById('name-en').value.trim(),
+                name_fr: document.getElementById('name-fr').value.trim(),
+                badge_ar: document.getElementById('badge-ar').value.trim(),
+                badge_en: document.getElementById('badge-en').value.trim(),
+                badge_fr: document.getElementById('badge-fr').value.trim(),
+                monthly_price: parseFloat(document.getElementById('monthly-price').value),
+                yearly_price: parseFloat(document.getElementById('yearly-price').value),
+                currency: document.getElementById('currency').value.trim(),
+                is_popular: document.getElementById('is-popular').checked,
+                features: getFeaturesData(),
+                points: parseInt(document.getElementById('points').value) || 0,
+                messages: parseInt(document.getElementById('messages').value) || 0,
+                accounts: parseInt(document.getElementById('accounts').value) || 1,
+                supported_platforms: getSupportedPlatforms(),
+                // بيانات الخصم
+                has_discount: document.getElementById('has-discount').checked,
+                monthly_discount: parseFloat(document.getElementById('monthly-discount').value) || 0,
+                yearly_discount: parseFloat(document.getElementById('yearly-discount').value) || 0,
+                monthly_discount_percentage: parseFloat(document.getElementById('monthly-discount-percentage').value) || 0,
+                yearly_discount_percentage: parseFloat(document.getElementById('yearly-discount-percentage').value) || 0
+            };
+        }
+
+        // جلب المميزات
+        function getFeaturesData() {
+            const features = { ar: [], en: [], fr: [] };
+            
+            document.querySelectorAll('.feature-item').forEach(item => {
+                const arInput = item.querySelector('.feature-ar');
+                const enInput = item.querySelector('.feature-en');
+                const frInput = item.querySelector('.feature-fr');
+                
+                if (arInput && arInput.value.trim()) features.ar.push(arInput.value.trim());
+                if (enInput && enInput.value.trim()) features.en.push(enInput.value.trim());
+                if (frInput && frInput.value.trim()) features.fr.push(frInput.value.trim());
+            });
+            
+            return features;
+        }
+
+        // جلب المنصات المدعومة
+        function getSupportedPlatforms() {
+            const platforms = [];
+            document.querySelectorAll('.platforms-container input[type="checkbox"]:checked').forEach(checkbox => {
+                platforms.push(checkbox.value);
+            });
+            return platforms;
+        }
+
+        // التحقق من صحة النموذج
+        function validateForm(data) {
+            if (!data.name_ar || !data.name_en || !data.name_fr) {
+                showError('يجب ملء اسم الباقة بجميع اللغات');
+                return false;
+            }
+            
+            if (!data.badge_ar || !data.badge_en || !data.badge_fr) {
+                showError('يجب ملء شارة الباقة بجميع اللغات');
+                return false;
+            }
+            
+            if (!data.monthly_price || !data.yearly_price) {
+                showError('يجب ملء الأسعار');
+                return false;
+            }
+            
+            return true;
+        }
+
+        // ملء النموذج
+        function fillForm(package) {
+            document.getElementById('package-id').value = package.id;
+            document.getElementById('name-ar').value = package.name_ar;
+            document.getElementById('name-en').value = package.name_en;
+            document.getElementById('name-fr').value = package.name_fr;
+            document.getElementById('badge-ar').value = package.badge_ar;
+            document.getElementById('badge-en').value = package.badge_en;
+            document.getElementById('badge-fr').value = package.badge_fr;
+            document.getElementById('monthly-price').value = package.monthly_price;
+            document.getElementById('yearly-price').value = package.yearly_price;
+            document.getElementById('currency').value = package.currency;
+            document.getElementById('is-popular').checked = package.is_popular == 1;
+            
+            document.getElementById('points').value = package.points || 0;
+            document.getElementById('messages').value = package.messages || 0;
+            document.getElementById('accounts').value = package.accounts || 1;
+            
+            // ملء بيانات الخصم
+            document.getElementById('has-discount').checked = package.has_discount == 1;
+            document.getElementById('monthly-discount').value = package.monthly_discount || 0;
+            document.getElementById('yearly-discount').value = package.yearly_discount || 0;
+            document.getElementById('monthly-discount-percentage').value = package.monthly_discount_percentage || 0;
+            document.getElementById('yearly-discount-percentage').value = package.yearly_discount_percentage || 0;
+            
+            // إظهار/إخفاء حقول الخصم
+            toggleDiscountFields();
+            
+            fillSupportedPlatforms(package.supported_platforms || []);
+            fillFeatures(package.features);
+        }
+
+        // ملء المنصات المدعومة
+        function fillSupportedPlatforms(platforms) {
+            document.querySelectorAll('.platforms-container input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = platforms.includes(checkbox.value);
+            });
+        }
+
+        // ملء المميزات
+        function fillFeatures(features) {
+            const container = document.getElementById('features-container');
+            container.innerHTML = '';
+            
+            if (features && features.ar) {
+                features.ar.forEach((feature, index) => {
+                    const enFeature = features.en ? features.en[index] || '' : '';
+                    const frFeature = features.fr ? features.fr[index] || '' : '';
+                    addFeature(feature, enFeature, frFeature);
+                });
+            }
+            
+            if (!features || !features.ar || features.ar.length === 0) {
+                addFeature();
+            }
+        }
+
+        // إضافة ميزة
+        function addFeature(arText = '', enText = '', frText = '') {
+            const container = document.getElementById('features-container');
+            const div = document.createElement('div');
+            div.className = 'feature-item';
+            
+            div.innerHTML = `
+                <input type="text" class="form-input feature-ar" placeholder="الميزة بالعربية" value="${arText}">
+                <input type="text" class="form-input feature-en" placeholder="Feature in English" value="${enText}" style="display: none;">
+                <input type="text" class="form-input feature-fr" placeholder="Fonctionnalité en français" value="${frText}" style="display: none;">
+                <button type="button" class="remove-feature-btn" onclick="removeFeature(this)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            
+            container.appendChild(div);
+        }
+
+        // إزالة ميزة
+        function removeFeature(btn) {
+            btn.parentElement.remove();
+        }
+
+        // تبديل حقول الخصم
+        function toggleDiscountFields() {
+            const discountFields = document.getElementById('discount-fields');
+            const hasDiscount = document.getElementById('has-discount').checked;
+            
+            if (hasDiscount) {
+                discountFields.style.display = 'block';
+                discountFields.classList.add('show');
+            } else {
+                discountFields.style.display = 'none';
+                discountFields.classList.remove('show');
+                // مسح قيم الخصومات
+                document.getElementById('monthly-discount').value = '';
+                document.getElementById('yearly-discount').value = '';
+                document.getElementById('monthly-discount-percentage').value = '';
+                document.getElementById('yearly-discount-percentage').value = '';
+            }
+        }
+        
+        // مسح النموذج
+        function clearForm() {
+            document.getElementById('package-form').reset();
+            document.getElementById('package-id').value = '';
+            document.getElementById('currency').value = 'ريال';
+            document.getElementById('accounts').value = '1';
+            
+            // مسح حقول الخصم
+            document.getElementById('has-discount').checked = false;
+            toggleDiscountFields();
+            
+            const container = document.getElementById('features-container');
+            container.innerHTML = '';
+            addFeature();
+            
+            fillSupportedPlatforms([]);
+            switchLanguageTab('ar');
+        }
+
+        // إظهار وإخفاء المودال
+        function showModal() {
+            document.getElementById('package-modal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('package-modal').classList.remove('show');
+            setTimeout(() => clearForm(), 300);
+        }
+
+        // إظهار رسالة خطأ
+        function showError(message) {
+            Swal.fire({
+                title: 'خطأ!',
+                text: message,
+                icon: 'error',
+                confirmButtonText: 'موافق',
+                background: 'var(--glass-bg)',
+                color: 'var(--text-light)',
+                customClass: { popup: 'swal-rtl' }
+            });
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            setupLanguageTabs();
+            setupForm();
+            setTimeout(loadPackages, 100);
+        });
+
+        // إغلاق المودال عند النقر خارجه
+        document.getElementById('package-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

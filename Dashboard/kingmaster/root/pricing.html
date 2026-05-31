@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الأسعار والباقات | Kingmaster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    :root { color-scheme: dark; }
+    body { 
+      font-family: 'Cairo', system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; 
+      margin: 0;
+      padding: 0;
+    }
+    .bg-gradient { position: fixed; inset: 0; z-index: -1; }
+    
+    /* Header Section */
+    .pricing-header {
+      text-align: center;
+      padding: 4rem 1.5rem 3rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .pricing-header h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #fff;
+      margin: 0 0 1rem;
+      background: linear-gradient(135deg, #fff, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .pricing-header p {
+      font-size: 1.1rem;
+      color: #9ca3af;
+      margin: 0;
+      line-height: 1.7;
+    }
+    
+    /* Pricing Grid */
+    .pricing-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1.5rem 4rem;
+    }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+      align-items: stretch;
+    }
+    
+    /* Pricing Card */
+    .pricing-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      backdrop-filter: blur(14px);
+      padding: 2rem;
+      position: relative;
+      transition: all .3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .pricing-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 50px rgba(0,0,0,.5);
+      border-color: var(--primary);
+    }
+    
+    /* Popular Badge */
+    .pricing-card.popular {
+      border: 2px solid var(--primary);
+      box-shadow: 0 12px 40px rgba(108,92,231,.3);
+    }
+    .popular-badge {
+      position: absolute;
+      top: -12px;
+      right: 50%;
+      transform: translateX(50%);
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: #fff;
+      padding: .4rem 1.5rem;
+      border-radius: 999px;
+      font-size: .85rem;
+      font-weight: 700;
+      box-shadow: 0 4px 15px rgba(108,92,231,.5);
+    }
+    
+    /* Card Header */
+    .card-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .package-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 0 0 .5rem;
+    }
+    .package-description {
+      font-size: .9rem;
+      color: #9ca3af;
+      margin: 0;
+    }
+    .package-price {
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--primary-light);
+      margin: 1rem 0 .25rem;
+      line-height: 1;
+    }
+    .package-price small {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #9ca3af;
+    }
+    .package-duration {
+      font-size: .9rem;
+      color: #9ca3af;
+    }
+    
+    /* Features List */
+    .features-list {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 2rem;
+      flex-grow: 1;
+    }
+    .features-list li {
+      padding: .75rem 0;
+      color: #e5e7eb;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      font-size: .95rem;
+    }
+    .features-list li i {
+      color: #34d399;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+    
+    /* CTA Button */
+    .btn-cta {
+      width: 100%;
+      padding: 1rem 1.5rem;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: #fff;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all .2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+    }
+    .btn-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(108,92,231,.5);
+      filter: brightness(1.1);
+    }
+    .pricing-card.popular .btn-cta {
+      background: linear-gradient(135deg, #34d399, #10b981);
+      box-shadow: 0 4px 15px rgba(52,211,153,.3);
+    }
+    
+    /* Loading State */
+    .loading-container {
+      text-align: center;
+      padding: 4rem 1rem;
+      color: #9ca3af;
+    }
+    .loading-container i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .pricing-header h1 { font-size: 2rem; }
+      .pricing-grid { grid-template-columns: 1fr; }
+      .package-price { font-size: 2.5rem; }
+    }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  
+  <!-- Header -->
+  <div class="pricing-header">
+    <h1><i class="fas fa-crown"></i> الأسعار والباقات</h1>
+    <p>اختر الباقة المناسبة لاحتياجاتك وابدأ رحلتك معنا اليوم. جميع الباقات تشمل تحديثات مجانية ودعم فني متميز.</p>
+  </div>
+  
+  <!-- Pricing Cards -->
+  <div class="pricing-container">
+    <div class="pricing-grid" id="pricing_grid">
+      <!-- Loading State -->
+      <div class="loading-container" style="grid-column: 1/-1;">
+        <i class="fas fa-spinner fa-spin"></i>
+        <div>جارٍ تحميل الباقات...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <script>
+    // تحميل الباقات من API
+    async function loadPackages() {
+      const grid = document.getElementById('pricing_grid');
+      grid.innerHTML = '<div class="loading-container" style="grid-column: 1/-1;"><i class="fas fa-spinner fa-spin"></i><div>جارٍ تحميل الباقات...</div></div>';
+
+      try {
+        const response = await fetch('get_packages.php');
+        const result = await response.json();
+
+        if (result.success && result.data && result.data.length > 0) {
+          grid.innerHTML = result.data.map(pkg => createPackageCard(pkg)).join('');
+          attachBuyButtons();
+        } else {
+          grid.innerHTML = '<div class="loading-container" style="grid-column: 1/-1;"><i class="fas fa-inbox" style="opacity:.3;"></i><div>لا توجد باقات متاحة حالياً</div></div>';
+        }
+      } catch (error) {
+        grid.innerHTML = '<div class="loading-container" style="grid-column: 1/-1; color:#f87171;"><i class="fas fa-exclamation-triangle"></i><div>فشل تحميل الباقات</div></div>';
+      }
+    }
+
+    // إنشاء كارت الباقة
+    function createPackageCard(pkg) {
+      const isPopular = pkg.is_popular === true || pkg.is_popular === 1;
+      const popularClass = isPopular ? 'popular' : '';
+      const popularBadge = isPopular ? '<div class="popular-badge"><i class="fas fa-fire"></i> الأكثر شعبية</div>' : '';
+      
+      // استخدام المميزات العربية
+      const featuresAr = pkg.features?.ar || [];
+      const features = featuresAr.length > 0
+        ? featuresAr.map(f => `<li><i class="fas fa-check-circle"></i> <span>${f}</span></li>`).join('')
+        : '<li><i class="fas fa-check-circle"></i> <span>مميزات قياسية</span></li>';
+
+      // استخدام السعر الشهري
+      const price = pkg.monthly_price || pkg.price || 0;
+      const packageName = pkg.name_ar || pkg.name || 'باقة';
+      const packageDesc = pkg.description_ar || pkg.description || '';
+
+      return `
+        <div class="pricing-card ${popularClass}">
+          ${popularBadge}
+          <div class="card-header">
+            <h3 class="package-name">${packageName}</h3>
+            <p class="package-description">${packageDesc}</p>
+            <div class="package-price">
+              ${parseFloat(price).toFixed(2)} <small>ر.س</small>
+            </div>
+            <div class="package-duration">/ شهرياً</div>
+          </div>
+          <ul class="features-list">
+            ${features}
+          </ul>
+          <button class="btn-cta" data-package-id="${pkg.id}" data-package-name="${packageName}" data-package-price="${price}">
+            <i class="fas fa-shopping-cart"></i> اشترك الآن
+          </button>
+        </div>
+      `;
+    }
+
+    // ربط أزرار الشراء
+    function attachBuyButtons() {
+      document.querySelectorAll('.btn-cta').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const packageId = btn.dataset.packageId;
+          const packageName = btn.dataset.packageName;
+          const packagePrice = btn.dataset.packagePrice;
+
+          Swal.fire({
+            title: `الاشتراك في ${packageName}`,
+            html: `
+              <div style="text-align:center; color:#9ca3af;">
+                <p style="font-size:1.1rem; margin:1rem 0;">السعر: <strong style="color:#a78bfa; font-size:1.5rem;">${parseFloat(packagePrice).toFixed(2)} ر.س</strong></p>
+                <p>سيتم تحويلك لصفحة الدفع لإتمام الاشتراك</p>
+              </div>
+            `,
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: 'متابعة للدفع',
+            cancelButtonText: 'إلغاء',
+            confirmButtonColor: '#6c5ce7',
+            cancelButtonColor: '#ef4444'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              // هنا يمكنك التحويل لصفحة الدفع
+              // window.location.href = `checkout.php?package_id=${packageId}`;
+              Swal.fire({
+                icon: 'success',
+                title: 'تم!',
+                text: 'سيتم تحويلك لصفحة الدفع...',
+                timer: 2000,
+                showConfirmButton: false
+              });
+            }
+          });
+        });
+      });
+    }
+
+    // تحميل الباقات عند فتح الصفحة
+    loadPackages();
+  </script>
+</body>
+</html>

@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>إدارة الطلبات | Kingmaster</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary: #6c5ce7;
+      --primary-light: #a29bfe;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --info: #3b82f6;
+      --glass-bg: rgba(255, 255, 255, 0.1);
+      --glass-border: rgba(255, 255, 255, 0.2);
+      --text-light: #f5f6fa;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Cairo', sans-serif;
+      background: #0f172a;
+      color: var(--text-light);
+      padding: 2rem;
+    }
+
+    .bg-gradient {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image: radial-gradient(circle at top right, rgba(108, 92, 231, 0.15), transparent 40%),
+                        radial-gradient(circle at bottom left, rgba(0, 206, 201, 0.1), transparent 40%);
+    }
+
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .header-title {
+      font-size: 2rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .header-title i {
+      color: var(--primary-light);
+    }
+
+    /* Stats Cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      backdrop-filter: blur(14px);
+      padding: 1.5rem;
+      transition: all 0.3s;
+      cursor: pointer;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(108, 92, 231, 0.3);
+    }
+
+    .stat-card.active {
+      border-color: var(--primary);
+      background: linear-gradient(135deg, rgba(108, 92, 231, 0.2), rgba(118, 75, 162, 0.2));
+    }
+
+    .stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .stat-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+    }
+
+    .stat-icon.total { background: linear-gradient(135deg, #667eea, #764ba2); }
+    .stat-icon.pending { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .stat-icon.verified { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .stat-icon.preparing { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+    .stat-icon.shipped { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+    .stat-icon.delivered { background: linear-gradient(135deg, #10b981, #059669); }
+    .stat-icon.rejected { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text-light);
+    }
+
+    .stat-label {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-top: 0.5rem;
+    }
+
+    /* Search & Filters */
+    .controls {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      backdrop-filter: blur(14px);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .search-wrapper {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .search-input {
+      flex: 1;
+      padding: 1rem 1.5rem;
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      color: white;
+      font-family: 'Cairo', sans-serif;
+      font-size: 1rem;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .btn {
+      padding: 1rem 2rem;
+      border-radius: 12px;
+      border: none;
+      font-family: 'Cairo', sans-serif;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(108, 92, 231, 0.4);
+    }
+
+    /* Table */
+    .table-container {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      backdrop-filter: blur(14px);
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: rgba(108, 92, 231, 0.1);
+    }
+
+    th {
+      padding: 1rem;
+      text-align: right;
+      font-weight: 600;
+      border-bottom: 2px solid var(--glass-border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    tbody tr {
+      transition: all 0.3s;
+    }
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .badge {
+      padding: 0.4rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .badge-pending { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .badge-verified { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .badge-preparing { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+    .badge-shipped { background: rgba(6, 182, 212, 0.2); color: #22d3ee; }
+    .badge-delivered { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge-rejected { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .btn-sm {
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+    }
+
+    .btn-info {
+      background: var(--info);
+      color: white;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: #9ca3af;
+    }
+
+    .empty-state i {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 3rem;
+      font-size: 1.2rem;
+      color: #9ca3af;
+    }
+
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top: 4px solid var(--primary);
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Dark Modal Styling */
+    .dark-modal {
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .dark-modal-title {
+      color: #f5f6fa !important;
+      font-family: 'Cairo', sans-serif;
+    }
+
+    .swal2-input,
+    .swal2-textarea,
+    .swal2-select {
+      background: rgba(255, 255, 255, 0.05) !important;
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      color: #f5f6fa !important;
+      border-radius: 8px !important;
+      font-family: 'Cairo', sans-serif !important;
+    }
+
+    .swal2-input:focus,
+    .swal2-textarea:focus,
+    .swal2-select:focus {
+      border-color: #6c5ce7 !important;
+      box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2) !important;
+      outline: none !important;
+    }
+
+    .swal2-select option {
+      background: #1e293b !important;
+      color: #f5f6fa !important;
+      padding: 0.5rem !important;
+    }
+
+    .swal2-input::placeholder,
+    .swal2-textarea::placeholder {
+      color: #6b7280 !important;
+    }
+
+    .swal2-validation-message {
+      background: rgba(239, 68, 68, 0.1) !important;
+      color: #f87171 !important;
+      border: 1px solid #ef4444 !important;
+    }
+
+    .swal2-html-container {
+      margin: 0 !important;
+      padding: 1.5rem !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+    }
+
+    .swal2-popup {
+      padding: 2rem !important;
+      overflow: hidden !important;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .search-wrapper {
+        flex-direction: column;
+      }
+
+      table {
+        font-size: 0.85rem;
+      }
+
+      th, td {
+        padding: 0.75rem 0.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-gradient"></div>
+
+  <div class="container">
+    <div class="header">
+      <h1 class="header-title">
+        <i class="fas fa-shopping-cart"></i>
+        إدارة الطلبات
+      </h1>
+      <button class="btn btn-primary" onclick="window.location.href='track_order.html'">
+        <i class="fas fa-search"></i>
+        تتبع طلب
+      </button>
+    </div>
+
+    <!-- Statistics -->
+    <div class="stats-grid" id="statsGrid">
+      <!-- سيتم ملؤها ديناميكياً -->
+    </div>
+
+    <!-- Financial Statistics -->
+    <div class="stats-grid" id="financialStatsGrid" style="margin-bottom: 2rem;">
+      <!-- سيتم ملؤها ديناميكياً -->
+    </div>
+
+    <!-- Search & Filters -->
+    <div class="controls">
+      <div class="search-wrapper">
+        <input 
+          type="text" 
+          id="searchInput" 
+          class="search-input" 
+          placeholder="ابحث برقم الطلب، اسم العميل، البريد الإلكتروني..."
+        >
+        <button class="btn btn-primary" onclick="searchOrders()">
+          <i class="fas fa-search"></i>
+          بحث
+        </button>
+      </div>
+    </div>
+
+    <!-- Orders Table -->
+    <div class="table-container">
+      <div id="loadingState" class="loading">
+        <div class="spinner"></div>
+        جارِ تحميل الطلبات...
+      </div>
+
+      <div id="tableContent" style="display: none;">
+        <table>
+          <thead>
+            <tr>
+              <th>رقم الطلب</th>
+              <th>اسم العميل</th>
+              <th>البريد الإلكتروني</th>
+              <th>الهاتف</th>
+              <th>المبلغ</th>
+              <th>الحالة</th>
+              <th>التاريخ</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="ordersBody">
+            <!-- سيتم ملؤها ديناميكياً -->
+          </tbody>
+        </table>
+      </div>
+
+      <div id="emptyState" class="empty-state" style="display: none;">
+        <i class="fas fa-inbox"></i>
+        <h3>لا توجد طلبات</h3>
+        <p>لم يتم العثور على أي طلبات بالمعايير المحددة</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    let orders = [];
+    let stats = {};
+    let financialStats = {};
+    let statusNames = {};
+    let currentFilter = 'all';
+
+    // تحميل الطلبات
+    async function loadOrders(status = 'all', search = '') {
+      const loadingState = document.getElementById('loadingState');
+      const tableContent = document.getElementById('tableContent');
+      const emptyState = document.getElementById('emptyState');
+
+      loadingState.style.display = 'block';
+      tableContent.style.display = 'none';
+      emptyState.style.display = 'none';
+
+      try {
+        const url = `api/get_orders.php?status=${status}&search=${encodeURIComponent(search)}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.success) {
+          orders = data.orders;
+          stats = data.stats;
+          financialStats = data.financial_stats;
+          statusNames = data.status_names;
+          currentFilter = status;
+
+          renderStats();
+          renderFinancialStats();
+          
+          if (orders.length > 0) {
+            renderOrders();
+            tableContent.style.display = 'block';
+          } else {
+            emptyState.style.display = 'block';
+          }
+        } else {
+          throw new Error(data.message);
+        }
+      } catch (error) {
+        Swal.fire({
+          icon: 'error',
+          title: 'خطأ',
+          text: 'فشل في تحميل الطلبات',
+          confirmButtonColor: '#6c5ce7'
+        });
+      } finally {
+        loadingState.style.display = 'none';
+      }
+    }
+
+    // رسم الإحصائيات المالية
+    function renderFinancialStats() {
+      const financialStatsGrid = document.getElementById('financialStatsGrid');
+      
+      const financialItems = [
+        { 
+          key: 'delivered_revenue', 
+          label: 'إجمالي المبيعات المسلمة', 
+          icon: 'fa-hand-holding-usd', 
+          class: 'delivered',
+          color: '#10b981'
+        },
+        { 
+          key: 'pending_revenue', 
+          label: 'المبلغ في الانتظار', 
+          icon: 'fa-hourglass-half', 
+          class: 'pending',
+          color: '#f59e0b'
+        },
+        { 
+          key: 'in_progress_revenue', 
+          label: 'المبلغ قيد التنفيذ', 
+          icon: 'fa-sync-alt', 
+          class: 'preparing',
+          color: '#8b5cf6'
+        },
+        { 
+          key: 'total_revenue', 
+          label: 'إجمالي المبيعات الكلي', 
+          icon: 'fa-chart-line', 
+          class: 'total',
+          color: '#667eea'
+        }
+      ];
+
+      financialStatsGrid.innerHTML = financialItems.map(item => {
+        const value = parseFloat(financialStats[item.key] || 0).toFixed(2);
+        return `
+          <div class="stat-card" style="border-color: ${item.color};">
+            <div class="stat-header">
+              <div class="stat-icon ${item.class}">
+                <i class="fas ${item.icon}"></i>
+              </div>
+            </div>
+            <div class="stat-value" style="color: ${item.color};">${value} ر.س</div>
+            <div class="stat-label">${item.label}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // رسم الإحصائيات
+    function renderStats() {
+      const statsGrid = document.getElementById('statsGrid');
+      
+      const statItems = [
+        { key: 'total', label: 'إجمالي الطلبات', icon: 'fa-shopping-cart', class: 'total' },
+        { key: 'pending', label: 'بانتظار المراجعة', icon: 'fa-clock', class: 'pending' },
+        { key: 'verified', label: 'تم التحقق', icon: 'fa-check-circle', class: 'verified' },
+        { key: 'preparing', label: 'قيد التحضير', icon: 'fa-box', class: 'preparing' },
+        { key: 'shipped', label: 'تم الشحن', icon: 'fa-truck', class: 'shipped' },
+        { key: 'delivered', label: 'تم التسليم', icon: 'fa-home', class: 'delivered' },
+        { key: 'rejected', label: 'مرفوض', icon: 'fa-times-circle', class: 'rejected' }
+      ];
+
+      statsGrid.innerHTML = statItems.map(item => `
+        <div class="stat-card ${currentFilter === item.key ? 'active' : ''}" onclick="filterByStatus('${item.key}')">
+          <div class="stat-header">
+            <div class="stat-icon ${item.class}">
+              <i class="fas ${item.icon}"></i>
+            </div>
+          </div>
+          <div class="stat-value">${stats[item.key] || 0}</div>
+          <div class="stat-label">${item.label}</div>
+        </div>
+      `).join('');
+    }
+
+    // رسم الطلبات
+    function renderOrders() {
+      const tbody = document.getElementById('ordersBody');
+      
+      tbody.innerHTML = orders.map(order => {
+        const statusClass = `badge-${order.status}`;
+        const date = new Date(order.created_at).toLocaleDateString('ar-SA');
+        
+        return `
+          <tr>
+            <td><strong>${order.order_number}</strong></td>
+            <td>${order.customer_name}</td>
+            <td>${order.customer_email}</td>
+            <td>${order.customer_phone || '-'}</td>
+            <td><strong>${parseFloat(order.total_amount).toFixed(2)} ر.س</strong></td>
+            <td>
+              <span class="badge ${statusClass}">
+                <i class="fas fa-circle" style="font-size: 0.5rem;"></i>
+                ${statusNames[order.status]}
+              </span>
+            </td>
+            <td>${date}</td>
+            <td>
+              <div class="actions">
+                <button class="btn btn-info btn-sm" onclick="viewOrder('${order.order_number}')">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-success btn-sm" onclick="trackOrder('${order.order_number}')">
+                  <i class="fas fa-route"></i>
+                </button>
+                <button class="btn btn-sm" style="background: #8b5cf6; color: white;" onclick="updateStatus(${order.id}, '${order.order_number}', '${order.status}')">
+                  <i class="fas fa-edit"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // فلترة حسب الحالة
+    function filterByStatus(status) {
+      const searchInput = document.getElementById('searchInput');
+      loadOrders(status, searchInput.value);
+    }
+
+    // البحث
+    function searchOrders() {
+      const searchInput = document.getElementById('searchInput');
+      loadOrders(currentFilter, searchInput.value);
+    }
+
+    // عرض تفاصيل الطلب
+    function viewOrder(orderNumber) {
+      const order = orders.find(o => o.order_number === orderNumber);
+      if (!order) return;
+
+      Swal.fire({
+        title: 'تفاصيل الطلب',
+        html: `
+          <div style="text-align: right; padding: 1rem;">
+            <div style="background: rgba(108, 92, 231, 0.1); padding: 1rem; border-radius: 12px; margin-bottom: 1rem;">
+              <h3 style="color: #6c5ce7; margin-bottom: 0.5rem;">${order.order_number}</h3>
+              <p style="color: #9ca3af; font-size: 0.9rem;">
+                كود التتبع: ${order.tracking_code || 'غير متوفر'}
+              </p>
+            </div>
+            <div style="text-align: right; margin-bottom: 1rem;">
+              <p><strong>العميل:</strong> ${order.customer_name}</p>
+              <p><strong>البريد:</strong> ${order.customer_email}</p>
+              <p><strong>الهاتف:</strong> ${order.customer_phone || 'غير متوفر'}</p>
+              <p><strong>العنوان:</strong> ${order.customer_address || 'غير متوفر'}</p>
+              <p><strong>المبلغ:</strong> ${parseFloat(order.total_amount).toFixed(2)} ر.س</p>
+              <p><strong>الحالة:</strong> ${statusNames[order.status]}</p>
+              ${order.notes ? `<p><strong>ملاحظات:</strong> ${order.notes}</p>` : ''}
+              ${order.rejection_reason ? `<p style="color: #ef4444;"><strong>سبب الرفض:</strong> ${order.rejection_reason}</p>` : ''}
+            </div>
+          </div>
+        `,
+        width: '600px',
+        confirmButtonColor: '#6c5ce7',
+        confirmButtonText: 'إغلاق'
+      });
+    }
+
+    // تتبع الطلب
+    function trackOrder(orderNumber) {
+      window.location.href = `track_order.html?order=${orderNumber}`;
+    }
+
+    // تحديث حالة الطلب
+    async function updateStatus(orderId, orderNumber, currentStatus) {
+      const statusOptions = {
+        'pending': 'بانتظار المراجعة',
+        'verified': 'تم التحقق',
+        'preparing': 'قيد التحضير',
+        'shipped': 'تم الشحن',
+        'delivered': 'تم التسليم',
+        'rejected': 'مرفوض'
+      };
+
+      // إنشاء خيارات الحالات
+      let optionsHtml = '';
+      for (const [key, value] of Object.entries(statusOptions)) {
+        const selected = key === currentStatus ? 'selected' : '';
+        optionsHtml += `<option value="${key}" ${selected}>${value}</option>`;
+      }
+
+      const { value: formValues } = await Swal.fire({
+        title: 'تحديث حالة الطلب',
+        html: `
+          <div style="text-align: right; width: 100%; max-width: 100%; box-sizing: border-box;">
+            <div style="background: rgba(108, 92, 231, 0.1); padding: 1rem; border-radius: 12px; margin-bottom: 1.5rem;">
+              <h3 style="color: #6c5ce7; margin-bottom: 0.3rem;">${orderNumber}</h3>
+              <p style="color: #9ca3af; font-size: 0.9rem;">الحالة الحالية: ${statusOptions[currentStatus]}</p>
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+              <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; text-align: right; color: #f5f6fa;">الحالة الجديدة:</label>
+              <select id="swal-status" class="swal2-select" style="width: 98%; box-sizing: border-box; padding: 0.75rem; font-size: 1rem;">
+                ${optionsHtml}
+              </select>
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+              <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; text-align: right; color: #f5f6fa;">ملاحظات:</label>
+              <textarea id="swal-notes" class="swal2-textarea" placeholder="أضف ملاحظات (اختياري)" style="width: 98%; box-sizing: border-box; min-height: 100px; resize: vertical;"></textarea>
+            </div>
+            
+            <div id="rejectionReasonDiv" style="display: none; margin-bottom: 1rem;">
+              <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; text-align: right; color: #ef4444;">سبب الرفض:</label>
+              <textarea id="swal-rejection" class="swal2-textarea" placeholder="يجب إدخال سبب الرفض" style="width: 98%; box-sizing: border-box; min-height: 80px; resize: vertical; border: 1px solid #ef4444 !important; background: rgba(239, 68, 68, 0.1) !important;"></textarea>
+            </div>
+          </div>
+        `,
+        background: '#1e293b',
+        color: '#f5f6fa',
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonColor: '#6c5ce7',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'تحديث',
+        cancelButtonText: 'إلغاء',
+        width: '600px',
+        customClass: {
+          popup: 'dark-modal',
+          title: 'dark-modal-title'
+        },
+        didOpen: () => {
+          const statusSelect = document.getElementById('swal-status');
+          const rejectionDiv = document.getElementById('rejectionReasonDiv');
+          
+          // إظهار/إخفاء حقل سبب الرفض
+          statusSelect.addEventListener('change', function() {
+            if (this.value === 'rejected') {
+              rejectionDiv.style.display = 'block';
+            } else {
+              rejectionDiv.style.display = 'none';
+            }
+          });
+          
+          // فحص الحالة الحالية
+          if (statusSelect.value === 'rejected') {
+            rejectionDiv.style.display = 'block';
+          }
+        },
+        preConfirm: () => {
+          const status = document.getElementById('swal-status').value;
+          const notes = document.getElementById('swal-notes').value;
+          const rejection = document.getElementById('swal-rejection').value;
+          
+          // التحقق من سبب الرفض
+          if (status === 'rejected' && !rejection.trim()) {
+            Swal.showValidationMessage('يجب إدخال سبب الرفض');
+            return false;
+          }
+          
+          return { status, notes, rejection };
+        }
+      });
+
+      if (formValues) {
+        // إرسال التحديث للسيرفر
+        try {
+          Swal.fire({
+            title: 'جارِ التحديث...',
+            allowOutsideClick: false,
+            didOpen: () => {
+              Swal.showLoading();
+            }
+          });
+
+          const response = await fetch('api/update_order_status.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              order_id: orderId,
+              new_status: formValues.status,
+              notes: formValues.notes,
+              rejection_reason: formValues.rejection,
+              created_by: 'المدير'
+            })
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            await Swal.fire({
+              icon: 'success',
+              title: 'تم التحديث!',
+              text: data.message,
+              confirmButtonColor: '#6c5ce7'
+            });
+            
+            // إعادة تحميل الطلبات
+            loadOrders(currentFilter, document.getElementById('searchInput').value);
+          } else {
+            throw new Error(data.message);
+          }
+        } catch (error) {
+          Swal.fire({
+            icon: 'error',
+            title: 'خطأ',
+            text: error.message || 'فشل في تحديث الحالة',
+            confirmButtonColor: '#6c5ce7'
+          });
+        }
+      }
+    }
+
+    // البحث عند الضغط على Enter
+    document.getElementById('searchInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        searchOrders();
+      }
+    });
+
+    // التحميل عند فتح الصفحة
+    loadOrders();
+  </script>
+</body>
+</html>

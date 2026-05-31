@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>King Master - إدارة الحسابات</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    .content-admin-container { min-height:100vh; position:relative; z-index:1; }
+    .main-content { padding:0; padding-right:0; }
+    .content-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem; flex-wrap:wrap; gap:1rem; }
+    .content-title { font-size:2rem; font-weight:700; color:var(--text-light); margin:0; }
+    .content-actions { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+    .search-box { position:relative; min-width:300px; }
+    .search-box input { width:100%; padding:0.75rem 1rem 0.75rem 3rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:0.9rem; }
+    .search-box i { position:absolute; right:1rem; top:50%; transform:translateY(-50%); color:var(--text-light-dark); }
+    .add-content-btn { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; border:none; padding:0.75rem 1.5rem; border-radius:var(--radius-md); font-weight:600; display:flex; align-items:center; gap:.5rem; cursor:pointer; transition:all .3s ease; }
+    .add-content-btn:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:2rem; }
+    .stat-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; text-align:center; backdrop-filter:blur(10px); }
+    .stat-number { font-size:2rem; font-weight:700; color:var(--primary-light); margin-bottom:.5rem; display:block; }
+    .stat-label { color:var(--text-light-dark); font-size:.9rem; }
+    .stat-col-12 { grid-column: 1 / -1; }
+    .stat-row { display:grid; grid-template-columns: repeat(3, 1fr); gap:1rem; }
+    @media (max-width:768px){ .stat-row{ grid-template-columns:1fr; } }
+
+    .filter-section { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; margin-bottom:2rem; backdrop-filter:blur(10px); }
+    .filter-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; align-items:end; }
+    .filter-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; font-size:.9rem; }
+    .filter-group select, .filter-group input { width:100%; padding:.75rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    :root { color-scheme: dark; }
+    .filter-group select, .form-group select { background-color: rgba(17,24,39,0.85); color: var(--text-light); }
+    .filter-group select option, .form-group select option, .filter-group select optgroup, .form-group select optgroup { background-color: #111827; color: #F3F4F6; }
+.filter-group select:focus, .form-group select:focus { background-color: rgba(17,24,39,0.95); border-color: var(--primary); }
+
+    /* Toolbar buttons */
+    .filter-actions { display:flex; gap:.5rem; flex-direction:column; }
+    .filter-btn { padding:.5rem 1rem; border:1px solid var(--glass-border); border-radius:var(--radius-md); cursor:pointer; transition:all .3s ease; font-size:.8rem; white-space:nowrap; text-align:center; background: var(--glass-bg); color: var(--text-light-dark); }
+    .btn-delete-selected { background: rgba(239,68,68,.2); color:#EF4444; border-color:#EF4444; }
+    .btn-delete-selected:hover { background:#EF4444; color:#fff; }
+
+    /* Status badges */
+    .status-badge { border:1px solid transparent; }
+    .status-active { background: rgba(16,185,129,.2); color:#10B981; border-color:#10B981; }
+    .status-closed { background: rgba(239,68,68,.2); color:#EF4444; border-color:#EF4444; }
+    .status-inactive { background: rgba(107,114,128,.2); color:#9CA3AF; border-color:#9CA3AF; }
+
+    /* Action buttons */
+    .btn-verify { background:rgba(16,185,129,.2); color:#10B981; border:1px solid #10B981; }
+    .btn-verify:hover { background:#10B981; color:#fff; }
+.btn-relink { background:rgba(6,182,212,.2); color:#06B6D4; border:1px solid #06B6D4; }
+    .btn-relink:hover { background:#06B6D4; color:#fff; }
+    .btn-pause { background: rgba(245,158,11,.2); color:#F59E0B; border:1px solid #F59E0B; }
+    .btn-pause:hover { background:#F59E0B; color:#fff; }
+
+    .contents-table-container { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); overflow:hidden; backdrop-filter:blur(10px); }
+    .contents-table { width:100%; border-collapse:collapse; }
+    .contents-table th, .contents-table td { padding:1rem; text-align:right; border-bottom:1px solid rgba(255,255,255,.1); }
+    .contents-table th { background:rgba(108,92,231,.1); color:var(--text-light); font-weight:600; position:sticky; top:0; z-index:10; }
+    .contents-table td { color:var(--text-light-dark); }
+    .contents-table tr:hover { background:rgba(255,255,255,.05); }
+    .checkbox-cell { width:40px; text-align:center; }
+    .checkbox-cell input[type="checkbox"] { width:18px; height:18px; accent-color:var(--primary); }
+    .action-buttons { display:flex; gap:.5rem; align-items:center; }
+    .action-btn { width:32px; height:32px; border:none; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .3s ease; font-size:.8rem; }
+    .btn-edit { background:rgba(59,130,246,.2); color:#3B82F6; border:1px solid #3B82F6; }
+    .btn-edit:hover { background:#3B82F6; color:#fff; }
+    .btn-delete { background:rgba(239,68,68,.2); color:#EF4444; border:1px solid #EF4444; }
+    .btn-delete:hover { background:#EF4444; color:#fff; }
+    .btn-relink { background:rgba(6,182,212,.2); color:#06B6D4; border:1px solid #06B6D4; }
+    .btn-relink:hover { background:#06B6D4; color:#fff; }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); display:flex; align-items:center; justify-content:center; z-index:1000; opacity:0; visibility:hidden; transition:all .3s ease; }
+    .modal-overlay.active { opacity:1; visibility:visible; }
+    .modal { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); backdrop-filter:blur(20px); max-width:800px; width:95%; max-height:90vh; overflow-y:auto; transform:scale(.95); transition:all .3s ease; }
+    .modal-overlay.active .modal { transform:scale(1); }
+    .modal-header { padding:1rem 1.5rem; border-bottom:1px solid rgba(255,255,255,.1); display:flex; justify-content:space-between; align-items:center; }
+    .modal-title { margin:0; color:var(--text-light); font-size:1.25rem; font-weight:600; }
+    .modal-close { background:none; border:none; color:var(--text-light-dark); font-size:1.5rem; cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-sm); }
+    .modal-body { padding:1.25rem 1.5rem; }
+    .form-group { margin-bottom:1rem; }
+    .form-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; }
+    .form-group input, .form-group select, .form-group textarea { width:100%; padding:.75rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    .modal-footer { padding:1rem 1.5rem; border-top:1px solid rgba(255,255,255,.1); display:flex; gap:.5rem; justify-content:flex-end; flex-wrap:wrap; }
+    .btn { padding:0.65rem 1.25rem; border:none; border-radius:var(--radius-md); font-weight:600; cursor:pointer; transition:all .3s ease; display:flex; align-items:center; gap:.5rem; }
+    .btn-primary { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; }
+    .btn-secondary { background:var(--glass-bg); color:var(--text-light-dark); border:1px solid var(--glass-border); }
+
+    /* SweetAlert dark */
+    .dark-swal.swal2-popup, .dark-swal {
+      background: var(--glass-bg) !important;
+      border: 1px solid var(--glass-border) !important;
+      backdrop-filter: blur(20px) !important;
+      color: var(--text-light) !important;
+      border-radius: var(--radius-lg) !important;
+    }
+    .dark-swal .swal2-title, .dark-swal .swal2-html-container { color: var(--text-light) !important; }
+    .dark-swal .swal2-radio, .dark-swal .swal2-select, .dark-swal .swal2-input, .dark-swal textarea { background: rgba(17,24,39,0.85) !important; color: var(--text-light) !important; border: 1px solid var(--glass-border) !important; }
+
+    @media (max-width:768px){ .content-header{flex-direction:column; align-items:stretch;} .content-actions{width:100%;} .filter-row{grid-template-columns:1fr;} .contents-table-container{overflow-x:auto;} .contents-table{min-width:900px;} }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="dashboard-container content-admin-container">
+    <div class="main-content" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+      <div class="content-header">
+        <div class="content-title"><i class="fas fa-users-gear" style="margin-left:.5rem;"></i> إدارة الحسابات</div>
+        <div class="content-actions">
+          <div class="search-box">
+            <input type="text" id="searchInput" placeholder="ابحث عن حساب...">
+            <i class="fas fa-search"></i>
+          </div>
+          <button class="add-content-btn" onclick="openAccountFlow()"><i class="fas fa-plus"></i> إضافة حساب</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card stat-col-12"><span class="stat-number" id="statTotal">0</span><div class="stat-label">إجمالي الحسابات</div></div>
+        <div class="stat-row stat-col-12">
+          <div class="stat-card"><span class="stat-number" id="statActive">0</span><div class="stat-label">نشط</div></div>
+          <div class="stat-card"><span class="stat-number" id="statClosed">0</span><div class="stat-label">مغلق</div></div>
+          <div class="stat-card"><span class="stat-number" id="statInactive">0</span><div class="stat-label">غير مفعل</div></div>
+        </div>
+        <div class="stat-card"><span class="stat-number" id="statFB">0</span><div class="stat-label">فيسبوك</div></div>
+        <div class="stat-card"><span class="stat-number" id="statWA">0</span><div class="stat-label">واتساب</div></div>
+        <div class="stat-card"><span class="stat-number" id="statIG">0</span><div class="stat-label">انستجرام</div></div>
+        <div class="stat-card"><span class="stat-number" id="statTG">0</span><div class="stat-label">تليجرام</div></div>
+        <div class="stat-card"><span class="stat-number" id="statEM">0</span><div class="stat-label">بريد</div></div>
+        <div class="stat-card"><span class="stat-number" id="statSMS">0</span><div class="stat-label">SMS</div></div>
+      </div>
+
+      <div class="filter-section">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label>الحالة</label>
+            <select id="statusFilter">
+              <option value="">الكل</option>
+              <option value="active">نشط</option>
+              <option value="closed">مغلق</option>
+              <option value="inactive">غير مفعل</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>القناة</label>
+            <select id="channelFilter">
+              <option value="">الكل</option>
+              <option value="facebook">فيسبوك</option>
+              <option value="whatsapp">واتساب</option>
+              <option value="instagram">انستجرام</option>
+              <option value="telegram">تليجرام</option>
+              <option value="email">بريد</option>
+              <option value="sms">SMS</option>
+              <option value="tiktok">Tiktok</option>
+              <option value="linkedin">LinkedIn</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>عدد الحسابات المعروضة</label>
+            <div class="count-display"><span class="count-number" id="displayCount">0</span> <span>حساب</span></div>
+          </div>
+          <div class="filter-actions">
+            <button class="filter-btn btn-delete-selected" onclick="deleteSelected()"><i class="fas fa-trash"></i> حذف المحدد</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="contents-table-container">
+        <table class="contents-table">
+          <thead>
+            <tr>
+              <th class="checkbox-cell"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+              <th>اسم الحساب</th>
+              <th>معرف الحساب</th>
+              <th>القناة</th>
+              <th>الحالة</th>
+              <th>آخر تعديل</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="accountsTableBody">
+            <tr><td colspan="7" class="table-loading"><div class="loading-spinner"></div><div>جاري تحميل الحسابات...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="accountModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTitle">إضافة حساب</h3>
+        <button class="modal-close" onclick="closeAccountModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>اسم الحساب</label><input type="text" id="accName" placeholder="name account" value="name account"></div>
+        <div class="form-group"><label>معرف الحساب</label><input type="text" id="accUid" placeholder="100000033" value="100000033"></div>
+        <div class="form-group"><label>القناة</label>
+          <select id="accChannel">
+            <option value="facebook">فيسبوك</option>
+            <option value="whatsapp">واتساب</option>
+            <option value="instagram">انستجرام</option>
+            <option value="telegram">تليجرام</option>
+            <option value="email">بريد</option>
+            <option value="sms">SMS</option>
+            <option value="tiktok">Tiktok</option>
+            <option value="linkedin">LinkedIn</option>
+          </select>
+        </div>
+        <div class="form-group"><label>الحالة</label>
+          <select id="accStatus">
+            <option value="inactive" selected>غير مفعل</option>
+            <option value="active">نشط</option>
+            <option value="closed">مغلق</option>
+          </select>
+        </div>
+        <div class="form-group" id="methodWrap" style="display:none;">
+          <label>طريقة الربط</label>
+          <select id="accMethod">
+            <option value="">— اختر —</option>
+            <option value="cookies">عبر الكوكيز</option>
+            <option value="data">عبر البيانات</option>
+          </select>
+        </div>
+        <div class="form-group" id="cookiesWrap" style="display:none;">
+          <label>الكوكيز</label>
+          <textarea id="accCookies" placeholder="ضع سلسلة الكوكيز هنا"></textarea>
+          <div class="form-help">استخدم زر تسجيل الدخول بعد وضع الكوكيز للتحقق.</div>
+          <button class="btn btn-secondary" type="button" onclick="fakeLogin()"><i class="fas fa-right-to-bracket"></i> تسجيل دخول</button>
+        </div>
+        <div class="form-group" id="dataWrap" style="display:none;">
+          <label>البيانات (JSON)</label>
+          <textarea id="accData" placeholder='{"token":"..."}'></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeAccountModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveAccount()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let accounts = []; let filtered = []; let selected = []; let editId = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadAccounts();
+      document.getElementById('searchInput').addEventListener('input', applyFilters);
+      document.getElementById('statusFilter').addEventListener('change', applyFilters);
+      document.getElementById('channelFilter').addEventListener('change', applyFilters);
+      document.getElementById('accChannel').addEventListener('change', onChannelChange);
+      document.getElementById('accMethod').addEventListener('change', onMethodChange);
+    });
+
+    async function openAccountFlow(){
+      const { value: channel } = await Swal.fire({
+        title: 'اختر القناة', input:'select', inputOptions: {
+          facebook:'فيسبوك', whatsapp:'واتساب', instagram:'انستجرام', telegram:'تليجرام', email:'بريد', sms:'SMS', tiktok:'Tiktok', linkedin:'LinkedIn'
+        }, inputPlaceholder:'اختر القناة', showCancelButton:true, confirmButtonText:'التالي', customClass:{ popup:'dark-swal' }
+      });
+      if (!channel) return;
+      if (channel === 'facebook'){
+        const { value: method } = await Swal.fire({ title:'فيسبوك - طريقة الربط', input:'radio', inputOptions:{ cookies:'عبر الكوكيز', data:'عبر البيانات' }, inputValidator:(v)=>!v && 'اختر طريقة', showCancelButton:true, confirmButtonText:'متابعة', customClass:{ popup:'dark-swal' } });
+        if (!method) return;
+        openAccountModal();
+        document.getElementById('accChannel').value = 'facebook';
+        const wrap = document.getElementById('methodWrap'); if (wrap) wrap.style.display = '';
+        document.getElementById('accMethod').value = method;
+        onMethodChange();
+        return;
+      }
+      if (channel === 'whatsapp'){
+        const token = 'wa_' + Date.now();
+        const qrData = encodeURIComponent('WA_LOGIN:' + token);
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${qrData}`;
+        let secs = 30;
+        await Swal.fire({
+          title: 'واتساب - امسح QR',
+          html: `<div style="display:flex; flex-direction:column; align-items:center; gap:1rem;">
+            <img src="${qrUrl}" alt="QR" style="width:240px;height:240px; border-radius:8px; border:1px solid var(--glass-border); background:rgba(255,255,255,.05);" />
+            <div id="waCountdown" class="category-badge" style="font-size:1rem;">00:${String(secs).padStart(2,'0')}</div>
+          </div>`,
+          showConfirmButton: false,
+          timer: 30000,
+          didOpen: () => {
+            const el = Swal.getHtmlContainer().querySelector('#waCountdown');
+            const int = setInterval(()=>{ secs--; if (el) el.textContent = `00:${String(secs).padStart(2,'0')}`; if (secs<=0) clearInterval(int); }, 1000);
+          },
+          customClass:{ popup:'dark-swal' }
+        });
+        await addWhatsAppAccount(token);
+        return;
+      }
+      if (channel === 'instagram') {
+        const { value: creds } = await Swal.fire({
+          title: 'انستجرام - تسجيل الدخول',
+          html: `
+            <input id=\"igUser\" class=\"swal2-input\" placeholder=\"اسم المستخدم\">\n            <input id=\"igPass\" type=\"password\" class=\"swal2-input\" placeholder=\"كلمة المرور\">
+          `,
+          focusConfirm: false,
+          showCancelButton: true,
+          confirmButtonText: 'حفظ',
+          customClass: { popup: 'dark-swal' },
+          preConfirm: () => {
+            const u = (document.getElementById('igUser')||{}).value?.trim();
+            const p = (document.getElementById('igPass')||{}).value?.trim();
+            if (!u || !p) { Swal.showValidationMessage('أدخل اسم المستخدم وكلمة المرور'); return false; }
+            return { username: u, password: p };
+          }
+        });
+        if (!creds) return;
+        await addInstagramAccount(creds.username, creds.password);
+        return;
+      }
+      if (channel === 'telegram') {
+        const { value: login } = await Swal.fire({
+          title: 'تليجرام - تسجيل الدخول',
+          html: `
+            <input id=\"tgApiKey\" class=\"swal2-input\" placeholder=\"API ID / KEY\">\n            <input id=\"tgApiHash\" class=\"swal2-input\" placeholder=\"API HASH\">\n            <input id=\"tgPhone\" class=\"swal2-input\" placeholder=\"Phone (e.g. 2012XXXXXXXX)\">`
+          ,
+          focusConfirm: false,
+          showCancelButton: true,
+          confirmButtonText: 'تسجيل دخول',
+          customClass: { popup: 'dark-swal' },
+          preConfirm: () => {
+            const k = (document.getElementById('tgApiKey')||{}).value?.trim();
+            const h = (document.getElementById('tgApiHash')||{}).value?.trim();
+            const ph = (document.getElementById('tgPhone')||{}).value?.trim();
+            if (!k || !h || !ph) { Swal.showValidationMessage('أدخل API Key و API Hash ورقم الهاتف'); return false; }
+            return { api_key: k, api_hash: h, phone: ph };
+          }
+        });
+        if (!login) return;
+        const { value: otp } = await Swal.fire({ title:'رمز OTP', input:'text', inputPlaceholder:'ادخل رمز التحقق', showCancelButton:true, confirmButtonText:'تحقق', customClass:{ popup:'dark-swal' }, inputValidator:(v)=>!v && 'أدخل رمز OTP' });
+        if (!otp) return;
+        await addTelegramAccount(login.api_key, login.api_hash, login.phone, otp);
+        return;
+      }
+      if (channel === 'email'){
+        const { value: creds } = await Swal.fire({
+          title: 'بريد - تسجيل الدخول',
+          html: `
+            <input id=\"emUser\" class=\"swal2-input\" placeholder=\"البريد الإلكتروني\">\n            <input id=\"emPass\" type=\"password\" class=\"swal2-input\" placeholder=\"كلمة المرور\">`
+          ,
+          focusConfirm: false,
+          showCancelButton: true,
+          confirmButtonText: 'حفظ',
+          customClass: { popup: 'dark-swal' },
+          preConfirm: () => {
+            const u = (document.getElementById('emUser')||{}).value?.trim();
+            const p = (document.getElementById('emPass')||{}).value?.trim();
+            if (!u || !p) { Swal.showValidationMessage('أدخل البريد وكلمة المرور'); return false; }
+            return { email: u, password: p };
+          }
+        });
+        if (!creds) return;
+        await addEmailAccount(creds.email, creds.password);
+        return;
+      }
+      openAccountModal();
+      document.getElementById('accChannel').value = channel;
+      const wrap = document.getElementById('methodWrap'); if (wrap) wrap.style.display = 'none';
+      document.getElementById('cookiesWrap').style.display = 'none';
+      document.getElementById('dataWrap').style.display = 'none';
+    }
+
+    function onChannelChange(){
+      const ch = document.getElementById('accChannel').value;
+      const wrap = document.getElementById('methodWrap');
+      if (ch === 'facebook'){ wrap.style.display = ''; }
+      else { wrap.style.display = 'none'; document.getElementById('cookiesWrap').style.display = 'none'; document.getElementById('dataWrap').style.display = 'none'; }
+    }
+    function onMethodChange(){
+      const m = document.getElementById('accMethod').value;
+      document.getElementById('cookiesWrap').style.display = (m==='cookies')? '' : 'none';
+      document.getElementById('dataWrap').style.display = (m==='data')? '' : 'none';
+    }
+
+    async function addWhatsAppAccount(token){
+      const body = { name: 'name account', account_uid: '100000033', channel: 'whatsapp', status: 'inactive', data: { session: token } };
+      try{
+        const res = await fetch('api/accounts_api.php', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message||'فشل إضافة الحساب');
+        await loadAccounts();
+        Swal.fire({ icon:'success', title:'تم', text:'تم إضافة حساب واتساب' });
+      }catch(e){ Swal.fire({ icon:'error', title:'خطأ', text: e.message || 'فشل إضافة الحساب' }); }
+    }
+
+    async function addInstagramAccount(username, password){
+      const body = { name: 'name account', account_uid: '100000033', channel: 'instagram', status: 'inactive', data: { username, password } };
+      try{
+        const res = await fetch('api/accounts_api.php', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message||'فشل إضافة الحساب');
+        await loadAccounts();
+        Swal.fire({ icon:'success', title:'تم', text:'تم إضافة حساب انستجرام' });
+      }catch(e){ Swal.fire({ icon:'error', title:'خطأ', text: e.message || 'فشل إضافة الحساب' }); }
+    }
+
+    async function addTelegramAccount(api_key, api_hash, phone, otp){
+      const body = { name: 'name account', account_uid: '100000033', channel: 'telegram', status: 'inactive', data: { api_key, api_hash, phone, otp } };
+      try{
+        const res = await fetch('api/accounts_api.php', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message||'فشل إضافة الحساب');
+        await loadAccounts();
+        Swal.fire({ icon:'success', title:'تم', text:'تم إضافة حساب تليجرام' });
+      }catch(e){ Swal.fire({ icon:'error', title:'خطأ', text: e.message || 'فشل إضافة الحساب' }); }
+    }
+
+    async function addEmailAccount(email, password){
+      const body = { name: 'name account', account_uid: '100000033', channel: 'email', status: 'inactive', data: { email, password } };
+      try{
+        const res = await fetch('api/accounts_api.php', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message||'فشل إضافة الحساب');
+        await loadAccounts();
+        Swal.fire({ icon:'success', title:'تم', text:'تم إضافة حساب بريد' });
+      }catch(e){ Swal.fire({ icon:'error', title:'خطأ', text: e.message || 'فشل إضافة الحساب' }); }
+    }
+
+    function openAccountModal(){
+      editId = null;
+      document.getElementById('modalTitle').textContent = 'إضافة حساب';
+      document.getElementById('accName').value = 'name account';
+      document.getElementById('accUid').value = '100000033';
+      document.getElementById('accChannel').value = 'facebook';
+      document.getElementById('accStatus').value = 'inactive';
+      document.getElementById('accMethod').value = '';
+      document.getElementById('cookiesWrap').style.display = 'none';
+      document.getElementById('dataWrap').style.display = 'none';
+      document.getElementById('methodWrap').style.display = 'none';
+      document.getElementById('accountModal').classList.add('active');
+    }
+    function closeAccountModal(){ document.getElementById('accountModal').classList.remove('active'); }
+
+    function fakeLogin(){ Swal.fire({ icon:'success', title:'تم', text:'تسجيل الدخول (اختبار)'}); }
+
+    async function saveAccount(){
+      const name = document.getElementById('accName').value.trim() || 'name account';
+      const account_uid = document.getElementById('accUid').value.trim() || '100000033';
+      const channel = document.getElementById('accChannel').value;
+      const status = document.getElementById('accStatus').value;
+      const method = document.getElementById('accMethod').value;
+      const cookies_text = document.getElementById('accCookies').value.trim();
+      let data = null; try { const s=document.getElementById('accData').value.trim(); data = s? JSON.parse(s): null; } catch(e){ Swal.fire({icon:'warning', title:'JSON غير صالح'}); return; }
+      const body = { name, account_uid, channel, status };
+      if (channel==='facebook'){ body.method = method; if (method==='cookies') body.cookies_text = cookies_text; else if (method==='data') body.data = data; }
+      console.log('account save', body);
+      try{
+        const methodHTTP = editId ? 'PUT' : 'POST';
+        const payload = editId ? { id: editId, ...body } : body;
+        const res = await fetch('api/accounts_api.php', { method: methodHTTP, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const resp = await res.json();
+        if (!resp.success) throw new Error(resp.message||'فشل الحفظ');
+        closeAccountModal();
+        await loadAccounts();
+        Swal.fire({ icon:'success', title:'تم', text: editId? 'تم التعديل' : 'تم إضافة الحساب' });
+      }catch(e){ Swal.fire({ icon:'error', title:'خطأ', text:e.message||'فشل الحفظ' }); }
+    }
+
+    async function loadAccounts(){
+      try{
+        const res = await fetch('api/accounts_api.php');
+        const data = await res.json(); if (!data.success) throw new Error(data.message||'fail');
+        accounts = data.data || []; filtered = accounts; renderTable(); updateStats();
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:'فشل تحميل الحسابات'}); }
+    }
+
+    function applyFilters(){
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const st = document.getElementById('statusFilter').value;
+      const ch = document.getElementById('channelFilter').value;
+      filtered = accounts.filter(a=>{
+        const mq = (a.name||'').toLowerCase().includes(q) || (String(a.account_uid||'').toLowerCase().includes(q));
+        const ms = !st || (a.status||'inactive')===st;
+        const mc = !ch || (a.channel||'')===ch;
+        return mq && ms && mc;
+      });
+      renderTable(); updateStats();
+    }
+
+    function channelIcon(ch){
+      const map = {
+        facebook: { icon:'fab fa-facebook', label:'فيسبوك' },
+        whatsapp: { icon:'fab fa-whatsapp', label:'واتساب' },
+        instagram: { icon:'fab fa-instagram', label:'انستجرام' },
+        telegram: { icon:'fab fa-telegram', label:'تليجرام' },
+        email: { icon:'fas fa-envelope', label:'بريد' },
+        sms: { icon:'fas fa-sms', label:'SMS' },
+        tiktok: { icon:'fab fa-tiktok', label:'Tiktok' },
+        linkedin: { icon:'fab fa-linkedin', label:'LinkedIn' }
+      };
+      const m = map[ch] || { icon:'fas fa-hashtag', label: ch||'' };
+      return `<span class="category-badge" style="display:inline-flex; align-items:center; gap:.4rem;"><i class="${m.icon}"></i> ${m.label}</span>`;
+    }
+    function statusBadge(st){
+      const s = (st||'inactive');
+      if (s==='active') return '<span class="category-badge status-badge status-active">نشط</span>';
+      if (s==='closed') return '<span class="category-badge status-badge status-closed">مغلق</span>';
+      return '<span class="category-badge status-badge status-inactive">غير مفعل</span>';
+    }
+
+    async function setStatus(id, status){
+      try{
+        const res = await fetch('api/accounts_api.php', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status }) });
+        const d = await res.json(); if (!d.success) throw new Error(d.message||'فشل التحديث');
+        await loadAccounts();
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل تحديث الحالة'}); }
+    }
+    function verifyAccount(id){ setStatus(id, 'active'); }
+    function relinkAccount(id){ setStatus(id, 'active'); }
+
+    function renderTable(){
+      const tbody = document.getElementById('accountsTableBody');
+      if (!filtered.length){ tbody.innerHTML = '<tr><td colspan="7" class="table-loading">لا توجد حسابات</td></tr>'; document.getElementById('displayCount').textContent = 0; return; }
+      tbody.innerHTML = filtered.map(a=>`
+        <tr>
+          <td class="checkbox-cell"><input type="checkbox" onchange="toggleSelection(${a.id}, this.checked)" ${selected.includes(a.id)?'checked':''}></td>
+          <td style="color:var(--text-light); font-weight:600;">${escapeHtml(a.name||'name account')}</td>
+          <td style="font-family: ui-monospace, monospace; color:var(--text-light);">${escapeHtml(a.account_uid||'100000033')}</td>
+          <td>${channelIcon(a.channel)}</td>
+          <td>${statusBadge(a.status)}</td>
+          <td style="font-size:.85rem; color: var(--text-light-dark);">${formatDate(a.updated_at)}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn btn-verify" title="تحقق (تفعيل)" onclick="verifyAccount(${a.id})"><i class="fas fa-circle-check"></i></button>
+              <button class="action-btn btn-pause" title="إيقاف مؤقت" onclick="setStatus(${a.id}, 'inactive')"><i class="fas fa-pause"></i></button>
+              ${ (a.method==='cookies') ? '' : '<button class="action-btn btn-relink" title="إعادة ربط" onclick="relinkAccount(' + a.id + ')"><i class="fas fa-link"></i></button>' }
+              <button class="action-btn btn-edit" title="تعديل" onclick="editAccount(${a.id})"><i class="fas fa-edit"></i></button>
+              <button class="action-btn btn-delete" title="حذف" onclick="deleteAccount(${a.id})"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+      document.getElementById('displayCount').textContent = filtered.length;
+    }
+
+    function updateStats(){
+      document.getElementById('statTotal').textContent = accounts.length;
+      document.getElementById('statActive').textContent = accounts.filter(a=> (a.status||'inactive')==='active').length;
+      document.getElementById('statClosed').textContent = accounts.filter(a=> (a.status||'inactive')==='closed').length;
+      document.getElementById('statInactive').textContent = accounts.filter(a=> (a.status||'inactive')==='inactive').length;
+      const by = (ch)=> accounts.filter(a=> (a.channel||'')===ch).length;
+      const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.textContent = val; };
+      set('statFB', by('facebook'));
+      set('statWA', by('whatsapp'));
+      set('statIG', by('instagram'));
+      set('statTG', by('telegram'));
+      set('statEM', by('email'));
+      set('statSMS', by('sms'));
+      set('statTT', by('tiktok'));
+      set('statLI', by('linkedin'));
+    }
+
+    function toggleSelectAll(){ const all=document.getElementById('selectAll'); document.querySelectorAll('#accountsTableBody input[type="checkbox"]').forEach(cb=>{ cb.checked=all.checked; const id=parseInt(cb.getAttribute('onchange').match(/\d+/)[0]); toggleSelection(id, cb.checked); }); }
+    function toggleSelection(id, checked){ if (checked) { if(!selected.includes(id)) selected.push(id); } else { selected = selected.filter(x=>x!==id); } }
+
+    async function deleteSelected(){ if (selected.length===0){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر حسابات للحذف'}); return; } const r=await Swal.fire({ title:'حذف متعدد', html:`سيتم حذف <strong>${selected.length}</strong> حساب. متابعة؟`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' }); if(!r.isConfirmed) return; try{ const res=await fetch('api/accounts_api.php',{ method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids: selected }) }); const d=await res.json(); if(!d.success) throw new Error(d.message||'فشل الحذف'); selected=[]; document.getElementById('selectAll').checked=false; await loadAccounts(); Swal.fire({icon:'success', title:'تم', text:'تم حذف الحسابات المحددة'});}catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); } }
+
+    async function deleteAccount(id){ const a=accounts.find(x=>x.id===id); if(!a) return; const r=await Swal.fire({ title:'حذف حساب', html:`هل تريد حذف <strong>${escapeHtml(a.name)}</strong>?`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' }); if(!r.isConfirmed) return; try{ const res=await fetch(`api/accounts_api.php/${id}`, { method:'DELETE' }); const d=await res.json(); if(!d.success) throw new Error(d.message||'فشل الحذف'); selected=selected.filter(x=>x!==id); await loadAccounts(); Swal.fire({icon:'success', title:'تم', text:'تم الحذف'});}catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); } }
+
+    function editAccount(id){ const a=accounts.find(x=>x.id===id); if(!a) return; editId=id; document.getElementById('modalTitle').textContent='تعديل حساب'; document.getElementById('accName').value=a.name||'name account'; document.getElementById('accUid').value=a.account_uid||'100000033'; document.getElementById('accChannel').value=a.channel||'facebook'; document.getElementById('accStatus').value=a.status||'inactive'; onChannelChange(); if ((a.channel||'')==='facebook'){ const m=a.method||''; document.getElementById('accMethod').value=m; onMethodChange(); document.getElementById('accCookies').value=a.cookies_text||''; try{ document.getElementById('accData').value = a.data? (typeof a.data==='string'? a.data: JSON.stringify(a.data, null, 2)) : ''; }catch{ document.getElementById('accData').value=''; } } document.getElementById('accountModal').classList.add('active'); }
+
+    function relink(id){ const a=accounts.find(x=>x.id===id); if(!a) return; // open modal focusing on cookies for facebook
+      editId=id; document.getElementById('modalTitle').textContent='إعادة ربط / تحقق'; document.getElementById('accName').value=a.name||'name account'; document.getElementById('accUid').value=a.account_uid||'100000033'; document.getElementById('accChannel').value=a.channel||'facebook'; document.getElementById('accStatus').value=a.status||'inactive'; onChannelChange(); if ((a.channel||'')==='facebook'){ document.getElementById('methodWrap').style.display=''; document.getElementById('accMethod').value='cookies'; onMethodChange(); document.getElementById('accCookies').focus(); } document.getElementById('accountModal').classList.add('active'); }
+
+    function formatDate(s){ if(!s) return '--'; const d=new Date(s); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}); }
+    function escapeHtml(s){ const map={ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }; return String(s||'').replace(/[&<>"']/g, ch=>map[ch]); }
+  </script>
+</body>
+</html>

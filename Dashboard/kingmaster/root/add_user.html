@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إضافة مستخدم جديد - MLM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+
+        .parent-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .parent-info.show {
+            display: block;
+        }
+
+        .parent-info h3 {
+            color: #667eea;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .parent-info p {
+            color: #555;
+            font-size: 14px;
+            margin: 5px 0;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102,126,234,0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .required {
+            color: red;
+        }
+
+        .users-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .users-list h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .user-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .user-item:hover {
+            background: #667eea;
+            color: white;
+            transform: translateX(-5px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>إضافة مستخدم جديد</h1>
+        <p class="subtitle">أضف مستخدم جديد باستخدام كود الإحالة</p>
+
+        <div id="alert" class="alert"></div>
+
+        <form id="addUserForm">
+            <div class="form-group">
+                <label for="referral_code">كود الإحالة <span class="required">*</span></label>
+                <input type="text" id="referral_code" name="referral_code" required placeholder="مثال: ADMIN001" style="text-transform: uppercase;">
+                <small style="color: #666; font-size: 12px; display: block; margin-top: 5px;">أدخل كود الإحالة الخاص بالشخص الذي دعاك</small>
+            </div>
+
+            <div id="parentInfo" class="parent-info">
+                <h3>معلومات صاحب كود الإحالة:</h3>
+                <p><strong>الاسم:</strong> <span id="parentName"></span></p>
+                <p><strong>اسم المستخدم:</strong> <span id="parentUsername"></span></p>
+                <p><strong>الإحالات المباشرة:</strong> <span id="parentReferrals"></span></p>
+            </div>
+
+            <div class="form-group">
+                <label for="username">اسم المستخدم <span class="required">*</span></label>
+                <input type="text" id="username" name="username" required placeholder="مثال: user10">
+            </div>
+
+            <div class="form-group">
+                <label for="email">البريد الإلكتروني <span class="required">*</span></label>
+                <input type="email" id="email" name="email" required placeholder="example@domain.com">
+            </div>
+
+            <div class="form-group">
+                <label for="full_name">الاسم الكامل <span class="required">*</span></label>
+                <input type="text" id="full_name" name="full_name" required placeholder="مثال: أحمد محمد">
+            </div>
+
+            <div class="form-group">
+                <label for="phone">رقم الهاتف</label>
+                <input type="tel" id="phone" name="phone" placeholder="05xxxxxxxx">
+            </div>
+
+            <div class="form-group">
+                <label for="package_id">الباقة المشتراة (اختياري)</label>
+                <select id="package_id" name="package_id">
+                    <option value="">لم يشتري بعد</option>
+                </select>
+                <small style="color: #666; font-size: 12px; display: block; margin-top: 5px;">إذا اخترت باقة، سيتم حساب العمولات تلقائياً</small>
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn">إضافة المستخدم</button>
+        </form>
+
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px;">جاري الإضافة...</p>
+        </div>
+
+        <div class="users-list">
+            <h3>المستخدمين الحاليين</h3>
+            <div id="usersList"></div>
+        </div>
+    </div>
+
+    <script>
+        let usersData = [];
+
+        // تحميل المستخدمين عند فتح الصفحة
+        async function loadUsers() {
+            try {
+                const response = await fetch('api/get_all_users.php');
+                const data = await response.json();
+                
+                if (data.success) {
+                    usersData = data.users;
+                    displayUsersList(data.users);
+                }
+            } catch (error) {
+                console.error('خطأ في تحميل المستخدمين:', error);
+            }
+        }
+        
+        // تحميل الباقات
+        async function loadPackages() {
+            try {
+                const response = await fetch('api/get_packages.php');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const select = document.getElementById('package_id');
+                    data.packages.forEach(pkg => {
+                        const option = document.createElement('option');
+                        option.value = pkg.id;
+                        option.textContent = `${pkg.name} - ${pkg.monthly_price} ر.س`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('خطأ في تحميل الباقات:', error);
+            }
+        }
+
+        // عرض قائمة المستخدمين
+        function displayUsersList(users) {
+            const listDiv = document.getElementById('usersList');
+            listDiv.innerHTML = '';
+            
+            users.forEach(user => {
+                const div = document.createElement('div');
+                div.className = 'user-item';
+                div.innerHTML = `<strong>${user.full_name}</strong> - ${user.username}<br><small style="color: #888;">كود: ${user.referral_code}</small>`;
+                div.onclick = () => {
+                    document.getElementById('referral_code').value = user.referral_code;
+                    document.getElementById('referral_code').dispatchEvent(new Event('input'));
+                };
+                listDiv.appendChild(div);
+            });
+        }
+
+        // عرض معلومات صاحب كود الإحالة
+        document.getElementById('referral_code').addEventListener('input', async function() {
+            const code = this.value.toUpperCase().trim();
+            this.value = code;
+            
+            if (code.length < 3) {
+                document.getElementById('parentInfo').classList.remove('show');
+                return;
+            }
+            
+            // البحث عن المستخدم بالكود
+            const user = usersData.find(u => u.referral_code === code);
+            if (user) {
+                showParentInfo(user);
+            } else {
+                document.getElementById('parentInfo').classList.remove('show');
+            }
+        });
+
+        function showParentInfo(user) {
+            document.getElementById('parentName').textContent = user.full_name;
+            document.getElementById('parentUsername').textContent = user.username;
+            document.getElementById('parentReferrals').textContent = user.direct_referrals;
+            document.getElementById('parentInfo').classList.add('show');
+        }
+
+        // إرسال النموذج
+        document.getElementById('addUserForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                referral_code: document.getElementById('referral_code').value.toUpperCase().trim(),
+                username: document.getElementById('username').value,
+                email: document.getElementById('email').value,
+                full_name: document.getElementById('full_name').value,
+                phone: document.getElementById('phone').value,
+                package_id: document.getElementById('package_id').value || null
+            };
+
+            // عرض التحميل
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('submitBtn').disabled = true;
+            hideAlert();
+
+            try {
+                const response = await fetch('api/add_user.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    let message = `${data.message}<br><br><strong>كود الإحالة:</strong> <span style="font-size: 18px; color: #667eea;">${data.referral_code}</span>`;
+                    
+                    if (data.commissions && data.commissions.total > 0) {
+                        message += `<br><br><strong style="color: #4ade80;">✓ تم حساب عمولات بقيمة:</strong> ${data.commissions.total.toFixed(2)} ر.س`;
+                        message += `<br><small>لـ ${data.commissions.details.length} شخص في الشجرة</small>`;
+                    }
+                    
+                    showAlert(message, 'success');
+                    this.reset();
+                    document.getElementById('parentInfo').classList.remove('show');
+                    loadUsers(); // إعادة تحميل القائمة
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            } catch (error) {
+                showAlert('حدث خطأ أثناء إضافة المستخدم', 'error');
+                console.error('Error:', error);
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+                document.getElementById('submitBtn').disabled = false;
+            }
+        });
+
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.innerHTML = message;
+            alert.className = `alert alert-${type} show`;
+        }
+
+        function hideAlert() {
+            document.getElementById('alert').classList.remove('show');
+        }
+
+        // تحميل البيانات عند فتح الصفحة
+        loadUsers();
+        loadPackages();
+    </script>
+</body>
+</html>

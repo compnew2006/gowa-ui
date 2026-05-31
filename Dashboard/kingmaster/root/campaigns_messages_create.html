@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>King Master - إنشاء حملة رسائل</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    :root { color-scheme: dark; }
+    .content-admin-container { min-height:100vh; position:relative; z-index:1; }
+    .main-content { padding:0; }
+    .content-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem; flex-wrap:wrap; gap:1rem; }
+    .content-title { font-size:2rem; font-weight:700; color:var(--text-light); margin:0; }
+    .content-actions { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+
+    .card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.25rem; backdrop-filter: blur(10px); }
+    .grid { display:grid; gap:1rem; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    .form-group { margin-bottom:1rem; }
+    .form-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:600; }
+    .form-group input, .form-group select, .form-group textarea { width:100%; padding:.75rem; background:rgba(17,24,39,0.85); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    .form-help { color:var(--text-light-dark); font-size:.85rem; margin-top:.25rem; }
+
+    .section-title { font-size:1.1rem; font-weight:700; color:var(--text-light); margin:0 0 .75rem; display:flex; align-items:center; gap:.5rem; }
+
+    .pill { display:inline-flex; align-items:center; gap:.35rem; background:rgba(255,255,255,.08); border:1px solid var(--glass-border); border-radius:999px; padding:.25rem .6rem; margin:.125rem; }
+
+    .btn { padding:0.65rem 1.25rem; border:none; border-radius:var(--radius-md); font-weight:600; cursor:pointer; transition:all .3s ease; display:inline-flex; align-items:center; gap:.5rem; }
+    .btn-primary { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; }
+    .btn-secondary { background:var(--glass-bg); color:var(--text-light-dark); border:1px solid var(--glass-border); }
+    .btn-danger { background:rgba(239,68,68,.2); color:#EF4444; border:1px solid #EF4444; }
+
+    .chips { display:flex; flex-wrap:wrap; gap:.25rem; }
+    .area { min-height:140px; }
+
+    .upload-box { border:1px dashed var(--glass-border); border-radius:var(--radius-md); padding:1rem; text-align:center; color:var(--text-light-dark); }
+
+    @media (max-width: 900px){ .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="dashboard-container content-admin-container">
+    <div class="main-content" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+      <div class="content-header">
+        <div class="content-title"><i class="fas fa-paper-plane" style="margin-left:.5rem;"></i> إنشاء حملة رسائل</div>
+        <div class="content-actions">
+          <button class="btn btn-secondary" onclick="resetForm()"><i class="fas fa-broom"></i> مسح</button>
+          <button class="btn btn-primary" onclick="saveCampaign()"><i class="fas fa-save"></i> حفظ الحملة</button>
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <!-- تعريف الحملة -->
+        <div class="card">
+          <div class="section-title"><i class="fas fa-info-circle"></i> بيانات الحملة</div>
+          <div class="form-group">
+            <label>اسم الحملة</label>
+            <input type="text" id="cName" placeholder="مثال: حملة أكتوبر">
+          </div>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label>القناة</label>
+              <select id="cChannel" onchange="onChannelChange()">
+                <option value="whatsapp">واتساب</option>
+                <option value="sms">SMS</option>
+                <option value="email">بريد إلكتروني</option>
+                <option value="telegram">تيليجرام</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>الإرسال</label>
+              <select id="cScheduleType" onchange="toggleSchedule()">
+                <option value="now">الآن</option>
+                <option value="later">تحديد وقت</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-2" id="scheduleRow" style="display:none;">
+            <div class="form-group">
+              <label>التاريخ</label>
+              <input type="date" id="cDate">
+            </div>
+            <div class="form-group">
+              <label>الوقت</label>
+              <input type="time" id="cTime">
+            </div>
+          </div>
+          <div class="grid grid-3">
+            <div class="form-group">
+              <label>عدد الرسائل/الدقيقة (اختياري)</label>
+              <input type="number" id="cRate" placeholder="مثال: 30">
+            </div>
+            <div class="form-group">
+              <label>إرسال اختبار إلى</label>
+              <input type="text" id="cTestTarget" placeholder="هاتف أو بريد للاختبار">
+            </div>
+            <div class="form-group" style="display:flex; align-items:flex-end;">
+              <button class="btn btn-secondary" onclick="sendTest()"><i class="fas fa-vial"></i> إرسال اختبار</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- المستلمين -->
+        <div class="card">
+          <div class="section-title"><i class="fas fa-users"></i> المستلمون</div>
+          <div class="form-group">
+            <label>إضافة مستلمين</label>
+            <textarea id="cRecipients" class="area" placeholder="أضف أرقام الهواتف أو البريد الإلكتروني كل سطر على حدة"></textarea>
+            <div class="form-help">يمكنك لصق قائمة أرقام/بريد، سطر لكل مستلم</div>
+          </div>
+          <div class="form-group">
+            <label>أو رفع ملف CSV</label>
+            <div class="upload-box">
+              <input type="file" id="cCsv" accept=".csv" onchange="importCSV(event)">
+              <div class="form-help">صيغة مدعومة: عمود واحد (هاتف/بريد) أو أعمدة تشمل phone/email</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>إحصائيات سريعة</label>
+            <div class="chips">
+              <span class="pill"><i class="fas fa-hashtag"></i> <span id="rcpCount">0</span> مستلم</span>
+              <span class="pill"><i class="fas fa-money-bill"></i> التكلفة التقريبية: <span id="rcpCost">0</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- الرسالة -->
+      <div class="card" style="margin-top:1rem;">
+        <div class="section-title"><i class="fas fa-message"></i> محتوى الرسالة</div>
+        <div id="emailFields" class="grid grid-2" style="display:none;">
+          <div class="form-group">
+            <label>الموضوع</label>
+            <input type="text" id="emailSubject" placeholder="موضوع البريد">
+          </div>
+          <div class="form-group">
+            <label>من (اختياري)</label>
+            <input type="text" id="emailFrom" placeholder="support@example.com">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>النص</label>
+          <textarea id="cBody" class="area" placeholder="اكتب رسالتك هنا... يمكنك استخدام متغيرات مثل {{name}}"></textarea>
+          <div class="form-help">متغيرات مدعومة: {{name}}, {{email}}, {{phone}}</div>
+        </div>
+        <div id="waAttachRow" class="grid grid-3">
+          <div class="form-group">
+            <label>إرفاق صورة (اختياري)</label>
+            <input type="url" id="waImage" placeholder="رابط الصورة">
+          </div>
+          <div class="form-group">
+            <label>إرفاق ملف (اختياري)</label>
+            <input type="url" id="waFile" placeholder="رابط الملف">
+          </div>
+          <div class="form-group">
+            <label>رابط (CTA)</label>
+            <input type="url" id="waLink" placeholder="https://...">
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem; display:flex; gap:.5rem; justify-content:flex-end;">
+        <button class="btn btn-secondary" onclick="resetForm()"><i class="fas fa-rotate-left"></i> إعادة تعيين</button>
+        <button class="btn btn-primary" onclick="saveCampaign()"><i class="fas fa-save"></i> حفظ الحملة</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function onChannelChange(){ const ch = document.getElementById('cChannel').value; document.getElementById('emailFields').style.display = (ch==='email')?'grid':'none'; document.getElementById('waAttachRow').style.display = (ch==='whatsapp' || ch==='telegram')?'grid':'none'; }
+    function toggleSchedule(){ const v=document.getElementById('cScheduleType').value; document.getElementById('scheduleRow').style.display = v==='later'?'grid':'none'; }
+
+    function getRecipients(){
+      const raw = document.getElementById('cRecipients').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      return Array.from(new Set(raw));
+    }
+    function updateQuickStats(){ const rec = getRecipients(); document.getElementById('rcpCount').textContent = rec.length; const ch=document.getElementById('cChannel').value; const cost = ch==='sms'? rec.length*0.05 : 0; document.getElementById('rcpCost').textContent = cost.toFixed(2); }
+    document.getElementById('cRecipients').addEventListener('input', updateQuickStats);
+    document.getElementById('cChannel').addEventListener('change', updateQuickStats);
+
+    async function importCSV(e){
+      const file = e.target.files && e.target.files[0]; if(!file) return;
+      const text = await file.text();
+      // naive CSV parse
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      let out = [];
+      if (lines.length){
+        const header = lines[0].split(',').map(s=>s.trim().toLowerCase());
+        if (header.length>1){
+          const pPhone = header.indexOf('phone'); const pEmail = header.indexOf('email');
+          for (let i=1;i<lines.length;i++){ const cols = lines[i].split(','); if (pPhone>=0 && cols[pPhone]) out.push(cols[pPhone].trim()); else if (pEmail>=0 && cols[pEmail]) out.push(cols[pEmail].trim()); }
+        } else {
+          out = lines.map(s=>s.trim());
+        }
+      }
+      const area = document.getElementById('cRecipients');
+      const exist = area.value ? area.value.split(/\r?\n/) : [];
+      const merged = Array.from(new Set([...exist.map(s=>s.trim()).filter(Boolean), ...out]));
+      area.value = merged.join('\n');
+      updateQuickStats();
+    }
+
+    function collectPayload(){
+      const name = document.getElementById('cName').value.trim();
+      const channel = document.getElementById('cChannel').value;
+      const scheduleType = document.getElementById('cScheduleType').value;
+      const when = scheduleType==='later' ? `${document.getElementById('cDate').value} ${document.getElementById('cTime').value}`.trim() : null;
+      const rate = Number(document.getElementById('cRate').value||0) || null;
+      const testTarget = document.getElementById('cTestTarget').value.trim() || null;
+      const recipients = getRecipients();
+      const body = document.getElementById('cBody').value;
+      const emailSubject = document.getElementById('emailSubject').value.trim()||null;
+      const emailFrom = document.getElementById('emailFrom').value.trim()||null;
+      const waImage = document.getElementById('waImage').value.trim()||null;
+      const waFile = document.getElementById('waFile').value.trim()||null;
+      const waLink = document.getElementById('waLink').value.trim()||null;
+      return { name, channel, scheduleType, when, rate, testTarget, recipients, body, emailSubject, emailFrom, waImage, waFile, waLink };
+    }
+
+    async function saveCampaign(){
+      const p = collectPayload();
+      if (!p.name){ Swal.fire({icon:'warning', title:'تنبيه', text:'أدخل اسم الحملة'}); return; }
+      if (!Array.isArray(p.recipients) || p.recipients.length===0){ Swal.fire({icon:'warning', title:'تنبيه', text:'أضف مستلمين'}); return; }
+      try{
+        // استبدل هذا بعنوان API الحقيقي لديك إذا رغبت
+        console.log('save messages campaign', p);
+        await new Promise(r=>setTimeout(r,400));
+        Swal.fire({icon:'success', title:'تم', text:'تم حفظ الحملة'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:'تعذر حفظ الحملة'}); }
+    }
+
+    async function sendTest(){
+      const p = collectPayload(); if (!p.testTarget){ Swal.fire({icon:'warning', title:'تنبيه', text:'أدخل هدف الاختبار'}); return; }
+      try{ console.log('send test', {to:p.testTarget, channel:p.channel, body:p.body}); await new Promise(r=>setTimeout(r,400)); Swal.fire({icon:'success', title:'تم', text:'تم إرسال الاختبار'}); }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:'تعذر إرسال الاختبار'}); }
+    }
+
+    function resetForm(){ document.getElementById('cName').value=''; document.getElementById('cChannel').value='whatsapp'; onChannelChange(); document.getElementById('cScheduleType').value='now'; toggleSchedule(); document.getElementById('cDate').value=''; document.getElementById('cTime').value=''; document.getElementById('cRate').value=''; document.getElementById('cTestTarget').value=''; document.getElementById('cRecipients').value=''; document.getElementById('cBody').value=''; document.getElementById('emailSubject').value=''; document.getElementById('emailFrom').value=''; document.getElementById('waImage').value=''; document.getElementById('waFile').value=''; document.getElementById('waLink').value=''; updateQuickStats(); }
+
+    // init
+    onChannelChange(); toggleSchedule(); updateQuickStats();
+  </script>
+</body>
+</html>

@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>إحصائيات المستخدمين</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/map/js/world.js"></script>
+  <!-- MapLibre GL for advanced choropleth map -->
+  <style>
+    :root { color-scheme: dark; }
+    .content-admin-container { min-height:100vh; position:relative; z-index:1; }
+    .main-content { padding:0; }
+    .content-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem; }
+    .content-title { font-size:2rem; font-weight:700; color:var(--text-light); margin:0; }
+    .content-actions { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
+    .btn { padding:0.6rem 1rem; border:none; border-radius:var(--radius-md); font-weight:600; cursor:pointer; }
+    .btn-primary { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; }
+    .btn-secondary { background:var(--glass-bg); border:1px solid var(--glass-border); color:var(--text-light); }
+
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:1rem; margin-bottom:1rem; }
+.stat-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1rem; text-align:center; }
+    .stat-card.full { grid-column: 1 / -1; }
+    .stat-number { font-size:1.6rem; font-weight:800; color:var(--primary-light); }
+    .stat-label { color:var(--text-light-dark); font-size:.9rem; }
+
+    .panels { display:grid; grid-template-columns:2fr 1fr; gap:1rem; }
+    .panel { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1rem; }
+    .panel h3 { margin:0 0 .75rem; color:var(--text-light); font-size:1.1rem; }
+    .chart { width:100%; height:420px; }
+
+    .filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.5rem; margin-bottom:.5rem; }
+    .filters label { display:block; font-size:.85rem; margin-bottom:.25rem; color:var(--text-light); }
+    .filters input, .filters select { width:100%; padding:.55rem .6rem; background:rgba(17,24,39,.85); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); }
+
+    .table { width:100%; border-collapse:collapse; }
+    .table th, .table td { padding:.75rem; border-bottom:1px solid rgba(255,255,255,.08); text-align:right; }
+    .table th { background:rgba(108,92,231,.08); position:sticky; top:0; }
+
+    .birthday-alert { background:rgba(255,255,255,.06); border:1px dashed var(--glass-border); border-radius:var(--radius-md); padding:.75rem; margin-bottom:1rem; }
+    .birthday-item { display:flex; justify-content:space-between; padding:.4rem .5rem; border-bottom:1px solid rgba(255,255,255,.05); }
+    .birthday-item:last-child { border-bottom:none; }
+
+    .action-buttons { display:flex; gap:.4rem; align-items:center; }
+    .action-btn { width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--glass-border); border-radius:6px; background:rgba(255,255,255,.06); color:#e5e7eb; cursor:pointer; }
+    .action-btn:hover { background:rgba(108,92,231,.15); }
+
+    /* Simple Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); display:none; align-items:center; justify-content:center; z-index:2000; }
+    .modal-overlay.active { display:flex; }
+    .modal { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:12px; width:95%; max-width:560px; padding:1rem; }
+    .modal h3 { margin:0 0 .75rem; color:var(--text-light); }
+    .modal .form-group { margin-bottom:.75rem; }
+    .modal label { display:block; margin-bottom:.25rem; color:var(--text-light); font-weight:600; }
+    .modal input, .modal textarea { width:100%; padding:.6rem .7rem; background:rgba(17,24,39,.85); border:1px solid var(--glass-border); border-radius:8px; color:var(--text-light); }
+    .modal textarea { min-height:120px; resize:vertical; }
+    .modal .footer { display:flex; gap:.5rem; justify-content:flex-end; margin-top:.75rem; }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="dashboard-container content-admin-container">
+    <div class="main-content" style="max-width: 1400px; margin: 0 auto; padding: 1.5rem;">
+      <div class="content-header">
+        <div class="content-title"><i class="fas fa-chart-line" style="margin-left:.5rem;"></i> إحصائيات المستخدمين</div>
+        <div class="content-actions">
+          <button class="btn btn-secondary" onclick="exportAllUsers()"><i class="fas fa-file-csv"></i> حفظ كل العملاء CSV</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-number" id="sTotal">0</div><div class="stat-label">إجمالي المستخدمين</div></div>
+        <div class="stat-card"><div class="stat-number" id="sActive">0</div><div class="stat-label">نشط</div></div>
+        <div class="stat-card"><div class="stat-number" id="sInactive">0</div><div class="stat-label">معطل</div></div>
+        <div class="stat-card"><div class="stat-number" id="sExpiring">0</div><div class="stat-label">ينتهي خلال 10 أيام</div></div>
+        <div class="stat-card"><div class="stat-number" id="sAvgAge">-</div><div class="stat-label">متوسط الأعمار</div></div>
+        <div class="stat-card"><div class="stat-number" id="sPoints">0</div><div class="stat-label">إجمالي النقاط</div></div>
+      </div>
+
+      <div class="stats-grid" style="margin-top: .5rem;">
+        <div class="stat-card full"><div class="stat-number" id="sLastUser">-</div><div class="stat-label">تاريخ آخر مستخدم</div></div>
+      </div>
+
+      <div class="birthday-alert" id="birthdayAlerts" style="display:none;"></div>
+
+      <div class="panels">
+        <div class="panel">
+          <h3><i class="fas fa-globe"></i> خريطة توزع المستخدمين حسب الدولة (من المنطقة الزمنية)</h3>
+          <div id="mapChart" class="chart"></div>
+        </div>
+        <div class="panel">
+          <h3><i class="fas fa-box"></i> أكثر الباقات استخداماً</h3>
+          <div id="packagesChart" class="chart" style="height:420px;"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:1rem;">
+        <h3><i class="fas fa-calendar"></i> إحصائيات تواريخ الميلاد خلال السنة</h3>
+        <div id="birthdaysChart" class="chart" style="height:340px;"></div>
+      </div>
+
+      <div class="panel" style="margin-top:1rem;">
+        <h3><i class="fas fa-filter"></i> تصفية حسب تاريخ انتهاء الاشتراك</h3>
+        <div class="filters">
+          <div>
+            <label>من تاريخ</label>
+            <input type="date" id="fStart">
+          </div>
+          <div>
+            <label>إلى تاريخ</label>
+            <input type="date" id="fEnd">
+          </div>
+          <div style="display:flex; gap:.5rem; align-items:end;">
+            <button class="btn btn-primary" onclick="applySubsFilter()"><i class="fas fa-search"></i> عرض</button>
+            <button class="btn btn-secondary" onclick="exportFiltered()"><i class="fas fa-file-export"></i> حفظ CSV</button>
+          </div>
+        </div>
+        <div style="overflow:auto;">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>المستخدم</th>
+                <th>البريد</th>
+                <th>الهاتف</th>
+                <th>تاريخ الميلاد</th>
+                <th>الوظيفة</th>
+                <th>النقاط</th>
+                <th>الباقة</th>
+                <th>تاريخ الانتهاء</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="subsTbody"><tr><td colspan="9" style="text-align:center; padding:1rem; color:var(--text-light-dark);">لا توجد بيانات</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:1rem;">
+        <h3><i class="fas fa-user-search"></i> بحث عن مستخدم</h3>
+        <div class="filters">
+          <div>
+            <label>البحث (هاتف/بريد/اسم)</label>
+            <input type="text" id="uQuery" placeholder="مثال: 2010.. أو name@example.com أو أحمد">
+          </div>
+          <div style="display:flex; gap:.5rem; align-items:end;">
+            <button class="btn btn-primary" onclick="applyUserSearch()"><i class="fas fa-search"></i> بحث</button>
+            <button class="btn btn-secondary" onclick="exportUserSearch()"><i class="fas fa-file-export"></i> حفظ CSV</button>
+          </div>
+        </div>
+        <div style="overflow:auto;">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>المستخدم</th>
+                <th>البريد</th>
+                <th>الهاتف</th>
+                <th>تاريخ الميلاد</th>
+                <th>الوظيفة</th>
+                <th>النقاط</th>
+                <th>الباقة</th>
+                <th>تاريخ الانتهاء</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="usrTbody"><tr><td colspan="9" style="text-align:center; padding:1rem; color:var(--text-light-dark);">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:1rem;">
+        <h3><i class="fas fa-birthday-cake"></i> تواريخ الميلاد</h3>
+        <div class="filters">
+          <div>
+            <label>الشهر</label>
+            <select id="bMonth">
+              <option value="">اختر</option>
+              <option value="1">يناير</option>
+              <option value="2">فبراير</option>
+              <option value="3">مارس</option>
+              <option value="4">أبريل</option>
+              <option value="5">مايو</option>
+              <option value="6">يونيو</option>
+              <option value="7">يوليو</option>
+              <option value="8">أغسطس</option>
+              <option value="9">سبتمبر</option>
+              <option value="10">أكتوبر</option>
+              <option value="11">نوفمبر</option>
+              <option value="12">ديسمبر</option>
+            </select>
+          </div>
+          <div>
+            <label>اليوم (اختياري)</label>
+            <select id="bDay">
+              <option value="">—</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:.5rem; align-items:end;">
+            <button class="btn btn-primary" onclick="loadBirthdays()"><i class="fas fa-search"></i> جلب</button>
+          </div>
+        </div>
+        <div style="overflow:auto;">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>المستخدم</th>
+                <th>البريد</th>
+                <th>الهاتف</th>
+                <th>تاريخ الميلاد</th>
+                <th>الوظيفة</th>
+                <th>النقاط</th>
+                <th>الباقة</th>
+                <th>تاريخ الانتهاء</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="bdTbody"><tr><td colspan="9" style="text-align:center; padding:1rem; color:var(--text-light-dark);">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- WhatsApp Modal -->
+  <div class="modal-overlay" id="whatsModal">
+    <div class="modal">
+      <h3><i class="fab fa-whatsapp" style="margin-left:.4rem;"></i> إرسال رسالة واتساب</h3>
+      <div class="form-group">
+        <label>رقم الهاتف</label>
+        <input type="tel" id="waPhone" placeholder="مثال: 2010xxxxxxxx">
+      </div>
+      <div class="form-group">
+        <label>الرسالة</label>
+        <textarea id="waMsg" placeholder="اكتب رسالتك..."></textarea>
+      </div>
+      <div class="footer">
+        <button class="btn btn-secondary" onclick="closeModal('whatsModal')">إلغاء</button>
+        <button class="btn btn-primary" onclick="sendWhats()">إرسال</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email Modal -->
+  <div class="modal-overlay" id="emailModal">
+    <div class="modal">
+      <h3><i class="fas fa-envelope" style="margin-left:.4rem;"></i> إرسال بريد</h3>
+      <div class="form-group">
+        <label>البريد الإلكتروني</label>
+        <input type="email" id="emEmail" placeholder="name@example.com">
+      </div>
+      <div class="form-group">
+        <label>الرسالة</label>
+        <textarea id="emMsg" placeholder="اكتب رسالتك..."></textarea>
+      </div>
+      <div class="footer">
+        <button class="btn btn-secondary" onclick="closeModal('emailModal')">إلغاء</button>
+        <button class="btn btn-primary" onclick="sendEmail()">إرسال</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notify Modal -->
+  <div class="modal-overlay" id="notifyModal">
+    <div class="modal">
+      <h3><i class="fas fa-bell" style="margin-left:.4rem;"></i> إرسال إشعار</h3>
+      <div class="form-group">
+        <label>ID المستخدم</label>
+        <input type="text" id="ntfUserId" readonly>
+      </div>
+      <div class="form-group">
+        <label>الرسالة</label>
+        <textarea id="ntfMsg" placeholder="اكتب رسالتك..."></textarea>
+      </div>
+      <div class="footer">
+        <button class="btn btn-secondary" onclick="closeModal('notifyModal')">إلغاء</button>
+        <button class="btn btn-primary" onclick="sendNotify()">إرسال</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = 'api/analytics_api.php';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Populate days 1..31
+      const bDay = document.getElementById('bDay');
+      for (let i=1;i<=31;i++){ const o=document.createElement('option'); o.value=i; o.textContent=i; bDay.appendChild(o); }
+      loadOverview();
+      loadGeo();
+      loadPackages();
+      loadBirthdayAlerts();
+      loadBirthdaysStats();
+    });
+
+    async function loadOverview(){
+      try { const r = await fetch(`${API}?action=overview&days=10`); const d = await r.json(); if(!d.success) throw new Error();
+        setText('sTotal', d.data.total_users);
+        setText('sActive', d.data.active);
+        setText('sInactive', d.data.inactive);
+        setText('sExpiring', d.data.expiring_in_days);
+        setText('sAvgAge', d.data.avg_age ?? '-');
+        setText('sPoints', d.data.total_points ?? 0);
+        setText('sLastUser', formatDateTime(d.data.last_user_date));
+      } catch(e){ console.warn('overview failed'); }
+    }
+
+    async function loadGeo(){
+      try { const r=await fetch(`${API}?action=geo`); const d=await r.json(); if(!d.success) throw new Error();
+        const data = d.data.map(x=>({ name: x.name, value: x.count }));
+        await renderMap2D(data);
+      } catch(e){ await renderMap2D([]); }
+    }
+
+    async function loadPackages(){
+      try { const r=await fetch(`${API}?action=packages`); const d=await r.json(); if(!d.success) throw new Error();
+        const labels = d.data.map(x=>x.label); const vals = d.data.map(x=>x.count);
+        renderPackages(labels, vals);
+      } catch(e){ renderPackages([],[]); }
+    }
+
+    async function ensureWorldMap(){
+      if (echarts.getMap && echarts.getMap('world')) return true;
+      // Try local then JSON CDN sources
+      const jsonUrls = [
+        'maps/world.json',
+        'assets/maps/world.json',
+        'https://echarts.apache.org/examples/data/asset/geo/world.json',
+        'https://cdn.jsdelivr.net/npm/echarts-countries-js@1.5.0/dist/countries/world.min.json',
+        'https://unpkg.com/echarts-countries-js/dist/countries/world.min.json'
+      ];
+      for (const u of jsonUrls){
+        try { const r = await fetch(u, {cache:'no-store'}); if(!r.ok) continue; const geo = await r.json(); if (geo && echarts.registerMap) { echarts.registerMap('world', geo); return true; } } catch(_){}
+      }
+      // Try JS map loader
+      const jsUrls = [
+        'https://cdn.jsdelivr.net/npm/echarts@5/map/js/world.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/extension/bmap.min.js' // fallback no-op
+      ];
+      for (const u of jsUrls){
+        try {
+          await new Promise((resolve,reject)=>{
+            const s=document.createElement('script'); s.src=u; s.async=true; s.onload=()=>resolve(); s.onerror=()=>reject(); document.head.appendChild(s);
+          });
+          if (echarts.getMap && echarts.getMap('world')) return true;
+        } catch(_){}
+      }
+      return false;
+    }
+
+    async function ensureEchartsGL(){
+      // If map3D is available, return true
+      try {
+        const test = echarts.graphic && echarts.version; // echarts loaded
+      } catch(_) { return false; }
+      // Quick check: if extension already loaded
+      try {
+        const option = { series:[{type:'map3D'}] };
+        // Some builds throw if extension missing; we won't set this option, just probing
+      } catch(_) {}
+      // Load extension
+      const urls = [
+        'https://cdn.jsdelivr.net/npm/echarts-gl@2/dist/echarts-gl.min.js',
+        'https://unpkg.com/echarts-gl@2/dist/echarts-gl.min.js'
+      ];
+      for (const u of urls){
+        try {
+          await new Promise((resolve,reject)=>{ const s=document.createElement('script'); s.src=u; s.async=true; s.onload=resolve; s.onerror=reject; document.head.appendChild(s); });
+          // If loaded successfully, return
+          return true;
+        } catch(_){}
+      }
+      return false;
+    }
+
+    async function resolveWorldGeo(){
+      const candidates = [ 'maps/world.json', 'assets/maps/world.json', 'https://echarts.apache.org/examples/data/asset/geo/world.json' ];
+      for (const u of candidates){ try { const r=await fetch(u,{cache:'no-store'}); if(r.ok) return u; } catch(_){} }
+      return null;
+    }
+
+    async function renderMap(data){
+      const el = document.getElementById('mapChart');
+      const hasData = Array.isArray(data) && data.length>0;
+
+      // Try MapLibre GL first
+      if (window.maplibregl){
+        const geoUrl = await resolveWorldGeo();
+        if (geoUrl){
+          el.innerHTML = '';
+          const map = new maplibregl.Map({
+            container: el,
+            style: { version:8, sources:{ countries:{ type:'geojson', data: geoUrl, promoteId:'name' } }, layers:[
+              { id:'countries-fill', type:'fill', source:'countries', paint:{ 'fill-color':'#1f2937', 'fill-opacity':0.9 } },
+              { id:'countries-line', type:'line', source:'countries', paint:{ 'line-color':'#4b5563', 'line-width':0.6 } }
+            ] },
+            center:[0,20], zoom:1.2, attributionControl:false
+          });
+          const maxV = Math.max(1, ...data.map(d=>d.value||0));
+          const popup = new maplibregl.Popup({closeButton:false, closeOnClick:false});
+          map.on('load', ()=>{
+            // Initialize feature-state values
+            for (const r of data){ try { map.setFeatureState({source:'countries', id:r.name}, {value:r.value}); } catch(_){} }
+            // Set choropleth paint using feature-state
+            map.setPaintProperty('countries-fill', 'fill-color', [
+              'interpolate', ['linear'], ['feature-state','value'],
+              0, '#111827',
+              maxV*0.33, '#6c5ce7',
+              maxV, '#8e44ad'
+            ]);
+          });
+          map.on('mousemove','countries-fill', (e)=>{
+            const f = e.features && e.features[0]; if (!f) return;
+            const name = f.properties && f.properties.name; const st = map.getFeatureState({source:'countries', id:name});
+            popup.setLngLat(e.lngLat).setHTML(`<div style=\"font-family:Cairo,Roboto\">${name||''}: ${st && st.value || 0}</div>`).addTo(map);
+          });
+          map.on('mouseleave','countries-fill', ()=> popup.remove());
+          return; // done with MapLibre
+        }
+      }
+
+      // Fallback to ECharts (3D if available)
+      const chart = echarts.init(el);
+      const hasMap = await ensureWorldMap();
+      const hasGL = await ensureEchartsGL();
+
+      if (hasGL && hasMap) {
+        const maxV = Math.max(1, ...data.map(d=>d.value||0));
+        const option3D = {
+          tooltip: { trigger:'item', formatter:(p)=> `${p.name}: ${p.value||0}` },
+          visualMap: hasData ? { min:0, max:maxV, text:['مرتفع','منخفض'], calculable:true, inRange:{color:['#0b1020','#6c5ce7','#8e44ad']} } : undefined,
+          series: [{
+            type:'map3D', map:'world', data: data,
+            roam: true,
+            shading: 'realistic',
+            realisticMaterial: { roughness: 0.8 },
+            environment: '#0b1020',
+            itemStyle:{ areaColor:'#1b1f3b', borderColor:'#6b7280', borderWidth:0.6 },
+            label:{ show:false, color:'#e5e7eb' },
+            emphasis:{ itemStyle:{ areaColor:'#6c5ce7' }, label:{ show:true, color:'#fff' } },
+            light:{ main:{ intensity:1.2, shadow:false }, ambient:{ intensity:0.3 } },
+            viewControl:{ distance:90 }
+          }],
+          graphic: !hasData ? [{ type:'text', left:'center', top:'middle', style:{ text:'لا توجد بيانات', fill:'#9ca3af', fontSize:16 } }] : []
+        };
+        chart.setOption(option3D);
+        window.addEventListener('resize', ()=>chart.resize());
+        return;
+      }
+
+      const option2D = {
+        tooltip: { trigger:'item', formatter:(p)=> `${p.name}: ${p.value||0}` },
+        visualMap: hasData ? { min:0, max: Math.max(1, ...data.map(d=>d.value||0)), text:['مرتفع','منخفض'], realtime:false, calculable:true, inRange:{color:['#1f2937','#6c5ce7','#8e44ad']} } : undefined,
+        series: [{
+          name:'Users', type:'map', map:'world', roam:true,
+          itemStyle:{ areaColor:'#1f2937', borderColor:'#4b5563' },
+          emphasis:{ itemStyle:{ areaColor:'#374151' }, label:{show:false} },
+          data: data
+        }],
+        graphic: !hasMap ? [{ type:'text', left:'center', top:'middle', style:{ text:'تعذر تحميل خريطة العالم', fill:'#ef4444', fontSize:16 } }] : (!hasData ? [{ type:'text', left:'center', top:'middle', style:{ text:'لا توجد بيانات', fill:'#9ca3af', fontSize:16 } }] : [])
+      };
+      chart.setOption(option2D);
+      window.addEventListener('resize', ()=>chart.resize());
+    }
+
+    function renderPackages(labels, vals){
+      const el = document.getElementById('packagesChart');
+      const chart = echarts.init(el);
+      const hasData = labels && labels.length>0;
+      const option = {
+        tooltip:{},
+        grid:{left:30,right:10,top:20,bottom:40,containLabel:true},
+        xAxis:{ type:'category', data: labels, axisLabel:{color:'#ddd'} },
+        yAxis:{ type:'value', axisLabel:{color:'#ddd'} },
+        series: hasData ? [{ type:'bar', data: vals, itemStyle:{color:'#6c5ce7'}, label:{show:true, position:'top', color:'#eee'} }] : [],
+        graphic: !hasData ? [{ type:'text', left:'center', top:'middle', style:{ text:'لا توجد بيانات', fill:'#9ca3af', fontSize:16 } }] : []
+      };
+      chart.setOption(option);
+      window.addEventListener('resize', ()=>chart.resize());
+    }
+
+    async function loadBirthdaysStats(){
+      try{ const r=await fetch(`${API}?action=birthdays_stats&group=year`); const j=await r.json(); if(!j.success) throw new Error();
+        const data = (j.data||[]);
+        const labels = data.map(x=> String(x.year));
+        const vals = data.map(x=> x.count||0);
+        renderBirthdaysStats(labels, vals);
+      }catch(e){ renderBirthdaysStats(['لا يوجد'], [0]); }
+    }
+
+    function renderBirthdaysStats(labels, vals){
+      const el = document.getElementById('birthdaysChart');
+      const chart = echarts.init(el);
+      const hasData = labels && labels.length>0;
+      const option = {
+        tooltip:{},
+        grid:{left:30,right:10,top:20,bottom:40,containLabel:true},
+        xAxis:{ type:'category', data: labels, axisLabel:{color:'#ddd'} },
+        yAxis:{ type:'value', axisLabel:{color:'#ddd'} },
+        series: hasData ? [{ type:'bar', data: vals, itemStyle:{color:'#10b981'}, label:{show:true, position:'top', color:'#eee'} }] : [],
+        graphic: !hasData ? [{ type:'text', left:'center', top:'middle', style:{ text:'لا توجد بيانات', fill:'#9ca3af', fontSize:16 } }] : []
+      };
+      chart.setOption(option);
+      window.addEventListener('resize', ()=>chart.resize());
+    }
+
+    async function applySubsFilter(){
+      const s = document.getElementById('fStart').value; const e = document.getElementById('fEnd').value;
+      if (!s || !e){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر فترة تاريخ صحيحة'}); return; }
+      try{
+        const r = await fetch(`${API}?action=filter_subs`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({start_date:s, end_date:e})});
+        const d = await r.json(); if(!d.success) throw new Error(d.message||'خطأ');
+        renderSubs(d.data||[]);
+      }catch(err){ Swal.fire({icon:'error', title:'خطأ', text:'تعذر التحميل'}); }
+    }
+
+    let currentSubs = [];
+    function renderSubs(rows){
+      currentSubs = rows || [];
+      const tb = document.getElementById('subsTbody');
+      if (!rows.length){ tb.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:1rem; color:var(--text-light-dark);">لا توجد نتائج</td></tr>'; return; }
+      tb.innerHTML = rows.map((r,i)=>`
+        <tr>
+          <td>${escapeHtml(r.first_name||'')} ${escapeHtml(r.last_name||'')}</td>
+          <td>${escapeHtml(r.email||'')}</td>
+          <td>${escapeHtml(r.phone||'-')}</td>
+          <td>${formatDate(r.brithday)}</td>
+          <td>${escapeHtml(r.work||'-')}</td>
+          <td>${r.points!=null?r.points:'-'}</td>
+          <td>${escapeHtml(r.package_name||r.package_id||'-')}</td>
+          <td>${formatDate(r.end_date)}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn" title="واتساب" onclick="openWhatsModal(${i})"><i class="fab fa-whatsapp"></i></button>
+              <button class="action-btn" title="بريد" onclick="openEmailModal(${i})"><i class="fas fa-envelope"></i></button>
+              <button class="action-btn" title="إشعار" onclick="openNotifyModal(${i})"><i class="fas fa-bell"></i></button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function exportFiltered(){
+      const s = document.getElementById('fStart').value; const e = document.getElementById('fEnd').value;
+      if (!s || !e){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر فترة تاريخ أولاً'}); return; }
+      window.open(`${API}?action=filter_subs&export=1&start_date=${encodeURIComponent(s)}&end_date=${encodeURIComponent(e)}`, '_blank');
+    }
+
+    // User search
+    let currentSearch = [];
+    async function applyUserSearch(){
+      const q = document.getElementById('uQuery').value.trim();
+      if (!q){ Swal.fire({icon:'warning', title:'تنبيه', text:'اكتب عبارة بحث'}); return; }
+      try{
+        const r = await fetch(`${API}?action=search_users&q=${encodeURIComponent(q)}`);
+        const j = await r.json(); if(!j.success) throw new Error(); renderUserSearch(j.data||[]);
+      }catch(e){ renderUserSearch([]); }
+    }
+    function exportUserSearch(){
+      const q = document.getElementById('uQuery').value.trim();
+      if (!q){ Swal.fire({icon:'warning', title:'تنبيه', text:'اكتب عبارة بحث'}); return; }
+      window.open(`${API}?action=export_search_users&q=${encodeURIComponent(q)}`, '_blank');
+    }
+    function renderUserSearch(rows){
+      currentSearch = rows||[];
+      const tb = document.getElementById('usrTbody');
+      if (!rows.length){ tb.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:1rem; color:var(--text-light-dark);">لا توجد نتائج</td></tr>'; return; }
+      tb.innerHTML = rows.map((r,i)=>`
+        <tr>
+          <td>${escapeHtml(r.first_name||'')} ${escapeHtml(r.last_name||'')}</td>
+          <td>${escapeHtml(r.email||'')}</td>
+          <td>${escapeHtml(r.phone||'-')}</td>
+          <td>${formatDate(r.brithday)}</td>
+          <td>${escapeHtml(r.work||'-')}</td>
+          <td>${r.points!=null?r.points:'-'}</td>
+          <td>${escapeHtml(r.package_name||'-')}</td>
+          <td>${r.end_date?formatDate(r.end_date):'-'}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn" title="واتساب" onclick="openWhatsModalS(${i})"><i class="fab fa-whatsapp"></i></button>
+              <button class="action-btn" title="بريد" onclick="openEmailModalS(${i})"><i class="fas fa-envelope"></i></button>
+              <button class="action-btn" title="إشعار" onclick="openNotifyModalS(${i})"><i class="fas fa-bell"></i></button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+    function openWhatsModalS(i){ const r=currentSearch[i]; setVal('waPhone', r.phone||''); setVal('waMsg', `مرحبًا ${r.first_name||''}`.trim()); openModal('whatsModal'); }
+    function openEmailModalS(i){ const r=currentSearch[i]; setVal('emEmail', r.email||''); setVal('emMsg', `مرحبًا ${r.first_name||''}`.trim()); openModal('emailModal'); }
+    function openNotifyModalS(i){ const r=currentSearch[i]; setVal('ntfUserId', r.id||''); setVal('ntfMsg', ''); openModal('notifyModal'); }
+
+    // Modals logic
+    let currentIndex = -1;
+    function openWhatsModal(i){ currentIndex=i; const r=currentSubs[i]; setVal('waPhone', r.phone||''); setVal('waMsg', `مرحبًا ${r.first_name||''}`.trim()); openModal('whatsModal'); }
+    function openEmailModal(i){ currentIndex=i; const r=currentSubs[i]; setVal('emEmail', r.email||''); setVal('emMsg', `مرحبًا ${r.first_name||''}`.trim()); openModal('emailModal'); }
+    function openNotifyModal(i){ currentIndex=i; const r=currentSubs[i]; setVal('ntfUserId', r.id||''); setVal('ntfMsg', ''); openModal('notifyModal'); }
+
+    function openModal(id){ const el=document.getElementById(id); if(el) el.classList.add('active'); }
+    function closeModal(id){ const el=document.getElementById(id); if(el) el.classList.remove('active'); }
+    function setVal(id,v){ const el=document.getElementById(id); if(el) el.value=v; }
+
+    function sendWhats(){ closeModal('whatsModal'); Swal.fire({icon:'success', title:'تم', text:'تم الإرسال عبر واتساب'}); }
+    function sendEmail(){ closeModal('emailModal'); Swal.fire({icon:'success', title:'تم', text:'تم إرسال البريد'}); }
+    function sendNotify(){ closeModal('notifyModal'); Swal.fire({icon:'success', title:'تم', text:'تم إرسال الإشعار'}); }
+
+    function exportAllUsers(){ window.open(`${API}?action=export_all_users`, '_blank'); }
+
+    async function loadBirthdays(){
+      const m = document.getElementById('bMonth').value; const d = document.getElementById('bDay').value;
+      if (!m){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر الشهر'}); return; }
+      const url = `${API}?action=birthdays&month=${encodeURIComponent(m)}${d?`&day=${encodeURIComponent(d)}`:''}`;
+      try{ const r=await fetch(url); const j=await r.json(); if(!j.success) throw new Error(); renderBirthdays(j.data||[]); }catch(e){ renderBirthdays([]); }
+    }
+
+    let currentBirthdays = [];
+    function renderBirthdays(rows){
+      currentBirthdays = rows || [];
+      const tb = document.getElementById('bdTbody');
+      if (!rows.length){ tb.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:1rem; color:var(--text-light-dark);">لا توجد بيانات</td></tr>'; return; }
+      tb.innerHTML = rows.map((r,i)=>`
+        <tr>
+          <td>${escapeHtml(r.first_name||'')} ${escapeHtml(r.last_name||'')}</td>
+          <td>${escapeHtml(r.email||'')}</td>
+          <td>${escapeHtml(r.phone||'-')}</td>
+          <td>${formatDate(r.brithday)}</td>
+          <td>${escapeHtml(r.work||'-')}</td>
+          <td>${r.points!=null?r.points:'-'}</td>
+          <td>${escapeHtml(r.package_name||r.package_id||'-')}</td>
+          <td>${r.end_date?formatDate(r.end_date):'-'}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn" title="واتساب" onclick="openWhatsModalB(${i})"><i class="fab fa-whatsapp"></i></button>
+              <button class="action-btn" title="بريد" onclick="openEmailModalB(${i})"><i class="fas fa-envelope"></i></button>
+              <button class="action-btn" title="إشعار" onclick="openNotifyModalB(${i})"><i class="fas fa-bell"></i></button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function openWhatsModalB(i){ const r=currentBirthdays[i]; setVal('waPhone', r.phone||''); setVal('waMsg', `مرحبًا ${r.first_name||''}`.trim()); openModal('whatsModal'); }
+    function openEmailModalB(i){ const r=currentBirthdays[i]; setVal('emEmail', r.email||''); setVal('emMsg', `مرحبًا ${r.first_name||''}`.trim()); openModal('emailModal'); }
+    function openNotifyModalB(i){ const r=currentBirthdays[i]; setVal('ntfUserId', r.id||''); setVal('ntfMsg', ''); openModal('notifyModal'); }
+
+    async function loadBirthdayAlerts(){
+      try{ const r=await fetch(`${API}?action=birthday_alerts`); const j=await r.json(); if(!j.success) return; const rows=j.data||[]; if(!rows.length){ document.getElementById('birthdayAlerts').style.display='none'; return; }
+        const html = `
+          <div style="font-weight:700; margin-bottom:.5rem; color:var(--text-light);"><i class="fas fa-bell"></i> تنبيهات أعياد الميلاد</div>
+          ${rows.map(x=>`<div class=\"birthday-item\"><div>${escapeHtml(x.first_name||'')} ${escapeHtml(x.last_name||'')}</div><div style=\"opacity:.8\">${x.when_tag==='today'?'اليوم':'غداً'}</div></div>`).join('')}
+        `;
+        const box=document.getElementById('birthdayAlerts'); box.innerHTML=html; box.style.display='block';
+      }catch(e){ document.getElementById('birthdayAlerts').style.display='none'; }
+    }
+
+    function setText(id, val){ const el=document.getElementById(id); if(el) el.textContent = val == null || val === '' ? '-' : val; }
+    function formatDate(s){ if(!s) return '-'; const d=new Date(s); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+    function formatDateTime(s){ if(!s) return '-'; const d=new Date(s); return d.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}); }
+    function escapeHtml(s){ const m={ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }; return String(s||'').replace(/[&<>"']/g, ch=>m[ch]); }
+    async function renderMap2D(data){
+      const el = document.getElementById('mapChart');
+      const chart = echarts.init(el);
+      const hasData = Array.isArray(data) && data.length>0;
+      const hasMap = await ensureWorldMap();
+      const option = {
+        tooltip: { trigger:'item', formatter:(p)=> `${p.name}: ${p.value||0}` },
+        visualMap: hasData ? { min:0, max: Math.max(1, ...data.map(d=>d.value||0)), text:['مرتفع','منخفض'], realtime:false, calculable:true, inRange:{color:['#1f2937','#6c5ce7','#8e44ad']} } : undefined,
+        series: [{
+          name:'Users', type:'map', map:'world', roam:true,
+          itemStyle:{ areaColor:'#1f2937', borderColor:'#4b5563' },
+          emphasis:{ itemStyle:{ areaColor:'#374151' }, label:{show:false} },
+          data: data
+        }],
+        graphic: !hasMap ? [{ type:'text', left:'center', top:'middle', style:{ text:'تعذر تحميل خريطة العالم', fill:'#ef4444', fontSize:16 } }] : (!hasData ? [{ type:'text', left:'center', top:'middle', style:{ text:'لا توجد بيانات', fill:'#9ca3af', fontSize:16 } }] : [])
+      };
+      chart.setOption(option);
+      // Click export by country name
+      chart.off('click');
+      chart.on('click', (params)=>{ if (params && params.name){ exportCountryCSV(params.name); } });
+      window.addEventListener('resize', ()=>chart.resize());
+    }
+
+    function exportCountryCSV(name){
+      const url = `${API}?action=export_country_users&country=${encodeURIComponent(name)}`;
+      window.open(url, '_blank');
+    }
+  </script>
+</body>
+</html>

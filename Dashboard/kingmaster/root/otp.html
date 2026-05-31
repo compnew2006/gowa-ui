@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>King Master - تأكيد الهوية</title>
+    
+    <!-- الخطوط -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- أنماط CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/rtl-ltr.css">
+    
+    <!-- Internationalization -->
+    <script src="js/i18n.js"></script>
+    
+    <style>
+        .auth-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-lg);
+            background-image: radial-gradient(circle at top right, rgba(108, 92, 231, 0.15), transparent 40%),
+                              radial-gradient(circle at bottom left, rgba(0, 206, 201, 0.1), transparent 40%);
+        }
+        
+        .auth-card {
+            width: 100%;
+            max-width: 500px;
+            padding: var(--spacing-xxl);
+            border-radius: var(--radius-xl);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--shadow-glass);
+            text-align: center;
+        }
+        
+        .auth-header {
+            margin-bottom: var(--spacing-xxl);
+        }
+        
+        .auth-logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto var(--spacing-lg);
+            border-radius: var(--radius-lg);
+            object-fit: contain;
+        }
+        
+        .auth-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-light);
+            margin-bottom: var(--spacing-sm);
+        }
+        
+        .auth-subtitle {
+            color: var(--text-light-dark);
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .phone-display {
+            background: var(--glass-bg-dark);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--spacing-xl);
+            border: 1px solid var(--glass-border);
+        }
+        
+        .phone-number {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-sm);
+        }
+        
+        .otp-container {
+            margin: var(--spacing-xl) 0;
+        }
+        
+        .otp-inputs {
+            display: flex;
+            gap: var(--spacing-md);
+            justify-content: center;
+            margin-bottom: var(--spacing-lg);
+            direction: ltr;
+        }
+        
+        .otp-input {
+            width: 60px;
+            height: 60px;
+            border: 2px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            background: var(--glass-bg);
+            color: var(--text-light);
+            font-family: inherit;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+            transition: var(--transition-fast);
+            outline: none;
+        }
+        
+        .otp-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2);
+            background: var(--glass-bg-dark);
+        }
+        
+        .otp-input:not(:placeholder-shown) {
+            border-color: var(--success);
+            background: var(--glass-bg-dark);
+        }
+        
+        .otp-input.error {
+            border-color: var(--danger);
+            background: rgba(255, 118, 117, 0.1);
+        }
+        
+        .submit-btn {
+            width: 100%;
+            height: 50px;
+            border: none;
+            border-radius: var(--radius-md);
+            background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+            color: var(--text-light);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition-fast);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        .submit-btn:hover {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(108, 92, 231, 0.3);
+        }
+        
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            background: var(--glass-bg-dark);
+        }
+        
+        .resend-section {
+            margin-top: var(--spacing-lg);
+            padding-top: var(--spacing-lg);
+            border-top: 1px solid var(--glass-border);
+        }
+        
+        .resend-info {
+            color: var(--text-light-dark);
+            font-size: 0.9rem;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .resend-btn {
+            background: none;
+            border: none;
+            color: var(--primary-light);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: var(--transition-fast);
+            text-decoration: underline;
+        }
+        
+        .resend-btn:hover {
+            color: var(--primary);
+        }
+        
+        .resend-btn:disabled {
+            color: var(--text-light-dark);
+            cursor: not-allowed;
+            text-decoration: none;
+        }
+        
+        .countdown {
+            color: var(--warning);
+            font-weight: 600;
+        }
+        
+        .back-link {
+            margin-top: var(--spacing-xl);
+            padding-top: var(--spacing-lg);
+            border-top: 1px solid var(--glass-border);
+        }
+        
+        .back-link a {
+            color: var(--primary-light);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+        
+        .back-link a:hover {
+            color: var(--primary);
+            text-decoration: underline;
+        }
+        
+        .error-message {
+            background: rgba(255, 118, 117, 0.1);
+            border: 1px solid var(--danger);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+            color: var(--danger);
+            font-size: 0.9rem;
+            display: none;
+        }
+        
+        .success-message {
+            background: rgba(0, 184, 148, 0.1);
+            border: 1px solid var(--success);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+            color: var(--success);
+            font-size: 0.9rem;
+            display: none;
+        }
+        
+        /* Light theme adjustments */
+        .light-theme .auth-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        
+        .light-theme .auth-title {
+            color: var(--text-dark);
+        }
+        
+        .light-theme .auth-subtitle {
+            color: var(--text-dark-light);
+        }
+        
+        .light-theme .phone-display {
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .light-theme .otp-input {
+            background: rgba(255, 255, 255, 0.7);
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            color: var(--text-dark);
+        }
+        
+        .light-theme .otp-input:focus {
+            background: rgba(255, 255, 255, 0.9);
+        }
+        
+        .light-theme .resend-info {
+            color: var(--text-dark-light);
+        }
+        
+        /* Animation for wrong OTP */
+        @keyframes shake {
+            0%, 20%, 40%, 60%, 80% {
+                transform: translateX(0);
+            }
+            10%, 30%, 50%, 70%, 90% {
+                transform: translateX(-10px);
+            }
+        }
+        
+        .otp-inputs.shake {
+            animation: shake 0.5s ease-in-out;
+        }
+        
+        /* Responsive */
+        @media (max-width: 576px) {
+            .auth-container {
+                padding: var(--spacing-md);
+            }
+            
+            .auth-card {
+                padding: var(--spacing-xl);
+            }
+            
+            .auth-title {
+                font-size: 1.5rem;
+            }
+            
+            .otp-input {
+                width: 50px;
+                height: 50px;
+                font-size: 1.2rem;
+            }
+            
+            .otp-inputs {
+                gap: var(--spacing-sm);
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .otp-input {
+                width: 45px;
+                height: 45px;
+                font-size: 1.1rem;
+            }
+        }
+        
+        /* Auto-complete styling */
+        .otp-input:-webkit-autofill {
+            -webkit-box-shadow: 0 0 0 30px var(--glass-bg) inset;
+            -webkit-text-fill-color: var(--text-light);
+        }
+        
+        .light-theme .otp-input:-webkit-autofill {
+            -webkit-box-shadow: 0 0 0 30px rgba(255, 255, 255, 0.7) inset;
+            -webkit-text-fill-color: var(--text-dark);
+        }
+    </style>
+</head>
+<body class="rtl ar">
+    <!-- خلفية التدرج -->
+    <div class="bg-gradient"></div>
+    
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <img src="images/logo.jpg" alt="King Master" class="auth-logo">
+                <h1 class="auth-title" data-i18n="otp_title">تأكيد الهوية</h1>
+                <p class="auth-subtitle" data-i18n="otp_subtitle">أدخل رمز التحقق المرسل إليك</p>
+                
+                <div class="phone-display">
+                    <div class="phone-number">
+                        <i class="fas fa-mobile-alt"></i>
+                        <span id="phone-display">+20 123 456 789</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="error-message" class="error-message">
+                <i class="fas fa-exclamation-circle"></i>
+                <span data-i18n="invalid_otp">رمز التحقق غير صحيح، يرجى المحاولة مرة أخرى</span>
+            </div>
+            
+            <div id="success-message" class="success-message">
+                <i class="fas fa-check-circle"></i>
+                <span data-i18n="otp_success">تم التحقق بنجاح!</span>
+            </div>
+            
+            <form id="otpForm" class="auth-form">
+                <div class="otp-container">
+                    <div id="otp-inputs" class="otp-inputs">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="one-time-code">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+                    </div>
+                </div>
+                
+                <button type="submit" id="verify-btn" class="submit-btn" disabled>
+                    <i class="fas fa-shield-alt"></i>
+                    <span data-i18n="verify_otp">تحقق من الرمز</span>
+                </button>
+            </form>
+            
+            <div class="resend-section">
+                <div class="resend-info">
+                    <span data-i18n="no_code_received">لم تستلم الرمز؟</span>
+                </div>
+                
+                <div id="resend-container">
+                    <button id="resend-btn" class="resend-btn" disabled>
+                        <span data-i18n="resend_code">إعادة الإرسال</span>
+                        <span id="countdown" class="countdown">(60)</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="back-link">
+                <a href="login">
+                    <i class="fas fa-arrow-right"></i>
+                    <span data-i18n="back_to_login">العودة لتسجيل الدخول</span>
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Theme Toggle Button -->
+    <button id="theme-toggle" class="header-icon" style="position: fixed; top: 20px; left: 20px; z-index: 1000;">
+        <i class="fas fa-sun"></i>
+    </button>
+    
+    <!-- Language Toggle Button -->
+    <div class="language-dropdown" style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
+        <button class="language-btn">
+            <i class="fas fa-globe language-icon"></i>
+            <span id="current-language" data-i18n="arabic">العربية</span>
+            <i class="fas fa-chevron-down dropdown-arrow"></i>
+        </button>
+        <div class="language-dropdown-menu glass">
+            <a href="#" class="dropdown-item active" data-lang="ar">
+                <span class="dropdown-icon">🇪🇬</span>
+                <span data-i18n="arabic">العربية</span>
+            </a>
+            <a href="#" class="dropdown-item" data-lang="en">
+                <span class="dropdown-icon">🇺🇸</span>
+                <span data-i18n="english">English</span>
+            </a>
+            <a href="#" class="dropdown-item" data-lang="fr">
+                <span class="dropdown-icon">🇫🇷</span>
+                <span data-i18n="french">Français</span>
+            </a>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize page when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize language system
+            if (typeof initializeLanguage === 'function') {
+                initializeLanguage();
+            }
+            
+            // Get phone number from URL parameters or localStorage
+            initializePhoneDisplay();
+            
+            // Setup OTP inputs
+            setupOTPInputs();
+            
+            // Start countdown
+            startResendCountdown();
+        });
+        
+        // Initialize phone number display
+        function initializePhoneDisplay() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const phoneFromUrl = urlParams.get('phone');
+            const phoneFromStorage = localStorage.getItem('verification_phone');
+            
+            const phoneDisplay = document.getElementById('phone-display');
+            if (phoneFromUrl) {
+                phoneDisplay.textContent = phoneFromUrl;
+                localStorage.setItem('verification_phone', phoneFromUrl);
+            } else if (phoneFromStorage) {
+                phoneDisplay.textContent = phoneFromStorage;
+            }
+        }
+        
+        // Setup OTP input functionality
+        function setupOTPInputs() {
+            const inputs = document.querySelectorAll('.otp-input');
+            const verifyBtn = document.getElementById('verify-btn');
+            
+            inputs.forEach((input, index) => {
+                input.addEventListener('input', function(e) {
+                    // Only allow numbers
+                    this.value = this.value.replace(/[^0-9]/g, '');
+                    
+                    // Move to next input
+                    if (this.value.length === 1) {
+                        if (index < inputs.length - 1) {
+                            inputs[index + 1].focus();
+                        }
+                    }
+                    
+                    // Check if all inputs are filled
+                    checkAllInputsFilled();
+                    
+                    // Clear error state
+                    clearErrorState();
+                });
+                
+                input.addEventListener('keydown', function(e) {
+                    // Move to previous input on backspace
+                    if (e.key === 'Backspace' && this.value === '' && index > 0) {
+                        inputs[index - 1].focus();
+                    }
+                    
+                    // Allow only numbers and navigation keys
+                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                        e.preventDefault();
+                    }
+                });
+                
+                input.addEventListener('paste', function(e) {
+                    e.preventDefault();
+                    const pastedData = e.clipboardData.getData('text').replace(/[^0-9]/g, '');
+                    
+                    // Fill inputs with pasted data
+                    for (let i = 0; i < Math.min(pastedData.length, inputs.length - index); i++) {
+                        inputs[index + i].value = pastedData[i];
+                    }
+                    
+                    // Focus on next empty input or last input
+                    const nextEmptyIndex = Math.min(index + pastedData.length, inputs.length - 1);
+                    inputs[nextEmptyIndex].focus();
+                    
+                    checkAllInputsFilled();
+                });
+            });
+            
+            function checkAllInputsFilled() {
+                const allFilled = Array.from(inputs).every(input => input.value.length === 1);
+                verifyBtn.disabled = !allFilled;
+            }
+        }
+        
+        // Clear error state
+        function clearErrorState() {
+            document.getElementById('error-message').style.display = 'none';
+            document.querySelectorAll('.otp-input').forEach(input => {
+                input.classList.remove('error');
+            });
+            document.getElementById('otp-inputs').classList.remove('shake');
+        }
+        
+        // Show error state
+        function showErrorState() {
+            document.getElementById('error-message').style.display = 'block';
+            document.querySelectorAll('.otp-input').forEach(input => {
+                input.classList.add('error');
+            });
+            document.getElementById('otp-inputs').classList.add('shake');
+            
+            // Clear inputs after animation
+            setTimeout(() => {
+                document.querySelectorAll('.otp-input').forEach(input => {
+                    input.value = '';
+                });
+                document.querySelector('.otp-input').focus();
+                document.getElementById('verify-btn').disabled = true;
+            }, 500);
+        }
+        
+        // Show success state
+        function showSuccessState() {
+            document.getElementById('success-message').style.display = 'block';
+            document.getElementById('error-message').style.display = 'none';
+        }
+        
+        // Start resend countdown
+        function startResendCountdown() {
+            const resendBtn = document.getElementById('resend-btn');
+            const countdown = document.getElementById('countdown');
+            let timeLeft = 60;
+            
+            const timer = setInterval(() => {
+                timeLeft--;
+                countdown.textContent = `(${timeLeft})`;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    resendBtn.disabled = false;
+                    countdown.style.display = 'none';
+                    resendBtn.innerHTML = '<span data-i18n="resend_code">إعادة الإرسال</span>';
+                    
+                    // Apply translations
+                    if (typeof applyTranslations === 'function') {
+                        applyTranslations();
+                    }
+                }
+            }, 1000);
+        }
+        
+        // Form submission
+        document.getElementById('otpForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const otpInputs = document.querySelectorAll('.otp-input');
+            const otp = Array.from(otpInputs).map(input => input.value).join('');
+            
+            // Simulate OTP verification
+            const verifyBtn = document.getElementById('verify-btn');
+            const currentLanguage = getCurrentLanguage();
+            
+            verifyBtn.disabled = true;
+            verifyBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${t('verifying', currentLanguage)}`;
+            
+            setTimeout(() => {
+                // Simulate verification logic (in real app, send to server)
+                const isValid = otp === '123456'; // Mock validation
+                
+                if (isValid) {
+                    showSuccessState();
+                    setTimeout(() => {
+                        // Redirect to dashboard or next step
+                        window.location.href = 'index';
+                    }, 1500);
+                } else {
+                    showErrorState();
+                    verifyBtn.disabled = true;
+                    verifyBtn.innerHTML = `<i class="fas fa-shield-alt"></i> ${t('verify_otp', currentLanguage)}`;
+                }
+            }, 2000);
+        });
+        
+        // Resend OTP
+        document.getElementById('resend-btn').addEventListener('click', function() {
+            if (this.disabled) return;
+            
+            const currentLanguage = getCurrentLanguage();
+            
+            // Simulate resend
+            this.disabled = true;
+            this.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${t('sending', currentLanguage)}`;
+            
+            setTimeout(() => {
+                alert(t('otp_resent', currentLanguage));
+                
+                // Reset countdown
+                const countdown = document.getElementById('countdown');
+                countdown.style.display = 'inline';
+                startResendCountdown();
+                
+                // Clear any error states
+                clearErrorState();
+            }, 2000);
+        });
+        
+        // Theme toggle functionality
+        document.getElementById('theme-toggle').addEventListener('click', function() {
+            document.body.classList.toggle('light-theme');
+            const icon = this.querySelector('i');
+            
+            if (document.body.classList.contains('light-theme')) {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+            } else {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            }
+        });
+        
+        // Language dropdown functionality
+        document.querySelectorAll('.language-dropdown').forEach(dropdown => {
+            dropdown.addEventListener('click', function(e) {
+                e.stopPropagation();
+                this.classList.toggle('active');
+            });
+        });
+        
+        // Language selection
+        document.querySelectorAll('[data-lang]').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                const lang = this.dataset.lang;
+                
+                // Update active state
+                document.querySelectorAll('[data-lang]').forEach(el => el.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Change language using the i18n system
+                if (typeof changeLanguage === 'function') {
+                    changeLanguage(lang);
+                }
+                
+                // Close dropdown
+                document.querySelector('.language-dropdown').classList.remove('active');
+            });
+        });
+        
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.language-dropdown').forEach(dropdown => {
+                dropdown.classList.remove('active');
+            });
+        });
+        
+        // Auto-focus first input
+        window.addEventListener('load', function() {
+            document.querySelector('.otp-input').focus();
+        });
+    </script>
+</body>
+</html>

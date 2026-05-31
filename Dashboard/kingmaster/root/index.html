@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <link rel="canonical" href="https://kingmaster.info/landing.php">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>King Master - لوحة التحكم</title>
+    
+    <!-- الخطوط -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- ApexCharts -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    
+    <!-- أنماط CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/rtl-ltr.css">
+
+<style>
+    .content-admin-container {
+        min-height: 100vh;
+        position: relative;
+        z-index: 1;
+    }
+
+    .main-content {
+        padding: 0;
+        padding-right: 0;
+    }
+
+    .content-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .content-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-light);
+        margin: 0;
+    }
+
+    .content-actions {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .search-box {
+        position: relative;
+        min-width: 300px;
+    }
+
+    .search-box input {
+        width: 100%;
+        padding: 0.75rem 1rem 0.75rem 3rem;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+        color: var(--text-light);
+        font-size: 0.9rem;
+    }
+
+    .search-box i {
+        position: absolute;
+        right: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-light-dark);
+    }
+
+    .add-content-btn {
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        color: #fff;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: var(--radius-md);
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        cursor: pointer;
+        transition: all .3s ease;
+    }
+
+    .add-content-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        text-align: center;
+        backdrop-filter: blur(10px);
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--primary-light);
+        margin-bottom: .5rem;
+        display: block;
+    }
+
+    .stat-label {
+        color: var(--text-light-dark);
+        font-size: .9rem;
+    }
+
+    .stat-col-12 {
+        grid-column: 1 / -1;
+    }
+
+    .filter-section {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        backdrop-filter: blur(10px);
+    }
+
+    .filter-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        align-items: end;
+    }
+
+    .filter-group label {
+        display: block;
+        margin-bottom: .5rem;
+        color: var(--text-light);
+        font-weight: 500;
+        font-size: .9rem;
+    }
+
+    .filter-group select,
+    .filter-group input {
+        width: 100%;
+        padding: .75rem;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+        color: var(--text-light);
+        font-size: .9rem;
+    }
+
+    :root {
+        color-scheme: dark;
+    }
+
+    .filter-group select,
+    .form-group select {
+        background-color: rgba(17, 24, 39, 0.85);
+        color: var(--text-light);
+    }
+
+    .filter-group select option,
+    .form-group select option,
+    .filter-group select optgroup,
+    .form-group select optgroup {
+        background-color: #111827;
+        color: #F3F4F6;
+    }
+
+    .filter-group select:focus,
+    .form-group select:focus {
+        background-color: rgba(17, 24, 39, 0.95);
+        border-color: var(--primary);
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: .5rem;
+        flex-direction: column;
+    }
+
+    .filter-btn {
+        padding: .5rem 1rem;
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all .3s ease;
+        font-size: .8rem;
+        white-space: nowrap;
+        text-align: center;
+        background: var(--glass-bg);
+        color: var(--text-light-dark);
+    }
+
+    .btn-delete-selected {
+        background: rgba(239, 68, 68, .2);
+        color: #EF4444;
+        border-color: #EF4444;
+    }
+
+    .btn-delete-selected:hover {
+        background: #EF4444;
+        color: #fff;
+    }
+
+    .contents-table-container {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        backdrop-filter: blur(10px);
+    }
+
+    .contents-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .contents-table th,
+    .contents-table td {
+        padding: 1rem;
+        text-align: right;
+        border-bottom: 1px solid rgba(255, 255, 255, .1);
+    }
+
+    .contents-table th {
+        background: rgba(108, 92, 231, .1);
+        color: var(--text-light);
+        font-weight: 600;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .contents-table td {
+        color: var(--text-light-dark);
+    }
+
+    .contents-table tr:hover {
+        background: rgba(255, 255, 255, .05);
+    }
+
+    .checkbox-cell {
+        width: 40px;
+        text-align: center;
+    }
+
+    .checkbox-cell input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: .5rem;
+        align-items: center;
+    }
+
+    .action-btn {
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all .3s ease;
+        font-size: .8rem;
+    }
+
+    .btn-edit {
+        background: rgba(59, 130, 246, .2);
+        color: #3B82F6;
+        border: 1px solid #3B82F6;
+    }
+
+    .btn-edit:hover {
+        background: #3B82F6;
+        color: #fff;
+    }
+
+    .btn-save {
+        background: rgba(99, 102, 241, .2);
+        color: #6366F1;
+        border: 1px solid #6366F1;
+    }
+
+    .btn-save:hover {
+        background: #6366F1;
+        color: #fff;
+    }
+
+    .btn-start {
+        background: rgba(16, 185, 129, .2);
+        color: #10B981;
+        border: 1px solid #10B981;
+    }
+
+    .btn-start:hover {
+        background: #10B981;
+        color: #fff;
+    }
+
+    .btn-pause {
+        background: rgba(245, 158, 11, .2);
+        color: #F59E0B;
+        border: 1px solid #F59E0B;
+    }
+
+    .btn-pause:hover {
+        background: #F59E0B;
+        color: #fff;
+    }
+
+    .btn-stop {
+        background: rgba(239, 68, 68, .2);
+        color: #EF4444;
+        border: 1px solid #EF4444;
+    }
+
+    .btn-stop:hover {
+        background: #EF4444;
+        color: #fff;
+    }
+
+    .btn-restart {
+        background: rgba(6, 182, 212, .2);
+        color: #06B6D4;
+        border: 1px solid #06B6D4;
+    }
+
+    .btn-restart:hover {
+        background: #06B6D4;
+        color: #fff;
+    }
+
+    .btn-delete {
+        background: rgba(239, 68, 68, .2);
+        color: #EF4444;
+        border: 1px solid #EF4444;
+    }
+
+    .btn-delete:hover {
+        background: #EF4444;
+        color: #fff;
+    }
+
+    .chip {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(255, 255, 255, .08);
+        border: 1px solid var(--glass-border);
+        border-radius: 999px;
+        padding: .25rem .5rem;
+        margin: .125rem;
+        gap: .35rem;
+    }
+
+    .chip .x {
+        cursor: pointer;
+        color: #EF4444;
+    }
+
+    /* Modal */
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, .8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: all .3s ease;
+    }
+
+    .modal-overlay.active {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .modal {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-lg);
+        backdrop-filter: blur(20px);
+        max-width: 800px;
+        width: 95%;
+        max-height: 90vh;
+        overflow-y: auto;
+        transform: scale(.95);
+        transition: all .3s ease;
+    }
+
+    .modal-overlay.active .modal {
+        transform: scale(1);
+    }
+
+    .modal-header {
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, .1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-title {
+        margin: 0;
+        color: var(--text-light);
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-light-dark);
+        font-size: 1.5rem;
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-sm);
+    }
+
+    .modal-body {
+        padding: 1.25rem 1.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: .5rem;
+        color: var(--text-light);
+        font-weight: 500;
+    }
+
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: .75rem;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+        color: var(--text-light);
+        font-size: .9rem;
+    }
+
+    .modal-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid rgba(255, 255, 255, .1);
+        display: flex;
+        gap: .5rem;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        padding: 0.65rem 1.25rem;
+        border: none;
+        border-radius: var(--radius-md);
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .3s ease;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        color: #fff;
+    }
+
+    .btn-secondary {
+        background: var(--glass-bg);
+        color: var(--text-light-dark);
+        border: 1px solid var(--glass-border);
+    }
+
+    .btn-names-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .names-select {
+        position: relative;
+    }
+
+    .names-panel {
+        display: none;
+        position: absolute;
+        right: 0;
+        left: 0;
+        background: rgba(17, 24, 39, 0.95);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+        padding: .5rem;
+        max-height: 240px;
+        overflow: auto;
+        z-index: 1001;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+
+    .names-panel.active {
+        display: block;
+    }
+
+    .names-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .25rem .5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, .06);
+    }
+
+    .names-row:last-child {
+        border-bottom: none;
+    }
+
+    .names-row label {
+        color: var(--text-light);
+    }
+
+    .names-row input[type="checkbox"] {
+        accent-color: var(--primary);
+    }
+
+    .names-actions {
+        display: flex;
+        gap: .5rem;
+        align-items: center;
+        margin-bottom: .5rem;
+    }
+
+    .names-actions label {
+        color: var(--text-light);
+    }
+
+    @media (max-width:768px) {
+        .content-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .content-actions {
+            width: 100%;
+        }
+
+        .filter-row {
+            grid-template-columns: 1fr;
+        }
+
+        .contents-table-container {
+            overflow-x: auto;
+        }
+
+        .contents-table {
+            min-width: 900px;
+        }
+    }
+
+    /* Modern textarea styling */
+    .form-group textarea.area,
+    .area {
+        width: 100%;
+        min-height: 160px;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, .02), rgba(255, 255, 255, 0)),
+            var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-lg);
+        color: var(--text-light);
+        padding: .9rem 1rem;
+        font-size: .95rem;
+        line-height: 1.6;
+        outline: none;
+        resize: vertical;
+        transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, .2), inset 0 1px 0 rgba(255, 255, 255, .02);
+    }
+
+    .area::placeholder {
+        color: var(--text-light-dark);
+        opacity: .9;
+    }
+
+    .area:focus {
+        border-color: var(--primary);
+        box-shadow:
+            0 0 0 3px rgba(108, 92, 231, .25),
+            0 6px 18px rgba(0, 0, 0, .35),
+            inset 0 1px 0 rgba(255, 255, 255, .05);
+        background-color: rgba(17, 24, 39, 0.92);
+    }
+
+    .area::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    .area::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .area::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, .12);
+        border-radius: 8px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+    }
+
+    .area:hover::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, .18);
+    }
+
+    /* Modern CSV upload box */
+    .upload-box {
+        position: relative;
+        padding: 1.25rem;
+        border: 1.5px dashed var(--glass-border);
+        border-radius: var(--radius-lg);
+        text-align: center;
+        background: var(--glass-bg);
+        transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+        cursor: pointer;
+    }
+
+    .upload-box:hover,
+    .upload-box.dragover {
+        border-color: var(--primary);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+        background-color: rgba(17, 24, 39, 0.92);
+    }
+
+    .upload-box .upload-icon {
+        font-size: 2rem;
+        color: var(--text-light-dark);
+        margin-bottom: .5rem;
+        display: block;
+    }
+
+    .upload-box .upload-text {
+        color: var(--text-light);
+        margin-bottom: .5rem;
+    }
+
+    .upload-box .upload-btn {
+        margin-inline-start: .35rem;
+        padding: .4rem .75rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--primary);
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        color: #fff;
+        font-weight: 600;
+        font-size: .85rem;
+        cursor: pointer;
+    }
+
+    .upload-box .upload-btn:hover {
+        filter: brightness(1.05);
+    }
+
+    .upload-box .upload-meta {
+        font-size: .85rem;
+        color: var(--text-light-dark);
+    }
+
+    .upload-box input[type="file"] {
+        display: none;
+    }
+</style>
+</head>
+<body class="rtl ar">
+    <!-- خلفية التدرج -->
+    <div class="bg-gradient"></div>
+    
+    <!-- حاوية لوحة التحكم -->
+    <div class="dashboard-container">
+        <!-- الشريط الجانبي -->
+        <aside id="sidebar" class="sidebar glass">
+            <div class="sidebar-header">
+                <div class="logo-container">
+                    <img src="images/logo.jpg" alt="King Master" class="logo">
+                    <span class="logo-text" data-i18n="dashboard">لوحة التحكم</span>
+                </div>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="#" class="menu-item active">
+                    <span class="menu-icon"><i class="fas fa-tachometer-alt"></i></span>
+                    <span class="menu-text" data-i18n="dashboard">لوحة التحكم</span>
+                </a>
+                <a href="tools" class="menu-item">
+                    <span class="menu-icon"><i class="fab fa-whatsapp"></i></span>
+                    <span class="menu-text" data-i18n="whatsapp_tools">أدوات واتساب</span>
+                </a>
+                <a href="tools" class="menu-item">
+                    <span class="menu-icon"><i class="fab fa-facebook-f"></i></span>
+                    <span class="menu-text" data-i18n="facebook_tools">أدوات فيسبوك</span>
+                </a>
+                <a href="tools" class="menu-item">
+                    <span class="menu-icon"><i class="fab fa-instagram"></i></span>
+                    <span class="menu-text" data-i18n="instagram_tools">أدوات انستغرام</span>
+                </a>
+                <a href="tools" class="menu-item">
+                    <span class="menu-icon"><i class="fab fa-telegram-plane"></i></span>
+                    <span class="menu-text" data-i18n="telegram_tools">أدوات تليجرام</span>
+                </a>
+                <a href="tools" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-database"></i></span>
+                    <span class="menu-text" data-i18n="data_extraction">استخراج البيانات</span>
+                </a>
+                <a href="tools" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-bullhorn"></i></span>
+                    <span class="menu-text" data-i18n="campaigns">الحملات</span>
+                </a>
+                <a href="analytics_admin" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-chart-bar"></i></span>
+                    <span class="menu-text" data-i18n="reports">التقارير</span>
+                </a>
+                <a href="#" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-cog"></i></span>
+                    <span class="menu-text" data-i18n="settings">الإعدادات</span>
+                </a>
+                <a href="#" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-question-circle"></i></span>
+                    <span class="menu-text" data-i18n="help">المساعدة</span>
+                </a>
+
+                <a href="tools_admin" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-question-circle"></i></span>
+                    <span class="menu-text" data-i18n="help">اداره الادوات</span>
+                </a>
+
+                <a href="users_admin" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-question-circle"></i></span>
+                    <span class="menu-text" data-i18n="help">اداره المستخدمين</span>
+                </a>
+
+                <a href="templates_admin" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-question-circle"></i></span>
+                    <span class="menu-text" data-i18n="help">إدارة القوالب</span>
+                </a>
+
+                <a href="packages_admin_final" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-question-circle"></i></span>
+                    <span class="menu-text" data-i18n="help">إدارة الباقات</span>
+                </a>
+
+                <a href="media_admin" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-question-circle"></i></span>
+                    <span class="menu-text" data-i18n="help">إدارة الوسائط</span>
+                </a>
+
+                <a href="coupons_admin" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-question-circle"></i></span>
+                    <span class="menu-text" data-i18n="help">إدارة الكوبونات</span>
+                </a>
+
+                <a href="content_admin_fixed" class="menu-item">
+                    <span class="menu-icon"><i class="fas fa-question-circle"></i></span>
+                    <span class="menu-text" data-i18n="help">إدارة المحتوى النصي</span>
+                </a>
+<a href="accounts_admin" class="menu-item">
+    <span class="menu-icon"><i class="fas fa-question-circle"></i></span>
+    <span class="menu-text" data-i18n="help">إدارة الحسابات</span>
+</a>
+
+
+                
+
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <img src="images/avatar.jpg" alt="User" class="user-avatar">
+                    <div class="user-details">
+                        <div class="user-name">مصطفى</div>
+                        <div class="user-role">مدير الحساب</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- المحتوى الرئيسي -->
+        <main class="main-content">
+            <!-- زر القائمة للأجهزة المحمولة -->
+       
+            
+            <!-- الهيدر -->
+            <header class="header">
+                <div class="header-left">
+                    <h1 class="page-title" data-i18n="dashboard">لوحة التحكم</h1>
+                </div>
+                
+                <div class="header-right">
+                    <div class="search-container">
+                        <input type="text" class="search-input" data-i18n-placeholder="search_placeholder" placeholder="ابحث هنا...">
+                        <i class="fas fa-search search-icon"></i>
+                    </div>
+                    
+                    <button id="theme-toggle" class="header-icon">
+                        <i class="fas fa-sun"></i>
+                    </button>
+                    
+                    <button class="header-icon">
+                        <i class="fas fa-bell"></i>
+                    </button>
+                    
+                    <button class="header-icon">
+                        <i class="fas fa-envelope"></i>
+                    </button>
+                    
+                    <div class="language-dropdown">
+                        <button class="language-btn">
+                            <i class="fas fa-globe language-icon"></i>
+                            <span id="current-language" data-i18n="arabic">العربية</span>
+                            <i class="fas fa-chevron-down dropdown-arrow"></i>
+                        </button>
+                        <div class="language-dropdown-menu glass">
+                            <a href="#" class="dropdown-item active" data-lang="ar">
+                                <span class="dropdown-icon">🇪🇬</span>
+                                <span data-i18n="arabic">العربية</span>
+                            </a>
+                            <a href="#" class="dropdown-item" data-lang="en">
+                                <span class="dropdown-icon">🇺🇸</span>
+                                <span data-i18n="english">الإنجليزية</span>
+                            </a>
+                            <a href="#" class="dropdown-item" data-lang="fr">
+                                <span class="dropdown-icon">🇫🇷</span>
+                                <span data-i18n="french">الفرنسية</span>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="user-dropdown">
+                        <button class="user-dropdown-btn">
+                            <img src="images/avatar.jpg" alt="User" class="user-avatar" style="width: 30px; height: 30px;">
+                            <span>مصطفى</span>
+                            <i class="fas fa-chevron-down dropdown-arrow"></i>
+                        </button>
+                        <div class="user-dropdown-menu glass">
+                            <a href="profile" class="dropdown-item">
+                                <span class="dropdown-icon"><i class="fas fa-user"></i></span>
+                                <span data-i18n="profile">الملف الشخصي</span>
+                            </a>
+                            <a href="#" class="dropdown-item">
+                                <span class="dropdown-icon"><i class="fas fa-cog"></i></span>
+                                <span data-i18n="account_settings">إعدادات الحساب</span>
+                            </a>
+                            <a href="#" class="dropdown-item">
+                                <span class="dropdown-icon"><i class="fas fa-sign-out-alt"></i></span>
+                                <span data-i18n="logout">تسجيل الخروج</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- بطاقة الترحيب -->
+            <div class="dashboard-grid">
+                <div class="card card-lg welcome-card">
+                    <div class="welcome-content">
+                        <h2 class="welcome-title" data-i18n="welcome_message">صباح الخير</h2>
+                        <p class="welcome-subtitle" data-i18n="welcome_subtitle">إليك نظرة عامة على أداء حسابك</p>
+                        <div class="welcome-actions">
+                            <a href="#" class="btn btn-primary">
+                                <i class="fas fa-chart-line"></i>
+                                <span data-i18n="view_details">عرض التفاصيل</span>
+                            </a>
+                            <a href="#" class="btn btn-secondary">
+                                <i class="fas fa-rocket"></i>
+                                <span data-i18n="get_started">ابدأ الآن</span>
+                            </a>
+                        </div>
+                    </div>
+                    <img src="images/dashboard-illustration.png" alt="Welcome" class="welcome-image">
+                    <img src="images/pattern.png" alt="" class="welcome-pattern">
+                </div>
+                
+                <div class="card card-sm balance-card">
+                    <div class="balance-header">
+                        <h3 class="balance-title" data-i18n="your_balance">رصيدك</h3>
+                        <i class="fas fa-dollar-sign"></i>
+                    </div>
+                    <div class="balance-amount">500.00</div>
+                    <div class="balance-subtitle" data-i18n="points">نقطة</div>
+                    <div id="balance-chart" class="balance-chart"></div>
+                </div>
+            </div>
+            
+            <!-- بطاقات الإحصائيات -->
+            <div class="dashboard-grid">
+                <div class="card card-sm glass stats-card">
+                    <div class="stats-icon purple">
+                        <i class="fas fa-bullhorn"></i>
+                    </div>
+                    <div class="stats-content">
+                        <div class="stats-value">24</div>
+                        <div class="stats-label" data-i18n="total_campaigns">إجمالي الحملات</div>
+                        <div class="stats-change positive">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>12%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card card-sm glass stats-card">
+                    <div class="stats-icon blue">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="stats-content">
+                        <div class="stats-value">1,254</div>
+                        <div class="stats-label" data-i18n="total_extractions">إجمالي الاستخراجات</div>
+                        <div class="stats-change positive">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>8%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card card-sm glass stats-card">
+                    <div class="stats-icon green">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stats-content">
+                        <div class="stats-value">5</div>
+                        <div class="stats-label" data-i18n="team_members">أعضاء الفريق</div>
+                        <div class="stats-change positive">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>2%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card card-sm glass stats-card">
+                    <div class="stats-icon red">
+                        <i class="fas fa-coins"></i>
+                    </div>
+                    <div class="stats-content">
+                        <div class="stats-value">2,500</div>
+                        <div class="stats-label" data-i18n="earned_points">النقاط المكتسبة</div>
+                        <div class="stats-change negative">
+                            <i class="fas fa-arrow-down"></i>
+                            <span>5%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- بطاقات الرسوم البيانية -->
+            <div class="dashboard-grid">
+                <div class="card card-md glass dashboard-card">
+                    <div class="card-header">
+                        <h3 class="card-title" data-i18n="points_usage">استخدام النقاط</h3>
+                        <div class="card-actions">
+                            <button class="card-action">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="points-usage-chart" class="chart-container"></div>
+                    </div>
+                </div>
+                
+                <div class="card card-md glass dashboard-card">
+                    <div class="card-header">
+                        <h3 class="card-title">توزيع استخدام الأدوات</h3>
+                        <div class="card-actions">
+                            <button class="card-action">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="tools-usage-chart" class="chart-container"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- بطاقات التحديثات والإحالات -->
+            <div class="dashboard-grid">
+                <div class="card card-md glass dashboard-card">
+                    <div class="card-header">
+                        <h3 class="card-title" data-i18n="latest_updates">أحدث التحديثات</h3>
+                        <div class="card-actions">
+                            <button class="card-action">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="updates-list">
+                            <div class="update-item">
+                                <div class="update-icon">
+                                    <i class="fas fa-star"></i>
+                                </div>
+                                <div class="update-content">
+                                    <div class="update-title" data-i18n="new_feature">ميزة جديدة</div>
+                                    <div class="update-text">تم إضافة أداة جديدة لاستخراج بيانات المجموعات في واتساب</div>
+                                    <div class="update-time">10 <span data-i18n="minutes_ago">دقائق مضت</span></div>
+                                </div>
+                            </div>
+                            <div class="update-item">
+                                <div class="update-icon">
+                                    <i class="fas fa-sync"></i>
+                                </div>
+                                <div class="update-content">
+                                    <div class="update-title" data-i18n="system_update">تحديث النظام</div>
+                                    <div class="update-text">تم تحديث نظام إرسال الرسائل الجماعية لتحسين الأداء</div>
+                                    <div class="update-time">2 <span data-i18n="hours_ago">ساعات مضت</span></div>
+                                </div>
+                            </div>
+                            <div class="update-item">
+                                <div class="update-icon">
+                                    <i class="fas fa-tools"></i>
+                                </div>
+                                <div class="update-content">
+                                    <div class="update-title" data-i18n="maintenance">صيانة</div>
+                                    <div class="update-text">سيتم إجراء صيانة للنظام غداً من الساعة 2-4 صباحاً</div>
+                                    <div class="update-time">5 <span data-i18n="hours_ago">ساعات مضت</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <a href="#" class="btn btn-secondary">
+                            <span data-i18n="see_all">عرض الكل</span>
+                            <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card card-md glass dashboard-card">
+                    <div class="card-header">
+                        <h3 class="card-title" data-i18n="latest_referrals">أحدث الإحالات</h3>
+                        <div class="card-actions">
+                            <button class="card-action">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="referrals-list">
+                            <div class="referral-item">
+                                <img src="images/avatar1.jpg" alt="User" class="referral-avatar">
+                                <div class="referral-info">
+                                    <div class="referral-name">أحمد محمد</div>
+                                    <div class="referral-email">ahmed@example.com</div>
+                                </div>
+                                <div class="referral-date">
+                                    <span data-i18n="joined">انضم</span> 2 <span data-i18n="days_ago">أيام مضت</span>
+                                </div>
+                            </div>
+                            <div class="referral-item">
+                                <img src="images/avatar2.jpg" alt="User" class="referral-avatar">
+                                <div class="referral-info">
+                                    <div class="referral-name">سارة أحمد</div>
+                                    <div class="referral-email">sara@example.com</div>
+                                </div>
+                                <div class="referral-date">
+                                    <span data-i18n="joined">انضم</span> 3 <span data-i18n="days_ago">أيام مضت</span>
+                                </div>
+                            </div>
+                            <div class="referral-item">
+                                <img src="images/avatar3.jpg" alt="User" class="referral-avatar">
+                                <div class="referral-info">
+                                    <div class="referral-name">محمد علي</div>
+                                    <div class="referral-email">mohamed@example.com</div>
+                                </div>
+                                <div class="referral-date">
+                                    <span data-i18n="joined">انضم</span> 5 <span data-i18n="days_ago">أيام مضت</span>
+                                </div>
+                            </div>
+                            <div class="referral-item">
+                                <img src="images/avatar4.jpg" alt="User" class="referral-avatar">
+                                <div class="referral-info">
+                                    <div class="referral-name">فاطمة محمود</div>
+                                    <div class="referral-email">fatma@example.com</div>
+                                </div>
+                                <div class="referral-date">
+                                    <span data-i18n="joined">انضم</span> 1 <span data-i18n="week_ago">أسبوع مضى</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <a href="#" class="btn btn-secondary">
+                            <span data-i18n="see_all">عرض الكل</span>
+                            <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- بطاقة الأدوات السريعة -->
+            <div class="dashboard-grid">
+                <div class="card card-xl glass dashboard-card">
+                    <div class="card-header">
+                        <h3 class="card-title" data-i18n="quick_actions">الأدوات السريعة</h3>
+                        <div class="card-actions">
+                            <button class="card-action">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="quick-actions-grid">
+                            <a href="#" class="quick-action-card">
+                                <div class="quick-action-icon">
+                                    <i class="fas fa-bullhorn"></i>
+                                </div>
+                                <div class="quick-action-content">
+                                    <div class="quick-action-title" data-i18n="new_campaign">حملة جديدة</div>
+                                    <div class="quick-action-subtitle">إنشاء حملة تسويقية جديدة</div>
+                                </div>
+                            </a>
+                            <a href="#" class="quick-action-card">
+                                <div class="quick-action-icon">
+                                    <i class="fas fa-database"></i>
+                                </div>
+                                <div class="quick-action-content">
+                                    <div class="quick-action-title" data-i18n="extract_data">استخراج بيانات</div>
+                                    <div class="quick-action-subtitle">استخراج بيانات من المجموعات</div>
+                                </div>
+                            </a>
+                            <a href="#" class="quick-action-card">
+                                <div class="quick-action-icon">
+                                    <i class="fas fa-paper-plane"></i>
+                                </div>
+                                <div class="quick-action-content">
+                                    <div class="quick-action-title" data-i18n="send_message">إرسال رسالة</div>
+                                    <div class="quick-action-subtitle">إرسال رسائل جماعية للعملاء</div>
+                                </div>
+                            </a>
+                            <a href="#" class="quick-action-card">
+                                <div class="quick-action-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div class="quick-action-content">
+                                    <div class="quick-action-title" data-i18n="create_group">إنشاء مجموعة</div>
+                                    <div class="quick-action-subtitle">إنشاء مجموعة واتساب جديدة</div>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- التذييل -->
+            <footer class="footer">
+                <div class="footer-left">
+                    <p>&copy; 2025 King Master. <span data-i18n="copyright">جميع الحقوق محفوظة</span></p>
+                </div>
+                <div class="footer-right">
+                    <a href="#" class="footer-link" data-i18n="terms">الشروط والأحكام</a>
+                    <a href="#" class="footer-link" data-i18n="privacy">سياسة الخصوصية</a>
+                    <a href="#" class="footer-link" data-i18n="help_center">مركز المساعدة</a>
+                </div>
+            </footer>
+        </main>
+    </div>
+    
+    <!-- ملفات JavaScript -->
+    <script src="js/translations.js"></script>
+    <script src="js/script.js"></script>
+</body>
+</html>

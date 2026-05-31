@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الملف الشخصي | Kingmaster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: 'Cairo', system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+    .bg-gradient { position: fixed; inset: 0; z-index: -1; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem; }
+    .header-bar { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.25rem; }
+    .header-title { font-size:1.8rem; font-weight:700; color: var(--text-light); margin:0; display:flex; align-items:center; gap:.6rem; }
+    .back-link { display:inline-flex; align-items:center; gap:.5rem; padding:.5rem .75rem; border:1px solid var(--glass-border); border-radius:10px; color:#e5e7eb; text-decoration:none; background:var(--glass-bg); }
+    .back-link:hover { background: rgba(255,255,255,.06); }
+
+    .card { background: var(--glass-bg); border:1px solid var(--glass-border); border-radius: 16px; backdrop-filter: blur(14px); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
+    .card-body { padding: 1.25rem; }
+
+    .profile-head { display:flex; gap:1rem; align-items:center; }
+    .avatar { width: 96px; height:96px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,.15); }
+    .user-name { font-size: 1.35rem; font-weight: 700; color:#fff; margin:0; }
+    .muted { color:#9ca3af; }
+
+    .grid { display:grid; gap:1rem; grid-template-columns: 2fr 1fr; }
+    .grid-2 { display:grid; gap:.75rem; grid-template-columns: repeat(2,1fr); }
+    @media (max-width: 768px){ .grid{ grid-template-columns: 1fr; } .profile-head{ flex-direction:column; align-items:flex-start; } }
+
+    .stat { background: rgba(255,255,255,.06); border:1px solid var(--glass-border); border-radius:12px; padding: .9rem; }
+    .stat .label { color:#9ca3af; font-size:.9rem; }
+    .stat .value { color:#fff; font-size:1.25rem; font-weight:700; }
+
+    .badge { display:inline-flex; align-items:center; gap:.4rem; padding:.25rem .6rem; border-radius:999px; border:1px solid var(--glass-border); background: rgba(255,255,255,.06); color:#e5e7eb; font-size:.85rem; }
+
+    .activity-log { margin-top:2rem; }
+    .activity-table { width:100%; border-collapse: collapse; }
+    .activity-table thead { border-bottom: 2px solid var(--glass-border); }
+    .activity-table th { text-align: right; padding: 1rem; color:#e5e7eb; font-weight:600; font-size:.9rem; }
+    .activity-table td { padding: 1rem; color:#e5e7eb; border-bottom: 1px solid rgba(255,255,255,.05); }
+    .activity-table tbody tr { transition: background .2s ease; }
+    .activity-table tbody tr:hover { background: rgba(255,255,255,.03); }
+    .activity-icon { width: 36px; height:36px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; font-size:.9rem; }
+    .activity-icon.login { background: rgba(59,130,246,.15); color:#60a5fa; }
+    .activity-icon.logout { background: rgba(239,68,68,.15); color:#f87171; }
+    .activity-icon.update { background: rgba(34,197,94,.15); color:#4ade80; }
+    .activity-icon.purchase { background: rgba(168,85,247,.15); color:#c084fc; }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="container">
+    <div class="header-bar">
+      <h1 class="header-title"><i class="fas fa-user-circle"></i> الملف الشخصي</h1>
+    </div>
+
+    <div class="grid">
+      <!-- العمود الأيسر: بيانات المستخدم والباقة -->
+      <div class="card"><div class="card-body">
+        <div class="profile-head">
+          <img id="pf_avatar" class="avatar" src="images/avatar.jpg" alt="User" />
+          <div>
+            <h2 id="pf_name" class="user-name">—</h2>
+            <div class="muted" style="display:flex; gap:1rem; flex-wrap:wrap;">
+              <span><i class="fas fa-phone"></i> <span id="pf_phone">—</span></span>
+              <span><i class="fas fa-envelope"></i> <span id="pf_email">—</span></span>
+            </div>
+          </div>
+        </div>
+
+        <hr style="border-color: rgba(255,255,255,.08); margin:1rem 0;" />
+
+        <h3 style="color:#fff; font-size:1.1rem; margin:0 0 .5rem;"><i class="fas fa-box"></i> الباقة</h3>
+        <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.5rem;">
+          <span id="pf_package_name" class="badge">—</span>
+          <span id="pf_package_status" class="badge"><i class="fas fa-circle" style="font-size:.6rem; color:#10b981"></i> فعّالة</span>
+        </div>
+        <p id="pf_package_desc" class="muted" style="margin:0;">—</p>
+      </div></div>
+
+      <!-- العمود الأيمن: إحصاءات -->
+      <div class="card"><div class="card-body">
+        <div class="grid-2">
+          <div class="stat">
+            <div class="label">النقاط</div>
+            <div id="pf_points" class="value">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">تاريخ انتهاء الاشتراك</div>
+            <div id="pf_expiry" class="value">—</div>
+            <div id="pf_expiry_left" class="muted" style="margin-top:.25rem;">—</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="activity-log">
+      <div class="card"><div class="card-body">
+        <h3 style="color:#fff; font-size:1.2rem; margin:0 0 1.5rem; display:flex; align-items:center; gap:.6rem;">
+          <i class="fas fa-history"></i> سجل النشاط
+        </h3>
+        <div style="overflow-x:auto;">
+          <table class="activity-table">
+            <thead>
+              <tr>
+                <th style="width:60px;"></th>
+                <th>النشاط</th>
+                <th>التفاصيل</th>
+                <th style="width:140px;">IP</th>
+                <th style="width:180px;">التاريخ</th>
+              </tr>
+            </thead>
+            <tbody id="activity_tbody">
+              <tr>
+                <td colspan="5" style="text-align:center; padding:2rem; color:#9ca3af;">
+                  <i class="fas fa-spinner fa-spin" style="font-size:1.5rem;"></i>
+                  <div style="margin-top:.5rem;">جارٍ التحميل...</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <script>
+    // بيانات تجريبية — يمكنك استبدالها ببيانات فعلية من API
+    const PROFILE_DATA = window.PROFILE_DATA || {
+      name: 'مصطفى',
+      phone: '+20 127 371 6467',
+      email: 'user@example.com',
+      avatar: 'images/avatar.jpg',
+      package: { name: 'الباقة الذهبية', desc: 'مزايا متقدمة ودعم أولوية وتحديثات مستمرة.' },
+      points: 1250,
+      expires_at: '2026-01-31'
+    };
+
+    function fmtDate(s){ if(!s) return '—'; const d=new Date(s); if(isNaN(d)) return '—'; return d.toLocaleDateString('ar-EG',{ year:'numeric', month:'2-digit', day:'2-digit'}); }
+    function daysLeft(s){ const d=new Date(s); if(isNaN(d)) return null; const now=new Date(); const diff=Math.ceil((d - now)/(1000*60*60*24)); return diff; }
+
+    (function fill(){
+      document.getElementById('pf_name').textContent = PROFILE_DATA.name || '—';
+      document.getElementById('pf_phone').textContent = PROFILE_DATA.phone || '—';
+      document.getElementById('pf_email').textContent = PROFILE_DATA.email || '—';
+      const av = document.getElementById('pf_avatar'); if (av && PROFILE_DATA.avatar) av.src = PROFILE_DATA.avatar;
+      document.getElementById('pf_package_name').textContent = (PROFILE_DATA.package && PROFILE_DATA.package.name) || '—';
+      document.getElementById('pf_package_desc').textContent = (PROFILE_DATA.package && PROFILE_DATA.package.desc) || '—';
+      document.getElementById('pf_points').textContent = PROFILE_DATA.points != null ? PROFILE_DATA.points : 0;
+      document.getElementById('pf_expiry').textContent = fmtDate(PROFILE_DATA.expires_at);
+      const left = daysLeft(PROFILE_DATA.expires_at);
+      document.getElementById('pf_expiry_left').textContent = (left==null)? '—' : (left>=0? `متبقي ${left} يوم` : `انتهى منذ ${Math.abs(left)} يوم`);
+    })();
+
+    // Activity Log Data (تجريبي)
+    const ACTIVITY_LOG = [
+      { type:'login', title:'تسجيل دخول', details:'تم تسجيل الدخول من Chrome على Windows', ip:'197.55.123.45', date:'2025-10-23 09:30' },
+      { type:'update', title:'تحديث البيانات', details:'تم تحديث رقم الهاتف والمنطقة الزمنية', ip:'197.55.123.45', date:'2025-10-22 14:15' },
+      { type:'purchase', title:'شراء باقة', details:'تم شراء الباقة الذهبية', ip:'41.233.67.89', date:'2025-10-20 11:00' },
+      { type:'logout', title:'تسجيل خروج', details:'تم تسجيل الخروج من الجلسة السابقة', ip:'197.55.123.45', date:'2025-10-19 18:45' },
+      { type:'login', title:'تسجيل دخول', details:'تم تسجيل الدخول من Safari على iPhone', ip:'156.210.34.12', date:'2025-10-19 08:20' },
+      { type:'update', title:'تحديث الصورة الشخصية', details:'تم رفع صورة جديدة للحساب', ip:'197.55.123.45', date:'2025-10-18 16:30' },
+    ];
+
+    function getActivityIcon(type) {
+      const icons = {
+        login: '<i class="fas fa-sign-in-alt"></i>',
+        logout: '<i class="fas fa-sign-out-alt"></i>',
+        update: '<i class="fas fa-edit"></i>',
+        purchase: '<i class="fas fa-shopping-cart"></i>'
+      };
+      return `<div class="activity-icon ${type}">${icons[type] || '<i class="fas fa-circle"></i>'}</div>`;
+    }
+
+    function fillActivityLog() {
+      const tbody = document.getElementById('activity_tbody');
+      if (!ACTIVITY_LOG.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:#9ca3af;">لا يوجد نشاط حتى الآن</td></tr>';
+        return;
+      }
+      tbody.innerHTML = ACTIVITY_LOG.map(item => `
+        <tr>
+          <td style="text-align:center;">${getActivityIcon(item.type)}</td>
+          <td style="font-weight:600;">${item.title}</td>
+          <td style="color:#9ca3af;">${item.details}</td>
+          <td style="color:#9ca3af; font-size:.85rem; font-family:monospace;">${item.ip || '—'}</td>
+          <td style="color:#9ca3af; font-size:.85rem;">${item.date}</td>
+        </tr>
+      `).join('');
+    }
+
+    // تحميل Activity Log بعد ثانية (محاكاة API)
+    setTimeout(fillActivityLog, 1000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,1493 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>إدارة تارجت المبيعات | Kingmaster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: 'Cairo', system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+    .bg-gradient { position: fixed; inset: 0; z-index: -1; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1rem; }
+    
+    .header-bar { 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between; 
+      gap: 1rem; 
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+    
+    .header-title { 
+      font-size: 1.8rem; 
+      font-weight: 700; 
+      color: var(--text-light); 
+      margin: 0; 
+      display: flex; 
+      align-items: center; 
+      gap: .6rem; 
+    }
+    
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .7rem 1.2rem;
+      border: none;
+      border-radius: 10px;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s ease;
+      font-family: inherit;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: #fff;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+    }
+    
+    .btn-success {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #fff;
+    }
+    
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: #fff;
+    }
+    
+    .btn-sm {
+      padding: .5rem .8rem;
+      font-size: .85rem;
+    }
+    
+    .card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 8px 28px rgba(0,0,0,.35);
+      margin-bottom: 1.5rem;
+    }
+    
+    .card-body { padding: 1.25rem; }
+    
+    .card-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 0 0 1rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    
+    /* Target Progress */
+    .target-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    
+    .target-stats {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+    
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .stat-label {
+      font-size: .85rem;
+      color: #9ca3af;
+      margin-bottom: .25rem;
+    }
+    
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    
+    .progress-bar-container {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+      height: 30px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+      transition: width 0.5s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 600;
+      font-size: .9rem;
+    }
+    
+    /* Table */
+    .table-responsive {
+      overflow-x: auto;
+      margin-top: 1rem;
+    }
+    
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .data-table thead {
+      border-bottom: 2px solid var(--glass-border);
+    }
+    
+    .data-table th {
+      text-align: right;
+      padding: 1rem;
+      color: #e5e7eb;
+      font-weight: 600;
+      font-size: .9rem;
+    }
+    
+    .data-table td {
+      padding: 1rem;
+      color: #e5e7eb;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+    
+    .data-table tbody tr {
+      transition: background .2s ease;
+    }
+    
+    .data-table tbody tr:hover {
+      background: rgba(255,255,255,.03);
+    }
+    
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      padding: .3rem .6rem;
+      border-radius: 999px;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+    
+    .badge-success {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    
+    .badge-warning {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    
+    .badge-danger {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+    }
+    
+    .modal.active { display: flex; align-items: center; justify-content: center; }
+    
+    .modal-content {
+      background: rgba(30, 41, 59, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      padding: 2rem;
+      max-width: 600px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    .modal-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 0;
+    }
+    
+    .close-btn {
+      background: none;
+      border: none;
+      color: #9ca3af;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all .2s ease;
+    }
+    
+    .close-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+    
+    .form-group {
+      margin-bottom: 1.2rem;
+    }
+    
+    .form-label {
+      display: block;
+      color: #e5e7eb;
+      font-weight: 600;
+      margin-bottom: .5rem;
+      font-size: .95rem;
+    }
+    
+    .form-control {
+      width: 100%;
+      padding: .8rem;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      color: #fff;
+      font-family: inherit;
+      font-size: .95rem;
+      transition: all .2s ease;
+    }
+    
+    .form-control:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    textarea.form-control {
+      resize: vertical;
+      min-height: 80px;
+    }
+    
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+    
+    @media (max-width: 768px) {
+      .form-row { grid-template-columns: 1fr; }
+      .target-stats { flex-direction: column; gap: 1rem; align-items: flex-start; }
+    }
+    
+    .action-btns {
+      display: flex;
+      gap: .5rem;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: #9ca3af;
+    }
+    
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="container">
+    <div class="header-bar">
+      <h1 class="header-title">
+        <i class="fas fa-chart-line"></i> 
+        إدارة تارجت المبيعات
+      </h1>
+      <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <select id="month_selector" class="form-control" style="width: 200px;" onchange="loadSelectedMonth()">
+          <!-- سيتم ملؤها بواسطة JavaScript -->
+        </select>
+        <button class="btn btn-primary" onclick="openTargetModal()">
+          <i class="fas fa-cog"></i>
+          تعديل التارجت
+        </button>
+      </div>
+    </div>
+
+    <!-- Target Progress Card -->
+    <div class="card">
+      <div class="card-body">
+        <div class="target-header">
+          <div class="card-title">
+            <i class="fas fa-bullseye"></i>
+            تقدم التارجت - <span id="current_month"></span>
+            <span id="archive_badge" style="display: none; margin-right: 0.5rem;">
+              <span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);">
+                <i class="fas fa-archive"></i> أرشيف
+              </span>
+            </span>
+          </div>
+          <div class="target-stats">
+            <div class="stat-item">
+              <span class="stat-label">المتبقي من التارجت</span>
+              <span class="stat-value" id="remaining_amount">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">المبلغ الحالي</span>
+              <span class="stat-value" id="current_amount">0</span>
+            </div>
+            <div class="stat-item" id="bonus_section" style="display: none;">
+              <span class="stat-label">🎉 بونص 50%</span>
+              <span class="stat-value" id="bonus_earned" style="color: #10b981;">0</span>
+            </div>
+          </div>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progress_bar" style="width: 0%">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Customers Card -->
+    <div class="card">
+      <div class="card-body">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+          <div class="card-title" style="margin: 0;">
+            <i class="fas fa-users"></i>
+            قائمة العملاء
+          </div>
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <input type="text" id="search_input" class="form-control" placeholder="🔍 ابحث برقم الهاتف أو البريد..." style="width: 300px; padding: 0.7rem;">
+            <button class="btn btn-primary" onclick="openCustomerModal()">
+              <i class="fas fa-plus"></i>
+              إضافة عميل جديد
+            </button>
+          </div>
+        </div>
+        
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>الاسم</th>
+                <th>رقم الهاتف</th>
+                <th>البريد الإلكتروني</th>
+                <th>النقاط</th>
+                <th>المبلغ</th>
+                <th>تاريخ الانتهاء</th>
+                <th>الحالة</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="customers_tbody">
+              <tr>
+                <td colspan="8" class="empty-state">
+                  <i class="fas fa-spinner fa-spin"></i>
+                  <div>جارٍ التحميل...</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Target Modal -->
+  <div id="targetModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">تعديل التارجت الشهري</h3>
+        <button class="close-btn" onclick="closeTargetModal()">&times;</button>
+      </div>
+      <form id="targetForm" onsubmit="saveTarget(event)">
+        <div class="form-group">
+          <label class="form-label">المبلغ المطلوب (جنيه)</label>
+          <input type="number" class="form-control" id="target_input" step="0.01" required>
+        </div>
+        <div style="display: flex; gap: .75rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-danger" onclick="closeTargetModal()">إلغاء</button>
+          <button type="submit" class="btn btn-success">حفظ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Charge Points Modal -->
+  <div id="chargePointsModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">⭐ شحن نقاط</h3>
+        <button class="close-btn" onclick="closeChargePointsModal()">&times;</button>
+      </div>
+      <form id="chargePointsForm" onsubmit="saveChargePoints(event)">
+        <input type="hidden" id="charge_customer_id">
+        
+        <div style="background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <i class="fas fa-user" style="color: #8b5cf6;"></i>
+            <strong id="charge_customer_name" style="color: #fff;">-</strong>
+          </div>
+          <div style="color: #9ca3af; font-size: 0.9rem;">
+            <i class="fas fa-star" style="color: #fbbf24;"></i> النقاط الحالية: <span id="charge_current_points" style="color: #fbbf24; font-weight: 600;">0</span>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">مبلغ الشحن (جنيه) <span style="color:#ef4444">*</span></label>
+          <input type="number" class="form-control" id="charge_amount" step="0.01" required>
+          <div style="color: #9ca3af; font-size: 0.85rem; margin-top: 0.5rem;">
+            <i class="fas fa-info-circle"></i> سيتم إضافة هذا المبلغ للتارجت
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">عدد النقاط للشحن <span style="color:#ef4444">*</span></label>
+          <input type="number" class="form-control" id="charge_points" required>
+          <div style="color: #9ca3af; font-size: 0.85rem; margin-top: 0.5rem;">
+            <i class="fas fa-gift"></i> مثال: 100ج = 10,000 نقطة
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">🎫 كود الكوبون (اختياري)</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" class="form-control" id="charge_coupon" placeholder="أدخل كود الكوبون" style="flex: 1; text-transform: uppercase;">
+            <button type="button" class="btn btn-primary" onclick="verifyChargeCoupon()" style="white-space: nowrap;">
+              <i class="fas fa-check-circle"></i> تحقق
+            </button>
+          </div>
+          <div id="charge_coupon_info" style="margin-top: 0.5rem; display: none;"></div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">ملاحظات</label>
+          <textarea class="form-control" id="charge_notes" placeholder="مثال: شحن نقاط بقيمة 100 جنيه"></textarea>
+        </div>
+        
+        <div style="display: flex; gap: .75rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-danger" onclick="closeChargePointsModal()">إلغاء</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fas fa-check"></i>
+            شحن الآن
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Renew Modal -->
+  <div id="renewModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">🔄 تجديد الاشتراك</h3>
+        <button class="close-btn" onclick="closeRenewModal()">&times;</button>
+      </div>
+      <form id="renewForm" onsubmit="saveRenewal(event)">
+        <input type="hidden" id="renew_customer_id">
+        
+        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <i class="fas fa-user" style="color: #3b82f6;"></i>
+            <strong id="renew_customer_name" style="color: #fff;">-</strong>
+          </div>
+          <div style="color: #9ca3af; font-size: 0.9rem;">
+            <i class="fas fa-phone"></i> <span id="renew_customer_phone">-</span>
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">مبلغ التجديد (جنيه) <span style="color:#ef4444">*</span></label>
+            <input type="number" class="form-control" id="renew_amount" step="0.01" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">النقاط المضافة</label>
+            <input type="number" class="form-control" id="renew_points" value="0">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">تاريخ الانتهاء الجديد <span style="color:#ef4444">*</span></label>
+          <input type="date" class="form-control" id="renew_expiry" required>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">🎫 كود الكوبون (اختياري)</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" class="form-control" id="renew_coupon" placeholder="أدخل كود الكوبون" style="flex: 1; text-transform: uppercase;">
+            <button type="button" class="btn btn-primary" onclick="verifyRenewCoupon()" style="white-space: nowrap;">
+              <i class="fas fa-check-circle"></i> تحقق
+            </button>
+          </div>
+          <div id="renew_coupon_info" style="margin-top: 0.5rem; display: none;"></div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">ملاحظات التجديد</label>
+          <textarea class="form-control" id="renew_notes" placeholder="مثال: تجديد الباقة الذهبية لمدة شهر"></textarea>
+        </div>
+        
+        <div style="display: flex; gap: .75rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-danger" onclick="closeRenewModal()">إلغاء</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fas fa-check"></i>
+            تجديد الآن
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Customer Modal -->
+  <div id="customerModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="customer_modal_title">إضافة عميل جديد</h3>
+        <button class="close-btn" onclick="closeCustomerModal()">&times;</button>
+      </div>
+      <form id="customerForm" onsubmit="saveCustomer(event)">
+        <input type="hidden" id="customer_id">
+        
+        <div class="form-group">
+          <label class="form-label">🎯 نوع الاشتراك <span style="color:#ef4444">*</span></label>
+          <div style="display: flex; gap: 1rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 2px solid rgba(59, 130, 246, 0.3); border-radius: 8px; flex: 1; background: rgba(59, 130, 246, 0.1);" id="purchase_label">
+              <input type="radio" name="subscription_type" value="purchase" id="type_purchase" checked onchange="toggleSubscriptionType()">
+              <span style="color: #fff; font-weight: 600;">💰 شراء</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 2px solid rgba(139, 92, 246, 0.3); border-radius: 8px; flex: 1;" id="trial_label">
+              <input type="radio" name="subscription_type" value="trial" id="type_trial" onchange="toggleSubscriptionType()">
+              <span style="color: #fff; font-weight: 600;">🎁 تجريبي</span>
+            </label>
+          </div>
+          <div style="color: #9ca3af; font-size: 0.85rem; margin-top: 0.5rem;" id="subscription_hint">
+            <i class="fas fa-info-circle"></i> الاشتراك التجريبي: 100 نقطة مجاناً لمدة 24 ساعة
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">الاسم <span style="color:#ef4444">*</span></label>
+            <input type="text" class="form-control" id="customer_name" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">رقم الهاتف <span style="color:#ef4444">*</span></label>
+            <input type="tel" class="form-control" id="customer_phone" required>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">البريد الإلكتروني</label>
+          <input type="email" class="form-control" id="customer_email">
+        </div>
+        
+        <div class="form-group" id="amount_group">
+          <label class="form-label">مبلغ الشراء (جنيه) <span style="color:#ef4444">*</span></label>
+          <input type="number" class="form-control" id="customer_amount" step="0.01" value="0" min="0.01" required>
+        </div>
+        
+        <input type="hidden" id="customer_points" value="0">
+        <input type="hidden" id="customer_expiry">
+        
+        <div class="form-group">
+          <label class="form-label">🎫 كود الكوبون (اختياري)</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" class="form-control" id="customer_coupon" placeholder="أدخل كود الكوبون" style="flex: 1; text-transform: uppercase;">
+            <button type="button" class="btn btn-primary" onclick="verifyCustomerCoupon()" style="white-space: nowrap;">
+              <i class="fas fa-check-circle"></i> تحقق
+            </button>
+          </div>
+          <div id="customer_coupon_info" style="margin-top: 0.5rem; display: none;"></div>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">📋 اختر خيار</label>
+          <select class="form-control" id="customer_option" style="background: rgba(255, 255, 255, 0.1); color: #fff; font-weight: 500;">
+            <option value="option1" style="background: #1e293b; color: #fff;">الخيار الأول</option>
+            <option value="option2" style="background: #1e293b; color: #fff;">الخيار الثاني</option>
+            <option value="option3" style="background: #1e293b; color: #fff;">الخيار الثالث</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">ملاحظات</label>
+          <textarea class="form-control" id="customer_notes"></textarea>
+        </div>
+        
+        <div style="display: flex; gap: .75rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-danger" onclick="closeCustomerModal()">إلغاء</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fas fa-save"></i>
+            حفظ
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Global state
+    let currentTarget = null;
+    let customers = [];
+    let filteredCustomers = [];
+    let appliedCoupon = null;
+    let selectedMonth = null; // null = الشهر الحالي
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      populateMonthSelector();
+      loadTarget();
+      loadCustomers();
+      updateMonthDisplay();
+      
+      // إضافة مستمع للبحث
+      const searchInput = document.getElementById('search_input');
+      searchInput.addEventListener('input', (e) => {
+        filterCustomers(e.target.value);
+      });
+    });
+    
+    function populateMonthSelector() {
+      const selector = document.getElementById('month_selector');
+      const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 
+                      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+      
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      
+      let options = [];
+      
+      // إضافة آخر 12 شهر
+      for (let i = 0; i < 12; i++) {
+        const date = new Date(currentYear, currentMonth - i, 1);
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const value = `${year}-${String(month + 1).padStart(2, '0')}`;
+        const label = `${months[month]} ${year}`;
+        const isCurrent = i === 0;
+        
+        options.push(`<option value="${value}" ${isCurrent ? 'selected' : ''}>${label}${isCurrent ? ' (الحالي)' : ''}</option>`);
+      }
+      
+      selector.innerHTML = options.join('');
+    }
+    
+    function loadSelectedMonth() {
+      const selector = document.getElementById('month_selector');
+      selectedMonth = selector.value;
+      
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const isCurrentMonth = selectedMonth === currentMonth;
+      
+      // إظهار/إخفاء badge الأرشيف
+      document.getElementById('archive_badge').style.display = isCurrentMonth ? 'none' : 'inline';
+      
+      loadTarget();
+      updateMonthDisplay();
+    }
+
+    function updateMonthDisplay() {
+      const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 
+                      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+      
+      if (selectedMonth) {
+        const [year, month] = selectedMonth.split('-');
+        document.getElementById('current_month').textContent = `${months[parseInt(month) - 1]} ${year}`;
+      } else {
+        const now = new Date();
+        document.getElementById('current_month').textContent = `${months[now.getMonth()]} ${now.getFullYear()}`;
+      }
+    }
+
+    // Load Target
+    async function loadTarget() {
+      try {
+        const url = selectedMonth 
+          ? `api/sales_target_api.php?action=get_target&month=${selectedMonth}`
+          : 'api/sales_target_api.php?action=get_target';
+        
+        const response = await fetch(url);
+        const result = await response.json();
+        
+        if (result.success) {
+          currentTarget = result.data;
+          displayTarget();
+        }
+      } catch (error) {
+        console.error('Error loading target:', error);
+        Swal.fire('خطأ', 'فشل تحميل بيانات التارجت', 'error');
+      }
+    }
+
+    function displayTarget() {
+      if (!currentTarget) return;
+      
+      const targetAmount = parseFloat(currentTarget.target_amount || 0);
+      const currentAmount = parseFloat(currentTarget.current_amount || 0);
+      const bonusAmount = parseFloat(currentTarget.bonus_amount || 0);
+      const bonusEarned = parseFloat(currentTarget.bonus_earned || 0);
+      const percentage = Math.min(100, Math.round(currentTarget.percentage || 0));
+      
+      // حساب المتبقي
+      const remainingAmount = Math.max(0, targetAmount - currentAmount);
+      
+      document.getElementById('remaining_amount').textContent = formatCurrency(remainingAmount);
+      document.getElementById('current_amount').textContent = formatCurrency(currentAmount);
+      
+      // عرض البونص إذا تحقق التارجت
+      const bonusSection = document.getElementById('bonus_section');
+      if (bonusAmount > 0) {
+        bonusSection.style.display = 'flex';
+        document.getElementById('bonus_earned').textContent = formatCurrency(bonusEarned);
+      } else {
+        bonusSection.style.display = 'none';
+      }
+      
+      const progressBar = document.getElementById('progress_bar');
+      progressBar.style.width = percentage + '%';
+      progressBar.textContent = percentage + '%';
+      
+      if (percentage >= 100) {
+        progressBar.style.background = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+      } else if (percentage >= 75) {
+        progressBar.style.background = 'linear-gradient(90deg, #3b82f6 0%, #2563eb 100%)';
+      } else if (percentage >= 50) {
+        progressBar.style.background = 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)';
+      } else {
+        progressBar.style.background = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+      }
+    }
+
+    // Load Customers
+    async function loadCustomers() {
+      try {
+        const response = await fetch('api/sales_target_api.php?action=get_customers');
+        const result = await response.json();
+        
+        if (result.success) {
+          customers = result.data || [];
+          filteredCustomers = customers;
+          displayCustomers();
+        }
+      } catch (error) {
+        console.error('Error loading customers:', error);
+        document.getElementById('customers_tbody').innerHTML = `
+          <tr><td colspan="8" class="empty-state">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div>فشل تحميل بيانات العملاء</div>
+          </td></tr>
+        `;
+      }
+    }
+    
+    function filterCustomers(searchTerm) {
+      if (!searchTerm.trim()) {
+        filteredCustomers = customers;
+      } else {
+        const term = searchTerm.toLowerCase();
+        filteredCustomers = customers.filter(customer => 
+          customer.phone.toLowerCase().includes(term) ||
+          (customer.email && customer.email.toLowerCase().includes(term))
+        );
+      }
+      displayCustomers();
+    }
+
+    function displayCustomers() {
+      const tbody = document.getElementById('customers_tbody');
+      
+      if (!filteredCustomers.length) {
+        tbody.innerHTML = `
+          <tr><td colspan="8" class="empty-state">
+            <i class="fas fa-users"></i>
+            <div>${customers.length ? 'لا توجد نتائج للبحث' : 'لا يوجد عملاء حتى الآن'}</div>
+          </td></tr>
+        `;
+        return;
+      }
+      
+      tbody.innerHTML = filteredCustomers.map(customer => {
+        const expiryStatus = getExpiryStatus(customer.expiry_date);
+        const whatsappLink = `https://wa.me/${customer.phone.replace(/[^0-9]/g, '')}`;
+        
+        return `
+          <tr>
+            <td style="font-weight: 600;">${escapeHtml(customer.name)}</td>
+            <td dir="ltr" style="text-align: right;">${escapeHtml(customer.phone)}</td>
+            <td style="color: #9ca3af; font-size: 0.9rem;">${customer.email ? escapeHtml(customer.email) : '—'}</td>
+            <td><span class="badge badge-success"><i class="fas fa-star"></i> ${customer.points}</span></td>
+            <td>${formatCurrency(customer.purchase_amount)}</td>
+            <td>${customer.expiry_date ? formatDate(customer.expiry_date) : '—'}</td>
+            <td>${expiryStatus}</td>
+            <td>
+              <div class="action-btns">
+                <button class="btn btn-sm" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff;" onclick="renewCustomer(${customer.id})" title="تجديد الاشتراك">
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+                <button class="btn btn-sm" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff;" onclick="chargePoints(${customer.id})" title="شحن نقاط">
+                  <i class="fas fa-star"></i>
+                </button>
+                <a href="${whatsappLink}" target="_blank" class="btn btn-sm btn-success" title="تواصل عبر واتساب">
+                  <i class="fab fa-whatsapp"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function getExpiryStatus(expiryDate) {
+      if (!expiryDate) return '<span class="badge badge-success">فعال</span>';
+      
+      const expiry = new Date(expiryDate);
+      const now = new Date();
+      const diff = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+      
+      if (diff < 0) {
+        return '<span class="badge badge-danger"><i class="fas fa-times-circle"></i> منتهي</span>';
+      } else if (diff <= 7) {
+        return `<span class="badge badge-warning"><i class="fas fa-exclamation-triangle"></i> ينتهي خلال ${diff} يوم</span>`;
+      } else {
+        return '<span class="badge badge-success"><i class="fas fa-check-circle"></i> فعال</span>';
+      }
+    }
+
+    // Target Modal
+    function openTargetModal() {
+      document.getElementById('target_input').value = currentTarget ? currentTarget.target_amount : 100000;
+      document.getElementById('targetModal').classList.add('active');
+    }
+
+    function closeTargetModal() {
+      document.getElementById('targetModal').classList.remove('active');
+    }
+
+    async function saveTarget(e) {
+      e.preventDefault();
+      
+      const targetAmount = document.getElementById('target_input').value;
+      
+      try {
+        const response = await fetch('api/sales_target_api.php?action=update_target', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_amount: targetAmount })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          Swal.fire('نجح', 'تم تحديث التارجت بنجاح', 'success');
+          closeTargetModal();
+          loadTarget();
+        } else {
+          Swal.fire('خطأ', result.message, 'error');
+        }
+      } catch (error) {
+        console.error('Error saving target:', error);
+        Swal.fire('خطأ', 'فشل حفظ التارجت', 'error');
+      }
+    }
+
+    // Customer Modal
+    function openCustomerModal() {
+      document.getElementById('customer_modal_title').textContent = 'إضافة عميل جديد';
+      document.getElementById('customerForm').reset();
+      document.getElementById('customer_id').value = '';
+      
+      // تعيين شراء كافتراضي
+      document.getElementById('type_purchase').checked = true;
+      toggleSubscriptionType();
+      
+      document.getElementById('customerModal').classList.add('active');
+    }
+    
+    function toggleSubscriptionType() {
+      const isPurchase = document.getElementById('type_purchase').checked;
+      const amountGroup = document.getElementById('amount_group');
+      const amountInput = document.getElementById('customer_amount');
+      const pointsInput = document.getElementById('customer_points');
+      const expiryInput = document.getElementById('customer_expiry');
+      const subscriptionHint = document.getElementById('subscription_hint');
+      
+      const purchaseLabel = document.getElementById('purchase_label');
+      const trialLabel = document.getElementById('trial_label');
+      
+      if (isPurchase) {
+        // وضع الشراء
+        amountGroup.style.display = 'block';
+        amountInput.required = true;
+        amountInput.min = '0.01';
+        amountInput.value = '';
+        pointsInput.value = '0';
+        
+        // تاريخ افتراضي (شهر من الآن)
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        expiryInput.value = nextMonth.toISOString().split('T')[0];
+        
+        // تغيير الملاحظة
+        subscriptionHint.innerHTML = '<i class="fas fa-info-circle"></i> اشتراك مدفوع مع مدة صلاحية شهر';
+        
+        // تغيير الألوان
+        purchaseLabel.style.background = 'rgba(59, 130, 246, 0.1)';
+        purchaseLabel.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+        trialLabel.style.background = 'transparent';
+        trialLabel.style.borderColor = 'rgba(139, 92, 246, 0.3)';
+      } else {
+        // وضع التجريبي
+        amountGroup.style.display = 'none';
+        amountInput.required = false;
+        amountInput.value = '0';
+        pointsInput.value = '100'; // 100 نقطة مجاناً
+        
+        // تاريخ الانتهاء بعد 24 ساعة
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        expiryInput.value = tomorrow.toISOString().split('T')[0];
+        
+        // تغيير الملاحظة
+        subscriptionHint.innerHTML = '<i class="fas fa-info-circle"></i> الاشتراك التجريبي: 100 نقطة مجاناً لمدة 24 ساعة';
+        
+        // تغيير الألوان
+        trialLabel.style.background = 'rgba(139, 92, 246, 0.1)';
+        trialLabel.style.borderColor = 'rgba(139, 92, 246, 0.5)';
+        purchaseLabel.style.background = 'transparent';
+        purchaseLabel.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+      }
+    }
+
+    function closeCustomerModal() {
+      document.getElementById('customerModal').classList.remove('active');
+      appliedCoupon = null;
+    }
+    
+    async function verifyCustomerCoupon() {
+      const couponCode = document.getElementById('customer_coupon').value.trim();
+      const infoDiv = document.getElementById('customer_coupon_info');
+      
+      if (!couponCode) {
+        infoDiv.style.display = 'none';
+        appliedCoupon = null;
+        return;
+      }
+      
+      try {
+        const response = await fetch('api/sales_target_api.php?action=verify_coupon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: couponCode })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          appliedCoupon = result.coupon;
+          const coupon = result.coupon;
+          
+          let info = `<div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 0.75rem;">`;
+          info += `<div style="color: #10b981; font-weight: 600; margin-bottom: 0.25rem;">`;
+          info += `<i class="fas fa-check-circle"></i> كوبون صالح!`;
+          info += `</div>`;
+          info += `<div style="color: #9ca3af; font-size: 0.85rem;">`;
+          info += `• النوع: ${coupon.type_name}<br>`;
+          
+          if (coupon.type === 'extra_time') {
+            info += `• مدة إضافية: ${coupon.duration_days} يوم<br>`;
+          } else if (coupon.type === 'points') {
+            info += `• نقاط إضافية: ${parseInt(coupon.value).toLocaleString('ar-EG')}<br>`;
+          } else if (coupon.type === 'amount') {
+            info += `• خصم: ${formatCurrency(coupon.value)}<br>`;
+          } else if (coupon.type === 'discount') {
+            info += `• خصم: ${coupon.value}%<br>`;
+          }
+          
+          if (coupon.remaining_uses > 0) {
+            info += `• متبقي: ${coupon.remaining_uses} استخدام<br>`;
+          }
+          
+          info += `</div></div>`;
+          infoDiv.innerHTML = info;
+          infoDiv.style.display = 'block';
+          
+        } else {
+          appliedCoupon = null;
+          let info = `<div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.75rem;">`;
+          info += `<div style="color: #ef4444; font-weight: 600;">`;
+          info += `<i class="fas fa-times-circle"></i> ${result.message}`;
+          info += `</div></div>`;
+          infoDiv.innerHTML = info;
+          infoDiv.style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error verifying coupon:', error);
+      }
+    }
+
+    function editCustomer(id) {
+      const customer = customers.find(c => c.id == id);
+      if (!customer) return;
+      
+      document.getElementById('customer_modal_title').textContent = 'تعديل بيانات العميل';
+      document.getElementById('customer_id').value = customer.id;
+      document.getElementById('customer_name').value = customer.name;
+      document.getElementById('customer_phone').value = customer.phone;
+      document.getElementById('customer_email').value = customer.email || '';
+      document.getElementById('customer_points').value = customer.points;
+      document.getElementById('customer_amount').value = customer.purchase_amount;
+      document.getElementById('customer_expiry').value = customer.expiry_date || '';
+      document.getElementById('customer_notes').value = customer.notes || '';
+      
+      document.getElementById('customerModal').classList.add('active');
+    }
+
+    async function saveCustomer(e) {
+      e.preventDefault();
+      
+      const customerId = document.getElementById('customer_id').value;
+      const data = {
+        id: customerId ? parseInt(customerId) : null,
+        name: document.getElementById('customer_name').value,
+        phone: document.getElementById('customer_phone').value,
+        email: document.getElementById('customer_email').value,
+        points: parseInt(document.getElementById('customer_points').value) || 0,
+        purchase_amount: parseFloat(document.getElementById('customer_amount').value) || 0,
+        expiry_date: document.getElementById('customer_expiry').value || null,
+        notes: document.getElementById('customer_notes').value
+      };
+      
+      const action = customerId ? 'update_customer' : 'add_customer';
+      
+      try {
+        const response = await fetch(`api/sales_target_api.php?action=${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          Swal.fire('نجح', result.message, 'success');
+          closeCustomerModal();
+          loadCustomers();
+          loadTarget();
+        } else {
+          Swal.fire('خطأ', result.message, 'error');
+        }
+      } catch (error) {
+        console.error('Error saving customer:', error);
+        Swal.fire('خطأ', 'فشل حفظ بيانات العميل', 'error');
+      }
+    }
+
+    async function deleteCustomer(id) {
+      const result = await Swal.fire({
+        title: 'هل أنت متأكد؟',
+        text: 'سيتم حذف العميل نهائياً',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'نعم، احذف',
+        cancelButtonText: 'إلغاء'
+      });
+      
+      if (!result.isConfirmed) return;
+      
+      try {
+        const response = await fetch('api/sales_target_api.php?action=delete_customer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        
+        const apiResult = await response.json();
+        
+        if (apiResult.success) {
+          Swal.fire('تم الحذف', 'تم حذف العميل بنجاح', 'success');
+          loadCustomers();
+          loadTarget();
+        } else {
+          Swal.fire('خطأ', apiResult.message, 'error');
+        }
+      } catch (error) {
+        console.error('Error deleting customer:', error);
+        Swal.fire('خطأ', 'فشل حذف العميل', 'error');
+      }
+    }
+
+    // Utility Functions
+    function formatCurrency(amount) {
+      return new Intl.NumberFormat('ar-EG', {
+        style: 'currency',
+        currency: 'EGP',
+        minimumFractionDigits: 2
+      }).format(amount);
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Charge Points
+    function chargePoints(id) {
+      const customer = customers.find(c => c.id == id);
+      if (!customer) return;
+      
+      document.getElementById('charge_customer_id').value = customer.id;
+      document.getElementById('charge_customer_name').textContent = customer.name;
+      document.getElementById('charge_current_points').textContent = customer.points.toLocaleString('ar-EG');
+      document.getElementById('charge_amount').value = '';
+      document.getElementById('charge_points').value = '';
+      document.getElementById('charge_coupon').value = '';
+      document.getElementById('charge_notes').value = '';
+      document.getElementById('charge_coupon_info').style.display = 'none';
+      appliedCoupon = null;
+      
+      document.getElementById('chargePointsModal').classList.add('active');
+    }
+
+    function closeChargePointsModal() {
+      document.getElementById('chargePointsModal').classList.remove('active');
+      appliedCoupon = null;
+    }
+    
+    async function verifyChargeCoupon() {
+      const couponCode = document.getElementById('charge_coupon').value.trim();
+      const infoDiv = document.getElementById('charge_coupon_info');
+      
+      if (!couponCode) {
+        infoDiv.style.display = 'none';
+        appliedCoupon = null;
+        return;
+      }
+      
+      try {
+        const response = await fetch('api/sales_target_api.php?action=verify_coupon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: couponCode })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          appliedCoupon = result.coupon;
+          const coupon = result.coupon;
+          
+          let info = `<div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 0.75rem;">`;
+          info += `<div style="color: #10b981; font-weight: 600; margin-bottom: 0.25rem;">`;
+          info += `<i class="fas fa-check-circle"></i> كوبون صالح!`;
+          info += `</div>`;
+          info += `<div style="color: #9ca3af; font-size: 0.85rem;">`;
+          info += `• النوع: ${coupon.type_name}<br>`;
+          
+          if (coupon.type === 'extra_time') {
+            info += `• مدة إضافية: ${coupon.duration_days} يوم<br>`;
+          } else if (coupon.type === 'points') {
+            info += `• نقاط إضافية: ${parseInt(coupon.value).toLocaleString('ar-EG')}<br>`;
+          } else if (coupon.type === 'amount') {
+            info += `• خصم: ${formatCurrency(coupon.value)}<br>`;
+          } else if (coupon.type === 'discount') {
+            info += `• خصم: ${coupon.value}%<br>`;
+          }
+          
+          if (coupon.remaining_uses > 0) {
+            info += `• متبقي: ${coupon.remaining_uses} استخدام<br>`;
+          }
+          
+          info += `</div></div>`;
+          infoDiv.innerHTML = info;
+          infoDiv.style.display = 'block';
+          
+        } else {
+          appliedCoupon = null;
+          let info = `<div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.75rem;">`;
+          info += `<div style="color: #ef4444; font-weight: 600;">`;
+          info += `<i class="fas fa-times-circle"></i> ${result.message}`;
+          info += `</div></div>`;
+          infoDiv.innerHTML = info;
+          infoDiv.style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error verifying coupon:', error);
+      }
+    }
+
+    async function saveChargePoints(e) {
+      e.preventDefault();
+      
+      const customerId = document.getElementById('charge_customer_id').value;
+      const chargeAmount = parseFloat(document.getElementById('charge_amount').value);
+      const chargePoints = parseInt(document.getElementById('charge_points').value);
+      const chargeNotes = document.getElementById('charge_notes').value;
+      
+      const customer = customers.find(c => c.id == customerId);
+      if (!customer) return;
+      
+      const data = {
+        id: parseInt(customerId),
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+        points: customer.points + chargePoints,
+        purchase_amount: customer.purchase_amount + chargeAmount,
+        expiry_date: customer.expiry_date,
+        notes: chargeNotes || customer.notes,
+        renew_amount: chargeAmount
+      };
+      
+      try {
+        const response = await fetch('api/sales_target_api.php?action=renew_customer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'تم شحن النقاط بنجاح! ⭐',
+            html: `
+              <div style="text-align: right; direction: rtl;">
+                <p>• المبلغ المضاف للتارجت: ${formatCurrency(chargeAmount)}</p>
+                <p style="color: #fbbf24;">• النقاط المشحونة: ${chargePoints.toLocaleString('ar-EG')} نقطة</p>
+                <p style="color: #10b981;">• إجمالي النقاط: ${(customer.points + chargePoints).toLocaleString('ar-EG')} نقطة</p>
+              </div>
+            `,
+            confirmButtonText: 'تمام'
+          });
+          closeChargePointsModal();
+          loadCustomers();
+          loadTarget();
+        } else {
+          Swal.fire('خطأ', result.message, 'error');
+        }
+      } catch (error) {
+        console.error('Error charging points:', error);
+        Swal.fire('خطأ', 'فشل شحن النقاط', 'error');
+      }
+    }
+
+    // Verify Coupon
+    async function verifyRenewCoupon() {
+      const couponCode = document.getElementById('renew_coupon').value.trim();
+      const infoDiv = document.getElementById('renew_coupon_info');
+      
+      if (!couponCode) {
+        infoDiv.style.display = 'none';
+        appliedCoupon = null;
+        return;
+      }
+      
+      try {
+        const response = await fetch('api/sales_target_api.php?action=verify_coupon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: couponCode })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          appliedCoupon = result.coupon;
+          const coupon = result.coupon;
+          
+          let info = `<div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 0.75rem;">`;
+          info += `<div style="color: #10b981; font-weight: 600; margin-bottom: 0.25rem;">`;
+          info += `<i class="fas fa-check-circle"></i> كوبون صالح!`;
+          info += `</div>`;
+          info += `<div style="color: #9ca3af; font-size: 0.85rem;">`;
+          info += `• النوع: ${coupon.type_name}<br>`;
+          
+          if (coupon.type === 'extra_time') {
+            info += `• مدة إضافية: ${coupon.duration_days} يوم<br>`;
+          } else if (coupon.type === 'points') {
+            info += `• نقاط إضافية: ${parseInt(coupon.value).toLocaleString('ar-EG')}<br>`;
+          } else if (coupon.type === 'amount') {
+            info += `• خصم: ${formatCurrency(coupon.value)}<br>`;
+          } else if (coupon.type === 'discount') {
+            info += `• خصم: ${coupon.value}%<br>`;
+          }
+          
+          if (coupon.remaining_uses > 0) {
+            info += `• متبقي: ${coupon.remaining_uses} استخدام<br>`;
+          }
+          
+          info += `</div></div>`;
+          infoDiv.innerHTML = info;
+          infoDiv.style.display = 'block';
+          
+        } else {
+          appliedCoupon = null;
+          let info = `<div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.75rem;">`;
+          info += `<div style="color: #ef4444; font-weight: 600;">`;
+          info += `<i class="fas fa-times-circle"></i> ${result.message}`;
+          info += `</div></div>`;
+          infoDiv.innerHTML = info;
+          infoDiv.style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error verifying coupon:', error);
+      }
+    }
+
+    // Renew Customer
+    function renewCustomer(id) {
+      const customer = customers.find(c => c.id == id);
+      if (!customer) return;
+      
+      document.getElementById('renew_customer_id').value = customer.id;
+      document.getElementById('renew_customer_name').textContent = customer.name;
+      document.getElementById('renew_customer_phone').textContent = customer.phone;
+      document.getElementById('renew_amount').value = '';
+      document.getElementById('renew_points').value = 0;
+      document.getElementById('renew_coupon').value = '';
+      document.getElementById('renew_coupon_info').style.display = 'none';
+      appliedCoupon = null;
+      
+      // تعيين تاريخ افتراضي (شهر من الآن)
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      document.getElementById('renew_expiry').value = nextMonth.toISOString().split('T')[0];
+      
+      document.getElementById('renew_notes').value = '';
+      document.getElementById('renewModal').classList.add('active');
+    }
+
+    function closeRenewModal() {
+      document.getElementById('renewModal').classList.remove('active');
+      appliedCoupon = null;
+    }
+
+    async function saveRenewal(e) {
+      e.preventDefault();
+      
+      const customerId = document.getElementById('renew_customer_id').value;
+      const renewAmount = parseFloat(document.getElementById('renew_amount').value);
+      const renewPoints = parseInt(document.getElementById('renew_points').value) || 0;
+      const renewExpiry = document.getElementById('renew_expiry').value;
+      const renewNotes = document.getElementById('renew_notes').value;
+      
+      const customer = customers.find(c => c.id == customerId);
+      if (!customer) return;
+      
+      const data = {
+        id: parseInt(customerId),
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+        points: customer.points + renewPoints,
+        purchase_amount: customer.purchase_amount + renewAmount,
+        expiry_date: renewExpiry,
+        notes: renewNotes || customer.notes,
+        renew_amount: renewAmount
+      };
+      
+      try {
+        const response = await fetch('api/sales_target_api.php?action=renew_customer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'تم التجديد بنجاح! 🎉',
+            html: `
+              <div style="text-align: right; direction: rtl;">
+                <p>• المبلغ المضاف للتارجت: ${formatCurrency(renewAmount)}</p>
+                <p style="color: #10b981;">• النقاط المجانية: ${renewPoints.toLocaleString('ar-EG')} نقطة 🎁</p>
+                <p>• تاريخ الانتهاء الجديد: ${formatDate(renewExpiry)}</p>
+              </div>
+            `,
+            confirmButtonText: 'تمام'
+          });
+          closeRenewModal();
+          loadCustomers();
+          loadTarget();
+        } else {
+          Swal.fire('خطأ', result.message, 'error');
+        }
+      } catch (error) {
+        console.error('Error renewing customer:', error);
+        Swal.fire('خطأ', 'فشل تجديد الاشتراك', 'error');
+      }
+    }
+
+    // Close modal on outside click
+    window.onclick = function(event) {
+      const targetModal = document.getElementById('targetModal');
+      const customerModal = document.getElementById('customerModal');
+      const renewModal = document.getElementById('renewModal');
+      const chargePointsModal = document.getElementById('chargePointsModal');
+      if (event.target === targetModal) closeTargetModal();
+      if (event.target === customerModal) closeCustomerModal();
+      if (event.target === renewModal) closeRenewModal();
+      if (event.target === chargePointsModal) closeChargePointsModal();
+    }
+  </script>
+</body>
+</html>

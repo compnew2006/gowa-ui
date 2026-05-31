@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>البوستات | Kingmaster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: 'Cairo', system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+    .bg-gradient { position: fixed; inset: 0; z-index: -1; }
+    .container { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+    
+    .header-bar { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:2rem; flex-wrap:wrap; }
+    .header-title { font-size:1.8rem; font-weight:700; color: var(--text-light); margin:0; display:flex; align-items:center; gap:.6rem; }
+    .btn { padding:.85rem 1.5rem; border:none; border-radius:12px; background: linear-gradient(135deg,var(--primary),var(--primary-light)); color:#fff; font-weight:600; cursor:pointer; font-size:.95rem; transition: all .2s ease; display: inline-flex; align-items:center; gap:.5rem; }
+    .btn:hover{ filter: brightness(1.08); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108,92,231,.4); }
+    
+    .card { background: var(--glass-bg); border:1px solid var(--glass-border); border-radius: 20px; backdrop-filter: blur(14px); box-shadow: 0 8px 28px rgba(0,0,0,.35); transition: transform .2s ease, box-shadow .2s ease; margin-bottom:1.5rem; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+    .card-body { padding: 2rem; }
+    
+    .new-post-form { display:none; }
+    .new-post-form.active { display:block; }
+    .form-group { margin-bottom: 1rem; }
+    label { color:#e5e7eb; margin-bottom:.5rem; display:block; font-size:.9rem; font-weight:500; }
+    input, textarea { width:100%; padding:.85rem 1rem; border:1px solid var(--glass-border); border-radius:12px; background: rgba(17,24,39,0.85); color:#fff; font-size:.95rem; transition: all .2s ease; font-family: 'Cairo', sans-serif; }
+    textarea { resize: vertical; min-height: 120px; }
+    input:focus, textarea:focus{ outline:none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(108,92,231,.25); background: rgba(17,24,39,0.95); }
+    
+    .post { margin-bottom:1.5rem; }
+    .post-header { display:flex; align-items:center; gap:1rem; margin-bottom:1rem; }
+    .post-avatar { width: 48px; height:48px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,.15); }
+    .post-user-info h4 { margin:0; color:#fff; font-size:1rem; font-weight:600; }
+    .post-user-info .post-date { color:#9ca3af; font-size:.85rem; }
+    .post-title { font-size:1.25rem; font-weight:700; color:#fff; margin:0 0 .75rem; }
+    .post-content { color:#e5e7eb; line-height:1.7; margin-bottom:1.5rem; }
+    
+    .post-footer { display:flex; align-items:center; justify-content:space-between; padding-top:1rem; border-top: 1px solid rgba(255,255,255,.08); flex-wrap:wrap; gap:1rem; }
+    .rating-display { display:flex; align-items:center; gap:.5rem; }
+    .stars { display:flex; gap:.25rem; }
+    .star { font-size:1.2rem; cursor:pointer; transition: all .2s ease; color:#4b5563; }
+    .star.active { color:#fbbf24; }
+    .star:hover { transform: scale(1.15); }
+    .rating-info { color:#9ca3af; font-size:.9rem; margin-right:.5rem; }
+    
+    .btn-sm { padding:.5rem 1rem; font-size:.85rem; }
+    .posts-container { min-height: 200px; }
+    .loading { text-align:center; padding:3rem; color:#9ca3af; }
+    .empty-state { text-align:center; padding:3rem; color:#9ca3af; }
+    
+    @media (max-width: 768px) {
+      .header-bar { flex-direction:column; align-items:stretch; }
+      .btn { width:100%; justify-content:center; }
+    }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="container">
+    <div class="header-bar">
+      <h1 class="header-title"><i class="fas fa-newspaper"></i> البوستات</h1>
+      <button class="btn" id="btn_toggle_form"><i class="fas fa-plus"></i> إضافة بوست جديد</button>
+    </div>
+
+    <!-- نموذج إضافة بوست جديد -->
+    <div class="card new-post-form" id="new_post_form">
+      <div class="card-body">
+        <h3 style="color:#fff; font-size:1.15rem; font-weight:600; margin:0 0 1.5rem; display:flex; align-items:center; gap:.6rem; padding-bottom:.75rem; border-bottom: 1px solid rgba(255,255,255,.08);">
+          <i class="fas fa-pen"></i> بوست جديد
+        </h3>
+        <form id="post_form">
+          <div class="form-group">
+            <label>العنوان</label>
+            <input type="text" id="post_title" required placeholder="عنوان مميز للبوست" />
+          </div>
+          <div class="form-group">
+            <label>المحتوى</label>
+            <textarea id="post_content" required placeholder="اكتب محتوى البوست هنا..."></textarea>
+          </div>
+          <div style="display:flex; gap:.75rem; justify-content:flex-end;">
+            <button type="button" class="btn btn-sm" id="btn_cancel" style="background: rgba(239,68,68,.2); color:#f87171;">
+              <i class="fas fa-times"></i> إلغاء
+            </button>
+            <button type="submit" class="btn btn-sm">
+              <i class="fas fa-paper-plane"></i> نشر البوست
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- عرض البوستات -->
+    <div class="posts-container" id="posts_container">
+      <div class="loading">
+        <i class="fas fa-spinner fa-spin" style="font-size:2rem;"></i>
+        <div style="margin-top:1rem;">جارٍ تحميل البوستات...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <script>
+    // معرف المستخدم الحالي (يمكن جلبه من الجلسة)
+    const CURRENT_USER_ID = 1;
+    const CURRENT_USER_NAME = 'مصطفى';
+
+    // Toggle form
+    document.getElementById('btn_toggle_form').addEventListener('click', () => {
+      document.getElementById('new_post_form').classList.toggle('active');
+    });
+
+    document.getElementById('btn_cancel').addEventListener('click', () => {
+      document.getElementById('new_post_form').classList.remove('active');
+      document.getElementById('post_form').reset();
+    });
+
+    // إرسال بوست جديد
+    document.getElementById('post_form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('post_title').value.trim();
+      const content = document.getElementById('post_content').value.trim();
+      
+      if (!title || !content) {
+        Swal.fire({ icon: 'warning', title: 'تنبيه', text: 'يرجى ملء جميع الحقول' });
+        return;
+      }
+
+      try {
+        const response = await fetch('api/create_post.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: CURRENT_USER_ID,
+            user_name: CURRENT_USER_NAME,
+            title,
+            content
+          })
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          Swal.fire({ icon: 'success', title: 'تم', text: 'تم نشر البوست بنجاح' });
+          document.getElementById('post_form').reset();
+          document.getElementById('new_post_form').classList.remove('active');
+          loadPosts();
+        } else {
+          Swal.fire({ icon: 'error', title: 'خطأ', text: result.message || 'حدث خطأ أثناء النشر' });
+        }
+      } catch (error) {
+        Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل الاتصال بالخادم' });
+      }
+    });
+
+    // تحميل البوستات
+    async function loadPosts() {
+      const container = document.getElementById('posts_container');
+      container.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin" style="font-size:2rem;"></i><div style="margin-top:1rem;">جارٍ تحميل البوستات...</div></div>';
+
+      try {
+        const response = await fetch('api/get_posts.php');
+        const result = await response.json();
+
+        if (result.success && result.posts.length > 0) {
+          container.innerHTML = result.posts.map(post => createPostHTML(post)).join('');
+          attachRatingListeners();
+        } else {
+          container.innerHTML = '<div class="empty-state"><i class="fas fa-inbox" style="font-size:3rem; margin-bottom:1rem; opacity:.3;"></i><div>لا توجد بوستات حتى الآن. كن أول من ينشر!</div></div>';
+        }
+      } catch (error) {
+        container.innerHTML = '<div class="empty-state" style="color:#f87171;"><i class="fas fa-exclamation-triangle" style="font-size:3rem; margin-bottom:1rem;"></i><div>فشل تحميل البوستات</div></div>';
+      }
+    }
+
+    // إنشاء HTML للبوست
+    function createPostHTML(post) {
+      const avgRating = parseFloat(post.avg_rating) || 0;
+      const userRating = parseInt(post.user_rating) || 0;
+      const totalRatings = parseInt(post.total_ratings) || 0;
+
+      return `
+        <div class="card post">
+          <div class="card-body">
+            <div class="post-header">
+              <img src="${post.user_avatar}" alt="${post.user_name}" class="post-avatar" />
+              <div class="post-user-info">
+                <h4>${post.user_name}</h4>
+                <div class="post-date">${formatDate(post.created_at)}</div>
+              </div>
+            </div>
+            <h3 class="post-title">${post.title}</h3>
+            <div class="post-content">${post.content}</div>
+            <div class="post-footer">
+              <div class="rating-display">
+                <div class="stars" data-post-id="${post.id}">
+                  ${[1,2,3,4,5].map(i => `<i class="fas fa-star star ${i <= userRating ? 'active' : ''}" data-rating="${i}"></i>`).join('')}
+                </div>
+                <span class="rating-info">${avgRating.toFixed(1)} (${totalRatings} تقييم)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ربط أحداث التقييم
+    function attachRatingListeners() {
+      document.querySelectorAll('.stars').forEach(starsContainer => {
+        const postId = starsContainer.dataset.postId;
+        const stars = starsContainer.querySelectorAll('.star');
+
+        stars.forEach(star => {
+          star.addEventListener('click', async () => {
+            const rating = parseInt(star.dataset.rating);
+            await ratePost(postId, rating);
+          });
+
+          star.addEventListener('mouseenter', () => {
+            const rating = parseInt(star.dataset.rating);
+            stars.forEach((s, idx) => {
+              if (idx < rating) s.classList.add('active');
+              else s.classList.remove('active');
+            });
+          });
+        });
+
+        starsContainer.addEventListener('mouseleave', () => {
+          loadPosts(); // إعادة تحميل لعرض التقييم الفعلي
+        });
+      });
+    }
+
+    // إضافة/تحديث التقييم
+    async function ratePost(postId, rating) {
+      try {
+        const response = await fetch('api/rate_post.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            post_id: postId,
+            user_id: CURRENT_USER_ID,
+            rating
+          })
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          loadPosts();
+        } else {
+          Swal.fire({ icon: 'error', title: 'خطأ', text: result.message || 'فشل حفظ التقييم' });
+        }
+      } catch (error) {
+        Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل الاتصال بالخادم' });
+      }
+    }
+
+    // تنسيق التاريخ
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return 'الآن';
+      if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
+      if (diffHours < 24) return `منذ ${diffHours} ساعة`;
+      if (diffDays < 7) return `منذ ${diffDays} يوم`;
+      
+      return date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    // تحميل البوستات عند فتح الصفحة
+    loadPosts();
+  </script>
+</body>
+</html>

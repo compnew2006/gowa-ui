@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>King Master - إدارة قوالب الماسنجر</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+
+    
+    .content-admin-container { min-height:100vh; position:relative; z-index:1; }
+    .main-content { padding:0; padding-right:0; }
+    .content-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem; flex-wrap:wrap; gap:1rem; }
+    .content-title { font-size:2rem; font-weight:700; color:var(--text-light); margin:0; }
+    .content-actions { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+    .search-box { position:relative; min-width:300px; }
+    .search-box input { width:100%; padding:0.75rem 1rem 0.75rem 3rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:0.9rem; }
+    .search-box i { position:absolute; right:1rem; top:50%; transform:translateY(-50%); color:var(--text-light-dark); }
+    .add-content-btn { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; border:none; padding:0.75rem 1.5rem; border-radius:var(--radius-md); font-weight:600; display:flex; align-items:center; gap:0.5rem; cursor:pointer; transition:all .3s ease; }
+    .add-content-btn:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:2rem; }
+    .stat-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; text-align:center; backdrop-filter:blur(10px); }
+    .stat-number { font-size:2rem; font-weight:700; color:var(--primary-light); margin-bottom:.5rem; display:block; }
+    .stat-label { color:var(--text-light-dark); font-size:.9rem; }
+
+    .filter-section { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; margin-bottom:2rem; backdrop-filter:blur(10px); }
+    .filter-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; align-items:end; }
+    .filter-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; font-size:.9rem; }
+    .filter-group select, .filter-group input { width:100%; padding:.75rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    :root { color-scheme:dark; }
+    .filter-group select, .form-group select { background-color:rgba(17,24,39,.85); color:var(--text-light); }
+    .filter-group select option, .form-group select option { background-color:#111827; color:#F3F4F6; }
+
+    .filter-actions { display:flex; gap:.5rem; flex-direction:column; }
+    .filter-btn { padding:.5rem 1rem; border:1px solid var(--glass-border); border-radius:var(--radius-md); cursor:pointer; transition:all .3s ease; font-size:.8rem; white-space:nowrap; text-align:center; }
+    .btn-delete-selected { background:rgba(239,68,68,.2); color:#EF4444; border-color:#EF4444; }
+    .btn-delete-selected:hover { background:#EF4444; color:#fff; }
+
+    .contents-table-container { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); overflow:hidden; backdrop-filter:blur(10px); }
+    .contents-table { width:100%; border-collapse:collapse; }
+    .contents-table th, .contents-table td { padding:1rem; text-align:right; border-bottom:1px solid rgba(255,255,255,.1); }
+    .contents-table th { background:rgba(108,92,231,.1); color:var(--text-light); font-weight:600; position:sticky; top:0; z-index:10; }
+    .contents-table td { color:var(--text-light-dark); }
+    .contents-table tr:hover { background:rgba(255,255,255,.05); }
+    .checkbox-cell { width:40px; text-align:center; }
+    .checkbox-cell input[type="checkbox"] { width:18px; height:18px; accent-color:var(--primary); }
+
+    .action-buttons { display:flex; gap:.5rem; align-items:center; }
+    .action-btn { width:32px; height:32px; border:none; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .3s ease; font-size:.8rem; }
+    .btn-edit { background:rgba(59,130,246,.2); color:#3B82F6; border:1px solid #3B82F6; }
+    .btn-edit:hover { background:#3B82F6; color:#fff; }
+    .btn-preview { background:rgba(16,185,129,.2); color:#10B981; border:1px solid #10B981; }
+    .btn-preview:hover { background:#10B981; color:#fff; }
+    .btn-copy { background:rgba(99,102,241,.2); color:#6366F1; border:1px solid #6366F1; }
+    .btn-copy:hover { background:#6366F1; color:#fff; }
+    .btn-delete { background:rgba(239,68,68,.2); color:#EF4444; border:1px solid #EF4444; }
+    .btn-delete:hover { background:#EF4444; color:#fff; }
+
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); display:flex; align-items:center; justify-content:center; z-index:1000; opacity:0; visibility:hidden; transition:all .3s ease; }
+    .modal-overlay.active { opacity:1; visibility:visible; }
+    .modal { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); backdrop-filter:blur(20px); max-width:800px; width:95%; max-height:90vh; overflow-y:auto; transform:scale(.95); transition:all .3s ease; }
+    .modal-overlay.active .modal { transform:scale(1); }
+    .modal-header { padding:1rem 1.5rem; border-bottom:1px solid rgba(255,255,255,.1); display:flex; justify-content:space-between; align-items:center; }
+    .modal-title { margin:0; color:var(--text-light); font-size:1.25rem; font-weight:600; }
+    .modal-close { background:none; border:none; color:var(--text-light-dark); font-size:1.5rem; cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-sm); }
+    .modal-body { padding:1.25rem 1.5rem; }
+    .form-group { margin-bottom:1rem; }
+    .form-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; }
+    .form-group input, .form-group textarea, .form-group select { width:100%; padding:.75rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    .form-help { color:var(--text-light-dark); font-size:.8rem; margin-top:.25rem; }
+    .codebox { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background:rgba(0,0,0,.35); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:0.75rem; color:var(--text-light-dark); }
+    .modal-footer { padding:1rem 1.5rem; border-top:1px solid rgba(255,255,255,.1); display:flex; gap:0.5rem; justify-content:flex-end; flex-wrap:wrap; }
+    .btn { padding:0.65rem 1.25rem; border:none; border-radius:var(--radius-md); font-weight:600; cursor:pointer; transition:all .3s ease; display:flex; align-items:center; gap:.5rem; }
+    .btn-primary { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; }
+    .btn-secondary { background:var(--glass-bg); color:var(--text-light-dark); border:1px solid var(--glass-border); }
+
+    /* Buttons builder */
+    .btn-item { display:grid; grid-template-columns: 1fr 1fr 2fr auto; gap:.5rem; align-items:center; margin-bottom:.5rem; }
+    .btn-item select, .btn-item input { width:100%; padding:.5rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text-light); }
+    .btn-item .remove { background:rgba(239,68,68,.2); color:#EF4444; border:1px solid #EF4444; border-radius:var(--radius-sm); padding:.5rem .75rem; cursor:pointer; }
+    .btn-item .remove:hover { background:#EF4444; color:#fff; }
+
+    /* Album modal grid */
+    .album-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:.75rem; }
+    .album-item { position:relative; border:1px solid var(--glass-border); border-radius: var(--radius-md); overflow:hidden; background: rgba(255,255,255,0.05); }
+    .album-item img { width:100%; height:100px; object-fit:cover; display:block; }
+    .album-item .check { position:absolute; top:.4rem; right:.4rem; background: rgba(0,0,0,0.5); padding:.2rem .3rem; border-radius: var(--radius-sm); }
+    .album-item input[type="checkbox"] { width:18px; height:18px; accent-color: var(--primary); }
+
+    /* SweetAlert2 dark theme */
+    .dark-swal.swal2-popup, .dark-swal {
+      background: var(--glass-bg) !important;
+      border: 1px solid var(--glass-border) !important;
+      backdrop-filter: blur(20px) !important;
+      color: var(--text-light) !important;
+      border-radius: var(--radius-lg) !important;
+    }
+    .dark-swal .swal2-title,
+    .dark-swal .swal2-html-container { color: var(--text-light) !important; }
+    .dark-swal .swal2-radio { background: rgba(17,24,39,0.6) !important; border: 1px solid var(--glass-border) !important; border-radius: var(--radius-md) !important; padding: .75rem !important; display: flex !important; gap: .5rem !important; }
+    .dark-swal .swal2-radio label { color: var(--text-light) !important; background: transparent !important; }
+    .dark-swal .swal2-radio input { accent-color: var(--primary) !important; margin-inline-end: .5rem !important; }
+    .dark-swal .swal2-select,
+    .dark-swal select,
+    .dark-swal .swal2-input { background: rgba(17,24,39,0.85) !important; color: var(--text-light) !important; border: 1px solid var(--glass-border) !important; }
+    .dark-swal .swal2-actions .swal2-confirm { background: linear-gradient(135deg, var(--primary), var(--primary-light)) !important; color: #fff !important; }
+    .dark-swal .swal2-actions .swal2-cancel { background: var(--glass-bg) !important; color: var(--text-light-dark) !important; border: 1px solid var(--glass-border) !important; }
+    .dark-swal .swal2-timer-progress-bar { background: var(--primary) !important; }
+
+    @media (max-width:768px){ .content-header{flex-direction:column; align-items:stretch;} .content-actions{width:100%;} .filter-row{grid-template-columns:1fr;} .contents-table-container{overflow-x:auto;} .contents-table{min-width:900px;} .btn-item{grid-template-columns:1fr; } }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="dashboard-container content-admin-container">
+    <div class="main-content" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+      <div class="content-header">
+        <div class="content-title"><i class="fas fa-layer-group" style="margin-left:.5rem;"></i> إدارة القوالب </div>
+        <div class="content-actions">
+          <div class="search-box">
+            <input type="text" id="searchInput" placeholder="ابحث عن قالب...">
+            <i class="fas fa-search"></i>
+          </div>
+          <button class="add-content-btn" onclick="createTemplateFlow()"><i class="fas fa-plus"></i> إنشاء قالب</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card"><span class="stat-number" id="totalTemplates">0</span><div class="stat-label">إجمالي القوالب</div></div>
+        <div class="stat-card"><span class="stat-number" id="genericTemplates">0</span><div class="stat-label">قوالب Generic</div></div>
+        <div class="stat-card"><span class="stat-number" id="fbButtonCount">0</span><div class="stat-label">قوالب Facebook Button</div></div>
+        <div class="stat-card"><span class="stat-number" id="fbAlbumCount">0</span><div class="stat-label">قوالب Facebook Album</div></div>
+        <div class="stat-card"><span class="stat-number" id="pollCount">0</span><div class="stat-label">استطلاعات واتساب</div></div>
+        <div class="stat-card"><span class="stat-number" id="waListCount">0</span><div class="stat-label">قوائم واتساب</div></div>
+      </div>
+
+      <div class="filter-section">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label>النوع</label>
+            <select id="typeFilter">
+              <option value="">الكل</option>
+              <option value="generic">Generic</option>
+              <option value="poll">استطلاع</option>
+              <option value="list">قائمة</option>
+              <option value="album">ألبوم</option>
+              <option value="fb_button">Facebook Button</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>القناة</label>
+            <select id="channelFilter">
+              <option value="">الكل</option>
+              <option value="facebook">فيس</option>
+              <option value="whatsapp">واتساب</option>
+              <option value="telegram">تليجرام</option>
+              <option value="email">إيميل</option>
+              <option value="instagram">انستا</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>عدد القوالب المعروضة</label>
+            <div class="count-display"><span class="count-number" id="displayCount">0</span> <span>قالب</span></div>
+          </div>
+          <div class="filter-actions">
+            <button class="filter-btn btn-delete-selected" onclick="deleteSelected()"><i class="fas fa-trash"></i> حذف المحدد</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="contents-table-container">
+        <table class="contents-table">
+          <thead>
+            <tr>
+              <th class="checkbox-cell"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+              <th>الاسم</th>
+              <th>النوع</th>
+              <th>تاريخ التعديل</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="templatesTableBody">
+            <tr><td colspan="5" class="table-loading"><div class="loading-spinner"></div><div>جاري تحميل القوالب...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="templateModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTitle">إنشاء قالب</h3>
+        <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>اسم القالب</label>
+          <input type="text" id="tplName" placeholder="مثال: قالب ترحيب">
+        </div>
+        <div class="form-group">
+          <label>النوع</label>
+          <select id="tplType">
+            <option value="generic">generic</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>القناة</label>
+          <select id="tplChannel">
+            <option value="facebook">فيس</option>
+            <option value="whatsapp">واتساب</option>
+            <option value="telegram">تليجرام</option>
+            <option value="email">إيميل</option>
+            <option value="instagram">انستا</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>عنوان البطاقة</label>
+          <input type="text" id="elTitle" placeholder="مثال: Welcome!">
+        </div>
+        <div class="form-group">
+          <label>الوصف الفرعي</label>
+          <input type="text" id="elSubtitle" placeholder="مثال: We have the right hat for everyone.">
+        </div>
+        <div class="form-group">
+          <label>اختر محتوى محفوظ (سيستبدل عنوان البطاقة)</label>
+          <select id="contentSelect">
+            <option value="">— اختر محتوى —</option>
+          </select>
+          <div class="form-help">عند الاختيار سيتم وضع النص مكان "عنوان البطاقة" تلقائيًا.</div>
+        </div>
+        <div class="form-group">
+          <label>الصورة</label>
+          <select id="imageSelect">
+            <option value="">— اختر من الوسائط المرفوعة —</option>
+          </select>
+          <div class="form-help">أو ضع رابط صورة خارجي</div>
+          <input type="text" id="imageUrl" placeholder="https://example.com/image.jpg">
+        </div>
+        <div class="form-group">
+          <label>الفتح الافتراضي (Default Action)</label>
+          <input type="text" id="daUrl" placeholder="https://example.com">
+          <div style="margin-top:.5rem; display:flex; gap:.5rem; align-items:center;">
+            <label style="margin:0;">ارتفاع الويب فيو</label>
+            <select id="daHeight" style="max-width:200px;">
+              <option value="tall">tall</option>
+              <option value="compact">compact</option>
+              <option value="full">full</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>الأزرار</label>
+          <div id="buttonsContainer"></div>
+          <button type="button" class="btn btn-secondary" onclick="addButton()" style="margin-top:.5rem;"><i class="fas fa-plus"></i> إضافة زر</button>
+          <div class="form-help">أنواع الأزرار: رابط ويب (web_url) أو Postback</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveTemplate()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="pollModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">استطلاع رأي واتساب</h3>
+        <button class="modal-close" onclick="closePollModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>اسم القالب</label><input type="text" id="pollTplName" placeholder="مثال: استطلاع ترحيب"></div>
+        <div class="form-group" style="display:none;"><label>رابط الخدمة</label><input type="text" id="pollBaseUrl" value="https://waapi.king-master.pro/send-poll-message.php"></div>
+        <div class="form-group" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.5rem;">
+          <div style="display:none;"><label>API Key</label><input type="text" id="pollKey" placeholder="{{WA_API_KEY}}" value="VV9D6WL23X"></div>
+          <div style="display:none;"><label>Instance ID</label><input type="text" id="pollInstance" placeholder="{{INSTANCE_ID}}" value="{{INSTANCE_ID}}"></div>
+          <div style="display:none;"><label>Phone</label><input type="text" id="pollPhone" placeholder="2012XXXXXXXX" value="2012XXXXXXXX"></div>
+        </div>
+        <div class="form-group"><label>اسم الاستطلاع (name)</label><input type="text" id="pollName" value="%%name%%"></div>
+        <div class="form-group">
+          <label>الخيارات</label>
+          <div id="choicesContainer"></div>
+          <button type="button" class="btn btn-secondary" onclick="addChoice()" style="margin-top:.5rem;"><i class="fas fa-plus"></i> إضافة خيار</button>
+        </div>
+        <div class="form-group" style="display:none;"><label>الرابط النهائي</label><div id="pollUrlPreview" class="codebox" style="word-break:break-all; min-height:48px;">--</div></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closePollModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="savePoll()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Facebook Button Template Modal -->
+  <div class="modal-overlay" id="fbButtonModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">زر فيسبوك (Button Template)</h3>
+        <button class="modal-close" onclick="closeFbButtonModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>اسم القالب</label><input type="text" id="fbBtnTplName" placeholder="مثال: أزرار سريعة"></div>
+        <div class="form-group"><label>النص (text)</label><input type="text" id="fbBtnText" placeholder="Try the URL button!"></div>
+        <div class="form-group">
+          <label>الأزرار</label>
+          <div id="fbButtonsContainer"></div>
+          <button type="button" class="btn btn-secondary" onclick="addFbButton()" style="margin-top:.5rem;"><i class="fas fa-plus"></i> إضافة زر</button>
+          <div class="form-help">يدعم: URL Button, Postback Button, Call Button (حتى 3 أزرار)</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeFbButtonModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveFbButton()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="contents-table-container" style="max-width: 1400px; margin: 1rem auto; display:none;">
+    <table class="contents-table">
+      <thead>
+        <tr>
+          <th class="checkbox-cell"><input type="checkbox" id="selectAllPolls" onchange="toggleSelectAllPolls()"></th>
+          <th>الاسم</th>
+          <th>الهاتف</th>
+          <th>عدد الخيارات</th>
+          <th>الرابط</th>
+          <th>الإجراءات</th>
+        </tr>
+      </thead>
+      <tbody id="pollsTableBody">
+        <tr><td colspan="6" class="table-loading"><div class="loading-spinner"></div><div>جاري تحميل استطلاعات واتساب...</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="modal-overlay" id="listModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">قائمة واتساب</h3>
+        <button class="modal-close" onclick="closeListModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>اسم القالب</label><input type="text" id="listTplName" placeholder="مثال: قائمة عروض"></div>
+        <div class="form-group" style="display:none;"><label>رابط الخدمة</label><input type="text" id="listBaseUrl" value="https://waapi.king-master.pro/send-list-message.php"></div>
+           <div style="display:none;"><label>API Key</label><input type="text" id="pollKey" placeholder="{{WA_API_KEY}}" value="VV9D6WL23X"></div>
+          <div style="display:none;"><label>Instance ID</label><input type="text" id="pollInstance" placeholder="{{INSTANCE_ID}}" value="{{INSTANCE_ID}}"></div>
+          <div style="display:none;"><label>Phone</label><input type="text" id="pollPhone" placeholder="2012XXXXXXXX" value="2012XXXXXXXX"></div>
+         <div class="form-group"><label>الوصف (description)</label><input type="text" id="listDescription" placeholder="Desc for list"></div>
+        <div class="form-group"><label>نص الزر (buttonText)</label><input type="text" id="listButtonText" placeholder="Select"></div>
+        <div class="form-group">
+          <label>الأقسام والعناصر</label>
+          <div id="sectionsContainer"></div>
+          <button type="button" class="btn btn-secondary" onclick="addSection()" style="margin-top:.5rem;"><i class="fas fa-plus"></i> إضافة قسم</button>
+        </div>
+        <div class="form-group" style="display:none;"><label>الرابط النهائي</label><div id="listUrlPreview" class="codebox" style="word-break:break-all; min-height:48px;">--</div></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeListModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveList()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Facebook Album Modal -->
+  <div class="modal-overlay" id="fbAlbumModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">ألبوم فيسبوك</h3>
+        <button class="modal-close" onclick="closeFbAlbumModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>اسم الألبوم</label><input type="text" id="fbAlbumName" placeholder="مثال: ألبوم صور"></div>
+        <div class="form-group"><label>اختر الصور (حد أقصى 30)</label>
+          <div id="fbAlbumSelectedInfo" class="form-help">0 مختارة</div>
+          <div id="fbAlbumGrid" class="album-grid"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeFbAlbumModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveFbAlbum()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Facebook Carousel Modal -->
+  <div class="modal-overlay" id="fbCarouselModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">قالب دوار (Carousel)</h3>
+        <button class="modal-close" onclick="closeFbCarouselModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group"><label>اسم القالب</label><input type="text" id="fbCarouselTplName" placeholder="مثال: قالب دوار منتجات"></div>
+        <div class="form-group"><div class="form-help">يمكنك إضافة حتى 10 بطاقات. كل بطاقة تدعم صورة، عنوان، وصف، زر/أزرار (حتى 3).</div></div>
+        <div class="form-group">
+          <label>البطاقات</label>
+          <div id="carouselCardsContainer"></div>
+          <button type="button" class="btn btn-secondary" onclick="addCarouselCard()" style="margin-top:.5rem;"><i class="fas fa-plus"></i> إضافة بطاقة</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeFbCarouselModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveFbCarousel()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let templates = [];
+    let filtered = [];
+    let selected = [];
+    let editId = null;
+    let images = [];
+    let buttons = [];
+    let savedContents = [];
+
+    // Polls state
+    let polls = [];
+    let selectedPolls = [];
+    let pollChoices = [];
+
+    // Lists state
+    let listSections = [];
+
+    // Facebook Button state
+    let fbBtnButtons = [];
+
+    // Facebook Album state
+    let fbAlbumSelected = [];
+
+    // Facebook Carousel state
+    let carouselCards = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadTemplates();
+      loadImages();
+      loadSavedContents();
+      loadPolls();
+      loadLists();
+      document.getElementById('searchInput').addEventListener('input', applyFilters);
+      document.getElementById('typeFilter').addEventListener('change', applyFilters);
+      document.getElementById('channelFilter').addEventListener('change', applyFilters);
+      ['tplType','tplName','elTitle','elSubtitle','imageSelect','imageUrl','daUrl','daHeight'].forEach(id=>{
+        const el = document.getElementById(id); if (el) el.addEventListener('input', updatePreview);
+        if (el && el.tagName === 'SELECT') el.addEventListener('change', updatePreview);
+      });
+      const cs = document.getElementById('contentSelect');
+      if (cs) cs.addEventListener('change', onContentSelect);
+    });
+
+    async function loadTemplates(){
+      try{
+        const res = await fetch('api/templates_api.php');
+        const data = await res.json();
+        if(!data.success) throw new Error(data.message||'fail');
+        templates = data.data || [];
+        filtered = templates;
+        renderUnifiedTable();
+        updateStats();
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:'فشل تحميل القوالب'}); }
+    }
+
+    function getCombinedFiltered(){
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const typeVal = document.getElementById('typeFilter').value;
+      const channel = document.getElementById('channelFilter').value;
+      const wantPolls = (typeVal === 'poll');
+      const wantLists = (typeVal === 'list');
+      let wantTemplatesType = '';
+      let fbBtnSpecial = false;
+      if (typeVal === 'fb_button') { wantTemplatesType = 'button'; fbBtnSpecial = true; }
+      else if (typeVal && typeVal !== 'poll' && typeVal !== 'list') { wantTemplatesType = typeVal; }
+
+      const tFiltered = templates.filter(t=>{
+        const mq = (t.name||'').toLowerCase().includes(q);
+        const mt = !wantTemplatesType || (t.type||'generic')===wantTemplatesType;
+        const mc = !channel || (t.channel||'facebook')===channel;
+        const mcSpecial = fbBtnSpecial ? ((t.channel||'facebook')==='facebook') : true;
+        const include = mq && mt && mc && mcSpecial;
+        // إذا اختير استطلاع أو قائمة، لا نعرض القوالب العادية
+        return (wantPolls || wantLists) ? false : include;
+      }).map(t=>({ kind:'template', id:t.id, name:t.name, type:t.type||'generic', channel:t.channel||'facebook', updated_at:(t.updated_at||t.created_at), row:t }));
+
+      const pFiltered = polls.filter(p=>{
+        const mq = (p.name||'').toLowerCase().includes(q) || (p.phone||'').toLowerCase().includes(q);
+        const mc = !channel || channel==='whatsapp';
+        const mt = !typeVal || typeVal==='poll';
+        return mq && mc && mt;
+      }).map(p=>({ kind:'poll', id:p.id, name:p.name, type:'poll', channel:'whatsapp', updated_at:(p.updated_at||p.created_at), row:p }));
+
+      const lFiltered = lists.filter(l=>{
+        const mq = (l.name||'').toLowerCase().includes(q) || (l.phone||'').toLowerCase().includes(q);
+        const mc = !channel || channel==='whatsapp';
+        const mt = !typeVal || typeVal==='list';
+        return mq && mc && mt;
+      }).map(l=>({ kind:'list', id:l.id, name:l.name, type:'list', channel:'whatsapp', updated_at:(l.updated_at||l.created_at), row:l }));
+      return [...tFiltered, ...pFiltered, ...lFiltered].sort((a,b)=> new Date(b.updated_at)-new Date(a.updated_at));
+    }
+
+    function renderUnifiedTable(){
+      const tbody = document.getElementById('templatesTableBody');
+      const items = getCombinedFiltered();
+      if(items.length===0){ tbody.innerHTML = `<tr><td colspan="5" class="table-loading"><i class="fas fa-layer-group fa-3x" style="color:var(--text-light-dark);margin-bottom:1rem;"></i><div>لا توجد عناصر</div></td></tr>`; return; }
+      tbody.innerHTML = items.map(it=>{
+        if (it.kind === 'template') {
+          const t = it.row;
+          return `
+            <tr>
+              <td class=\"checkbox-cell\"><input type=\"checkbox\" data-kind=\"template\" data-id=\"${t.id}\" onchange=\"toggleSelection(${t.id}, this.checked)\" ${selected.includes(t.id)?'checked':''}></td>
+              <td style=\"color:var(--text-light); font-weight:600;\">${escapeHtml(t.name)}</td>
+              <td><span class=\"category-badge\">قالب</span> <span class=\"category-badge\">${escapeHtml(t.type||'generic')}</span> <span class=\"category-badge\" style=\"margin-right:.25rem; background: rgba(59,130,246,0.2); color:#3B82F6; border-color:#3B82F6;\">${escapeHtml(t.channel||'facebook')}</span></td>
+              <td style=\"font-size:.85rem; color: var(--text-light-dark);\">${formatDate(t.updated_at||t.created_at)}</td>
+              <td>
+                <div class=\"action-buttons\">
+                  <button class=\"action-btn btn-edit\" title=\"تعديل\" onclick=\"editTemplate(${t.id})\"><i class=\"fas fa-edit\"></i></button>
+                  <button class=\"action-btn btn-copy\" title=\"نسخ cURL\" onclick=\"copyCurl(${t.id})\"><i class=\"fas fa-copy\"></i></button>
+                  <button class=\"action-btn btn-delete\" title=\"حذف\" onclick=\"deleteTemplate(${t.id})\"><i class=\"fas fa-trash\"></i></button>
+                </div>
+              </td>
+            </tr>`;
+        } else if (it.kind === 'poll') {
+          const p = it.row;
+          return `
+            <tr>
+              <td class=\"checkbox-cell\"><input type=\"checkbox\" data-kind=\"poll\" data-id=\"${p.id}\" onchange=\"togglePollSelection(${p.id}, this.checked)\" ${selectedPolls.includes(p.id)?'checked':''}></td>
+              <td style=\"color:var(--text-light); font-weight:600;\">${escapeHtml(p.name)}</td>
+              <td><span class=\"category-badge\">استطلاع</span> <span class=\"category-badge\" style=\"margin-right:.25rem; background: rgba(59,130,246,0.2); color:#3B82F6; border-color:#3B82F6;\">whatsapp</span></td>
+              <td style=\"font-size:.85rem; color: var(--text-light-dark);\">${formatDate(p.updated_at||p.created_at)}</td>
+              <td>
+                <div class=\"action-buttons\">
+                  <button class=\"action-btn btn-copy\" title=\"نسخ الرابط\" onclick=\"copyPollUrl(${p.id})\"><i class=\"fas fa-copy\"></i></button>
+                  <button class=\"action-btn btn-edit\" title=\"تعديل\" onclick=\"editPoll(${p.id})\"><i class=\"fas fa-edit\"></i></button>
+                  <button class=\"action-btn btn-delete\" title=\"حذف\" onclick=\"deletePoll(${p.id})\"><i class=\"fas fa-trash\"></i></button>
+                </div>
+              </td>
+            </tr>`;
+        } else {
+          const l = it.row;
+          return `
+            <tr>
+              <td class=\"checkbox-cell\"><input type=\"checkbox\" data-kind=\"list\" data-id=\"${l.id}\" onchange=\"toggleListSelection(${l.id}, this.checked)\" ${selectedLists.includes(l.id)?'checked':''}></td>
+              <td style=\"color:var(--text-light); font-weight:600;\">${escapeHtml(l.name)}</td>
+              <td><span class=\"category-badge\">قائمة</span> <span class=\"category-badge\" style=\"margin-right:.25rem; background: rgba(59,130,246,0.2); color:#3B82F6; border-color:#3B82F6;\">whatsapp</span></td>
+              <td style=\"font-size:.85rem; color: var(--text-light-dark);\">${formatDate(l.updated_at||l.created_at)}</td>
+              <td>
+                <div class=\"action-buttons\">
+                  <button class=\"action-btn btn-copy\" title=\"نسخ الرابط\" onclick=\"copyListUrl(${l.id})\"><i class=\"fas fa-copy\"></i></button>
+                  <button class=\"action-btn btn-edit\" title=\"تعديل\" onclick=\"editList(${l.id})\"><i class=\"fas fa-edit\"></i></button>
+                  <button class=\"action-btn btn-delete\" title=\"حذف\" onclick=\"deleteList(${l.id})\"><i class=\"fas fa-trash\"></i></button>
+                </div>
+              </td>
+            </tr>`;
+        }
+      }).join('');
+    }
+    function applyFilters(){
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const typeVal = document.getElementById('typeFilter').value;
+      const channel = document.getElementById('channelFilter').value;
+      filtered = templates.filter(t=>{
+        const mq = (t.name||'').toLowerCase().includes(q);
+        let typeMatch = true;
+        let fbBtnChannelMatch = true;
+        if (typeVal) {
+          if (typeVal === 'fb_button') { typeMatch = (t.type||'')==='button'; fbBtnChannelMatch = (t.channel||'')==='facebook'; }
+          else if (typeVal !== 'poll' && typeVal !== 'list') { typeMatch = (t.type||'generic')===typeVal; }
+        }
+        const mc = !channel || (t.channel||'facebook')===channel;
+        return mq && typeMatch && mc && fbBtnChannelMatch;
+      });
+      renderUnifiedTable();
+      updateStats();
+    }
+
+    function updateStats(){
+      const total = (templates?.length || 0) + (polls?.length || 0) + (lists?.length || 0);
+      document.getElementById('totalTemplates').textContent = total;
+      document.getElementById('genericTemplates').textContent = templates.filter(t=>(t.type||'generic')==='generic').length;
+      const fbBtn = templates.filter(t => (t.channel||'')==='facebook' && (t.type||'')==='button').length;
+      const fbBtnEl = document.getElementById('fbButtonCount'); if (fbBtnEl) fbBtnEl.textContent = fbBtn;
+      const fbAlb = templates.filter(t => (t.channel||'')==='facebook' && (t.type||'')==='album').length;
+      const fbAlbEl = document.getElementById('fbAlbumCount'); if (fbAlbEl) fbAlbEl.textContent = fbAlb;
+      document.getElementById('pollCount').textContent = polls.length;
+      const waListEl = document.getElementById('waListCount'); if (waListEl) waListEl.textContent = (lists?.length || 0);
+      const combinedLen = getCombinedFiltered().length;
+      document.getElementById('displayCount').textContent = combinedLen;
+    }
+
+    function toggleSelectAll(){
+      const all = document.getElementById('selectAll');
+      const boxes = document.querySelectorAll('#templatesTableBody input[type="checkbox"]');
+      boxes.forEach(cb=>{
+        cb.checked = all.checked;
+        const id = parseInt(cb.dataset.id);
+        const kind = cb.dataset.kind || 'template';
+        if (kind === 'poll') togglePollSelection(id, cb.checked);
+        else if (kind === 'list') toggleListSelection(id, cb.checked);
+        else toggleSelection(id, cb.checked);
+      });
+    }
+    function toggleSelection(id, checked){ if(checked){ if(!selected.includes(id)) selected.push(id); } else { selected = selected.filter(x=>x!==id); } }
+
+    async function createTemplateFlow(){
+      // reset any edit state to force create mode
+      editId = null; window._fbBtnEditId = null; window._savePollEditId = null; window._saveListEditId = null;
+      const { value: channel } = await Swal.fire({
+        title: 'اختر القناة',
+        input: 'select',
+        inputOptions: { facebook:'فيسبوك', whatsapp:'واتساب', telegram:'تليجرام', email:'إيميل', instagram:'انستا' },
+        inputPlaceholder: 'اختر القناة',
+        showCancelButton: true,
+        confirmButtonText: 'التالي',
+        customClass: { popup: 'dark-swal' }
+      });
+      if (!channel) return;
+      if (channel === 'facebook') {
+        const { value: ftype } = await Swal.fire({
+          title: 'فيسبوك - اختر النوع',
+          input: 'radio',
+          inputOptions: { button:'زر', generic:'قالب', album:'ألبوم', carousel:'قالب دوار' },
+          inputValidator: (v)=>!v && 'اختر نوعًا',
+          confirmButtonText: 'متابعة',
+          showCancelButton: true,
+          customClass: { popup: 'dark-swal' }
+        });
+        if (!ftype) return;
+        if (ftype === 'button') { openFbButtonModal(); return; }
+        if (ftype === 'album') { openFbAlbumModal(); return; }
+        if (ftype === 'carousel') { openFbCarouselModal(); return; }
+        // generic
+        openModal();
+        document.getElementById('tplChannel').value = 'facebook';
+        document.getElementById('tplType').value = 'generic';
+        return;
+      }
+      if (channel === 'whatsapp') {
+        const { value: wtype } = await Swal.fire({
+          title: 'واتساب - اختر النوع',
+          input: 'radio',
+          inputOptions: { template:'قالب', poll:'استطلاع رأي' },
+          inputValidator: (v)=>!v && 'اختر نوعًا',
+          confirmButtonText: 'متابعة',
+          showCancelButton: true,
+          customClass: { popup: 'dark-swal' }
+        });
+        if (!wtype) return;
+        if (wtype === 'poll') { setTimeout(()=>openPollModal(), 100); return; }
+        if (wtype === 'template') { setTimeout(()=>openListModal(), 100); return; }
+        return;
+      }
+      openModal();
+      document.getElementById('tplChannel').value = channel;
+    }
+
+    function openModal(){
+      editId = null; document.getElementById('modalTitle').textContent = 'إنشاء قالب';
+      document.getElementById('tplName').value=''; document.getElementById('tplType').value='generic'; document.getElementById('tplChannel').value='facebook';
+      document.getElementById('elTitle').value=''; document.getElementById('elSubtitle').value='';
+      document.getElementById('imageSelect').value=''; document.getElementById('imageUrl').value='';
+      document.getElementById('daUrl').value=''; document.getElementById('daHeight').value='tall';
+      buttons = []; renderButtons();
+      document.getElementById('templateModal').classList.add('active');
+    }
+    function closeModal(){ document.getElementById('templateModal').classList.remove('active'); }
+
+    function collectPayload(){
+      const title = document.getElementById('elTitle').value.trim();
+      const subtitle = document.getElementById('elSubtitle').value.trim();
+      const imgSel = document.getElementById('imageSelect').value;
+      const imgUrl = document.getElementById('imageUrl').value.trim();
+      const image_url = imgSel || imgUrl || undefined;
+      const daUrl = document.getElementById('daUrl').value.trim();
+      const daHeight = document.getElementById('daHeight').value;
+      const btns = buttons.map(b=>{
+        if (b.type === 'web_url') return { type:'web_url', title: b.title||'', url: b.url||'' };
+        return { type:'postback', title: b.title||'', payload: b.payload||'' };
+      });
+      const element = { title };
+      if (subtitle) element.subtitle = subtitle;
+      if (image_url) element.image_url = image_url;
+      if (daUrl) element.default_action = { type: 'web_url', url: daUrl, webview_height_ratio: daHeight || 'tall' };
+      if (btns.length) element.buttons = btns;
+      return { elements: [ element ] };
+    }
+
+    function updatePreview(){
+      // Build payload silently for saving/sending; لا نعرض المعاينة
+      void collectPayload();
+    }
+
+    async function saveTemplate(){
+      const name = document.getElementById('tplName').value.trim();
+      const type = document.getElementById('tplType').value; const channel = document.getElementById('tplChannel').value;
+      const payload = collectPayload();
+      if(!name){ Swal.fire({icon:'warning', title:'تنبيه', text:'أدخل الاسم'}); return; }
+      try{
+        const method = editId? 'PUT':'POST';
+        const body = editId? { id: editId, name, type, channel, payload } : { name, type, channel, payload };
+        const res = await fetch('api/templates_api.php', { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const data = await res.json();
+        if(!data.success) throw new Error(data.message||'fail');
+        closeModal();
+        await loadTemplates();
+        Swal.fire({icon:'success', title:'تم', text:'تم حفظ القالب'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); }
+    }
+
+    function previewTemplate(id){
+      const t = templates.find(x=>x.id===id); if(!t) return;
+      const payload = typeof t.payload==='string'? JSON.parse(t.payload): t.payload;
+      const message = { attachment:{ type:'template', payload: Object.assign({ template_type: t.type||'generic' }, payload||{}) } };
+      Swal.fire({ title: 'معاينة JSON', html: `<pre style="text-align:left;white-space:pre-wrap;direction:ltr;">${escapeHtml(JSON.stringify({ message }, null, 2))}</pre>`, width: 800 });
+    }
+
+    async function copyCurl(id){
+      const t = templates.find(x=>x.id===id); if(!t) return;
+      const payload = typeof t.payload==='string'? JSON.parse(t.payload): t.payload;
+      const recipient = '<PSID>';
+      const token = '<PAGE_ACCESS_TOKEN>';
+      let message;
+      if ((t.channel||'')==='facebook' && (t.type||'')==='album') {
+        // attachments array
+        message = { attachments: (payload && payload.attachments) ? payload.attachments : [] };
+      } else {
+        message = { attachment:{ type:'template', payload: Object.assign({ template_type: t.type||'generic' }, payload||{}) } };
+      }
+      const body = { messaging_type: 'MESSAGE_TAG', tag: 'POST_PURCHASE_UPDATE', recipient: { id: recipient }, message };
+      const curl = `curl -X POST -H \"Content-Type: application/json\" -d '${JSON.stringify(body).replace(/'/g,"'\\''")}' \"https://graph.facebook.com/v15.0/me/messages?access_token=${token}\"`;
+      try{ await navigator.clipboard.writeText(curl); Swal.fire({icon:'success', title:'تم النسخ', text:'تم نسخ أمر cURL'}); }catch{ Swal.fire({icon:'info', title:'أمر cURL', html:`<pre style=\"text-align:left;white-space:pre-wrap;direction:ltr;\">${escapeHtml(curl)}</pre>`}); }
+    }
+
+    async function editTemplate(id){
+      const t = templates.find(x=>x.id===id); if(!t) return;
+      // Route Facebook button templates to its own modal
+      if ((t.channel||'') === 'facebook' && (t.type||'') === 'button') { return editFbButtonTemplate(id); }
+      if ((t.channel||'') === 'facebook' && (t.type||'') === 'album') { return editFbAlbumTemplate(id); }
+      // Facebook generic carousel (multiple elements)
+      if ((t.channel||'')==='facebook' && (t.type||'')==='generic') {
+        try {
+          const payload = typeof t.payload==='string'? JSON.parse(t.payload): t.payload;
+          if (payload && Array.isArray(payload.elements) && payload.elements.length>1) { return editFbCarouselTemplate(id); }
+        } catch(e){}
+      }
+      editId = id;
+      document.getElementById('modalTitle').textContent = 'تعديل القالب';
+      document.getElementById('tplName').value = t.name||'';
+      document.getElementById('tplType').value = (t.type||'generic'); document.getElementById('tplChannel').value = (t.channel||'facebook');
+      // reset
+      buttons = [];
+      document.getElementById('elTitle').value = '';
+      document.getElementById('elSubtitle').value = '';
+      document.getElementById('imageSelect').value = '';
+      document.getElementById('imageUrl').value = '';
+      document.getElementById('daUrl').value = '';
+      document.getElementById('daHeight').value = 'tall';
+      try{
+        const payload = typeof t.payload==='string'? JSON.parse(t.payload): t.payload;
+        const el = (payload && payload.elements && payload.elements[0]) ? payload.elements[0] : {};
+        document.getElementById('elTitle').value = el.title || '';
+        document.getElementById('elSubtitle').value = el.subtitle || '';
+        const img = el.image_url || '';
+        if (img) {
+          // try match select option
+          const select = document.getElementById('imageSelect');
+          let matched = false;
+          for (const opt of select.options) { if (opt.value === img) { select.value = img; matched = true; break; } }
+          if (!matched) { document.getElementById('imageUrl').value = img; }
+        }
+        if (el.default_action && el.default_action.url) {
+          document.getElementById('daUrl').value = el.default_action.url;
+          document.getElementById('daHeight').value = el.default_action.webview_height_ratio || 'tall';
+        }
+        buttons = Array.isArray(el.buttons) ? el.buttons.map(b=>({
+          type: b.type === 'postback' ? 'postback' : 'web_url',
+          title: b.title || '',
+          url: b.url || '',
+          payload: b.payload || ''
+        })) : [];
+      } catch(e) { buttons = []; }
+      renderButtons();
+      updatePreview();
+      document.getElementById('templateModal').classList.add('active');
+    }
+
+    async function deleteTemplate(id){
+      const t = templates.find(x=>x.id===id); if(!t) return;
+      const result = await Swal.fire({ title:'حذف القالب', html:`هل تريد حذف <strong>${escapeHtml(t.name)}</strong>?`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' });
+      if(!result.isConfirmed) return;
+      try{
+        const res = await fetch(`api/templates_api.php/${id}`, { method:'DELETE' });
+        const data = await res.json();
+        if(!data.success) throw new Error(data.message||'fail');
+        selected = selected.filter(x=>x!==id);
+        await loadTemplates();
+        Swal.fire({icon:'success', title:'تم', text:'تم الحذف'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); }
+    }
+
+    async function deleteSelected(){
+      const tCount = selected.length;
+      const pCount = selectedPolls.length || 0;
+      const lCount = selectedLists.length || 0;
+      if(tCount===0 && pCount===0 && lCount===0){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر عناصر للحذف'}); return; }
+      const total = tCount + pCount + lCount;
+      const result = await Swal.fire({ title:'حذف متعدد', html:`سيتم حذف <strong>${total}</strong> عنصر (قوالب/واتساب). متابعة؟`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' });
+      if(!result.isConfirmed) return;
+      try{
+        // حذف القوالب العادية
+        if (tCount>0){
+          const res = await fetch('api/templates_api.php', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids: selected }) });
+          const data = await res.json(); if(!data.success) throw new Error(data.message||'فشل حذف القوالب');
+        }
+        // حذف استطلاعات واتساب
+        if (pCount>0){
+          const resP = await fetch('api/whatsapp_polls_api.php', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids: selectedPolls }) });
+          const dataP = await resP.json(); if(!dataP.success) throw new Error(dataP.message||'فشل حذف الاستطلاعات');
+        }
+        // حذف قوائم واتساب
+        if (lCount>0){
+          const resL = await fetch('api/whatsapp_lists_api.php', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids: selectedLists }) });
+          const dataL = await resL.json(); if(!dataL.success) throw new Error(dataL.message||'فشل حذف القوائم');
+        }
+        selected = []; selectedPolls = []; selectedLists = [];
+        document.getElementById('selectAll').checked=false;
+        await Promise.all([loadTemplates(), loadPolls(), loadLists()]);
+        Swal.fire({icon:'success', title:'تم', text:'تم حذف العناصر المحددة'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); }
+    }
+
+    async function loadImages(){
+      try{
+        const res = await fetch('api/files_api.php?type=image');
+        const data = await res.json();
+        if (data && data.success) { images = data.data || []; }
+        else { images = []; }
+      }catch{ images = []; }
+      const select = document.getElementById('imageSelect');
+      select.innerHTML = '<option value="">— اختر من الوسائط المرفوعة —</option>' + images.map(img => `<option value="${img.url}">${escapeHtml(img.original_name || img.filename)}</option>`).join('');
+    }
+
+    async function loadSavedContents(){
+      try{
+        const res = await fetch('api/content_api.php');
+        const data = await res.json();
+        if (data && data.success) { savedContents = data.data || []; } else { savedContents = []; }
+      }catch{ savedContents = []; }
+      const cs = document.getElementById('contentSelect');
+      if (!cs) return;
+      const opts = ['<option value="">— اختر محتوى —</option>'];
+      savedContents.forEach(c => {
+        const label = c.title && c.title.trim() ? c.title.trim() : (c.content||'').toString().slice(0, 40).replace(/\s+/g,' ');
+        opts.push(`<option value="${c.id}">${escapeHtml(label)}</option>`);
+      });
+      cs.innerHTML = opts.join('');
+    }
+
+    function onContentSelect(){
+      const cs = document.getElementById('contentSelect');
+      const id = parseInt(cs.value);
+      if (!id) return;
+      const item = savedContents.find(x => x.id === id);
+      if (!item) return;
+      document.getElementById('elTitle').value = (item.content || '').toString();
+      updatePreview();
+    }
+
+    function renderButtons(){
+      const c = document.getElementById('buttonsContainer');
+      c.innerHTML = '';
+      if (buttons.length === 0) {
+        c.innerHTML = '<div class="form-help">لا توجد أزرار. اضغط "إضافة زر".</div>';
+        return;
+      }
+      buttons.forEach((b, idx) => {
+        const row = document.createElement('div');
+        row.className = 'btn-item';
+        row.innerHTML = `
+          <select data-idx="${idx}" data-field="type">
+            <option value="web_url" ${b.type==='web_url'?'selected':''}>web_url</option>
+            <option value="postback" ${b.type==='postback'?'selected':''}>postback</option>
+          </select>
+          <input type="text" placeholder="عنوان الزر" value="${escapeHtml(b.title||'')}" data-idx="${idx}" data-field="title" />
+          <input type="text" placeholder="${b.type==='postback'?'Payload':'https://example.com'}" value="${escapeHtml(b.type==='postback'?(b.payload||''):(b.url||''))}" data-idx="${idx}" data-field="value" />
+          <button type="button" class="remove" onclick="removeButton(${idx})"><i class="fas fa-times"></i></button>
+        `;
+        c.appendChild(row);
+      });
+      // Attach listeners
+      c.querySelectorAll('select, input').forEach(el => {
+        el.addEventListener('input', onButtonChange);
+        el.addEventListener('change', onButtonChange);
+      });
+      updatePreview();
+    }
+
+    function onButtonChange(e){
+      const idx = parseInt(e.target.getAttribute('data-idx'));
+      const field = e.target.getAttribute('data-field');
+      if (Number.isNaN(idx) || !buttons[idx]) return;
+      if (field === 'type') {
+        const prevType = buttons[idx].type;
+        const prevUrl = buttons[idx].url || '';
+        const prevPayload = buttons[idx].payload || '';
+        const newType = e.target.value === 'postback' ? 'postback' : 'web_url';
+        buttons[idx].type = newType;
+        // swap value logically without re-render
+        const row = e.target.closest('.btn-item');
+        const valInput = row ? row.querySelector(`input[data-field="value"][data-idx="${idx}"]`) : null;
+        if (newType === 'postback') {
+          buttons[idx].payload = prevUrl || prevPayload;
+          buttons[idx].url = '';
+          if (valInput) { valInput.placeholder = 'Payload'; valInput.value = buttons[idx].payload; }
+        } else {
+          buttons[idx].url = prevPayload || prevUrl;
+          buttons[idx].payload = '';
+          if (valInput) { valInput.placeholder = 'https://example.com'; valInput.value = buttons[idx].url; }
+        }
+      } else if (field === 'title') {
+        buttons[idx].title = e.target.value;
+      } else if (field === 'value') {
+        if (buttons[idx].type === 'postback') { buttons[idx].payload = e.target.value; buttons[idx].url = ''; }
+        else { buttons[idx].url = e.target.value; buttons[idx].payload = ''; }
+      }
+      updatePreview();
+    }
+
+    function addButton(){
+      if (buttons.length >= 3) { Swal.fire({icon:'info', title:'حد الأزرار', text:'أقصى 3 أزرار حسب مواصفات فيسبوك'}); return; }
+      buttons.push({ type:'web_url', title:'', url:'', payload:'' });
+      renderButtons();
+    }
+    function removeButton(i){ buttons.splice(i,1); renderButtons(); }
+
+    // Polls helpers
+    function openPollModal(){
+      window._savePollEditId = null;
+      pollChoices = [];
+      document.getElementById('pollTplName').value = '';
+      document.getElementById('pollBaseUrl').value = 'https://waapi.king-master.pro/send-poll-message.php';
+      document.getElementById('pollKey').value = 'VV9D6WL23X';
+      document.getElementById('pollInstance').value = '{{INSTANCE_ID}}';
+      document.getElementById('pollPhone').value = '2012XXXXXXXX';
+      document.getElementById('pollName').value = '%%name%%';
+      renderChoices();
+      updatePollPreview();
+      document.getElementById('pollModal').classList.add('active');
+    }
+    function closePollModal(){ document.getElementById('pollModal').classList.remove('active'); }
+
+    function renderChoices(){
+      const c = document.getElementById('choicesContainer');
+      c.innerHTML = '';
+      if (pollChoices.length === 0) { c.innerHTML = '<div class="form-help">لا توجد خيارات. اضغط "إضافة خيار".</div>'; return; }
+      pollChoices.forEach((ch, idx) => {
+        const row = document.createElement('div');
+        row.className = 'btn-item';
+        row.innerHTML = `
+          <input type="text" placeholder="خيار ${idx+1}" value="${escapeHtml(ch)}" data-idx="${idx}" data-field="choice" />
+          <button type="button" class="remove" onclick="removeChoice(${idx})"><i class="fas fa-times"></i></button>
+        `;
+        c.appendChild(row);
+      });
+      c.querySelectorAll('input[data-field="choice"]').forEach(el => {
+        el.addEventListener('input', (e)=>{ const i=parseInt(e.target.getAttribute('data-idx')); pollChoices[i]=e.target.value; updatePollPreview(); });
+      });
+    }
+    function addChoice(){ if (pollChoices.length>=10){ Swal.fire({icon:'info', title:'حد الخيارات', text:'الحد الأقصى 10 خيارات'}); return; } pollChoices.push(''); renderChoices(); }
+    function removeChoice(i){ pollChoices.splice(i,1); renderChoices(); updatePollPreview(); }
+
+    function buildPollUrlObj(){
+      const base = document.getElementById('pollBaseUrl').value.trim();
+      const key = document.getElementById('pollKey').value.trim();
+      const inst = document.getElementById('pollInstance').value.trim();
+      const phone = document.getElementById('pollPhone').value.trim();
+      const name = document.getElementById('pollName').value.trim();
+      const choices = pollChoices.filter(x=>x && x.trim());
+      const params = [];
+      params.push('key='+encodeURIComponent(key));
+      params.push('instance_id='+encodeURIComponent(inst));
+      params.push('phone='+encodeURIComponent(phone));
+      params.push('name='+encodeURIComponent(name));
+      choices.forEach(ch=>params.push('choices[]='+encodeURIComponent(ch)));
+      return (base.replace(/[?&]$/,'')+'?'+params.join('&'));
+    }
+    function updatePollPreview(){ document.getElementById('pollUrlPreview').textContent = buildPollUrlObj(); }
+
+    // List builder
+    function openListModal(){
+      window._saveListEditId = null;
+      listSections = [];
+      setIfExists('listTplName','');
+      setIfExists('listBaseUrl','https://waapi.king-master.pro/send-list-message.php');
+      // support both ids if markup differs
+      setIfExists('listKey','VV9D6WL23X');
+      setIfExists('pollKey','VV9D6WL23X');
+      setIfExists('listInstance','{{INSTANCE_ID}}');
+      setIfExists('pollInstance','{{INSTANCE_ID}}');
+      setIfExists('listPhone','2012XXXXXXXX');
+      setIfExists('pollPhone','2012XXXXXXXX');
+      setIfExists('listDescription','');
+      setIfExists('listButtonText','Select');
+      renderSections();
+      if (typeof updateListPreview === 'function') updateListPreview();
+      const modal = document.getElementById('listModal');
+      if (modal) modal.classList.add('active');
+    }
+    function closeListModal(){ document.getElementById('listModal').classList.remove('active'); }
+
+    function renderSections(){
+      const sc = document.getElementById('sectionsContainer');
+      sc.innerHTML = '';
+      if (listSections.length === 0) { sc.innerHTML = '<div class="form-help">لا توجد أقسام. اضغط "إضافة قسم".</div>'; return; }
+      listSections.forEach((sec, sidx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'codebox';
+        wrap.style.marginBottom = '.5rem';
+        wrap.innerHTML = `
+          <div style="display:grid; grid-template-columns:1fr auto; gap:.5rem; align-items:center; margin-bottom:.5rem;">
+            <input type="text" placeholder="عنوان القسم" value="${escapeHtml(sec.title||'')}" data-sidx="${sidx}" data-field="section_title" />
+            <button type="button" class="remove" onclick="removeSection(${sidx})"><i class="fas fa-times"></i></button>
+          </div>
+          <div id="items_${sidx}"></div>
+          <button type="button" class="btn btn-secondary" onclick="addItem(${sidx})" style="margin-top:.5rem;"><i class="fas fa-plus"></i> إضافة عنصر</button>
+        `;
+        sc.appendChild(wrap);
+        // render items
+        const ic = wrap.querySelector(`#items_${sidx}`);
+        (sec.items||[]).forEach((it, iidx) => {
+          const row = document.createElement('div');
+          row.className = 'btn-item';
+          row.innerHTML = `
+            <input type="text" placeholder="عنوان" value="${escapeHtml(it.title||'')}" data-sidx="${sidx}" data-iidx="${iidx}" data-field="item_title" />
+            <input type="text" placeholder="وصف" value="${escapeHtml(it.description||'')}" data-sidx="${sidx}" data-iidx="${iidx}" data-field="item_desc" />
+            <button type="button" class="remove" onclick="removeItem(${sidx}, ${iidx})"><i class="fas fa-times"></i></button>
+          `;
+          ic.appendChild(row);
+        });
+      });
+      // attach listeners
+      sc.querySelectorAll('input[data-field="section_title"]').forEach(el=> el.addEventListener('input', (e)=>{ const sidx=parseInt(e.target.dataset.sidx); listSections[sidx].title = e.target.value; updateListPreview(); }));
+      sc.querySelectorAll('input[data-field="item_title"]').forEach(el=> el.addEventListener('input', (e)=>{ const sidx=parseInt(e.target.dataset.sidx), iidx=parseInt(e.target.dataset.iidx); listSections[sidx].items[iidx].title = e.target.value; updateListPreview(); }));
+      sc.querySelectorAll('input[data-field="item_desc"]').forEach(el=> el.addEventListener('input', (e)=>{ const sidx=parseInt(e.target.dataset.sidx), iidx=parseInt(e.target.dataset.iidx); listSections[sidx].items[iidx].description = e.target.value; updateListPreview(); }));
+    }
+    function addSection(){ listSections.push({ title:'', items:[] }); renderSections(); updateListPreview(); }
+    function removeSection(i){ listSections.splice(i,1); renderSections(); updateListPreview(); }
+    function addItem(sidx){ listSections[sidx].items.push({ title:'', description:'' }); renderSections(); updateListPreview(); }
+    function removeItem(sidx,iidx){ listSections[sidx].items.splice(iidx,1); renderSections(); updateListPreview(); }
+
+    function getVal(){
+      for (let i=0;i<arguments.length;i++){
+        const el = document.getElementById(arguments[i]);
+        if (el) return String(el.value || '').trim();
+      }
+      return '';
+    }
+    function buildListUrlObj(){
+      const base = getVal('listBaseUrl');
+      const key = getVal('listKey','pollKey');
+      const inst = getVal('listInstance','pollInstance');
+      const phone = getVal('listPhone','pollPhone');
+      const desc = getVal('listDescription');
+      const btn = getVal('listButtonText') || 'Select';
+      const params = [];
+      if (key) params.push('key='+encodeURIComponent(key));
+      if (inst) params.push('instance_id='+encodeURIComponent(inst));
+      if (phone) params.push('phone='+encodeURIComponent(phone));
+      if (desc) params.push('description='+encodeURIComponent(desc));
+      if (btn) params.push('buttonText='+encodeURIComponent(btn));
+      (listSections||[]).forEach((sec, idx) => {
+        const title = (sec && sec.title) ? sec.title : '';
+        const items = ((sec && sec.items) ? sec.items : []).map(it => (it.title||'')+'|'+(it.description||''));
+        params.push('section'+idx+'_title='+encodeURIComponent(title));
+        params.push('section'+idx+'='+encodeURIComponent(items.join(',')));
+      });
+      const b = (base||'').replace(/[?&]$/,'');
+      return (b ? (b+'?') : '') + params.join('&');
+    }
+    function updateListPreview(){ const el = document.getElementById('listUrlPreview'); if (el) el.textContent = buildListUrlObj(); }
+
+    async function saveList(){
+      const name = getVal('listTplName');
+      const base_url = getVal('listBaseUrl');
+      const api_key = getVal('listKey','pollKey');
+      const instance_id = getVal('listInstance','pollInstance');
+      const phone = getVal('listPhone','pollPhone');
+      const description = getVal('listDescription');
+      const button_text = getVal('listButtonText') || 'Select';
+      const sections = listSections;
+      if (!name || !base_url || !api_key || !instance_id || !phone || !description || !button_text || !Array.isArray(sections) || sections.length===0) { Swal.fire({icon:'warning', title:'تنبيه', text:'أكمل جميع الحقول'}); return; }
+      const isEdit = !!window._saveListEditId; const id = window._saveListEditId;
+      const body = { name, base_url, api_key, instance_id, phone, description, button_text, sections };
+      const url = isEdit ? `api/whatsapp_lists_api.php/${id}` : 'api/whatsapp_lists_api.php';
+      const method = isEdit ? 'PUT' : 'POST';
+      try{
+        const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(isEdit? { id, ...body }: body) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message||'فشل الحفظ');
+        window._saveListEditId = null;
+        closeListModal();
+        await loadLists();
+        Swal.fire({icon:'success', title:'تم', text:isEdit?'تم التعديل':'تم الحفظ'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); }
+    }
+
+    function toggleListSelection(id, checked){ if (checked) { if(!selectedLists.includes(id)) selectedLists.push(id); } else { selectedLists = selectedLists.filter(x=>x!==id); } }
+    async function copyListUrl(id){ const l = lists.find(x=>x.id===id); if(!l) return; try{ await navigator.clipboard.writeText(l.url); Swal.fire({icon:'success', title:'تم النسخ'}); }catch{ window.open(l.url, '_blank'); } }
+    async function deleteList(id){
+      const l = lists.find(x=>x.id===id); if(!l) return;
+      const res = await Swal.fire({ title:'حذف قائمة', html:`هل تريد حذف <strong>${escapeHtml(l.name)}</strong>?`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' });
+      if (!res.isConfirmed) return;
+      try{
+        const r = await fetch(`api/whatsapp_lists_api.php/${id}`, { method:'DELETE' });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.message||'فشل الحذف');
+        selectedLists = selectedLists.filter(x=>x!==id);
+        await loadLists();
+        Swal.fire({icon:'success', title:'تم', text:'تم الحذف'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); }
+    }
+
+    async function editList(id){
+      const l = lists.find(x=>x.id===id); if(!l) return;
+      document.getElementById('listTplName').value = l.name||'';
+      document.getElementById('listBaseUrl').value = l.base_url||'';
+      document.getElementById('listKey').value = l.api_key||'';
+      document.getElementById('listInstance').value = l.instance_id||'';
+      document.getElementById('listPhone').value = l.phone||'';
+      document.getElementById('listDescription').value = l.description||'';
+      document.getElementById('listButtonText').value = l.button_text||'Select';
+      try{ listSections = Array.isArray(l.sections) ? l.sections : JSON.parse(l.sections||'[]'); }catch{ listSections = []; }
+      renderSections(); updateListPreview();
+      document.getElementById('listModal').classList.add('active');
+      window._saveListEditId = id;
+    }
+
+    async function savePoll(){
+      const name = document.getElementById('pollTplName').value.trim();
+      const base_url = document.getElementById('pollBaseUrl').value.trim();
+      const api_key = document.getElementById('pollKey').value.trim();
+      const instance_id = document.getElementById('pollInstance').value.trim();
+      const phone = document.getElementById('pollPhone').value.trim();
+      const poll_name = document.getElementById('pollName').value.trim();
+      const choices = pollChoices.filter(x=>x && x.trim());
+      if (!name || !base_url || !api_key || !instance_id || !phone || !poll_name || choices.length===0){ Swal.fire({icon:'warning', title:'تنبيه', text:'أكمل جميع الحقول'}); return; }
+      try{
+        const res = await fetch('api/whatsapp_polls_api.php', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, base_url, api_key, instance_id, phone, poll_name, choices }) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message||'فشل الحفظ');
+        closePollModal();
+        await loadPolls();
+        Swal.fire({icon:'success', title:'تم', text:'تم حفظ الاستطلاع'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message || 'فشل الحفظ'}); }
+    }
+
+    async function loadPolls(){
+      try{
+        const res = await fetch('api/whatsapp_polls_api.php');
+        const data = await res.json();
+        if (data && data.success) { polls = data.data || []; } else { polls = []; }
+      }catch{ polls = []; }
+      renderPollsTable();
+      renderUnifiedTable();
+      updateStats();
+    }
+
+    // Lists state and loaders
+    let lists = [];
+    let selectedLists = [];
+
+    async function loadLists(){
+      try{
+        const res = await fetch('api/whatsapp_lists_api.php');
+        const data = await res.json();
+        if (data && data.success) { lists = data.data || []; } else { lists = []; }
+      }catch{ lists = []; }
+      renderUnifiedTable();
+      updateStats();
+    }
+
+    function renderPollsTable(){
+      const tbody = document.getElementById('pollsTableBody');
+      if (!tbody) return;
+      if (polls.length===0){ tbody.innerHTML = '<tr><td colspan="6" class="table-loading">لا توجد استطلاعات</td></tr>'; return; }
+      tbody.innerHTML = polls.map(p=>`
+        <tr>
+          <td class="checkbox-cell"><input type="checkbox" onchange="togglePollSelection(${p.id}, this.checked)" ${selectedPolls.includes(p.id)?'checked':''}></td>
+          <td style="color:var(--text-light); font-weight:600;">${escapeHtml(p.name)}</td>
+          <td>${escapeHtml(p.phone)}</td>
+          <td>${(Array.isArray(p.choices?JSON.parse(p.choices):p.choices)?(p.choices?JSON.parse(p.choices).length:0):0)}</td>
+          <td style="max-width:420px; word-break:break-all;"><a href="${escapeHtml(p.url)}" target="_blank" style="color:#8ab4f8;">فتح</a></td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn btn-copy" title="نسخ الرابط" onclick="copyPollUrl(${p.id})"><i class="fas fa-copy"></i></button>
+              <button class="action-btn btn-edit" title="تعديل" onclick="editPoll(${p.id})"><i class="fas fa-edit"></i></button>
+              <button class="action-btn btn-delete" title="حذف" onclick="deletePoll(${p.id})"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function toggleSelectAllPolls(){
+      const all = document.getElementById('selectAllPolls');
+      const boxes = document.querySelectorAll('#pollsTableBody input[type="checkbox"]');
+      boxes.forEach(cb=>{ cb.checked = all.checked; const id = parseInt(cb.getAttribute('onchange').match(/\d+/)[0]); togglePollSelection(id, cb.checked); });
+    }
+    function togglePollSelection(id, checked){ if (checked) { if(!selectedPolls.includes(id)) selectedPolls.push(id); } else { selectedPolls = selectedPolls.filter(x=>x!==id); } }
+
+    async function copyPollUrl(id){ const p = polls.find(x=>x.id===id); if(!p) return; try{ await navigator.clipboard.writeText(p.url); Swal.fire({icon:'success', title:'تم النسخ'}); }catch{ window.open(p.url, '_blank'); } }
+
+    async function deletePoll(id){
+      const p = polls.find(x=>x.id===id); if(!p) return;
+      const res = await Swal.fire({ title:'حذف استطلاع', html:`هل تريد حذف <strong>${escapeHtml(p.name)}</strong>?`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' });
+      if (!res.isConfirmed) return;
+      try{
+        const r = await fetch(`api/whatsapp_polls_api.php/${id}`, { method:'DELETE' });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.message||'فشل الحذف');
+        selectedPolls = selectedPolls.filter(x=>x!==id);
+        await loadPolls();
+        Swal.fire({icon:'success', title:'تم', text:'تم الحذف'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); }
+    }
+
+    async function editPoll(id){
+      const p = polls.find(x=>x.id===id); if(!p) return;
+      document.getElementById('pollTplName').value = p.name||'';
+      document.getElementById('pollBaseUrl').value = p.base_url||'';
+      document.getElementById('pollKey').value = p.api_key||'';
+      document.getElementById('pollInstance').value = p.instance_id||'';
+      document.getElementById('pollPhone').value = p.phone||'';
+      document.getElementById('pollName').value = p.poll_name||'';
+      try{ pollChoices = Array.isArray(p.choices)? p.choices : JSON.parse(p.choices||'[]'); }catch{ pollChoices = []; }
+      renderChoices(); updatePollPreview();
+      document.getElementById('pollModal').classList.add('active');
+      // override save to PUT for this edit
+      window._savePollEditId = id;
+    }
+
+    // override-aware save
+    async function savePoll(){
+      const isEdit = !!window._savePollEditId;
+      const id = window._savePollEditId;
+      const name = document.getElementById('pollTplName').value.trim();
+      const base_url = document.getElementById('pollBaseUrl').value.trim();
+      const api_key = document.getElementById('pollKey').value.trim();
+      const instance_id = document.getElementById('pollInstance').value.trim();
+      const phone = document.getElementById('pollPhone').value.trim();
+      const poll_name = document.getElementById('pollName').value.trim();
+      const choices = pollChoices.filter(x=>x && x.trim());
+      if (!name || !base_url || !api_key || !instance_id || !phone || !poll_name || choices.length===0){ Swal.fire({icon:'warning', title:'تنبيه', text:'أكمل جميع الحقول'}); return; }
+      const body = { name, base_url, api_key, instance_id, phone, poll_name, choices };
+      const url = isEdit ? `api/whatsapp_polls_api.php/${id}` : 'api/whatsapp_polls_api.php';
+      const method = isEdit ? 'PUT' : 'POST';
+      try{
+        const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(isEdit? { id, ...body }: body) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message||'فشل الحفظ');
+        window._savePollEditId = null;
+        closePollModal();
+        await loadPolls();
+        Swal.fire({icon:'success', title:'تم', text:isEdit?'تم التعديل':'تم الحفظ'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); }
+    }
+
+    function formatDate(s){ if(!s) return '--'; const d=new Date(s); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}); }
+    function escapeHtml(s){
+      const map = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
+      return String(s || '').replace(/[&<>"']/g, ch => map[ch]);
+    }
+
+    // Facebook Button builder
+    function openFbButtonModal(){
+      window._fbBtnEditId = null;
+      document.getElementById('fbBtnTplName').value = '';
+      document.getElementById('fbBtnText').value = '';
+      fbBtnButtons = [];
+      renderFbButtons();
+      document.getElementById('fbButtonModal').classList.add('active');
+    }
+    function closeFbButtonModal(){ document.getElementById('fbButtonModal').classList.remove('active'); }
+
+    // helpers
+    function setIfExists(id, val){ const el=document.getElementById(id); if(el) el.value = val; }
+
+    // Facebook Album
+    function openFbAlbumModal(){
+      window._fbAlbumEditId = null;
+      fbAlbumSelected = [];
+      document.getElementById('fbAlbumName').value = '';
+      renderFbAlbumGrid();
+      updateFbAlbumSelectedInfo();
+      document.getElementById('fbAlbumModal').classList.add('active');
+    }
+    function closeFbAlbumModal(){ document.getElementById('fbAlbumModal').classList.remove('active'); }
+
+    function updateFbAlbumSelectedInfo(){
+      const el = document.getElementById('fbAlbumSelectedInfo'); if (!el) return; el.textContent = `${fbAlbumSelected.length} مختارة`;
+    }
+    function renderFbAlbumGrid(){
+      const grid = document.getElementById('fbAlbumGrid'); if (!grid) return;
+      grid.innerHTML = '';
+      (images||[]).forEach(img => {
+        const url = img.url;
+        const div = document.createElement('div');
+        div.className = 'album-item';
+        div.innerHTML = `<img src="${url}"><div class="check"><input type="checkbox" ${fbAlbumSelected.includes(url)?'checked':''}></div>`;
+        const cb = div.querySelector('input[type="checkbox"]');
+        cb.addEventListener('change', (e)=>{
+          if (e.target.checked) {
+            if (fbAlbumSelected.length>=30) { e.target.checked=false; Swal.fire({icon:'info', title:'الحد 30 صورة'}); return; }
+            fbAlbumSelected.push(url);
+          } else {
+            fbAlbumSelected = fbAlbumSelected.filter(u=>u!==url);
+          }
+          updateFbAlbumSelectedInfo();
+        });
+        grid.appendChild(div);
+      });
+    }
+
+    async function saveFbAlbum(){
+      const name = document.getElementById('fbAlbumName').value.trim();
+      if (!name || fbAlbumSelected.length===0) { Swal.fire({icon:'warning', title:'تنبيه', text:'أدخل الاسم واختر صورًا'}); return; }
+      const attachments = fbAlbumSelected.map(u=>({ type:'image', payload:{ url: u } }));
+      const payload = { attachments };
+      const body = window._fbAlbumEditId ? { id: window._fbAlbumEditId, name, type:'album', channel:'facebook', payload } : { name, type:'album', channel:'facebook', payload };
+      const method = window._fbAlbumEditId ? 'PUT' : 'POST';
+      try{
+        const res = await fetch('api/templates_api.php', { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const data = await res.json(); if (!data.success) throw new Error(data.message||'فشل الحفظ');
+        window._fbAlbumEditId = null;
+        closeFbAlbumModal();
+        await loadTemplates();
+        Swal.fire({icon:'success', title:'تم', text:'تم حفظ الألبوم'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); }
+    }
+
+    function editFbAlbumTemplate(id){
+      const t = templates.find(x=>x.id===id); if(!t) return;
+      window._fbAlbumEditId = id;
+      document.getElementById('fbAlbumName').value = t.name || '';
+      try{
+        const payload = typeof t.payload==='string'? JSON.parse(t.payload): t.payload;
+        fbAlbumSelected = (payload && Array.isArray(payload.attachments)) ? payload.attachments.map(a=>a.payload && a.payload.url).filter(Boolean) : [];
+      }catch{ fbAlbumSelected = []; }
+      renderFbAlbumGrid(); updateFbAlbumSelectedInfo();
+      document.getElementById('fbAlbumModal').classList.add('active');
+    }
+
+    // Facebook Carousel builder
+    function openFbCarouselModal(){
+      window._fbCarouselEditId = null;
+      setIfExists('fbCarouselTplName','');
+      carouselCards = [];
+      // ابدأ ببطاقتين افتراضيتين
+      addCarouselCard();
+      addCarouselCard();
+      renderCarouselCards();
+      const modal = document.getElementById('fbCarouselModal'); if (modal) modal.classList.add('active');
+    }
+    function closeFbCarouselModal(){ const modal=document.getElementById('fbCarouselModal'); if (modal) modal.classList.remove('active'); }
+
+    function addCarouselCard(){
+      if (carouselCards.length>=10){ Swal.fire({icon:'info', title:'حد البطاقات', text:'الحد الأقصى 10 بطاقات'}); return; }
+      carouselCards.push({ title:'', subtitle:'', image_url:'', da_url:'', da_height:'tall', buttons:[] });
+      renderCarouselCards();
+    }
+    function removeCarouselCard(i){ carouselCards.splice(i,1); renderCarouselCards(); }
+
+    function addCarouselButton(cardIdx){
+      const card = carouselCards[cardIdx]; if (!card) return;
+      if ((card.buttons||[]).length>=3){ Swal.fire({icon:'info', title:'حد الأزرار', text:'أقصى 3 أزرار لكل بطاقة'}); return; }
+      card.buttons = card.buttons || [];
+      card.buttons.push({ type:'web_url', title:'', url:'', payload:'', webview_height_ratio:'full' });
+      renderCarouselCards();
+    }
+    function removeCarouselButton(cardIdx, btnIdx){ const card=carouselCards[cardIdx]; if(!card) return; (card.buttons||[]).splice(btnIdx,1); renderCarouselCards(); }
+
+    function renderCarouselCards(){
+      const c = document.getElementById('carouselCardsContainer'); if (!c) return;
+      const imgOpts = (images||[]).map(img=>`<option value="${img.url}">${escapeHtml(img.original_name||img.filename)}</option>`).join('');
+      if (carouselCards.length===0){ c.innerHTML = '<div class="form-help">لا توجد بطاقات. اضغط "إضافة بطاقة".</div>'; return; }
+      c.innerHTML = carouselCards.map((card, idx)=>{
+        const btnsHtml = (card.buttons||[]).map((b, bidx)=>`
+          <div class="btn-item" style="grid-template-columns: 1fr 1fr 2fr auto;">
+            <select data-idx="${idx}" data-bidx="${bidx}" data-field="btn_type">
+              <option value="web_url" ${b.type==='web_url'?'selected':''}>web_url</option>
+              <option value="postback" ${b.type==='postback'?'selected':''}>postback</option>
+              <option value="phone_number" ${b.type==='phone_number'?'selected':''}>phone_number</option>
+            </select>
+            <input type="text" placeholder="عنوان الزر" value="${escapeHtml(b.title||'')}" data-idx="${idx}" data-bidx="${bidx}" data-field="btn_title" />
+            <input type="text" placeholder="${b.type==='web_url'?'https://example.com':(b.type==='postback'?'PAYLOAD':'+2012...')}" value="${escapeHtml(b.type==='web_url'?(b.url||''):(b.payload||''))}" data-idx="${idx}" data-bidx="${bidx}" data-field="btn_value" />
+            <button type="button" class="remove" onclick="removeCarouselButton(${idx}, ${bidx})"><i class="fas fa-times"></i></button>
+          </div>
+          ${b.type==='web_url'?`
+          <div class="btn-item" style="grid-template-columns: 1fr 1fr 1fr 1fr; margin-top:.5rem;">
+            <select data-idx="${idx}" data-bidx="${bidx}" data-field="btn_webview_height_ratio">
+              <option value="full" ${(b.webview_height_ratio||'full')==='full'?'selected':''}>full</option>
+              <option value="tall" ${(b.webview_height_ratio||'full')==='tall'?'selected':''}>tall</option>
+              <option value="compact" ${(b.webview_height_ratio||'full')==='compact'?'selected':''}>compact</option>
+            </select>
+            <select data-idx="${idx}" data-bidx="${bidx}" data-field="btn_messenger_extensions">
+              <option value="false" ${b.messenger_extensions?'':'selected'}>extensions: false</option>
+              <option value="true" ${b.messenger_extensions?'selected':''}>extensions: true</option>
+            </select>
+            <input type="text" placeholder="fallback_url (اختياري)" value="${escapeHtml(b.fallback_url||'')}" data-idx="${idx}" data-bidx="${bidx}" data-field="btn_fallback_url" />
+            <select data-idx="${idx}" data-bidx="${bidx}" data-field="btn_webview_share_button">
+              <option value="">share: default</option>
+              <option value="hide" ${b.webview_share_button==='hide'?'selected':''}>share: hide</option>
+            </select>
+          </div>`:''}
+        `).join('');
+        return `
+        <div class="codebox" style="margin-bottom:.75rem;">
+          <div style="display:grid; grid-template-columns:1fr auto; gap:.5rem; align-items:center; margin-bottom:.5rem;">
+            <strong style="color:var(--text-light)">بطاقة ${idx+1}</strong>
+            <button type="button" class="remove" onclick="removeCarouselCard(${idx})"><i class="fas fa-times"></i></button>
+          </div>
+          <div class="btn-item" style="grid-template-columns:1fr 1fr;">
+            <input type="text" placeholder="العنوان" value="${escapeHtml(card.title||'')}" data-idx="${idx}" data-field="title"/>
+            <input type="text" placeholder="الوصف الفرعي" value="${escapeHtml(card.subtitle||'')}" data-idx="${idx}" data-field="subtitle"/>
+          </div>
+          <div class="btn-item" style="grid-template-columns:1fr 1fr; margin-top:.5rem;">
+            <select data-idx="${idx}" data-field="image_select"><option value="">— اختر من الوسائط —</option>${imgOpts}</select>
+            <input type="text" placeholder="أو رابط صورة خارجي" value="${escapeHtml(card.image_url||'')}" data-idx="${idx}" data-field="image_url"/>
+          </div>
+          <div class="btn-item" style="grid-template-columns:2fr 1fr; margin-top:.5rem;">
+            <input type="text" placeholder="Default Action URL" value="${escapeHtml(card.da_url||'')}" data-idx="${idx}" data-field="da_url"/>
+            <select data-idx="${idx}" data-field="da_height">
+              <option value="tall" ${ (card.da_height||'tall')==='tall'?'selected':'' }>tall</option>
+              <option value="compact" ${ (card.da_height||'tall')==='compact'?'selected':'' }>compact</option>
+              <option value="full" ${ (card.da_height||'tall')==='full'?'selected':'' }>full</option>
+            </select>
+          </div>
+          <div style="margin-top:.5rem;">
+            <label style="display:block; margin-bottom:.25rem;">الأزرار</label>
+            ${btnsHtml || '<div class="form-help">لا توجد أزرار.</div>'}
+            <button type="button" class="btn btn-secondary" onclick="addCarouselButton(${idx})" style="margin-top:.5rem;"><i class="fas fa-plus"></i> إضافة زر</button>
+          </div>
+        </div>`;
+      }).join('');
+      // set selected for image selects based on current card.image_url if it matches an image
+      c.querySelectorAll('select[data-field="image_select"]').forEach(sel=>{
+        const idx = parseInt(sel.dataset.idx);
+        const card = carouselCards[idx]; if (!card) return;
+        const match = (images||[]).some(img=>img.url===card.image_url);
+        if (match) sel.value = card.image_url; else sel.value = '';
+      });
+      // Bind inputs
+      c.querySelectorAll('input, select').forEach(el=>{
+        el.addEventListener('input', onCarouselInput);
+        el.addEventListener('change', onCarouselInput);
+      });
+    }
+
+    function onCarouselInput(e){
+      const idx = parseInt(e.target.dataset.idx);
+      if (Number.isNaN(idx) || !carouselCards[idx]) return;
+      const field = e.target.dataset.field;
+      const card = carouselCards[idx];
+      if (field === 'title') card.title = e.target.value;
+      else if (field === 'subtitle') card.subtitle = e.target.value;
+      else if (field === 'image_select') { if (e.target.value) { card.image_url = e.target.value; } }
+      else if (field === 'image_url') card.image_url = e.target.value;
+      else if (field === 'da_url') card.da_url = e.target.value;
+      else if (field === 'da_height') card.da_height = e.target.value;
+      else if (field && field.startsWith('btn_')){
+        const bidx = parseInt(e.target.dataset.bidx);
+        if (Number.isNaN(bidx) || !(card.buttons||[])[bidx]) return;
+        const b = card.buttons[bidx];
+        if (field === 'btn_type'){
+          const prev = { ...b };
+          const newType = e.target.value;
+          b.type = newType;
+          if (newType==='web_url'){ b.url = prev.url || prev.payload || ''; b.payload=''; b.webview_height_ratio=prev.webview_height_ratio||'full'; }
+          else { b.payload = prev.payload || prev.url || ''; b.url=''; b.webview_height_ratio='full'; b.messenger_extensions=false; b.fallback_url=''; b.webview_share_button=''; }
+          renderCarouselCards();
+          return;
+        }
+        if (field === 'btn_title') b.title = e.target.value;
+        else if (field === 'btn_value') { if (b.type==='web_url') b.url = e.target.value; else b.payload = e.target.value; }
+        else if (field === 'btn_webview_height_ratio') b.webview_height_ratio = e.target.value;
+        else if (field === 'btn_messenger_extensions') b.messenger_extensions = (e.target.value==='true');
+        else if (field === 'btn_fallback_url') b.fallback_url = e.target.value;
+        else if (field === 'btn_webview_share_button') b.webview_share_button = e.target.value;
+      }
+    }
+
+    async function saveFbCarousel(){
+      const name = document.getElementById('fbCarouselTplName').value.trim();
+      const cards = carouselCards;
+      if (!name || !Array.isArray(cards) || cards.length<2){ Swal.fire({icon:'warning', title:'تنبيه', text:'أدخل الاسم وأضف بطاقتين على الأقل'}); return; }
+      const elements = cards.map(c=>{
+        const el = { title: c.title||'' };
+        if (c.subtitle) el.subtitle = c.subtitle;
+        if (c.image_url) el.image_url = c.image_url;
+        if (c.da_url) el.default_action = { type:'web_url', url: c.da_url, webview_height_ratio: c.da_height||'tall' };
+        const btns = (c.buttons||[]).map(b=>{
+          if (b.type==='web_url'){
+            const btn = { type:'web_url', title:b.title||'', url:b.url||'', webview_height_ratio: b.webview_height_ratio||'full' };
+            if (b.messenger_extensions) btn.messenger_extensions = true;
+            if (b.fallback_url) btn.fallback_url = b.fallback_url;
+            if (b.webview_share_button) btn.webview_share_button = b.webview_share_button;
+            return btn;
+          } else if (b.type==='postback'){
+            return { type:'postback', title:b.title||'', payload:b.payload||'' };
+          } else {
+            return { type:'phone_number', title:b.title||'', payload:b.payload||'' };
+          }
+        });
+        if (btns.length) el.buttons = btns;
+        return el;
+      });
+      const payload = { elements };
+      const isEdit = !!window._fbCarouselEditId;
+      const body = isEdit ? { id: window._fbCarouselEditId, name, type:'generic', channel:'facebook', payload } : { name, type:'generic', channel:'facebook', payload };
+      const method = isEdit ? 'PUT' : 'POST';
+      try{
+        const res = await fetch('api/templates_api.php', { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const data = await res.json(); if (!data.success) throw new Error(data.message||'فشل الحفظ');
+        window._fbCarouselEditId = null;
+        closeFbCarouselModal();
+        await loadTemplates();
+        Swal.fire({icon:'success', title:'تم', text: isEdit ? 'تم تعديل القالب الدوار' : 'تم حفظ القالب الدوار'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); }
+    }
+
+    function editFbCarouselTemplate(id){
+      const t = templates.find(x=>x.id===id); if(!t) return;
+      window._fbCarouselEditId = id;
+      setIfExists('fbCarouselTplName', t.name||'');
+      try{
+        const payload = typeof t.payload==='string'? JSON.parse(t.payload): t.payload;
+        const els = (payload && Array.isArray(payload.elements)) ? payload.elements : [];
+        carouselCards = els.map(el=>({
+          title: el.title||'',
+          subtitle: el.subtitle||'',
+          image_url: el.image_url||'',
+          da_url: (el.default_action && el.default_action.url) ? el.default_action.url : '',
+          da_height: (el.default_action && el.default_action.webview_height_ratio) ? el.default_action.webview_height_ratio : 'tall',
+          buttons: Array.isArray(el.buttons) ? el.buttons.map(b=>({ ...b })) : []
+        }));
+      }catch{ carouselCards = []; }
+      if (carouselCards.length===0){ addCarouselCard(); addCarouselCard(); }
+      renderCarouselCards();
+      const modal = document.getElementById('fbCarouselModal'); if (modal) modal.classList.add('active');
+    }
+
+    function renderFbButtons(){
+      const c = document.getElementById('fbButtonsContainer');
+      c.innerHTML = '';
+      if (fbBtnButtons.length === 0) { c.innerHTML = '<div class="form-help">لا توجد أزرار. اضغط "إضافة زر".</div>'; return; }
+      fbBtnButtons.forEach((b, idx) => {
+        const row = document.createElement('div');
+        row.className = 'codebox';
+        row.style.marginBottom = '.5rem';
+        row.innerHTML = `
+          <div class="btn-item" style="grid-template-columns: 1fr 1fr 2fr auto;">
+            <select data-idx="${idx}" data-field="type">
+              <option value="web_url" ${b.type==='web_url'?'selected':''}>URL Button</option>
+              <option value="postback" ${b.type==='postback'?'selected':''}>Postback Button</option>
+              <option value="phone_number" ${b.type==='phone_number'?'selected':''}>Call Button</option>
+            </select>
+            <input type="text" placeholder="عنوان الزر" value="${escapeHtml(b.title||'')}" data-idx="${idx}" data-field="title" />
+            <input type="text" placeholder="${b.type==='web_url'?'https://example.com':(b.type==='postback'?'PAYLOAD':' +2012... ')}" value="${escapeHtml(b.type==='web_url'?(b.url||''):(b.payload||''))}" data-idx="${idx}" data-field="value" />
+            <button type="button" class="remove" onclick="removeFbButton(${idx})"><i class="fas fa-times"></i></button>
+          </div>
+          ${b.type==='web_url' ? `
+          <div class="btn-item" style="grid-template-columns: 1fr 1fr 1fr 1fr; margin-top:.5rem;">
+            <select data-idx="${idx}" data-field="webview_height_ratio">
+              <option value="full" ${(b.webview_height_ratio||'full')==='full'?'selected':''}>full</option>
+              <option value="tall" ${(b.webview_height_ratio||'full')==='tall'?'selected':''}>tall</option>
+              <option value="compact" ${(b.webview_height_ratio||'full')==='compact'?'selected':''}>compact</option>
+            </select>
+            <select data-idx="${idx}" data-field="messenger_extensions">
+              <option value="false" ${b.messenger_extensions?'':'selected'}>extensions: false</option>
+              <option value="true" ${b.messenger_extensions?'selected':''}>extensions: true</option>
+            </select>
+            <input type="text" placeholder="fallback_url (اختياري)" value="${escapeHtml(b.fallback_url||'')}" data-idx="${idx}" data-field="fallback_url" />
+            <select data-idx="${idx}" data-field="webview_share_button">
+              <option value="">share: default</option>
+              <option value="hide" ${b.webview_share_button==='hide'?'selected':''}>share: hide</option>
+            </select>
+          </div>` : ''}
+        `;
+        c.appendChild(row);
+      });
+      c.querySelectorAll('select, input').forEach(el=>{
+        el.addEventListener('input', onFbBtnChange);
+        el.addEventListener('change', onFbBtnChange);
+      });
+    }
+    function onFbBtnChange(e){
+      const idx = parseInt(e.target.dataset.idx);
+      const field = e.target.dataset.field;
+      if (Number.isNaN(idx) || !fbBtnButtons[idx]) return;
+      let b = fbBtnButtons[idx];
+      if (field === 'type') {
+        const prev = { ...b };
+        const newType = e.target.value;
+        b.type = newType;
+        if (newType === 'web_url') { b.url = prev.url || prev.payload || ''; }
+        else { b.payload = prev.payload || prev.url || ''; b.url = ''; b.webview_height_ratio='full'; b.messenger_extensions=false; b.fallback_url=''; b.webview_share_button=''; }
+        renderFbButtons();
+        return;
+      }
+      if (field === 'title') b.title = e.target.value;
+      else if (field === 'value') { if (b.type==='web_url') b.url = e.target.value; else b.payload = e.target.value; }
+      else if (field === 'webview_height_ratio') b.webview_height_ratio = e.target.value;
+      else if (field === 'messenger_extensions') b.messenger_extensions = (e.target.value==='true');
+      else if (field === 'fallback_url') b.fallback_url = e.target.value;
+      else if (field === 'webview_share_button') b.webview_share_button = e.target.value;
+    }
+    function addFbButton(){ if (fbBtnButtons.length>=3){ Swal.fire({icon:'info', title:'حد الأزرار', text:'الحد 3 أزرار'}); return; } fbBtnButtons.push({ type:'web_url', title:'', url:'', webview_height_ratio:'full', messenger_extensions:false, fallback_url:'', webview_share_button:'' }); renderFbButtons(); }
+    function removeFbButton(i){ fbBtnButtons.splice(i,1); renderFbButtons(); }
+
+    async function saveFbButton(){
+      const name = document.getElementById('fbBtnTplName').value.trim();
+      const text = document.getElementById('fbBtnText').value.trim();
+      if (!name || !text || fbBtnButtons.length===0) { Swal.fire({icon:'warning', title:'تنبيه', text:'أدخل الاسم والنص وزر واحد على الأقل'}); return; }
+      // build buttons payload
+      const buttons = fbBtnButtons.map(b=>{
+        if (b.type==='web_url') {
+          const btn = { type:'web_url', title:b.title||'', url:b.url||'', webview_height_ratio: b.webview_height_ratio||'full' };
+          if (b.messenger_extensions) btn.messenger_extensions = true;
+          if (b.fallback_url) btn.fallback_url = b.fallback_url;
+          if (b.webview_share_button) btn.webview_share_button = b.webview_share_button;
+          return btn;
+        } else if (b.type==='postback') {
+          return { type:'postback', title:b.title||'', payload:b.payload||'' };
+        } else {
+          return { type:'phone_number', title:b.title||'', payload:b.payload||'' };
+        }
+      });
+      const payload = { text, buttons };
+      const body = window._fbBtnEditId ? { id: window._fbBtnEditId, name, type:'button', channel:'facebook', payload } : { name, type:'button', channel:'facebook', payload };
+      const method = window._fbBtnEditId ? 'PUT' : 'POST';
+      try{
+        const res = await fetch('api/templates_api.php', { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message||'فشل الحفظ');
+        window._fbBtnEditId = null;
+        closeFbButtonModal();
+        await loadTemplates();
+        Swal.fire({icon:'success', title:'تم', text:'تم حفظ زر فيسبوك'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); }
+    }
+
+    function editFbButtonTemplate(id){
+      const t = templates.find(x=>x.id===id); if(!t) return;
+      window._fbBtnEditId = id;
+      document.getElementById('fbBtnTplName').value = t.name||'';
+      const payload = typeof t.payload==='string'? JSON.parse(t.payload): t.payload;
+      document.getElementById('fbBtnText').value = (payload && payload.text) || '';
+      try{ fbBtnButtons = Array.isArray(payload.buttons)? payload.buttons.map(btn=>({ ...btn })) : []; }catch{ fbBtnButtons = []; }
+      renderFbButtons();
+      document.getElementById('fbButtonModal').classList.add('active');
+    }
+  </script>
+</body>
+</html>

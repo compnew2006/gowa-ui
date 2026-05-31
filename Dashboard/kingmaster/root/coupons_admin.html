@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>King Master - إدارة الكوبونات</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    :root { color-scheme: dark; }
+    .content-admin-container { min-height:100vh; position:relative; z-index:1; }
+    .main-content { padding:0; }
+    /* Header & actions (same as accounts) */
+    .content-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem; flex-wrap:wrap; gap:1rem; }
+    .content-title { font-size:2rem; font-weight:700; color:var(--text-light); margin:0; }
+    .content-actions { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+    .search-box { position:relative; min-width:300px; }
+    .search-box input { width:100%; padding:0.75rem 1rem 0.75rem 3rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:0.9rem; }
+    .search-box i { position:absolute; right:1rem; top:50%; transform:translateY(-50%); color:var(--text-light-dark); }
+    .add-content-btn { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; border:none; padding:0.75rem 1.5rem; border-radius:var(--radius-md); font-weight:600; display:flex; align-items:center; gap:0.5rem; cursor:pointer; transition:all .3s ease; }
+    .add-content-btn:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+
+    /* Stats (same as accounts) */
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:2rem; }
+    .stat-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; text-align:center; backdrop-filter:blur(10px); }
+    .stat-number { font-size:2rem; font-weight:700; color:var(--primary-light); margin-bottom:.5rem; display:block; }
+    .stat-label { color:var(--text-light-dark); font-size:.9rem; }
+    .stat-row { display:grid; gap:1rem; }
+    .stat-row-4 { grid-template-columns: repeat(4, 1fr); }
+    @media (max-width:1200px){ .stat-row-4{ grid-template-columns: repeat(2, 1fr);} }
+    @media (max-width:768px){ .stat-row-4{ grid-template-columns: 1fr;} }
+
+    /* Filters */
+    .filter-section { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; margin-bottom:2rem; backdrop-filter:blur(10px); }
+    .filter-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; align-items:end; }
+    .filter-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; font-size:.9rem; }
+    .filter-group select, .filter-group input { width:100%; padding:.75rem; background:rgba(17,24,39,0.85); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    .form-group select { background:rgba(17,24,39,0.85); color:var(--text-light); border:1px solid var(--glass-border); }
+    .filter-group select option, .form-group select option { background:#111827; color:#F3F4F6; }
+    .filter-group select:focus, .form-group select:focus { background:rgba(17,24,39,0.95); border-color: var(--primary); }
+    .filter-actions { display:flex; gap:.5rem; flex-direction:column; }
+    .filter-btn { padding:.5rem 1rem; border:1px solid var(--glass-border); border-radius:var(--radius-md); cursor:pointer; transition:all .3s ease; font-size:.8rem; white-space:nowrap; text-align:center; background: var(--glass-bg); color: var(--text-light-dark); }
+    .btn-delete-selected { background: rgba(239,68,68,.2); color:#EF4444; border-color:#EF4444; }
+    .btn-delete-selected:hover { background:#EF4444; color:#fff; }
+
+    /* Table */
+    .contents-table-container { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); overflow:hidden; backdrop-filter:blur(10px); }
+    .contents-table { width:100%; border-collapse:collapse; }
+    .contents-table th, .contents-table td { padding:1rem; text-align:right; border-bottom:1px solid rgba(255,255,255,.1); }
+    .contents-table th { background:rgba(108,92,231,.1); color:var(--text-light); font-weight:600; position:sticky; top:0; z-index:10; }
+    .contents-table td { color:var(--text-light-dark); }
+    .checkbox-cell { width:40px; text-align:center; }
+
+    /* Badges */
+    .status-badge { border:1px solid transparent; }
+    .status-active { background: rgba(16,185,129,.2); color:#10B981; border-color:#10B981; }
+    .status-inactive { background: rgba(107,114,128,.2); color:#9CA3AF; border-color:#9CA3AF; }
+
+    /* Buttons */
+    .action-buttons { display:flex; gap:.5rem; align-items:center; }
+    .action-btn { width:32px; height:32px; border:none; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .3s ease; font-size:.8rem; }
+    .btn-edit { background:rgba(59,130,246,.2); color:#3B82F6; border:1px solid #3B82F6; }
+    .btn-edit:hover { background:#3B82F6; color:#fff; }
+    .btn-delete { background:rgba(239,68,68,.2); color:#EF4444; border:1px solid #EF4444; }
+    .btn-delete:hover { background:#EF4444; color:#fff; }
+    .btn-secondary { background:var(--glass-bg); color:var(--text-light-dark); border:1px solid var(--glass-border); }
+    .btn-primary { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; }
+    .btn { padding:0.65rem 1.25rem; border:none; border-radius:var(--radius-md); font-weight:600; cursor:pointer; transition:all .3s ease; display:flex; align-items:center; gap:.5rem; }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); display:flex; align-items:center; justify-content:center; z-index:1000; opacity:0; visibility:hidden; transition:all .3s ease; }
+    .modal-overlay.active { opacity:1; visibility:visible; }
+    .modal { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); backdrop-filter:blur(20px); max-width:800px; width:95%; max-height:90vh; overflow-y:auto; transform:scale(.95); transition:all .3s ease; }
+    .modal-overlay.active .modal { transform:scale(1); }
+    .modal-header { padding:1rem 1.5rem; border-bottom:1px solid rgba(255,255,255,.1); display:flex; justify-content:space-between; align-items:center; }
+    .modal-title { margin:0; color:var(--text-light); font-size:1.25rem; font-weight:600; }
+    .modal-close { background:none; border:none; color:var(--text-light-dark); font-size:1.5rem; cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-sm); }
+    .modal-body { padding:1.25rem 1.5rem; }
+    .form-group { margin-bottom:1rem; }
+    .form-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; }
+    .form-group input, .form-group select, .form-group textarea { width:100%; padding:.75rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    .form-help { color:var(--text-light-dark); font-size:.8rem; margin-top:.25rem; }
+    .modal-footer { padding:1rem 1.5rem; border-top:1px solid rgba(255,255,255,.1); display:flex; gap:.5rem; justify-content:flex-end; flex-wrap:wrap; }
+  </style>
+</head>
+<body class="rtl ar coupons-page">
+  <div class="bg-gradient"></div>
+  <div class="dashboard-container content-admin-container">
+    <div class="main-content" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+      <div class="content-header">
+        <div class="content-title"><i class="fas fa-ticket" style="margin-left:.5rem;"></i> إدارة الكوبونات</div>
+        <div class="content-actions">
+          <div class="search-box">
+            <input type="text" id="searchInput" placeholder="ابحث عن كوبون...">
+            <i class="fas fa-search"></i>
+          </div>
+          <button class="add-content-btn" onclick="openCouponModal()"><i class="fas fa-plus"></i> إضافة كوبون</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card stat-col-12"><span class="stat-number" id="statTotal">0</span><div class="stat-label">إجمالي الكوبونات</div></div>
+        <div class="stat-row stat-col-12 stat-row-4">
+          <div class="stat-card"><span class="stat-number" id="statActive">0</span><div class="stat-label">نشط</div></div>
+          <div class="stat-card"><span class="stat-number" id="statExpired">0</span><div class="stat-label">منتهي</div></div>
+          <div class="stat-card"><span class="stat-number" id="statUsed">0</span><div class="stat-label">تم استخدامه</div></div>
+          <div class="stat-card"><span class="stat-number" id="statRemaining">0</span><div class="stat-label">متبقي الاستخدامات</div></div>
+        </div>
+      </div>
+
+      <div class="filter-section">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label>الحالة</label>
+            <select id="statusFilter">
+              <option value="">الكل</option>
+              <option value="active">نشط</option>
+              <option value="inactive">غير مفعل</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>النوع</label>
+            <select id="typeFilter">
+              <option value="">الكل</option>
+              <option value="extra_time">مدة إضافية</option>
+              <option value="points">نقاط</option>
+              <option value="amount">مبلغ</option>
+              <option value="discount">خصم مبلغ</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>عدد العناصر المعروضة</label>
+            <div class="count-display"><span class="count-number" id="displayCount">0</span> <span>عنصر</span></div>
+          </div>
+          <div class="filter-actions">
+            <button class="filter-btn btn-delete-selected" onclick="deleteSelected()"><i class="fas fa-trash"></i> حذف المحدد</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="contents-table-container">
+        <table class="contents-table">
+          <thead>
+            <tr>
+              <th class="checkbox-cell"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+              <th>الكود</th>
+              <th>النوع</th>
+              <th>القيمة</th>
+              <th>حد الاستخدام</th>
+              <th>المستخدم</th>
+              <th>انتهاء</th>
+              <th>الحالة</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="couponsTableBody">
+            <tr><td colspan="9" class="table-loading"><div class="loading-spinner"></div><div>جاري تحميل الكوبونات...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="couponModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTitle">إضافة كوبون</h3>
+        <button class="modal-close" onclick="closeCouponModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>الكود</label>
+          <div style="display:grid; grid-template-columns: 1fr auto; gap:.5rem; align-items:center;">
+            <input type="text" id="cpCode" placeholder="مثال: 3F7K9Z">
+            <button type="button" class="btn btn-secondary" onclick="genCode()" title="توليد كود"><i class="fas fa-wand-magic-sparkles"></i></button>
+          </div>
+          <div class="form-help">توليد كود عشوائي مكون من 6 حروف/أرقام كابتال.</div>
+        </div>
+        <div class="form-group"><label>عدد الكوبونات</label><input type="number" id="cpBulk" placeholder="مثال: 10" value="1"></div>
+        <div class="form-group"><label>النوع</label>
+          <select id="cpType">
+            <option value="extra_time">مدة إضافية</option>
+            <option value="points">نقاط</option>
+            <option value="amount">مبلغ</option>
+            <option value="discount">خصم مبلغ</option>
+          </select>
+        </div>
+        <div class="form-group" id="rowDuration" style="display:none;"><label>عدد الأيام الإضافية</label><input type="number" id="cpDays" placeholder="مثال: 7"></div>
+        <div class="form-group" id="rowValue"><label>القيمة</label><input type="number" id="cpValue" placeholder="مثال: 50"></div>
+        <div class="form-group"><label>حد الاستخدام</label><input type="number" id="cpLimit" placeholder="مثال: 100" value="1"></div>
+        <div class="form-group"><label>تاريخ الانتهاء</label><input type="datetime-local" id="cpExpiry"></div>
+        <div class="form-group"><label>الحالة</label>
+          <select id="cpStatus"><option value="active">نشط</option><option value="inactive">غير مفعل</option></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCouponModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveCoupon()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+ 
+    let coupons = []; let filtered = []; let selected = []; let editId = null;
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      loadCoupons();
+      document.getElementById('searchInput').addEventListener('input', applyFilters);
+      document.getElementById('statusFilter').addEventListener('change', applyFilters);
+      document.getElementById('typeFilter').addEventListener('change', applyFilters);
+      document.getElementById('cpType').addEventListener('change', onTypeChange);
+    });
+
+    function onTypeChange(){
+      const t = document.getElementById('cpType').value;
+      document.getElementById('rowDuration').style.display = (t==='extra_time')? '' : 'none';
+      document.getElementById('rowValue').style.display = (t==='extra_time')? 'none' : '';
+    }
+    function genCode(){ const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; let s=''; for(let i=0;i<6;i++){ s+=chars[Math.floor(Math.random()*chars.length)]; } const el=document.getElementById('cpCode'); if (el) el.value=s; }
+
+    function formatType(t){
+      return t==='extra_time'?'مدة إضافية':(t==='points'?'نقاط':(t==='amount'?'مبلغ':'خصم مبلغ'));
+    }
+
+    async function loadCoupons(){
+      try{
+        const res = await fetch('api/coupons_api.php');
+        const data = await res.json(); if(!data.success) throw new Error(data.message||'fail');
+        coupons = data.data || []; filtered = coupons; renderTable(); updateStats();
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:'فشل تحميل الكوبونات'}); }
+    }
+
+    function applyFilters(){
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const st = document.getElementById('statusFilter').value;
+      const tp = document.getElementById('typeFilter').value;
+      filtered = coupons.filter(c=>{
+        const mq = (c.code||'').toLowerCase().includes(q);
+        const ms = !st || (c.status||'active')===st;
+        const mt = !tp || (c.type||'')===tp;
+        return mq && ms && mt;
+      });
+      renderTable(); updateStats();
+    }
+
+    function renderTable(){
+      const tbody = document.getElementById('couponsTableBody');
+      if (!filtered.length){ tbody.innerHTML='<tr><td colspan="9" class="table-loading">لا توجد كوبونات</td></tr>'; document.getElementById('displayCount').textContent=0; return; }
+      tbody.innerHTML = filtered.map(c=>{
+        const remaining = Math.max(0, Number(c.uses_limit||0) - Number(c.used_count||0));
+        const val = c.type==='extra_time'? (c.duration_days+' يوم') : (Number(c.value||0));
+        return `
+        <tr>
+          <td class="checkbox-cell"><input type="checkbox" onchange="toggleSelection(${c.id}, this.checked)" ${selected.includes(c.id)?'checked':''}></td>
+          <td style="color:var(--text-light); font-weight:600;">${escapeHtml(c.code)}</td>
+          <td><span class="category-badge">${formatType(c.type)}</span></td>
+          <td>${escapeHtml(val)}</td>
+          <td>${Number(c.uses_limit||0)}</td>
+          <td>${Number(c.used_count||0)}</td>
+          <td>${c.expires_at? formatDate(c.expires_at): '--'}</td>
+          <td>${c.status==='active'? '<span class="category-badge status-badge status-active">نشط</span>':'<span class="category-badge status-badge status-inactive">غير مفعل</span>'}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn btn-edit" title="تعديل" onclick="editCoupon(${c.id})"><i class="fas fa-edit"></i></button>
+              <button class="action-btn btn-delete" title="حذف" onclick="deleteCoupon(${c.id})"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+      document.getElementById('displayCount').textContent = filtered.length;
+    }
+
+    function updateStats(){
+      const now = new Date();
+      const isExpired = (c)=> c.expires_at && new Date(c.expires_at) < now;
+      const total = coupons.length;
+      const active = coupons.filter(c=> (c.status||'active')==='active' && !isExpired(c)).length;
+      const expired = coupons.filter(c=> isExpired(c)).length;
+      const used = coupons.reduce((s,c)=> s + (Number(c.used_count||0)), 0);
+      const remaining = coupons.reduce((s,c)=> s + Math.max(0, Number(c.uses_limit||0) - Number(c.used_count||0)), 0);
+      setText('statTotal', total); setText('statActive', active); setText('statExpired', expired); setText('statUsed', used); setText('statRemaining', remaining);
+    }
+
+    function setText(id, val){ const el=document.getElementById(id); if(el) el.textContent = val; }
+
+    function toggleSelectAll(){ const all=document.getElementById('selectAll'); document.querySelectorAll('#couponsTableBody input[type="checkbox"]').forEach(cb=>{ cb.checked=all.checked; const id=parseInt(cb.getAttribute('onchange').match(/\d+/)[0]); toggleSelection(id, cb.checked); }); }
+    function toggleSelection(id, checked){ if (checked) { if(!selected.includes(id)) selected.push(id); } else { selected = selected.filter(x=>x!==id); } }
+
+    function openCouponModal(){ editId=null; document.getElementById('modalTitle').textContent='إضافة كوبون'; document.getElementById('cpCode').value=''; document.getElementById('cpType').value='extra_time'; document.getElementById('cpDays').value=''; document.getElementById('cpValue').value=''; document.getElementById('cpLimit').value='1'; document.getElementById('cpExpiry').value=''; document.getElementById('cpStatus').value='active'; onTypeChange(); document.getElementById('couponModal').classList.add('active'); }
+    function closeCouponModal(){ document.getElementById('couponModal').classList.remove('active'); }
+
+    async function saveCoupon(){
+      let code = document.getElementById('cpCode').value.trim();
+      const bulk = Math.max(1, Number(document.getElementById('cpBulk').value || 1));
+      const type = document.getElementById('cpType').value;
+      const days = Number(document.getElementById('cpDays').value || 0);
+      const value = Number(document.getElementById('cpValue').value || 0);
+      // عدد الكوبونات = حد الاستخدام
+      const uses_limit = bulk;
+      const expires_at = document.getElementById('cpExpiry').value || null;
+      const status = document.getElementById('cpStatus').value;
+      if (!editId && !code){ code = randomCode(); }
+      try{
+        const body = { code, type, value, duration_days: days, uses_limit, expires_at, status };
+        const method = editId ? 'PUT' : 'POST';
+        const payload = editId ? { id: editId, ...body } : body;
+        const res = await fetch('api/coupons_api.php', { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const data = await res.json(); if(!data.success) throw new Error(data.message||'فشل الحفظ');
+        closeCouponModal(); await loadCoupons(); Swal.fire({icon:'success', title:'تم', text: editId? 'تم التعديل':'تم الحفظ'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); }
+    }
+    function randomCode(){ const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; let s=''; for(let i=0;i<6;i++){ s+=chars[Math.floor(Math.random()*chars.length)]; } return s; }
+
+    async function editCoupon(id){ const c=coupons.find(x=>x.id===id); if(!c) return; editId=id; document.getElementById('modalTitle').textContent='تعديل كوبون'; document.getElementById('cpCode').value=c.code||''; document.getElementById('cpType').value=c.type||'extra_time'; onTypeChange(); document.getElementById('cpDays').value=c.duration_days||0; document.getElementById('cpValue').value=c.value||0; document.getElementById('cpLimit').value=c.uses_limit||1; document.getElementById('cpExpiry').value=c.expires_at? new Date(c.expires_at).toISOString().slice(0,16):''; document.getElementById('cpStatus').value=c.status||'active'; document.getElementById('couponModal').classList.add('active'); }
+
+    async function deleteCoupon(id){ const c=coupons.find(x=>x.id===id); if(!c) return; const r=await Swal.fire({ title:'حذف كوبون', html:`هل تريد حذف <strong>${escapeHtml(c.code)}</strong>?`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' }); if(!r.isConfirmed) return; try{ const res=await fetch(`api/coupons_api.php/${id}`, { method:'DELETE' }); const d=await res.json(); if(!d.success) throw new Error(d.message||'فشل الحذف'); selected=selected.filter(x=>x!==id); await loadCoupons(); Swal.fire({icon:'success', title:'تم', text:'تم الحذف'});}catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); } }
+
+    async function deleteSelected(){ if(selected.length===0){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر عناصر للحذف'}); return; } const r=await Swal.fire({ title:'حذف متعدد', html:`سيتم حذف <strong>${selected.length}</strong> كوبون. متابعة؟`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' }); if(!r.isConfirmed) return; try{ const res=await fetch('api/coupons_api.php', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids: selected }) }); const d=await res.json(); if(!d.success) throw new Error(d.message||'فشل الحذف'); selected=[]; document.getElementById('selectAll').checked=false; await loadCoupons(); Swal.fire({icon:'success', title:'تم', text:'تم حذف العناصر المحددة'});}catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); } }
+
+    function formatDate(s){ if(!s) return '--'; const d=new Date(s); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}); }
+    function escapeHtml(s){ const map={ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }; return String(s||'').replace(/[&<>"']/g, ch=>map[ch]); }
+  </script>
+</body>
+</html>

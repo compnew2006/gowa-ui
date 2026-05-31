@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>إعدادات MLM | Kingmaster</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: 'Cairo', sans-serif; }
+    .bg-gradient { position: fixed; inset: 0; z-index: -1; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+    
+    .header-bar { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:2rem; flex-wrap:wrap; }
+    .header-title { font-size:1.8rem; font-weight:700; color: var(--text-light); margin:0; display:flex; align-items:center; gap:.6rem; }
+    
+    .card { background: var(--glass-bg); border:1px solid var(--glass-border); border-radius: 20px; backdrop-filter: blur(14px); box-shadow: 0 8px 28px rgba(0,0,0,.35); padding: 2rem; margin-bottom:2rem; }
+    .section-title { color:#fff; font-size:1.15rem; font-weight:600; margin:0 0 1.5rem; display:flex; align-items:center; gap:.6rem; padding-bottom:.75rem; border-bottom: 1px solid rgba(255,255,255,.08); }
+    
+    .settings-table { width:100%; border-collapse: collapse; }
+    .settings-table thead { border-bottom: 2px solid var(--glass-border); }
+    .settings-table th { text-align: right; padding: 1rem; color:#e5e7eb; font-weight:600; font-size:.9rem; }
+    .settings-table td { padding: 1rem; border-bottom: 1px solid rgba(255,255,255,.05); }
+    .settings-table tbody tr { transition: background .2s ease; }
+    .settings-table tbody tr:hover { background: rgba(255,255,255,.03); }
+    
+    .level-badge { 
+      display: inline-block;
+      padding: .35rem .75rem;
+      border-radius: 999px;
+      font-size: .85rem;
+      font-weight: 600;
+      background: linear-gradient(135deg, rgba(168,85,247,.2), rgba(108,92,231,.2));
+      color: #a78bfa;
+      border: 1px solid rgba(168,85,247,.3);
+    }
+    
+    .form-group { margin-bottom: 1rem; }
+    label { color:#e5e7eb; margin-bottom:.5rem; display:block; font-size:.9rem; font-weight:500; }
+    input, select { width:100%; padding:.85rem 1rem; border:1px solid var(--glass-border); border-radius:12px; background: rgba(17,24,39,0.85); color:#fff; font-size:.95rem; transition: all .2s ease; }
+    input:focus, select:focus { outline:none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(108,92,231,.25); background: rgba(17,24,39,0.95); }
+    
+    .input-group { display: flex; align-items: center; gap: .5rem; }
+    .input-group input { width: 80px; text-align: center; }
+    .input-group span { color: #9ca3af; font-size: .9rem; }
+    
+    .btn { padding:.85rem 1.5rem; border:none; border-radius:12px; background: linear-gradient(135deg,var(--primary),var(--primary-light)); color:#fff; font-weight:600; cursor:pointer; font-size:.95rem; transition: all .2s ease; display: inline-flex; align-items:center; gap:.5rem; }
+    .btn:hover{ filter: brightness(1.08); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108,92,231,.4); }
+    .btn-full { width:100%; justify-content:center; }
+    
+    .info-box {
+      background: rgba(59,130,246,.1);
+      border: 1px solid rgba(59,130,246,.3);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      margin-bottom: 1.5rem;
+      color: #60a5fa;
+    }
+    .info-box i { margin-left: .5rem; }
+    
+    .loading { text-align:center; padding:2rem; color:#9ca3af; }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="container">
+    <div class="header-bar">
+      <h1 class="header-title"><i class="fas fa-sliders-h"></i> إعدادات MLM</h1>
+      <a href="mlm_tree.html" class="btn" style="background: rgba(255,255,255,.1);">
+        <i class="fas fa-sitemap"></i> عرض الشجرة
+      </a>
+    </div>
+
+    <!-- Info Box -->
+    <div class="info-box">
+      <i class="fas fa-info-circle"></i>
+      <strong>ملاحظة:</strong> يمكنك تحديد نسب العمولات المباشرة (المستوى الأول فقط) والعمولات غير المباشرة (باقي المستويات).
+      المجموع الكلي للعمولات لا يجب أن يتجاوز 100%.
+    </div>
+
+    <!-- Settings Table -->
+    <div class="card">
+      <h3 class="section-title">
+        <i class="fas fa-layer-group"></i> إعدادات المستويات والعمولات
+      </h3>
+      
+      <div style="overflow-x:auto;">
+        <table class="settings-table" id="settings_table">
+          <thead>
+            <tr>
+              <th style="width:100px;">المستوى</th>
+              <th>اسم المستوى</th>
+              <th style="width:180px;">عمولة مباشرة (%)</th>
+              <th style="width:180px;">عمولة غير مباشرة (%)</th>
+              <th>الوصف</th>
+              <th style="width:100px;">الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="settings_tbody">
+            <tr>
+              <td colspan="6" class="loading">
+                <i class="fas fa-spinner fa-spin"></i> جارٍ التحميل...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:2rem; padding-top:2rem; border-top: 1px solid rgba(255,255,255,.08);">
+        <div style="display:flex; gap:1rem; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+          <div style="color:#9ca3af;">
+            <i class="fas fa-calculator"></i>
+            إجمالي العمولات: <strong style="color:#fff; font-size:1.1rem;" id="total_commission">0%</strong>
+          </div>
+          <button class="btn" onclick="saveSettings()">
+            <i class="fas fa-save"></i> حفظ جميع الإعدادات
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Commission Calculator -->
+    <div class="card">
+      <h3 class="section-title">
+        <i class="fas fa-calculator"></i> حاسبة العمولات
+      </h3>
+      <p style="color:#9ca3af; margin-bottom:1.5rem;">احسب العمولات المتوقعة على أساس قيمة البيع</p>
+      
+      <div style="max-width:400px;">
+        <div class="form-group">
+          <label>قيمة البيع (ر.س)</label>
+          <input type="number" id="sale_amount" placeholder="مثال: 1000" min="0" step="0.01" />
+        </div>
+        <button class="btn btn-full" onclick="calculateCommission()">
+          <i class="fas fa-calculator"></i> احسب العمولات
+        </button>
+      </div>
+
+      <div id="commission_result" style="margin-top:1.5rem; display:none;">
+        <div style="background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.3); border-radius:12px; padding:1rem;">
+          <h4 style="color:#4ade80; margin:0 0 1rem;">نتيجة الحساب:</h4>
+          <div id="commission_breakdown"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <script>
+    let settingsData = [];
+
+    // تحميل الإعدادات
+    async function loadSettings() {
+      const tbody = document.getElementById('settings_tbody');
+      tbody.innerHTML = '<tr><td colspan="6" class="loading"><i class="fas fa-spinner fa-spin"></i> جارٍ التحميل...</td></tr>';
+
+      try {
+        const response = await fetch('api/get_mlm_settings.php');
+        const result = await response.json();
+
+        if (result.success && result.settings.length > 0) {
+          settingsData = result.settings;
+          renderSettings();
+          updateTotalCommission();
+        } else {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#9ca3af;">لا توجد إعدادات</td></tr>';
+        }
+      } catch (error) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#f87171;">فشل تحميل الإعدادات</td></tr>';
+      }
+    }
+
+    // عرض الإعدادات
+    function renderSettings() {
+      const tbody = document.getElementById('settings_tbody');
+      tbody.innerHTML = settingsData.map((item, index) => `
+        <tr>
+          <td><span class="level-badge">المستوى ${item.level_number}</span></td>
+          <td style="color:#e5e7eb; font-weight:600;">${item.level_name}</td>
+          <td>
+            <div class="input-group">
+              <input type="number" id="direct_${item.level_number}" value="${item.direct_commission_percentage}" 
+                     min="0" max="100" step="0.01" onchange="updateTotalCommission()"
+                     ${item.level_number === 1 ? '' : 'disabled style="opacity:0.5;"'} />
+              <span>%</span>
+            </div>
+          </td>
+          <td>
+            <div class="input-group">
+              <input type="number" id="indirect_${item.level_number}" value="${item.indirect_commission_percentage}" 
+                     min="0" max="100" step="0.01" onchange="updateTotalCommission()" />
+              <span>%</span>
+            </div>
+          </td>
+          <td style="color:#9ca3af; font-size:.85rem;">${item.description || '—'}</td>
+          <td>
+            <span style="color:${item.is_active ? '#4ade80' : '#f87171'};">
+              <i class="fas fa-circle" style="font-size:.6rem;"></i>
+              ${item.is_active ? 'نشط' : 'معطل'}
+            </span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // تحديث إجمالي العمولات
+    function updateTotalCommission() {
+      let total = 0;
+      settingsData.forEach(item => {
+        const direct = parseFloat(document.getElementById(`direct_${item.level_number}`)?.value || 0);
+        const indirect = parseFloat(document.getElementById(`indirect_${item.level_number}`)?.value || 0);
+        total += (item.level_number === 1 ? direct : indirect);
+      });
+      
+      document.getElementById('total_commission').textContent = total.toFixed(2) + '%';
+      document.getElementById('total_commission').style.color = total > 100 ? '#f87171' : '#4ade80';
+    }
+
+    // حفظ الإعدادات
+    async function saveSettings() {
+      const total = parseFloat(document.getElementById('total_commission').textContent);
+      
+      if (total > 100) {
+        Swal.fire({
+          icon: 'error',
+          title: 'خطأ',
+          text: 'إجمالي العمولات لا يمكن أن يتجاوز 100%'
+        });
+        return;
+      }
+
+      const updates = settingsData.map(item => ({
+        level_number: item.level_number,
+        direct_commission_percentage: parseFloat(document.getElementById(`direct_${item.level_number}`).value),
+        indirect_commission_percentage: parseFloat(document.getElementById(`indirect_${item.level_number}`).value)
+      }));
+
+      try {
+        const response = await fetch('api/save_mlm_settings.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings: updates })
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'تم الحفظ',
+            text: 'تم حفظ الإعدادات بنجاح',
+            timer: 2000,
+            showConfirmButton: false
+          });
+          loadSettings();
+        } else {
+          Swal.fire({ icon: 'error', title: 'خطأ', text: result.message });
+        }
+      } catch (error) {
+        Swal.fire({ icon: 'error', title: 'خطأ', text: 'فشل حفظ الإعدادات' });
+      }
+    }
+
+    // حساب العمولات
+    function calculateCommission() {
+      const saleAmount = parseFloat(document.getElementById('sale_amount').value);
+      
+      if (!saleAmount || saleAmount <= 0) {
+        Swal.fire({ icon: 'warning', title: 'تنبيه', text: 'أدخل قيمة البيع' });
+        return;
+      }
+
+      let breakdown = '<div style="display:grid; gap:.75rem;">';
+      let totalCommission = 0;
+
+      settingsData.forEach(item => {
+        const percentage = item.level_number === 1 
+          ? parseFloat(document.getElementById(`direct_${item.level_number}`).value)
+          : parseFloat(document.getElementById(`indirect_${item.level_number}`).value);
+        
+        const commission = (saleAmount * percentage) / 100;
+        totalCommission += commission;
+
+        breakdown += `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:.5rem; background:rgba(255,255,255,.05); border-radius:8px;">
+            <span style="color:#e5e7eb;">${item.level_name} (${percentage}%)</span>
+            <strong style="color:#4ade80;">${commission.toFixed(2)} ر.س</strong>
+          </div>
+        `;
+      });
+
+      breakdown += `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:.75rem; background:rgba(34,197,94,.2); border-radius:8px; margin-top:.5rem; border-top:2px solid rgba(34,197,94,.5);">
+          <span style="color:#fff; font-weight:700;">الإجمالي</span>
+          <strong style="color:#4ade80; font-size:1.2rem;">${totalCommission.toFixed(2)} ر.س</strong>
+        </div>
+      </div>`;
+
+      document.getElementById('commission_breakdown').innerHTML = breakdown;
+      document.getElementById('commission_result').style.display = 'block';
+    }
+
+    // تحميل الإعدادات عند فتح الصفحة
+    loadSettings();
+  </script>
+</body>
+</html>

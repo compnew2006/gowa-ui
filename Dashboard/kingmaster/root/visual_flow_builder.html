@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Flow Builder | Kingmaster</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/rtl-ltr.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Cairo', sans-serif; height: 100vh; overflow: hidden; }
+        
+        .flow-container { display: flex; height: 100vh; }
+        
+        /* Sidebar */
+        .sidebar { width: 300px; background: var(--glass-bg); border-left: 1px solid var(--glass-border); backdrop-filter: blur(14px); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 1.5rem; border-bottom: 1px solid var(--glass-border); }
+        .sidebar-header h2 { color: #fff; font-size: 1.3rem; display: flex; align-items: center; gap: 0.5rem; }
+        .sidebar-content { flex: 1; overflow-y: auto; padding: 1rem; }
+        
+        .node-category { margin-bottom: 1.5rem; }
+        .node-category h3 { color: #9ca3af; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.75rem; font-weight: 600; }
+        
+        .node-item { background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 10px; padding: 0.75rem; margin-bottom: 0.5rem; cursor: grab; transition: all 0.2s; display: flex; align-items: center; gap: 0.75rem; }
+        .node-item:hover { background: rgba(255,255,255,0.08); transform: translateX(-3px); }
+        .node-item:active { cursor: grabbing; }
+        
+        .node-icon { width: 35px; height: 35px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+        .node-icon.start { background: rgba(34,197,94,0.15); color: #4ade80; }
+        .node-icon.action { background: rgba(59,130,246,0.15); color: #60a5fa; }
+        .node-icon.condition { background: rgba(251,146,60,0.15); color: #fb923c; }
+        .node-icon.end { background: rgba(239,68,68,0.15); color: #ef4444; }
+        
+        .node-info h4 { color: #fff; font-size: 0.95rem; margin-bottom: 0.2rem; }
+        .node-info p { color: #9ca3af; font-size: 0.75rem; }
+        
+        /* Canvas */
+        .canvas-area { flex: 1; position: relative; background: linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px); background-size: 20px 20px; overflow: hidden; }
+        
+        .canvas-toolbar { position: absolute; top: 1rem; left: 1rem; display: flex; gap: 0.5rem; z-index: 10; }
+        .toolbar-btn { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem 0.75rem; color: #fff; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(14px); }
+        .toolbar-btn:hover { background: rgba(255,255,255,0.1); }
+        
+        .canvas { width: 100%; height: 100%; position: relative; }
+        
+        /* Flow Nodes */
+        .flow-node { position: absolute; background: var(--glass-bg); border: 2px solid var(--glass-border); border-radius: 12px; padding: 1rem; min-width: 180px; cursor: move; backdrop-filter: blur(14px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .flow-node:hover { box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+        .flow-node.selected { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.2); }
+        
+        .flow-node-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+        .flow-node-header .icon { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; }
+        .flow-node-header h4 { color: #fff; font-size: 0.9rem; flex: 1; }
+        .flow-node-delete { color: #ef4444; cursor: pointer; font-size: 0.85rem; opacity: 0.7; transition: opacity 0.2s; }
+        .flow-node-delete:hover { opacity: 1; }
+        
+        .flow-node-body { color: #9ca3af; font-size: 0.85rem; }
+        
+        .node-port { width: 12px; height: 12px; border-radius: 50%; background: #667eea; position: absolute; cursor: crosshair; border: 2px solid var(--glass-bg); z-index: 10; }
+        .node-port.input { top: 50%; right: -6px; transform: translateY(-50%); }
+        .node-port.output { top: 50%; left: -6px; transform: translateY(-50%); }
+        .node-port:hover { background: #764ba2; transform: translateY(-50%) scale(1.3); }
+        
+        /* Connection Lines */
+        .connection-line { stroke: #667eea; stroke-width: 2; fill: none; pointer-events: all; cursor: pointer; }
+        .connection-line:hover { stroke: #764ba2; stroke-width: 3; }
+        
+        /* Keywords Tags */
+        .keywords-container { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+        .keyword-tag { background: rgba(102,126,234,0.15); border: 1px solid #667eea; border-radius: 6px; padding: 0.4rem 0.75rem; color: #fff; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .keyword-tag .remove { color: #ef4444; cursor: pointer; font-size: 0.75rem; opacity: 0.7; transition: opacity 0.2s; }
+        .keyword-tag .remove:hover { opacity: 1; }
+        
+        .add-keyword-btn { background: rgba(34,197,94,0.15); border: 1px dashed #4ade80; border-radius: 6px; padding: 0.4rem 0.75rem; color: #4ade80; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.3rem; }
+        .add-keyword-btn:hover { background: rgba(34,197,94,0.25); }
+        
+        .keyword-input-group { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+        .keyword-input-group input { flex: 1; }
+        .keyword-input-group button { padding: 0.65rem 1rem; background: #4ade80; border: none; border-radius: 6px; color: #000; font-weight: 600; cursor: pointer; }
+        
+        /* Radio Button Styling */
+        input[type="radio"] { width: 18px; height: 18px; accent-color: #667eea; }
+        
+        /* Typing Animation */
+        .typing-indicator { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.6rem; background: rgba(102,126,234,0.15); border: 1px solid #667eea; border-radius: 6px; }
+        .typing-dot { width: 6px; height: 6px; background: #667eea; border-radius: 50%; animation: typingDot 1.4s infinite; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingDot { 0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); } 30% { opacity: 1; transform: scale(1.2); } }
+        
+        /* Properties Panel */
+        .properties-panel { width: 320px; background: var(--glass-bg); border-right: 1px solid var(--glass-border); backdrop-filter: blur(14px); display: flex; flex-direction: column; }
+        .properties-header { padding: 1.5rem; border-bottom: 1px solid var(--glass-border); }
+        .properties-header h2 { color: #fff; font-size: 1.2rem; display: flex; align-items: center; gap: 0.5rem; }
+        .properties-content { flex: 1; overflow-y: auto; padding: 1.5rem; }
+        
+        .prop-group { margin-bottom: 1.5rem; }
+        .prop-label { color: #e5e7eb; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; display: block; }
+        .prop-input { width: 100%; padding: 0.65rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 8px; color: #fff; font-family: 'Cairo', sans-serif; font-size: 0.9rem; }
+        .prop-input:focus { outline: none; border-color: #667eea; background: rgba(255,255,255,0.08); }
+        
+        .prop-select { width: 100%; padding: 0.65rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 8px; color: #fff; font-family: 'Cairo', sans-serif; font-size: 0.9rem; cursor: pointer; }
+        
+        textarea.prop-input { min-height: 80px; resize: vertical; }
+        
+        .btn-save { width: 100%; background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; padding: 0.75rem; border: none; border-radius: 8px; font-family: 'Cairo', sans-serif; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 1rem; }
+        .btn-save:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.4); }
+        
+        .empty-state { text-align: center; color: #9ca3af; padding: 2rem; }
+        .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        
+        @media (max-width: 768px) {
+            .sidebar { width: 250px; }
+            .properties-panel { width: 280px; }
+        }
+    </style>
+</head>
+<body class="rtl ar">
+    <div class="bg-gradient"></div>
+    
+    <div class="flow-container">
+        <!-- Sidebar - Node Library -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-puzzle-piece"></i> المكونات</h2>
+            </div>
+            <div class="sidebar-content">
+                <div class="node-category">
+                    <h3>البداية والنهاية</h3>
+                    <div class="node-item" draggable="true" data-type="start">
+                        <div class="node-icon start">
+                            <i class="fas fa-play"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>نقطة البداية</h4>
+                            <p>بداية السير</p>
+                        </div>
+                    </div>
+                    <div class="node-item" draggable="true" data-type="end">
+                        <div class="node-icon end">
+                            <i class="fas fa-flag-checkered"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>نقطة النهاية</h4>
+                            <p>نهاية السير</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="node-category">
+                    <h3>الإجراءات</h3>
+                    <div class="node-item" draggable="true" data-type="send-email">
+                        <div class="node-icon action">
+                            <i class="fas fa-envelope"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>إرسال بريد</h4>
+                            <p>إرسال رسالة بريد إلكتروني</p>
+                        </div>
+                    </div>
+                    <div class="node-item" draggable="true" data-type="send-sms">
+                        <div class="node-icon action">
+                            <i class="fas fa-comment-sms"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>إرسال رسالة</h4>
+                            <p>إرسال رسالة نصية</p>
+                        </div>
+                    </div>
+                    <div class="node-item" draggable="true" data-type="api-call">
+                        <div class="node-icon action">
+                            <i class="fas fa-cloud"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>استدعاء API</h4>
+                            <p>طلب HTTP خارجي</p>
+                        </div>
+                    </div>
+                    <div class="node-item" draggable="true" data-type="delay">
+                        <div class="node-icon action">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>تأخير</h4>
+                            <p>انتظار لمدة معينة</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="node-category">
+                    <h3>الشروط</h3>
+                    <div class="node-item" draggable="true" data-type="condition">
+                        <div class="node-icon condition">
+                            <i class="fas fa-code-branch"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>شرط</h4>
+                            <p>تحقق من شرط</p>
+                        </div>
+                    </div>
+                    <div class="node-item" draggable="true" data-type="switch">
+                        <div class="node-icon condition">
+                            <i class="fas fa-random"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>تبديل</h4>
+                            <p>تبديل بين خيارات متعددة</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="node-category">
+                    <h3>البيانات</h3>
+                    <div class="node-item" draggable="true" data-type="keywords">
+                        <div class="node-icon action">
+                            <i class="fas fa-tags"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>كلمات مفتاحية</h4>
+                            <p>إضافة وإدارة الكلمات المفتاحية</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="node-category">
+                    <h3>الوسائط</h3>
+                    <div class="node-item" draggable="true" data-type="show-image">
+                        <div class="node-icon action">
+                            <i class="fas fa-image"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>عرض صورة</h4>
+                            <p>عرض صورة للمستخدم</p>
+                        </div>
+                    </div>
+                    <div class="node-item" draggable="true" data-type="show-video">
+                        <div class="node-icon action">
+                            <i class="fas fa-video"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>عرض فيديو</h4>
+                            <p>عرض فيديو للمستخدم</p>
+                        </div>
+                    </div>
+                    <div class="node-item" draggable="true" data-type="send-text">
+                        <div class="node-icon action">
+                            <i class="fas fa-comment-dots"></i>
+                        </div>
+                        <div class="node-info">
+                            <h4>إرسال نص</h4>
+                            <p>إرسال رسالة نصية</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Canvas Area -->
+        <div class="canvas-area">
+            <div class="canvas-toolbar">
+                <button class="toolbar-btn" onclick="zoomIn()">
+                    <i class="fas fa-search-plus"></i>
+                </button>
+                <button class="toolbar-btn" onclick="zoomOut()">
+                    <i class="fas fa-search-minus"></i>
+                </button>
+                <button class="toolbar-btn" onclick="resetZoom()">
+                    <i class="fas fa-undo"></i>
+                </button>
+                <button class="toolbar-btn" onclick="clearCanvas()">
+                    <i class="fas fa-trash"></i> مسح الكل
+                </button>
+                <button class="toolbar-btn" onclick="saveFlow()">
+                    <i class="fas fa-save"></i> حفظ
+                </button>
+            </div>
+            
+            <svg id="connections" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;"></svg>
+            
+            <div class="canvas" id="canvas">
+                <!-- Nodes will be added here dynamically -->
+            </div>
+        </div>
+        
+        <!-- Properties Panel -->
+        <div class="properties-panel">
+            <div class="properties-header">
+                <h2><i class="fas fa-sliders-h"></i> الخصائص</h2>
+            </div>
+            <div class="properties-content" id="propertiesContent">
+                <div class="empty-state">
+                    <i class="fas fa-mouse-pointer"></i>
+                    <p>اختر عنصراً لعرض خصائصه</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedNode = null;
+        let nodeCounter = 0;
+        let isDraggingNode = false;
+        let dragOffset = { x: 0, y: 0 };
+        const nodes = [];
+        const connections = [];
+        let isConnecting = false;
+        let connectingFrom = null;
+        let tempLine = null;
+        
+        // Drag from sidebar
+        document.querySelectorAll('.node-item').forEach(item => {
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('nodeType', e.currentTarget.dataset.type);
+            });
+        });
+        
+        // Drop on canvas
+        const canvas = document.getElementById('canvas');
+        canvas.addEventListener('dragover', (e) => e.preventDefault());
+        canvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const nodeType = e.dataTransfer.getData('nodeType');
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            createNode(nodeType, x, y);
+        });
+        
+        // Handle mouseup on canvas for connection ending
+        canvas.addEventListener('mouseup', (e) => {
+            if (isConnecting && !e.target.classList.contains('node-port')) {
+                endConnection();
+            }
+        });
+        
+        // Also handle click outside canvas
+        document.addEventListener('mousedown', (e) => {
+            if (isConnecting && !canvas.contains(e.target)) {
+                endConnection();
+            }
+        });
+        
+        // Handle mousemove to draw temporary connection line
+        canvas.addEventListener('mousemove', (e) => {
+            if (isConnecting && connectingFrom) {
+                drawTempLine(e);
+            }
+        });
+        
+        // Add keyboard support for keywords
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const input = document.getElementById('newKeywordInput');
+                if (input && document.activeElement === input) {
+                    e.preventDefault();
+                    addKeyword();
+                }
+            }
+        });
+        
+        function createNode(type, x, y) {
+            nodeCounter++;
+            const nodeId = `node-${nodeCounter}`;
+            
+            const nodeData = getNodeData(type);
+            const node = document.createElement('div');
+            node.className = 'flow-node';
+            node.id = nodeId;
+            node.style.left = `${x}px`;
+            node.style.top = `${y}px`;
+            
+            node.innerHTML = `
+                <div class="flow-node-header">
+                    <div class="node-icon ${nodeData.category}">
+                        <i class="${nodeData.icon}"></i>
+                    </div>
+                    <h4>${nodeData.title}</h4>
+                    <i class="fas fa-times flow-node-delete" onclick="deleteNode('${nodeId}')"></i>
+                </div>
+                <div class="flow-node-body" id="body-${nodeId}">
+                    ${nodeData.description}
+                </div>
+                <div class="node-port input" data-port="input"></div>
+                <div class="node-port output" data-port="output"></div>
+            `;
+            
+            canvas.appendChild(node);
+            
+            // Add to nodes array
+            nodes.push({
+                id: nodeId,
+                type: type,
+                x: x,
+                y: y,
+                data: { keywords: [], matchType: 'contains' }
+            });
+            
+            // Make draggable
+            makeNodeDraggable(node);
+            
+            // Select node
+            node.addEventListener('click', (e) => {
+                if (!e.target.classList.contains('flow-node-delete')) {
+                    selectNode(nodeId);
+                }
+            });
+            
+            // Add port click handlers for connections
+            const outputPort = node.querySelector('.node-port.output');
+            const inputPort = node.querySelector('.node-port.input');
+            
+            if (inputPort) {
+                inputPort.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    startConnection(nodeId, 'input');
+                });
+            }
+            
+            if (outputPort) {
+                outputPort.addEventListener('mouseup', (e) => {
+                    e.stopPropagation();
+                    if (isConnecting && connectingFrom !== nodeId) {
+                        createConnection(connectingFrom, nodeId);
+                        endConnection();
+                    }
+                });
+            }
+        }
+        
+        function getNodeData(type) {
+            const nodeTypes = {
+                'start': { title: 'نقطة البداية', icon: 'fas fa-play', category: 'start', description: 'بداية السير' },
+                'end': { title: 'نقطة النهاية', icon: 'fas fa-flag-checkered', category: 'end', description: 'نهاية السير' },
+                'send-email': { title: 'إرسال بريد', icon: 'fas fa-envelope', category: 'action', description: 'إرسال رسالة بريد' },
+                'send-sms': { title: 'إرسال رسالة', icon: 'fas fa-comment-sms', category: 'action', description: 'إرسال SMS' },
+                'api-call': { title: 'استدعاء API', icon: 'fas fa-cloud', category: 'action', description: 'طلب HTTP' },
+                'delay': { title: 'تأخير', icon: 'fas fa-clock', category: 'action', description: 'انتظار' },
+                'condition': { title: 'شرط', icon: 'fas fa-code-branch', category: 'condition', description: 'تحقق من شرط' },
+                'switch': { title: 'تبديل', icon: 'fas fa-random', category: 'condition', description: 'اختيار متعدد' },
+                'keywords': { title: 'كلمات مقتاحية', icon: 'fas fa-tags', category: 'action', description: 'إدارة الكلمات' },
+                'show-image': { title: 'عرض صورة', icon: 'fas fa-image', category: 'action', description: 'عرض صورة' },
+                'show-video': { title: 'عرض فيديو', icon: 'fas fa-video', category: 'action', description: 'عرض فيديو' },
+                'send-text': { title: 'إرسال نص', icon: 'fas fa-comment-dots', category: 'action', description: 'رسالة نصية' }
+            };
+            return nodeTypes[type] || nodeTypes['start'];
+        }
+        
+        function makeNodeDraggable(node) {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+            
+            node.onmousedown = dragMouseDown;
+            
+            function dragMouseDown(e) {
+                if (e.target.classList.contains('node-port') || e.target.classList.contains('flow-node-delete')) return;
+                
+                e.preventDefault();
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
+            }
+            
+            function elementDrag(e) {
+                e.preventDefault();
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                node.style.top = (node.offsetTop - pos2) + "px";
+                node.style.left = (node.offsetLeft - pos1) + "px";
+                
+                // Update connections
+                updateConnections();
+            }
+            
+            function closeDragElement() {
+                document.onmouseup = null;
+                document.onmousemove = null;
+            }
+        }
+        
+        function selectNode(nodeId) {
+            document.querySelectorAll('.flow-node').forEach(n => n.classList.remove('selected'));
+            const node = document.getElementById(nodeId);
+            if (node) {
+                node.classList.add('selected');
+                selectedNode = nodeId;
+                showProperties(nodeId);
+                
+                // Update node body display if it has keywords
+                const nodeData = nodes.find(n => n.id === nodeId);
+                if (nodeData && nodeData.type === 'keywords' && nodeData.data.keywords && nodeData.data.keywords.length > 0) {
+                    updateNodeKeywordsDisplay(nodeId, nodeData.data.keywords);
+                }
+                
+                // Update node body display if it has an image
+                if (nodeData && nodeData.type === 'show-image' && nodeData.data.imageUrl) {
+                    const nodeBody = document.getElementById(`body-${nodeId}`);
+                    if (nodeBody) {
+                        nodeBody.innerHTML = `
+                            <div style="text-align: center;">
+                                <img src="${nodeData.data.imageUrl}" style="max-width: 100%; max-height: 80px; object-fit: contain; border-radius: 6px;" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\'%3E%3Crect fill=\'%23333\' width=\'100\' height=\'100\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' fill=\'%23999\' font-size=\'14\'%3Eصورة%3C/text%3E%3C/svg%3E'"/>
+                                ${nodeData.data.imageAlt ? `<div style="margin-top: 0.3rem; font-size: 0.7rem; color: #9ca3af;">${nodeData.data.imageAlt}</div>` : ''}
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Update node body display if it has a video
+                if (nodeData && nodeData.type === 'show-video' && nodeData.data.videoUrl) {
+                    const nodeBody = document.getElementById(`body-${nodeId}`);
+                    if (nodeBody) {
+                        nodeBody.innerHTML = `
+                            <div style="text-align: center;">
+                                ${getVideoEmbed(nodeData.data.videoUrl)}
+                                ${nodeData.data.videoTitle ? `<div style="margin-top: 0.3rem; font-size: 0.75rem; color: #9ca3af;">${nodeData.data.videoTitle}</div>` : ''}
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Update node body display if it has text
+                if (nodeData && nodeData.type === 'send-text' && nodeData.data.messageText) {
+                    const nodeBody = document.getElementById(`body-${nodeId}`);
+                    if (nodeBody) {
+                        const textPreview = nodeData.data.messageText.length > 30 ? nodeData.data.messageText.substring(0, 30) + '...' : nodeData.data.messageText;
+                        nodeBody.innerHTML = `
+                            <div>
+                                ${nodeData.data.typingEnabled ? `
+                                    <div class="typing-indicator" style="margin-bottom: 0.5rem;">
+                                        <div class="typing-dot"></div>
+                                        <div class="typing-dot"></div>
+                                        <div class="typing-dot"></div>
+                                        <span style="font-size: 0.7rem; color: #667eea; margin-right: 0.3rem;">${nodeData.data.typingDuration}ث</span>
+                                    </div>
+                                ` : ''}
+                                <div style="font-size: 0.8rem; color: #e5e7eb; line-height: 1.4;">${textPreview}</div>
+                            </div>
+                        `;
+                    }
+                }
+            }
+        }
+        
+        function updateNodeKeywordsDisplay(nodeId, keywords) {
+            const nodeBody = document.getElementById(`body-${nodeId}`);
+            const nodeData = nodes.find(n => n.id === nodeId);
+            const matchType = nodeData?.data?.matchType || 'contains';
+            const matchTypeText = matchType === 'contains' ? 'يحتوي على' : 'يساوي';
+            const matchTypeColor = matchType === 'contains' ? '#4ade80' : '#fb923c';
+            
+            if (nodeBody) {
+                nodeBody.innerHTML = `
+                    <div style="margin-bottom: 0.5rem;">
+                        <span style="background: rgba(${matchType === 'contains' ? '74,222,128' : '251,146,60'},0.15); border: 1px solid ${matchTypeColor}; border-radius: 4px; padding: 0.25rem 0.5rem; font-size: 0.7rem; color: ${matchTypeColor}; font-weight: 600;">
+                            ${matchTypeText}
+                        </span>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+                        ${keywords.map(kw => `
+                            <span style="background: rgba(102,126,234,0.2); border: 1px solid #667eea; border-radius: 4px; padding: 0.3rem 0.5rem; font-size: 0.75rem; color: #fff;">
+                                ${kw}
+                            </span>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        }
+        
+        function showProperties(nodeId) {
+            const nodeData = nodes.find(n => n.id === nodeId);
+            if (!nodeData) return;
+            
+            // Load keywords and match type for this node
+            currentKeywords = nodeData.data.keywords || [];
+            currentMatchType = nodeData.data.matchType || 'contains';
+            
+            const props = document.getElementById('propertiesContent');
+            props.innerHTML = `
+                <div class="prop-group">
+                    <label class="prop-label">اسم العنصر</label>
+                    <input type="text" class="prop-input" value="${nodeData.type}" placeholder="اسم مخصص">
+                </div>
+                <div class="prop-group">
+                    <label class="prop-label">الوصف</label>
+                    <textarea class="prop-input" placeholder="ادخل وصف للعنصر"></textarea>
+                </div>
+                ${getTypeSpecificProps(nodeData.type)}
+                <button class="btn-save" onclick="saveProperties()">
+                    <i class="fas fa-check"></i> حفظ التغييرات
+                </button>
+            `;
+            
+            // Render keywords if this is a keywords node
+            if (nodeData.type === 'keywords') {
+                setTimeout(() => {
+                    renderKeywords();
+                    // Update radio buttons
+                    const radios = document.getElementsByName('matchType');
+                    radios.forEach(radio => {
+                        radio.checked = radio.value === currentMatchType;
+                    });
+                }, 0);
+            }
+            
+            // Load saved image data if this is a show-image node
+            if (nodeData.type === 'show-image') {
+                setTimeout(() => {
+                    const imageUrl = nodeData.data.imageUrl || '';
+                    const imageAlt = nodeData.data.imageAlt || '';
+                    
+                    const urlInput = document.getElementById('imageUrl');
+                    const altInput = document.getElementById('imageAlt');
+                    
+                    if (urlInput) urlInput.value = imageUrl;
+                    if (altInput) altInput.value = imageAlt;
+                    
+                    if (imageUrl) {
+                        updateImagePreview();
+                    }
+                }, 0);
+            }
+            
+            // Load saved video data
+            if (nodeData.type === 'show-video') {
+                setTimeout(() => {
+                    const videoUrl = nodeData.data.videoUrl || '';
+                    const videoTitle = nodeData.data.videoTitle || '';
+                    
+                    const urlInput = document.getElementById('videoUrl');
+                    const titleInput = document.getElementById('videoTitle');
+                    
+                    if (urlInput) urlInput.value = videoUrl;
+                    if (titleInput) titleInput.value = videoTitle;
+                }, 0);
+            }
+            
+            // Load saved text data
+            if (nodeData.type === 'send-text') {
+                setTimeout(() => {
+                    const messageText = nodeData.data.messageText || '';
+                    const typingEnabled = nodeData.data.typingEnabled || false;
+                    const typingDuration = nodeData.data.typingDuration || '3';
+                    
+                    const textInput = document.getElementById('messageText');
+                    const durationInput = document.getElementById('typingDuration');
+                    const radios = document.getElementsByName('typingEnabled');
+                    
+                    if (textInput) textInput.value = messageText;
+                    if (durationInput) durationInput.value = typingDuration;
+                    
+                    radios.forEach(radio => {
+                        radio.checked = (radio.value === 'yes') === typingEnabled;
+                    });
+                    
+                    toggleTypingDuration(typingEnabled);
+                }, 0);
+            }
+        }
+        
+        function getTypeSpecificProps(type) {
+            const propTypes = {
+                'send-email': `
+                    <div class="prop-group">
+                        <label class="prop-label">البريد الإلكتروني</label>
+                        <input type="email" class="prop-input" placeholder="example@email.com">
+                    </div>
+                    <div class="prop-group">
+                        <label class="prop-label">الموضوع</label>
+                        <input type="text" class="prop-input" placeholder="موضوع الرسالة">
+                    </div>
+                `,
+                'send-sms': `
+                    <div class="prop-group">
+                        <label class="prop-label">رقم الهاتف</label>
+                        <input type="tel" class="prop-input" placeholder="+966XXXXXXXXX">
+                    </div>
+                `,
+                'api-call': `
+                    <div class="prop-group">
+                        <label class="prop-label">URL</label>
+                        <input type="url" class="prop-input" placeholder="https://api.example.com">
+                    </div>
+                    <div class="prop-group">
+                        <label class="prop-label">الطريقة</label>
+                        <select class="prop-select">
+                            <option>GET</option>
+                            <option>POST</option>
+                            <option>PUT</option>
+                            <option>DELETE</option>
+                        </select>
+                    </div>
+                `,
+                'delay': `
+                    <div class="prop-group">
+                        <label class="prop-label">المدة (بالثواني)</label>
+                        <input type="number" class="prop-input" value="5" min="1">
+                    </div>
+                `,
+                'condition': `
+                    <div class="prop-group">
+                        <label class="prop-label">الشرط</label>
+                        <input type="text" class="prop-input" placeholder="x > 10">
+                    </div>
+                `,
+                'keywords': `
+                    <div class="prop-group">
+                        <label class="prop-label">نوع المطابقة</label>
+                        <div style="display: flex; gap: 1.5rem; margin-bottom: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="matchType" value="contains" checked onchange="updateMatchType('contains')" style="cursor: pointer;">
+                                <span style="color: #e5e7eb;">يحتوي على</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="matchType" value="equals" onchange="updateMatchType('equals')" style="cursor: pointer;">
+                                <span style="color: #e5e7eb;">يساوي</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="prop-group">
+                        <label class="prop-label">الكلمات المفتاحية</label>
+                        <div class="keywords-container" id="keywordsContainer"></div>
+                        <div class="keyword-input-group">
+                            <input type="text" class="prop-input" id="newKeywordInput" placeholder="أدخل كلمة مفتاحية">
+                            <button onclick="addKeyword()">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                `,
+                'show-image': `
+                    <div class="prop-group">
+                        <label class="prop-label">رابط الصورة (URL)</label>
+                        <input type="url" class="prop-input" id="imageUrl" placeholder="https://example.com/image.jpg" oninput="updateImagePreview()">
+                    </div>
+                    <div class="prop-group">
+                        <label class="prop-label">معاينة الصورة</label>
+                        <div id="imagePreview" style="width: 100%; min-height: 150px; background: rgba(255,255,255,0.05); border: 1px dashed var(--glass-border); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                            <span style="color: #9ca3af; font-size: 0.85rem;">أدخل رابط الصورة لمعاينتها</span>
+                        </div>
+                    </div>
+                    <div class="prop-group">
+                        <label class="prop-label">نص بديل (Alt Text)</label>
+                        <input type="text" class="prop-input" id="imageAlt" placeholder="وصف الصورة">
+                    </div>
+                `,
+                'show-video': `
+                    <div class="prop-group">
+                        <label class="prop-label">رابط الفيديو (URL)</label>
+                        <input type="url" class="prop-input" id="videoUrl" placeholder="https://example.com/video.mp4">
+                    </div>
+                    <div class="prop-group">
+                        <label class="prop-label">عنوان الفيديو</label>
+                        <input type="text" class="prop-input" id="videoTitle" placeholder="عنوان اختياري">
+                    </div>
+                `,
+                'send-text': `
+                    <div class="prop-group">
+                        <label class="prop-label">النص</label>
+                        <textarea class="prop-input" id="messageText" placeholder="أدخل نص الرسالة" rows="4"></textarea>
+                    </div>
+                    <div class="prop-group">
+                        <label class="prop-label">تفعيل وضع الكتابة</label>
+                        <div style="display: flex; gap: 1.5rem; margin-bottom: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="typingEnabled" value="yes" onchange="toggleTypingDuration(true)" style="cursor: pointer;">
+                                <span style="color: #e5e7eb;">نعم</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="typingEnabled" value="no" checked onchange="toggleTypingDuration(false)" style="cursor: pointer;">
+                                <span style="color: #e5e7eb;">لا</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="prop-group" id="typingDurationGroup" style="display: none;">
+                        <label class="prop-label">مدة الكتابة (بالثواني)</label>
+                        <input type="number" class="prop-input" id="typingDuration" placeholder="3" min="1" max="30" value="3">
+                    </div>
+                `
+            };
+            return propTypes[type] || '';
+        }
+        
+        function deleteNode(nodeId) {
+            const node = document.getElementById(nodeId);
+            if (node) {
+                node.remove();
+                const index = nodes.findIndex(n => n.id === nodeId);
+                if (index > -1) nodes.splice(index, 1);
+                
+                // Remove connections related to this node
+                for (let i = connections.length - 1; i >= 0; i--) {
+                    if (connections[i].from === nodeId || connections[i].to === nodeId) {
+                        connections.splice(i, 1);
+                    }
+                }
+                
+                if (selectedNode === nodeId) {
+                    selectedNode = null;
+                    currentKeywords = [];
+                    document.getElementById('propertiesContent').innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-mouse-pointer"></i>
+                            <p>اختر عنصراً لعرض خصائصه</p>
+                        </div>
+                    `;
+                }
+                updateConnections();
+            }
+        }
+        
+        function saveProperties() {
+            if (selectedNode) {
+                const nodeData = nodes.find(n => n.id === selectedNode);
+                
+                if (nodeData && nodeData.type === 'keywords' && currentKeywords.length > 0) {
+                    // Update the card body to show keywords
+                    updateNodeKeywordsDisplay(selectedNode, currentKeywords);
+                }
+                
+                if (nodeData && nodeData.type === 'show-image') {
+                    // Save image data
+                    const imageUrl = document.getElementById('imageUrl')?.value;
+                    const imageAlt = document.getElementById('imageAlt')?.value;
+                    
+                    if (imageUrl) {
+                        nodeData.data.imageUrl = imageUrl;
+                        nodeData.data.imageAlt = imageAlt || 'صورة';
+                        
+                        // Update card body to show image thumbnail
+                        const nodeBody = document.getElementById(`body-${selectedNode}`);
+                        if (nodeBody) {
+                            nodeBody.innerHTML = `
+                                <div style="text-align: center;">
+                                    <img src="${imageUrl}" style="max-width: 100%; max-height: 80px; object-fit: contain; border-radius: 6px;" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\'%3E%3Crect fill=\'%23333\' width=\'100\' height=\'100\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' fill=\'%23999\' font-size=\'14\'%3Eصورة%3C/text%3E%3C/svg%3E'"/>
+                                    ${imageAlt ? `<div style="margin-top: 0.3rem; font-size: 0.7rem; color: #9ca3af;">${imageAlt}</div>` : ''}
+                                </div>
+                            `;
+                        }
+                    }
+                }
+                
+                if (nodeData && nodeData.type === 'show-video') {
+                    const videoUrl = document.getElementById('videoUrl')?.value;
+                    const videoTitle = document.getElementById('videoTitle')?.value;
+                    
+                    if (videoUrl) {
+                        nodeData.data.videoUrl = videoUrl;
+                        nodeData.data.videoTitle = videoTitle || 'فيديو';
+                        
+                        const nodeBody = document.getElementById(`body-${selectedNode}`);
+                        if (nodeBody) {
+                            nodeBody.innerHTML = `
+                                <div style="text-align: center;">
+                                    ${getVideoEmbed(videoUrl)}
+                                    ${videoTitle ? `<div style="margin-top: 0.3rem; font-size: 0.75rem; color: #9ca3af;">${videoTitle}</div>` : ''}
+                                </div>
+                            `;
+                        }
+                    }
+                }
+                
+                if (nodeData && nodeData.type === 'send-text') {
+                    const messageText = document.getElementById('messageText')?.value;
+                    const typingEnabled = document.querySelector('input[name="typingEnabled"]:checked')?.value === 'yes';
+                    const typingDuration = document.getElementById('typingDuration')?.value || '3';
+                    
+                    if (messageText) {
+                        nodeData.data.messageText = messageText;
+                        nodeData.data.typingEnabled = typingEnabled;
+                        nodeData.data.typingDuration = typingDuration;
+                        
+                        const nodeBody = document.getElementById(`body-${selectedNode}`);
+                        if (nodeBody) {
+                            const textPreview = messageText.length > 30 ? messageText.substring(0, 30) + '...' : messageText;
+                            nodeBody.innerHTML = `
+                                <div>
+                                    ${typingEnabled ? `
+                                        <div class="typing-indicator" style="margin-bottom: 0.5rem;">
+                                            <div class="typing-dot"></div>
+                                            <div class="typing-dot"></div>
+                                            <div class="typing-dot"></div>
+                                            <span style="font-size: 0.7rem; color: #667eea; margin-right: 0.3rem;">${typingDuration}ث</span>
+                                        </div>
+                                    ` : ''}
+                                    <div style="font-size: 0.8rem; color: #e5e7eb; line-height: 1.4;">${textPreview}</div>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+            }
+            alert('تم حفظ الخصائص بنجاح!');
+        }
+        
+        function updateConnections() {
+            const svg = document.getElementById('connections');
+            svg.innerHTML = '';
+            
+            connections.forEach(conn => {
+                const fromNode = document.getElementById(conn.from);
+                const toNode = document.getElementById(conn.to);
+                
+                if (fromNode && toNode) {
+                    const fromPort = fromNode.querySelector('.node-port.input');
+                    const toPort = toNode.querySelector('.node-port.output');
+                    
+                    const fromRect = fromPort.getBoundingClientRect();
+                    const toRect = toPort.getBoundingClientRect();
+                    const svgRect = svg.getBoundingClientRect();
+                    
+                    const x1 = fromRect.left + fromRect.width / 2 - svgRect.left;
+                    const y1 = fromRect.top + fromRect.height / 2 - svgRect.top;
+                    const x2 = toRect.left + toRect.width / 2 - svgRect.left;
+                    const y2 = toRect.top + toRect.height / 2 - svgRect.top;
+                    
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const dx = x2 - x1;
+                    const dy = y2 - y1;
+                    const curve = Math.abs(dx) * 0.5;
+                    
+                    const d = `M ${x1} ${y1} C ${x1 + curve} ${y1}, ${x2 - curve} ${y2}, ${x2} ${y2}`;
+                    path.setAttribute('d', d);
+                    path.setAttribute('class', 'connection-line');
+                    path.setAttribute('data-connection-id', conn.id);
+                    path.addEventListener('click', () => deleteConnection(conn.id));
+                    
+                    svg.appendChild(path);
+                }
+            });
+        }
+        
+        function startConnection(nodeId, portType) {
+            isConnecting = true;
+            connectingFrom = nodeId;
+        }
+        
+        function endConnection() {
+            isConnecting = false;
+            connectingFrom = null;
+            // Remove temp line
+            if (tempLine) {
+                tempLine.remove();
+                tempLine = null;
+            }
+        }
+        
+        function drawTempLine(e) {
+            const fromNode = document.getElementById(connectingFrom);
+            if (!fromNode) return;
+            
+            const fromPort = fromNode.querySelector('.node-port.input');
+            const fromRect = fromPort.getBoundingClientRect();
+            const svg = document.getElementById('connections');
+            const svgRect = svg.getBoundingClientRect();
+            
+            const x1 = fromRect.left + fromRect.width / 2 - svgRect.left;
+            const y1 = fromRect.top + fromRect.height / 2 - svgRect.top;
+            const x2 = e.clientX - svgRect.left;
+            const y2 = e.clientY - svgRect.top;
+            
+            // Remove old temp line
+            if (tempLine) {
+                tempLine.remove();
+            }
+            
+            // Create new temp line
+            tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            const curve = Math.abs(x2 - x1) * 0.5;
+            const d = `M ${x1} ${y1} C ${x1 + curve} ${y1}, ${x2 - curve} ${y2}, ${x2} ${y2}`;
+            tempLine.setAttribute('d', d);
+            tempLine.setAttribute('stroke', '#667eea');
+            tempLine.setAttribute('stroke-width', '2');
+            tempLine.setAttribute('stroke-dasharray', '5,5');
+            tempLine.setAttribute('fill', 'none');
+            tempLine.setAttribute('opacity', '0.6');
+            
+            svg.appendChild(tempLine);
+        }
+        
+        function createConnection(fromNodeId, toNodeId) {
+            const connId = `conn-${Date.now()}`;
+            connections.push({
+                id: connId,
+                from: fromNodeId,
+                to: toNodeId
+            });
+            updateConnections();
+        }
+        
+        function deleteConnection(connId) {
+            if (confirm('حذف هذا الاتصال؟')) {
+                const index = connections.findIndex(c => c.id === connId);
+                if (index > -1) {
+                    connections.splice(index, 1);
+                    updateConnections();
+                }
+            }
+        }
+        
+        // Keywords Management
+        let currentKeywords = [];
+        let currentMatchType = 'contains'; // 'contains' or 'equals'
+        
+        function updateMatchType(type) {
+            currentMatchType = type;
+            // Save to node data
+            if (selectedNode) {
+                const nodeData = nodes.find(n => n.id === selectedNode);
+                if (nodeData) {
+                    nodeData.data.matchType = type;
+                }
+            }
+        }
+        
+        function addKeyword() {
+            const input = document.getElementById('newKeywordInput');
+            const keyword = input.value.trim();
+            
+            if (keyword && !currentKeywords.includes(keyword)) {
+                currentKeywords.push(keyword);
+                renderKeywords();
+                input.value = '';
+                
+                // Save to node data
+                if (selectedNode) {
+                    const nodeData = nodes.find(n => n.id === selectedNode);
+                    if (nodeData) {
+                        nodeData.data.keywords = currentKeywords;
+                        nodeData.data.matchType = currentMatchType;
+                    }
+                }
+            }
+        }
+        
+        function removeKeyword(keyword) {
+            currentKeywords = currentKeywords.filter(k => k !== keyword);
+            renderKeywords();
+            
+            // Update node data
+            if (selectedNode) {
+                const nodeData = nodes.find(n => n.id === selectedNode);
+                if (nodeData) {
+                    nodeData.data.keywords = currentKeywords;
+                    nodeData.data.matchType = currentMatchType;
+                }
+            }
+        }
+        
+        function renderKeywords() {
+            const container = document.getElementById('keywordsContainer');
+            if (!container) return;
+            
+            container.innerHTML = currentKeywords.map(keyword => `
+                <div class="keyword-tag">
+                    ${keyword}
+                    <span class="remove" onclick="removeKeyword('${keyword}')">
+                        <i class="fas fa-times"></i>
+                    </span>
+                </div>
+            `).join('');
+        }
+        
+        function clearCanvas() {
+            if (confirm('هل أنت متأكد من مسح جميع العناصر؟')) {
+                canvas.innerHTML = '';
+                nodes.length = 0;
+                connections.length = 0;
+                selectedNode = null;
+                currentKeywords = [];
+                document.getElementById('connections').innerHTML = '';
+                document.getElementById('propertiesContent').innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-mouse-pointer"></i>
+                        <p>اختر عنصراً لعرض خصائصه</p>
+                    </div>
+                `;
+            }
+        }
+        
+        function saveFlow() {
+            console.log('='.repeat(80));
+            console.log('📊 بيانات الكروت (Nodes Data)');
+            console.log('='.repeat(80));
+            
+            nodes.forEach((node, index) => {
+                console.log(`\n🔷 كارت #${index + 1}: ${node.type}`);
+                console.log('├─ ID:', node.id);
+                console.log(`├─ الموقع: (${node.x}, ${node.y})`);
+                console.log('└─ البيانات:');
+                
+                // Display specific data based on node type
+                switch(node.type) {
+                    case 'keywords':
+                        console.log('   ├─ الكلمات المفتاحية:', node.data.keywords || []);
+                        console.log('   └─ نوع المطابقة:', node.data.matchType || 'contains');
+                        break;
+                    
+                    case 'show-image':
+                        console.log('   ├─ رابط الصورة:', node.data.imageUrl || 'لم يتم تحديد');
+                        console.log('   └─ النص البديل:', node.data.imageAlt || 'لا يوجد');
+                        break;
+                    
+                    case 'show-video':
+                        console.log('   ├─ رابط الفيديو:', node.data.videoUrl || 'لم يتم تحديد');
+                        console.log('   └─ العنوان:', node.data.videoTitle || 'لا يوجد');
+                        break;
+                    
+                    case 'send-text':
+                        console.log('   ├─ النص:', node.data.messageText || 'لم يتم تحديد');
+                        console.log('   ├─ وضع الكتابة:', node.data.typingEnabled ? 'مفعّل' : 'معطّل');
+                        if (node.data.typingEnabled) {
+                            console.log('   └─ مدة الكتابة:', node.data.typingDuration + ' ثانية');
+                        }
+                        break;
+                    
+                    case 'send-email':
+                        console.log('   └─ نوع: إرسال بريد إلكتروني');
+                        break;
+                    
+                    case 'send-sms':
+                        console.log('   └─ نوع: إرسال رسالة SMS');
+                        break;
+                    
+                    case 'api-call':
+                        console.log('   └─ نوع: استدعاء API');
+                        break;
+                    
+                    case 'delay':
+                        console.log('   └─ نوع: تأخير');
+                        break;
+                    
+                    case 'condition':
+                        console.log('   └─ نوع: شرط');
+                        break;
+                    
+                    case 'switch':
+                        console.log('   └─ نوع: تبديل');
+                        break;
+                    
+                    case 'start':
+                        console.log('   └─ نوع: نقطة البداية');
+                        break;
+                    
+                    case 'end':
+                        console.log('   └─ نوع: نقطة النهاية');
+                        break;
+                    
+                    default:
+                        console.log('   └─ نوع غير معروف');
+                }
+            });
+            
+            console.log('\n' + '='.repeat(80));
+            console.log('🔗 الاتصالات (Connections)');
+            console.log('='.repeat(80));
+            
+            if (connections.length === 0) {
+                console.log('لا توجد اتصالات');
+            } else {
+                connections.forEach((conn, index) => {
+                    const fromNode = nodes.find(n => n.id === conn.from);
+                    const toNode = nodes.find(n => n.id === conn.to);
+                    console.log(`\n🔗 اتصال #${index + 1}:`);
+                    console.log(`   من: ${fromNode?.type || conn.from} (${conn.from})`);
+                    console.log(`   إلى: ${toNode?.type || conn.to} (${conn.to})`);
+                });
+            }
+            
+            console.log('\n' + '='.repeat(80));
+            console.log('📦 البيانات الكاملة (JSON)');
+            console.log('='.repeat(80));
+            console.log(JSON.stringify({ nodes, connections }, null, 2));
+            console.log('='.repeat(80));
+            
+            alert('تم حفظ السير بنجاح!\n\nتحقق من الكونسول لرؤية البيانات');
+        }
+        
+        function zoomIn() { console.log('Zoom in'); }
+        function zoomOut() { console.log('Zoom out'); }
+        function resetZoom() { console.log('Reset zoom'); }
+        
+        // Toggle Typing Duration Input
+        function toggleTypingDuration(show) {
+            const group = document.getElementById('typingDurationGroup');
+            if (group) {
+                group.style.display = show ? 'block' : 'none';
+            }
+        }
+        
+        // Get video embed HTML
+        function getVideoEmbed(url) {
+            // YouTube
+            const youtubeRegex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/;
+            const youtubeMatch = url.match(youtubeRegex);
+            if (youtubeMatch) {
+                return `<iframe width="100%" height="120" src="https://www.youtube.com/embed/${youtubeMatch[1]}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="border-radius: 6px;"></iframe>`;
+            }
+            
+            // Vimeo
+            const vimeoRegex = /vimeo\.com\/(\d+)/;
+            const vimeoMatch = url.match(vimeoRegex);
+            if (vimeoMatch) {
+                return `<iframe width="100%" height="120" src="https://player.vimeo.com/video/${vimeoMatch[1]}" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="border-radius: 6px;"></iframe>`;
+            }
+            
+            // Direct video URL
+            return `
+                <video controls style="max-width: 100%; max-height: 120px; border-radius: 6px; background: #000;" onerror="this.outerHTML='<div style=\'color: #ef4444; font-size: 0.85rem; padding: 1rem;\'>فشل تحميل الفيديو</div>'">
+                    <source src="${url}" type="video/mp4">
+                    <source src="${url}" type="video/webm">
+                    <source src="${url}" type="video/ogg">
+                    متصفحك لا يدعم عرض الفيديو
+                </video>
+            `;
+        }
+        
+        // Image Preview Function
+        function updateImagePreview() {
+            const imageUrl = document.getElementById('imageUrl')?.value;
+            const preview = document.getElementById('imagePreview');
+            
+            if (imageUrl && preview) {
+                preview.innerHTML = `<img src="${imageUrl}" style="max-width: 100%; max-height: 200px; object-fit: contain;" onerror="this.parentElement.innerHTML='<span style=\'color: #ef4444; font-size: 0.85rem;\'>فشل تحميل الصورة</span>'"/>`;
+                
+                // Save to node data
+                if (selectedNode) {
+                    const nodeData = nodes.find(n => n.id === selectedNode);
+                    if (nodeData) {
+                        nodeData.data.imageUrl = imageUrl;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

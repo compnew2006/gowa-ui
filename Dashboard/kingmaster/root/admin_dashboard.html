@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>King Master - لوحة التحكم الإدارية</title>
+    
+    <!-- الخطوط -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- أنماط CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/rtl-ltr.css">
+    
+    <style>
+        .admin-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .admin-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+        }
+        
+        .admin-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(108, 92, 231, 0.3);
+            border-color: var(--primary-light);
+            color: inherit;
+            text-decoration: none;
+        }
+        
+        .admin-card-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            font-size: 2rem;
+            color: var(--text-light);
+        }
+        
+        .admin-card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-light);
+            margin-bottom: 1rem;
+        }
+        
+        .admin-card-description {
+            color: var(--text-light-dark);
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+        
+        .admin-card-features {
+            list-style: none;
+            text-align: right;
+        }
+        
+        .admin-card-features li {
+            padding: 0.25rem 0;
+            color: var(--text-light-dark);
+            font-size: 0.9rem;
+        }
+        
+        .admin-card-features li:before {
+            content: '✓';
+            color: var(--success);
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+        
+        .page-header {
+            text-align: center;
+            margin: 3rem 0;
+        }
+        
+        .page-title {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--text-light);
+            margin-bottom: 1rem;
+        }
+        
+        .page-subtitle {
+            font-size: 1.2rem;
+            color: var(--text-light-dark);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+        
+        .stat-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-light);
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: var(--text-light-dark);
+            font-size: 0.9rem;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            margin-left: 0.5rem;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="rtl ar">
+    <!-- خلفية التدرج -->
+    <div class="bg-gradient"></div>
+    
+    <!-- المحتوى الرئيسي -->
+    <div class="dashboard-container" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+        
+        <!-- الهيدر -->
+        <div class="page-header">
+            <h1 class="page-title">
+                <span class="status-indicator"></span>
+                King Master
+            </h1>
+            <p class="page-subtitle">
+                لوحة التحكم الإدارية الشاملة لإدارة النظام بكفاءة واحترافية
+            </p>
+        </div>
+        
+        <!-- إحصائيات سريعة -->
+        <div class="quick-stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalUsers">-</div>
+                <div class="stat-label">إجمالي المستخدمين</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalPackages">-</div>
+                <div class="stat-label">إجمالي الباقات</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="activeUsers">-</div>
+                <div class="stat-label">المستخدمين النشطين</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">99.9%</div>
+                <div class="stat-label">وقت التشغيل</div>
+            </div>
+        </div>
+        
+        <!-- بطاقات الصفحات الإدارية -->
+        <div class="admin-cards-grid">
+            
+            <!-- بطاقة إدارة المستخدمين -->
+            <a href="users_admin.html" class="admin-card">
+                <div class="admin-card-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <h3 class="admin-card-title">إدارة المستخدمين</h3>
+                <p class="admin-card-description">
+                    إدارة شاملة لجميع حسابات المستخدمين مع التحكم الكامل في الصلاحيات والباقات
+                </p>
+                <ul class="admin-card-features">
+                    <li>عرض وإدارة جميع المستخدمين</li>
+                    <li>إضافة وتعديل وحذف المستخدمين</li>
+                    <li>تفعيل وتعطيل الحسابات</li>
+                    <li>تعيين الباقات للمستخدمين</li>
+                    <li>إدارة المناطق الزمنية</li>
+                    <li>تحديد صلاحيات المدير والمستخدم</li>
+                    <li>تحديد تواريخ انتهاء العضوية</li>
+                    <li>بحث متقدم وتصفية</li>
+                </ul>
+            </a>
+            
+            <!-- بطاقة إدارة الباقات -->
+            <a href="packages_admin_final.html" class="admin-card">
+                <div class="admin-card-icon">
+                    <i class="fas fa-box"></i>
+                </div>
+                <h3 class="admin-card-title">إدارة الباقات</h3>
+                <p class="admin-card-description">
+                    إدارة كاملة للباقات والخطط المتاحة مع إمكانية إضافة الخصومات والعروض
+                </p>
+                <ul class="admin-card-features">
+                    <li>إنشاء وتعديل الباقات</li>
+                    <li>إدارة الأسعار والخصومات</li>
+                    <li>تعيين الشعبية للباقات</li>
+                    <li>دعم متعدد اللغات</li>
+                    <li>إدارة المميزات والخصائص</li>
+                    <li>تحديد المنصات المدعومة</li>
+                    <li>نظام النقاط والرسائل</li>
+                    <li>واجهة سهلة الاستخدام</li>
+                </ul>
+            </a>
+            
+            <!-- بطاقة صفحة الهبوط -->
+            <a href="landing.html" class="admin-card">
+                <div class="admin-card-icon">
+                    <i class="fas fa-rocket"></i>
+                </div>
+                <h3 class="admin-card-title">صفحة الهبوط</h3>
+                <p class="admin-card-description">
+                    صفحة الهبوط الرئيسية للموقع مع عرض الباقات والميزات بشكل تفاعلي وجذاب
+                </p>
+                <ul class="admin-card-features">
+                    <li>تصميم عصري ومتجاوب</li>
+                    <li>عرض الباقات بشكل ديناميكي</li>
+                    <li>دعم الخصومات والعروض</li>
+                    <li>متعدد اللغات</li>
+                    <li>تأثيرات بصرية متقدمة</li>
+                    <li>أقسام متكاملة</li>
+                    <li>آراء العملاء</li>
+                    <li>تحسين محركات البحث</li>
+                </ul>
+            </a>
+            
+            <!-- بطاقة إدارة المحتوى النصي -->
+            <a href="content_admin.html" class="admin-card">
+                <div class="admin-card-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <h3 class="admin-card-title">إدارة المحتوى النصي</h3>
+                <p class="admin-card-description">
+                    إدارة شاملة للمحتوى النصي مع دعم تقنية Spintax والإيموجي للرسائل التفاعلية
+                </p>
+                <ul class="admin-card-features">
+                    <li>إضافة وتعديل المحتوى النصي</li>
+                    <li>دعم Spintax للرسائل المتنوعة</li>
+                    <li>إدراج الإيموجي بسهولة</li>
+                    <li>تصنيف المحتوى بالوسوم</li>
+                    <li>معاينة فورية للمحتوى</li>
+                    <li>حذف جماعي للمحتويات</li>
+                    <li>تصدير واستيراد البيانات</li>
+                    <li>إحصائيات تفصيلية</li>
+                </ul>
+            </a>
+            
+            <!-- بطاقة لوحة التحكم الرئيسية -->
+            <a href="index.html" class="admin-card">
+                <div class="admin-card-icon">
+                    <i class="fas fa-tachometer-alt"></i>
+                </div>
+                <h3 class="admin-card-title">لوحة التحكم الرئيسية</h3>
+                <p class="admin-card-description">
+                    لوحة تحكم شاملة مع الإحصائيات والتقارير والأدوات الأساسية
+                </p>
+                <ul class="admin-card-features">
+                    <li>إحصائيات شاملة</li>
+                    <li>رسوم بيانية تفاعلية</li>
+                    <li>تقارير الأداء</li>
+                    <li>إشعارات النظام</li>
+                    <li>اختصارات سريعة</li>
+                    <li>معلومات الحساب</li>
+                    <li>التحكم في الإعدادات</li>
+                    <li>تبديل المظهر</li>
+                </ul>
+            </a>
+            
+        </div>
+        
+        <!-- معلومات النظام -->
+        <div class="card glass" style="margin-top: 3rem; padding: 2rem; text-align: center;">
+            <h3 style="color: var(--text-light); margin-bottom: 1rem;">
+                <i class="fas fa-info-circle" style="color: var(--primary-light); margin-left: 0.5rem;"></i>
+                معلومات النظام
+            </h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
+                <div>
+                    <strong style="color: var(--text-light);">الإصدار:</strong>
+                    <div style="color: var(--text-light-dark);">v2.0.0</div>
+                </div>
+                <div>
+                    <strong style="color: var(--text-light);">قاعدة البيانات:</strong>
+                    <div style="color: var(--success);">متصلة ✓</div>
+                </div>
+                <div>
+                    <strong style="color: var(--text-light);">الخادم:</strong>
+                    <div style="color: var(--success);">يعمل ✓</div>
+                </div>
+                <div>
+                    <strong style="color: var(--text-light);">آخر تحديث:</strong>
+                    <div style="color: var(--text-light-dark);" id="lastUpdate">-</div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <script>
+        // تحميل الإحصائيات
+        async function loadStats() {
+            try {
+                // جلب إحصائيات المستخدمين
+                const usersResponse = await fetch('api/users_api.php');
+                const usersData = await usersResponse.json();
+                
+                if (usersData.success) {
+                    document.getElementById('totalUsers').textContent = usersData.count || 0;
+                    
+                    const activeUsers = usersData.data.filter(user => user.status === 'active').length;
+                    document.getElementById('activeUsers').textContent = activeUsers;
+                }
+                
+                // جلب إحصائيات الباقات
+                const packagesResponse = await fetch('get_packages.php');
+                const packagesData = await packagesResponse.json();
+                
+                if (packagesData.success) {
+                    document.getElementById('totalPackages').textContent = packagesData.count || 0;
+                }
+                
+            } catch (error) {
+                console.error('خطأ في تحميل الإحصائيات:', error);
+                // عرض قيم افتراضية
+                document.getElementById('totalUsers').textContent = '0';
+                document.getElementById('totalPackages').textContent = '0';
+                document.getElementById('activeUsers').textContent = '0';
+            }
+        }
+        
+        // تحديد وقت آخر تحديث
+        function setLastUpdate() {
+            const now = new Date();
+            const dateString = now.toLocaleDateString('en-GB'); // DD/MM/YYYY
+            const timeString = now.toLocaleTimeString('en-GB', { hour12: false }); // 24-hour format
+            document.getElementById('lastUpdate').textContent = dateString + ' ' + timeString;
+        }
+        
+        // تحميل البيانات عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            setLastUpdate();
+            
+            // تحديث الوقت كل دقيقة
+            setInterval(setLastUpdate, 60000);
+            
+            // تحديث الإحصائيات كل 5 دقائق
+            setInterval(loadStats, 300000);
+        });
+        
+        // إضافة تأثيرات الحركة للبطاقات
+        const cards = document.querySelectorAll('.admin-card');
+        
+        cards.forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(50px)';
+            card.style.transition = 'all 0.6s ease';
+            
+            setTimeout(() => {
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, index * 150);
+        });
+    </script>
+</body>
+</html>

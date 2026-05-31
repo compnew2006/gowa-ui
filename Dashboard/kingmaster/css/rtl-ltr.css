@@ -1,0 +1,200 @@
+/* 
+ * King Master Dashboard v2.0
+ * ملف تنسيقات خاص بالاتجاه (RTL/LTR)
+ */
+
+/* ===== الاتجاه من اليمين إلى اليسار (RTL) ===== */
+body.rtl {
+    direction: rtl;
+    text-align: right;
+}
+
+body.rtl .sidebar {
+    right: 0;
+    left: auto;
+}
+
+body.rtl .main-content {
+    padding-right: calc(var(--sidebar-width) + var(--spacing-lg));
+    padding-left: var(--spacing-lg);
+}
+
+body.rtl .sidebar.collapsed ~ .main-content {
+    padding-right: calc(var(--sidebar-collapsed-width) + var(--spacing-lg));
+}
+
+body.rtl .menu-item.active::before {
+    right: 0;
+    left: auto;
+}
+
+body.rtl .menu-icon {
+    margin-left: var(--spacing-md);
+    margin-right: 0;
+}
+
+body.rtl .badge {
+    right: -5px;
+    left: auto;
+}
+
+body.rtl .search-input {
+    padding: 0 var(--spacing-md) 0 var(--spacing-xl);
+}
+
+body.rtl .search-icon {
+    left: var(--spacing-sm);
+    right: auto;
+}
+
+body.rtl .language-dropdown-menu,
+body.rtl .user-dropdown-menu {
+    right: 0;
+    left: auto;
+}
+
+body.rtl .card-actions {
+    left: var(--spacing-md);
+    right: auto;
+}
+
+body.rtl .stats-icon {
+    margin-left: var(--spacing-md);
+    margin-right: 0;
+}
+
+body.rtl .update-icon {
+    margin-left: var(--spacing-md);
+    margin-right: 0;
+}
+
+body.rtl .referral-avatar {
+    margin-left: var(--spacing-md);
+    margin-right: 0;
+}
+
+body.rtl .quick-action-icon {
+    margin-left: var(--spacing-sm);
+    margin-right: 0;
+}
+
+body.rtl .welcome-pattern {
+    right: 0;
+    left: auto;
+}
+
+/* ===== الاتجاه من اليسار إلى اليمين (LTR) ===== */
+body.ltr {
+    direction: ltr;
+    text-align: left;
+}
+
+body.ltr .sidebar {
+    left: 0;
+    right: auto;
+}
+
+body.ltr .main-content {
+    padding-left: calc(var(--sidebar-width) + var(--spacing-lg));
+    padding-right: var(--spacing-lg);
+}
+
+body.ltr .sidebar.collapsed ~ .main-content {
+    padding-left: calc(var(--sidebar-collapsed-width) + var(--spacing-lg));
+}
+
+body.ltr .menu-item.active::before {
+    left: 0;
+    right: auto;
+}
+
+body.ltr .menu-icon {
+    margin-right: var(--spacing-md);
+    margin-left: 0;
+}
+
+body.ltr .badge {
+    left: -5px;
+    right: auto;
+}
+
+body.ltr .search-input {
+    padding: 0 var(--spacing-xl) 0 var(--spacing-md);
+}
+
+body.ltr .search-icon {
+    right: var(--spacing-sm);
+    left: auto;
+}
+
+body.ltr .language-dropdown-menu,
+body.ltr .user-dropdown-menu {
+    left: -64px;
+    right: auto;
+}
+
+body.ltr .card-actions {
+    right: var(--spacing-md);
+    left: auto;
+}
+
+body.ltr .stats-icon {
+    margin-right: var(--spacing-md);
+    margin-left: 0;
+}
+
+body.ltr .update-icon {
+    margin-right: var(--spacing-md);
+    margin-left: 0;
+}
+
+body.ltr .referral-avatar {
+    margin-right: var(--spacing-md);
+    margin-left: 0;
+}
+
+body.ltr .quick-action-icon {
+    margin-right: var(--spacing-sm);
+    margin-left: 0;
+}
+
+body.ltr .welcome-pattern {
+    left: 0;
+    right: auto;
+}
+
+/* ===== التجاوب مع الأجهزة المحمولة ===== */
+@media (max-width: 992px) {
+    body.rtl .sidebar {
+        transform: translateX(100%);
+    }
+    
+    body.rtl .sidebar.active {
+        transform: translateX(0);
+    }
+    
+    body.rtl .main-content {
+        padding-right: var(--spacing-lg);
+    }
+    
+    body.ltr .sidebar {
+        transform: translateX(-100%);
+    }
+    
+    body.ltr .sidebar.active {
+        transform: translateX(0);
+    }
+    
+    body.ltr .main-content {
+        padding-left: var(--spacing-lg);
+    }
+}
+
+/* ===== تخصيص الخطوط حسب اللغة ===== */
+body.ar {
+    font-family: var(--font-ar);
+}
+
+body.en, body.fr {
+    font-family: var(--font-en);
+}

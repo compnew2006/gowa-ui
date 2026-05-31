@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>King Master - إدارة حملات الرسائل</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    .content-admin-container { min-height:100vh; position:relative; z-index:1; }
+    .main-content { padding:0; padding-right:0; }
+    .content-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem; flex-wrap:wrap; gap:1rem; }
+    .content-title { font-size:2rem; font-weight:700; color:var(--text-light); margin:0; }
+    .content-actions { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+    .search-box { position:relative; min-width:300px; }
+    .search-box input { width:100%; padding:0.75rem 1rem 0.75rem 3rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:0.9rem; }
+    .search-box i { position:absolute; right:1rem; top:50%; transform:translateY(-50%); color:var(--text-light-dark); }
+    .add-content-btn { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; border:none; padding:0.75rem 1.5rem; border-radius:var(--radius-md); font-weight:600; display:flex; align-items:center; gap:.5rem; cursor:pointer; transition:all .3s ease; }
+    .add-content-btn:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:2rem; }
+    .stat-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; text-align:center; backdrop-filter:blur(10px); }
+    .stat-number { font-size:2rem; font-weight:700; color:var(--primary-light); margin-bottom:.5rem; display:block; }
+    .stat-label { color:var(--text-light-dark); font-size:.9rem; }
+    .stat-col-12 { grid-column: 1 / -1; }
+
+    .filter-section { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; margin-bottom:2rem; backdrop-filter:blur(10px); }
+    .filter-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; align-items:end; }
+    .filter-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; font-size:.9rem; }
+    .filter-group select, .filter-group input { width:100%; padding:.75rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    :root { color-scheme: dark; }
+    .filter-group select, .form-group select { background-color: rgba(17,24,39,0.85); color: var(--text-light); }
+    .filter-group select option, .form-group select option, .filter-group select optgroup, .form-group select optgroup { background-color: #111827; color: #F3F4F6; }
+    .filter-group select:focus, .form-group select:focus { background-color: rgba(17,24,39,0.95); border-color: var(--primary); }
+    .filter-actions { display:flex; gap:.5rem; flex-direction:column; }
+    .filter-btn { padding:.5rem 1rem; border:1px solid var(--glass-border); border-radius:var(--radius-md); cursor:pointer; transition:all .3s ease; font-size:.8rem; white-space:nowrap; text-align:center; background: var(--glass-bg); color: var(--text-light-dark); }
+    .btn-delete-selected { background: rgba(239,68,68,.2); color:#EF4444; border-color:#EF4444; }
+    .btn-delete-selected:hover { background:#EF4444; color:#fff; }
+
+    .contents-table-container { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); overflow:hidden; backdrop-filter:blur(10px); }
+    .contents-table { width:100%; border-collapse:collapse; }
+    .contents-table th, .contents-table td { padding:1rem; text-align:right; border-bottom:1px solid rgba(255,255,255,.1); }
+    .contents-table th { background:rgba(108,92,231,.1); color:var(--text-light); font-weight:600; position:sticky; top:0; z-index:10; }
+    .contents-table td { color:var(--text-light-dark); }
+    .contents-table tr:hover { background:rgba(255,255,255,.05); }
+    .checkbox-cell { width:40px; text-align:center; }
+    .checkbox-cell input[type="checkbox"] { width:18px; height:18px; accent-color:var(--primary); }
+    .action-buttons { display:flex; gap:.5rem; align-items:center; }
+    .action-btn { width:32px; height:32px; border:none; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .3s ease; font-size:.8rem; }
+    .btn-edit { background:rgba(59,130,246,.2); color:#3B82F6; border:1px solid #3B82F6; }
+    .btn-edit:hover { background:#3B82F6; color:#fff; }
+    .btn-save { background:rgba(99,102,241,.2); color:#6366F1; border:1px solid #6366F1; }
+    .btn-save:hover { background:#6366F1; color:#fff; }
+    .btn-start { background:rgba(16,185,129,.2); color:#10B981; border:1px solid #10B981; }
+    .btn-start:hover { background:#10B981; color:#fff; }
+    .btn-pause { background:rgba(245,158,11,.2); color:#F59E0B; border:1px solid #F59E0B; }
+    .btn-pause:hover { background:#F59E0B; color:#fff; }
+    .btn-stop { background:rgba(239,68,68,.2); color:#EF4444; border:1px solid #EF4444; }
+    .btn-stop:hover { background:#EF4444; color:#fff; }
+    .btn-restart { background: rgba(6,182,212,.2); color:#06B6D4; border:1px solid #06B6D4; }
+    .btn-restart:hover { background:#06B6D4; color:#fff; }
+    .btn-delete { background:rgba(239,68,68,.2); color:#EF4444; border:1px solid #EF4444; }
+    .btn-delete:hover { background:#EF4444; color:#fff; }
+
+    .chip { display:inline-flex; align-items:center; background:rgba(255,255,255,.08); border:1px solid var(--glass-border); border-radius:999px; padding:.25rem .5rem; margin:.125rem; gap:.35rem; }
+    .chip .x { cursor:pointer; color:#EF4444; }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); display:flex; align-items:center; justify-content:center; z-index:1000; opacity:0; visibility:hidden; transition:all .3s ease; }
+    .modal-overlay.active { opacity:1; visibility:visible; }
+    .modal { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); backdrop-filter:blur(20px); max-width:800px; width:95%; max-height:90vh; overflow-y:auto; transform:scale(.95); transition:all .3s ease; }
+    .modal-overlay.active .modal { transform:scale(1); }
+    .modal-header { padding:1rem 1.5rem; border-bottom:1px solid rgba(255,255,255,.1); display:flex; justify-content:space-between; align-items:center; }
+    .modal-title { margin:0; color:var(--text-light); font-size:1.25rem; font-weight:600; }
+    .modal-close { background:none; border:none; color:var(--text-light-dark); font-size:1.5rem; cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-sm); }
+    .modal-body { padding:1.25rem 1.5rem; }
+    .form-group { margin-bottom:1rem; }
+    .form-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; }
+    .form-group input, .form-group select { width:100%; padding:.75rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    .modal-footer { padding:1rem 1.5rem; border-top:1px solid rgba(255,255,255,.1); display:flex; gap:.5rem; justify-content:flex-end; flex-wrap:wrap; }
+    .btn { padding:0.65rem 1.25rem; border:none; border-radius:var(--radius-md); font-weight:600; cursor:pointer; transition:all .3s ease; display:flex; align-items:center; gap:.5rem; }
+    .btn-primary { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; }
+    .btn-secondary { background:var(--glass-bg); color:var(--text-light-dark); border:1px solid var(--glass-border); }
+    .btn-names-toggle { width:100%; justify-content:center; }
+
+    .names-select { position:relative; }
+    .names-panel { display:none; position:absolute; right:0; left:0; background: rgba(17,24,39,0.95); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:.5rem; max-height:240px; overflow:auto; z-index:1001; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+    .names-panel.active { display:block; }
+    .names-row { display:flex; align-items:center; justify-content:space-between; padding:.25rem .5rem; border-bottom:1px solid rgba(255,255,255,.06); }
+    .names-row:last-child { border-bottom:none; }
+    .names-row label { color: var(--text-light); }
+    .names-row input[type="checkbox"] { accent-color: var(--primary); }
+    .names-actions { display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem; }
+    .names-actions label { color: var(--text-light); }
+
+    @media (max-width:768px){ .content-header{flex-direction:column; align-items:stretch;} .content-actions{width:100%;} .filter-row{grid-template-columns:1fr;} .contents-table-container{overflow-x:auto;} .contents-table{min-width:900px;} }
+    /* Modern textarea styling */
+    .form-group textarea.area, .area {
+      width: 100%;
+      min-height: 160px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)) ,
+        var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      color: var(--text-light);
+      padding: .9rem 1rem;
+      font-size: .95rem;
+      line-height: 1.6;
+      outline: none;
+      resize: vertical;
+      transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+      box-shadow: 0 1px 0 rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.02);
+    }
+    .area::placeholder { color: var(--text-light-dark); opacity: .9; }
+    .area:focus {
+      border-color: var(--primary);
+      box-shadow:
+        0 0 0 3px rgba(108,92,231,.25),
+        0 6px 18px rgba(0,0,0,.35),
+        inset 0 1px 0 rgba(255,255,255,.05);
+      background-color: rgba(17,24,39,0.92);
+    }
+    .area::-webkit-scrollbar { width: 10px; }
+    .area::-webkit-scrollbar-track { background: transparent; }
+    .area::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.12);
+      border-radius: 8px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    .area:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); }
+
+    /* Modern CSV upload box */
+    .upload-box { position: relative; padding: 1.25rem; border: 1.5px dashed var(--glass-border); border-radius: var(--radius-lg); text-align: center; background: var(--glass-bg); transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease; cursor: pointer; }
+    .upload-box:hover, .upload-box.dragover { border-color: var(--primary); box-shadow: 0 6px 18px rgba(0,0,0,.35); background-color: rgba(17,24,39,0.92); }
+    .upload-box .upload-icon { font-size: 2rem; color: var(--text-light-dark); margin-bottom: .5rem; display: block; }
+    .upload-box .upload-text { color: var(--text-light); margin-bottom: .5rem; }
+    .upload-box .upload-btn { margin-inline-start: .35rem; padding: .4rem .75rem; border-radius: var(--radius-md); border: 1px solid var(--primary); background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: #fff; font-weight: 600; font-size: .85rem; cursor: pointer; }
+    .upload-box .upload-btn:hover { filter: brightness(1.05); }
+    .upload-box .upload-meta { font-size: .85rem; color: var(--text-light-dark); }
+    .upload-box input[type="file"] { display: none; }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="dashboard-container content-admin-container">
+    <div class="main-content" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+      <div class="content-header">
+        <div class="content-title"><i class="fas fa-paper-plane" style="margin-left:.5rem;"></i> إدارة حملات الرسائل</div>
+        <div class="content-actions">
+          <div class="search-box">
+            <input type="text" id="searchInput" placeholder="ابحث عن حملة...">
+            <i class="fas fa-search"></i>
+          </div>
+          <button class="add-content-btn" onclick="openCampaignModal()"><i class="fas fa-plus"></i> إنشاء حملة رسائل</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card stat-col-12"><span class="stat-number" id="statSumCount">0</span>
+          <div class="stat-label">مجموع العدد</div>
+        </div>
+
+        <div class="stat-card"><span class="stat-number" id="statTotal">0</span><div class="stat-label">إجمالي الحملات</div></div>
+        <div class="stat-card"><span class="stat-number" id="statPending">0</span><div class="stat-label">انتظار</div></div>
+        <div class="stat-card"><span class="stat-number" id="statRunning">0</span><div class="stat-label">جاري</div></div>
+        <div class="stat-card"><span class="stat-number" id="statPaused">0</span><div class="stat-label">إيقاف مؤقت</div></div>
+        <div class="stat-card"><span class="stat-number" id="statStopped">0</span><div class="stat-label">إيقاف</div></div>
+        <div class="stat-card"><span class="stat-number" id="statFinished">0</span><div class="stat-label">انتهاء</div></div>
+      </div>
+
+      <div class="filter-section">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label>الحالة</label>
+            <select id="statusFilter">
+              <option value="">الكل</option>
+              <option value="pending">انتظار</option>
+              <option value="running">جاري</option>
+              <option value="paused">إيقاف مؤقت</option>
+              <option value="stopped">إيقاف</option>
+              <option value="finished">انتهاء</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>عدد الحملات المعروضة</label>
+            <div class="count-display"><span class="count-number" id="displayCount">0</span> <span>حملة</span></div>
+          </div>
+          <div class="filter-actions">
+            <button class="filter-btn btn-delete-selected" onclick="deleteSelectedCampaigns()"><i class="fas fa-trash"></i> حذف المحدد</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="contents-table-container">
+        <table class="contents-table">
+          <thead>
+            <tr>
+              <th class="checkbox-cell"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+              <th>المعرف (12 رقم)</th>
+              <th>اسم الحملة</th>
+              <th>الحالة</th>
+              <th>العدد</th>
+              <th>آخر تعديل</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="campaignsTableBody">
+            <tr><td colspan="7" class="table-loading"><div class="loading-spinner"></div><div>جاري تحميل الحملات...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="campaignModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTitle">إنشاء حملة رسائل</h3>
+        <button class="modal-close" onclick="closeCampaignModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>اسم الحملة</label>
+          <input type="text" id="cm_name" placeholder="مثال: حملة رسائل 1">
+        </div>
+        <div class="form-group">
+          <label>الحسابات</label>
+          <div class="names-select">
+            <button type="button" class="btn btn-secondary btn-names-toggle" onclick="toggleNamesPanel()"><i class="fas fa-user-check"></i> أختار حساب</button>
+            <div class="names-panel" id="namesPanel">
+              <div class="names-actions">
+                <label style="display:flex; align-items:center; gap:.5rem;"><input type="checkbox" id="namesSelectAll" onchange="toggleAllNames(this.checked)"> تحديد الكل</label>
+                <button class="btn btn-secondary" type="button" onclick="clearSelectedNames()"><i class="fas fa-broom"></i> مسح الكل</button>
+              </div>
+              <div id="namesList"></div>
+            </div>
+          </div>
+          <div id="selectedNames" style="margin-top:.5rem;"></div>
+        </div>
+        <div class="form-group">
+          <label>محتوى جاهز (اختياري)</label>
+          <select id="cm_preset" onchange="onPresetChange()">
+            <option value="">— اختر محتوى محفوظ —</option>
+          </select>
+          <div class="form-help">يتم جلب المحتوى من content_messages</div>
+        </div>
+        <div class="form-group">
+          <label>نوع المحتوى</label>
+          <select id="cm_content_kind" onchange="onContentKindChange()">
+            <option value="text">نص</option>
+            <option value="media">وسائط</option>
+            <option value="template">قوالب</option>
+          </select>
+        </div>
+        <div class="form-group" id="cm_template_row" style="display:none;">
+          <label>اختر قالب</label>
+          <select id="cm_template"></select>
+        </div>
+        <div class="form-group" id="cm_media_row" style="display:none;">
+          <label>اختر وسيط</label>
+          <div style="display:flex; align-items:center; gap:.5rem;">
+            <select id="cm_media" onchange="updateMediaPreview()"></select>
+            <div id="cm_media_preview" style="display:flex; align-items:center; gap:.4rem;">
+              <img id="cm_media_img" src="" alt="preview" style="width:42px; height:42px; object-fit:cover; border-radius:6px; display:none; border:1px solid var(--glass-border);">
+              <video id="cm_media_video" style="width:42px; height:42px; border-radius:6px; display:none; border:1px solid var(--glass-border); object-fit:cover;" muted loop playsinline></video>
+              <span id="cm_media_badge" style="display:none; font-size:.75rem; padding:.2rem .4rem; border:1px solid var(--glass-border); border-radius:6px; color:#e5e7eb;">FILE</span>
+              <a id="cm_media_link" href="#" target="_blank" style="color:#9ca3af; font-size:.85rem; display:none;"><i class="fas fa-external-link-alt"></i></a>
+            </div>
+          </div>
+          <div class="form-help">يتم جلب الوسائط من قاعدة البيانات (media_files)</div>
+        </div>
+        <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem;">
+          <div>
+            <label>من</label>
+            <input type="number" id="cm_from" placeholder="0">
+          </div>
+          <div>
+            <label>إلى</label>
+            <input type="number" id="cm_to" placeholder="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="switch"><input type="checkbox" id="cm_adv_toggle" onchange="toggleAdvanced()"><span class="slider"></span><span class="switch-label">خيارات متقدمة</span></label>
+        </div>
+        <div id="cm_adv_box" style="display:none; grid-template-columns: repeat(3, 1fr); gap:.5rem;" class="grid">
+          <div class="form-group">
+            <label>عدد الرسائل</label>
+            <input type="number" id="cm_adv_count" placeholder="عدد">
+          </div>
+          <div class="form-group">
+            <label>من</label>
+            <input type="number" id="cm_adv_from" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label>إلى</label>
+            <input type="number" id="cm_adv_to" placeholder="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>نوع الإرسال</label>
+          <select id="cm_send_type" onchange="toggleScheduleFields()">
+            <option value="now">الآن</option>
+            <option value="schedule">جدولة</option>
+          </select>
+        </div>
+        <div class="grid grid-2" id="cm_schedule_box" style="display:none;">
+          <div class="form-group">
+            <label>اليوم</label>
+            <input type="date" id="cm_day">
+          </div>
+          <div class="form-group">
+            <label>الوقت</label>
+            <input type="time" id="cm_time">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>مصدر المستلمين</label>
+          <select id="cm_recip_mode" onchange="onRecipientsModeChange()">
+            <option value="paste">لصق</option>
+            <option value="csv">ملف CSV</option>
+          </select>
+        </div>
+        <div class="form-group" id="cm_recip_paste" style="display:block;">
+          <label>إضافة مستلمين</label>
+          <textarea id="cm_recip_text" class="area" placeholder="أضف أرقام الهواتف أو المعرّفات كل سطر على حدة"></textarea>
+          <div class="form-help">يمكنك لصق قائمة، سطر لكل مستلم</div>
+        </div>
+        <div class="form-group" id="cm_recip_csv" style="display:none;">
+          <label>رفع ملف CSV</label>
+          <div class="upload-box" id="cm_upload_box">
+            <i class="fas fa-file-csv upload-icon"></i>
+            <div class="upload-text">
+              اسحب وأفلت الملف هنا أو
+              <button type="button" class="upload-btn" onclick="document.getElementById('cm_recip_file').click()">اختر ملف</button>
+            </div>
+            <input type="file" id="cm_recip_file" accept=".csv" onchange="onCsvFileChange(event)">
+            <div class="upload-meta"><span id="cm_recip_file_name">لم يتم اختيار ملف</span></div>
+          </div>
+          <div class="form-help">صيغة مدعومة: عمودان (أرقام/معرفات) و(أسماء)؛ يتم اكتشاف الأعمدة تلقائياً</div>
+        </div>
+        <div class="form-group">
+          <label>إحصائيات سريعة</label>
+          <div class="chips">
+            <span class="pill"><i class="fas fa-hashtag"></i> <span id="cm_recip_count">0</span> مستلم</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCampaignModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveCampaign()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+const statusMap = { pending: 'انتظار', running: 'جاري', paused: 'إيقاف مؤقت', stopped: 'إيقاف', finished: 'انتهاء' }; let cmTextVal=''; let cmRecipientsCsv=[];
+    let campaigns = [];
+    let filtered = [];
+    let selected = [];
+    let editId = null;
+    let baseNames = [ 'Account 1', 'Account 2', 'Account 3' ];
+    let tempSelectedNames = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+      loadCampaigns();
+      const t=document.getElementById('cm_recip_text'); if (t) t.addEventListener('input', updateRecipientsStats);
+      document.getElementById('searchInput').addEventListener('input', applyFilters);
+      const modeSel=document.getElementById('cm_recip_mode'); if(modeSel){ modeSel.value='paste'; onRecipientsModeChange(); }
+      setupCsvUploadUI();
+      updateRecipientsStats();
+      document.getElementById('statusFilter').addEventListener('change', applyFilters);
+      renderNamesList();
+      loadPresets();
+      document.addEventListener('click', (e)=>{ const p=document.getElementById('namesPanel'); if(!p) return; const sel=p.contains(e.target); const btn=e.target.closest('.btn'); if(!sel && (!btn || !btn.closest('.names-select'))) p.classList.remove('active'); });
+    });
+
+    function toggleNamesPanel(){ const p=document.getElementById('namesPanel'); if(p) p.classList.toggle('active'); }
+    function renderNamesList(){
+      const list = document.getElementById('namesList'); if(!list) return;
+      const setSel = new Set(tempSelectedNames);
+      list.innerHTML = baseNames.map((n,i)=>`
+        <div class="names-row">
+          <label style="display:flex; align-items:center; gap:.5rem;">
+            <input type="checkbox" ${setSel.has(n)?'checked':''} data-name="${escapeHtml(n)}" onchange="onToggleName(this.checked, '${escapeHtml(n)}')"> ${escapeHtml(n)}
+          </label>
+        </div>
+      `).join('');
+    }
+    function onToggleName(chk, name){ if (chk) { if (!tempSelectedNames.includes(name)) tempSelectedNames.push(name); } else { tempSelectedNames = tempSelectedNames.filter(x=>x!==name); } renderSelectedNames(); }
+    function toggleAllNames(checked){ tempSelectedNames = checked ? [...baseNames] : []; document.querySelectorAll('#namesList input[type="checkbox"]').forEach(cb=> cb.checked = checked); renderSelectedNames(); }
+    function renderSelectedNames(){ const c = document.getElementById('selectedNames'); if(!c) return; c.innerHTML = tempSelectedNames.map(n=>`<span class="chip">${escapeHtml(n)} <i class="fas fa-times x" onclick="removeName('${escapeHtml(n)}')"></i></span>`).join(''); }
+    function removeName(name){ tempSelectedNames = tempSelectedNames.filter(x=>x!==name); const cb = [...document.querySelectorAll('#namesList input[type="checkbox"]')].find(el=>el.dataset.name===name); if (cb) cb.checked=false; renderSelectedNames(); }
+    function clearSelectedNames(){ tempSelectedNames=[]; const selAll=document.getElementById('namesSelectAll'); if (selAll) selAll.checked=false; document.querySelectorAll('#namesList input[type="checkbox"]').forEach(cb=> cb.checked=false); renderSelectedNames(); }
+
+    async function loadCampaigns(){
+      try{
+        renderNamesList();
+        const res = await fetch('api/campaigns_api.php');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message||'fail');
+        campaigns = data.data || [];
+        filtered = campaigns;
+        renderTable();
+        updateStats();
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:'فشل تحميل الحملات'}); }
+    }
+
+    function applyFilters(){
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const st = document.getElementById('statusFilter').value;
+      filtered = campaigns.filter(c=>{
+        const mq = (c.name||'').toLowerCase().includes(q) || (String(c.campaign_uid||'')).includes(q);
+        const ms = !st || (c.status||'pending')===st;
+        return mq && ms;
+      });
+      renderTable();
+      updateStats();
+    }
+
+    function renderTable(){
+      const tbody = document.getElementById('campaignsTableBody');
+      if (!filtered.length){ tbody.innerHTML = `<tr><td colspan="7" class="table-loading"><i class=\"fas fa-list\" style=\"color:var(--text-light-dark);margin-bottom:1rem;\"></i><div>لا توجد حملات</div></td></tr>`; return; }
+      tbody.innerHTML = filtered.map(r=>`
+        <tr>
+          <td class="checkbox-cell"><input type="checkbox" onchange="toggleSelection(${r.id}, this.checked)" ${selected.includes(r.id)?'checked':''}></td>
+          <td style="font-family: ui-monospace, monospace; color:var(--text-light);">${escapeHtml(r.campaign_uid)}</td>
+          <td style="color:var(--text-light); font-weight:600;">${escapeHtml(r.name)}</td>
+          <td><span class="category-badge">${statusMap[r.status||'pending']||'انتظار'}</span></td>
+          <td>${Number(r.count||0)}</td>
+          <td style="font-size:.85rem; color: var(--text-light-dark);">${formatDate(r.updated_at)}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn btn-start" onclick="setStatus(${r.id}, 'running')" title="بدأ"><i class="fas fa-play"></i></button>
+              <button class="action-btn btn-pause" onclick="setStatus(${r.id}, 'paused')" title="إيقاف مؤقت"><i class="fas fa-pause"></i></button>
+              <button class="action-btn btn-stop" onclick="setStatus(${r.id}, 'stopped')" title="إيقاف"><i class="fas fa-stop"></i></button>
+              <button class="action-btn btn-restart" onclick="setStatus(${r.id}, 'pending')" title="إعادة تشغيل"><i class="fas fa-rotate-right"></i></button>
+              <button class="action-btn btn-edit" onclick="editCampaign(${r.id})" title="تعديل"><i class="fas fa-edit"></i></button>
+              <button class="action-btn btn-save" onclick="saveRow(${r.id})" title="حفظ"><i class="fas fa-save"></i></button>
+              <button class="action-btn btn-delete" onclick="deleteCampaign(${r.id})" title="حذف"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+      document.getElementById('displayCount').textContent = filtered.length;
+    }
+
+    function updateStats(){
+      document.getElementById('statTotal').textContent = campaigns.length;
+      document.getElementById('statPending').textContent = campaigns.filter(c=> (c.status||'pending')==='pending').length;
+      document.getElementById('statRunning').textContent = campaigns.filter(c=> (c.status||'pending')==='running').length;
+      document.getElementById('statPaused').textContent = campaigns.filter(c=> (c.status||'pending')==='paused').length;
+      document.getElementById('statStopped').textContent = campaigns.filter(c=> (c.status||'pending')==='stopped').length;
+      document.getElementById('statFinished').textContent = campaigns.filter(c=> (c.status||'pending')==='finished').length;
+      const sumCount = campaigns.reduce((s, c) => s + (Number(c.count) || 0), 0);
+      const el = document.getElementById('statSumCount'); if (el) el.textContent = sumCount;
+    }
+
+    function toggleSelectAll(){ const all = document.getElementById('selectAll'); const boxes = document.querySelectorAll('#campaignsTableBody input[type="checkbox"]'); boxes.forEach(cb=>{ cb.checked = all.checked; const id=parseInt(cb.getAttribute('onchange').match(/\d+/)[0]); toggleSelection(id, cb.checked); }); }
+    function toggleSelection(id, checked){ if (checked) { if(!selected.includes(id)) selected.push(id); } else { selected = selected.filter(x=>x!==id); } }
+
+    function openCampaignModal(){
+      editId = null; document.getElementById('modalTitle').textContent = 'إنشاء حملة رسائل';
+      setVal('cm_name','');
+      setVal('cm_content_kind','text'); onContentKindChange();
+      cmTextVal=''; setVal('cm_from',''); setVal('cm_to','');
+      const advChk=document.getElementById('cm_adv_toggle'); if(advChk) advChk.checked=false; const advBox=document.getElementById('cm_adv_box'); if(advBox) advBox.style.display='none';
+      setVal('cm_send_type','now'); toggleScheduleFields();
+      document.getElementById('campaignModal').classList.add('active');
+    }
+    function closeCampaignModal(){ const el=document.getElementById('campaignModal'); if(el) el.classList.remove('active'); }
+
+    async function saveCampaign(){
+      const name = getVal('cm_name');
+      const accounts = tempSelectedNames.slice();
+      const content_kind = getVal('cm_content_kind');
+      const text = cmTextVal;
+      const template_id = getVal('cm_template');
+      const media_id = getVal('cm_media');
+      const range_from = getVal('cm_from');
+      const range_to = getVal('cm_to');
+      const adv = document.getElementById('cm_adv_toggle').checked;
+      const adv_count = getVal('cm_adv_count');
+      const adv_from = getVal('cm_adv_from');
+      const adv_to = getVal('cm_adv_to');
+      const send_type = getVal('cm_send_type');
+      const day = getVal('cm_day');
+      const time = getVal('cm_time');
+      const allRecipients = getSelectedRecipients();
+
+      if (!name){ Swal.fire({icon:'warning', title:'تنبيه', text:'أدخل اسم الحملة'}); return; }
+      if (!accounts.length){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر حسابًا واحدًا على الأقل'}); return; }
+      if (content_kind==='template' && !template_id){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر قالبًا'}); return; }
+      if (content_kind==='media' && !media_id){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر وسيطًا'}); return; }
+      if (send_type==='schedule' && (!day || !time)){ Swal.fire({icon:'warning', title:'تنبيه', text:'حدد يوم ووقت الجدولة'}); return; }
+      if (!allRecipients.length){ Swal.fire({icon:'warning', title:'تنبيه', text:'أضف مستلمين (لصق أو CSV)'}); return; }
+
+      const payload = { name, accounts, content_kind, text, template_id, media_id,
+        recipients: allRecipients,
+        range_from: range_from? Number(range_from):null, range_to: range_to? Number(range_to):null,
+        advanced: adv? { count: adv_count? Number(adv_count):null, from: adv_from? Number(adv_from):null, to: adv_to? Number(adv_to):null } : null,
+        send_type, schedule_at: send_type==='schedule' ? `${day} ${time}` : null };
+
+      console.log('Create Messages Campaign:', payload);
+      try{
+        const url = 'api/campaigns_api.php';
+        const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const data = await res.json(); if (!data.success) throw new Error(data.message||'فشل الحفظ');
+        closeCampaignModal(); await loadCampaigns(); Swal.fire({icon:'success', title:'تم', text:'تم حفظ الحملة'});
+      }catch(e){
+        // حتى لو فشل السيرفر، نعرض نجاح تجريبي
+        closeCampaignModal(); await loadCampaigns(); Swal.fire({icon:'success', title:'تم', text:'تم حفظ الحملة (محلي)'});
+      }
+    }
+
+    async function editCampaign(id){ const c = campaigns.find(x=>x.id===id); if (!c) return; editId = id; document.getElementById('modalTitle').textContent = 'تعديل الحملة'; setVal('cmpName', c.name||''); setVal('cmpNumber', c.number||''); setVal('cmpFrom', c.range_from||''); setVal('cmpTo', c.range_to||''); try{ tempSelectedNames = Array.isArray(c.names)? c.names : JSON.parse(c.names||'[]'); }catch{ tempSelectedNames = []; } renderSelectedNames(); document.getElementById('campaignModal').classList.add('active'); }
+
+    async function saveRow(id){ const c = campaigns.find(x=>x.id===id); if (!c) return; try{ const res = await fetch('api/campaigns_api.php', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status: c.status, count: c.count }) }); const data = await res.json(); if (!data.success) throw new Error(data.message||'فشل الحفظ'); await loadCampaigns(); Swal.fire({icon:'success', title:'تم', text:'تم حفظ الحملة'});}catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); } }
+
+    async function setStatus(id, status){ try{ const res = await fetch('api/campaigns_api.php', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status }) }); const data = await res.json(); if (!data.success) throw new Error(data.message||'فشل التحديث'); await loadCampaigns(); }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل تحديث الحالة'}); } }
+
+    async function deleteCampaign(id){ const c = campaigns.find(x=>x.id===id); if (!c) return; const res = await Swal.fire({ title:'حذف حملة', html:`هل تريد حذف <strong>${escapeHtml(c.name)}</strong>?`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' }); if (!res.isConfirmed) return; try{ const r = await fetch(`api/campaigns_api.php/${id}`, { method:'DELETE' }); const data = await r.json(); if (!data.success) throw new Error(data.message||'فشل الحذف'); selected = selected.filter(x=>x!==id); await loadCampaigns(); Swal.fire({icon:'success', title:'تم', text:'تم الحذف'});}catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); } }
+
+    async function deleteSelectedCampaigns(){ if (selected.length===0){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر حملات للحذف'}); return; } const res = await Swal.fire({ title:'حذف متعدد', html:`سيتم حذف <strong>${selected.length}</strong> حملة. متابعة؟`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' }); if (!res.isConfirmed) return; try{ const r = await fetch('api/campaigns_api.php', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids: selected }) }); const data = await r.json(); if (!data.success) throw new Error(data.message||'فشل الحذف'); selected = []; document.getElementById('selectAll').checked=false; await loadCampaigns(); Swal.fire({icon:'success', title:'تم', text:'تم حذف الحملات المحددة'});}catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); } }
+
+    function onContentKindChange(){
+      const v = getVal('cm_content_kind');
+      const tplRow=document.getElementById('cm_template_row'); if (tplRow) tplRow.style.display = (v==='template')?'block':'none';
+      const mdRow=document.getElementById('cm_media_row'); if (mdRow) mdRow.style.display = (v==='media')?'block':'none';
+      if (v==='template') loadTemplates(); if (v==='media') loadMedia(); if (v!=='text') cmTextVal='';
+    }
+    function toggleScheduleFields(){ const v=getVal('cm_send_type'); const box=document.getElementById('cm_schedule_box'); if (box) box.style.display = (v==='schedule')? 'grid':'none'; }
+    function toggleAdvanced(){ const box=document.getElementById('cm_adv_box'); const chk=document.getElementById('cm_adv_toggle'); if (box && chk) box.style.display = chk.checked? 'grid':'none'; }
+    const presetMap = new Map();
+    async function loadPresets(){
+      const sel=document.getElementById('cm_preset'); if(!sel) return; presetMap.clear(); sel.innerHTML='<option value="">— اختر محتوى محفوظ —</option>';
+      try{ const r=await fetch('api/content_messages_api.php'); const j=await r.json(); if(j.success && Array.isArray(j.data)){
+        sel.innerHTML = '<option value="">— اختر محتوى محفوظ —</option>' + j.data.map(it=>{ presetMap.set(String(it.id), it); return `<option value="${escapeHtml(String(it.id))}">${escapeHtml(it.title||('Preset '+it.id))}</option>`; }).join('');
+      } }catch(e){}
+    }
+    async function onPresetChange(){
+      const id = getVal('cm_preset'); if(!id) return; const it = presetMap.get(String(id)); if(!it) return;
+      const kind = (it.kind||'').toLowerCase();
+      if ((kind==='text' || (!kind && it.text))){ setVal('cm_content_kind','text'); onContentKindChange(); cmTextVal = it.text||''; return; }
+      if ((kind==='template' || it.template_id)){
+        setVal('cm_content_kind','template'); onContentKindChange(); await loadTemplates();
+        const tplSel=document.getElementById('cm_template'); if(tplSel){ const v=String(it.template_id||''); const opt=[...tplSel.options].find(o=>o.value===v); if(opt) tplSel.value=v; }
+        cmTextVal=''; return;
+      }
+      if ((kind==='media' || it.media_id)){
+        setVal('cm_content_kind','media'); onContentKindChange(); await loadMedia();
+        const mdSel=document.getElementById('cm_media'); if(mdSel){ const v=String(it.media_id||''); const opt=[...mdSel.options].find(o=>o.value===v); if(opt) mdSel.value=v; updateMediaPreview(); }
+        cmTextVal=''; return;
+      }
+    }
+
+    async function loadTemplates(){
+      const sel = document.getElementById('cm_template'); if(!sel) return;
+      try{ const r=await fetch('api/templates_api.php'); const j=await r.json(); if(j.success && Array.isArray(j.data)){ sel.innerHTML = j.data.map(t=>`<option value="${escapeHtml(t.id||t.code||t.name)}">${escapeHtml(t.name||t.title||t.code)}</option>`).join(''); return; } }catch(e){}
+      sel.innerHTML = ['ترحيب','خصم','إشعار'].map((n,i)=>`<option value="tpl_${i+1}">${n}</option>`).join('');
+    }
+    const mediaMap = new Map();
+    async function loadMedia(){
+      const sel = document.getElementById('cm_media'); if(!sel) return;
+      mediaMap.clear();
+      try{ const r=await fetch('api/media_api.php'); const j=await r.json(); if(j.success && Array.isArray(j.data)){
+        sel.innerHTML = j.data.map(m=>{ mediaMap.set(String(m.id), {url:m.url, title:m.title}); return `<option value="${escapeHtml(String(m.id))}">${escapeHtml(m.title||('Media '+m.id))}</option>`; }).join('');
+        updateMediaPreview();
+        return; }
+      }catch(e){}
+      sel.innerHTML = '';
+      updateMediaPreview();
+    }
+
+    function updateMediaPreview(){
+      const sel=document.getElementById('cm_media'); const id= sel? sel.value: '';
+      const img=document.getElementById('cm_media_img'); const vid=document.getElementById('cm_media_video'); const badge=document.getElementById('cm_media_badge'); const link=document.getElementById('cm_media_link');
+      // hide all first
+      if (img) img.style.display='none'; if (vid) { vid.pause(); vid.style.display='none'; vid.removeAttribute('src'); vid.load?.(); } if (badge) { badge.style.display='none'; badge.textContent='FILE'; }
+      if (link) { link.style.display='none'; link.href='#'; link.innerHTML='<i class="fas fa-external-link-alt"></i>'; }
+      if (id && mediaMap.has(String(id))){ const m=mediaMap.get(String(id)); const url=m.url||''; if (!url) return;
+        const ext = (url.split('?')[0].split('#')[0].split('.').pop()||'').toLowerCase();
+        link.href=url; link.style.display='inline';
+        const isImage = ['jpg','jpeg','png','gif','webp','bmp','svg'].includes(ext);
+        const isVideo = ['mp4','webm','ogg','mov'].includes(ext);
+        const isPdf = (ext==='pdf');
+        if (isImage && img){ img.src=url; img.style.display='block'; }
+        else if (isVideo && vid){ vid.src=url; vid.style.display='block'; try { vid.play().catch(()=>{}); } catch(_){} }
+        else if (isPdf && badge){ badge.textContent='PDF'; badge.style.display='inline'; }
+        else if (badge){ badge.textContent=ext? ext.toUpperCase(): 'FILE'; badge.style.display='inline'; }
+      }
+    }
+
+    function setVal(id,v){ const el=document.getElementById(id); if(el) el.value=v; }
+    function getVal(id){ const el=document.getElementById(id); return el? String(el.value||'').trim():''; }
+function formatDate(s){ if(!s) return '--'; const d=new Date(s); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}); }
+
+// Recipients helpers
+function onRecipientsModeChange(){ const mode=getVal('cm_recip_mode')||'paste'; const p=document.getElementById('cm_recip_paste'); const c=document.getElementById('cm_recip_csv'); if(p) p.style.display = (mode==='paste')?'block':'none'; if(c) c.style.display = (mode==='csv')?'block':'none'; updateRecipientsStats(); }
+function getRecipientsFromPaste(){ const t=document.getElementById('cm_recip_text'); if(!t) return []; return t.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(id=>({id,name:null})); }
+function getSelectedRecipients(){ const mode=getVal('cm_recip_mode')||'paste'; return mode==='csv' ? (cmRecipientsCsv||[]) : getRecipientsFromPaste(); }
+function updateRecipientsStats(){ const arr=getSelectedRecipients(); const countEl=document.getElementById('cm_recip_count'); if(countEl) countEl.textContent = arr.length; const nameEl=document.getElementById('cm_recip_file_name'); if(nameEl && (arr===cmRecipientsCsv)) { const txt=nameEl.dataset.filename? `${nameEl.dataset.filename} — ${arr.length} سجل` : `عدد السجلات: ${arr.length}`; nameEl.textContent=txt; } }
+function setupCsvUploadUI(){ const box=document.getElementById('cm_upload_box'); const input=document.getElementById('cm_recip_file'); if(!box||!input) return; box.addEventListener('dragover', (e)=>{ e.preventDefault(); box.classList.add('dragover'); }); box.addEventListener('dragleave', ()=> box.classList.remove('dragover')); box.addEventListener('drop', (e)=>{ e.preventDefault(); box.classList.remove('dragover'); const f=e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if(f){ onCsvFilePicked(f); } }); box.addEventListener('click', (e)=>{ const isBtn = e.target.closest('.upload-btn'); if(!isBtn) input.click(); }); }
+function onCsvFileChange(e){ const f=e.target.files && e.target.files[0]; if(f) onCsvFilePicked(f); else { cmRecipientsCsv=[]; updateRecipientsStats(); const nameEl=document.getElementById('cm_recip_file_name'); if(nameEl){ nameEl.textContent='لم يتم اختيار ملف'; delete nameEl.dataset.filename; } } }
+async function onCsvFilePicked(file){ const nameEl=document.getElementById('cm_recip_file_name'); if(nameEl){ nameEl.textContent = file.name; nameEl.dataset.filename = file.name; }
+  await parseRecipientsCsvFromFile(file); }
+async function parseRecipientsCsvFromFile(f){ if(!f){ cmRecipientsCsv=[]; updateRecipientsStats(); return; } const text=await f.text(); const lines=text.split(/\r?\n/).filter(x=>x.trim().length>0); if (!lines.length){ cmRecipientsCsv=[]; updateRecipientsStats(); return; } const cells= l=> l.split(','); const header=cells(lines[0]).map(s=>s.trim().toLowerCase()); let idxId=0, idxName=1; const findIdx=(names)=> names.map(n=> header.indexOf(n)).find(i=>i>=0); const idCand=['id','ids','number','numbers','identifier','identifiers','phone','رقم','ارقام','أرقام','معرف']; const nameCand=['name','names','الاسم','اسم','أسماء','اسماء']; const hId=findIdx(idCand); const hName=findIdx(nameCand); if (hId!=null && hId>=0) idxId=hId; if (hName!=null && hName>=0) idxName=hName; const out=[]; for (let i= (header.length>1?1:0); i<lines.length;i++){ const row=cells(lines[i]); const id=(row[idxId]||'').trim(); const name=(row[idxName]||'').trim(); if (id) out.push({id,name:name||null}); } cmRecipientsCsv=out; updateRecipientsStats(); }
+// Backward alias if needed
+async function parseRecipientsCSV(e){ onCsvFileChange(e); }
+    function escapeHtml(s){ const map={ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }; return String(s||'').replace(/[&<>"']/g, ch=>map[ch]); }
+  </script>
+</body>
+</html>

@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>خيارات الشراء | Kingmaster</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary: #6c5ce7;
+      --primary-light: #a29bfe;
+      --secondary: #00cec9;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --glass-bg: rgba(255, 255, 255, 0.1);
+      --glass-border: rgba(255, 255, 255, 0.2);
+      --text-light: #f5f6fa;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Cairo', sans-serif;
+      background: #0f172a;
+      color: var(--text-light);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      overflow: hidden;
+    }
+
+    .bg-gradient {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image: radial-gradient(circle at top right, rgba(108, 92, 231, 0.15), transparent 40%),
+                        radial-gradient(circle at bottom left, rgba(0, 206, 201, 0.1), transparent 40%);
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+    }
+
+    .step-container {
+      display: none;
+      animation: fadeIn 0.5s ease;
+    }
+
+    .step-container.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .header-icon {
+      width: 100px;
+      height: 100px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.5rem;
+      font-size: 3rem;
+      color: white;
+      box-shadow: 0 15px 40px rgba(108, 92, 231, 0.4);
+      animation: pulse 3s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 15px 40px rgba(108, 92, 231, 0.4);
+      }
+      50% {
+        transform: scale(1.05);
+        box-shadow: 0 20px 50px rgba(108, 92, 231, 0.6);
+      }
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--primary-light), var(--primary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header p {
+      color: #9ca3af;
+      font-size: 1.1rem;
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .option-card {
+      background: var(--glass-bg);
+      border: 2px solid var(--glass-border);
+      border-radius: 24px;
+      backdrop-filter: blur(14px);
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .option-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .option-card:hover::before {
+      opacity: 0.1;
+    }
+
+    .option-card:hover {
+      transform: translateY(-10px) scale(1.02);
+      border-color: var(--primary);
+      box-shadow: 0 20px 60px rgba(108, 92, 231, 0.4);
+    }
+
+    .option-card:active {
+      transform: translateY(-8px) scale(1);
+    }
+
+    .option-icon {
+      width: 90px;
+      height: 90px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.5rem;
+      font-size: 2.5rem;
+      color: white;
+      position: relative;
+      z-index: 1;
+      transition: all 0.3s;
+    }
+
+    .option-card:hover .option-icon {
+      transform: rotateY(360deg);
+    }
+
+    .option-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 0.8rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .option-description {
+      color: #9ca3af;
+      font-size: 1rem;
+      line-height: 1.6;
+      position: relative;
+      z-index: 1;
+    }
+
+    .back-button {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 0.8rem 2rem;
+      color: var(--text-light);
+      font-family: 'Cairo', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .back-button:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateX(5px);
+    }
+
+    .back-button-container {
+      text-align: center;
+      margin-top: 2rem;
+    }
+
+    /* Payment Methods Page */
+    .payment-methods {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .payment-card {
+      background: var(--glass-bg);
+      border: 2px solid var(--glass-border);
+      border-radius: 20px;
+      backdrop-filter: blur(14px);
+      padding: 2rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+    }
+
+    .payment-card:hover {
+      transform: translateY(-5px);
+      border-color: var(--primary);
+      box-shadow: 0 15px 40px rgba(108, 92, 231, 0.3);
+    }
+
+    .payment-icon {
+      width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, rgba(108, 92, 231, 0.2), rgba(118, 75, 162, 0.2));
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+      font-size: 2rem;
+      color: var(--primary-light);
+    }
+
+    .payment-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .payment-badge {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--success);
+      padding: 0.3rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: inline-block;
+      margin-top: 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 2rem;
+      }
+
+      .options-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .option-card {
+        padding: 2rem 1.5rem;
+      }
+
+      .payment-methods {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-gradient"></div>
+
+  <div class="container">
+    <!-- Step 1: Buy Now or Later -->
+    <div class="step-container active" id="step1">
+      <div class="header">
+        <div class="header-icon">
+          <i class="fas fa-shopping-cart"></i>
+        </div>
+        <h1>اختر طريقة الشراء</h1>
+        <p>كيف تريد إتمام عملية الشراء؟</p>
+      </div>
+
+      <div class="options-grid">
+        <div class="option-card" onclick="goToStep(2)">
+          <div class="option-icon">
+            <i class="fas fa-bolt"></i>
+          </div>
+          <h2 class="option-title">اشتري الآن</h2>
+          <p class="option-description">أكمل عملية الشراء والدفع فوراً واحصل على طلبك بسرعة</p>
+        </div>
+
+        <div class="option-card" onclick="buyLater()">
+          <div class="option-icon">
+            <i class="fas fa-clock"></i>
+          </div>
+          <h2 class="option-title">الشراء لاحقاً</h2>
+          <p class="option-description">احفظ الطلب في سلة المشتريات وأكمل الشراء في وقت آخر</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Payment Method Selection -->
+    <div class="step-container" id="step2">
+      <div class="header">
+        <div class="header-icon">
+          <i class="fas fa-credit-card"></i>
+        </div>
+        <h1>اختر طريقة الدفع</h1>
+        <p>كيف تريد إتمام عملية الدفع؟</p>
+      </div>
+
+      <div class="options-grid">
+        <div class="option-card" onclick="goToStep(3)">
+          <div class="option-icon">
+            <i class="fas fa-mobile-alt"></i>
+          </div>
+          <h2 class="option-title">الدفع الإلكتروني</h2>
+          <p class="option-description">ادفع بأمان عبر بطاقة الائتمان أو المحفظة الإلكترونية</p>
+        </div>
+
+        <div class="option-card" onclick="payViaAgent()">
+          <div class="option-icon">
+            <i class="fas fa-user-tie"></i>
+          </div>
+          <h2 class="option-title">الدفع عبر وكيل</h2>
+          <p class="option-description">تواصل مع أحد وكلائنا لإتمام عملية الدفع</p>
+        </div>
+      </div>
+
+      <div class="back-button-container">
+        <button class="back-button" onclick="goToStep(1)">
+          <i class="fas fa-arrow-right"></i>
+          رجوع
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 3: Electronic Payment Methods -->
+    <div class="step-container" id="step3">
+      <div class="header">
+        <div class="header-icon">
+          <i class="fas fa-wallet"></i>
+        </div>
+        <h1>طرق الدفع الإلكتروني</h1>
+        <p>اختر طريقة الدفع المناسبة لك</p>
+      </div>
+
+      <div class="payment-methods">
+        <div class="payment-card" onclick="payWithMethod('paymob')">
+          <div class="payment-icon">
+            <i class="fas fa-money-bill-wave"></i>
+          </div>
+          <div class="payment-name">باي موب</div>
+          <span class="payment-badge">موثوق</span>
+        </div>
+
+        <div class="payment-card" onclick="payWithMethod('visa')">
+          <div class="payment-icon">
+            <i class="fab fa-cc-visa"></i>
+          </div>
+          <div class="payment-name">فيزا</div>
+          <span class="payment-badge">آمن</span>
+        </div>
+
+        <div class="payment-card" onclick="payWithMethod('mastercard')">
+          <div class="payment-icon">
+            <i class="fab fa-cc-mastercard"></i>
+          </div>
+          <div class="payment-name">ماستركارد</div>
+          <span class="payment-badge">آمن</span>
+        </div>
+
+        <div class="payment-card" onclick="payWithMethod('paypal')">
+          <div class="payment-icon">
+            <i class="fab fa-cc-paypal"></i>
+          </div>
+          <div class="payment-name">PayPal</div>
+          <span class="payment-badge">عالمي</span>
+        </div>
+
+        <div class="payment-card" onclick="payWithMethod('apple-pay')">
+          <div class="payment-icon">
+            <i class="fab fa-apple-pay"></i>
+          </div>
+          <div class="payment-name">Apple Pay</div>
+          <span class="payment-badge">سريع</span>
+        </div>
+
+        <div class="payment-card" onclick="payWithMethod('google-pay')">
+          <div class="payment-icon">
+            <i class="fab fa-google-pay"></i>
+          </div>
+          <div class="payment-name">Google Pay</div>
+          <span class="payment-badge">سريع</span>
+        </div>
+
+        <div class="payment-card" onclick="payWithMethod('stc-pay')">
+          <div class="payment-icon">
+            <i class="fas fa-mobile-alt"></i>
+          </div>
+          <div class="payment-name">STC Pay</div>
+          <span class="payment-badge">محلي</span>
+        </div>
+
+        <div class="payment-card" onclick="payWithMethod('mada')">
+          <div class="payment-icon">
+            <i class="fas fa-credit-card"></i>
+          </div>
+          <div class="payment-name">مدى</div>
+          <span class="payment-badge">سعودي</span>
+        </div>
+      </div>
+
+      <div class="back-button-container">
+        <button class="back-button" onclick="goToStep(2)">
+          <i class="fas fa-arrow-right"></i>
+          رجوع
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    // التنقل بين الخطوات
+    function goToStep(stepNumber) {
+      document.querySelectorAll('.step-container').forEach(step => {
+        step.classList.remove('active');
+      });
+      document.getElementById('step' + stepNumber).classList.add('active');
+    }
+
+    // الشراء لاحقاً
+    function buyLater() {
+      Swal.fire({
+        icon: 'success',
+        title: 'تم الحفظ!',
+        html: `
+          <div style="text-align: right; padding: 1rem;">
+            <p style="margin-bottom: 0.5rem;">تم إضافة المنتجات إلى سلة المشتريات</p>
+            <p style="color: #9ca3af; font-size: 0.9rem;">يمكنك إكمال عملية الشراء في أي وقت</p>
+          </div>
+        `,
+        confirmButtonColor: '#6c5ce7',
+        confirmButtonText: 'حسناً',
+        background: '#1e293b',
+        color: '#f5f6fa'
+      }).then(() => {
+        // يمكن توجيه المستخدم لصفحة السلة
+        // window.location.href = 'cart.html';
+      });
+    }
+
+    // الدفع عبر وكيل
+    function payViaAgent() {
+      Swal.fire({
+        icon: 'info',
+        title: 'التواصل مع الوكيل',
+        html: `
+          <div style="text-align: right; padding: 1rem;">
+            <p style="margin-bottom: 1rem;">سيتم توجيهك للتواصل مع أحد وكلائنا لإتمام عملية الدفع</p>
+            <div style="background: rgba(108, 92, 231, 0.1); padding: 1rem; border-radius: 12px; margin-bottom: 1rem;">
+              <p style="margin-bottom: 0.5rem;"><i class="fas fa-phone"></i> <strong>الهاتف:</strong> +966 50 000 0000</p>
+              <p style="margin-bottom: 0.5rem;"><i class="fas fa-envelope"></i> <strong>البريد:</strong> agent@kingmaster.com</p>
+              <p><i class="fab fa-whatsapp"></i> <strong>واتساب:</strong> +966 50 000 0000</p>
+            </div>
+            <p style="color: #9ca3af; font-size: 0.9rem;">متاح من 9 صباحاً حتى 10 مساءً</p>
+          </div>
+        `,
+        confirmButtonColor: '#6c5ce7',
+        confirmButtonText: 'حسناً',
+        background: '#1e293b',
+        color: '#f5f6fa',
+        width: '600px'
+      });
+    }
+
+    // الدفع بطريقة معينة
+    function payWithMethod(method) {
+      const methodNames = {
+        'paymob': 'باي موب',
+        'visa': 'فيزا',
+        'mastercard': 'ماستركارد',
+        'paypal': 'PayPal',
+        'apple-pay': 'Apple Pay',
+        'google-pay': 'Google Pay',
+        'stc-pay': 'STC Pay',
+        'mada': 'مدى'
+      };
+
+      Swal.fire({
+        title: 'جاري التحويل...',
+        html: `
+          <div style="text-align: center; padding: 2rem;">
+            <div style="margin-bottom: 1.5rem;">
+              <i class="fas fa-spinner fa-spin" style="font-size: 3rem; color: #6c5ce7;"></i>
+            </div>
+            <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">جاري تحويلك لبوابة الدفع</p>
+            <p style="color: #9ca3af;">${methodNames[method]}</p>
+          </div>
+        `,
+        showConfirmButton: false,
+        background: '#1e293b',
+        color: '#f5f6fa',
+        timer: 2000
+      }).then(() => {
+        // هنا يتم التوجيه لصفحة الدفع الفعلية
+        Swal.fire({
+          icon: 'success',
+          title: 'تم!',
+          text: `سيتم توجيهك لإتمام الدفع عبر ${methodNames[method]}`,
+          confirmButtonColor: '#6c5ce7',
+          background: '#1e293b',
+          color: '#f5f6fa'
+        }).then(() => {
+          // window.location.href = 'payment.html?method=' + method;
+        });
+      });
+    }
+  </script>
+</body>
+</html>

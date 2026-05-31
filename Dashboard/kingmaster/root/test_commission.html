@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار حساب العمولات</title>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 40px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+        }
+        h1 { color: #667eea; }
+        .result {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-family: monospace;
+        }
+        input, button {
+            padding: 10px;
+            margin: 10px 0;
+            width: 100%;
+            font-size: 16px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧮 حاسبة العمولات</h1>
+        
+        <label>سعر الباقة (ر.س):</label>
+        <input type="number" id="price" value="66" step="0.01">
+        
+        <label>نسبة العمولة (%):</label>
+        <input type="number" id="percentage" value="5" step="0.01">
+        
+        <button onclick="calculate()">احسب</button>
+        
+        <div id="result" class="result"></div>
+    </div>
+    
+    <script>
+        function calculate() {
+            const price = parseFloat(document.getElementById('price').value);
+            const percentage = parseFloat(document.getElementById('percentage').value);
+            const commission = (price * percentage) / 100;
+            
+            document.getElementById('result').innerHTML = `
+                <strong>الحساب:</strong><br>
+                ${price} × ${percentage}% = ${price} × ${percentage/100} = <strong style="color: #667eea; font-size: 24px;">${commission.toFixed(2)} ر.س</strong>
+                <br><br>
+                <strong>التوقع:</strong><br>
+                - إذا كان السعر: ${price} ر.س<br>
+                - والنسبة: ${percentage}%<br>
+                - العمولة يجب أن تكون: ${commission.toFixed(2)} ر.س
+                <br><br>
+                ${commission.toFixed(2) == '1.98' ? 
+                    '<span style="color: red;">⚠️ إذا كانت العمولة 1.98 ر.س، فالنسبة المحفوظة هي 3% وليس 5%!</span>' : 
+                    '<span style="color: green;">✓ الحساب صحيح!</span>'
+                }
+            `;
+        }
+        
+        calculate();
+    </script>
+</body>
+</html>

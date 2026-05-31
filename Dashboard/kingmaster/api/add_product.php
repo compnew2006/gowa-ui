@@ -1,0 +1,94 @@
+<?php
+header('Content-Type: application/json');
+session_start();
+
+require_once '../config/database.php';
+
+try {
+    $pdo = getDB();
+    
+    // استقبال البيانات
+    $name = $_POST['name'] ?? '';
+    $description = $_POST['description'] ?? '';
+    $price = $_POST['price'] ?? 0;
+    $discount_percentage = $_POST['discount_percentage'] ?? 0;
+    $stock_quantity = $_POST['stock_quantity'] ?? 0;
+    $category = $_POST['category'] ?? 'other';
+    $status = $_POST['status'] ?? 'active';
+    $is_digital = isset($_POST['is_digital']) ? (int)$_POST['is_digital'] : 0;
+    $is_new = isset($_POST['is_new']) ? (int)$_POST['is_new'] : 0;
+    $is_featured = isset($_POST['is_featured']) ? (int)$_POST['is_featured'] : 0;
+    $commission = $_POST['commission'] ?? 0;
+    $colors = $_POST['colors'] ?? '';
+    $sizes = $_POST['sizes'] ?? '';
+    
+    // رفع الصورة
+    $image_name = '';
+    if (isset($_FILES['product_image']) && $_FILES['product_image']['error'] === 0) {
+        $upload_dir = '../uploads/products/';
+        $file_extension = pathinfo($_FILES['product_image']['name'], PATHINFO_EXTENSION);
+        $file_name = uniqid('product_') . '.' . $file_extension;
+        $upload_path = $upload_dir . $file_name;
+        
+        if (move_uploaded_file($_FILES['product_image']['tmp_name'], $upload_path)) {
+            $image_name = $file_name;
+        }
+    }
+    
+    // التحقق من البيانات المطلوبة
+    if (empty($name) || empty($price)) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'الاسم والسعر مطلوبان'
+        ]);
+        exit;
+    }
+    
+    // إضافة المنتج
+    $stmt = $pdo->prepare("
+        INSERT INTO products (
+            name, description, price, discount_percentage, 
+            stock_quantity, category, image, commission, status,
+            is_digital, is_new, is_featured, colors, sizes
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+    ");
+    
+    $result = $stmt->execute([
+        $name,
+        $description,
+        $price,
+        $discount_percentage,
+        $stock_quantity,
+        $category,
+        $image_name,
+        $commission,
+        $status,
+        $is_digital,
+        $is_new,
+        $is_featured,
+        $colors,
+        $sizes
+    ]);
+    
+    if ($result) {
+        echo json_encode([
+            'success' => true,
+            'message' => 'تم إضافة المنتج بنجاح',
+            'product_id' => $pdo->lastInsertId()
+        ]);
+    } else {
+        echo json_encode([
+            'success' => false,
+            'message' => 'فشل إضافة المنتج'
+        ]);
+    }
+    
+} catch (PDOException $e) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'خطأ في قاعدة البيانات: ' . $e->getMessage()
+    ]);
+}
+?>

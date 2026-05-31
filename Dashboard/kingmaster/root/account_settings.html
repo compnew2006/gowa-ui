@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>إعدادات الحساب | Kingmaster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: 'Cairo', system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+    .bg-gradient { position: fixed; inset: 0; z-index: -1; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 2.5rem 1.5rem; }
+    .header-bar { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.25rem; }
+    .header-title { font-size:1.8rem; font-weight:700; color: var(--text-light); margin:0; display:flex; align-items:center; gap:.6rem; }
+    .back-link { display:inline-flex; align-items:center; gap:.5rem; padding:.5rem .75rem; border:1px solid var(--glass-border); border-radius:10px; color:#e5e7eb; text-decoration:none; background:var(--glass-bg); }
+    .back-link:hover { background: rgba(255,255,255,.06); }
+
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 2rem; }
+    .grid + .grid { margin-top: 2rem; }
+    @media (max-width: 768px){ .grid{ grid-template-columns: 1fr; } }
+
+    .card { background: var(--glass-bg); border:1px solid var(--glass-border); border-radius: 20px; backdrop-filter: blur(14px); box-shadow: 0 8px 28px rgba(0,0,0,.35); transition: transform .2s ease, box-shadow .2s ease; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+    .card-body { padding: 2rem; }
+    .section-title { color:#fff; font-size:1.15rem; font-weight:600; margin:0 0 1.5rem; display:flex; align-items:center; gap:.6rem; padding-bottom:.75rem; border-bottom: 1px solid rgba(255,255,255,.08); }
+
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:1rem; }
+    .full { grid-column: 1 / -1; }
+    .form-group { margin-bottom: 1rem; }
+    label { color:#e5e7eb; margin-bottom:.5rem; display:block; font-size:.9rem; font-weight:500; }
+    input, select { width:100%; padding:.85rem 1rem; border:1px solid var(--glass-border); border-radius:12px; background: rgba(17,24,39,0.85); color:#fff; font-size:.95rem; transition: all .2s ease; }
+    .btn { padding:.85rem 1.5rem; border:none; border-radius:12px; background: linear-gradient(135deg,var(--primary),var(--primary-light)); color:#fff; font-weight:600; cursor:pointer; font-size:.95rem; transition: all .2s ease; display: inline-flex; align-items:center; gap:.5rem; }
+
+    .avatar-wrap { display:flex; gap:1.5rem; align-items:center; flex-wrap:wrap; }
+    .avatar { width: 110px; height:110px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,.15); cursor: pointer; transition: all .2s ease; }
+    .avatar:hover { transform: scale(1.05); box-shadow: 0 12px 30px rgba(108,92,231,.4); border-color: var(--primary); }
+    .upload-box { border: 2px dashed var(--glass-border); border-radius: 14px; padding: 1rem 1.5rem; text-align:center; cursor:pointer; background: rgba(17,24,39,0.5); transition: all .2s ease; flex:1; min-width: 200px; }
+    .upload-box input[type="file"]{ display:none; }
+    .upload-box .hint{ color:#9ca3af; font-size:.85rem; margin-top:.3rem; }
+    .upload-box:hover{ border-color: var(--primary); background: rgba(108,92,231,.08); transform: translateY(-2px); }
+
+    /* inputs / buttons polish */
+    input:focus, select:focus{ outline:none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(108,92,231,.25); background: rgba(17,24,39,0.95); }
+    .btn:hover{ filter: brightness(1.08); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108,92,231,.4); }
+    .btn:active{ transform: translateY(0); }
+    .btn-actions { margin-top:1.5rem; display:flex; gap:.75rem; justify-content:flex-end; flex-wrap:wrap; }
+    .btn-full { width: 100%; justify-content: center; }
+
+    /* modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:1000; }
+    .modal-overlay.active { display:flex; }
+    .modal { background: var(--glass-bg); border:1px solid var(--glass-border); border-radius: 14px; width:95%; max-width:420px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+    .modal-header{ padding: .8rem 1rem; border-bottom:1px solid rgba(255,255,255,.08); color:#fff; font-weight:700; }
+    .modal-body{ padding: 1rem; }
+    .modal-footer{ padding: .8rem 1rem; border-top:1px solid rgba(255,255,255,.08); display:flex; gap:.5rem; justify-content:flex-end; }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="container">
+    <div class="header-bar">
+      <h1 class="header-title"><i class="fas fa-user-gear"></i> إعدادات الحساب</h1>
+    </div>
+
+    <div class="grid">
+      <!-- بطاقة صورة الحساب -->
+      <div class="card"><div class="card-body">
+        <h3 class="section-title"><i class="fas fa-image"></i> صورة الحساب</h3>
+        <div class="avatar-wrap">
+          <img id="acc_avatar" class="avatar" src="images/avatar.jpg" alt="Avatar" />
+          <div class="upload-box" id="avatar_box">
+            <div style="font-size:1.1rem; margin-bottom:.3rem;"><i class="fas fa-cloud-upload-alt"></i> اختر صورة</div>
+            <div class="hint">PNG, JPG (حد أقصى 2MB)</div>
+            <input type="file" id="avatar_file" accept="image/*" />
+          </div>
+        </div>
+        <div class="btn-actions">
+          <button class="btn btn-full" id="btn_save_avatar"><i class="fas fa-save"></i> حفظ الصورة</button>
+        </div>
+      </div></div>
+
+      <!-- بطاقة تغيير كلمة المرور -->
+      <div class="card"><div class="card-body">
+        <h3 class="section-title"><i class="fas fa-lock"></i> تغيير كلمة المرور</h3>
+        <div class="form-group full">
+          <label>كلمة المرور الحالية</label>
+          <input type="password" id="pwd_current" placeholder="أدخل كلمة المرور الحالية" />
+        </div>
+        <div class="row">
+          <div class="form-group">
+            <label>كلمة مرور جديدة</label>
+            <input type="password" id="pwd_new" placeholder="كلمة مرور قوية" />
+          </div>
+          <div class="form-group">
+            <label>تأكيد كلمة المرور</label>
+            <input type="password" id="pwd_confirm" placeholder="أعد إدخال كلمة المرور" />
+          </div>
+        </div>
+        <div class="btn-actions">
+          <button class="btn btn-full" id="btn_save_pwd"><i class="fas fa-key"></i> حفظ كلمة المرور</button>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="grid">
+      <!-- بطاقة رقم الهاتف والمنطقة الزمنية -->
+      <div class="card" style="grid-column: 1 / -1;"><div class="card-body">
+        <h3 class="section-title"><i class="fas fa-globe"></i> رقم الهاتف والمنطقة الزمنية</h3>
+        <div class="row">
+          <div class="form-group">
+            <label>رقم الهاتف</label>
+            <input type="tel" id="acc_phone" placeholder="مثال: +201234567890" />
+            <button class="btn" id="btn_save_phone" style="margin-top:.75rem; width:100%; justify-content:center;"><i class="fas fa-shield-halved"></i> تحقق وتأكيد الهاتف</button>
+          </div>
+          <div class="form-group">
+            <label>المنطقة الزمنية</label>
+            <select id="acc_tz"></select>
+            <button class="btn" id="btn_save_tz" style="margin-top:.75rem; width:100%; justify-content:center;"><i class="fas fa-clock"></i> حفظ المنطقة الزمنية</button>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <script>
+    // تعبئة المناطق الزمنية
+    (function(){
+      try{
+        const tzs = Intl.supportedValuesOf('timeZone').sort((a,b)=>a.localeCompare(b));
+        const sel = document.getElementById('acc_tz');
+        sel.innerHTML = tzs.map(t=>`<option value="${t}">${t}</option>`).join('');
+      }catch(_){ document.getElementById('acc_tz').innerHTML='<option value="">—</option>'; }
+    })();
+
+    // رفع صورة افاتار
+    const avatarBox = document.getElementById('avatar_box');
+    const avatarFile = document.getElementById('avatar_file');
+    const avatarImg = document.getElementById('acc_avatar');
+    avatarBox.addEventListener('click', ()=> avatarFile.click());
+    avatarImg.addEventListener('click', ()=> avatarFile.click());
+    avatarFile.addEventListener('change', (e)=>{
+      const f=e.target.files && e.target.files[0]; if(!f) return; if (f.size>2*1024*1024){ Swal.fire({icon:'warning', title:'تنبيه', text:'الملف أكبر من 2MB'}); avatarFile.value=''; return; }
+      const url = URL.createObjectURL(f); avatarImg.src = url;
+    });
+    document.getElementById('btn_save_avatar').addEventListener('click', async ()=>{
+      Swal.fire({
+        title:'جارٍ الحفظ',
+        allowOutsideClick:false,
+        allowEscapeKey:false,
+        didOpen: ()=>{
+          Swal.showLoading();
+          setTimeout(()=>{ Swal.close(); Swal.fire({icon:'success', title:'تم', text:'تم حفظ الصورة'}); }, 800);
+        }
+      });
+    });
+
+    // تغيير كلمة المرور
+    document.getElementById('btn_save_pwd').addEventListener('click', ()=>{
+      const cur = document.getElementById('pwd_current').value.trim();
+      const p1 = document.getElementById('pwd_new').value.trim();
+      const p2 = document.getElementById('pwd_confirm').value.trim();
+      if (!cur || !p1 || !p2){ Swal.fire({icon:'warning', title:'تنبيه', text:'يرجى ملء كل الحقول'}); return; }
+      if (p1.length < 6){ Swal.fire({icon:'error', title:'خطأ', text:'كلمة المرور الجديدة قصيرة'}); return; }
+      if (p1 !== p2){ Swal.fire({icon:'error', title:'خطأ', text:'تأكيد كلمة المرور غير مطابق'}); return; }
+      Swal.fire({icon:'success', title:'تم', text:'تم تحديث كلمة المرور'});
+    });
+
+    // حفظ المنطقة الزمنية
+    document.getElementById('btn_save_tz').addEventListener('click', ()=>{
+      const tz = document.getElementById('acc_tz').value;
+      if(!tz){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر منطقة زمنية'}); return; }
+      Swal.fire({icon:'success', title:'تم', text:'تم حفظ المنطقة الزمنية: '+tz});
+    });
+
+    // تغيير الهاتف => فتح مودال OTP
+    document.getElementById('btn_save_phone').addEventListener('click', async ()=>{
+      const phone = document.getElementById('acc_phone').value.trim();
+      if(!phone){ Swal.fire({icon:'warning', title:'تنبيه', text:'أدخل رقم الهاتف'}); return; }
+      const { value: code } = await Swal.fire({
+        title: 'التحقق برمز OTP',
+        input: 'text',
+        inputLabel: 'أدخل الرمز المرسل إلى هاتفك',
+        inputPlaceholder: '123456',
+        confirmButtonText: 'تأكيد',
+        cancelButtonText: 'إلغاء',
+        showCancelButton: true,
+        inputValidator: (v)=> !v && 'أدخل الرمز'
+      });
+      if (code){ Swal.fire({icon:'success', title:'تم', text:'تم تأكيد رقم الهاتف'}); }
+    });
+  </script>
+</body>
+</html>

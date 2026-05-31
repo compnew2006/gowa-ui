@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الأسعار والباقات - King Master</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/rtl-ltr.css">
+    
+    <style>
+        :root {
+            --primary: #6C5CE7;
+            --primary-dark: #5F50D7;
+            --primary-light: #A78BFA;
+            --secondary: #FF6B6B;
+            --success: #4ECDC4;
+            --warning: #FFE66D;
+            --bg-dark: #0A0E27;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-bg-dark: rgba(255, 255, 255, 0.02);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-light: #FFFFFF;
+            --text-light-dark: #B0B0B0;
+            --spacing-xs: 0.5rem;
+            --spacing-sm: 0.75rem;
+            --spacing-md: 1rem;
+            --spacing-lg: 1.5rem;
+            --spacing-xl: 2rem;
+            --spacing-xxl: 3rem;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-full: 9999px;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --transition-fast: all 0.2s ease;
+            --transition-normal: all 0.3s ease;
+            color-scheme: dark;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+        
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0A0E27 0%, #1a1f3a 50%, #0A0E27 100%);
+            z-index: -1;
+        }
+        
+        .section {
+            padding: var(--spacing-xxl) 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .section-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 var(--spacing-xl);
+            width: 100%;
+        }
+        
+        .section-header {
+            text-align: center;
+            margin-bottom: var(--spacing-xxl);
+        }
+        
+        .section-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--text-light), var(--primary-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .section-subtitle {
+            font-size: 1.1rem;
+            color: var(--text-light-dark);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        /* Pricing Grid */
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: var(--spacing-xl);
+            margin-top: var(--spacing-xxl);
+        }
+        
+        .pricing-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-xxl);
+            text-align: center;
+            position: relative;
+            transition: var(--transition-normal);
+            backdrop-filter: blur(10px);
+        }
+        
+        .pricing-card.popular {
+            background: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(108, 92, 231, 0.05));
+            border: 2px solid var(--primary);
+            transform: scale(1.05);
+        }
+        
+        .pricing-card.popular::before {
+            content: 'الأكثر شعبية';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+            color: var(--text-light);
+            padding: var(--spacing-xs) var(--spacing-lg);
+            border-radius: var(--radius-full);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .pricing-card:hover {
+            transform: translateY(-10px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .pricing-card.popular:hover {
+            transform: translateY(-10px) scale(1.05);
+        }
+        
+        .pricing-badge {
+            display: inline-block;
+            background: var(--secondary);
+            color: var(--text-light);
+            padding: var(--spacing-xs) var(--spacing-md);
+            border-radius: var(--radius-full);
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .pricing-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-light);
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .pricing-price {
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        .price-amount {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--primary-light);
+        }
+        
+        .price-currency {
+            font-size: 1.2rem;
+            color: var(--text-light-dark);
+        }
+        
+        .price-period {
+            font-size: 1rem;
+            color: var(--text-light-dark);
+        }
+        
+        .pricing-features {
+            list-style: none;
+            margin-bottom: var(--spacing-xl);
+            text-align: right;
+        }
+        
+        .pricing-features li {
+            padding: var(--spacing-sm) 0;
+            color: var(--text-light-dark);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+        
+        .pricing-features li i {
+            color: var(--success);
+            font-size: 0.9rem;
+        }
+        
+        .pricing-btn {
+            width: 100%;
+            padding: var(--spacing-md) var(--spacing-lg);
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition-fast);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-sm);
+        }
+        
+        .pricing-btn.primary {
+            background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+            color: var(--text-light);
+        }
+        
+        .pricing-btn.primary:hover {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            transform: translateY(-2px);
+        }
+        
+        .pricing-btn.secondary {
+            background: var(--glass-bg);
+            color: var(--text-light);
+            border: 1px solid var(--glass-border);
+        }
+        
+        .pricing-btn.secondary:hover {
+            background: var(--glass-bg-dark);
+            border-color: var(--primary-light);
+        }
+        
+        .discount-offer-badge {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .original-price {
+            position: relative;
+            opacity: 0.7;
+        }
+        
+        .hero-btn {
+            padding: var(--spacing-md) var(--spacing-xl);
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+        
+        .hero-btn.secondary {
+            background: var(--glass-bg);
+            color: var(--text-light);
+            border: 1px solid var(--glass-border);
+        }
+        
+        .hero-btn.secondary:hover {
+            background: var(--glass-bg-dark);
+            border-color: var(--primary-light);
+        }
+        
+        @media (max-width: 768px) {
+            .section-title { font-size: 2rem; }
+            .pricing-grid { grid-template-columns: 1fr; }
+            .pricing-card.popular { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+    
+    <!-- Pricing Section -->
+    <section id="pricing" class="section">
+        <div class="section-container">
+            <div class="section-header">
+                <h2 class="section-title">خطط مرنة تناسب احتياجاتك</h2>
+                <p class="section-subtitle">
+                    اختر الخطة المناسبة لك واستمتع بأقوى أدوات التسويق الرقمي
+                </p>
+            </div>
+            
+            <div class="pricing-grid" id="packages-container">
+                <!-- Loading placeholder -->
+                <div class="pricing-card" style="grid-column: 1 / -1; text-align: center;">
+                    <i class="fas fa-spinner fa-spin fa-2x" style="color: var(--primary); margin-bottom: 1rem;"></i>
+                    <p style="color: var(--text-light);">جاري تحميل الباقات...</p>
+                </div>
+            </div>
+            
+            <!-- Annual Pricing Toggle -->
+            <div style="text-align: center; margin-top: 3rem;">
+                <p style="color: var(--text-light-dark); margin-bottom: 1rem;">
+                    وفر 20% عند الاشتراك السنوي
+                </p>
+                <button id="pricing-toggle" class="hero-btn secondary" style="margin: 0;">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>عرض الأسعار السنوية</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="js/i18n.js"></script>
+    
+    <script>
+        let packagesData = [];
+        let isAnnualPricing = false;
+        let currentLanguage = 'ar';
+        
+        // جلب اللغة الحالية
+        function getCurrentLanguage() {
+            return localStorage.getItem('language') || 'ar';
+        }
+        
+        // تحميل الباقات من API
+        async function loadPackagesFromAPI() {
+            try {
+                const response = await fetch('get_packages.php');
+                const result = await response.json();
+                
+                if (result.success && result.data && result.data.length > 0) {
+                    packagesData = result.data;
+                    renderPackages();
+                } else {
+                    renderFallbackPackages();
+                }
+            } catch (error) {
+                console.error('Error loading packages:', error);
+                renderFallbackPackages();
+            }
+        }
+        
+        // دالة عرض الباقات
+        function renderPackages() {
+            const container = document.getElementById('packages-container');
+            if (!container || !packagesData.length) {
+                renderFallbackPackages();
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            packagesData.forEach((packageData, index) => {
+                const packageCard = createPackageCard(packageData, index);
+                container.appendChild(packageCard);
+            });
+        }
+        
+        // دالة إنشاء بطاقة باقة
+        function createPackageCard(packageData, index) {
+            const div = document.createElement('div');
+            const isPopular = packageData.is_popular;
+            
+            const nameKey = `name_${currentLanguage}`;
+            const badgeKey = `badge_${currentLanguage}`;
+            const featuresKey = currentLanguage;
+            
+            const packageName = packageData[nameKey] || packageData.name_ar;
+            const packageBadge = packageData[badgeKey] || packageData.badge_ar;
+            const packageFeatures = packageData.features ? 
+                (packageData.features[featuresKey] || packageData.features.ar || []) : [];
+            
+            // الأسعار مع الخصم
+            const hasDiscount = packageData.has_discount;
+            let originalPrice, discountAmount, finalPrice, discountPercentage;
+            
+            if (isAnnualPricing) {
+                originalPrice = packageData.yearly_price;
+                discountAmount = hasDiscount ? packageData.yearly_discount : 0;
+                finalPrice = originalPrice - discountAmount;
+                discountPercentage = packageData.yearly_discount_percentage;
+            } else {
+                originalPrice = packageData.monthly_price;
+                discountAmount = hasDiscount ? packageData.monthly_discount : 0;
+                finalPrice = originalPrice - discountAmount;
+                discountPercentage = packageData.monthly_discount_percentage;
+            }
+            
+            const displayPrice = hasDiscount && discountAmount > 0 ? finalPrice : originalPrice;
+            const priceLabel = isAnnualPricing ? '/سنوياً' : '/شهرياً';
+            
+            div.className = `pricing-card${isPopular ? ' popular' : ''}`;
+            
+            const icons = ['fas fa-rocket', 'fas fa-crown', 'fas fa-building'];
+            const buttonClasses = ['secondary', 'primary', 'secondary'];
+            
+            div.innerHTML = `
+                ${isPopular ? '<div class="popular-badge"><span>الأكثر شعبية</span></div>' : ''}
+                
+                ${hasDiscount && discountAmount > 0 ? `<div class="discount-offer-badge" style="position: absolute; top: 10px; left: 10px; background: linear-gradient(45deg, #EF4444, #DC2626); color: white; padding: 5px 10px; border-radius: 15px; font-size: 0.8em; font-weight: bold; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3); z-index: 2;">
+                    خصم ${Math.round(discountPercentage)}%
+                </div>` : ''}
+                
+                <div class="pricing-badge">${packageBadge}</div>
+                <h3 class="pricing-title">${packageName}</h3>
+                
+                <div class="pricing-price">
+                    ${hasDiscount && discountAmount > 0 ? `
+                        <div class="discount-container">
+                            <span class="original-price" style="text-decoration: line-through; color: #9CA3AF; font-size: 0.9em; margin-bottom: 5px; display: block;">
+                                ${originalPrice} ${packageData.currency}
+                            </span>
+                            <div class="discounted-price-container" style="display: flex; align-items: center; gap: 10px; justify-content: center;">
+                                <span class="price-amount" style="color: #EF4444; font-weight: bold;">${displayPrice}</span>
+                                <span class="price-currency" style="color: #EF4444;">${packageData.currency}</span>
+                                <span class="discount-badge" style="background: #EF4444; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7em; font-weight: bold;">
+                                    -${Math.round(discountPercentage)}%
+                                </span>
+                            </div>
+                        </div>
+                    ` : `
+                        <span class="price-amount">${displayPrice}</span>
+                        <span class="price-currency">${packageData.currency}</span>
+                    `}
+                    <div class="price-period">${priceLabel}</div>
+                </div>
+                
+                <div class="package-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 15px 0; padding: 12px; background: rgba(255, 255, 255, 0.05); border-radius: 8px;">
+                    <div class="stat-item" style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-light-dark);">
+                        <i class="fas fa-star" style="color: var(--primary-light); font-size: 0.85rem;"></i>
+                        <span>${packageData.points || 0} نقطة</span>
+                    </div>
+                    <div class="stat-item" style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-light-dark);">
+                        <i class="fas fa-envelope" style="color: var(--primary-light); font-size: 0.85rem;"></i>
+                        <span>${packageData.messages || 0} رسالة</span>
+                    </div>
+                    <div class="stat-item" style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-light-dark);">
+                        <i class="fas fa-user" style="color: var(--primary-light); font-size: 0.85rem;"></i>
+                        <span>${packageData.accounts || 1} حساب</span>
+                    </div>
+                </div>
+                
+                <div class="package-platforms" style="display: flex; justify-content: center; gap: 8px; margin: 15px 0;">
+                    ${(packageData.supported_platforms || ['facebook', 'whatsapp', 'instagram']).map(platform => {
+                        const platformIcons = {
+                            facebook: { icon: 'fab fa-facebook-f', color: '#1877F2' },
+                            whatsapp: { icon: 'fab fa-whatsapp', color: '#25D366' },
+                            instagram: { icon: 'fab fa-instagram', color: '#E4405F' },
+                            telegram: { icon: 'fab fa-telegram-plane', color: '#0088CC' },
+                            b2b: { icon: 'fas fa-building', color: '#6366F1' }
+                        };
+                        const platformData = platformIcons[platform] || { icon: 'fas fa-question', color: '#6B7280' };
+                        return `<i class="${platformData.icon}" style="width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; background: rgba(255, 255, 255, 0.1); color: ${platformData.color};" title="${platform}"></i>`;
+                    }).join('')}
+                </div>
+                
+                <ul class="pricing-features">
+                    ${packageFeatures.map(feature => `
+                        <li><i class="fas fa-check"></i> <span>${feature}</span></li>
+                    `).join('')}
+                </ul>
+                
+                <a href="register.html" class="pricing-btn ${buttonClasses[index] || 'secondary'}">
+                    <i class="${icons[index] || 'fas fa-arrow-left'}"></i>
+                    <span>اختر هذه الخطة</span>
+                </a>
+            `;
+            
+            return div;
+        }
+        
+        // دالة عرض الباقات الافتراضية
+        function renderFallbackPackages() {
+            const container = document.getElementById('packages-container');
+            if (!container) return;
+            
+            container.innerHTML = '<div class="pricing-card" style="grid-column: 1 / -1; text-align: center;"><i class="fas fa-exclamation-triangle fa-2x" style="color: var(--warning); margin-bottom: 1rem;"></i><p style="color: var(--text-light);">لا توجد باقات متاحة حالياً</p></div>';
+        }
+        
+        // Pricing toggle functionality
+        document.getElementById('pricing-toggle')?.addEventListener('click', function() {
+            isAnnualPricing = !isAnnualPricing;
+            this.classList.toggle('active', isAnnualPricing);
+            
+            renderPackages();
+            
+            const toggleText = this.querySelector('span');
+            if (toggleText) {
+                toggleText.textContent = isAnnualPricing ? 'عرض الأسعار الشهرية' : 'عرض الأسعار السنوية';
+            }
+        });
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            currentLanguage = getCurrentLanguage();
+            loadPackagesFromAPI();
+        });
+    </script>
+</body>
+</html>

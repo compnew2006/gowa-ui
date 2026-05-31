@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>King Master - إدارة الحملات</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/rtl-ltr.css">
+  <style>
+    .content-admin-container { min-height:100vh; position:relative; z-index:1; }
+    .main-content { padding:0; padding-right:0; }
+    .content-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem; flex-wrap:wrap; gap:1rem; }
+    .content-title { font-size:2rem; font-weight:700; color:var(--text-light); margin:0; }
+    .content-actions { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+    .search-box { position:relative; min-width:300px; }
+    .search-box input { width:100%; padding:0.75rem 1rem 0.75rem 3rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:0.9rem; }
+    .search-box i { position:absolute; right:1rem; top:50%; transform:translateY(-50%); color:var(--text-light-dark); }
+    .add-content-btn { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; border:none; padding:0.75rem 1.5rem; border-radius:var(--radius-md); font-weight:600; display:flex; align-items:center; gap:.5rem; cursor:pointer; transition:all .3s ease; }
+    .add-content-btn:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:2rem; }
+    .stat-card { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; text-align:center; backdrop-filter:blur(10px); }
+    .stat-number { font-size:2rem; font-weight:700; color:var(--primary-light); margin-bottom:.5rem; display:block; }
+    .stat-label { color:var(--text-light-dark); font-size:.9rem; }
+    .stat-col-12 { grid-column: 1 / -1; }
+
+    .filter-section { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); padding:1.5rem; margin-bottom:2rem; backdrop-filter:blur(10px); }
+    .filter-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; align-items:end; }
+    .filter-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; font-size:.9rem; }
+    .filter-group select, .filter-group input { width:100%; padding:.75rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    :root { color-scheme: dark; }
+    .filter-group select, .form-group select { background-color: rgba(17,24,39,0.85); color: var(--text-light); }
+    .filter-group select option, .form-group select option, .filter-group select optgroup, .form-group select optgroup { background-color: #111827; color: #F3F4F6; }
+    .filter-group select:focus, .form-group select:focus { background-color: rgba(17,24,39,0.95); border-color: var(--primary); }
+    .filter-actions { display:flex; gap:.5rem; flex-direction:column; }
+    .filter-btn { padding:.5rem 1rem; border:1px solid var(--glass-border); border-radius:var(--radius-md); cursor:pointer; transition:all .3s ease; font-size:.8rem; white-space:nowrap; text-align:center; background: var(--glass-bg); color: var(--text-light-dark); }
+    .btn-delete-selected { background: rgba(239,68,68,.2); color:#EF4444; border-color:#EF4444; }
+    .btn-delete-selected:hover { background:#EF4444; color:#fff; }
+
+    .contents-table-container { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); overflow:hidden; backdrop-filter:blur(10px); }
+    .contents-table { width:100%; border-collapse:collapse; }
+    .contents-table th, .contents-table td { padding:1rem; text-align:right; border-bottom:1px solid rgba(255,255,255,.1); }
+    .contents-table th { background:rgba(108,92,231,.1); color:var(--text-light); font-weight:600; position:sticky; top:0; z-index:10; }
+    .contents-table td { color:var(--text-light-dark); }
+    .contents-table tr:hover { background:rgba(255,255,255,.05); }
+    .checkbox-cell { width:40px; text-align:center; }
+    .checkbox-cell input[type="checkbox"] { width:18px; height:18px; accent-color:var(--primary); }
+    .action-buttons { display:flex; gap:.5rem; align-items:center; }
+    .action-btn { width:32px; height:32px; border:none; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .3s ease; font-size:.8rem; }
+    .btn-edit { background:rgba(59,130,246,.2); color:#3B82F6; border:1px solid #3B82F6; }
+    .btn-edit:hover { background:#3B82F6; color:#fff; }
+    .btn-save { background:rgba(99,102,241,.2); color:#6366F1; border:1px solid #6366F1; }
+    .btn-save:hover { background:#6366F1; color:#fff; }
+    .btn-start { background:rgba(16,185,129,.2); color:#10B981; border:1px solid #10B981; }
+    .btn-start:hover { background:#10B981; color:#fff; }
+    .btn-pause { background:rgba(245,158,11,.2); color:#F59E0B; border:1px solid #F59E0B; }
+    .btn-pause:hover { background:#F59E0B; color:#fff; }
+.btn-stop { background:rgba(239,68,68,.2); color:#EF4444; border:1px solid #EF4444; }
+    .btn-stop:hover { background:#EF4444; color:#fff; }
+    .btn-restart { background: rgba(6,182,212,.2); color:#06B6D4; border:1px solid #06B6D4; }
+    .btn-restart:hover { background:#06B6D4; color:#fff; }
+    .btn-delete { background:rgba(239,68,68,.2); color:#EF4444; border:1px solid #EF4444; }
+    .btn-delete:hover { background:#EF4444; color:#fff; }
+
+    .chip { display:inline-flex; align-items:center; background:rgba(255,255,255,.08); border:1px solid var(--glass-border); border-radius:999px; padding:.25rem .5rem; margin:.125rem; gap:.35rem; }
+    .chip .x { cursor:pointer; color:#EF4444; }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); display:flex; align-items:center; justify-content:center; z-index:1000; opacity:0; visibility:hidden; transition:all .3s ease; }
+    .modal-overlay.active { opacity:1; visibility:visible; }
+    .modal { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-lg); backdrop-filter:blur(20px); max-width:800px; width:95%; max-height:90vh; overflow-y:auto; transform:scale(.95); transition:all .3s ease; }
+    .modal-overlay.active .modal { transform:scale(1); }
+    .modal-header { padding:1rem 1.5rem; border-bottom:1px solid rgba(255,255,255,.1); display:flex; justify-content:space-between; align-items:center; }
+    .modal-title { margin:0; color:var(--text-light); font-size:1.25rem; font-weight:600; }
+    .modal-close { background:none; border:none; color:var(--text-light-dark); font-size:1.5rem; cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-sm); }
+    .modal-body { padding:1.25rem 1.5rem; }
+    .form-group { margin-bottom:1rem; }
+    .form-group label { display:block; margin-bottom:.5rem; color:var(--text-light); font-weight:500; }
+    .form-group input, .form-group select { width:100%; padding:.75rem; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-md); color:var(--text-light); font-size:.9rem; }
+    .modal-footer { padding:1rem 1.5rem; border-top:1px solid rgba(255,255,255,.1); display:flex; gap:.5rem; justify-content:flex-end; flex-wrap:wrap; }
+    .btn { padding:0.65rem 1.25rem; border:none; border-radius:var(--radius-md); font-weight:600; cursor:pointer; transition:all .3s ease; display:flex; align-items:center; gap:.5rem; }
+    .btn-primary { background:linear-gradient(135deg, var(--primary), var(--primary-light)); color:#fff; }
+    .btn-secondary { background:var(--glass-bg); color:var(--text-light-dark); border:1px solid var(--glass-border); }
+    .btn-names-toggle { width:100%; justify-content:center; }
+
+    .names-select { position:relative; }
+    .names-panel { display:none; position:absolute; right:0; left:0; background: rgba(17,24,39,0.95); border:1px solid var(--glass-border); border-radius:var(--radius-md); padding:.5rem; max-height:240px; overflow:auto; z-index:1001; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+    .names-panel.active { display:block; }
+    .names-row { display:flex; align-items:center; justify-content:space-between; padding:.25rem .5rem; border-bottom:1px solid rgba(255,255,255,.06); }
+    .names-row:last-child { border-bottom:none; }
+    .names-row label { color: var(--text-light); }
+    .names-row input[type="checkbox"] { accent-color: var(--primary); }
+    .names-actions { display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem; }
+    .names-actions label { color: var(--text-light); }
+
+    @media (max-width:768px){ .content-header{flex-direction:column; align-items:stretch;} .content-actions{width:100%;} .filter-row{grid-template-columns:1fr;} .contents-table-container{overflow-x:auto;} .contents-table{min-width:900px;} }
+  </style>
+</head>
+<body class="rtl ar">
+  <div class="bg-gradient"></div>
+  <div class="dashboard-container content-admin-container">
+    <div class="main-content" style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+      <div class="content-header">
+        <div class="content-title"><i class="fas fa-bullhorn" style="margin-left:.5rem;"></i> إدارة الحملات</div>
+        <div class="content-actions">
+          <div class="search-box">
+            <input type="text" id="searchInput" placeholder="ابحث عن حملة...">
+            <i class="fas fa-search"></i>
+          </div>
+          <button class="add-content-btn" onclick="openCampaignModal()"><i class="fas fa-plus"></i> إنشاء حملة استخراج</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+                <div class="stat-card stat-col-12"><span class="stat-number" id="statSumCount">0</span>
+                  <div class="stat-label">مجموع العدد</div>
+                </div>
+
+        <div class="stat-card"><span class="stat-number" id="statTotal">0</span><div class="stat-label">إجمالي الحملات</div></div>
+        <div class="stat-card"><span class="stat-number" id="statPending">0</span><div class="stat-label">انتظار</div></div>
+        <div class="stat-card"><span class="stat-number" id="statRunning">0</span><div class="stat-label">جاري</div></div>
+        <div class="stat-card"><span class="stat-number" id="statPaused">0</span><div class="stat-label">إيقاف مؤقت</div></div>
+        <div class="stat-card"><span class="stat-number" id="statStopped">0</span><div class="stat-label">إيقاف</div></div>
+        <div class="stat-card"><span class="stat-number" id="statFinished">0</span><div class="stat-label">انتهاء</div></div>
+      </div>
+
+      <div class="filter-section">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label>الحالة</label>
+            <select id="statusFilter">
+              <option value="">الكل</option>
+              <option value="pending">انتظار</option>
+              <option value="running">جاري</option>
+              <option value="paused">إيقاف مؤقت</option>
+              <option value="stopped">إيقاف</option>
+              <option value="finished">انتهاء</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>عدد الحملات المعروضة</label>
+            <div class="count-display"><span class="count-number" id="displayCount">0</span> <span>حملة</span></div>
+          </div>
+          <div class="filter-actions">
+            <button class="filter-btn btn-delete-selected" onclick="deleteSelectedCampaigns()"><i class="fas fa-trash"></i> حذف المحدد</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="contents-table-container">
+        <table class="contents-table">
+          <thead>
+            <tr>
+              <th class="checkbox-cell"><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+              <th>المعرف (12 رقم)</th>
+              <th>اسم الحملة</th>
+              <th>الحالة</th>
+              <th>العدد</th>
+              <th>آخر تعديل</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="campaignsTableBody">
+            <tr><td colspan="7" class="table-loading"><div class="loading-spinner"></div><div>جاري تحميل الحملات...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="campaignModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTitle">إنشاء حملة</h3>
+        <button class="modal-close" onclick="closeCampaignModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>اسم الحملة</label>
+          <input type="text" id="cmpName" placeholder="مثال: حملة استخراج 1">
+        </div>
+        <div class="form-group">
+          <label>الحسابات</label>
+          <div class="names-select">
+            <button type="button" class="btn btn-secondary btn-names-toggle" onclick="toggleNamesPanel()"><i class="fas fa-user-check"></i> أختار حساب</button>
+            <div class="names-panel" id="namesPanel">
+              <div class="names-actions">
+                <label style="display:flex; align-items:center; gap:.5rem;"><input type="checkbox" id="namesSelectAll" onchange="toggleAllNames(this.checked)"> تحديد الكل</label>
+                <button class="btn btn-secondary" type="button" onclick="clearSelectedNames()"><i class="fas fa-broom"></i> مسح الكل</button>
+              </div>
+              <div id="namesList"></div>
+            </div>
+          </div>
+          <div id="selectedNames" style="margin-top:.5rem;"></div>
+        </div>
+        <div class="form-group">
+          <label>المعرف</label>
+          <input type="text" id="cmpNumber" placeholder="1000365445787646">
+        </div>
+        <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem;">
+          <div>
+            <label>من</label>
+            <input type="number" id="cmpFrom" placeholder="0">
+          </div>
+          <div>
+            <label>إلى</label>
+            <input type="number" id="cmpTo" placeholder="0">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCampaignModal()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveCampaign()"><i class="fas fa-save"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const statusMap = {
+      pending: 'انتظار', running: 'جاري', paused: 'إيقاف مؤقت', stopped: 'إيقاف', finished: 'انتهاء'
+    };
+    let campaigns = [];
+    let filtered = [];
+    let selected = [];
+    let editId = null; // for editing existing
+    let baseNames = [ 'الاسم 1', 'الاسم 2', 'الاسم 3', 'الاسم 4', 'الاسم 5', 'الاسم 6', 'الاسم 7', 'الاسم 8', 'الاسم 9', 'الاسم 10', 'الاسم 11' ]; // يمكنك إضافة عدد غير محدود من الأسماء من خلال الحقل أعلاه
+    let tempSelectedNames = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadCampaigns();
+      document.getElementById('searchInput').addEventListener('input', applyFilters);
+      document.getElementById('statusFilter').addEventListener('change', applyFilters);
+      renderNamesList();
+      document.addEventListener('click', (e)=>{ const p=document.getElementById('namesPanel'); if(!p) return; const sel=p.contains(e.target); const btn=e.target.closest('.btn'); if(!sel && (!btn || !btn.closest('.names-select'))) p.classList.remove('active'); });
+    });
+
+    function toggleNamesPanel(){ const p=document.getElementById('namesPanel'); if(p) p.classList.toggle('active'); }
+    function renderNamesList(){
+      const list = document.getElementById('namesList'); if(!list) return;
+      const setSel = new Set(tempSelectedNames);
+      list.innerHTML = baseNames.map((n,i)=>`
+        <div class="names-row">
+          <label style="display:flex; align-items:center; gap:.5rem;">
+            <input type="checkbox" ${setSel.has(n)?'checked':''} data-name="${escapeHtml(n)}" onchange="onToggleName(this.checked, '${escapeHtml(n)}')"> ${escapeHtml(n)}
+          </label>
+        </div>
+      `).join('');
+    }
+    function onToggleName(chk, name){
+      if (chk) { if (!tempSelectedNames.includes(name)) tempSelectedNames.push(name); }
+      else { tempSelectedNames = tempSelectedNames.filter(x=>x!==name); }
+      renderSelectedNames();
+    }
+    function toggleAllNames(checked){
+      tempSelectedNames = checked ? [...baseNames] : [];
+      document.querySelectorAll('#namesList input[type="checkbox"]').forEach(cb=> cb.checked = checked);
+      renderSelectedNames();
+    }
+    function renderSelectedNames(){
+      const c = document.getElementById('selectedNames'); if(!c) return;
+      c.innerHTML = tempSelectedNames.map(n=>`<span class="chip">${escapeHtml(n)} <i class="fas fa-times x" onclick="removeName('${escapeHtml(n)}')"></i></span>`).join('');
+    }
+    function removeName(name){ tempSelectedNames = tempSelectedNames.filter(x=>x!==name); const cb = [...document.querySelectorAll('#namesList input[type="checkbox"]')].find(el=>el.dataset.name===name); if (cb) cb.checked=false; renderSelectedNames(); }
+    function clearSelectedNames(){ tempSelectedNames=[]; const selAll=document.getElementById('namesSelectAll'); if (selAll) selAll.checked=false; document.querySelectorAll('#namesList input[type="checkbox"]').forEach(cb=> cb.checked=false); renderSelectedNames(); }
+
+
+    async function loadCampaigns(){
+      try{
+        const res = await fetch('api/campaigns_api.php');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message||'fail');
+        campaigns = data.data || [];
+        filtered = campaigns;
+        renderTable();
+        updateStats();
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:'فشل تحميل الحملات'}); }
+    }
+
+    function applyFilters(){
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const st = document.getElementById('statusFilter').value;
+      filtered = campaigns.filter(c=>{
+        const mq = (c.name||'').toLowerCase().includes(q) || (String(c.campaign_uid||'')).includes(q);
+        const ms = !st || (c.status||'pending')===st;
+        return mq && ms;
+      });
+      renderTable();
+      updateStats();
+    }
+
+    function renderTable(){
+      const tbody = document.getElementById('campaignsTableBody');
+      if (!filtered.length){ tbody.innerHTML = `<tr><td colspan="7" class="table-loading"><i class=\"fas fa-list\" style=\"color:var(--text-light-dark);margin-bottom:1rem;\"></i><div>لا توجد حملات</div></td></tr>`; return; }
+      tbody.innerHTML = filtered.map(r=>`
+        <tr>
+          <td class="checkbox-cell"><input type="checkbox" onchange="toggleSelection(${r.id}, this.checked)" ${selected.includes(r.id)?'checked':''}></td>
+          <td style="font-family: ui-monospace, monospace; color:var(--text-light);">${escapeHtml(r.campaign_uid)}</td>
+          <td style="color:var(--text-light); font-weight:600;">${escapeHtml(r.name)}</td>
+          <td><span class="category-badge">${statusMap[r.status||'pending']||'انتظار'}</span></td>
+          <td>${Number(r.count||0)}</td>
+          <td style="font-size:.85rem; color: var(--text-light-dark);">${formatDate(r.updated_at)}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="action-btn btn-start" onclick="setStatus(${r.id}, 'running')" title="بدأ"><i class="fas fa-play"></i></button>
+              <button class="action-btn btn-pause" onclick="setStatus(${r.id}, 'paused')" title="إيقاف مؤقت"><i class="fas fa-pause"></i></button>
+              <button class="action-btn btn-stop" onclick="setStatus(${r.id}, 'stopped')" title="إيقاف"><i class="fas fa-stop"></i></button>
+              <button class="action-btn btn-restart" onclick="setStatus(${r.id}, 'pending')" title="إعادة تشغيل"><i class="fas fa-rotate-right"></i></button>
+              <button class="action-btn btn-edit" onclick="editCampaign(${r.id})" title="تعديل"><i class="fas fa-edit"></i></button>
+              <button class="action-btn btn-save" onclick="saveRow(${r.id})" title="حفظ"><i class="fas fa-save"></i></button>
+              <button class="action-btn btn-delete" onclick="deleteCampaign(${r.id})" title="حذف"><i class="fas fa-trash"></i></button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+      document.getElementById('displayCount').textContent = filtered.length;
+    }
+
+    function updateStats(){
+      document.getElementById('statTotal').textContent = campaigns.length;
+      document.getElementById('statPending').textContent = campaigns.filter(c=> (c.status||'pending')==='pending').length;
+      document.getElementById('statRunning').textContent = campaigns.filter(c=> (c.status||'pending')==='running').length;
+      document.getElementById('statPaused').textContent = campaigns.filter(c=> (c.status||'pending')==='paused').length;
+      document.getElementById('statStopped').textContent = campaigns.filter(c=> (c.status||'pending')==='stopped').length;
+      document.getElementById('statFinished').textContent = campaigns.filter(c=> (c.status||'pending')==='finished').length;
+      const sumCount = campaigns.reduce((s, c) => s + (Number(c.count) || 0), 0);
+      const el = document.getElementById('statSumCount'); if (el) el.textContent = sumCount;
+    }
+
+    function toggleSelectAll(){
+      const all = document.getElementById('selectAll');
+      const boxes = document.querySelectorAll('#campaignsTableBody input[type="checkbox"]');
+      boxes.forEach(cb=>{ cb.checked = all.checked; const id=parseInt(cb.getAttribute('onchange').match(/\d+/)[0]); toggleSelection(id, cb.checked); });
+    }
+    function toggleSelection(id, checked){ if (checked) { if(!selected.includes(id)) selected.push(id); } else { selected = selected.filter(x=>x!==id); } }
+
+    function openCampaignModal(){
+      editId = null;
+      document.getElementById('modalTitle').textContent = 'إنشاء حملة';
+      document.getElementById('cmpName').value='';
+      document.getElementById('cmpNumber').value='';
+      document.getElementById('cmpFrom').value='';
+      document.getElementById('cmpTo').value='';
+      tempSelectedNames = [];
+      renderSelectedNames();
+      document.getElementById('campaignModal').classList.add('active');
+    }
+    function closeCampaignModal(){ document.getElementById('campaignModal').classList.remove('active'); }
+
+    async function saveCampaign(){
+      const name = document.getElementById('cmpName').value.trim();
+      const number = document.getElementById('cmpNumber').value.trim();
+      const range_from = document.getElementById('cmpFrom').value.trim();
+      const range_to = document.getElementById('cmpTo').value.trim();
+      if (!name){ Swal.fire({icon:'warning', title:'تنبيه', text:'أدخل اسم الحملة'}); return; }
+      // تحقق من وجود أسماء مختارة وعلى الأقل اسم واحد
+      if (!Array.isArray(tempSelectedNames) || tempSelectedNames.length===0){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر اسمًا واحدًا على الأقل'}); return; }
+      const missing = tempSelectedNames.filter(n=> !baseNames.includes(n));
+      if (missing.length>0){ Swal.fire({icon:'warning', title:'تنبيه', html:`بعض الأسماء غير موجودة في القائمة:<br>${missing.map(escapeHtml).join(', ')}`}); return; }
+      const names = tempSelectedNames.slice();
+      const payload = { name, names, number: number? Number(number):0, range_from: range_from? Number(range_from):null, range_to: range_to? Number(range_to):null };
+      try{
+        const isEdit = !!editId;
+        const url = isEdit ? 'api/campaigns_api.php' : 'api/campaigns_api.php';
+        const method = isEdit ? 'PUT' : 'POST';
+        const body = isEdit ? { id: editId, ...payload } : payload;
+        console.log('Campaign save payload:', body);
+        const res = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message||'فشل الحفظ');
+        closeCampaignModal();
+        await loadCampaigns();
+        Swal.fire({icon:'success', title:'تم', text: isEdit? 'تم التعديل' : 'تم حفظ الحملة'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); }
+    }
+
+    async function editCampaign(id){
+      const c = campaigns.find(x=>x.id===id); if (!c) return;
+      editId = id;
+      document.getElementById('modalTitle').textContent = 'تعديل الحملة';
+      document.getElementById('cmpName').value = c.name || '';
+      document.getElementById('cmpNumber').value = c.number || '';
+      document.getElementById('cmpFrom').value = c.range_from || '';
+      document.getElementById('cmpTo').value = c.range_to || '';
+      try{ tempSelectedNames = Array.isArray(c.names)? c.names : JSON.parse(c.names||'[]'); }catch{ tempSelectedNames = []; }
+      renderSelectedNames();
+      document.getElementById('campaignModal').classList.add('active');
+    }
+
+    async function saveRow(id){
+      const c = campaigns.find(x=>x.id===id); if (!c) return;
+      try{
+        const res = await fetch('api/campaigns_api.php', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status: c.status, count: c.count }) });
+        const data = await res.json(); if (!data.success) throw new Error(data.message||'فشل الحفظ');
+        await loadCampaigns();
+        Swal.fire({icon:'success', title:'تم', text:'تم حفظ الحملة'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحفظ'}); }
+    }
+
+    async function setStatus(id, status){
+      try{
+        const res = await fetch('api/campaigns_api.php', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status }) });
+        const data = await res.json(); if (!data.success) throw new Error(data.message||'فشل التحديث');
+        await loadCampaigns();
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل تحديث الحالة'}); }
+    }
+
+    async function deleteCampaign(id){
+      const c = campaigns.find(x=>x.id===id); if (!c) return;
+      const res = await Swal.fire({ title:'حذف حملة', html:`هل تريد حذف <strong>${escapeHtml(c.name)}</strong>?`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' });
+      if (!res.isConfirmed) return;
+      try{
+        const r = await fetch(`api/campaigns_api.php/${id}`, { method:'DELETE' });
+        const data = await r.json(); if (!data.success) throw new Error(data.message||'فشل الحذف');
+        selected = selected.filter(x=>x!==id);
+        await loadCampaigns();
+        Swal.fire({icon:'success', title:'تم', text:'تم الحذف'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); }
+    }
+
+    async function deleteSelectedCampaigns(){
+      if (selected.length===0){ Swal.fire({icon:'warning', title:'تنبيه', text:'اختر حملات للحذف'}); return; }
+      const res = await Swal.fire({ title:'حذف متعدد', html:`سيتم حذف <strong>${selected.length}</strong> حملة. متابعة؟`, icon:'warning', showCancelButton:true, confirmButtonText:'نعم، حذف', cancelButtonText:'إلغاء', confirmButtonColor:'#d33' });
+      if (!res.isConfirmed) return;
+      try{
+        const r = await fetch('api/campaigns_api.php', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ids: selected }) });
+        const data = await r.json(); if (!data.success) throw new Error(data.message||'فشل الحذف');
+        selected = []; document.getElementById('selectAll').checked=false;
+        await loadCampaigns();
+        Swal.fire({icon:'success', title:'تم', text:'تم حذف الحملات المحددة'});
+      }catch(e){ Swal.fire({icon:'error', title:'خطأ', text:e.message||'فشل الحذف'}); }
+    }
+
+    function formatDate(s){ if(!s) return '--'; const d=new Date(s); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}); }
+    function escapeHtml(s){ const map={ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }; return String(s||'').replace(/[&<>"']/g, ch=>map[ch]); }
+  </script>
+</body>
+</html>

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إعدادات عمولات الباقات - MLM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 2.5rem;
+        }
+
+        .packages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .package-card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .package-header {
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .package-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .package-price {
+            font-size: 1.2rem;
+            color: #764ba2;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+
+        .levels-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .levels-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .level-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .level-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .level-label {
+            font-weight: 600;
+            color: #667eea;
+            min-width: 100px;
+            font-size: 15px;
+            white-space: nowrap;
+        }
+
+        .level-item input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            min-width: 0;
+        }
+        
+        .level-item input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102,126,234,0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .alert {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 30px;
+            border-radius: 10px;
+            display: none;
+            z-index: 1000;
+            min-width: 300px;
+            text-align: center;
+        }
+
+        .alert.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateX(-50%) translateY(-100%); }
+            to { transform: translateX(-50%) translateY(0); }
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            padding: 40px;
+            font-size: 1.2rem;
+        }
+
+        .summary {
+            background: rgba(255,255,255,0.9);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .summary-item:last-child {
+            border-bottom: none;
+            font-weight: 700;
+            color: #667eea;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i class="fas fa-sliders-h"></i> إعدادات عمولات الباقات</h1>
+
+        <div id="alert" class="alert"></div>
+
+        <div id="packages_container" class="packages-grid">
+            <div class="loading">
+                <i class="fas fa-spinner fa-spin" style="font-size: 2rem;"></i>
+                <div>جاري التحميل...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        let packagesData = [];
+
+        async function loadPackages() {
+            try {
+                const [packagesRes, settingsRes] = await Promise.all([
+                    fetch('api/get_packages.php'),
+                    fetch('api/get_package_mlm_settings.php')
+                ]);
+
+                const packagesData = await packagesRes.json();
+                const settingsData = await settingsRes.json();
+
+                if (packagesData.success && settingsData.success) {
+                    displayPackages(packagesData.packages, settingsData.settings);
+                } else {
+                    showError('فشل تحميل البيانات');
+                }
+            } catch (error) {
+                showError('خطأ في الاتصال بالخادم');
+                console.error(error);
+            }
+        }
+
+        function displayPackages(packages, settings) {
+            const container = document.getElementById('packages_container');
+            container.innerHTML = '';
+
+            packages.forEach(pkg => {
+                const setting = settings.find(s => s.package_id == pkg.id) || {};
+                const card = createPackageCard(pkg, setting);
+                container.appendChild(card);
+            });
+        }
+
+        function createPackageCard(pkg, setting) {
+            const div = document.createElement('div');
+            div.className = 'package-card';
+            
+            const maxLevels = setting.max_levels || 5;
+            let levelsHTML = '';
+            
+            for (let i = 1; i <= maxLevels; i++) {
+                const value = setting[`level_${i}_percentage`] || 0;
+                levelsHTML += `
+                    <div class="level-item">
+                        <span class="level-label">المستوى ${i}</span>
+                        <input type="number" 
+                               step="0.01" 
+                               min="0" 
+                               max="100" 
+                               value="${value}" 
+                               data-package="${pkg.id}" 
+                               data-level="${i}">
+                        <span style="min-width: 30px; font-size: 16px; font-weight: 600; color: #764ba2;">%</span>
+                    </div>
+                `;
+            }
+
+            div.innerHTML = `
+                <div class="package-header">
+                    <div class="package-name">${pkg.name}</div>
+                    <div class="package-price">${pkg.monthly_price || 0} ر.س / شهرياً</div>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <i class="fas fa-layer-group"></i> عدد المستويات (1-10)
+                    </label>
+                    <input type="number" min="1" max="10" value="${maxLevels}" 
+                           onchange="updateMaxLevels(${pkg.id}, this.value, '${pkg.name}')">
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <i class="fas fa-money-bill-wave"></i> العمولة المباشرة (بالمبلغ)
+                    </label>
+                    <input type="number" step="0.01" min="0" value="${setting.direct_commission_amount || 0}" 
+                           onchange="updateDirectCommission(${pkg.id}, this.value)">
+                </div>
+
+                <div class="levels-section">
+                    <div class="levels-header">
+                        <strong><i class="fas fa-percentage"></i> نسب العمولات غير المباشرة</strong>
+                    </div>
+                    <div class="level-input-group">
+                        ${levelsHTML}
+                    </div>
+                </div>
+
+                <div class="summary">
+                    <div class="summary-item">
+                        <span>إجمالي النسب:</span>
+                        <span id="total_${pkg.id}">${calculateTotal(setting, maxLevels)}%</span>
+                    </div>
+                </div>
+
+                <button class="btn" onclick="saveSettings(${pkg.id}, '${pkg.name}')">
+                    <i class="fas fa-save"></i> حفظ الإعدادات
+                </button>
+            `;
+
+            return div;
+        }
+
+        function calculateTotal(setting, maxLevels) {
+            let total = 0;
+            for (let i = 1; i <= maxLevels; i++) {
+                total += parseFloat(setting[`level_${i}_percentage`] || 0);
+            }
+            return total.toFixed(2);
+        }
+
+        function updateMaxLevels(packageId, value, packageName) {
+            Swal.fire({
+                title: 'تحديث عدد المستويات',
+                text: `هل تريد تغيير عدد المستويات إلى ${value} للباقة ${packageName}؟`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'نعم، تحديث',
+                cancelButtonText: 'إلغاء'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    loadPackages(); // إعادة تحميل لعرض المستويات الجديدة
+                }
+            });
+        }
+
+        function updateDirectCommission(packageId, value) {
+            console.log(`تحديث العمولة المباشرة للباقة ${packageId}: ${value}`);
+        }
+
+        function updateLevel(packageId, level, value) {
+            console.log(`تحديث المستوى ${level} للباقة ${packageId}: ${value}%`);
+        }
+
+        async function saveSettings(packageId, packageName) {
+            const card = event.target.closest('.package-card');
+            const maxLevels = card.querySelector('input[type="number"]').value;
+            const directCommission = card.querySelectorAll('input[type="number"]')[1].value;
+            
+            const levels = {};
+            for (let i = 1; i <= 10; i++) {
+                const input = card.querySelector(`input[data-level="${i}"]`);
+                levels[`level_${i}_percentage`] = input ? parseFloat(input.value) : 0;
+            }
+
+            const data = {
+                package_id: packageId,
+                max_levels: parseInt(maxLevels),
+                direct_commission_amount: parseFloat(directCommission),
+                ...levels
+            };
+
+            try {
+                const response = await fetch('api/save_package_mlm_settings.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showSuccess(`تم حفظ إعدادات ${packageName} بنجاح`);
+                    loadPackages();
+                } else {
+                    showError(result.message || 'فشل الحفظ');
+                }
+            } catch (error) {
+                showError('خطأ في الاتصال');
+            }
+        }
+
+        function showSuccess(message) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = 'alert alert-success show';
+            setTimeout(() => alert.classList.remove('show'), 3000);
+        }
+
+        function showError(message) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = 'alert alert-error show';
+            setTimeout(() => alert.classList.remove('show'), 3000);
+        }
+
+        loadPackages();
+    </script>
+</body>
+</html>
