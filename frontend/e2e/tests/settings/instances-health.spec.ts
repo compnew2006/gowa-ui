@@ -14,7 +14,7 @@ interface MockHealthInstance {
 async function loginAsSuperAdmin(page: Page) {
   await page.goto('/login')
   await page.locator('input[name="email"], input[type="email"]').fill('admin@admin.com')
-  await page.locator('input[name="password"], input[type="password"]').fill('admin')
+  await page.locator('input[name="password"], input[type="password"]').fill('adminpassword12')
   await page.locator('button[type="submit"]').click()
   await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10000 })
 }

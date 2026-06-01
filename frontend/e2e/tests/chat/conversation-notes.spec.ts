@@ -18,7 +18,7 @@ async function cleanupAllNotes(contactId: string) {
   // Try with superadmin first (for notes created via manual UI testing)
   const ctx1 = await playwrightRequest.newContext()
   const superApi = new ApiHelper(ctx1)
-  await superApi.login('admin@admin.com', 'admin')
+  await superApi.login('admin@admin.com', 'adminpassword12')
   await cleanupNotes(superApi, contactId)
   await ctx1.dispose()
   // Then with test admin (for notes created by test user)

@@ -3,7 +3,7 @@ import { TablePage, DialogPage } from "../../pages";
 import { loginAsAdmin } from "../../helpers";
 
 const SUPER_ADMIN_EMAIL = "admin@admin.com";
-const SUPER_ADMIN_PASSWORD = "admin";
+const SUPER_ADMIN_PASSWORD = "adminpassword12";
 
 async function loginAsSuperAdmin(
   page: Parameters<typeof loginAsAdmin>[0],

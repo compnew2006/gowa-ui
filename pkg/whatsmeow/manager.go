@@ -762,10 +762,7 @@ func (cm *ConnectionManager) runHealthMonitorPass(ctx context.Context) {
 			continue
 		}
 
-		if client == nil {
-			continue
-		}
-		if client.IsConnected() {
+		if client != nil && client.IsConnected() {
 			cm.pool.markConnected(instance.ID, cm.connectedPhoneNumber(instance.PhoneNumber, client))
 			continue
 		}

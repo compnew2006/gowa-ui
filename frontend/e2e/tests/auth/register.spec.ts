@@ -3,7 +3,7 @@ import { ApiHelper } from '../../helpers'
 
 // Admin credentials for creating test organizations
 const ADMIN_EMAIL = 'admin@admin.com'
-const ADMIN_PASSWORD = 'admin'
+const ADMIN_PASSWORD = 'adminpassword12'
 const FALLBACK_ADMIN_EMAIL = 'admin@test.com'
 const FALLBACK_ADMIN_PASSWORD = 'password'
 

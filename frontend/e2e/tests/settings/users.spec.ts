@@ -302,7 +302,7 @@ test.describe('Users - Add Existing User (Multi Org)', () => {
   test.beforeAll(async () => {
     const reqContext = await playwrightRequest.newContext()
     const api = new ApiHelper(reqContext)
-    await api.login('admin@admin.com', 'admin')
+    await api.login('admin@admin.com', 'adminpassword12')
 
     // Create a role with organizations:assign + users:read (needed to view the page)
     const permissions = await api.findPermissionKeys([
@@ -338,7 +338,7 @@ test.describe('Users - Add Existing User (Multi Org)', () => {
   test.afterAll(async () => {
     const reqContext = await playwrightRequest.newContext()
     const api = new ApiHelper(reqContext)
-    await api.login('admin@admin.com', 'admin')
+    await api.login('admin@admin.com', 'adminpassword12')
     try { await api.removeOrgMember(testUserId, secondOrgId) } catch { /* ignore */ }
     try { await api.deleteUser(testUserId) } catch { /* ignore */ }
     try { await api.deleteRole(testRoleId) } catch { /* ignore */ }

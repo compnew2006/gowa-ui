@@ -566,6 +566,22 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_notification_rules_account ON notification_rules(whats_app_account, is_enabled)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_account ON messages(whats_app_account, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_account ON contacts(whats_app_account)`,
+		`ALTER TABLE agent_selection_participants ADD COLUMN IF NOT EXISTS settings_id uuid`,
+		`ALTER TABLE agent_selection_options ADD COLUMN IF NOT EXISTS settings_id uuid`,
+		`UPDATE agent_selection_participants AS p
+		 SET settings_id = s.id
+		 FROM agent_selection_settings AS s
+		 WHERE p.settings_id IS NULL
+		   AND p.organization_id = s.organization_id
+		   AND s.instance_id IS NULL`,
+		`UPDATE agent_selection_options AS o
+		 SET settings_id = s.id
+		 FROM agent_selection_settings AS s
+		 WHERE o.settings_id IS NULL
+		   AND o.organization_id = s.organization_id
+		   AND s.instance_id IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_selection_participants_settings_enabled ON agent_selection_participants(settings_id, is_enabled, sort_order)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_selection_options_settings_enabled ON agent_selection_options(settings_id, is_enabled, sort_order)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_canned_responses_org_name ON canned_responses(organization_id, name)`,
 		`CREATE INDEX IF NOT EXISTS idx_canned_responses_active ON canned_responses(organization_id, is_active, usage_count DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_webhooks_org_active ON webhooks(organization_id, is_active)`,

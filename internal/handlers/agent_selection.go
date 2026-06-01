@@ -46,10 +46,10 @@ type agentSelectionSettingsRequest struct {
 type agentSelectionParticipantRequest struct {
 	SettingsID            uuid.UUID `json:"settings_id"`
 	UserID                uuid.UUID `json:"user_id"`
-	DisplayName           string    `json:"display_name"`
-	Description           string    `json:"description"`
+	DisplayName           *string   `json:"display_name"`
+	Description           *string   `json:"description"`
 	IsEnabled             *bool     `json:"is_enabled"`
-	SortOrder             int       `json:"sort_order"`
+	SortOrder             *int      `json:"sort_order"`
 	ShowOnlyWhenAvailable *bool     `json:"show_only_when_available"`
 	MaxOpenChats          *int      `json:"max_open_chats"`
 }
@@ -59,11 +59,11 @@ type agentSelectionOptionRequest struct {
 	OptionType  models.AgentSelectionOptionType `json:"option_type"`
 	UserID      *uuid.UUID                      `json:"user_id"`
 	TeamID      *uuid.UUID                      `json:"team_id"`
-	Label       string                          `json:"label"`
-	Description string                          `json:"description"`
+	Label       *string                         `json:"label"`
+	Description *string                         `json:"description"`
 	IsEnabled   *bool                           `json:"is_enabled"`
-	SortOrder   int                             `json:"sort_order"`
-	Action      string                          `json:"action"`
+	SortOrder   *int                            `json:"sort_order"`
+	Action      *string                         `json:"action"`
 }
 
 type agentSelectionPreviewRequest struct {
@@ -171,10 +171,41 @@ func (a *App) ensureAgentSelectionSettings(db *gorm.DB, orgID uuid.UUID, instanc
 	if settings.InstanceID != nil && *settings.InstanceID == uuid.Nil {
 		settings.InstanceID = nil
 	}
-	if err := db.Create(settings).Error; err != nil {
+	if err := agentSelectionWriteDB(db).Create(settings).Error; err != nil {
+		if recovered, resolveErr := a.resolveAgentSelectionSettings(db, orgID, instanceID); resolveErr == nil && recovered.ID != uuid.Nil {
+			return recovered, nil
+		}
 		return nil, err
 	}
 	return settings, nil
+}
+
+func agentSelectionWriteDB(db *gorm.DB) *gorm.DB {
+	if db == nil {
+		return db
+	}
+	return db.Session(&gorm.Session{NewDB: true})
+}
+
+func agentSelectionReadDB(db *gorm.DB) *gorm.DB {
+	if db == nil {
+		return db
+	}
+	return db.Session(&gorm.Session{NewDB: true})
+}
+
+func trimOptionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func optionalIntValue(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func (a *App) GetAgentSelectionSettings(r *fastglue.Request) error {
@@ -196,8 +227,9 @@ func (a *App) GetAgentSelectionSettings(r *fastglue.Request) error {
 		instanceID = &parsed
 	}
 
-	settings, err := a.resolveAgentSelectionSettings(requestDB, orgID, instanceID)
+	settings, err := a.ensureAgentSelectionSettings(requestDB, orgID, instanceID)
 	if err != nil {
+		a.Log.Error("Failed to load agent selection settings", "error", err, "organization_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load agent selection settings", nil, "")
 	}
 
@@ -221,6 +253,7 @@ func (a *App) UpdateAgentSelectionSettings(r *fastglue.Request) error {
 
 	settings, err := a.ensureAgentSelectionSettings(requestDB, orgID, req.InstanceID)
 	if err != nil {
+		a.Log.Error("Failed to load agent selection settings for update", "error", err, "organization_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load agent selection settings", nil, "")
 	}
 
@@ -279,7 +312,7 @@ func (a *App) UpdateAgentSelectionSettings(r *fastglue.Request) error {
 		settings.HideUnavailableAgents = *req.HideUnavailableAgents
 	}
 
-	if err := requestDB.Save(settings).Error; err != nil {
+	if err := agentSelectionWriteDB(requestDB).Save(settings).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save agent selection settings", nil, "")
 	}
 	a.writeAgentSelectionAudit(requestDB, orgID, agentSelectionAuditInput{
@@ -334,11 +367,17 @@ func (a *App) CreateAgentSelectionParticipant(r *fastglue.Request) error {
 	if req.SettingsID == uuid.Nil || req.UserID == uuid.Nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "settings_id and user_id are required", nil, "")
 	}
+	if !a.agentSelectionSettingsBelongsToOrg(requestDB, orgID, req.SettingsID) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent selection settings not found", nil, "")
+	}
 	if !a.userBelongsToOrg(requestDB, req.UserID, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Agent is not available for this organization", nil, "")
 	}
 
-	displayName := strings.TrimSpace(req.DisplayName)
+	displayName := ""
+	if req.DisplayName != nil {
+		displayName = strings.TrimSpace(*req.DisplayName)
+	}
 	if displayName == "" {
 		displayName = strings.TrimSpace(a.ResolveUserDisplayName(req.UserID))
 	}
@@ -360,16 +399,17 @@ func (a *App) CreateAgentSelectionParticipant(r *fastglue.Request) error {
 		SettingsID:            req.SettingsID,
 		UserID:                req.UserID,
 		DisplayName:           displayName,
-		Description:           strings.TrimSpace(req.Description),
+		Description:           trimOptionalString(req.Description),
 		IsEnabled:             isEnabled,
-		SortOrder:             req.SortOrder,
+		SortOrder:             optionalIntValue(req.SortOrder),
 		ShowOnlyWhenAvailable: showOnlyWhenAvailable,
 		MaxOpenChats:          req.MaxOpenChats,
 		Metadata:              models.JSONB{},
 	}
-	if err := requestDB.Create(&participant).Error; err != nil {
+	if err := agentSelectionWriteDB(requestDB).Create(&participant).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Agent is already in this routing list", nil, "")
 	}
+	_ = requestDB.Preload("User").First(&participant, "id = ? AND organization_id = ?", participant.ID, orgID).Error
 	a.writeAgentSelectionAudit(requestDB, orgID, agentSelectionAuditInput{
 		EventType:   "participant_created",
 		ActorType:   models.AgentSelectionActorAdmin,
@@ -401,21 +441,28 @@ func (a *App) UpdateAgentSelectionParticipant(r *fastglue.Request) error {
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
 	}
-	if strings.TrimSpace(req.DisplayName) != "" {
-		participant.DisplayName = strings.TrimSpace(req.DisplayName)
+	if req.DisplayName != nil && strings.TrimSpace(*req.DisplayName) != "" {
+		participant.DisplayName = strings.TrimSpace(*req.DisplayName)
 	}
-	participant.Description = strings.TrimSpace(req.Description)
+	if req.Description != nil {
+		participant.Description = strings.TrimSpace(*req.Description)
+	}
 	if req.IsEnabled != nil {
 		participant.IsEnabled = *req.IsEnabled
 	}
-	participant.SortOrder = req.SortOrder
+	if req.SortOrder != nil {
+		participant.SortOrder = *req.SortOrder
+	}
 	if req.ShowOnlyWhenAvailable != nil {
 		participant.ShowOnlyWhenAvailable = *req.ShowOnlyWhenAvailable
 	}
-	participant.MaxOpenChats = req.MaxOpenChats
-	if err := requestDB.Save(&participant).Error; err != nil {
+	if req.MaxOpenChats != nil {
+		participant.MaxOpenChats = req.MaxOpenChats
+	}
+	if err := agentSelectionWriteDB(requestDB).Save(&participant).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save participant", nil, "")
 	}
+	_ = requestDB.Preload("User").First(&participant, "id = ? AND organization_id = ?", participant.ID, orgID).Error
 	a.writeAgentSelectionAudit(requestDB, orgID, agentSelectionAuditInput{
 		EventType:   "participant_updated",
 		ActorType:   models.AgentSelectionActorAdmin,
@@ -438,7 +485,7 @@ func (a *App) DeleteAgentSelectionParticipant(r *fastglue.Request) error {
 	if err != nil {
 		return nil
 	}
-	result := requestDB.Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.AgentSelectionParticipant{})
+	result := agentSelectionWriteDB(requestDB).Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.AgentSelectionParticipant{})
 	if result.Error != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete participant", nil, "")
 	}
@@ -501,14 +548,12 @@ func (a *App) upsertAgentSelectionOption(r *fastglue.Request, id uuid.UUID) erro
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
 	}
-	if req.SettingsID == uuid.Nil || req.OptionType == "" || strings.TrimSpace(req.Label) == "" {
+	if id == uuid.Nil && (req.SettingsID == uuid.Nil || req.OptionType == "" || req.Label == nil || strings.TrimSpace(*req.Label) == "") {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "settings_id, option_type and label are required", nil, "")
 	}
-	isEnabled := true
-	if req.IsEnabled != nil {
-		isEnabled = *req.IsEnabled
+	if req.SettingsID != uuid.Nil && !a.agentSelectionSettingsBelongsToOrg(requestDB, orgID, req.SettingsID) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent selection settings not found", nil, "")
 	}
-
 	option := models.AgentSelectionOption{}
 	if id != uuid.Nil {
 		if err := requestDB.Where("id = ? AND organization_id = ?", id, orgID).First(&option).Error; err != nil {
@@ -517,18 +562,37 @@ func (a *App) upsertAgentSelectionOption(r *fastglue.Request, id uuid.UUID) erro
 	} else {
 		option.OrganizationID = orgID
 		option.Metadata = models.JSONB{}
+		option.IsEnabled = true
 	}
-	option.SettingsID = req.SettingsID
-	option.OptionType = req.OptionType
-	option.UserID = req.UserID
-	option.TeamID = req.TeamID
-	option.Label = strings.TrimSpace(req.Label)
-	option.Description = strings.TrimSpace(req.Description)
-	option.IsEnabled = isEnabled
-	option.SortOrder = req.SortOrder
-	option.Action = strings.TrimSpace(req.Action)
+	if req.SettingsID != uuid.Nil {
+		option.SettingsID = req.SettingsID
+	}
+	if req.OptionType != "" {
+		option.OptionType = req.OptionType
+	}
+	if id == uuid.Nil || req.UserID != nil {
+		option.UserID = req.UserID
+	}
+	if id == uuid.Nil || req.TeamID != nil {
+		option.TeamID = req.TeamID
+	}
+	if req.Label != nil && strings.TrimSpace(*req.Label) != "" {
+		option.Label = strings.TrimSpace(*req.Label)
+	}
+	if req.Description != nil {
+		option.Description = strings.TrimSpace(*req.Description)
+	}
+	if req.IsEnabled != nil {
+		option.IsEnabled = *req.IsEnabled
+	}
+	if req.SortOrder != nil {
+		option.SortOrder = *req.SortOrder
+	}
+	if req.Action != nil {
+		option.Action = strings.TrimSpace(*req.Action)
+	}
 
-	if err := requestDB.Save(&option).Error; err != nil {
+	if err := agentSelectionWriteDB(requestDB).Save(&option).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save option", nil, "")
 	}
 	eventType := "option_created"
@@ -557,7 +621,7 @@ func (a *App) DeleteAgentSelectionOption(r *fastglue.Request) error {
 	if err != nil {
 		return nil
 	}
-	result := requestDB.Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.AgentSelectionOption{})
+	result := agentSelectionWriteDB(requestDB).Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.AgentSelectionOption{})
 	if result.Error != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete option", nil, "")
 	}
@@ -568,6 +632,19 @@ func (a *App) DeleteAgentSelectionOption(r *fastglue.Request) error {
 		Metadata:    models.JSONB{"option_id": id.String()},
 	})
 	return r.SendEnvelope(map[string]any{"deleted": result.RowsAffected > 0})
+}
+
+func (a *App) agentSelectionSettingsBelongsToOrg(db *gorm.DB, orgID, settingsID uuid.UUID) bool {
+	if db == nil || orgID == uuid.Nil || settingsID == uuid.Nil {
+		return false
+	}
+	var count int64
+	if err := db.Model(&models.AgentSelectionSettings{}).
+		Where("id = ? AND organization_id = ?", settingsID, orgID).
+		Count(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
 }
 
 func (a *App) PreviewAgentSelectionMenu(r *fastglue.Request) error {
@@ -612,9 +689,23 @@ func (a *App) PreviewAgentSelectionMenu(r *fastglue.Request) error {
 
 	menu, err := a.buildAgentSelectionMenu(requestDB, orgID, settings, contact)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to build menu preview", nil, "")
+		a.Log.Error("Failed to build agent selection menu preview", "error", err, "organization_id", orgID, "settings_id", settings.ID)
+		menu = emptyAgentSelectionMenuPreview(settings)
 	}
 	return r.SendEnvelope(map[string]any{"menu": menu})
+}
+
+func emptyAgentSelectionMenuPreview(settings *models.AgentSelectionSettings) *agentSelectionRenderedMenu {
+	header := "من فضلك اختر من تريد التواصل معه:"
+	if settings != nil {
+		if configuredHeader := strings.TrimSpace(settings.MenuHeaderText); configuredHeader != "" {
+			header = configuredHeader
+		}
+	}
+	return &agentSelectionRenderedMenu{
+		Text:    header,
+		Options: []agentSelectionRenderedOption{},
+	}
 }
 
 func (a *App) ListAgentSelectionAudit(r *fastglue.Request) error {
@@ -697,7 +788,7 @@ func (a *App) CancelAgentSelectionSession(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Session not found", nil, "")
 	}
 	session.Status = models.AgentSelectionSessionCancelled
-	if err := requestDB.Save(&session).Error; err != nil {
+	if err := agentSelectionWriteDB(requestDB).Save(&session).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to cancel session", nil, "")
 	}
 	a.writeAgentSelectionAudit(requestDB, orgID, agentSelectionAuditInput{
@@ -717,10 +808,11 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 		return nil, errors.New("settings is nil")
 	}
 
+	readDB := agentSelectionReadDB(db)
 	options := make([]agentSelectionRenderedOption, 0)
 	if settings.ID != uuid.Nil {
 		var participants []models.AgentSelectionParticipant
-		if err := db.Where("organization_id = ? AND settings_id = ? AND is_enabled = ?", orgID, settings.ID, true).
+		if err := readDB.Where("organization_id = ? AND settings_id = ? AND is_enabled = ?", orgID, settings.ID, true).
 			Preload("User").
 			Order("sort_order ASC, display_name ASC").
 			Find(&participants).Error; err != nil {
@@ -735,7 +827,7 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 			}
 			if participant.MaxOpenChats != nil && *participant.MaxOpenChats >= 0 {
 				var openCount int64
-				db.Model(&models.Contact{}).
+				readDB.Model(&models.Contact{}).
 					Where("organization_id = ? AND assigned_user_id = ? AND status = ?", orgID, participant.UserID, models.ChatStatusOpen).
 					Count(&openCount)
 				if openCount >= int64(*participant.MaxOpenChats) {
@@ -759,7 +851,7 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 		}
 
 		var configuredOptions []models.AgentSelectionOption
-		if err := db.Where("organization_id = ? AND settings_id = ? AND is_enabled = ?", orgID, settings.ID, true).
+		if err := readDB.Where("organization_id = ? AND settings_id = ? AND is_enabled = ?", orgID, settings.ID, true).
 			Order("sort_order ASC, label ASC").
 			Find(&configuredOptions).Error; err != nil {
 			return nil, err
@@ -770,7 +862,7 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 			}
 			if configured.OptionType == models.AgentSelectionOptionTeam && configured.TeamID != nil {
 				var team models.Team
-				if err := db.Where("id = ? AND organization_id = ? AND is_active = ?", *configured.TeamID, orgID, true).First(&team).Error; err != nil {
+				if err := readDB.Where("id = ? AND organization_id = ? AND is_active = ?", *configured.TeamID, orgID, true).First(&team).Error; err != nil {
 					continue
 				}
 			}
@@ -1338,7 +1430,7 @@ func (a *App) writeAgentSelectionAudit(db *gorm.DB, orgID uuid.UUID, input agent
 	if event.Metadata == nil {
 		event.Metadata = models.JSONB{}
 	}
-	if err := db.Create(&event).Error; err != nil && a != nil {
+	if err := agentSelectionWriteDB(db).Create(&event).Error; err != nil && a != nil {
 		a.Log.Error("Failed to write agent selection audit event", "error", err, "event_type", input.EventType)
 	}
 }

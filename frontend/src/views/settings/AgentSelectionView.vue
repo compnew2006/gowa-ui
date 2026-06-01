@@ -198,7 +198,7 @@ async function loadPage() {
       teamsStore.fetchTeams({ limit: 200 }),
       agentSelectionStore.fetchParticipants(settings.id),
       agentSelectionStore.fetchOptions(settings.id),
-      agentSelectionStore.fetchPreview(settings.id),
+      fetchPreviewForSettings(settings.id),
       agentSelectionStore.fetchSessions(),
       agentSelectionStore.fetchAudit(),
     ]);
@@ -237,34 +237,7 @@ function applySettings(settings: AgentSelectionSettings) {
 async function saveSettings() {
   isSaving.value = true;
   try {
-    const saved = await agentSelectionStore.saveSettings({
-      enabled: settingsForm.enabled,
-      allowed_instance_ids: settingsForm.allowed_instance_ids,
-      trigger_mode: settingsForm.trigger_mode as AgentSelectionSettings["trigger_mode"],
-      trigger_keywords: splitKeywords(settingsForm.trigger_keywords),
-      prompt_delay_minutes: settingsForm.prompt_delay_minutes,
-      selection_timeout_minutes: settingsForm.selection_timeout_minutes,
-      max_invalid_attempts: settingsForm.max_invalid_attempts,
-      menu_header_text: settingsForm.menu_header_text,
-      menu_footer_text: settingsForm.menu_footer_text,
-      invalid_reply_text: settingsForm.invalid_reply_text,
-      timeout_response_text: settingsForm.timeout_response_text,
-      unavailable_agent_text: settingsForm.unavailable_agent_text,
-      custom_final_option_enabled: settingsForm.custom_final_option_enabled,
-      custom_final_option_text: settingsForm.custom_final_option_text,
-      custom_final_option_response: settingsForm.custom_final_option_response,
-      custom_final_option_action: settingsForm.custom_final_option_action,
-      custom_final_option_team_id:
-        settingsForm.custom_final_option_action === "assign_to_team"
-          ? settingsForm.custom_final_option_team_id || null
-          : null,
-      hide_unavailable_agents: settingsForm.hide_unavailable_agents,
-    });
-    await Promise.all([
-      agentSelectionStore.fetchParticipants(saved.id),
-      agentSelectionStore.fetchOptions(saved.id),
-      agentSelectionStore.fetchPreview(saved.id),
-    ]);
+    await persistSettings();
     toast.success("Customer routing settings saved");
   } catch (error) {
     toast.error(getErrorMessage(error, "Failed to save settings"));
@@ -275,7 +248,16 @@ async function saveSettings() {
 
 async function addParticipant() {
   if (!canConfigureLists.value) {
-    await saveSettings();
+    try {
+      await persistSettings();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to save settings"));
+      return;
+    }
+  }
+  if (!canConfigureLists.value) {
+    toast.error("Save customer routing settings before adding agents");
+    return;
   }
   if (!participantForm.user_id) {
     toast.error("Choose an agent first");
@@ -296,7 +278,7 @@ async function addParticipant() {
         : null,
     });
     resetParticipantForm();
-    await agentSelectionStore.fetchPreview(settingsId.value);
+    await fetchPreviewForSettings(settingsId.value);
     toast.success("Agent added to customer list");
   } catch (error) {
     toast.error(getErrorMessage(error, "Failed to add agent"));
@@ -307,17 +289,26 @@ async function addParticipant() {
 
 async function toggleParticipant(id: string, isEnabled: boolean) {
   await agentSelectionStore.updateParticipant(id, { is_enabled: isEnabled });
-  await agentSelectionStore.fetchPreview(settingsId.value);
+  await fetchPreviewForSettings(settingsId.value);
 }
 
 async function removeParticipant(id: string) {
   await agentSelectionStore.deleteParticipant(id);
-  await agentSelectionStore.fetchPreview(settingsId.value);
+  await fetchPreviewForSettings(settingsId.value);
 }
 
 async function addOption() {
   if (!canConfigureLists.value) {
-    await saveSettings();
+    try {
+      await persistSettings();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to save settings"));
+      return;
+    }
+  }
+  if (!canConfigureLists.value) {
+    toast.error("Save customer routing settings before adding options");
+    return;
   }
   if (!optionForm.label.trim()) {
     toast.error("Option label is required");
@@ -341,7 +332,7 @@ async function addOption() {
       action: optionForm.action.trim(),
     });
     resetOptionForm();
-    await agentSelectionStore.fetchPreview(settingsId.value);
+    await fetchPreviewForSettings(settingsId.value);
     toast.success("Routing option added");
   } catch (error) {
     toast.error(getErrorMessage(error, "Failed to add option"));
@@ -352,12 +343,12 @@ async function addOption() {
 
 async function toggleOption(id: string, isEnabled: boolean) {
   await agentSelectionStore.updateOption(id, { is_enabled: isEnabled });
-  await agentSelectionStore.fetchPreview(settingsId.value);
+  await fetchPreviewForSettings(settingsId.value);
 }
 
 async function removeOption(id: string) {
   await agentSelectionStore.deleteOption(id);
-  await agentSelectionStore.fetchPreview(settingsId.value);
+  await fetchPreviewForSettings(settingsId.value);
 }
 
 async function refreshOps() {
@@ -401,6 +392,51 @@ function splitKeywords(value: string) {
     .split(",")
     .map((keyword) => keyword.trim())
     .filter(Boolean);
+}
+
+async function persistSettings() {
+  const saved = await agentSelectionStore.saveSettings(buildSettingsPayload());
+  await Promise.all([
+    agentSelectionStore.fetchParticipants(saved.id),
+    agentSelectionStore.fetchOptions(saved.id),
+    fetchPreviewForSettings(saved.id),
+  ]);
+  return saved;
+}
+
+async function fetchPreviewForSettings(id: string) {
+  try {
+    return await agentSelectionStore.fetchPreview(id);
+  } catch (error) {
+    toast.error(getErrorMessage(error, "Failed to load menu preview"));
+    return null;
+  }
+}
+
+function buildSettingsPayload(): Partial<AgentSelectionSettings> {
+  return {
+    enabled: settingsForm.enabled,
+    allowed_instance_ids: settingsForm.allowed_instance_ids,
+    trigger_mode: settingsForm.trigger_mode as AgentSelectionSettings["trigger_mode"],
+    trigger_keywords: splitKeywords(settingsForm.trigger_keywords),
+    prompt_delay_minutes: settingsForm.prompt_delay_minutes,
+    selection_timeout_minutes: settingsForm.selection_timeout_minutes,
+    max_invalid_attempts: settingsForm.max_invalid_attempts,
+    menu_header_text: settingsForm.menu_header_text,
+    menu_footer_text: settingsForm.menu_footer_text,
+    invalid_reply_text: settingsForm.invalid_reply_text,
+    timeout_response_text: settingsForm.timeout_response_text,
+    unavailable_agent_text: settingsForm.unavailable_agent_text,
+    custom_final_option_enabled: settingsForm.custom_final_option_enabled,
+    custom_final_option_text: settingsForm.custom_final_option_text,
+    custom_final_option_response: settingsForm.custom_final_option_response,
+    custom_final_option_action: settingsForm.custom_final_option_action,
+    custom_final_option_team_id:
+      settingsForm.custom_final_option_action === "assign_to_team"
+        ? settingsForm.custom_final_option_team_id || null
+        : null,
+    hide_unavailable_agents: settingsForm.hide_unavailable_agents,
+  };
 }
 
 function toggleAllowedInstance(instanceId: string, checked: boolean) {

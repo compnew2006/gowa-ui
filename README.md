@@ -93,7 +93,10 @@ openssl rand -hex 32
 docker compose up -d
 ```
 
-Go to `http://localhost:8080` and login with `admin@admin.com` / `admin`
+Go to `http://localhost:8080` and login with `admin@admin.com` / `adminpassword12`.
+Change `[default_admin].password` in `config.toml` before production use.
+If the admin user already exists, reset it explicitly:
+`./whatomate admin-reset-password -config config.toml -email admin@admin.com -password 'adminpassword12'`
 
 ---
 
@@ -115,7 +118,10 @@ openssl rand -hex 32
 ./whatomate server -migrate
 ```
 
-Go to `http://localhost:8080` and login with `admin@admin.com` / `admin`
+Go to `http://localhost:8080` and login with `admin@admin.com` / `adminpassword12`.
+Change `[default_admin].password` in `config.toml` before production use.
+If the admin user already exists, reset it explicitly:
+`./whatomate admin-reset-password -config config.toml -email admin@admin.com -password 'adminpassword12'`
 
 ---
 

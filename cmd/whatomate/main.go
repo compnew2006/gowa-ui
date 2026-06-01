@@ -18,6 +18,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/middleware"
+	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/observability"
 	"github.com/compnew2006/whatomate/internal/queue"
 	objectstorage "github.com/compnew2006/whatomate/internal/storage"
@@ -33,6 +34,7 @@ import (
 	"github.com/zerodha/logf"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -55,6 +57,8 @@ func main() {
 		runCryptoMigrate(os.Args[2:])
 	case "queue-migrate-campaigns":
 		runQueueMigrateCampaigns(os.Args[2:])
+	case "admin-reset-password":
+		runAdminResetPassword(os.Args[2:])
 	case "inbound-media-reconcile":
 		runInboundMediaReconcile(os.Args[2:])
 	case "legacy-media-reconcile":
@@ -81,6 +85,7 @@ Commands:
   worker    Start background workers only (no API server)
   crypto-migrate  Upgrade encrypted secrets from enc:/enc2: to enc3:
   queue-migrate-campaigns  Redistribute legacy global campaign jobs into tenant streams
+  admin-reset-password Reset an existing admin user's password
   inbound-media-reconcile  Reconcile stale queued inbound-media rows
   legacy-media-reconcile   Mark missing legacy local-media rows as unavailable
   version   Show version information
@@ -107,6 +112,11 @@ Queue Campaign Migration Options:
   -batch-size int      Number of Redis stream entries per batch (default 100)
   -lock-ttl duration   TTL for the migration lock (default 5m)
 
+Admin Reset Options:
+  -config string       Path to config file (default "config.toml")
+  -email string        Admin email to reset
+  -password string     New password
+
 Inbound Media Reconcile Options:
   -config string            Path to config file (default "config.toml")
   -instance-id string       Limit reconciliation to a single WhatsApp instance UUID
@@ -129,6 +139,7 @@ Examples:
   whatomate worker -workers 4          # campaign worker budget 4 (no API)
   whatomate crypto-migrate -dry-run    # Scan for legacy encrypted secrets
   whatomate queue-migrate-campaigns -config config.toml -apply
+  whatomate admin-reset-password -email admin@admin.com -password 'new-password'
   whatomate inbound-media-reconcile -config config.toml -apply
   whatomate legacy-media-reconcile -config config.toml -apply
 
@@ -827,6 +838,69 @@ func runWorker(args []string) {
 		}
 	}
 	lo.Info("Workers stopped")
+}
+
+// ============================================================================
+// ADMIN RESET COMMAND
+// ============================================================================
+
+func runAdminResetPassword(args []string) {
+	resetFlags := flag.NewFlagSet("admin-reset-password", flag.ExitOnError)
+	configPath := resetFlags.String("config", "config.toml", "Path to config file")
+	email := resetFlags.String("email", "", "Admin email to reset")
+	password := resetFlags.String("password", "", "New password")
+	_ = resetFlags.Parse(args)
+
+	lo := logf.New(logf.Opts{
+		EnableColor:     true,
+		Level:           logf.InfoLevel,
+		TimestampFormat: "2006-01-02 15:04:05",
+		DefaultFields:   []any{"app", "whatomate-admin-reset"},
+	})
+
+	normalizedEmail := strings.TrimSpace(*email)
+	normalizedPassword := strings.TrimSpace(*password)
+	if normalizedEmail == "" {
+		lo.Fatal("Admin email is required")
+	}
+	if normalizedPassword == "" {
+		lo.Fatal("New password is required")
+	}
+	if len(normalizedPassword) < 12 {
+		lo.Fatal("New password must be at least 12 characters")
+	}
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		lo.Fatal("Failed to load config", "error", err)
+	}
+	if err := config.ValidateDatabaseCredentials(cfg); err != nil {
+		lo.Fatal("Invalid database configuration", "error", err)
+	}
+
+	db, err := database.NewPostgres(&cfg.Database, cfg.App.Debug)
+	if err != nil {
+		lo.Fatal("Failed to connect to database", "error", err)
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(normalizedPassword), bcrypt.DefaultCost)
+	if err != nil {
+		lo.Fatal("Failed to hash password", "error", err)
+	}
+
+	result := db.Model(&models.User{}).
+		Where("LOWER(email) = LOWER(?)", normalizedEmail).
+		Updates(map[string]any{
+			"password_hash": string(passwordHash),
+		})
+	if result.Error != nil {
+		lo.Fatal("Failed to reset admin password", "error", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		lo.Fatal("Admin user not found", "email", normalizedEmail)
+	}
+
+	lo.Info("Admin password reset successfully", "email", normalizedEmail)
 }
 
 // ============================================================================

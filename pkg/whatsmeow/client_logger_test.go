@@ -43,3 +43,25 @@ func TestShouldSuppressClientError_StatusOtherErrorNotSuppressed(t *testing.T) {
 		t.Fatal("did not expect non-not-found status retry error to be suppressed")
 	}
 }
+
+func TestShouldDemoteClientError_WebSocketEOF(t *testing.T) {
+	msg := "Error reading from websocket: %v"
+	args := []interface{}{
+		"failed to get reader: failed to read frame header: EOF",
+	}
+
+	if !shouldDemoteClientError(msg, args...) {
+		t.Fatal("expected websocket EOF to be demoted")
+	}
+}
+
+func TestShouldDemoteClientError_NonEOFNotDemoted(t *testing.T) {
+	msg := "Error reading from websocket: %v"
+	args := []interface{}{
+		"failed to decrypt frame",
+	}
+
+	if shouldDemoteClientError(msg, args...) {
+		t.Fatal("did not expect non-EOF websocket error to be demoted")
+	}
+}

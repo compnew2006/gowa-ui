@@ -119,6 +119,6 @@ max_import_recipients = 10000 # Max recipients accepted in one campaign import r
 
 # Default admin credentials (only used during initial setup when no users exist)
 [default_admin]
-email = ""    # Optional bootstrap admin. Leave empty to disable auto-seeding.
-password = "" # Optional bootstrap admin password (minimum 12 chars in production).
+email = "admin@admin.com"          # Bootstrap admin created only when no users exist.
+password = "adminpassword12"       # Change before production use.
 full_name = "Admin"
