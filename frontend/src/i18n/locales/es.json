@@ -55,6 +55,42 @@
     "facebookAccounts": "Cuentas de Facebook",
     "facebookAccountsDesc": "Gestione sus cuentas y sesiones de Facebook conectadas."
   },
+  "agentSelection": {
+    "page": {
+      "title": "Enrutamiento de clientes",
+      "subtitle": "Permita que los clientes elijan el agente, equipo o cola que debe gestionar su chat",
+      "loading": "Cargando enrutamiento de clientes...",
+      "save": "Guardar configuración de enrutamiento",
+      "saved": "Configuración de enrutamiento guardada",
+      "tabs": {
+        "settings": "Configuración",
+        "agents": "Agentes",
+        "options": "Opciones",
+        "operations": "Operaciones"
+      },
+      "status": {
+        "active": "El enrutamiento está activo",
+        "paused": "El enrutamiento está en pausa",
+        "activeHelp": "Los clientes pueden recibir el menú de selección.",
+        "pausedHelp": "El comportamiento pendiente no cambia hasta que se active el enrutamiento."
+      },
+      "trigger": {
+        "first_pending_message": "Primer mensaje pendiente",
+        "keyword": "Sólo palabra clave",
+        "after_office_hours": "Fuera del horario laboral",
+        "chatbot_step": "Paso del chatbot (avanzado)",
+        "manual_test": "Sólo prueba manual"
+      },
+      "testSend": {
+        "button": "Enviar menú de prueba",
+        "pickContact": "Elija un contacto para recibir el menú de prueba",
+        "noContacts": "No hay contactos disponibles para probar",
+        "sending": "Enviando menú de prueba...",
+        "sent": "Menú de prueba enviado a {contact} vía {account}",
+        "failed": "Error al enviar la prueba: {error}"
+      }
+    }
+  },
   "licenseSettings": {
     "licenseKind": {
       "trial": "Prueba",

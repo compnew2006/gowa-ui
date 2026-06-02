@@ -126,7 +126,24 @@ func runMigrations(db *gorm.DB) error {
 		&models.CannedResponse{},
 		// Dashboard
 		&models.Widget{},
+		// Agent selection (customer routing)
+		&models.AgentSelectionSettings{},
+		&models.AgentSelectionParticipant{},
+		&models.AgentSelectionOption{},
+		&models.AgentSelectionSession{},
+		&models.AgentSelectionAuditEvent{},
 	)
+	// Mirror the production pre-migration fix so tests use the partial unique
+	// index and can reproduce the "delete then re-add" scenario.
+	if err := db.Exec(`
+		DROP INDEX IF EXISTS idx_agent_selection_participant_user;
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_selection_participant_user
+		ON agent_selection_participants (organization_id, settings_id, user_id)
+		WHERE deleted_at IS NULL
+	`).Error; err != nil {
+		return err
+	}
+	return nil
 }
 
 // cleanupTables removes all data from tables (for PostgreSQL cleanup).
@@ -182,6 +199,12 @@ func cleanupTables(db *gorm.DB) {
 		"users",
 		"organization_configs",
 		"organizations",
+		// Agent selection (customer routing)
+		"agent_selection_audit_events",
+		"agent_selection_sessions",
+		"agent_selection_options",
+		"agent_selection_participants",
+		"agent_selection_settings",
 	}
 
 	for _, table := range tables {
@@ -232,6 +255,12 @@ func TruncateTables(db *gorm.DB) {
 		"users",
 		"organization_configs",
 		"organizations",
+		// Agent selection (customer routing)
+		"agent_selection_audit_events",
+		"agent_selection_sessions",
+		"agent_selection_options",
+		"agent_selection_participants",
+		"agent_selection_settings",
 	}
 
 	for _, table := range tables {

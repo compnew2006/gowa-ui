@@ -341,6 +341,9 @@ func applyPreMigrationFixes(db *gorm.DB) error {
 	if err := fixSavedContentsUniqueIndex(db); err != nil {
 		return fmt.Errorf("failed to fix saved contents unique index: %w", err)
 	}
+	if err := fixAgentSelectionParticipantUniqueIndex(db); err != nil {
+		return fmt.Errorf("failed to fix agent selection participant unique index: %w", err)
+	}
 	return nil
 }
 
@@ -373,6 +376,87 @@ func fixSavedContentsUniqueIndex(db *gorm.DB) error {
 		return err
 	}
 	return nil
+}
+
+// fixAgentSelectionParticipantUniqueIndex replaces any full (non-partial)
+// unique index on (organization_id, settings_id, user_id) with a partial
+// unique index that ignores soft-deleted rows. Without this, deleting a
+// participant and re-adding the same agent to the same settings row fails
+// with 23505 "duplicate key" because the soft-deleted row still satisfies
+// the index.
+//
+// Looks for the index by definition (matching column set + uniqueness +
+// no WHERE clause) rather than by name, because GORM's auto-migration can
+// generate different index names depending on the schema path.
+func fixAgentSelectionParticipantUniqueIndex(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&models.AgentSelectionParticipant{}) {
+		return nil
+	}
+
+	// Find any non-partial unique index that covers the three columns.
+	// pg_indexes.indexdef includes the WHERE clause for partial indexes, so
+	// the absence of "WHERE" + the column set is a reliable fingerprint.
+	rows, err := db.Raw(`
+		SELECT indexname, indexdef FROM pg_indexes
+		WHERE tablename = 'agent_selection_participants'
+		  AND indexdef LIKE '%UNIQUE%'
+		  AND indexdef ILIKE '%organization_id%'
+		  AND indexdef ILIKE '%settings_id%'
+		  AND indexdef ILIKE '%user_id%'
+	`).Rows()
+	if err != nil {
+		return err
+	}
+	type indexInfo struct {
+		name string
+		def  string
+	}
+	var toDrop []indexInfo
+	for rows.Next() {
+		var info indexInfo
+		if err := rows.Scan(&info.name, &info.def); err != nil {
+			rows.Close()
+			return err
+		}
+		// Skip if already partial (has WHERE clause in the indexdef).
+		if strings.Contains(strings.ToUpper(info.def), " WHERE ") {
+			continue
+		}
+		toDrop = append(toDrop, info)
+	}
+	rows.Close()
+
+	for _, idx := range toDrop {
+		if err := db.Exec(fmt.Sprintf("DROP INDEX IF EXISTS %s", pgQuoteIdent(idx.name))).Error; err != nil {
+			return fmt.Errorf("failed to drop non-partial index %s: %w", idx.name, err)
+		}
+	}
+
+	// Ensure the canonical partial index exists. CREATE UNIQUE INDEX IF NOT
+	// EXISTS is a no-op when the index is already there, so this is safe to
+	// run on every startup.
+	if err := db.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_selection_participant_user
+		ON agent_selection_participants (organization_id, settings_id, user_id)
+		WHERE deleted_at IS NULL
+	`).Error; err != nil {
+		return err
+	}
+
+	// Log a single line so the operator can confirm the fix is in place.
+	// If dropped indexes were found, the user previously hit the
+	// "Agent is already in this routing list" 23505 regression.
+	if len(toDrop) > 0 {
+		fmt.Printf("[migrate] agent_selection_participants: replaced %d non-partial unique index(es) with partial unique index on (organization_id, settings_id, user_id) WHERE deleted_at IS NULL\n", len(toDrop))
+	}
+	return nil
+}
+
+// pgQuoteIdent quotes a Postgres identifier (index/table/column name) so
+// it can be safely interpolated into a DDL statement. Doubles any embedded
+// double-quotes per the SQL standard.
+func pgQuoteIdent(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
 
 func normalizeWhatsAppStatusRows(db *gorm.DB) error {

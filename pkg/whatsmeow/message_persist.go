@@ -523,6 +523,19 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 	cm.logger.Info("Message persisted", logFields...)
 
+	if cm.inboundMessageHook != nil && direction == models.DirectionIncoming && !isGroup && !isChannel {
+		cm.inboundMessageHook(ctx, InboundMessageInfo{
+			OrganizationID:  orgID,
+			InstanceID:      instanceID,
+			WhatsAppAccount: myAccount,
+			Contact:         contact,
+			Message:         &message,
+			MessageType:     msgType,
+			Content:         content,
+			IsHistorySync:   opts.HistorySync,
+		})
+	}
+
 	return &message, nil
 }
 

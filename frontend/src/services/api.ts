@@ -973,6 +973,15 @@ export const agentSelectionService = {
       "/agent-selection/preview",
       data,
     ),
+  testSend: (data: { settings_id?: string; contact_id: string }) =>
+    api.post<{
+      sent: boolean;
+      whatsapp_account: string;
+      contact_id: string;
+      menu_text: string;
+      option_count: number;
+      outbound_message_id?: string;
+    }>("/agent-selection/test-send", data),
   listAudit: (params?: {
     event_type?: string;
     contact_id?: string;

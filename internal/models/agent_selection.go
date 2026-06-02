@@ -110,9 +110,9 @@ func (AgentSelectionSettings) TableName() string {
 
 type AgentSelectionParticipant struct {
 	BaseModel
-	OrganizationID        uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_agent_selection_participant_user" json:"organization_id"`
-	SettingsID            uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_agent_selection_participant_user" json:"settings_id"`
-	UserID                uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_agent_selection_participant_user" json:"user_id"`
+	OrganizationID        uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_agent_selection_participant_user,where:deleted_at IS NULL" json:"organization_id"`
+	SettingsID            uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_agent_selection_participant_user,where:deleted_at IS NULL" json:"settings_id"`
+	UserID                uuid.UUID `gorm:"type:uuid;index;not null;uniqueIndex:idx_agent_selection_participant_user,where:deleted_at IS NULL" json:"user_id"`
 	DisplayName           string    `gorm:"size:255;not null" json:"display_name"`
 	Description           string    `gorm:"size:500" json:"description"`
 	IsEnabled             bool      `gorm:"default:true" json:"is_enabled"`

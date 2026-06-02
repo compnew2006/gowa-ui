@@ -196,6 +196,7 @@ func DefaultPermissions() []Permission {
 		// Customer agent selection
 		{Resource: ResourceAgentSelection, Action: ActionRead, Description: "View customer agent selection settings and audit"},
 		{Resource: ResourceAgentSelection, Action: ActionWrite, Description: "Manage customer agent selection routing"},
+		{Resource: ResourceAgentSelection, Action: ActionDelete, Description: "Delete customer agent selection participants, options, sessions, and audit events"},
 
 		// Webhooks
 		{Resource: ResourceWebhooks, Action: ActionRead, Description: "View webhooks"},
@@ -275,7 +276,7 @@ func SystemRolePermissions() map[string][]string {
 		// Transfers
 		"transfers:read", "transfers:write", "transfers:pickup",
 		// Customer agent selection
-		"agent_selection:read", "agent_selection:write",
+		"agent_selection:read", "agent_selection:write", "agent_selection:delete",
 		// Webhooks
 		"webhooks:read", "webhooks:write", "webhooks:delete",
 		// Canned Responses

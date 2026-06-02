@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { PageHeader } from "@/components/shared";
+import { PageHeader, DeleteConfirmDialog } from "@/components/shared";
 import { useAgentSelectionStore } from "@/stores/agentSelection";
 import { useInstancesStore } from "@/stores/instances";
 import { useTeamsStore } from "@/stores/teams";
@@ -54,7 +54,9 @@ import type {
   AgentSelectionSettings,
 } from "@/services/api";
 import type { User } from "@/types/auth";
+import { useI18n } from "vue-i18n";
 
+const { t } = useI18n();
 const agentSelectionStore = useAgentSelectionStore();
 const instancesStore = useInstancesStore();
 const usersStore = useUsersStore();
@@ -64,6 +66,13 @@ const isLoading = ref(false);
 const isSaving = ref(false);
 const isAddingParticipant = ref(false);
 const isAddingOption = ref(false);
+const isTestSending = ref(false);
+const testSendContactId = ref("");
+
+const participantDeleteDialogOpen = ref(false);
+const participantToDelete = ref<{ id: string; name: string } | null>(null);
+const optionDeleteDialogOpen = ref(false);
+const optionToDelete = ref<{ id: string; name: string } | null>(null);
 const selectedTab = ref("settings");
 
 const settingsForm = reactive({
@@ -143,25 +152,25 @@ const selectedInstanceScopeHelp = computed(() => {
   return "Customer routing will only listen on the selected instances.";
 });
 const routingStatusLabel = computed(() =>
-  settingsForm.enabled ? "Routing is active" : "Routing is paused",
+  settingsForm.enabled
+    ? t("agentSelection.page.status.active")
+    : t("agentSelection.page.status.paused"),
 );
 const routingStatusHelp = computed(() =>
   settingsForm.enabled
-    ? "Customers can receive the selection menu."
-    : "Pending behavior stays unchanged until routing is enabled.",
+    ? t("agentSelection.page.status.activeHelp")
+    : t("agentSelection.page.status.pausedHelp"),
 );
-const triggerModeLabel = computed(() => {
-  if (settingsForm.trigger_mode === "keyword") return "Keyword only";
-  if (settingsForm.trigger_mode === "after_office_hours") return "After office hours";
-  return "First pending message";
-});
+const triggerModeLabel = computed(() =>
+  t(`agentSelection.page.trigger.${settingsForm.trigger_mode}`),
+);
 const timingSummaryLabel = computed(
   () =>
     `${settingsForm.prompt_delay_minutes} min delay, ${settingsForm.selection_timeout_minutes} min timeout`,
 );
 const breadcrumbs = [
-  { label: "Settings", href: "/settings" },
-  { label: "Customer routing" },
+  { label: t("nav.settings"), href: "/settings" },
+  { label: t("agentSelection.page.title") },
 ];
 
 watch(
@@ -292,9 +301,24 @@ async function toggleParticipant(id: string, isEnabled: boolean) {
   await fetchPreviewForSettings(settingsId.value);
 }
 
-async function removeParticipant(id: string) {
-  await agentSelectionStore.deleteParticipant(id);
-  await fetchPreviewForSettings(settingsId.value);
+function removeParticipant(participant: { id: string; display_name: string }) {
+  participantToDelete.value = { id: participant.id, name: participant.display_name };
+  participantDeleteDialogOpen.value = true;
+}
+
+async function confirmRemoveParticipant() {
+  if (!participantToDelete.value) return;
+  const id = participantToDelete.value.id;
+  try {
+    await agentSelectionStore.deleteParticipant(id);
+    await fetchPreviewForSettings(settingsId.value);
+    toast.success("Agent removed");
+  } catch (error) {
+    toast.error(getErrorMessage(error, "Failed to remove agent"));
+  } finally {
+    participantDeleteDialogOpen.value = false;
+    participantToDelete.value = null;
+  }
 }
 
 async function addOption() {
@@ -346,9 +370,24 @@ async function toggleOption(id: string, isEnabled: boolean) {
   await fetchPreviewForSettings(settingsId.value);
 }
 
-async function removeOption(id: string) {
-  await agentSelectionStore.deleteOption(id);
-  await fetchPreviewForSettings(settingsId.value);
+function removeOption(option: { id: string; label: string }) {
+  optionToDelete.value = { id: option.id, name: option.label };
+  optionDeleteDialogOpen.value = true;
+}
+
+async function confirmRemoveOption() {
+  if (!optionToDelete.value) return;
+  const id = optionToDelete.value.id;
+  try {
+    await agentSelectionStore.deleteOption(id);
+    await fetchPreviewForSettings(settingsId.value);
+    toast.success("Option removed");
+  } catch (error) {
+    toast.error(getErrorMessage(error, "Failed to remove option"));
+  } finally {
+    optionDeleteDialogOpen.value = false;
+    optionToDelete.value = null;
+  }
 }
 
 async function refreshOps() {
@@ -364,6 +403,35 @@ async function cancelSession(id: string) {
     toast.success("Session cancelled");
   } catch (error) {
     toast.error(getErrorMessage(error, "Failed to cancel session"));
+  }
+}
+
+const canTestSend = computed(
+  () => !isTestSending.value && testSendContactId.value.trim().length > 0,
+);
+
+async function runTestSend() {
+  if (!canTestSend.value) return;
+  isTestSending.value = true;
+  try {
+    const result = await agentSelectionStore.testSend(
+      testSendContactId.value.trim(),
+      agentSelectionStore.settings?.id,
+    );
+    toast.success(
+      t("agentSelection.page.testSend.sent", {
+        contact: result.contact_id,
+        account: result.whatsapp_account,
+      }),
+    );
+  } catch (error) {
+    toast.error(
+      t("agentSelection.page.testSend.failed", {
+        error: getErrorMessage(error, "unknown error"),
+      }),
+    );
+  } finally {
+    isTestSending.value = false;
   }
 }
 
@@ -488,8 +556,8 @@ function formatDate(value?: string | null) {
 <template>
   <div class="flex h-full min-h-0 flex-col bg-background">
     <PageHeader
-      title="Customer routing"
-      description="Let WhatsMeow customers choose an available agent, team, queue, or branch action while pending behavior stays intact."
+      :title="t('agentSelection.page.title')"
+      :description="t('agentSelection.page.subtitle')"
       :breadcrumbs="breadcrumbs"
     >
       <template #actions>
@@ -514,10 +582,10 @@ function formatDate(value?: string | null) {
         <div class="sticky top-0 z-20 -mx-4 border-b bg-background/95 px-4 pb-3 pt-1 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6">
           <div class="mx-auto flex w-full max-w-7xl overflow-x-auto">
             <TabsList class="shrink-0">
-              <TabsTrigger value="settings">Settings</TabsTrigger>
-              <TabsTrigger value="participants">Agents</TabsTrigger>
-              <TabsTrigger value="options">Options</TabsTrigger>
-              <TabsTrigger value="audit">Operations</TabsTrigger>
+              <TabsTrigger value="settings">{{ t("agentSelection.page.tabs.settings") }}</TabsTrigger>
+              <TabsTrigger value="participants">{{ t("agentSelection.page.tabs.agents") }}</TabsTrigger>
+              <TabsTrigger value="options">{{ t("agentSelection.page.tabs.options") }}</TabsTrigger>
+              <TabsTrigger value="audit">{{ t("agentSelection.page.tabs.operations") }}</TabsTrigger>
             </TabsList>
           </div>
         </div>
@@ -796,9 +864,11 @@ function formatDate(value?: string | null) {
                   <Select v-model="settingsForm.trigger_mode">
                     <SelectTrigger id="agent-routing-trigger-mode"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="first_pending_message">First pending message</SelectItem>
-                      <SelectItem value="keyword">Keyword only</SelectItem>
-                      <SelectItem value="after_office_hours">After office hours</SelectItem>
+                      <SelectItem value="first_pending_message">{{ t("agentSelection.page.trigger.first_pending_message") }}</SelectItem>
+                      <SelectItem value="keyword">{{ t("agentSelection.page.trigger.keyword") }}</SelectItem>
+                      <SelectItem value="after_office_hours">{{ t("agentSelection.page.trigger.after_office_hours") }}</SelectItem>
+                      <SelectItem value="chatbot_step">{{ t("agentSelection.page.trigger.chatbot_step") }}</SelectItem>
+                      <SelectItem value="manual_test">{{ t("agentSelection.page.trigger.manual_test") }}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -973,7 +1043,7 @@ function formatDate(value?: string | null) {
                       variant="ghost"
                       class="ml-2"
                       :aria-label="`Remove ${participant.display_name}`"
-                      @click="removeParticipant(participant.id)"
+                      @click="removeParticipant(participant)"
                     >
                       <Trash2 class="h-4 w-4" />
                     </Button>
@@ -1077,7 +1147,7 @@ function formatDate(value?: string | null) {
                       variant="ghost"
                       class="ml-2"
                       :aria-label="`Remove ${option.label}`"
-                      @click="removeOption(option.id)"
+                      @click="removeOption(option)"
                     >
                       <Trash2 class="h-4 w-4" />
                     </Button>
@@ -1096,6 +1166,30 @@ function formatDate(value?: string | null) {
             Refresh operations
           </Button>
         </div>
+        <Card>
+          <CardHeader>
+            <CardTitle class="text-base">Test send</CardTitle>
+            <CardDescription>
+              Send the current selection menu to a real contact to verify rendering.
+            </CardDescription>
+          </CardHeader>
+          <CardContent class="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div class="flex-1 space-y-1.5">
+              <Label for="agent-routing-test-contact">Contact ID</Label>
+              <Input
+                id="agent-routing-test-contact"
+                v-model="testSendContactId"
+                placeholder="e.g. 9c2b8e14-..."
+                autocomplete="off"
+              />
+            </div>
+            <Button :disabled="!canTestSend" @click="runTestSend">
+              <Bot v-if="!isTestSending" class="mr-2 h-4 w-4" />
+              <Loader2 v-else class="mr-2 h-4 w-4 animate-spin" />
+              {{ isTestSending ? t("agentSelection.page.testSend.sending") : t("agentSelection.page.testSend.button") }}
+            </Button>
+          </CardContent>
+        </Card>
         <div class="grid gap-4 xl:grid-cols-2">
           <Card>
             <CardHeader>
@@ -1162,5 +1256,18 @@ function formatDate(value?: string | null) {
       </TabsContent>
       </Tabs>
     </div>
+
+    <DeleteConfirmDialog
+      v-model:open="participantDeleteDialogOpen"
+      title="Remove agent"
+      :item-name="participantToDelete?.name"
+      @confirm="confirmRemoveParticipant"
+    />
+    <DeleteConfirmDialog
+      v-model:open="optionDeleteDialogOpen"
+      title="Remove option"
+      :item-name="optionToDelete?.name"
+      @confirm="confirmRemoveOption"
+    />
   </div>
 </template>

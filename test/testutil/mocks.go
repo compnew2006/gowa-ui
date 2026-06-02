@@ -398,6 +398,42 @@ func (m *MockQueue) EnqueueGroupJoins(ctx context.Context, jobs []*queue.GroupJo
 	return nil
 }
 
+// EnqueueGroupExtraction mocks enqueueing a group extraction job.
+func (m *MockQueue) EnqueueGroupExtraction(ctx context.Context, job *queue.GroupExtractionJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+
+	return nil
+}
+
+// EnqueueMemberExtraction mocks enqueueing a member extraction job.
+func (m *MockQueue) EnqueueMemberExtraction(ctx context.Context, job *queue.MemberExtractionJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+
+	return nil
+}
+
+// EnqueueMessageExtraction mocks enqueueing a message extraction job.
+func (m *MockQueue) EnqueueMessageExtraction(ctx context.Context, job *queue.MessageExtractionJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.Error != nil {
+		return m.Error
+	}
+
+	return nil
+}
+
 // JobCount returns the number of jobs in the queue.
 func (m *MockQueue) JobCount() int {
 	m.mu.Lock()

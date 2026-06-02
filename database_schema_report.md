@@ -24,8 +24,13 @@ This document provides a 100% exhaustive extraction of the Whatomate database sc
 | **Channels** | `whatsapp_instances` | `WhatsAppInstance` | Yes | Yes | Whatsmeow virtual devices |
 | **Automation** | `chatbot_settings` | `ChatbotSettings` | Yes | No | AI/Flow global settings |
 | **Campaigns**| `bulk_message_campaigns` | `BulkMessageCampaign` | Yes | Yes | Outbound broadcast jobs |
+| **Routing**  | `agent_selection_settings` | `AgentSelectionSettings` | Yes | No | Customer-driven agent routing configuration (global or per-instance) |
+| **Routing**  | `agent_selection_participants` | `AgentSelectionParticipant` | Yes | No | Agents/teams/queues eligible for the selection menu |
+| **Routing**  | `agent_selection_options` | `AgentSelectionOption` | Yes | No | Numbered menu items presented to the customer |
+| **Routing**  | `agent_selection_sessions` | `AgentSelectionSession` | Yes | No | Per-conversation routing state machine (delay, sent, selected, timeout, cancelled) |
+| **Routing**  | `agent_selection_audit_events` | `AgentSelectionAuditEvent` | Yes | No | Append-only audit log of every routing action |
 
-*(Full list of 44 tables detailed below)*
+*(Full list of 49 tables detailed below)*
 
 ---
 
@@ -135,11 +140,114 @@ This document provides a 100% exhaustive extraction of the Whatomate database sc
 ### Soft-Delete Strategy
 *   **Mechanism**: `gorm.DeletedAt` column.
 *   **Audit**:
-    *   ✅ **Soft-Delete Enabled**: `organizations`, `users`, `custom_roles`, `contacts`, `messages`, `bulk_message_campaigns`, `chatbot_flows`, `whatsapp_accounts`.
-    *   ❌ **Hard-Delete Only**: `user_organizations`, `tags`, `chatbot_sessions`, `api_keys`.
+    *   ✅ **Soft-Delete Enabled**: `organizations`, `users`, `custom_roles`, `contacts`, `messages`, `bulk_message_campaigns`, `chatbot_flows`, `whatsapp_accounts`, `agent_selection_participants`.
+    *   ❌ **Hard-Delete Only**: `user_organizations`, `tags`, `chatbot_sessions`, `api_keys`, `agent_selection_settings`, `agent_selection_options`, `agent_selection_sessions`, `agent_selection_audit_events`.
 
 ---
 
 ## 🚀 5. Production Notes
 *   **Encryption**: `whatsapp_accounts` and `api_keys` contain encrypted secrets marked with `enc3:` prefix in the database.
 *   **Concurrency**: Tables like `bulk_message_recipients` use indexes to support high-throughput worker consumption from Redis-backed streams.
+
+---
+
+## 🧭 6. Customer Routing (Agent Selection) Domain
+
+The `agent_selection_*` family powers `/settings/agent-selection` — a feature that lets incoming WhatsApp customers pick the agent, team, or queue that should handle their chat. All five tables are multi-tenant via `organization_id`; none are soft-deletable (use the audit log for history).
+
+#### `agent_selection_settings`
+*   **Description**: Per-organization routing configuration. When `instance_id IS NULL`, the row is the **global default**; when set, it overrides for that specific WhatsApp instance only.
+*   **Columns**:
+    *   `id`: `UUID` (PK)
+    *   `organization_id`: `UUID` (FK, Multi-tenant)
+    *   `instance_id`: `UUID` (FK: whatsapp_instances.id, nullable)
+    *   `allowed_instance_ids`: `TEXT[]` (Postgres `StringArray` — instances the menu may listen on)
+    *   `enabled`: `BOOLEAN` (master on/off switch)
+    *   `trigger_mode`: `TEXT` enum (`first_pending_message` | `keyword` | `after_office_hours` | `chatbot_step` | `manual_test`)
+    *   `trigger_keywords`: `TEXT[]` (comma-separated keywords honored when `trigger_mode = 'keyword'`)
+    *   `prompt_delay_minutes`: `INT` (0–1440, validated)
+    *   `selection_timeout_minutes`: `INT` (1–1440, validated)
+    *   `max_invalid_attempts`: `INT` (1–20, validated)
+    *   `menu_header_text`, `menu_footer_text`, `invalid_reply_text`, `timeout_response_text`, `unavailable_agent_text`: `TEXT`
+    *   `custom_final_option_enabled`: `BOOLEAN`
+    *   `custom_final_option_text`: `TEXT`
+    *   `hide_unavailable_agents`: `BOOLEAN` (default true; when false, all enabled+active participants appear regardless of `MaxOpenChats`/`IsAvailable`)
+    *   `created_at`, `updated_at`: `TIMESTAMP WITH TIME ZONE`
+*   **Indexes**: unique `(organization_id, instance_id)`; `idx_agent_selection_settings_org`.
+*   **API**: `GET/PUT /api/agent-selection/settings`, `POST /api/agent-selection/test-send`.
+
+#### `agent_selection_participants`
+*   **Description**: Eligible agents, teams, or queues shown in the menu. `user_id` is nullable because a participant may be a team/queue reference instead of a single user.
+*   **Columns**:
+    *   `id`: `UUID` (PK)
+    *   `organization_id`: `UUID` (FK)
+    *   `settings_id`: `UUID` (FK: agent_selection_settings.id)
+    *   `user_id`: `UUID` (FK: users.id, nullable)
+    *   `team_id`: `UUID` (FK: teams.id, nullable)
+    *   `display_name`: `TEXT`
+    *   `description`: `TEXT`
+    *   `is_active`: `BOOLEAN` (soft availability flag; gated by `ShowOnlyWhenAvailable` + `MaxOpenChats` at menu-build time)
+    *   `sort_order`: `INT`
+    *   `created_at`, `updated_at`, `deleted_at`: `TIMESTAMP WITH TIME ZONE` (BaseModel — soft-delete enabled)
+*   **Indexes**: **partial unique** `idx_agent_selection_participant_user` on `(organization_id, settings_id, user_id) WHERE deleted_at IS NULL` — installed by `fixAgentSelectionParticipantUniqueIndex` in `internal/database/postgres.go` (mirrors the `saved_contents` pattern). Soft-deleting a participant and re-adding the same agent succeeds because the soft-deleted row is excluded from the index.
+*   **API**: `GET/POST/DELETE /api/agent-selection/participants` (DELETE requires `agent_selection:delete` permission).
+
+#### `agent_selection_options`
+*   **Description**: Numbered menu items (e.g. "1) Print at branch", "2) Talk to support"). Either user-targeted (assigns a chat) or a custom final action.
+*   **Columns**:
+    *   `id`: `UUID` (PK)
+    *   `organization_id`: `UUID` (FK)
+    *   `settings_id`: `UUID` (FK: agent_selection_settings.id)
+    *   `option_type`: `TEXT` enum (`user` | `team` | `queue` | `custom_final`)
+    *   `label`: `TEXT`
+    *   `description`: `TEXT`
+    *   `target_user_id`: `UUID` (FK: users.id, nullable)
+    *   `target_team_id`: `UUID` (FK: teams.id, nullable)
+    *   `custom_action`: `TEXT` (JSONB-encoded action descriptor for `custom_final` options)
+    *   `sort_order`: `INT`
+    *   `is_active`: `BOOLEAN`
+    *   `created_at`, `updated_at`: `TIMESTAMP WITH TIME ZONE`
+*   **API**: `GET/POST/DELETE /api/agent-selection/options` (DELETE requires `agent_selection:delete` permission).
+
+#### `agent_selection_sessions`
+*   **Description**: Per-conversation state machine for the routing flow. One row per (contact, instance) — created on inbound trigger, advanced by customer reply, ticked by the background sweeper.
+*   **Columns**:
+    *   `id`: `UUID` (PK)
+    *   `organization_id`: `UUID` (FK)
+    *   `instance_id`: `UUID` (FK: whatsapp_instances.id, nullable)
+    *   `contact_id`: `UUID` (FK: contacts.id)
+    *   `whatsapp_account`: `TEXT` (denormalized for quick audit joins)
+    *   `status`: `TEXT` enum (`waiting_delay` | `menu_sent` | `selected` | `timeout` | `cancelled` | `failed`)
+    *   `prompt_due_at`: `TIMESTAMP WITH TIME ZONE` (when to send the menu)
+    *   `expires_at`: `TIMESTAMP WITH TIME ZONE` (selection timeout)
+    *   `menu_snapshot`: `JSONB` (frozen rendering of the menu at send time, used to validate customer reply)
+    *   `selected_option_id`: `UUID` (FK: agent_selection_options.id, nullable)
+    *   `created_at`, `updated_at`: `TIMESTAMP WITH TIME ZONE`
+*   **Indexes**: `idx_agent_selection_sessions_contact`, `idx_agent_selection_sessions_status_due`.
+
+#### `agent_selection_audit_events`
+*   **Description**: Append-only audit log of every routing action — settings changes, menu sends, customer replies, timeout firings, deletions, test sends, and permission denials.
+*   **Columns**:
+    *   `id`: `UUID` (PK)
+    *   `organization_id`: `UUID` (FK)
+    *   `instance_id`: `UUID` (FK: whatsapp_instances.id, nullable)
+    *   `session_id`: `UUID` (FK: agent_selection_sessions.id, nullable)
+    *   `event_type`: `TEXT` enum (`settings_updated` | `participant_added` | `participant_deleted` | `option_added` | `option_deleted` | `menu_sent` | `selection_made` | `timeout` | `cancelled` | `test_menu_sent` | `test_send_failed`)
+    *   `actor_type`: `TEXT` enum (`user` | `system` | `customer`)
+    *   `actor_id`: `UUID` (nullable; user who triggered the event when `actor_type='user'`)
+    *   `metadata`: `JSONB` (event-specific context: `timeout_response_text_sent: bool`, `menu_text`, `whatsapp_account`, `error`, etc.)
+    *   `created_at`: `TIMESTAMP WITH TIME ZONE`
+*   **API**: `GET /api/agent-selection/audit`.
+
+### Routing Domain Relationships
+1.  `Organization` 1—N `agent_selection_settings` (per-instance override pattern)
+2.  `agent_selection_settings` 1—N `agent_selection_participants`
+3.  `agent_selection_settings` 1—N `agent_selection_options`
+4.  `agent_selection_settings` 1—N `agent_selection_sessions` (filtered by instance_id)
+5.  `agent_selection_sessions` 1—N `agent_selection_audit_events`
+6.  `agent_selection_options` 1—N `agent_selection_sessions` (via `selected_option_id`)
+
+### Routing Permissions
+*   `agent_selection:read` — list, get, preview, sessions, audit
+*   `agent_selection:write` — update settings, add/edit participants, add/edit options, cancel sessions, **send test menu**
+*   `agent_selection:delete` — delete participants, delete options, cancel sessions (intentionally split from `:write` to give least-privilege control to managers who should never erase routing config)

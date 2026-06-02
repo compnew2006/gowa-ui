@@ -136,6 +136,21 @@ export const useAgentSelectionStore = defineStore("agentSelection", () => {
     return data.menu;
   }
 
+  async function testSend(contactId: string, settingsId?: string) {
+    const response = await agentSelectionService.testSend({
+      settings_id: settingsId,
+      contact_id: contactId,
+    });
+    return unwrapResponse<{
+      sent: boolean;
+      whatsapp_account: string;
+      contact_id: string;
+      menu_text: string;
+      option_count: number;
+      outbound_message_id?: string;
+    }>(response);
+  }
+
   async function fetchSessions(params?: { status?: string }) {
     const response = await agentSelectionService.listSessions(params);
     const data = unwrapResponse<{ sessions: AgentSelectionSession[] }>(
@@ -182,6 +197,7 @@ export const useAgentSelectionStore = defineStore("agentSelection", () => {
     updateOption,
     deleteOption,
     fetchPreview,
+    testSend,
     fetchSessions,
     fetchAudit,
     cancelSession,

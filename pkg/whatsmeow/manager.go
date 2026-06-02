@@ -54,6 +54,11 @@ type ConnectionManager struct {
 	inboundMediaQueue inboundMediaJobEnqueuer
 	campaignPublisher *queue.Publisher
 
+	// inboundMessageHook fires after a direct incoming message is persisted, so
+	// the handlers layer can run post-processing (chatbot, agent selection,
+	// welcome menus, etc.) for the whatsmeow provider path.
+	inboundMessageHook InboundMessageHook
+
 	healthMonitorMu     sync.Mutex
 	healthMonitorCancel context.CancelFunc
 	healthMonitorDone   chan struct{}
@@ -65,6 +70,26 @@ type ConnectionManager struct {
 
 type inboundMediaJobEnqueuer interface {
 	EnqueueInboundMedia(ctx context.Context, job *queue.InboundMediaJob) error
+}
+
+// InboundMessageHook is invoked after a direct (1:1) incoming message has been
+// persisted. It runs on the whatsmeow message-persistence goroutine, so the
+// callback must not block the connection. The hook receives the resolved
+// org/instance identifiers, the account name persisted on the contact, the
+// contact record, the persisted inbound message, and the message type/content
+// for downstream dispatch (chatbot, agent selection, welcome menu, etc.).
+type InboundMessageHook func(ctx context.Context, info InboundMessageInfo)
+
+// InboundMessageInfo describes a newly persisted inbound message.
+type InboundMessageInfo struct {
+	OrganizationID  uuid.UUID
+	InstanceID      uuid.UUID
+	WhatsAppAccount string
+	Contact         *models.Contact
+	Message         *models.Message
+	MessageType     models.MessageType
+	Content         string
+	IsHistorySync   bool
 }
 
 type cachedQRCode struct {
@@ -120,6 +145,15 @@ func (cm *ConnectionManager) SetMediaService(service *MediaService) {
 		return
 	}
 	cm.mediaService = service
+}
+
+// SetInboundMessageHook registers a callback invoked after a direct incoming
+// message has been persisted. Pass nil to clear it.
+func (cm *ConnectionManager) SetInboundMessageHook(hook InboundMessageHook) {
+	if cm == nil {
+		return
+	}
+	cm.inboundMessageHook = hook
 }
 
 // Connect initializes and connects a WhatsApp instance.

@@ -642,6 +642,42 @@
       "description": "Description"
     }
   },
+  "agentSelection": {
+    "page": {
+      "title": "Customer routing",
+      "subtitle": "Let customers pick the agent, team, or queue that should handle their chat",
+      "loading": "Loading customer routing...",
+      "save": "Save routing settings",
+      "saved": "Routing settings saved",
+      "tabs": {
+        "settings": "Settings",
+        "agents": "Agents",
+        "options": "Options",
+        "operations": "Operations"
+      },
+      "status": {
+        "active": "Routing is active",
+        "paused": "Routing is paused",
+        "activeHelp": "Customers can receive the selection menu.",
+        "pausedHelp": "Pending behavior stays unchanged until routing is enabled."
+      },
+      "trigger": {
+        "first_pending_message": "First pending message",
+        "keyword": "Keyword only",
+        "after_office_hours": "After office hours",
+        "chatbot_step": "Chatbot step (advanced)",
+        "manual_test": "Manual test only"
+      },
+      "testSend": {
+        "button": "Test send menu",
+        "pickContact": "Pick a contact to receive the test menu",
+        "noContacts": "No contacts available for testing",
+        "sending": "Sending test menu...",
+        "sent": "Test menu sent to {contact} via {account}",
+        "failed": "Test send failed: {error}"
+      }
+    }
+  },
   "settings": {
     "title": "Settings",
     "subtitle": "Manage your organization settings",

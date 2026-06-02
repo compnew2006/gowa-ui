@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -67,6 +68,11 @@ type agentSelectionOptionRequest struct {
 }
 
 type agentSelectionPreviewRequest struct {
+	SettingsID *uuid.UUID `json:"settings_id"`
+	ContactID  *uuid.UUID `json:"contact_id"`
+}
+
+type agentSelectionTestSendRequest struct {
 	SettingsID *uuid.UUID `json:"settings_id"`
 	ContactID  *uuid.UUID `json:"contact_id"`
 }
@@ -265,20 +271,29 @@ func (a *App) UpdateAgentSelectionSettings(r *fastglue.Request) error {
 	}
 	settings.TriggerKeywords = normalizeStringArray(req.TriggerKeywords)
 	if req.AllowedInstanceIDs != nil {
-		allowedInstanceIDs, err := a.normalizeAgentSelectionAllowedInstanceIDs(requestDB, orgID, *req.AllowedInstanceIDs)
+		allowedInstanceIDs, err := a.normalizeAgentSelectionAllowedInstanceIDs(orgID, *req.AllowedInstanceIDs)
 		if err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 		}
 		settings.AllowedInstanceIDs = allowedInstanceIDs
 	}
 	if req.PromptDelayMinutes != nil {
-		settings.PromptDelayMinutes = clampInt(*req.PromptDelayMinutes, 0, 24*60)
+		if *req.PromptDelayMinutes < 0 || *req.PromptDelayMinutes > 24*60 {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "prompt_delay_minutes must be between 0 and 1440", nil, "")
+		}
+		settings.PromptDelayMinutes = *req.PromptDelayMinutes
 	}
 	if req.SelectionTimeoutMinutes != nil {
-		settings.SelectionTimeoutMinutes = clampInt(*req.SelectionTimeoutMinutes, 1, 24*60)
+		if *req.SelectionTimeoutMinutes < 1 || *req.SelectionTimeoutMinutes > 24*60 {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "selection_timeout_minutes must be between 1 and 1440", nil, "")
+		}
+		settings.SelectionTimeoutMinutes = *req.SelectionTimeoutMinutes
 	}
 	if req.MaxInvalidAttempts != nil {
-		settings.MaxInvalidAttempts = clampInt(*req.MaxInvalidAttempts, 1, 20)
+		if *req.MaxInvalidAttempts < 1 || *req.MaxInvalidAttempts > 20 {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "max_invalid_attempts must be between 1 and 20", nil, "")
+		}
+		settings.MaxInvalidAttempts = *req.MaxInvalidAttempts
 	}
 	if req.MenuHeaderText != nil {
 		settings.MenuHeaderText = strings.TrimSpace(*req.MenuHeaderText)
@@ -334,7 +349,7 @@ func (a *App) ListAgentSelectionParticipants(r *fastglue.Request) error {
 		return nil
 	}
 
-	query := requestDB.Where("organization_id = ?", orgID).Preload("User").Order("sort_order ASC, display_name ASC")
+	query := requestDB.Where("organization_id = ?", orgID).Order("sort_order ASC, display_name ASC")
 	if rawSettingsID := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("settings_id"))); rawSettingsID != "" {
 		settingsID, parseErr := uuid.Parse(rawSettingsID)
 		if parseErr != nil {
@@ -347,6 +362,7 @@ func (a *App) ListAgentSelectionParticipants(r *fastglue.Request) error {
 	if err := query.Find(&participants).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list participants", nil, "")
 	}
+	a.populateParticipantUsers(participants)
 	return r.SendEnvelope(map[string]any{"participants": participants})
 }
 
@@ -407,9 +423,14 @@ func (a *App) CreateAgentSelectionParticipant(r *fastglue.Request) error {
 		Metadata:              models.JSONB{},
 	}
 	if err := agentSelectionWriteDB(requestDB).Create(&participant).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Agent is already in this routing list", nil, "")
+		if isDuplicateKeyError(err) {
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "Agent is already in this routing list", nil, "")
+		}
+		a.Log.Error("Failed to create agent selection participant", "error", err, "organization_id", orgID, "user_id", userID, "settings_id", req.SettingsID.String(), "agent_id", req.UserID.String())
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to add agent to routing list", nil, "")
 	}
-	_ = requestDB.Preload("User").First(&participant, "id = ? AND organization_id = ?", participant.ID, orgID).Error
+	_ = requestDB.First(&participant, "id = ? AND organization_id = ?", participant.ID, orgID).Error
+	a.populateParticipantUser(&participant)
 	a.writeAgentSelectionAudit(requestDB, orgID, agentSelectionAuditInput{
 		EventType:   "participant_created",
 		ActorType:   models.AgentSelectionActorAdmin,
@@ -462,7 +483,8 @@ func (a *App) UpdateAgentSelectionParticipant(r *fastglue.Request) error {
 	if err := agentSelectionWriteDB(requestDB).Save(&participant).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save participant", nil, "")
 	}
-	_ = requestDB.Preload("User").First(&participant, "id = ? AND organization_id = ?", participant.ID, orgID).Error
+	_ = requestDB.First(&participant, "id = ? AND organization_id = ?", participant.ID, orgID).Error
+	a.populateParticipantUser(&participant)
 	a.writeAgentSelectionAudit(requestDB, orgID, agentSelectionAuditInput{
 		EventType:   "participant_updated",
 		ActorType:   models.AgentSelectionActorAdmin,
@@ -478,7 +500,7 @@ func (a *App) DeleteAgentSelectionParticipant(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
-	if err := a.requireAgentSelectionPermission(r, userID, models.ActionWrite); err != nil {
+	if err := a.requireAgentSelectionPermission(r, userID, models.ActionDelete); err != nil {
 		return nil
 	}
 	id, err := parsePathUUID(r, "id", "participant")
@@ -614,7 +636,7 @@ func (a *App) DeleteAgentSelectionOption(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
-	if err := a.requireAgentSelectionPermission(r, userID, models.ActionWrite); err != nil {
+	if err := a.requireAgentSelectionPermission(r, userID, models.ActionDelete); err != nil {
 		return nil
 	}
 	id, err := parsePathUUID(r, "id", "option")
@@ -693,6 +715,114 @@ func (a *App) PreviewAgentSelectionMenu(r *fastglue.Request) error {
 		menu = emptyAgentSelectionMenuPreview(settings)
 	}
 	return r.SendEnvelope(map[string]any{"menu": menu})
+}
+
+func (a *App) TestSendAgentSelectionMenu(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireAgentSelectionPermission(r, userID, models.ActionWrite); err != nil {
+		return nil
+	}
+
+	var req agentSelectionTestSendRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+	if req.ContactID == nil || *req.ContactID == uuid.Nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "contact_id is required to test-send", nil, "")
+	}
+
+	var contact models.Contact
+	if err := requestDB.Where("id = ? AND organization_id = ?", *req.ContactID, orgID).First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+
+	var settings *models.AgentSelectionSettings
+	if req.SettingsID != nil && *req.SettingsID != uuid.Nil {
+		var s models.AgentSelectionSettings
+		if err := requestDB.Where("id = ? AND organization_id = ?", *req.SettingsID, orgID).First(&s).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Settings not found", nil, "")
+		}
+		settings = &s
+	} else {
+		settings, err = a.resolveAgentSelectionSettings(requestDB, orgID, contact.InstanceID)
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load settings", nil, "")
+		}
+	}
+
+	menu, err := a.buildAgentSelectionMenu(requestDB, orgID, settings, &contact)
+	if err != nil {
+		a.Log.Error("Failed to build agent selection menu for test-send", "error", err, "organization_id", orgID, "settings_id", settings.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to build agent selection menu", nil, "")
+	}
+
+	accountName := strings.TrimSpace(contact.WhatsAppAccount)
+	var account models.WhatsAppAccount
+	accountErr := a.DB.Where("organization_id = ? AND name = ?", orgID, accountName).First(&account).Error
+	if accountErr != nil || account.Name == "" {
+		if err := a.DB.Where("organization_id = ? AND status = ?", orgID, "active").Order("created_at ASC").First(&account).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No active WhatsApp account available to send test menu", nil, "")
+		}
+		accountName = account.Name
+	}
+
+	msg, sendErr := a.SendOutgoingMessage(context.Background(), OutgoingMessageRequest{
+		Account: &account,
+		Contact: &contact,
+		Type:    models.MessageTypeText,
+		Content: menu.Text,
+	}, ChatbotSendOptions())
+	if sendErr != nil {
+		a.Log.Error("Test-send agent selection menu failed", "error", sendErr, "organization_id", orgID, "contact_id", contact.ID, "user_id", userID)
+		a.writeAgentSelectionAudit(requestDB, orgID, agentSelectionAuditInput{
+			ContactID:       &contact.ID,
+			InstanceID:      contact.InstanceID,
+			WhatsAppAccount: accountName,
+			EventType:       "test_send_failed",
+			ActorType:       models.AgentSelectionActorAdmin,
+			ActorUserID:     &userID,
+			Reason:          sendErr.Error(),
+		})
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to send test menu: "+sendErr.Error(), nil, "")
+	}
+
+	a.writeAgentSelectionAudit(requestDB, orgID, agentSelectionAuditInput{
+		ContactID:         &contact.ID,
+		InstanceID:        contact.InstanceID,
+		WhatsAppAccount:   accountName,
+		EventType:         "test_menu_sent",
+		ActorType:         models.AgentSelectionActorAdmin,
+		ActorUserID:       &userID,
+		OutboundMessageID: msgRefID(msg),
+		Metadata:          models.JSONB{"contact_id": contact.ID.String(), "settings_id": settings.ID.String()},
+	})
+
+	return r.SendEnvelope(map[string]any{
+		"sent":              true,
+		"whatsapp_account":  accountName,
+		"contact_id":        contact.ID.String(),
+		"menu_text":         menu.Text,
+		"option_count":      len(menu.Options),
+		"outbound_message_id": msgRefString(msg),
+	})
+}
+
+func msgRefID(msg *models.Message) *uuid.UUID {
+	if msg == nil {
+		return nil
+	}
+	return &msg.ID
+}
+
+func msgRefString(msg *models.Message) string {
+	if msg == nil {
+		return ""
+	}
+	return msg.ID.String()
 }
 
 func emptyAgentSelectionMenuPreview(settings *models.AgentSelectionSettings) *agentSelectionRenderedMenu {
@@ -813,25 +943,27 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 	if settings.ID != uuid.Nil {
 		var participants []models.AgentSelectionParticipant
 		if err := readDB.Where("organization_id = ? AND settings_id = ? AND is_enabled = ?", orgID, settings.ID, true).
-			Preload("User").
 			Order("sort_order ASC, display_name ASC").
 			Find(&participants).Error; err != nil {
 			return nil, err
 		}
+		a.populateParticipantUsers(participants)
 		for _, participant := range participants {
 			if participant.User == nil || !participant.User.IsActive {
 				continue
 			}
-			if participant.ShowOnlyWhenAvailable && !participant.User.IsAvailable {
-				continue
-			}
-			if participant.MaxOpenChats != nil && *participant.MaxOpenChats >= 0 {
-				var openCount int64
-				readDB.Model(&models.Contact{}).
-					Where("organization_id = ? AND assigned_user_id = ? AND status = ?", orgID, participant.UserID, models.ChatStatusOpen).
-					Count(&openCount)
-				if openCount >= int64(*participant.MaxOpenChats) {
+			if settings.HideUnavailableAgents {
+				if participant.ShowOnlyWhenAvailable && !participant.User.IsAvailable {
 					continue
+				}
+				if participant.MaxOpenChats != nil && *participant.MaxOpenChats >= 0 {
+					var openCount int64
+					readDB.Model(&models.Contact{}).
+						Where("organization_id = ? AND assigned_user_id = ? AND status = ?", orgID, participant.UserID, models.ChatStatusOpen).
+						Count(&openCount)
+					if openCount >= int64(*participant.MaxOpenChats) {
+						continue
+					}
 				}
 			}
 			if contact != nil {
@@ -958,6 +1090,77 @@ func (a *App) maybeHandleAgentSelectionInbound(account *models.WhatsAppAccount, 
 		return false
 	}
 	return true
+}
+
+// HandleWhatsmeowInboundMessage is the entry point for inbound message
+// post-processing on the whatsmeow provider path. It is wired into the
+// whatsmeow ConnectionManager via SetInboundMessageHook so that triggers like
+// the agent-selection keyword check fire for messages received over the
+// WhatsApp Web protocol (not just Meta Cloud API webhooks).
+func (a *App) HandleWhatsmeowInboundMessage(ctx context.Context, info whatsmeow.InboundMessageInfo) {
+	if a == nil || a.DB == nil {
+		return
+	}
+	if !a.isWhatsmeowProvider() {
+		return
+	}
+	if info.IsHistorySync {
+		return
+	}
+	if info.Contact == nil || info.Message == nil {
+		return
+	}
+	if info.Message.Direction != models.DirectionIncoming {
+		return
+	}
+
+	accountName := strings.TrimSpace(info.WhatsAppAccount)
+	if accountName == "" {
+		accountName = "whatsmeow"
+	}
+
+	var account models.WhatsAppAccount
+	if err := a.DB.WithContext(ctx).
+		Where("organization_id = ? AND name = ?", info.OrganizationID, accountName).
+		First(&account).Error; err != nil {
+		a.Log.Debug("WhatsApp account not found for whatsmeow inbound hook",
+			"organization_id", info.OrganizationID,
+			"account_name", accountName,
+			"error", err,
+		)
+		return
+	}
+
+	payload := incomingMessagePayload{
+		MessageText: info.Content,
+		MessageType: string(info.MessageType),
+	}
+
+	if a.licenseBlocksValueDelivery() {
+		a.Log.Info("License is locked; suppressing outbound chatbot processing for whatsmeow inbound message",
+			"contact_id", info.Contact.ID,
+			"organization_id", account.OrganizationID,
+		)
+		return
+	}
+
+	a.ClearContactChatbotTracking(info.Contact.ID)
+
+	if a.maybeCaptureChatCloseRating(account.OrganizationID, info.Contact, payload, info.Message) {
+		return
+	}
+
+	if a.maybeHandleAgentSelectionInbound(&account, info.Contact, info.Message, payload) {
+		return
+	}
+
+	if a.hasActiveAgentTransfer(account.OrganizationID, info.Contact.ID) {
+		a.Log.Info("Contact has active agent transfer, skipping chatbot processing",
+			"contact_id", info.Contact.ID,
+			"phone_number", info.Contact.PhoneNumber,
+		)
+		return
+	}
 }
 
 func (a *App) shouldCreateAgentSelectionDelay(settings *models.AgentSelectionSettings, contact *models.Contact, text string) bool {
@@ -1382,6 +1585,16 @@ func (a *App) sendAgentSelectionPromptIfDue(session *models.AgentSelectionSessio
 }
 
 func (a *App) expireAgentSelectionSession(session *models.AgentSelectionSession) {
+	settings, err := a.resolveAgentSelectionSettings(a.DB, session.OrganizationID, session.InstanceID)
+	if err == nil && settings != nil && strings.TrimSpace(settings.TimeoutResponseText) != "" {
+		var account models.WhatsAppAccount
+		if accountErr := a.DB.Where("organization_id = ? AND name = ?", session.OrganizationID, session.WhatsAppAccount).First(&account).Error; accountErr == nil {
+			var contact models.Contact
+			if contactErr := a.DB.Where("id = ? AND organization_id = ?", session.ContactID, session.OrganizationID).First(&contact).Error; contactErr == nil {
+				_ = a.sendAndSaveTextMessage(&account, &contact, settings.TimeoutResponseText)
+			}
+		}
+	}
 	session.Status = models.AgentSelectionSessionTimeout
 	_ = a.DB.Save(session).Error
 	a.writeAgentSelectionAudit(a.DB, session.OrganizationID, agentSelectionAuditInput{
@@ -1391,12 +1604,8 @@ func (a *App) expireAgentSelectionSession(session *models.AgentSelectionSession)
 		WhatsAppAccount: session.WhatsAppAccount,
 		EventType:       models.AgentSelectionEventSelectionTimeout,
 		ActorType:       models.AgentSelectionActorSystem,
+		Metadata:        models.JSONB{"timeout_response_text_sent": settings != nil && strings.TrimSpace(settings.TimeoutResponseText) != ""},
 	})
-	if session.Metadata != nil {
-		if response, _ := session.Metadata["timeout_response_text"].(string); strings.TrimSpace(response) != "" {
-			// Reserved for future per-session timeout text snapshots.
-		}
-	}
 }
 
 func (a *App) writeAgentSelectionAudit(db *gorm.DB, orgID uuid.UUID, input agentSelectionAuditInput) {
@@ -1561,7 +1770,10 @@ func normalizeStringArray(values []string) models.StringArray {
 	return out
 }
 
-func (a *App) normalizeAgentSelectionAllowedInstanceIDs(db *gorm.DB, orgID uuid.UUID, values []string) (models.StringArray, error) {
+// normalizeAgentSelectionAllowedInstanceIDs validates that all provided instance IDs exist
+// and belong to the given organization. It uses a.DB directly with an explicit
+// organization_id filter to avoid GORM tenant-session-scope interference.
+func (a *App) normalizeAgentSelectionAllowedInstanceIDs(orgID uuid.UUID, values []string) (models.StringArray, error) {
 	normalized := normalizeStringArray(values)
 	if len(normalized) == 0 {
 		return models.StringArray{}, nil
@@ -1581,13 +1793,27 @@ func (a *App) normalizeAgentSelectionAllowedInstanceIDs(db *gorm.DB, orgID uuid.
 		ids = append(ids, id)
 	}
 
-	var count int64
-	if err := db.Model(&models.WhatsAppInstance{}).
-		Where("organization_id = ? AND id IN ?", orgID, ids).
-		Count(&count).Error; err != nil {
+	if a == nil || a.DB == nil {
+		return nil, fmt.Errorf("database unavailable")
+	}
+
+	var existing []models.WhatsAppInstance
+	if err := a.DB.
+		Where("id IN ? AND organization_id = ?", ids, orgID).
+		Find(&existing).Error; err != nil {
 		return nil, err
 	}
-	if count != int64(len(ids)) {
+	found := make(map[uuid.UUID]struct{}, len(existing))
+	for _, inst := range existing {
+		found[inst.ID] = struct{}{}
+	}
+	var missing []string
+	for _, id := range ids {
+		if _, ok := found[id]; !ok {
+			missing = append(missing, id.String())
+		}
+	}
+	if len(missing) > 0 {
 		return nil, fmt.Errorf("One or more allowed instances were not found")
 	}
 
@@ -1655,4 +1881,62 @@ func stringFromAny(value any) string {
 	default:
 		return ""
 	}
+}
+
+func (a *App) populateParticipantUsers(participants []models.AgentSelectionParticipant) {
+	if a == nil || a.DB == nil || len(participants) == 0 {
+		return
+	}
+	userIDs := make([]uuid.UUID, 0, len(participants))
+	for _, p := range participants {
+		if p.UserID != uuid.Nil {
+			userIDs = append(userIDs, p.UserID)
+		}
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+	var users []models.User
+	if err := a.DB.Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+		a.Log.Error("Failed to fetch users for participants", "error", err)
+		return
+	}
+	userMap := make(map[uuid.UUID]*models.User)
+	for i := range users {
+		userMap[users[i].ID] = &users[i]
+	}
+	for i := range participants {
+		if u, ok := userMap[participants[i].UserID]; ok {
+			participants[i].User = u
+		}
+	}
+}
+
+func (a *App) populateParticipantUser(participant *models.AgentSelectionParticipant) {
+	if a == nil || a.DB == nil || participant == nil || participant.UserID == uuid.Nil {
+		return
+	}
+	var user models.User
+	if err := a.DB.Where("id = ?", participant.UserID).First(&user).Error; err != nil {
+		a.Log.Error("Failed to fetch user for participant", "error", err, "user_id", participant.UserID)
+		return
+	}
+	participant.User = &user
+}
+
+// --- Test-only helpers (exposed for integration tests) ---
+
+// BuildAgentSelectionMenuForTest wraps buildAgentSelectionMenu for integration tests.
+func (a *App) BuildAgentSelectionMenuForTest(orgID uuid.UUID, settings *models.AgentSelectionSettings, contact *models.Contact) (*agentSelectionRenderedMenu, error) {
+	return a.buildAgentSelectionMenu(a.DB, orgID, settings, contact)
+}
+
+// GetAgentSelectionSettingsForTest wraps resolveAgentSelectionSettings for integration tests.
+func (a *App) GetAgentSelectionSettingsForTest(orgID uuid.UUID, instanceID *uuid.UUID) (*models.AgentSelectionSettings, error) {
+	return a.resolveAgentSelectionSettings(a.DB, orgID, instanceID)
+}
+
+// ExpireAgentSelectionSessionForTest wraps expireAgentSelectionSession for integration tests.
+func (a *App) ExpireAgentSelectionSessionForTest(session *models.AgentSelectionSession) {
+	a.expireAgentSelectionSession(session)
 }

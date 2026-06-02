@@ -352,6 +352,8 @@ func runServer(args []string) {
 		HTTPClient:       httpClient,
 	}
 
+	whatsmeowManager.SetInboundMessageHook(app.HandleWhatsmeowInboundMessage)
+
 	licenseService, err := license.NewService(cfg, db, rdb, lo)
 	if err != nil {
 		lo.Fatal("Failed to initialize license service", "error", err)
@@ -1689,6 +1691,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/agent-selection/options/{id}", app.UpdateAgentSelectionOption)
 	g.DELETE("/api/agent-selection/options/{id}", app.DeleteAgentSelectionOption)
 	g.POST("/api/agent-selection/preview", app.PreviewAgentSelectionMenu)
+	g.POST("/api/agent-selection/test-send", app.TestSendAgentSelectionMenu)
 	g.GET("/api/agent-selection/audit", app.ListAgentSelectionAudit)
 	g.GET("/api/agent-selection/sessions", app.ListAgentSelectionSessions)
 	g.POST("/api/agent-selection/sessions/{id}/cancel", app.CancelAgentSelectionSession)

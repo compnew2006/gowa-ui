@@ -536,3 +536,97 @@ func CreateTestTag(t *testing.T, db *gorm.DB, orgID uuid.UUID, name string) *mod
 	require.NoError(t, db.Create(tag).Error)
 	return tag
 }
+
+// --- Agent Selection ---
+
+// CreateTestAgentSelectionSettings creates a test agent selection settings row.
+// Pass instanceID = nil to create the org-wide (global) row.
+func CreateTestAgentSelectionSettings(t *testing.T, db *gorm.DB, orgID uuid.UUID, instanceID *uuid.UUID, opts ...func(*models.AgentSelectionSettings)) *models.AgentSelectionSettings {
+	t.Helper()
+
+	settings := &models.AgentSelectionSettings{
+		BaseModel:                  models.BaseModel{ID: uuid.New()},
+		OrganizationID:             orgID,
+		InstanceID:                 instanceID,
+		AllowedInstanceIDs:         models.StringArray{},
+		Enabled:                    true,
+		TriggerMode:                models.AgentSelectionTriggerFirstPendingMessage,
+		TriggerKeywords:            models.StringArray{},
+		PromptDelayMinutes:         3,
+		SelectionTimeoutMinutes:    10,
+		MaxInvalidAttempts:         3,
+		MenuHeaderText:             "Please choose who you'd like to chat with:",
+		MenuFooterText:             "",
+		InvalidReplyText:           "Invalid selection. Please reply with a number from the list.",
+		TimeoutResponseText:        "We did not receive a selection. Please try again later.",
+		UnavailableAgentText:       "This agent is currently unavailable. Please pick another option.",
+		CustomFinalOptionEnabled:   false,
+		HideUnavailableAgents:      true,
+	}
+	for _, opt := range opts {
+		opt(settings)
+	}
+	require.NoError(t, db.Create(settings).Error)
+	return settings
+}
+
+// CreateTestAgentSelectionParticipant creates a test agent selection participant.
+func CreateTestAgentSelectionParticipant(t *testing.T, db *gorm.DB, orgID, settingsID, userID uuid.UUID, opts ...func(*models.AgentSelectionParticipant)) *models.AgentSelectionParticipant {
+	t.Helper()
+
+	participant := &models.AgentSelectionParticipant{
+		BaseModel:              models.BaseModel{ID: uuid.New()},
+		OrganizationID:         orgID,
+		SettingsID:             settingsID,
+		UserID:                 userID,
+		DisplayName:            "Test Participant",
+		IsEnabled:              true,
+		SortOrder:              0,
+		ShowOnlyWhenAvailable:  true,
+		Metadata:               models.JSONB{},
+	}
+	for _, opt := range opts {
+		opt(participant)
+	}
+	require.NoError(t, db.Create(participant).Error)
+	return participant
+}
+
+// CreateTestAgentSelectionOption creates a test agent selection option (team/queue/custom).
+func CreateTestAgentSelectionOption(t *testing.T, db *gorm.DB, orgID, settingsID uuid.UUID, optionType models.AgentSelectionOptionType, opts ...func(*models.AgentSelectionOption)) *models.AgentSelectionOption {
+	t.Helper()
+
+	option := &models.AgentSelectionOption{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: orgID,
+		SettingsID:     settingsID,
+		OptionType:     optionType,
+		Label:          "Test " + string(optionType),
+		IsEnabled:      true,
+		SortOrder:      0,
+		Metadata:       models.JSONB{},
+	}
+	for _, opt := range opts {
+		opt(option)
+	}
+	require.NoError(t, db.Create(option).Error)
+	return option
+}
+
+// CreateTestWhatsAppInstance creates a minimal whatsmeow instance row for tests.
+func CreateTestWhatsAppInstance(t *testing.T, db *gorm.DB, orgID uuid.UUID, opts ...func(*models.WhatsAppInstance)) *models.WhatsAppInstance {
+	t.Helper()
+
+	instance := &models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: orgID,
+		Name:           "Test Instance " + uuid.NewString()[:8],
+		Status:         models.InstanceStatusDisconnected,
+		Settings:       models.JSONB{},
+	}
+	for _, opt := range opts {
+		opt(instance)
+	}
+	require.NoError(t, db.Create(instance).Error)
+	return instance
+}

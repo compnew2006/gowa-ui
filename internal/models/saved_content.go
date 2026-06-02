@@ -52,8 +52,8 @@ func RenderPreview(body string) string {
 
 type SavedContent struct {
 	BaseModel
-	OrganizationID uuid.UUID  `gorm:"type:uuid;not null;uniqueIndex:idx_saved_contents_org_name" json:"organization_id"`
-	Name           string     `gorm:"size:255;not null;uniqueIndex:idx_saved_contents_org_name" json:"name"`
+	OrganizationID uuid.UUID  `gorm:"type:uuid;not null;uniqueIndex:idx_saved_contents_org_name,where:deleted_at IS NULL" json:"organization_id"`
+	Name           string     `gorm:"size:255;not null;uniqueIndex:idx_saved_contents_org_name,where:deleted_at IS NULL" json:"name"`
 	Body           string     `gorm:"type:text;not null" json:"body"`
 	Variables      StringArray `gorm:"type:jsonb;default:'[]'" json:"variables"`
 	Category       string     `gorm:"size:100" json:"category"`
