@@ -89,6 +89,8 @@ type AgentSelectionSettings struct {
 	TriggerMode               AgentSelectionTriggerMode  `gorm:"size:40;default:first_pending_message" json:"trigger_mode"`
 	TriggerKeywords           StringArray                `gorm:"type:jsonb;default:'[]'" json:"trigger_keywords"`
 	PromptDelayMinutes        int                        `gorm:"default:3" json:"prompt_delay_minutes"`
+	PromptDelayMinMinutes     int                        `gorm:"default:3" json:"prompt_delay_min_minutes"`
+	PromptDelayMaxMinutes     int                        `gorm:"default:3" json:"prompt_delay_max_minutes"`
 	SelectionTimeoutMinutes   int                        `gorm:"default:10" json:"selection_timeout_minutes"`
 	MaxInvalidAttempts        int                        `gorm:"default:3" json:"max_invalid_attempts"`
 	MenuHeaderText            string                     `gorm:"type:text" json:"menu_header_text"`

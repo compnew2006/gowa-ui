@@ -16,6 +16,7 @@ var envTopLevelSections = []string{
 	"whatsapp",
 	"observability",
 	"license",
+	"facebook_oauth",
 	"database",
 	"storage",
 	"server",
@@ -43,6 +44,7 @@ type Config struct {
 	Campaigns     CampaignsConfig     `koanf:"campaigns"`
 	Cookie        CookieConfig        `koanf:"cookie"`
 	License       LicenseConfig       `koanf:"license"`
+	FacebookOAuth FacebookOAuthConfig `koanf:"facebook_oauth"`
 }
 
 type AppConfig struct {
@@ -184,6 +186,15 @@ type LicenseConfig struct {
 	EnforceOnWorkers             *bool    `koanf:"enforce_on_workers"`
 }
 
+type FacebookOAuthConfig struct {
+	AppID              string `koanf:"app_id"`
+	AppSecret          string `koanf:"app_secret"`
+	APIVersion         string `koanf:"api_version"`
+	RedirectURI        string `koanf:"redirect_uri"`
+	BaseURL            string `koanf:"base_url"`
+	WebhookVerifyToken string `koanf:"webhook_verify_token"`
+}
+
 // Load loads configuration from file and environment variables
 func Load(configPath string) (*Config, error) {
 	k := koanf.New(".")
@@ -297,6 +308,12 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.WhatsApp.Provider == "" {
 		cfg.WhatsApp.Provider = "meta"
+	}
+	if cfg.FacebookOAuth.APIVersion == "" {
+		cfg.FacebookOAuth.APIVersion = "v20.0"
+	}
+	if cfg.FacebookOAuth.BaseURL == "" {
+		cfg.FacebookOAuth.BaseURL = "https://graph.facebook.com"
 	}
 	if cfg.Whatsmeow.RateLimitMinDelayMs == 0 {
 		cfg.Whatsmeow.RateLimitMinDelayMs = 1000

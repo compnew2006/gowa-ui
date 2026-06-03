@@ -11,45 +11,84 @@ import (
 )
 
 type FBCreateAccountRequest struct {
-	Name        string                      `json:"name"`
-	AccountUID  string                      `json:"account_uid"`
+	Name        string                       `json:"name"`
+	AccountUID  string                       `json:"account_uid"`
 	Method      models.FacebookAccountMethod `json:"method"`
-	CookiesText string                      `json:"cookies_text"`
-	Data        models.JSONB                `json:"data"`
+	CookiesText string                       `json:"cookies_text"`
+	Data        models.JSONB                 `json:"data"`
 }
 
 type FBUpdateAccountRequest struct {
-	Name        *string                      `json:"name"`
-	AccountUID  *string                      `json:"account_uid"`
+	Name        *string                       `json:"name"`
+	AccountUID  *string                       `json:"account_uid"`
 	Status      *models.FacebookAccountStatus `json:"status"`
 	Method      *models.FacebookAccountMethod `json:"method"`
-	CookiesText *string                      `json:"cookies_text"`
-	Data        *models.JSONB                `json:"data"`
+	CookiesText *string                       `json:"cookies_text"`
+	Data        *models.JSONB                 `json:"data"`
 }
 
 type FBAccountResponse struct {
-	ID             uuid.UUID                     `json:"id"`
-	Name           string                        `json:"name"`
-	AccountUID     string                        `json:"account_uid"`
-	Status         models.FacebookAccountStatus  `json:"status"`
-	Method         models.FacebookAccountMethod  `json:"method"`
-	Data           models.JSONB                  `json:"data"`
-	HasCookies     bool                          `json:"has_cookies"`
-	CreatedAt      string                        `json:"created_at"`
-	UpdatedAt      string                        `json:"updated_at"`
+	ID             uuid.UUID                    `json:"id"`
+	Name           string                       `json:"name"`
+	AccountUID     string                       `json:"account_uid"`
+	Platform       string                       `json:"platform"`
+	Email          string                       `json:"email,omitempty"`
+	AvatarURL      string                       `json:"avatar_url,omitempty"`
+	Status         models.FacebookAccountStatus `json:"status"`
+	Method         models.FacebookAccountMethod `json:"method"`
+	Data           models.JSONB                 `json:"data"`
+	HasCookies     bool                         `json:"has_cookies"`
+	OAuthConnected bool                         `json:"oauth_connected"`
+	TokenExpiresAt string                       `json:"token_expires_at,omitempty"`
+	ConnectedAt    string                       `json:"connected_at,omitempty"`
+	LastRenewedAt  string                       `json:"last_renewed_at,omitempty"`
+	PageCount      int                          `json:"page_count"`
+	CreatedAt      string                       `json:"created_at"`
+	UpdatedAt      string                       `json:"updated_at"`
 }
 
 func fbAccountToResponse(account models.FacebookAccount) FBAccountResponse {
+	tokenExpiresAt := ""
+	if account.TokenExpiresAt != nil {
+		tokenExpiresAt = account.TokenExpiresAt.Format("2006-01-02T15:04:05Z")
+	}
+	connectedAt := ""
+	if account.ConnectedAt != nil {
+		connectedAt = account.ConnectedAt.Format("2006-01-02T15:04:05Z")
+	}
+	lastRenewedAt := ""
+	if account.LastRenewedAt != nil {
+		lastRenewedAt = account.LastRenewedAt.Format("2006-01-02T15:04:05Z")
+	}
+	pageCount := 0
+	if account.Data != nil {
+		if rawPageCount, ok := account.Data["page_count"].(int); ok {
+			pageCount = rawPageCount
+		} else if rawPageCount, ok := account.Data["page_count"].(float64); ok {
+			pageCount = int(rawPageCount)
+		} else if pages, ok := account.Data["pages"].([]interface{}); ok {
+			pageCount = len(pages)
+		}
+	}
+
 	return FBAccountResponse{
-		ID:         account.ID,
-		Name:       account.Name,
-		AccountUID: account.AccountUID,
-		Status:     account.Status,
-		Method:     account.Method,
-		Data:       account.Data,
-		HasCookies: account.CookiesText != "",
-		CreatedAt:  account.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:  account.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		ID:             account.ID,
+		Name:           account.Name,
+		AccountUID:     account.AccountUID,
+		Platform:       account.Platform,
+		Email:          account.Email,
+		AvatarURL:      account.AvatarURL,
+		Status:         account.Status,
+		Method:         account.Method,
+		Data:           account.Data,
+		HasCookies:     account.CookiesText != "",
+		OAuthConnected: account.AccessToken != "",
+		TokenExpiresAt: tokenExpiresAt,
+		ConnectedAt:    connectedAt,
+		LastRenewedAt:  lastRenewedAt,
+		PageCount:      pageCount,
+		CreatedAt:      account.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:      account.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 }
 

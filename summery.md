@@ -196,6 +196,135 @@ whatomate-switch green
 whatomate-switch blue
 ```
 
+# 2026-06-03 - Sandbox Green Facebook OAuth Deployment
+
+## Result
+
+- Deployed the current project as an isolated green sandbox at `https://sandbox.ofuqalmadenah.com`.
+- Did not switch, restart, or replace production `https://ofuqalmadenah.com` / `whatomate.service`.
+- Sandbox service: `whatomate-sandbox.service`.
+- Sandbox port: `127.0.0.1:18127`.
+- Sandbox config: `/opt/whatomate-sandbox/config.toml`.
+- Sandbox database: `whatomate_sandbox_green_20260602_235053`.
+- Active sandbox binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260602_235053`.
+- Version: `Whatomate sandbox-green-20260602_235053-current (built 2026-06-03_00:03:36)`.
+- SHA256: `215b733c5fe2b2aadefaab315c612c3a0322a00035c986829bb54cba4654dfd2`.
+- Backup before deployment: `/root/whatomate_backups/20260602_235053_pre_sandbox_green_deploy`.
+
+## Verification
+
+- Built on VPS with embedded `/root/whatomate-keyring.json`.
+- `whatomate-sandbox.service` is active.
+- `whatomate.service` remained active.
+- License bootstrap on sandbox returned `enabled=true`, `status=active`, `locked=false`.
+- `https://sandbox.ofuqalmadenah.com/login` loads through nginx and returns the Vue app.
+- Chrome DevTools verified the login page loads, core assets return `200`, `/api/license/bootstrap` returns `200`, and there are no console errors.
+- Unauthenticated `/api/facebook/oauth/init?action=connect` returns `401`, confirming the OAuth route is present and auth-protected.
+
+## Sandbox Switch
+
+```bash
+whatomate-sandbox-switch green
+```
+
+Other sandbox-only commands:
+
+```bash
+whatomate-sandbox-switch status
+whatomate-sandbox-switch blue
+```
+
+## Cleanup
+
+- Removed temporary/source build paths from the VPS after installing the binary:
+  - `/root/whatomate_sandbox_build_20260602_235053`
+  - `/opt/whatomate-sandbox/src`
+  - `/opt/whatomate-sandbox/.cache`
+  - `/opt/whatomate-sandbox/.gopath`
+- Preserved binaries, sandbox config, backups, and remote deployment docs.
+
+# 2026-06-03 - Sandbox Facebook OAuth Save Fix
+
+## Result
+
+- Fixed the sandbox callback failure that showed `Failed to save Facebook account`.
+- Root cause from `whatomate-sandbox.service` logs: `table name "facebook_oauth_states" specified more than once`.
+- Code fix: `CallbackFacebookOAuth` now uses fresh GORM sessions when reading/deleting OAuth state and when saving the Facebook account.
+- Deployed to sandbox only.
+- Active sandbox binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260603_001fix`.
+- Version: `Whatomate sandbox-green-20260603_001fix-fb-oauth-save-fix (built 2026-06-03_00:29:31)`.
+- SHA256: `951aefd80614ca84e3dcf1a58ce5b71b3c5f7429cde04383833639118a25ebec`.
+
+## Verification
+
+- `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers -run TestNonExistentFacebookOAuthCompileOnly` passed.
+- `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/config` passed.
+- Sandbox service active.
+- Production service active and production symlink unchanged.
+- Sandbox `/login` returned `200`.
+- Sandbox license bootstrap returned `status=active`.
+- Recent sandbox logs no longer show the previous OAuth save SQL error.
+
+## Retry Note
+
+- Start Facebook OAuth again from `/facebook/accounts`.
+- Do not reuse the old Facebook callback URL because its `state` token was consumed by the failed callback.
+
+# 2026-06-03 - Sandbox Facebook Accounts Display Fix
+
+## Result
+
+- Fixed the issue where Facebook OAuth showed a success toast but no accounts appeared in `/facebook/accounts`.
+- Root cause: the API returns `{ accounts: [...] }`, while the frontend store was unwrapping the response as a direct array.
+- Updated `frontend/src/stores/fbAccounts.ts` to use `unwrapListResponse(response, "accounts")`.
+- Updated `frontend/src/views/facebook/FacebookAccountsView.vue` to display linked page names from `account.data.pages`.
+- Verified the sandbox database already contained the OAuth account and 7 linked pages.
+- Deployed to sandbox only.
+- Active sandbox binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260603_002fb_list_fix`.
+- Version: `Whatomate sandbox-green-20260603_002fb_list_fix (built 2026-06-03_00:35:39)`.
+- SHA256: `673e8650b7d8a658dfa988ed328402d46d2f94eaa473fd5831ff5e35ae0bcfb3`.
+
+## Verification
+
+- `cd frontend && npm run typecheck` passed.
+- Sandbox service active.
+- Production service active and production symlink unchanged.
+- Sandbox `/login` returned `200`.
+- Chrome DevTools loaded the new sandbox frontend assets with no console errors.
+- Browser verification of `/facebook/accounts` redirected to login in the Codex browser because that browser session was unauthenticated.
+
+# 2026-06-03 - Facebook Comment Inbox Feature
+
+## Result
+
+- Added a new `/facebook/comments` feature in the local codebase.
+- Backend models added:
+  - `FacebookComment`
+  - `FacebookCommentReply`
+  - `FacebookCommentSettings`
+- Backend APIs added:
+  - `GET /api/facebook/comments`
+  - `POST /api/facebook/comments/sync`
+  - `GET /api/facebook/comments/settings`
+  - `PUT /api/facebook/comments/settings`
+  - `POST /api/facebook/comments/{id}/reply`
+  - `PUT /api/facebook/comments/{id}/status`
+  - `GET /api/facebook/comments/webhook`
+  - `POST /api/facebook/comments/webhook`
+- The feature can sync recent page posts/comments, display comments as an inbox, show source page/post, send public comment replies, send private replies, close/reopen comments, and run configured auto replies.
+- Webhook receiving includes Meta `hub.challenge` verification and `X-Hub-Signature-256` validation when `facebook_oauth.app_secret` is configured.
+- Frontend added `/facebook/comments` with inbox, comment detail/reply panel, settings dialog, and sync dialog.
+- Navigation and i18n updated for English, Arabic, and Spanish.
+- Not deployed to VPS in this step.
+
+## Verification
+
+- `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers ./internal/database ./internal/config ./cmd/whatomate -run TestNonExistentFacebookCommentsCompileOnly` passed.
+- `cd frontend && npm run typecheck` passed.
+- Targeted ESLint for the Facebook comments files passed.
+- `git diff --check` passed.
+- Full frontend lint still reports the existing unrelated `AppLayout.vue` parse issue.
+
 # 2026-05-28 - Green Agent Selection UI Polish Deployment
 
 ## Result

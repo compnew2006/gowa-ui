@@ -708,10 +708,13 @@ export const instancesService = {
 export const fbAccountsService = {
   list: () => api.get("/facebook/accounts"),
   get: (id: string) => api.get(`/facebook/accounts/${id}`),
+  initOAuth: (params?: { action?: "connect" | "renew"; account_id?: string }) =>
+    api.get("/facebook/oauth/init", { params }),
+  renewOAuth: (id: string) => api.get(`/facebook/accounts/${id}/oauth/renew`),
   create: (data: {
     name: string;
     account_uid?: string;
-    method?: "cookies" | "credentials";
+    method?: "cookies" | "credentials" | "oauth";
     cookies_text?: string;
     data?: Record<string, unknown>;
   }) => api.post("/facebook/accounts", data),
@@ -720,13 +723,47 @@ export const fbAccountsService = {
     data: {
       name?: string;
       account_uid?: string;
-      status?: "active" | "inactive" | "closed";
-      method?: "cookies" | "credentials";
+      status?: "active" | "inactive" | "closed" | "expired" | "revoked";
+      method?: "cookies" | "credentials" | "oauth";
       cookies_text?: string;
       data?: Record<string, unknown>;
     },
   ) => api.put(`/facebook/accounts/${id}`, data),
   delete: (id: string) => api.delete(`/facebook/accounts/${id}`),
+};
+
+// Facebook Comments
+export const facebookCommentsService = {
+  list: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    account_id?: string;
+    page_id?: string;
+    search?: string;
+  }) => api.get("/facebook/comments", { params }),
+  sync: (data?: {
+    account_id?: string;
+    page_id?: string;
+    post_limit?: number;
+    comments_per_post?: number;
+    post_ids?: string[];
+    run_auto_reply?: boolean;
+  }) => api.post("/facebook/comments/sync", data || {}),
+  getSettings: () => api.get("/facebook/comments/settings"),
+  updateSettings: (data: Record<string, unknown>) =>
+    api.put("/facebook/comments/settings", data),
+  reply: (
+    id: string,
+    data: {
+      reply_text?: string;
+      private_message_text?: string;
+      send_comment_reply?: boolean;
+      send_private_message?: boolean;
+    },
+  ) => api.post(`/facebook/comments/${id}/reply`, data),
+  updateStatus: (id: string, status: string) =>
+    api.put(`/facebook/comments/${id}/status`, { status }),
 };
 
 export const notificationsService = {
@@ -831,6 +868,8 @@ export interface AgentSelectionSettings {
   trigger_mode: AgentSelectionTriggerMode;
   trigger_keywords?: string[];
   prompt_delay_minutes: number;
+  prompt_delay_min_minutes: number;
+  prompt_delay_max_minutes: number;
   selection_timeout_minutes: number;
   max_invalid_attempts: number;
   menu_header_text: string;
@@ -931,6 +970,8 @@ export const agentSelectionService = {
       "/agent-selection/settings",
       data,
     ),
+  deleteSettings: (id: string) =>
+    api.delete<{ deleted: boolean }>(`/agent-selection/settings/${id}`),
   listParticipants: (params?: { settings_id?: string }) =>
     api.get<{ participants: AgentSelectionParticipant[] }>(
       "/agent-selection/participants",

@@ -1330,7 +1330,8 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		if path == "/health" || path == "/ready" ||
 			path == "/api/license/bootstrap" || path == "/api/license/activate" ||
 			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
-			path == "/api/auth/logout" || path == "/api/webhook" || path == "/ws" {
+			path == "/api/auth/logout" || path == "/api/webhook" ||
+			path == "/api/facebook/comments/webhook" || path == "/ws" {
 			return r
 		}
 		// Skip auth for SSO routes (they handle their own auth via state tokens)
@@ -1357,7 +1358,8 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		if path == "/health" || path == "/ready" ||
 			path == "/api/license/bootstrap" || path == "/api/license/activate" ||
 			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
-			path == "/api/auth/logout" || path == "/api/webhook" || path == "/ws" {
+			path == "/api/auth/logout" || path == "/api/webhook" ||
+			path == "/api/facebook/comments/webhook" || path == "/ws" {
 			return r
 		}
 		if len(path) >= 13 && path[:13] == "/api/auth/sso" {
@@ -1505,9 +1507,23 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Facebook Accounts
 	g.GET("/api/facebook/accounts", app.ListFBAccounts)
 	g.POST("/api/facebook/accounts", app.CreateFBAccount)
+	g.GET("/api/facebook/oauth/init", app.InitFacebookOAuth)
+	g.GET("/api/facebook/oauth/callback", app.CallbackFacebookOAuth)
 	g.GET("/api/facebook/accounts/{id}", app.GetFBAccount)
 	g.PUT("/api/facebook/accounts/{id}", app.UpdateFBAccount)
 	g.DELETE("/api/facebook/accounts/{id}", app.DeleteFBAccount)
+	g.GET("/api/facebook/accounts/{id}/oauth/renew", app.RenewFacebookOAuth)
+	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/feed", app.PostFacebookPage)
+	g.GET("/api/facebook/accounts/{id}/pages/{page_id}/insights", app.GetFacebookPageInsights)
+	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/messages", app.SendFacebookPageMessage)
+	g.GET("/api/facebook/comments", app.ListFacebookComments)
+	g.POST("/api/facebook/comments/sync", app.SyncFacebookComments)
+	g.GET("/api/facebook/comments/settings", app.GetFacebookCommentSettings)
+	g.PUT("/api/facebook/comments/settings", app.UpdateFacebookCommentSettings)
+	g.POST("/api/facebook/comments/{id}/reply", app.ReplyFacebookComment)
+	g.PUT("/api/facebook/comments/{id}/status", app.UpdateFacebookCommentStatus)
+	g.GET("/api/facebook/comments/webhook", app.VerifyFacebookCommentsWebhook)
+	g.POST("/api/facebook/comments/webhook", app.ReceiveFacebookCommentsWebhook)
 
 	g.GET("/api/notifications", app.ListNotifications)
 	g.PUT("/api/notifications/{id}/dismiss", app.DismissNotification)
@@ -1682,6 +1698,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Customer Agent Selection
 	g.GET("/api/agent-selection/settings", app.GetAgentSelectionSettings)
 	g.PUT("/api/agent-selection/settings", app.UpdateAgentSelectionSettings)
+	g.DELETE("/api/agent-selection/settings/{id}", app.DeleteAgentSelectionSettings)
 	g.GET("/api/agent-selection/participants", app.ListAgentSelectionParticipants)
 	g.POST("/api/agent-selection/participants", app.CreateAgentSelectionParticipant)
 	g.PUT("/api/agent-selection/participants/{id}", app.UpdateAgentSelectionParticipant)

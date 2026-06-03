@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,6 +30,8 @@ type agentSelectionSettingsRequest struct {
 	TriggerMode               models.AgentSelectionTriggerMode  `json:"trigger_mode"`
 	TriggerKeywords           []string                          `json:"trigger_keywords"`
 	PromptDelayMinutes        *int                              `json:"prompt_delay_minutes"`
+	PromptDelayMinMinutes     *int                              `json:"prompt_delay_min_minutes"`
+	PromptDelayMaxMinutes     *int                              `json:"prompt_delay_max_minutes"`
 	SelectionTimeoutMinutes   *int                              `json:"selection_timeout_minutes"`
 	MaxInvalidAttempts        *int                              `json:"max_invalid_attempts"`
 	MenuHeaderText            *string                           `json:"menu_header_text"`
@@ -94,6 +97,13 @@ type agentSelectionRenderedMenu struct {
 	Options []agentSelectionRenderedOption `json:"options"`
 }
 
+type pendingAgentSelectionCustomOption struct {
+	OptionID string
+	Label    string
+	Action   string
+	Response string
+}
+
 type agentSelectionAuditInput struct {
 	ContactID              *uuid.UUID
 	SessionID              *uuid.UUID
@@ -123,6 +133,8 @@ func defaultAgentSelectionSettings(orgID uuid.UUID, instanceID *uuid.UUID) model
 		TriggerMode:               models.AgentSelectionTriggerFirstPendingMessage,
 		TriggerKeywords:           models.StringArray{},
 		PromptDelayMinutes:        3,
+		PromptDelayMinMinutes:     3,
+		PromptDelayMaxMinutes:     3,
 		SelectionTimeoutMinutes:   10,
 		MaxInvalidAttempts:        3,
 		MenuHeaderText:            "من فضلك اختر من تريد التواصل معه:",
@@ -166,24 +178,53 @@ func (a *App) resolveAgentSelectionSettings(db *gorm.DB, orgID uuid.UUID, instan
 	return &defaults, nil
 }
 
+func (a *App) resolveExactAgentSelectionSettings(db *gorm.DB, orgID uuid.UUID, instanceID *uuid.UUID) (*models.AgentSelectionSettings, error) {
+	var settings models.AgentSelectionSettings
+	var err error
+	if instanceID != nil && *instanceID != uuid.Nil {
+		err = db.Where("organization_id = ? AND instance_id = ?", orgID, *instanceID).First(&settings).Error
+	} else {
+		err = db.Where("organization_id = ? AND instance_id IS NULL", orgID).First(&settings).Error
+	}
+	if err == nil {
+		return &settings, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return nil, err
+}
+
 func (a *App) ensureAgentSelectionSettings(db *gorm.DB, orgID uuid.UUID, instanceID *uuid.UUID) (*models.AgentSelectionSettings, error) {
-	settings, err := a.resolveAgentSelectionSettings(db, orgID, instanceID)
+	settings, err := a.resolveExactAgentSelectionSettings(db, orgID, instanceID)
 	if err != nil {
 		return nil, err
 	}
-	if settings.ID != uuid.Nil {
+	if settings != nil && settings.ID != uuid.Nil {
 		return settings, nil
 	}
-	if settings.InstanceID != nil && *settings.InstanceID == uuid.Nil {
-		settings.InstanceID = nil
+	defaults := defaultAgentSelectionSettings(orgID, instanceID)
+	if instanceID != nil && *instanceID != uuid.Nil {
+		if global, globalErr := a.resolveExactAgentSelectionSettings(db, orgID, nil); globalErr == nil && global != nil && global.ID != uuid.Nil {
+			defaults = *global
+			defaults.ID = uuid.Nil
+			defaults.InstanceID = instanceID
+			defaults.AllowedInstanceIDs = models.StringArray{}
+			defaults.CreatedAt = time.Time{}
+			defaults.UpdatedAt = time.Time{}
+			defaults.DeletedAt = gorm.DeletedAt{}
+		}
 	}
-	if err := agentSelectionWriteDB(db).Create(settings).Error; err != nil {
-		if recovered, resolveErr := a.resolveAgentSelectionSettings(db, orgID, instanceID); resolveErr == nil && recovered.ID != uuid.Nil {
+	if defaults.InstanceID != nil && *defaults.InstanceID == uuid.Nil {
+		defaults.InstanceID = nil
+	}
+	if err := agentSelectionWriteDB(db).Create(&defaults).Error; err != nil {
+		if recovered, resolveErr := a.resolveExactAgentSelectionSettings(db, orgID, instanceID); resolveErr == nil && recovered != nil && recovered.ID != uuid.Nil {
 			return recovered, nil
 		}
 		return nil, err
 	}
-	return settings, nil
+	return &defaults, nil
 }
 
 func agentSelectionWriteDB(db *gorm.DB) *gorm.DB {
@@ -233,7 +274,26 @@ func (a *App) GetAgentSelectionSettings(r *fastglue.Request) error {
 		instanceID = &parsed
 	}
 
-	settings, err := a.ensureAgentSelectionSettings(requestDB, orgID, instanceID)
+	var settings *models.AgentSelectionSettings
+	if instanceID != nil && *instanceID != uuid.Nil {
+		settings, err = a.resolveExactAgentSelectionSettings(requestDB, orgID, instanceID)
+		if err != nil {
+			a.Log.Error("Failed to load exact agent selection settings", "error", err, "organization_id", orgID, "user_id", userID, "instance_id", instanceID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load agent selection settings", nil, "")
+		}
+		if settings == nil {
+			settings, err = a.resolveAgentSelectionSettings(requestDB, orgID, instanceID)
+			if err != nil {
+				a.Log.Error("Failed to load inherited agent selection settings", "error", err, "organization_id", orgID, "user_id", userID, "instance_id", instanceID)
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load agent selection settings", nil, "")
+			}
+			settings.ID = uuid.Nil
+			settings.InstanceID = instanceID
+			settings.AllowedInstanceIDs = models.StringArray{}
+		}
+	} else {
+		settings, err = a.ensureAgentSelectionSettings(requestDB, orgID, instanceID)
+	}
 	if err != nil {
 		a.Log.Error("Failed to load agent selection settings", "error", err, "organization_id", orgID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load agent selection settings", nil, "")
@@ -282,6 +342,31 @@ func (a *App) UpdateAgentSelectionSettings(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "prompt_delay_minutes must be between 0 and 1440", nil, "")
 		}
 		settings.PromptDelayMinutes = *req.PromptDelayMinutes
+		if req.PromptDelayMinMinutes == nil {
+			settings.PromptDelayMinMinutes = *req.PromptDelayMinutes
+		}
+		if req.PromptDelayMaxMinutes == nil {
+			settings.PromptDelayMaxMinutes = *req.PromptDelayMinutes
+		}
+	}
+	if req.PromptDelayMinMinutes != nil {
+		if *req.PromptDelayMinMinutes < 0 || *req.PromptDelayMinMinutes > 24*60 {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "prompt_delay_min_minutes must be between 0 and 1440", nil, "")
+		}
+		settings.PromptDelayMinMinutes = *req.PromptDelayMinMinutes
+	}
+	if req.PromptDelayMaxMinutes != nil {
+		if *req.PromptDelayMaxMinutes < 0 || *req.PromptDelayMaxMinutes > 24*60 {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "prompt_delay_max_minutes must be between 0 and 1440", nil, "")
+		}
+		settings.PromptDelayMaxMinutes = *req.PromptDelayMaxMinutes
+	}
+	if settings.PromptDelayMinMinutes == 0 && settings.PromptDelayMaxMinutes == 0 && settings.PromptDelayMinutes > 0 {
+		settings.PromptDelayMinMinutes = settings.PromptDelayMinutes
+		settings.PromptDelayMaxMinutes = settings.PromptDelayMinutes
+	}
+	if settings.PromptDelayMaxMinutes < settings.PromptDelayMinMinutes {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "prompt_delay_max_minutes must be greater than or equal to prompt_delay_min_minutes", nil, "")
 	}
 	if req.SelectionTimeoutMinutes != nil {
 		if *req.SelectionTimeoutMinutes < 1 || *req.SelectionTimeoutMinutes > 24*60 {
@@ -337,6 +422,60 @@ func (a *App) UpdateAgentSelectionSettings(r *fastglue.Request) error {
 		Metadata:    models.JSONB{"settings_id": settings.ID.String()},
 	})
 	return r.SendEnvelope(map[string]any{"settings": settings})
+}
+
+func (a *App) DeleteAgentSelectionSettings(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requireAgentSelectionPermission(r, userID, models.ActionDelete); err != nil {
+		return nil
+	}
+	id, err := parsePathUUID(r, "id", "settings")
+	if err != nil {
+		return nil
+	}
+
+	var settings models.AgentSelectionSettings
+	if err := requestDB.Where("id = ? AND organization_id = ?", id, orgID).First(&settings).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Settings not found", nil, "")
+	}
+
+	if err := agentSelectionWriteDB(requestDB).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().
+			Where("organization_id = ? AND settings_id = ?", orgID, id).
+			Delete(&models.AgentSelectionParticipant{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().
+			Where("organization_id = ? AND settings_id = ?", orgID, id).
+			Delete(&models.AgentSelectionOption{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().
+			Where("id = ? AND organization_id = ?", id, orgID).
+			Delete(&models.AgentSelectionSettings{}).Error; err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		a.Log.Error("Failed to delete agent selection settings", "error", err, "organization_id", orgID, "settings_id", id)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete settings", nil, "")
+	}
+
+	scope := "global"
+	if settings.InstanceID != nil && *settings.InstanceID != uuid.Nil {
+		scope = settings.InstanceID.String()
+	}
+	a.writeAgentSelectionAudit(requestDB, orgID, agentSelectionAuditInput{
+		EventType:   "settings_deleted",
+		ActorType:   models.AgentSelectionActorAdmin,
+		ActorUserID: &userID,
+		Metadata:    models.JSONB{"settings_id": id.String(), "scope": scope},
+	})
+	return r.SendEnvelope(map[string]any{"deleted": true})
 }
 
 func (a *App) ListAgentSelectionParticipants(r *fastglue.Request) error {
@@ -802,11 +941,11 @@ func (a *App) TestSendAgentSelectionMenu(r *fastglue.Request) error {
 	})
 
 	return r.SendEnvelope(map[string]any{
-		"sent":              true,
-		"whatsapp_account":  accountName,
-		"contact_id":        contact.ID.String(),
-		"menu_text":         menu.Text,
-		"option_count":      len(menu.Options),
+		"sent":                true,
+		"whatsapp_account":    accountName,
+		"contact_id":          contact.ID.String(),
+		"menu_text":           menu.Text,
+		"option_count":        len(menu.Options),
 		"outbound_message_id": msgRefString(msg),
 	})
 }
@@ -1011,15 +1150,21 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 		}
 	}
 
-	if settings.CustomFinalOptionEnabled && strings.TrimSpace(settings.CustomFinalOptionText) != "" {
-		options = append(options, agentSelectionRenderedOption{
-			OptionID: "custom_final",
-			Type:     models.AgentSelectionOptionCustom,
-			Label:    strings.TrimSpace(settings.CustomFinalOptionText),
-			Action:   string(settings.CustomFinalOptionAction),
-			Response: settings.CustomFinalOptionResponse,
-			TeamID:   settings.CustomFinalOptionTeamID,
-		})
+	if settings.CustomFinalOptionEnabled {
+		customFinalLabel := strings.TrimSpace(settings.CustomFinalOptionResponse)
+		if customFinalLabel == "" {
+			customFinalLabel = strings.TrimSpace(settings.CustomFinalOptionText)
+		}
+		if customFinalLabel != "" {
+			options = append(options, agentSelectionRenderedOption{
+				OptionID: "custom_final",
+				Type:     models.AgentSelectionOptionCustom,
+				Label:    customFinalLabel,
+				Action:   string(settings.CustomFinalOptionAction),
+				Response: settings.CustomFinalOptionResponse,
+				TeamID:   settings.CustomFinalOptionTeamID,
+			})
+		}
 	}
 
 	sort.SliceStable(options, func(i, j int) bool {
@@ -1040,13 +1185,25 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 	lines = append(lines, header, "")
 	for i := range options {
 		options[i].Number = i + 1
-		lines = append(lines, fmt.Sprintf("%d. %s", options[i].Number, options[i].Label))
+		lines = append(lines, fmt.Sprintf("%d. %s", options[i].Number, formatAgentSelectionOptionLine(options[i])))
 	}
 	if footer := strings.TrimSpace(settings.MenuFooterText); footer != "" {
 		lines = append(lines, "", footer)
 	}
 
 	return &agentSelectionRenderedMenu{Text: strings.Join(lines, "\n"), Options: options}, nil
+}
+
+func formatAgentSelectionOptionLine(option agentSelectionRenderedOption) string {
+	label := strings.TrimSpace(option.Label)
+	description := strings.TrimSpace(option.Description)
+	if label == "" {
+		return description
+	}
+	if description == "" {
+		return label
+	}
+	return fmt.Sprintf("%s : %s", label, description)
 }
 
 func (a *App) maybeHandleAgentSelectionInbound(account *models.WhatsAppAccount, contact *models.Contact, inbound *models.Message, payload incomingMessagePayload) bool {
@@ -1116,6 +1273,18 @@ func (a *App) HandleWhatsmeowInboundMessage(ctx context.Context, info whatsmeow.
 
 	accountName := strings.TrimSpace(info.WhatsAppAccount)
 	if accountName == "" {
+		accountName = strings.TrimSpace(info.Contact.WhatsAppAccount)
+	}
+	if accountName == "" && info.Contact.InstanceID != nil {
+		var instance models.WhatsAppInstance
+		if err := a.DB.WithContext(ctx).
+			Select("phone_number").
+			Where("id = ? AND organization_id = ?", *info.Contact.InstanceID, info.OrganizationID).
+			First(&instance).Error; err == nil {
+			accountName = strings.TrimSpace(instance.PhoneNumber)
+		}
+	}
+	if accountName == "" {
 		accountName = "whatsmeow"
 	}
 
@@ -1123,12 +1292,18 @@ func (a *App) HandleWhatsmeowInboundMessage(ctx context.Context, info whatsmeow.
 	if err := a.DB.WithContext(ctx).
 		Where("organization_id = ? AND name = ?", info.OrganizationID, accountName).
 		First(&account).Error; err != nil {
-		a.Log.Debug("WhatsApp account not found for whatsmeow inbound hook",
-			"organization_id", info.OrganizationID,
-			"account_name", accountName,
-			"error", err,
-		)
-		return
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			a.Log.Debug("WhatsApp account lookup failed for whatsmeow inbound hook",
+				"organization_id", info.OrganizationID,
+				"account_name", accountName,
+				"error", err,
+			)
+			return
+		}
+		account = models.WhatsAppAccount{
+			OrganizationID: info.OrganizationID,
+			Name:           accountName,
+		}
 	}
 
 	payload := incomingMessagePayload{
@@ -1201,7 +1376,7 @@ func (a *App) createAgentSelectionDelaySession(db *gorm.DB, account *models.What
 		return err
 	}
 
-	delay := time.Duration(clampInt(settings.PromptDelayMinutes, 0, 24*60)) * time.Minute
+	delay := time.Duration(randomPromptDelayMinutes(settings)) * time.Minute
 	promptDueAt := time.Now().Add(delay)
 	session := models.AgentSelectionSession{
 		OrganizationID:      account.OrganizationID,
@@ -1251,7 +1426,7 @@ func (a *App) processAgentSelectionReply(db *gorm.DB, account *models.WhatsAppAc
 				InboundMessageID: &inbound.ID,
 			})
 		} else if strings.TrimSpace(settings.InvalidReplyText) != "" {
-			_ = a.sendAndSaveTextMessage(account, contact, settings.InvalidReplyText)
+			_, _ = a.sendAgentSelectionTextMessage(account, contact, settings.InvalidReplyText)
 		}
 		_ = db.Save(session).Error
 		a.writeAgentSelectionAudit(db, account.OrganizationID, agentSelectionAuditInput{
@@ -1319,7 +1494,7 @@ func (a *App) commitAgentSelectionAgent(db *gorm.DB, account *models.WhatsAppAcc
 	var user models.User
 	if err := db.Where("id = ? AND is_active = ?", *selected.UserID, true).First(&user).Error; err != nil || !user.IsAvailable {
 		if strings.TrimSpace(settings.UnavailableAgentText) != "" {
-			_ = a.sendAndSaveTextMessage(account, contact, settings.UnavailableAgentText)
+			_, _ = a.sendAgentSelectionTextMessage(account, contact, settings.UnavailableAgentText)
 		}
 		a.writeAgentSelectionAudit(db, account.OrganizationID, agentSelectionAuditInput{
 			ContactID:        &contact.ID,
@@ -1338,7 +1513,7 @@ func (a *App) commitAgentSelectionAgent(db *gorm.DB, account *models.WhatsAppAcc
 	ok, err := a.canUserSeeContactInstance(account.OrganizationID, *selected.UserID, &latestContact)
 	if err != nil || !ok || !a.userBelongsToOrg(db, *selected.UserID, account.OrganizationID) {
 		if strings.TrimSpace(settings.UnavailableAgentText) != "" {
-			_ = a.sendAndSaveTextMessage(account, contact, settings.UnavailableAgentText)
+			_, _ = a.sendAgentSelectionTextMessage(account, contact, settings.UnavailableAgentText)
 		}
 		return
 	}
@@ -1418,17 +1593,65 @@ func (a *App) commitAgentSelectionQueue(db *gorm.DB, account *models.WhatsAppAcc
 }
 
 func (a *App) commitAgentSelectionCustom(db *gorm.DB, account *models.WhatsAppAccount, contact *models.Contact, inbound *models.Message, session *models.AgentSelectionSession, settings *models.AgentSelectionSettings, selected agentSelectionRenderedOption) {
-	if strings.TrimSpace(selected.Response) != "" {
-		_ = a.sendAndSaveTextMessage(account, contact, selected.Response)
+	delay := time.Duration(randomPromptDelayMinutes(settings)) * time.Minute
+	promptDueAt := time.Now().Add(delay)
+	session.Status = models.AgentSelectionSessionWaitingDelay
+	session.PromptDueAt = promptDueAt
+	session.Metadata = withAgentSelectionCustomResponseMetadata(session.Metadata, selected)
+	_ = db.Save(session).Error
+	a.writeAgentSelectionAudit(db, account.OrganizationID, agentSelectionAuditInput{
+		ContactID:        &contact.ID,
+		SessionID:        &session.ID,
+		InstanceID:       contact.InstanceID,
+		WhatsAppAccount:  account.Name,
+		EventType:        models.AgentSelectionEventCustomOptionSelected,
+		ActorType:        models.AgentSelectionActorCustomer,
+		SelectedOptionID: selected.OptionID,
+		InboundMessageID: &inbound.ID,
+		Metadata: models.JSONB{
+			"prompt_due_at": promptDueAt.Format(time.RFC3339),
+			"action":        selected.Action,
+		},
+	})
+}
+
+func (a *App) completeDelayedAgentSelectionCustomResponse(session *models.AgentSelectionSession, settings *models.AgentSelectionSettings, contact *models.Contact) {
+	if session == nil || contact == nil {
+		return
 	}
-	switch models.AgentSelectionCustomAction(selected.Action) {
+	account := models.WhatsAppAccount{
+		OrganizationID: session.OrganizationID,
+		Name:           strings.TrimSpace(session.WhatsAppAccount),
+	}
+	if account.Name == "" {
+		account.Name = strings.TrimSpace(contact.WhatsAppAccount)
+	}
+
+	pending := pendingAgentSelectionCustomResponse(session.Metadata)
+	if strings.TrimSpace(pending.Response) != "" {
+		if _, err := a.sendAgentSelectionTextMessage(&account, contact, pending.Response); err != nil {
+			session.Status = models.AgentSelectionSessionError
+			_ = a.DB.Save(session).Error
+			a.writeAgentSelectionAudit(a.DB, session.OrganizationID, agentSelectionAuditInput{
+				ContactID:       &contact.ID,
+				SessionID:       &session.ID,
+				InstanceID:      contact.InstanceID,
+				WhatsAppAccount: session.WhatsAppAccount,
+				EventType:       models.AgentSelectionEventMenuSendFailed,
+				ActorType:       models.AgentSelectionActorSystem,
+				Reason:          err.Error(),
+			})
+			return
+		}
+	}
+	switch models.AgentSelectionCustomAction(pending.Action) {
 	case models.AgentSelectionCustomActionAssignToTeam:
 		if settings.CustomFinalOptionTeamID != nil {
-			a.createTransferToTeam(account, contact, *settings.CustomFinalOptionTeamID, "Customer selected custom option: "+selected.Label, models.TransferSourceCustomerSelection)
+			a.createTransferToTeam(&account, contact, *settings.CustomFinalOptionTeamID, "Customer selected custom option: "+pending.Label, models.TransferSourceCustomerSelection)
 		}
 	case models.AgentSelectionCustomActionCloseChat:
 		now := time.Now()
-		_ = db.Model(&models.Contact{}).Where("id = ? AND organization_id = ?", contact.ID, account.OrganizationID).Updates(map[string]any{
+		_ = a.DB.Model(&models.Contact{}).Where("id = ? AND organization_id = ?", contact.ID, session.OrganizationID).Updates(map[string]any{
 			"status":    models.ChatStatusClosed,
 			"closed_at": now,
 		}).Error
@@ -1436,17 +1659,17 @@ func (a *App) commitAgentSelectionCustom(db *gorm.DB, account *models.WhatsAppAc
 		// send_only and keep_pending intentionally preserve pending/unassigned state.
 	}
 	session.Status = models.AgentSelectionSessionSelected
-	_ = db.Save(session).Error
-	a.writeAgentSelectionAudit(db, account.OrganizationID, agentSelectionAuditInput{
+	session.Metadata = clearAgentSelectionCustomResponseMetadata(session.Metadata)
+	_ = a.DB.Save(session).Error
+	a.writeAgentSelectionAudit(a.DB, session.OrganizationID, agentSelectionAuditInput{
 		ContactID:        &contact.ID,
 		SessionID:        &session.ID,
 		InstanceID:       contact.InstanceID,
-		WhatsAppAccount:  account.Name,
+		WhatsAppAccount:  session.WhatsAppAccount,
 		EventType:        models.AgentSelectionEventCustomActionCompleted,
 		ActorType:        models.AgentSelectionActorSystem,
-		SelectedOptionID: selected.OptionID,
-		InboundMessageID: &inbound.ID,
-		Metadata:         models.JSONB{"action": selected.Action},
+		SelectedOptionID: pending.OptionID,
+		Metadata:         models.JSONB{"action": pending.Action},
 	})
 }
 
@@ -1500,6 +1723,10 @@ func (a *App) sendAgentSelectionPromptIfDue(session *models.AgentSelectionSessio
 		_ = a.DB.Save(session).Error
 		return
 	}
+	if hasPendingAgentSelectionCustomResponse(session.Metadata) {
+		a.completeDelayedAgentSelectionCustomResponse(session, settings, &contact)
+		return
+	}
 	if contact.AssignedUserID != nil || normalizeContactStatus(&contact) != models.ChatStatusPending {
 		session.Status = models.AgentSelectionSessionCancelled
 		_ = a.DB.Save(session).Error
@@ -1528,9 +1755,15 @@ func (a *App) sendAgentSelectionPromptIfDue(session *models.AgentSelectionSessio
 	}
 	var account models.WhatsAppAccount
 	if err := a.DB.Where("organization_id = ? AND name = ?", session.OrganizationID, session.WhatsAppAccount).First(&account).Error; err != nil {
-		session.Status = models.AgentSelectionSessionError
-		_ = a.DB.Save(session).Error
-		return
+		if !errors.Is(err, gorm.ErrRecordNotFound) || !a.isWhatsmeowProvider() {
+			session.Status = models.AgentSelectionSessionError
+			_ = a.DB.Save(session).Error
+			return
+		}
+		account = models.WhatsAppAccount{
+			OrganizationID: session.OrganizationID,
+			Name:           strings.TrimSpace(session.WhatsAppAccount),
+		}
 	}
 	menu, err := a.buildAgentSelectionMenu(a.DB, session.OrganizationID, settings, &contact)
 	if err != nil || len(menu.Options) == 0 {
@@ -1588,10 +1821,17 @@ func (a *App) expireAgentSelectionSession(session *models.AgentSelectionSession)
 	settings, err := a.resolveAgentSelectionSettings(a.DB, session.OrganizationID, session.InstanceID)
 	if err == nil && settings != nil && strings.TrimSpace(settings.TimeoutResponseText) != "" {
 		var account models.WhatsAppAccount
-		if accountErr := a.DB.Where("organization_id = ? AND name = ?", session.OrganizationID, session.WhatsAppAccount).First(&account).Error; accountErr == nil {
+		accountErr := a.DB.Where("organization_id = ? AND name = ?", session.OrganizationID, session.WhatsAppAccount).First(&account).Error
+		if accountErr == nil || (errors.Is(accountErr, gorm.ErrRecordNotFound) && a.isWhatsmeowProvider()) {
+			if accountErr != nil {
+				account = models.WhatsAppAccount{
+					OrganizationID: session.OrganizationID,
+					Name:           strings.TrimSpace(session.WhatsAppAccount),
+				}
+			}
 			var contact models.Contact
 			if contactErr := a.DB.Where("id = ? AND organization_id = ?", session.ContactID, session.OrganizationID).First(&contact).Error; contactErr == nil {
-				_ = a.sendAndSaveTextMessage(&account, &contact, settings.TimeoutResponseText)
+				_, _ = a.sendAgentSelectionTextMessage(&account, &contact, settings.TimeoutResponseText)
 			}
 		}
 	}
@@ -1856,6 +2096,79 @@ func clampInt(value, min, max int) int {
 	return value
 }
 
+func randomPromptDelayMinutes(settings *models.AgentSelectionSettings) int {
+	if settings == nil {
+		return 0
+	}
+	minDelay := settings.PromptDelayMinMinutes
+	maxDelay := settings.PromptDelayMaxMinutes
+	if minDelay == 0 && maxDelay == 0 && settings.PromptDelayMinutes > 0 {
+		minDelay = settings.PromptDelayMinutes
+		maxDelay = settings.PromptDelayMinutes
+	}
+	minDelay = clampInt(minDelay, 0, 24*60)
+	maxDelay = clampInt(maxDelay, 0, 24*60)
+	if maxDelay < minDelay {
+		maxDelay = minDelay
+	}
+	if maxDelay == minDelay {
+		return minDelay
+	}
+	return minDelay + rand.Intn(maxDelay-minDelay+1)
+}
+
+func (a *App) sendAgentSelectionTextMessage(account *models.WhatsAppAccount, contact *models.Contact, content string) (*models.Message, error) {
+	return a.SendOutgoingMessage(context.Background(), OutgoingMessageRequest{
+		Account: account,
+		Contact: contact,
+		Type:    models.MessageTypeText,
+		Content: content,
+	}, ChatbotSendOptions())
+}
+
+func withAgentSelectionCustomResponseMetadata(metadata models.JSONB, selected agentSelectionRenderedOption) models.JSONB {
+	if metadata == nil {
+		metadata = models.JSONB{}
+	}
+	metadata["pending_custom_response"] = true
+	metadata["pending_custom_option_id"] = selected.OptionID
+	metadata["pending_custom_label"] = selected.Label
+	metadata["pending_custom_action"] = selected.Action
+	metadata["pending_custom_response_text"] = selected.Response
+	return metadata
+}
+
+func hasPendingAgentSelectionCustomResponse(metadata models.JSONB) bool {
+	if metadata == nil {
+		return false
+	}
+	return boolFromAny(metadata["pending_custom_response"])
+}
+
+func pendingAgentSelectionCustomResponse(metadata models.JSONB) pendingAgentSelectionCustomOption {
+	if metadata == nil {
+		return pendingAgentSelectionCustomOption{}
+	}
+	return pendingAgentSelectionCustomOption{
+		OptionID: stringFromAny(metadata["pending_custom_option_id"]),
+		Label:    stringFromAny(metadata["pending_custom_label"]),
+		Action:   stringFromAny(metadata["pending_custom_action"]),
+		Response: stringFromAny(metadata["pending_custom_response_text"]),
+	}
+}
+
+func clearAgentSelectionCustomResponseMetadata(metadata models.JSONB) models.JSONB {
+	if metadata == nil {
+		return models.JSONB{}
+	}
+	delete(metadata, "pending_custom_response")
+	delete(metadata, "pending_custom_option_id")
+	delete(metadata, "pending_custom_label")
+	delete(metadata, "pending_custom_action")
+	delete(metadata, "pending_custom_response_text")
+	return metadata
+}
+
 func intFromAny(value any) int {
 	switch typed := value.(type) {
 	case int:
@@ -1869,6 +2182,17 @@ func intFromAny(value any) int {
 		return i
 	default:
 		return 0
+	}
+}
+
+func boolFromAny(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
 	}
 }
 

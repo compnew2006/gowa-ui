@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, ref, onMounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useFBAccountsStore } from "@/stores/fbAccounts";
 import { DeleteConfirmDialog, PageHeader } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -39,30 +40,38 @@ import {
   Pencil,
   Trash2,
   Cookie,
+  Clipboard,
+  ExternalLink,
   User,
   ShieldCheck,
   ShieldX,
   ShieldOff,
 } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
+import { toast } from "vue-sonner";
 import type { FacebookAccount } from "@/types/facebook";
 
 const fbAccountsStore = useFBAccountsStore();
 const { t } = useI18n();
-const { fetchAccounts, createAccount, updateAccount, deleteAccount } =
+const route = useRoute();
+const router = useRouter();
+const { fetchAccounts, createAccount, updateAccount, deleteAccount, startOAuth } =
   fbAccountsStore;
 
 const createDialogOpen = ref(false);
 const newAccountName = ref("");
 const newAccountUID = ref("");
 const newAccountCookies = ref("");
+const newAccountPlatform = ref<"facebook" | "instagram">("facebook");
 const isCreating = ref(false);
+const isReadingClipboard = ref(false);
+const isStartingOAuth = ref(false);
 
 const editDialogOpen = ref(false);
 const editAccountId = ref("");
 const editAccountName = ref("");
 const editAccountUID = ref("");
-const editAccountStatus = ref<"active" | "inactive" | "closed">("active");
+const editAccountStatus = ref<"active" | "inactive" | "closed" | "expired" | "revoked">("active");
 const editAccountCookies = ref("");
 const isUpdating = ref(false);
 
@@ -71,8 +80,15 @@ const deletingAccount = ref<FacebookAccount | null>(null);
 const isDeleting = ref(false);
 
 onMounted(async () => {
+  handleOAuthCallbackToast();
   await fetchAccounts();
 });
+
+const loginUrl = computed(() =>
+  newAccountPlatform.value === "instagram"
+    ? "https://www.instagram.com/accounts/login/"
+    : "https://www.facebook.com/login",
+);
 
 function getStatusBadge(status: string) {
   switch (status) {
@@ -82,9 +98,72 @@ function getStatusBadge(status: string) {
       return { variant: "secondary" as const, icon: ShieldOff, label: t("fbAccounts.status.inactive") };
     case "closed":
       return { variant: "destructive" as const, icon: ShieldX, label: t("fbAccounts.status.closed") };
+    case "expired":
+      return { variant: "destructive" as const, icon: ShieldX, label: t("fbAccounts.status.expired") };
+    case "revoked":
+      return { variant: "destructive" as const, icon: ShieldX, label: t("fbAccounts.status.revoked") };
     default:
       return { variant: "outline" as const, icon: ShieldOff, label: status };
   }
+}
+
+function getMethodLabel(method: string) {
+  switch (method) {
+    case "oauth":
+      return t("fbAccounts.method.oauth");
+    case "credentials":
+      return t("fbAccounts.method.credentials");
+    default:
+      return t("fbAccounts.method.cookies");
+  }
+}
+
+function getLinkedPages(account: FacebookAccount): Array<{ id: string; name: string }> {
+  const pages = account.data?.pages;
+  if (!Array.isArray(pages)) {
+    return [];
+  }
+
+  return pages
+    .map((page) => ({
+      id: String(page?.id || ""),
+      name: String(page?.name || ""),
+    }))
+    .filter((page) => page.id || page.name);
+}
+
+async function handleStartOAuth(account?: FacebookAccount) {
+  isStartingOAuth.value = true;
+  try {
+    const authUrl = await startOAuth(account?.id);
+    if (authUrl) {
+      window.location.href = authUrl;
+    }
+  } finally {
+    isStartingOAuth.value = false;
+  }
+}
+
+function handleOAuthCallbackToast() {
+  const status = route.query.facebook_oauth;
+  if (status === "connected") {
+    toast.success(t("fbAccounts.toast.oauthConnected"));
+  } else if (status === "renewed") {
+    toast.success(t("fbAccounts.toast.oauthRenewed"));
+  } else if (status === "error") {
+    toast.error(
+      typeof route.query.message === "string"
+        ? route.query.message
+        : t("fbAccounts.toast.oauthCallbackFailed"),
+    );
+  } else {
+    return;
+  }
+
+  const nextQuery = { ...route.query };
+  delete nextQuery.facebook_oauth;
+  delete nextQuery.message;
+  router.replace({ query: nextQuery });
 }
 
 async function handleCreate() {
@@ -95,15 +174,73 @@ async function handleCreate() {
     await createAccount({
       name: trimmedName,
       account_uid: newAccountUID.value.trim() || undefined,
-      cookies_text: newAccountCookies.value.trim() || undefined,
+      method: "cookies",
+      cookies_text: normalizeCookiesInput(newAccountCookies.value) || undefined,
+      data: {
+        platform: newAccountPlatform.value,
+        cookie_import_source: "login_tab_manual_paste",
+      },
     });
     createDialogOpen.value = false;
     newAccountName.value = "";
     newAccountUID.value = "";
     newAccountCookies.value = "";
+    newAccountPlatform.value = "facebook";
   } finally {
     isCreating.value = false;
   }
+}
+
+function openLoginTab() {
+  window.open(loginUrl.value, "_blank", "noopener,noreferrer,width=1180,height=820");
+}
+
+async function pasteCookiesFromClipboard() {
+  if (!navigator.clipboard?.readText) {
+    toast.error(t("fbAccounts.toast.clipboardUnavailable"));
+    return;
+  }
+
+  isReadingClipboard.value = true;
+  try {
+    const text = await navigator.clipboard.readText();
+    newAccountCookies.value = normalizeCookiesInput(text);
+    if (!newAccountCookies.value) {
+      toast.error(t("fbAccounts.toast.clipboardEmpty"));
+      return;
+    }
+    toast.success(t("fbAccounts.toast.cookiesPasted"));
+  } catch {
+    toast.error(t("fbAccounts.toast.clipboardFailed"));
+  } finally {
+    isReadingClipboard.value = false;
+  }
+}
+
+function normalizeCookiesInput(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) return "";
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      const cookieHeader = parsed
+        .filter((cookie) => cookie && typeof cookie.name === "string")
+        .map((cookie) => `${cookie.name}=${cookie.value ?? ""}`)
+        .join("; ");
+      return cookieHeader || JSON.stringify(parsed);
+    }
+    if (parsed && typeof parsed === "object") {
+      const cookieHeader = Object.entries(parsed as Record<string, unknown>)
+        .map(([name, value]) => `${name}=${value ?? ""}`)
+        .join("; ");
+      return cookieHeader || trimmed;
+    }
+  } catch {
+    // Keep raw cookie headers and Netscape-style exports as pasted.
+  }
+
+  return trimmed;
 }
 
 function openEditDialog(account: FacebookAccount) {
@@ -181,9 +318,14 @@ async function handleDelete() {
       ]"
     >
       <template #actions>
-        <Button size="sm" @click="createDialogOpen = true">
+        <Button size="sm" :disabled="isStartingOAuth" @click="handleStartOAuth()">
+          <Loader2 v-if="isStartingOAuth" class="h-4 w-4 mr-2 animate-spin" />
+          <ExternalLink v-else class="h-4 w-4 mr-2" />
+          {{ $t("fbAccounts.connectOAuth") }}
+        </Button>
+        <Button size="sm" variant="outline" @click="createDialogOpen = true">
           <Plus class="h-4 w-4 mr-2" />
-          {{ $t("fbAccounts.addAccount") }}
+          {{ $t("fbAccounts.addManualAccount") }}
         </Button>
       </template>
     </PageHeader>
@@ -215,7 +357,7 @@ async function handleDelete() {
             >
               <template #action>
                 <Button variant="outline" @click="createDialogOpen = true">
-                  {{ $t("fbAccounts.addFirst") }}
+                  {{ $t("fbAccounts.addManualAccount") }}
                 </Button>
               </template>
             </EmptyState>
@@ -263,6 +405,13 @@ async function handleDelete() {
                         {{ $t("common.edit") }}
                       </DropdownMenuItem>
                       <DropdownMenuItem
+                        v-if="account.method === 'oauth'"
+                        @click="handleStartOAuth(account)"
+                      >
+                        <ExternalLink class="mr-2 h-4 w-4" />
+                        {{ $t("fbAccounts.renewOAuth") }}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         class="text-destructive focus:text-destructive"
                         @click="openDeleteDialog(account)"
                       >
@@ -285,7 +434,15 @@ async function handleDelete() {
                     {{ getStatusBadge(account.status).label }}
                   </Badge>
                   <Badge variant="outline" class="text-xs gap-1">
-                    {{ account.method === "cookies" ? $t("fbAccounts.method.cookies") : $t("fbAccounts.method.credentials") }}
+                    {{ getMethodLabel(account.method) }}
+                  </Badge>
+                  <Badge
+                    v-if="account.oauth_connected"
+                    variant="outline"
+                    class="text-xs gap-1 border-blue-500/30 text-blue-600 dark:text-blue-400"
+                  >
+                    <ExternalLink class="h-3 w-3" />
+                    {{ $t("fbAccounts.oauthConnected") }}
                   </Badge>
                   <Badge
                     v-if="account.has_cookies"
@@ -300,6 +457,36 @@ async function handleDelete() {
                 <div class="flex items-center gap-2 text-xs text-muted-foreground">
                   <User class="h-3 w-3" />
                   <span>{{ $t("fbAccounts.uid") }}: {{ account.account_uid || "—" }}</span>
+                </div>
+                <div
+                  v-if="account.method === 'oauth'"
+                  class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
+                >
+                  <span>{{ $t("fbAccounts.pages") }}: {{ account.page_count || 0 }}</span>
+                  <span v-if="account.token_expires_at">
+                    {{ $t("fbAccounts.expires") }}:
+                    {{ new Date(account.token_expires_at).toLocaleDateString() }}
+                  </span>
+                </div>
+                <div
+                  v-if="getLinkedPages(account).length > 0"
+                  class="mt-3 flex flex-wrap gap-2"
+                >
+                  <Badge
+                    v-for="page in getLinkedPages(account).slice(0, 4)"
+                    :key="page.id || page.name"
+                    variant="secondary"
+                    class="max-w-full justify-start truncate text-xs"
+                  >
+                    {{ page.name || page.id }}
+                  </Badge>
+                  <Badge
+                    v-if="getLinkedPages(account).length > 4"
+                    variant="outline"
+                    class="text-xs"
+                  >
+                    +{{ getLinkedPages(account).length - 4 }}
+                  </Badge>
                 </div>
               </CardContent>
             </Card>
@@ -319,6 +506,29 @@ async function handleDelete() {
         </DialogHeader>
         <div class="grid gap-4 py-4">
           <div class="grid gap-2">
+            <Label for="fb-platform">{{ $t("fbAccounts.dialog.platform") }}</Label>
+            <Select v-model="newAccountPlatform">
+              <SelectTrigger id="fb-platform">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="facebook">Facebook</SelectItem>
+                <SelectItem value="instagram">Instagram</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="rounded-lg border border-border bg-muted/30 p-3">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p class="text-sm text-muted-foreground">
+                {{ $t("fbAccounts.dialog.loginTabHint") }}
+              </p>
+              <Button variant="outline" size="sm" @click="openLoginTab">
+                <ExternalLink class="mr-2 h-4 w-4" />
+                {{ $t("fbAccounts.dialog.openLoginTab") }}
+              </Button>
+            </div>
+          </div>
+          <div class="grid gap-2">
             <Label for="fb-name">{{ $t("fbAccounts.dialog.accountName") }}</Label>
             <Input
               id="fb-name"
@@ -335,15 +545,31 @@ async function handleDelete() {
             />
           </div>
           <div class="grid gap-2">
-            <Label for="fb-cookies">{{ $t("fbAccounts.dialog.cookies") }}</Label>
+            <div class="flex items-center justify-between gap-3">
+              <Label for="fb-cookies">{{ $t("fbAccounts.dialog.cookies") }}</Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                :disabled="isReadingClipboard"
+                @click="pasteCookiesFromClipboard"
+              >
+                <Loader2 v-if="isReadingClipboard" class="mr-2 h-4 w-4 animate-spin" />
+                <Clipboard v-else class="mr-2 h-4 w-4" />
+                {{ $t("fbAccounts.dialog.pasteCookies") }}
+              </Button>
+            </div>
             <Textarea
               id="fb-cookies"
               v-model="newAccountCookies"
               :placeholder="$t('fbAccounts.dialog.cookiesPlaceholder')"
-              class="min-h-[80px]"
+              class="min-h-[110px]"
             />
             <p class="text-xs text-muted-foreground">
               {{ $t("fbAccounts.dialog.cookiesHint") }}
+            </p>
+            <p class="text-xs text-muted-foreground">
+              {{ $t("fbAccounts.dialog.browserLimitHint") }}
             </p>
           </div>
         </div>
@@ -403,6 +629,12 @@ async function handleDelete() {
                 </SelectItem>
                 <SelectItem value="closed">
                   {{ $t("fbAccounts.status.closed") }}
+                </SelectItem>
+                <SelectItem value="expired">
+                  {{ $t("fbAccounts.status.expired") }}
+                </SelectItem>
+                <SelectItem value="revoked">
+                  {{ $t("fbAccounts.status.revoked") }}
                 </SelectItem>
               </SelectContent>
             </Select>

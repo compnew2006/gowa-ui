@@ -249,6 +249,11 @@ export const navigationItems: NavItem[] = [
     ],
     children: [
       {
+        name: "nav.facebookComments",
+        path: "/facebook/comments",
+        icon: MessageCircle,
+      },
+      {
         name: "nav.facebookPageSearch",
         path: "/facebook/page-search",
         icon: Search,

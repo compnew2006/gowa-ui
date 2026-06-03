@@ -5,7 +5,7 @@ import { useAuthStore } from "@/stores/auth";
 import type { FacebookAccount } from "@/types/facebook";
 import { toast } from "vue-sonner";
 import { i18n } from "@/i18n";
-import { unwrapResponse } from "@/lib/api-utils";
+import { unwrapListResponse, unwrapResponse } from "@/lib/api-utils";
 
 export const useFBAccountsStore = defineStore("fbAccounts", () => {
   const authStore = useAuthStore();
@@ -33,7 +33,8 @@ export const useFBAccountsStore = defineStore("fbAccounts", () => {
     error.value = null;
     try {
       const response = await fbAccountsService.list();
-      accounts.value = unwrapResponse<FacebookAccount[]>(response);
+      accounts.value = unwrapListResponse<FacebookAccount>(response, "accounts");
+      return accounts.value;
     } catch (err: any) {
       const message =
         err.response?.data?.message || t("fbAccounts.toast.fetchFailed");
@@ -47,6 +48,7 @@ export const useFBAccountsStore = defineStore("fbAccounts", () => {
   async function createAccount(data: {
     name: string;
     account_uid?: string;
+    method?: "cookies" | "credentials" | "oauth";
     cookies_text?: string;
     data?: Record<string, unknown>;
   }): Promise<FacebookAccount | null> {
@@ -69,7 +71,8 @@ export const useFBAccountsStore = defineStore("fbAccounts", () => {
     data: {
       name?: string;
       account_uid?: string;
-      status?: "active" | "inactive" | "closed";
+      status?: "active" | "inactive" | "closed" | "expired" | "revoked";
+      method?: "cookies" | "credentials" | "oauth";
       cookies_text?: string;
       data?: Record<string, unknown>;
     },
@@ -105,6 +108,21 @@ export const useFBAccountsStore = defineStore("fbAccounts", () => {
     }
   }
 
+  async function startOAuth(accountId?: string): Promise<string | null> {
+    try {
+      const response = accountId
+        ? await fbAccountsService.renewOAuth(accountId)
+        : await fbAccountsService.initOAuth({ action: "connect" });
+      const payload = unwrapResponse<{ auth_url: string }>(response);
+      return payload.auth_url;
+    } catch (err: any) {
+      const message =
+        err.response?.data?.message || t("fbAccounts.toast.oauthInitFailed");
+      toast.error(message);
+      return null;
+    }
+  }
+
   return {
     accounts,
     loading,
@@ -115,5 +133,6 @@ export const useFBAccountsStore = defineStore("fbAccounts", () => {
     createAccount,
     updateAccount,
     deleteAccount,
+    startOAuth,
   };
 });

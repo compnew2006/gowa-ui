@@ -45,6 +45,16 @@ export const useAgentSelectionStore = defineStore("agentSelection", () => {
     return payload.settings;
   }
 
+  async function deleteSettings(id: string) {
+    const response = await agentSelectionService.deleteSettings(id);
+    const payload = unwrapResponse<{ deleted: boolean }>(response);
+    settings.value = null;
+    participants.value = [];
+    options.value = [];
+    preview.value = null;
+    return payload;
+  }
+
   async function fetchParticipants(settingsId?: string) {
     const response = await agentSelectionService.listParticipants(
       settingsId ? { settings_id: settingsId } : undefined,
@@ -188,6 +198,7 @@ export const useAgentSelectionStore = defineStore("agentSelection", () => {
     loading,
     fetchSettings,
     saveSettings,
+    deleteSettings,
     fetchParticipants,
     createParticipant,
     updateParticipant,

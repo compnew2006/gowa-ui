@@ -348,6 +348,12 @@ const router = createRouter({
           meta: { permission: "custom_actions" },
         },
         {
+          path: "facebook/comments",
+          name: "facebook-comments",
+          component: () => import("@/views/facebook/FacebookCommentsView.vue"),
+          meta: { permission: "chat" },
+        },
+        {
           path: "facebook/page-search",
           name: "facebook-page-search",
           component: () => import("@/views/facebook/PageSearchView.vue"),
@@ -450,6 +456,7 @@ const navigationOrder = [
     permission: "chat",
     childPaths: [
       { path: "/facebook/page-search", permission: "chat" },
+      { path: "/facebook/comments", permission: "chat" },
       { path: "/facebook/people-search", permission: "chat" },
       { path: "/facebook/group-search", permission: "chat" },
       { path: "/facebook/extract-likes", permission: "chat" },

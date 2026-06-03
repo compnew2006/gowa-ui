@@ -453,16 +453,16 @@ func CreateTestChatbotFlow(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppA
 	t.Helper()
 
 	flow := &models.ChatbotFlow{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   orgID,
-		WhatsAppAccount:  whatsAppAccount,
-		Name:             "Test Flow " + uuid.New().String()[:8],
-		IsEnabled:        true,
-		Description:      "Test flow description",
-		InitialMessage:   "Hello from test flow!",
+		BaseModel:          models.BaseModel{ID: uuid.New()},
+		OrganizationID:     orgID,
+		WhatsAppAccount:    whatsAppAccount,
+		Name:               "Test Flow " + uuid.New().String()[:8],
+		IsEnabled:          true,
+		Description:        "Test flow description",
+		InitialMessage:     "Hello from test flow!",
 		InitialMessageType: models.FlowStepTypeText,
-		CompletionMessage: "Flow completed",
-		TimeoutMessage:   "Flow timed out",
+		CompletionMessage:  "Flow completed",
+		TimeoutMessage:     "Flow timed out",
 	}
 	require.NoError(t, db.Create(flow).Error)
 	return flow
@@ -474,17 +474,17 @@ func CreateTestKeywordRule(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppA
 
 	uniqueID := uuid.New().String()[:8]
 	rule := &models.KeywordRule{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   orgID,
-		WhatsAppAccount:  whatsAppAccount,
-		Name:             "Test Rule " + uniqueID,
-		IsEnabled:        true,
-		Priority:         10,
-		Keywords:         models.StringArray{"test" + uniqueID},
-		MatchType:        models.MatchTypeContains,
-		CaseSensitive:    false,
-		ResponseType:     models.ResponseTypeText,
-		ResponseContent:  models.JSONB{"message": "Test response"},
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		WhatsAppAccount: whatsAppAccount,
+		Name:            "Test Rule " + uniqueID,
+		IsEnabled:       true,
+		Priority:        10,
+		Keywords:        models.StringArray{"test" + uniqueID},
+		MatchType:       models.MatchTypeContains,
+		CaseSensitive:   false,
+		ResponseType:    models.ResponseTypeText,
+		ResponseContent: models.JSONB{"message": "Test response"},
 	}
 	require.NoError(t, db.Create(rule).Error)
 	return rule
@@ -511,14 +511,14 @@ func CreateTestAIContext(t *testing.T, db *gorm.DB, orgID uuid.UUID, whatsAppAcc
 	t.Helper()
 
 	context := &models.AIContext{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   orgID,
-		WhatsAppAccount:  whatsAppAccount,
-		Name:             "Test Context " + uuid.New().String()[:8],
-		IsEnabled:        true,
-		Priority:         10,
-		ContextType:      models.ContextTypeStatic,
-		StaticContent:    "Test static content",
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		WhatsAppAccount: whatsAppAccount,
+		Name:            "Test Context " + uuid.New().String()[:8],
+		IsEnabled:       true,
+		Priority:        10,
+		ContextType:     models.ContextTypeStatic,
+		StaticContent:   "Test static content",
 	}
 	require.NoError(t, db.Create(context).Error)
 	return context
@@ -545,23 +545,25 @@ func CreateTestAgentSelectionSettings(t *testing.T, db *gorm.DB, orgID uuid.UUID
 	t.Helper()
 
 	settings := &models.AgentSelectionSettings{
-		BaseModel:                  models.BaseModel{ID: uuid.New()},
-		OrganizationID:             orgID,
-		InstanceID:                 instanceID,
-		AllowedInstanceIDs:         models.StringArray{},
-		Enabled:                    true,
-		TriggerMode:                models.AgentSelectionTriggerFirstPendingMessage,
-		TriggerKeywords:            models.StringArray{},
-		PromptDelayMinutes:         3,
-		SelectionTimeoutMinutes:    10,
-		MaxInvalidAttempts:         3,
-		MenuHeaderText:             "Please choose who you'd like to chat with:",
-		MenuFooterText:             "",
-		InvalidReplyText:           "Invalid selection. Please reply with a number from the list.",
-		TimeoutResponseText:        "We did not receive a selection. Please try again later.",
-		UnavailableAgentText:       "This agent is currently unavailable. Please pick another option.",
-		CustomFinalOptionEnabled:   false,
-		HideUnavailableAgents:      true,
+		BaseModel:                models.BaseModel{ID: uuid.New()},
+		OrganizationID:           orgID,
+		InstanceID:               instanceID,
+		AllowedInstanceIDs:       models.StringArray{},
+		Enabled:                  true,
+		TriggerMode:              models.AgentSelectionTriggerFirstPendingMessage,
+		TriggerKeywords:          models.StringArray{},
+		PromptDelayMinutes:       3,
+		PromptDelayMinMinutes:    3,
+		PromptDelayMaxMinutes:    3,
+		SelectionTimeoutMinutes:  10,
+		MaxInvalidAttempts:       3,
+		MenuHeaderText:           "Please choose who you'd like to chat with:",
+		MenuFooterText:           "",
+		InvalidReplyText:         "Invalid selection. Please reply with a number from the list.",
+		TimeoutResponseText:      "We did not receive a selection. Please try again later.",
+		UnavailableAgentText:     "This agent is currently unavailable. Please pick another option.",
+		CustomFinalOptionEnabled: false,
+		HideUnavailableAgents:    true,
 	}
 	for _, opt := range opts {
 		opt(settings)
@@ -575,15 +577,15 @@ func CreateTestAgentSelectionParticipant(t *testing.T, db *gorm.DB, orgID, setti
 	t.Helper()
 
 	participant := &models.AgentSelectionParticipant{
-		BaseModel:              models.BaseModel{ID: uuid.New()},
-		OrganizationID:         orgID,
-		SettingsID:             settingsID,
-		UserID:                 userID,
-		DisplayName:            "Test Participant",
-		IsEnabled:              true,
-		SortOrder:              0,
-		ShowOnlyWhenAvailable:  true,
-		Metadata:               models.JSONB{},
+		BaseModel:             models.BaseModel{ID: uuid.New()},
+		OrganizationID:        orgID,
+		SettingsID:            settingsID,
+		UserID:                userID,
+		DisplayName:           "Test Participant",
+		IsEnabled:             true,
+		SortOrder:             0,
+		ShowOnlyWhenAvailable: true,
+		Metadata:              models.JSONB{},
 	}
 	for _, opt := range opts {
 		opt(participant)

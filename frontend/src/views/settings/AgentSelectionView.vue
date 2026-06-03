@@ -3,14 +3,17 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { toast } from "vue-sonner";
 import {
   Bot,
+  Check,
   Clock3,
   Eye,
   Loader2,
+  Pencil,
   Plus,
   RefreshCcw,
   Save,
   Trash2,
   UserPlus,
+  X,
 } from "lucide-vue-next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,7 +70,11 @@ const isSaving = ref(false);
 const isAddingParticipant = ref(false);
 const isAddingOption = ref(false);
 const isTestSending = ref(false);
+const isDeletingRule = ref(false);
+const editingParticipantId = ref("");
+const isSavingParticipantEdit = ref(false);
 const testSendContactId = ref("");
+const selectedRuleProfile = ref("__global__");
 
 const participantDeleteDialogOpen = ref(false);
 const participantToDelete = ref<{ id: string; name: string } | null>(null);
@@ -81,6 +88,8 @@ const settingsForm = reactive({
   trigger_mode: "first_pending_message",
   trigger_keywords: "",
   prompt_delay_minutes: 3,
+  prompt_delay_min_minutes: 3,
+  prompt_delay_max_minutes: 3,
   selection_timeout_minutes: 10,
   max_invalid_attempts: 3,
   menu_header_text: "من فضلك اختر من تريد التواصل معه:",
@@ -107,6 +116,13 @@ const participantForm = reactive({
   max_open_chats: "",
 });
 
+const participantEditForm = reactive({
+  display_name: "",
+  description: "",
+  sort_order: 0,
+  max_open_chats: "",
+});
+
 const optionForm = reactive({
   option_type: "team" as AgentSelectionOptionType,
   team_id: "",
@@ -118,6 +134,9 @@ const optionForm = reactive({
 });
 
 const settingsId = computed(() => agentSelectionStore.settings?.id || "");
+const activeRuleInstanceId = computed(() =>
+  selectedRuleProfile.value === "__global__" ? "" : selectedRuleProfile.value,
+);
 const canConfigureLists = computed(
   () => settingsId.value && settingsId.value !== "00000000-0000-0000-0000-000000000000",
 );
@@ -131,6 +150,17 @@ const availableUsers = computed(() => {
 });
 const teamOptions = computed(() => teamsStore.teams.filter((team) => team.is_active));
 const availableInstances = computed(() => instancesStore.instances);
+const activeRuleInstance = computed(() =>
+  availableInstances.value.find((instance) => instance.id === activeRuleInstanceId.value),
+);
+const activeRuleProfileLabel = computed(() => {
+  if (!activeRuleInstanceId.value) return "Global/default rule";
+  return activeRuleInstance.value?.name || "Selected instance rule";
+});
+const activeRuleIsSaved = computed(() => canConfigureLists.value);
+const removeRuleLabel = computed(() =>
+  activeRuleInstanceId.value ? "Remove instance rule" : "Remove global rule",
+);
 const selectedInstanceCount = computed(
   () => settingsForm.allowed_instance_ids.length,
 );
@@ -140,12 +170,18 @@ const allInstancesSelected = computed(
     selectedInstanceCount.value === availableInstances.value.length,
 );
 const selectedInstanceScopeLabel = computed(() => {
+  if (activeRuleInstanceId.value) {
+    return activeRuleInstance.value?.name || "Selected instance";
+  }
   const selectedCount = selectedInstanceCount.value;
   if (selectedCount === 0) return "All WhatsMeow instances";
   if (selectedCount === 1) return "1 selected instance";
   return `${selectedCount} selected instances`;
 });
 const selectedInstanceScopeHelp = computed(() => {
+  if (activeRuleInstanceId.value) {
+    return "This rule applies only to the selected WhatsMeow instance.";
+  }
   if (selectedInstanceCount.value === 0) {
     return "Customer routing will listen on every WhatsMeow instance.";
   }
@@ -165,8 +201,15 @@ const triggerModeLabel = computed(() =>
   t(`agentSelection.page.trigger.${settingsForm.trigger_mode}`),
 );
 const timingSummaryLabel = computed(
-  () =>
-    `${settingsForm.prompt_delay_minutes} min delay, ${settingsForm.selection_timeout_minutes} min timeout`,
+  () => {
+    const minDelay = Number(settingsForm.prompt_delay_min_minutes) || 0;
+    const maxDelay = Number(settingsForm.prompt_delay_max_minutes) || minDelay;
+    const delayLabel =
+      minDelay === maxDelay
+        ? `${minDelay} min delay`
+        : `${minDelay}-${maxDelay} min delay`;
+    return `${delayLabel}, ${settingsForm.selection_timeout_minutes} min timeout`;
+  },
 );
 const breadcrumbs = [
   { label: t("nav.settings"), href: "/settings" },
@@ -199,20 +242,51 @@ onMounted(async () => {
 async function loadPage() {
   isLoading.value = true;
   try {
-    const settings = await agentSelectionStore.fetchSettings();
-    applySettings(settings);
     await Promise.all([
       instancesStore.fetchInstances(),
       usersStore.fetchUsers({ limit: 200 }),
       teamsStore.fetchTeams({ limit: 200 }),
-      agentSelectionStore.fetchParticipants(settings.id),
-      agentSelectionStore.fetchOptions(settings.id),
-      fetchPreviewForSettings(settings.id),
+    ]);
+    await loadRuleSettings();
+    await Promise.all([
       agentSelectionStore.fetchSessions(),
       agentSelectionStore.fetchAudit(),
     ]);
   } catch (error) {
     toast.error(getErrorMessage(error, "Failed to load customer routing"));
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+async function loadRuleSettings() {
+  const settings = await agentSelectionStore.fetchSettings(
+    activeRuleInstanceId.value || undefined,
+  );
+  applySettings(settings);
+  if (settings.id && settings.id !== "00000000-0000-0000-0000-000000000000") {
+    await Promise.all([
+      agentSelectionStore.fetchParticipants(settings.id),
+      agentSelectionStore.fetchOptions(settings.id),
+      fetchPreviewForSettings(settings.id),
+    ]);
+  } else {
+    agentSelectionStore.participants = [];
+    agentSelectionStore.options = [];
+    agentSelectionStore.preview = null;
+  }
+  return settings;
+}
+
+async function changeRuleProfile(value: unknown) {
+  const nextValue = String(value || "__global__");
+  if (nextValue === selectedRuleProfile.value) return;
+  selectedRuleProfile.value = nextValue;
+  isLoading.value = true;
+  try {
+    await loadRuleSettings();
+  } catch (error) {
+    toast.error(getErrorMessage(error, "Failed to load instance routing rule"));
   } finally {
     isLoading.value = false;
   }
@@ -224,6 +298,10 @@ function applySettings(settings: AgentSelectionSettings) {
   settingsForm.trigger_mode = settings.trigger_mode;
   settingsForm.trigger_keywords = (settings.trigger_keywords || []).join(", ");
   settingsForm.prompt_delay_minutes = settings.prompt_delay_minutes;
+  settingsForm.prompt_delay_min_minutes =
+    settings.prompt_delay_min_minutes ?? settings.prompt_delay_minutes;
+  settingsForm.prompt_delay_max_minutes =
+    settings.prompt_delay_max_minutes ?? settings.prompt_delay_minutes;
   settingsForm.selection_timeout_minutes = settings.selection_timeout_minutes;
   settingsForm.max_invalid_attempts = settings.max_invalid_attempts;
   settingsForm.menu_header_text = settings.menu_header_text || "";
@@ -252,6 +330,34 @@ async function saveSettings() {
     toast.error(getErrorMessage(error, "Failed to save settings"));
   } finally {
     isSaving.value = false;
+  }
+}
+
+async function removeCurrentRule() {
+  const id = settingsId.value;
+  if (!id || id === "00000000-0000-0000-0000-000000000000") {
+    toast.info("This rule has not been saved yet");
+    return;
+  }
+  const confirmed = window.confirm(
+    activeRuleInstanceId.value
+      ? "Remove this instance rule? Its agents and options will be deleted, and the instance will use the global/default rule."
+      : "Remove the global/default rule? Its agents and options will be deleted, and a fresh default rule will be created when needed.",
+  );
+  if (!confirmed) return;
+
+  isDeletingRule.value = true;
+  try {
+    await agentSelectionStore.deleteSettings(id);
+    toast.success("Routing rule removed");
+    if (activeRuleInstanceId.value) {
+      selectedRuleProfile.value = "__global__";
+    }
+    await loadRuleSettings();
+  } catch (error) {
+    toast.error(getErrorMessage(error, "Failed to remove routing rule"));
+  } finally {
+    isDeletingRule.value = false;
   }
 }
 
@@ -299,6 +405,56 @@ async function addParticipant() {
 async function toggleParticipant(id: string, isEnabled: boolean) {
   await agentSelectionStore.updateParticipant(id, { is_enabled: isEnabled });
   await fetchPreviewForSettings(settingsId.value);
+}
+
+function startEditParticipant(participant: {
+  id: string;
+  display_name: string;
+  description?: string;
+  sort_order: number;
+  max_open_chats?: number | null;
+}) {
+  editingParticipantId.value = participant.id;
+  participantEditForm.display_name = participant.display_name || "";
+  participantEditForm.description = participant.description || "";
+  participantEditForm.sort_order = Number(participant.sort_order) || 0;
+  participantEditForm.max_open_chats =
+    participant.max_open_chats === null || participant.max_open_chats === undefined
+      ? ""
+      : String(participant.max_open_chats);
+}
+
+function cancelEditParticipant() {
+  editingParticipantId.value = "";
+  participantEditForm.display_name = "";
+  participantEditForm.description = "";
+  participantEditForm.sort_order = 0;
+  participantEditForm.max_open_chats = "";
+}
+
+async function saveParticipantEdit(id: string) {
+  if (!participantEditForm.display_name.trim()) {
+    toast.error("Customer display name is required");
+    return;
+  }
+  isSavingParticipantEdit.value = true;
+  try {
+    await agentSelectionStore.updateParticipant(id, {
+      display_name: participantEditForm.display_name.trim(),
+      description: participantEditForm.description.trim(),
+      sort_order: Number(participantEditForm.sort_order) || 0,
+      max_open_chats: participantEditForm.max_open_chats
+        ? Number(participantEditForm.max_open_chats)
+        : null,
+    });
+    cancelEditParticipant();
+    await fetchPreviewForSettings(settingsId.value);
+    toast.success("Agent updated");
+  } catch (error) {
+    toast.error(getErrorMessage(error, "Failed to update agent"));
+  } finally {
+    isSavingParticipantEdit.value = false;
+  }
 }
 
 function removeParticipant(participant: { id: string; display_name: string }) {
@@ -483,11 +639,16 @@ async function fetchPreviewForSettings(id: string) {
 
 function buildSettingsPayload(): Partial<AgentSelectionSettings> {
   return {
+    instance_id: activeRuleInstanceId.value || null,
     enabled: settingsForm.enabled,
-    allowed_instance_ids: settingsForm.allowed_instance_ids,
+    allowed_instance_ids: activeRuleInstanceId.value
+      ? []
+      : settingsForm.allowed_instance_ids,
     trigger_mode: settingsForm.trigger_mode as AgentSelectionSettings["trigger_mode"],
     trigger_keywords: splitKeywords(settingsForm.trigger_keywords),
-    prompt_delay_minutes: settingsForm.prompt_delay_minutes,
+    prompt_delay_minutes: settingsForm.prompt_delay_min_minutes,
+    prompt_delay_min_minutes: settingsForm.prompt_delay_min_minutes,
+    prompt_delay_max_minutes: settingsForm.prompt_delay_max_minutes,
     selection_timeout_minutes: settingsForm.selection_timeout_minutes,
     max_invalid_attempts: settingsForm.max_invalid_attempts,
     menu_header_text: settingsForm.menu_header_text,
@@ -592,6 +753,60 @@ function formatDate(value?: string | null) {
 
       <TabsContent value="settings" class="space-y-4">
         <section
+          class="grid gap-3 rounded-lg border bg-card p-3 lg:grid-cols-[minmax(0,1fr)_320px]"
+          aria-label="Routing rule profile"
+        >
+          <div class="min-w-0">
+            <p class="text-xs font-medium uppercase text-muted-foreground">
+              Rule profile
+            </p>
+            <p class="mt-1 text-sm font-semibold">{{ activeRuleProfileLabel }}</p>
+            <p class="mt-1 text-xs leading-5 text-muted-foreground">
+              Choose a specific instance to configure its own agents, options, and delay.
+            </p>
+          </div>
+          <div class="space-y-2">
+            <Label for="agent-routing-rule-profile">Configure rule for</Label>
+            <div class="flex gap-2">
+              <Select
+                :model-value="selectedRuleProfile"
+                @update:model-value="changeRuleProfile"
+              >
+                <SelectTrigger id="agent-routing-rule-profile" class="min-w-0 flex-1">
+                  <SelectValue placeholder="Choose rule profile" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__global__">Global/default rule</SelectItem>
+                  <SelectItem
+                    v-for="instance in availableInstances"
+                    :key="instance.id"
+                    :value="instance.id"
+                  >
+                    {{ instance.name }}
+                    <span v-if="instance.phone_number" class="text-muted-foreground">
+                      - {{ instance.phone_number }}
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                :disabled="isDeletingRule || !activeRuleIsSaved"
+                :title="removeRuleLabel"
+                @click="removeCurrentRule"
+              >
+                <Loader2 v-if="isDeletingRule" class="h-4 w-4 animate-spin" />
+                <Trash2 v-else class="h-4 w-4" />
+              </Button>
+            </div>
+            <p v-if="!activeRuleIsSaved" class="text-xs text-muted-foreground">
+              This is an inherited draft. Press Save to add this rule.
+            </p>
+          </div>
+        </section>
+
+        <section
           class="grid gap-3 rounded-lg border bg-card p-3 sm:grid-cols-3"
           aria-label="Customer routing summary"
         >
@@ -601,7 +816,7 @@ function formatDate(value?: string | null) {
             <p class="mt-1 text-xs leading-5 text-muted-foreground">{{ routingStatusHelp }}</p>
           </div>
           <div class="rounded-md bg-muted/35 px-3 py-2.5">
-            <p class="text-xs font-medium text-muted-foreground">Scope</p>
+            <p class="text-xs font-medium text-muted-foreground">Profile</p>
             <p class="mt-1 text-sm font-semibold">{{ selectedInstanceScopeLabel }}</p>
             <p class="mt-1 text-xs leading-5 text-muted-foreground">{{ triggerModeLabel }}</p>
           </div>
@@ -616,7 +831,7 @@ function formatDate(value?: string | null) {
 
         <div class="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div class="grid gap-5">
-            <Card>
+            <Card v-if="!activeRuleInstanceId">
               <CardHeader class="gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="space-y-1.5">
                   <CardTitle class="text-base">Instance scope</CardTitle>
@@ -881,13 +1096,23 @@ function formatDate(value?: string | null) {
                     placeholder="موظف, تحويل, agent"
                   />
                 </div>
-                <div class="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                   <div class="space-y-2">
-                    <Label for="agent-routing-prompt-delay">Prompt delay</Label>
+                    <Label for="agent-routing-prompt-delay-min">Min delay</Label>
                     <Input
-                      id="agent-routing-prompt-delay"
-                      v-model.number="settingsForm.prompt_delay_minutes"
-                      name="agent-routing-prompt-delay"
+                      id="agent-routing-prompt-delay-min"
+                      v-model.number="settingsForm.prompt_delay_min_minutes"
+                      name="agent-routing-prompt-delay-min"
+                      type="number"
+                      min="0"
+                    />
+                  </div>
+                  <div class="space-y-2">
+                    <Label for="agent-routing-prompt-delay-max">Max delay</Label>
+                    <Input
+                      id="agent-routing-prompt-delay-max"
+                      v-model.number="settingsForm.prompt_delay_max_minutes"
+                      name="agent-routing-prompt-delay-max"
                       type="number"
                       min="0"
                     />
@@ -962,6 +1187,15 @@ function formatDate(value?: string | null) {
                 name="agent-routing-participant-name"
               />
             </div>
+            <div class="space-y-2 md:col-span-2">
+              <Label for="agent-routing-participant-service">Service / work</Label>
+              <Input
+                id="agent-routing-participant-service"
+                v-model="participantForm.description"
+                name="agent-routing-participant-service"
+                placeholder="خدمات الكترونيه"
+              />
+            </div>
             <div class="space-y-2">
               <Label for="agent-routing-participant-sort">Sort</Label>
               <Input
@@ -1011,6 +1245,7 @@ function formatDate(value?: string | null) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Display name</TableHead>
+                  <TableHead>Service / work</TableHead>
                   <TableHead>Internal user</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead class="text-right">Actions</TableHead>
@@ -1018,12 +1253,47 @@ function formatDate(value?: string | null) {
               </TableHeader>
               <TableBody>
                 <TableRow v-for="participant in agentSelectionStore.participants" :key="participant.id">
-                  <TableCell class="font-medium">{{ participant.display_name }}</TableCell>
+                  <TableCell class="font-medium">
+                    <Input
+                      v-if="editingParticipantId === participant.id"
+                      v-model="participantEditForm.display_name"
+                      :aria-label="`Edit display name for ${participant.display_name}`"
+                    />
+                    <span v-else>{{ participant.display_name }}</span>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      v-if="editingParticipantId === participant.id"
+                      v-model="participantEditForm.description"
+                      :aria-label="`Edit service for ${participant.display_name}`"
+                    />
+                    <span v-else>{{ participant.description || "-" }}</span>
+                  </TableCell>
                   <TableCell>{{ participant.user?.full_name || participant.user?.email || participant.user_id }}</TableCell>
                   <TableCell>
-                    <div class="flex gap-2">
+                    <div
+                      v-if="editingParticipantId === participant.id"
+                      class="grid min-w-40 gap-2 sm:grid-cols-2"
+                    >
+                      <Input
+                        v-model.number="participantEditForm.sort_order"
+                        type="number"
+                        aria-label="Edit sort order"
+                      />
+                      <Input
+                        v-model="participantEditForm.max_open_chats"
+                        type="number"
+                        placeholder="Any"
+                        aria-label="Edit max open chats"
+                      />
+                    </div>
+                    <div v-else class="flex flex-wrap gap-2">
                       <Badge :variant="participant.is_enabled ? 'default' : 'secondary'">
                         {{ participant.is_enabled ? "Enabled" : "Hidden" }}
+                      </Badge>
+                      <Badge variant="outline">Sort {{ participant.sort_order }}</Badge>
+                      <Badge variant="outline">
+                        Max {{ participant.max_open_chats ?? "Any" }}
                       </Badge>
                       <Badge v-if="participant.user?.is_available === false" variant="secondary">
                         Unavailable
@@ -1031,22 +1301,58 @@ function formatDate(value?: string | null) {
                     </div>
                   </TableCell>
                   <TableCell class="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      @click="toggleParticipant(participant.id, !participant.is_enabled)"
-                    >
-                      {{ participant.is_enabled ? "Hide" : "Show" }}
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      class="ml-2"
-                      :aria-label="`Remove ${participant.display_name}`"
-                      @click="removeParticipant(participant)"
-                    >
-                      <Trash2 class="h-4 w-4" />
-                    </Button>
+                    <template v-if="editingParticipantId === participant.id">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        :disabled="isSavingParticipantEdit"
+                        :aria-label="`Save ${participant.display_name}`"
+                        @click="saveParticipantEdit(participant.id)"
+                      >
+                        <Loader2
+                          v-if="isSavingParticipantEdit"
+                          class="h-4 w-4 animate-spin"
+                        />
+                        <Check v-else class="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        class="ml-2"
+                        :disabled="isSavingParticipantEdit"
+                        :aria-label="`Cancel editing ${participant.display_name}`"
+                        @click="cancelEditParticipant"
+                      >
+                        <X class="h-4 w-4" />
+                      </Button>
+                    </template>
+                    <template v-else>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        @click="toggleParticipant(participant.id, !participant.is_enabled)"
+                      >
+                        {{ participant.is_enabled ? "Hide" : "Show" }}
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        class="ml-2"
+                        :aria-label="`Edit ${participant.display_name}`"
+                        @click="startEditParticipant(participant)"
+                      >
+                        <Pencil class="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        class="ml-2"
+                        :aria-label="`Remove ${participant.display_name}`"
+                        @click="removeParticipant(participant)"
+                      >
+                        <Trash2 class="h-4 w-4" />
+                      </Button>
+                    </template>
                   </TableCell>
                 </TableRow>
               </TableBody>

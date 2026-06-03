@@ -119,6 +119,10 @@ func GetMigrationModels() []MigrationModel {
 		{"WhatsAppAccount", &models.WhatsAppAccount{}},
 		{"WhatsAppInstance", &models.WhatsAppInstance{}},
 		{"FacebookAccount", &models.FacebookAccount{}},
+		{"FacebookOAuthState", &models.FacebookOAuthState{}},
+		{"FacebookComment", &models.FacebookComment{}},
+		{"FacebookCommentReply", &models.FacebookCommentReply{}},
+		{"FacebookCommentSettings", &models.FacebookCommentSettings{}},
 		{"InstanceNotification", &models.InstanceNotification{}},
 		{"Contact", &models.Contact{}},
 		{"MediaAsset", &models.MediaAsset{}},
@@ -664,6 +668,13 @@ func getIndexes() []string {
 		 WHERE o.settings_id IS NULL
 		   AND o.organization_id = s.organization_id
 		   AND s.instance_id IS NULL`,
+		`ALTER TABLE agent_selection_settings ADD COLUMN IF NOT EXISTS prompt_delay_min_minutes integer DEFAULT 3`,
+		`ALTER TABLE agent_selection_settings ADD COLUMN IF NOT EXISTS prompt_delay_max_minutes integer DEFAULT 3`,
+		`UPDATE agent_selection_settings
+		 SET prompt_delay_min_minutes = COALESCE(NULLIF(prompt_delay_min_minutes, 0), prompt_delay_minutes, 3),
+		     prompt_delay_max_minutes = COALESCE(NULLIF(prompt_delay_max_minutes, 0), prompt_delay_minutes, 3)
+		 WHERE COALESCE(prompt_delay_minutes, 0) > 0
+		   AND (COALESCE(prompt_delay_min_minutes, 0) = 0 OR COALESCE(prompt_delay_max_minutes, 0) = 0)`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_selection_participants_settings_enabled ON agent_selection_participants(settings_id, is_enabled, sort_order)`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_selection_options_settings_enabled ON agent_selection_options(settings_id, is_enabled, sort_order)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_canned_responses_org_name ON canned_responses(organization_id, name)`,

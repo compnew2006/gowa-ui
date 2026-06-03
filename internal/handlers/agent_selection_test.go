@@ -39,6 +39,23 @@ func TestSelectedRenderedOptionMatchesSnapshotNumber(t *testing.T) {
 	}
 }
 
+func TestFormatAgentSelectionOptionLineIncludesServiceDescription(t *testing.T) {
+	line := formatAgentSelectionOptionLine(agentSelectionRenderedOption{
+		Label:       "Admin",
+		Description: "خدمات الكترونيه",
+	})
+	if line != "Admin : خدمات الكترونيه" {
+		t.Fatalf("line = %q", line)
+	}
+
+	finalLine := formatAgentSelectionOptionLine(agentSelectionRenderedOption{
+		Label: "في انتظارك في الفرع الاقرب إليك",
+	})
+	if finalLine != "في انتظارك في الفرع الاقرب إليك" {
+		t.Fatalf("final line = %q", finalLine)
+	}
+}
+
 func TestSelectedRenderedOptionRejectsInvalidReply(t *testing.T) {
 	snapshot := models.JSONBArray{
 		map[string]any{
@@ -78,6 +95,26 @@ func TestNormalizeStringArrayTrimsDeduplicatesAndDropsEmpty(t *testing.T) {
 	}
 	if got[0] != "transfer" || got[1] != "agent" {
 		t.Fatalf("got %#v, want [transfer agent]", got)
+	}
+}
+
+func TestRandomPromptDelayMinutesUsesConfiguredRange(t *testing.T) {
+	settings := &models.AgentSelectionSettings{
+		PromptDelayMinMinutes: 1,
+		PromptDelayMaxMinutes: 5,
+	}
+	for i := 0; i < 100; i++ {
+		delay := randomPromptDelayMinutes(settings)
+		if delay < 1 || delay > 5 {
+			t.Fatalf("delay = %d, want 1..5", delay)
+		}
+	}
+}
+
+func TestRandomPromptDelayMinutesFallsBackToLegacyFixedDelay(t *testing.T) {
+	settings := &models.AgentSelectionSettings{PromptDelayMinutes: 3}
+	if got := randomPromptDelayMinutes(settings); got != 3 {
+		t.Fatalf("delay = %d, want legacy fixed delay 3", got)
 	}
 }
 

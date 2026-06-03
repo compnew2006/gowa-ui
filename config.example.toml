@@ -63,6 +63,14 @@ api_version = "v18.0"
 base_url = "https://graph.facebook.com"
 provider = "meta" # meta, whatsmeow
 
+[facebook_oauth]
+app_id = "1802656793760128"       # Meta App ID used for connecting Facebook Pages via OAuth.
+app_secret = "78a37780b9cf4cd32aaa4b552f96bd8b"   # Meta App Secret. Prefer WHATOMATE_FACEBOOK_OAUTH_APP_SECRET in production.
+api_version = "v20.0"
+base_url = "https://graph.facebook.com"
+redirect_uri = "https://fbwebhook.ofuqalmadenah.com" # Optional exact callback URL. Empty = derived from current host: /api/facebook/oauth/callback
+webhook_verify_token = "change-me-facebook-comments-webhook"
+
 [whatsmeow]
 rate_limit_min_delay_ms = 1000
 rate_limit_max_delay_ms = 3000
