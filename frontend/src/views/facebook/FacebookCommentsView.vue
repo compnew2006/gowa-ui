@@ -52,7 +52,7 @@ const selectedCommentId = ref<string>("");
 const settings = ref<FacebookCommentSettings | null>(null);
 const total = ref(0);
 const page = ref(1);
-const limit = ref(30);
+const limit = ref(100);
 const search = ref("");
 const status = ref<FacebookCommentStatus | "all">("open");
 const loading = ref(false);
@@ -72,6 +72,8 @@ const syncRunAutoReply = ref(true);
 const selectedComment = computed(() =>
   comments.value.find((comment) => comment.id === selectedCommentId.value) || comments.value[0] || null,
 );
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)));
 
 const statusCounts = computed(() => {
   const counts: Record<string, number> = { open: 0, replied: 0, closed: 0, archived: 0 };
@@ -122,6 +124,18 @@ async function fetchComments() {
   } finally {
     loading.value = false;
   }
+}
+
+async function resetAndFetchComments() {
+  page.value = 1;
+  await fetchComments();
+}
+
+async function goToCommentsPage(nextPage: number) {
+  const safePage = Math.min(Math.max(1, nextPage), totalPages.value);
+  if (safePage === page.value) return;
+  page.value = safePage;
+  await fetchComments();
 }
 
 async function syncComments() {
@@ -261,14 +275,14 @@ function formatDate(value?: string) {
                 v-model="search"
                 class="pl-8"
                 :placeholder="$t('facebookComments.search')"
-                @keyup.enter="fetchComments"
+                @keyup.enter="resetAndFetchComments"
               />
             </div>
-            <Button variant="outline" size="sm" @click="fetchComments">
+            <Button variant="outline" size="sm" @click="resetAndFetchComments">
               <RefreshCw class="h-4 w-4" />
             </Button>
           </div>
-          <Select v-model="status" @update:model-value="fetchComments">
+          <Select v-model="status" @update:model-value="resetAndFetchComments">
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -314,6 +328,20 @@ function formatDate(value?: string) {
               </div>
             </div>
           </ScrollArea>
+          <div class="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground">
+            <Button variant="outline" size="sm" :disabled="page <= 1 || loading" @click="goToCommentsPage(page - 1)">
+              {{ $t("common.previous") }}
+            </Button>
+            <span>{{ page }} / {{ totalPages }}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="page >= totalPages || loading"
+              @click="goToCommentsPage(page + 1)"
+            >
+              {{ $t("common.next") }}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

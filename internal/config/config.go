@@ -48,12 +48,13 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Name                  string `koanf:"name"`
-	Environment           string `koanf:"environment"` // development, staging, production
-	Debug                 bool   `koanf:"debug"`
-	EncryptionKey         string `koanf:"encryption_key"` // AES-256 key for encrypting secrets at rest
-	AllowLegacyEncryption *bool  `koanf:"allow_legacy_encryption"`
-	SandboxMode           bool   `koanf:"sandbox_mode"` // Shared-data sandbox guardrail that disables startup mutations and background automation.
+	Name                           string `koanf:"name"`
+	Environment                    string `koanf:"environment"` // development, staging, production
+	Debug                          bool   `koanf:"debug"`
+	EncryptionKey                  string `koanf:"encryption_key"` // AES-256 key for encrypting secrets at rest
+	AllowLegacyEncryption          *bool  `koanf:"allow_legacy_encryption"`
+	SandboxMode                    bool   `koanf:"sandbox_mode"`                      // Shared-data sandbox guardrail that disables startup mutations and background automation.
+	SandboxAllowWhatsmeowReconnect bool   `koanf:"sandbox_allow_whatsmeow_reconnect"` // Narrow sandbox override for receiving WhatsApp Web messages without enabling jobs.
 }
 
 type ServerConfig struct {

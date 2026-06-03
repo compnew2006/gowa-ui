@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -165,6 +166,16 @@ type facebookCommentEdge struct {
 	From         facebookCommentActor      `json:"from"`
 	Parent       *facebookCommentParentRef `json:"parent"`
 	CommentCount int                       `json:"comment_count"`
+}
+
+type facebookCommentDetailResponse struct {
+	ID   string               `json:"id"`
+	From facebookCommentActor `json:"from"`
+}
+
+type facebookGraphBatchResponse struct {
+	Code int    `json:"code"`
+	Body string `json:"body"`
 }
 
 type facebookCommentActor struct {
@@ -483,6 +494,7 @@ func (a *App) ReceiveFacebookCommentsWebhook(r *fastglue.Request) error {
 			}
 			comment, created, err := a.upsertFacebookWebhookComment(a.DB, account, pageID, pageNames[pageID], change.Value)
 			if err != nil {
+				a.Log.Error("Failed to save Facebook webhook comment", "error", err, "page_id", pageID, "comment_id", change.Value.CommentID)
 				failures = append(failures, fmt.Sprintf("%s: failed to save webhook comment", pageID))
 				continue
 			}
@@ -557,7 +569,10 @@ func (a *App) getOrCreateFacebookCommentSettings(db *gorm.DB, orgID uuid.UUID) (
 		DefaultSyncCommentsPerPost: defaultFBCommentsPerPost,
 		Metadata:                   models.JSONB{},
 	}
-	return &settings, db.Create(&settings).Error
+	if err := a.DB.Create(&settings).Error; err != nil {
+		return nil, err
+	}
+	return &settings, nil
 }
 
 func (a *App) findFacebookAccountByPageID(pageID string) (*models.FacebookAccount, string, error) {
@@ -606,7 +621,9 @@ func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.Facebook
 			"verb":   value.Verb,
 		},
 	}
-	tx := db.Clauses(clause.OnConflict{
+	normalizeFacebookCommentForSave(&comment)
+	commentDB := db.Session(&gorm.Session{NewDB: true}).Table((&models.FacebookComment{}).TableName())
+	tx := commentDB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "organization_id"}, {Name: "external_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"page_name", "post_id", "parent_id", "from_id", "from_name", "message",
@@ -617,7 +634,7 @@ func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.Facebook
 		return nil, false, tx.Error
 	}
 	var saved models.FacebookComment
-	if err := db.Where("organization_id = ? AND external_id = ?", account.OrganizationID, value.CommentID).First(&saved).Error; err != nil {
+	if err := commentDB.Where("organization_id = ? AND external_id = ?", account.OrganizationID, value.CommentID).First(&saved).Error; err != nil {
 		return nil, false, err
 	}
 	created := saved.CreatedAt.Equal(saved.UpdatedAt) || saved.LastRepliedAt == nil
@@ -672,8 +689,29 @@ func normalizeFacebookCommentSettings(settings *models.FacebookCommentSettings) 
 	settings.DefaultSyncCommentsPerPost = clampPositive(settings.DefaultSyncCommentsPerPost, defaultFBCommentsPerPost, maxFBCommentsPerPost)
 }
 
+func normalizeFacebookCommentForSave(comment *models.FacebookComment) {
+	comment.PageID = truncateFacebookCommentField(comment.PageID, 255)
+	comment.PageName = truncateFacebookCommentField(comment.PageName, 255)
+	comment.PostID = truncateFacebookCommentField(comment.PostID, 255)
+	comment.ExternalID = truncateFacebookCommentField(comment.ExternalID, 255)
+	comment.ParentID = truncateFacebookCommentField(comment.ParentID, 255)
+	comment.FromID = truncateFacebookCommentField(comment.FromID, 255)
+	comment.FromName = truncateFacebookCommentField(comment.FromName, 255)
+}
+
+func truncateFacebookCommentField(value string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes])
+}
+
 func (a *App) facebookAccountsForCommentSync(db *gorm.DB, orgID uuid.UUID, accountID string) ([]models.FacebookAccount, error) {
-	query := db.Where("organization_id = ? AND method = ? AND status = ?", orgID, models.FBAccountMethodOAuth, models.FBAccountStatusActive)
+	query := a.DB.Where("organization_id = ? AND method = ? AND status = ?", orgID, models.FBAccountMethodOAuth, models.FBAccountStatusActive)
 	if strings.TrimSpace(accountID) != "" {
 		parsed, err := uuid.Parse(strings.TrimSpace(accountID))
 		if err != nil {
@@ -745,6 +783,7 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 		result.Failures = append(result.Failures, fmt.Sprintf("%s: %v", pageNameOrID(pageName, pageID), err))
 		return result
 	}
+	actorFallbacks := a.fetchMissingFacebookCommentActors(oauthCfg, posts, pageToken, pageID, pageName)
 	now := time.Now()
 	for _, post := range posts {
 		for _, edge := range post.Comments.Data {
@@ -752,6 +791,15 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 				continue
 			}
 			if settings.IgnorePageAdminComments && edge.From.ID == pageID {
+				continue
+			}
+			actor := edge.From
+			if strings.TrimSpace(actor.ID) == "" && strings.TrimSpace(actor.Name) == "" {
+				if fetchedActor, ok := actorFallbacks[edge.ID]; ok {
+					actor = fetchedActor
+				}
+			}
+			if settings.IgnorePageAdminComments && actor.ID == pageID {
 				continue
 			}
 			commentedAt := parseFacebookTime(edge.CreatedTime, now)
@@ -765,8 +813,8 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 				PostMessage:    post.Message,
 				ExternalID:     edge.ID,
 				ParentID:       parentID(edge.Parent),
-				FromID:         edge.From.ID,
-				FromName:       edge.From.Name,
+				FromID:         actor.ID,
+				FromName:       actor.Name,
 				Message:        edge.Message,
 				Permalink:      edge.PermalinkURL,
 				Status:         models.FBCommentStatusOpen,
@@ -778,7 +826,9 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 					"source":        "graph_sync",
 				},
 			}
-			tx := db.Clauses(clause.OnConflict{
+			normalizeFacebookCommentForSave(&comment)
+			commentDB := db.Session(&gorm.Session{NewDB: true}).Table((&models.FacebookComment{}).TableName())
+			tx := commentDB.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "organization_id"}, {Name: "external_id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
 					"page_name", "post_permalink", "post_message", "parent_id", "from_id", "from_name",
@@ -786,13 +836,14 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 				}),
 			}).Create(&comment)
 			if tx.Error != nil {
-				result.Failures = append(result.Failures, fmt.Sprintf("%s: failed to save comment %s", pageNameOrID(pageName, pageID), edge.ID))
+				a.Log.Error("Failed to save Facebook synced comment", "error", tx.Error, "page_id", pageID, "page_name", pageName, "comment_id", edge.ID)
+				result.Failures = append(result.Failures, fmt.Sprintf("%s: failed to save comment %s: %v", pageNameOrID(pageName, pageID), edge.ID, tx.Error))
 				continue
 			}
 			result.Synced++
 			if tx.RowsAffected > 0 {
 				var saved models.FacebookComment
-				_ = db.Where("organization_id = ? AND external_id = ?", orgID, edge.ID).First(&saved).Error
+				_ = commentDB.Where("organization_id = ? AND external_id = ?", orgID, edge.ID).First(&saved).Error
 				if saved.CreatedAt.Equal(saved.UpdatedAt) || saved.LastRepliedAt == nil {
 					result.Created++
 				}
@@ -827,7 +878,7 @@ func (a *App) fetchFacebookPostsWithComments(cfg facebookOAuthRuntimeConfig, pag
 	}
 
 	query := url.Values{
-		"fields":       {fmt.Sprintf("id,message,permalink_url,created_time,comments.limit(%d){id,message,from,created_time,permalink_url,comment_count,parent}", commentsPerPost)},
+		"fields":       {fmt.Sprintf("id,message,permalink_url,created_time,comments.limit(%d){id,message,from{id,name},created_time,permalink_url,comment_count,parent}", commentsPerPost)},
 		"limit":        {strconv.Itoa(postLimit)},
 		"access_token": {pageToken},
 	}
@@ -841,7 +892,7 @@ func (a *App) fetchFacebookPostsWithComments(cfg facebookOAuthRuntimeConfig, pag
 
 func (a *App) fetchFacebookPostWithComments(cfg facebookOAuthRuntimeConfig, postID, pageToken string, commentsPerPost int) (facebookPostEdge, error) {
 	query := url.Values{
-		"fields":       {fmt.Sprintf("id,message,permalink_url,created_time,comments.limit(%d){id,message,from,created_time,permalink_url,comment_count,parent}", commentsPerPost)},
+		"fields":       {fmt.Sprintf("id,message,permalink_url,created_time,comments.limit(%d){id,message,from{id,name},created_time,permalink_url,comment_count,parent}", commentsPerPost)},
 		"access_token": {pageToken},
 	}
 	endpoint := fmt.Sprintf("%s/%s/%s?%s", cfg.BaseURL, cfg.APIVersion, url.PathEscape(postID), query.Encode())
@@ -850,6 +901,96 @@ func (a *App) fetchFacebookPostWithComments(cfg facebookOAuthRuntimeConfig, post
 		return payload, err
 	}
 	return payload, nil
+}
+
+func (a *App) fetchMissingFacebookCommentActors(cfg facebookOAuthRuntimeConfig, posts []facebookPostEdge, pageToken, pageID, pageName string) map[string]facebookCommentActor {
+	commentIDs := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, post := range posts {
+		for _, edge := range post.Comments.Data {
+			if strings.TrimSpace(edge.ID) == "" {
+				continue
+			}
+			if strings.TrimSpace(edge.From.ID) != "" || strings.TrimSpace(edge.From.Name) != "" {
+				continue
+			}
+			if _, ok := seen[edge.ID]; ok {
+				continue
+			}
+			seen[edge.ID] = struct{}{}
+			commentIDs = append(commentIDs, edge.ID)
+		}
+	}
+	actors := make(map[string]facebookCommentActor, len(commentIDs))
+	if len(commentIDs) == 0 {
+		return actors
+	}
+	endpoint := fmt.Sprintf("%s/%s/", cfg.BaseURL, cfg.APIVersion)
+	for start := 0; start < len(commentIDs); start += 50 {
+		end := start + 50
+		if end > len(commentIDs) {
+			end = len(commentIDs)
+		}
+		requests := make([]map[string]string, 0, end-start)
+		for _, commentID := range commentIDs[start:end] {
+			requests = append(requests, map[string]string{
+				"method":       http.MethodGet,
+				"relative_url": fmt.Sprintf("%s?fields=from{id,name}", url.PathEscape(commentID)),
+			})
+		}
+		batchBody, err := json.Marshal(requests)
+		if err != nil {
+			a.Log.Warn("Failed to build Facebook comment actor batch", "error", err, "page_id", pageID, "page_name", pageName)
+			continue
+		}
+		responses, err := a.facebookGraphBatchFormPost(endpoint, url.Values{
+			"access_token": {pageToken},
+			"batch":        {string(batchBody)},
+		})
+		if err != nil {
+			a.Log.Warn("Failed to fetch Facebook comment actors batch", "error", err, "page_id", pageID, "page_name", pageName, "comment_count", end-start)
+			continue
+		}
+		for idx, response := range responses {
+			if idx >= end-start || response.Code < 200 || response.Code >= 300 || strings.TrimSpace(response.Body) == "" {
+				continue
+			}
+			var detail facebookCommentDetailResponse
+			if err := json.Unmarshal([]byte(response.Body), &detail); err != nil {
+				continue
+			}
+			if strings.TrimSpace(detail.From.ID) == "" && strings.TrimSpace(detail.From.Name) == "" {
+				continue
+			}
+			actors[commentIDs[start+idx]] = detail.From
+		}
+	}
+	return actors
+}
+
+func (a *App) facebookGraphBatchFormPost(endpoint string, form url.Values) ([]facebookGraphBatchResponse, error) {
+	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := a.oauthHTTPClient().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("Facebook Graph API returned status %d", resp.StatusCode)
+	}
+	var responses []facebookGraphBatchResponse
+	if err := json.Unmarshal(body, &responses); err != nil {
+		return nil, err
+	}
+	return responses, nil
 }
 
 func shouldAutoReplyFacebookComment(db *gorm.DB, settings *models.FacebookCommentSettings, comment models.FacebookComment) bool {

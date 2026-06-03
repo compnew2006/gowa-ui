@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type FacebookCommentStatus string
+type FacebookCommentStatus = string
 
 const (
 	FBCommentStatusOpen     FacebookCommentStatus = "open"
@@ -15,7 +15,7 @@ const (
 	FBCommentStatusArchived FacebookCommentStatus = "archived"
 )
 
-type FacebookCommentDirection string
+type FacebookCommentDirection = string
 
 const (
 	FBCommentDirectionIncoming FacebookCommentDirection = "incoming"

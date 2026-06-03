@@ -4,6 +4,14 @@ Generated: 2026-02-25 23:25:52 UTC
 Server IP: 31.97.192.53
 Base Domain Pattern (suggested): <tenant>.ofuqalmadenah.com
 
+## Sandbox Deploy Note - 2026-06-03
+
+- Sandbox domain: sandbox.ofuqalmadenah.com
+- Sandbox service: whatomate-sandbox.service
+- Active sandbox binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_134253_fbcomments_author_retry_i18n
+- Production binary untouched: /opt/whatomate/bin/whatomate.green.20260528_111523
+- Change: Facebook comments page now includes common.previous translations and retries per-comment Graph actor lookup (`from{id,name}`) when nested sync data has an empty author.
+
 ## Summary
 
 - Dedicated instance = separate systemd service, PostgreSQL DB/user, uploads path, config, internal port
@@ -1973,10 +1981,103 @@ whatomate-switch blue
 From a local machine:
 
 ```bash
-ssh root@31.97.192.53 'whatomate-switch green'
+ssh root@31.97.192.53 'whatomate-switch'
+```
+
+## 2026-06-03 04:10 Africa/Cairo - Current Project Green Sandbox Deployment
+
+- **Deployment type**: Sandbox-only GREEN (no production switch)
+- **Active sandbox binary**: /opt/whatomate/bin/whatomate.sandbox.green.20260603_011052
+- **Version**: `Whatomate sandbox-green-20260603_010732-124187f7 (built 2026-06-03_01:07:48)`
+- **SHA256**: `9dbef8f8b89de8a4ef7dece2a51e354e105e5fbd900f028f629f9ba06456fe9d`
+- **Build**: Local macOS (darwin/arm64 Go 1.25.9) cross-compiled for linux/amd64 with embedded keyring
+- **Embedded keyring**: /root/whatomate-keyring.json (3 keys)
+- **Source revision**: 124187f7 (working tree had uncommitted changes including Facebook comments feature)
+- **Backup**: /root/whatomate_backups/20260603_010704_pre_green_sandbox_deploy
+- **Production ofuqalmadenah.com was NOT touched**
+
+### Sandbox Config
+- Port: 127.0.0.1:18127, DB: whatomate_sandbox_green_20260602_235053, Redis DB: 4
+- Config: /opt/whatomate-sandbox/config.toml, Uploads: /opt/whatomate/uploads (shared)
+- Systemd: whatomate-sandbox.service -> /opt/whatomate/bin/whatomate.sandbox.green
+
+### Verification
+- whatomate-sandbox.service: active, whatomate.service: active (untouched)
+- Production symlink unchanged: /opt/whatomate/bin/whatomate -> whatomate.green.20260528_111523
+- Sandbox port 18127 /login: 200, Production port 18123 /login: 200
+- Sandbox license: enabled=true, status=active, locked=false
+- Production license: enabled=true, status=active, locked=false
+
+### Sandbox Switch
+```bash
+whatomate-sandbox-switch status    # show active sandbox binary
+whatomate-sandbox-switch green     # switch to latest sandbox green
+whatomate-sandbox-switch blue      # switch to latest production blue
 ```
 
 The helper updates `/opt/whatomate/bin/whatomate`, restarts the live services, and stops the sandbox when green is promoted. Switching back to blue restarts the sandbox so green can continue to be tested separately.
+
+## 2026-06-03 04:55 Africa/Cairo - Facebook Comments Sandbox Save Fix
+
+- **Deployment type**: Sandbox-only GREEN hotfix (no production switch)
+- **Active sandbox binary**: `/opt/whatomate/bin/whatomate.sandbox.green.20260603_045205_fbcomments_savefix`
+- **Version**: `sandbox-green-20260603_045205-fbcomments-savefix`
+- **Systemd**: `whatomate-sandbox.service` active on `127.0.0.1:18127`
+- **Production ofuqalmadenah.com was NOT touched**
+
+### What Changed
+
+- Added missing `facebook_oauth.webhook_verify_token` to `/opt/whatomate-sandbox/config.toml`.
+- Hardened Facebook comment saving to trim varchar-sized fields before persistence.
+- Added error logging and sync failure detail for failed Facebook comment saves.
+- Removed temporary build source directory after deployment.
+
+### Verification
+
+- Local compile check passed:
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers ./internal/database ./internal/config ./cmd/whatomate -run TestNonExistentFacebookCommentsCompileOnly`
+- `whatomate-sandbox.service`: active.
+- `whatomate.service`: active and unchanged.
+- Sandbox symlink:
+  - `/opt/whatomate/bin/whatomate.sandbox.green -> /opt/whatomate/bin/whatomate.sandbox.green.20260603_045205_fbcomments_savefix`
+- Production symlink unchanged:
+  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green.20260528_111523`
+- `https://sandbox.ofuqalmadenah.com/facebook/comments`: `200`
+- `http://127.0.0.1:18127/api/facebook/comments`: `401` unauthenticated, route present
+- Facebook comments webhook verify handshake: `200`
+- Signed Facebook comments webhook POST: `200`
+
+## 2026-06-03 10:34 Africa/Cairo - Facebook Comments Sandbox Enum Hotfix
+
+- **Deployment type**: Sandbox-only GREEN hotfix (no production switch)
+- **Active sandbox binary**: `/opt/whatomate/bin/whatomate.sandbox.green.20260603_103201_fbcomments_enumfix`
+- **Version**: `sandbox-green-20260603_103201-fbcomments-enumfix`
+- **Systemd**: `whatomate-sandbox.service` active on `127.0.0.1:18127`
+- **Production ofuqalmadenah.com was NOT touched**
+
+### Root Cause
+
+- Graph API was returning comments for connected pages, including `Ofuqalmadenahافق المدينة`.
+- Saving failed because GORM rejected custom enum fields:
+  - `unsupported data type: ... FacebookCommentStatus: Table not set`
+
+### What Changed
+
+- Added SQL `Value`/`Scan` converters for Facebook comment enum model fields:
+  - `FacebookCommentStatus`
+  - `FacebookCommentDirection`
+- Removed temporary build source directory after deployment.
+
+### Verification
+
+- Local compile check passed:
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/models ./internal/handlers ./internal/database ./internal/config ./cmd/whatomate -run TestNonExistentFacebookCommentsCompileOnly`
+- `whatomate-sandbox.service`: active.
+- `whatomate.service`: active and unchanged.
+- Sandbox symlink:
+  - `/opt/whatomate/bin/whatomate.sandbox.green -> /opt/whatomate/bin/whatomate.sandbox.green.20260603_103201_fbcomments_enumfix`
+- Production symlink unchanged:
+  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green.20260528_111523`
 
 ### License
 

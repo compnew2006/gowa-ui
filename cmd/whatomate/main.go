@@ -218,6 +218,7 @@ func runServer(args []string) {
 	}
 
 	sandboxMode := cfg.App.SandboxMode
+	sandboxWhatsmeowReconnect := sandboxMode && cfg.App.SandboxAllowWhatsmeowReconnect
 	if sandboxMode {
 		if *migrate {
 			lo.Fatal("Sandbox mode forbids -migrate to avoid shared-environment schema changes")
@@ -227,6 +228,9 @@ func runServer(args []string) {
 			*numWorkers = 0
 		}
 		lo.Warn("Sandbox mode enabled: startup upgrades, reconnect automation, recurring background jobs, and embedded workers are disabled")
+		if sandboxWhatsmeowReconnect {
+			lo.Warn("Sandbox mode override enabled: whatsmeow health monitor and reconnect lifecycle will run")
+		}
 	}
 
 	// Connect to PostgreSQL
@@ -296,7 +300,7 @@ func runServer(args []string) {
 
 	// Auto-connect linked sessions and reconnect active instances in background.
 	if cfg.WhatsApp.Provider == "whatsmeow" {
-		if sandboxMode {
+		if sandboxMode && !sandboxWhatsmeowReconnect {
 			lo.Warn("Sandbox mode: skipping whatsmeow health monitor and auto-reconnect lifecycle")
 		} else {
 			whatsmeowManager.StartHealthMonitor(context.Background())

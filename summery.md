@@ -275,7 +275,7 @@ whatomate-sandbox-switch blue
 ## Result
 
 - Fixed the issue where Facebook OAuth showed a success toast but no accounts appeared in `/facebook/accounts`.
-- Root cause: the API returns `{ accounts: [...] }`, while the frontend store was unwrapping the response as a direct array.
+- Root cause: the API returns `{ accounts: [...] }`, while the frontend store was unwrapped the response as a direct array.
 - Updated `frontend/src/stores/fbAccounts.ts` to use `unwrapListResponse(response, "accounts")`.
 - Updated `frontend/src/views/facebook/FacebookAccountsView.vue` to display linked page names from `account.data.pages`.
 - Verified the sandbox database already contained the OAuth account and 7 linked pages.
@@ -292,6 +292,104 @@ whatomate-sandbox-switch blue
 - Sandbox `/login` returned `200`.
 - Chrome DevTools loaded the new sandbox frontend assets with no console errors.
 - Browser verification of `/facebook/accounts` redirected to login in the Codex browser because that browser session was unauthenticated.
+
+# 2026-06-03 - Current Project Green Sandbox Final Deployment
+
+## Result
+
+- Deployed the current project (including Facebook comments feature, agent selection updates) as new sandbox green binary.
+- Active sandbox binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260603_011052`.
+- Version: `Whatomate sandbox-green-20260603_010732-124187f7 (built 2026-06-03_01:07:48)`.
+- SHA256: `9dbef8f8b89de8a4ef7dece2a51e354e105e5fbd900f028f629f9ba06456fe9d`.
+- Build: Local macOS cross-compiled for linux/amd64 with embedded keyring.
+- Old sandbox binaries preserved for rollback.
+- Backup: `/root/whatomate_backups/20260603_010704_pre_green_sandbox_deploy`.
+- **Production `ofuqalmadenah.com` was NOT touched.**
+
+## Sandbox Switch
+
+```bash
+whatomate-sandbox-switch status    # show active sandbox binary
+whatomate-sandbox-switch green     # switch to latest sandbox green
+whatomate-sandbox-switch blue      # switch to latest production blue
+```
+
+## Verification
+
+- `whatomate-sandbox.service`: active on port 18127.
+- `whatomate.service` (production): active on port 18123, binary symlink unchanged.
+- Sandbox `/login` returned `200`.
+- Production `/login` returned `200`.
+- License bootstrap on sandbox (18127): `enabled=true`, `status=active`, `locked=false`.
+- License bootstrap on production (18123): `enabled=true`, `status=active`, `locked=false`.
+
+## Cleanup
+
+- All temporary/source build paths were already cleaned from VPS.
+- Only runtime files remain: binaries, configs, uploads, backups, keyring.
+
+# 2026-06-03 - Facebook Comments Sandbox Save Fix
+
+## Result
+
+- Investigated `/facebook/comments` on `https://sandbox.ofuqalmadenah.com`.
+- Confirmed the route and comment tables exist on sandbox, and the linked OAuth account includes page `Ofuqalmadenahافق المدينة`.
+- Found no stored comments initially and no recent incoming webhook events.
+- Added `facebook_oauth.webhook_verify_token` to `/opt/whatomate-sandbox/config.toml` without printing the token.
+- Fixed Facebook comment persistence hardening in `internal/handlers/fb_comments.go`:
+  - trims varchar-sized Facebook comment fields to the database limit before save
+  - logs the real database error when webhook or sync comment save fails
+  - returns the real save error in manual sync failures
+- Deployed new sandbox-only green binary:
+  - `/opt/whatomate/bin/whatomate.sandbox.green.20260603_045205_fbcomments_savefix`
+  - version `sandbox-green-20260603_045205-fbcomments-savefix`
+- Removed VPS build source directory after deployment.
+- Production `ofuqalmadenah.com` was NOT touched.
+
+## Verification
+
+- Local compile check passed:
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers ./internal/database ./internal/config ./cmd/whatomate -run TestNonExistentFacebookCommentsCompileOnly`
+- `whatomate-sandbox.service`: active.
+- `whatomate.service`: active and unchanged.
+- Sandbox binary symlink:
+  - `/opt/whatomate/bin/whatomate.sandbox.green -> /opt/whatomate/bin/whatomate.sandbox.green.20260603_045205_fbcomments_savefix`
+- Production binary symlink unchanged:
+  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green.20260528_111523`
+- `https://sandbox.ofuqalmadenah.com/facebook/comments` returned `200`.
+- Unauthenticated comments API returned `401`, confirming the route exists behind auth.
+- Facebook comments webhook verification returned `200` with the configured token.
+- Signed Facebook comments webhook POST returned `200`.
+
+# 2026-06-03 - Facebook Comments Sandbox Enum Hotfix
+
+## Result
+
+- Investigated why comments still did not appear after the save hardening deploy.
+- Confirmed Graph API was returning comments, including comments for `Ofuqalmadenahافق المدينة`.
+- Root cause found in sandbox logs: GORM rejected the custom enum fields with:
+  - `unsupported data type: ... FacebookCommentStatus: Table not set`
+- Fixed `internal/models/fb_comment.go` by adding SQL `Value`/`Scan` converters for:
+  - `FacebookCommentStatus`
+  - `FacebookCommentDirection`
+- Deployed new sandbox-only green binary:
+  - `/opt/whatomate/bin/whatomate.sandbox.green.20260603_103201_fbcomments_enumfix`
+  - version `sandbox-green-20260603_103201-fbcomments-enumfix`
+- Removed VPS build source directory after deployment.
+- Production `ofuqalmadenah.com` was NOT touched.
+
+## Verification
+
+- Local compile check passed:
+  - `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/models ./internal/handlers ./internal/database ./internal/config ./cmd/whatomate -run TestNonExistentFacebookCommentsCompileOnly`
+- `whatomate-sandbox.service`: active.
+- `whatomate.service`: active and unchanged.
+- Sandbox binary symlink:
+  - `/opt/whatomate/bin/whatomate.sandbox.green -> /opt/whatomate/bin/whatomate.sandbox.green.20260603_103201_fbcomments_enumfix`
+- Production binary symlink unchanged:
+  - `/opt/whatomate/bin/whatomate -> /opt/whatomate/bin/whatomate.green.20260528_111523`
+- Unauthenticated comments API returned `401`, confirming the route exists behind auth.
+- No new `Facebook synced comment` enum save errors appeared after the hotfix restart.
 
 # 2026-06-03 - Facebook Comment Inbox Feature
 
@@ -381,6 +479,93 @@ whatomate-switch blue
   - `/opt/whatomate-src`
   - `/opt/whatomate-sandbox/src`
 - Preserved runtime binaries, configs, uploads, docs, license keyring, and backups.
+
+# 2026-06-03 - Sandbox Facebook Comment Author Scope Check
+
+## Result
+
+- Confirmed directly against Meta Graph API for a blank-author comment: the response contained `id` and `created_time` only, with no `from` object.
+- Confirmed sandbox DB still had blank author data for most synced comments after sync: `1013/1020` comments lacked `from_name` and `from_id`.
+- Added missing Facebook OAuth scope `pages_read_user_content` to newly generated OAuth links.
+- Deployed sandbox-only binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260603_145935_fbcomments_scope_fix`.
+- Production binary remained unchanged: `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+
+## Required Follow-Up
+
+- Existing page tokens will not gain the new scope automatically. Reconnect the Facebook account from `/facebook/accounts`, then run comments sync again.
+- If Meta still omits `from`, the app/token likely also needs Meta App Review / Access Verification for the relevant user-profile access.
+
+# 2026-06-03 - Sandbox Nginx Facebook Comments Sync Timeout
+
+## Result
+
+- Confirmed from `/var/log/nginx/sandbox.ofuqalmadenah.com.error.log` that `POST /api/facebook/comments/sync` hit `upstream timed out while reading response header`.
+- Updated sandbox nginx vhost only: `/etc/nginx/sites-available/sandbox.ofuqalmadenah.com.conf`.
+- Added `proxy_connect_timeout 30s`, `proxy_send_timeout 300s`, and `proxy_read_timeout 300s` under sandbox `location /`.
+- Ran `nginx -t` successfully and reloaded nginx.
+- Production binary remained unchanged: `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+
+## Verification
+
+- `nginx` is active.
+- `whatomate-sandbox.service` is active.
+- Sandbox unauthenticated `GET /api/facebook/comments` returns `401`.
+- Sandbox binary remains `/opt/whatomate/bin/whatomate.sandbox.green.20260603_144506_fbcomments_sync_timeout_hotfix`.
+- Production binary remains `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+
+# 2026-06-03 - Sandbox Facebook Comments Sync Timeout Hotfix
+
+## Result
+
+- Deployed sandbox-only binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260603_144506_fbcomments_sync_timeout_hotfix`.
+- Production binary remained unchanged: `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+- Root cause confirmed from sandbox nginx access log: `POST /api/facebook/comments/sync` returned `499`, meaning the browser/client closed the request before the server responded.
+- Increased the frontend timeout for Facebook comments sync only from the default 30 seconds to 180 seconds.
+
+## Verification
+
+- `cd frontend && npm run typecheck` passed.
+- `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers ./internal/models ./cmd/whatomate -run TestNonExistentFacebookCommentsCompileOnly` passed.
+- `git diff --check` passed.
+- Sandbox service `whatomate-sandbox.service` is active.
+- Sandbox unauthenticated `GET /api/facebook/comments` returns `401`.
+- Production service `whatomate.service` is active and still points to the old production green binary.
+
+# 2026-06-03 - Sandbox Facebook Comments Batch Actor Hotfix
+
+## Result
+
+- Deployed sandbox-only binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260603_141431_fbcomments_batch_actor_hotfix`.
+- Production binary remained unchanged: `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+- Replaced per-comment Facebook actor fallback calls with Graph batch calls of up to 50 comments per request.
+- Actor lookup failures now do not block saving/syncing comments; missing author data remains `مستخدم فيسبوك` only when Meta does not return `from`.
+
+## Verification
+
+- `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers ./internal/models ./cmd/whatomate -run TestNonExistentFacebookCommentsCompileOnly` passed.
+- `git diff --check` passed.
+- Sandbox service `whatomate-sandbox.service` is active.
+- Sandbox unauthenticated `GET /api/facebook/comments` returns `401`.
+- Production service `whatomate.service` is active and still points to the old production green binary.
+
+# 2026-06-03 - Sandbox Facebook Comments Author Retry and Pagination i18n
+
+## Result
+
+- Deployed sandbox-only binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260603_134253_fbcomments_author_retry_i18n`.
+- Production binary remained unchanged: `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+- Fixed missing top-level `common.previous` translations for Arabic, English, and Spanish.
+- Added a Graph API fallback that fetches `from{id,name}` from the individual comment endpoint when the nested comments response returns an empty actor.
+- Kept the comments list at 100 per page with previous/next pagination.
+
+## Verification
+
+- `jq empty frontend/src/i18n/locales/ar.json frontend/src/i18n/locales/en.json frontend/src/i18n/locales/es.json` passed.
+- `GOCACHE=/private/tmp/whatomate-gocache go test ./internal/handlers ./internal/models ./cmd/whatomate -run TestNonExistentFacebookCommentsCompileOnly` passed.
+- `cd frontend && npm run typecheck` passed.
+- Sandbox service `whatomate-sandbox.service` is active.
+- Sandbox unauthenticated `GET /api/facebook/comments` returns `401`.
+- Production service `whatomate.service` is active and still points to the old production green binary.
 
 # 2026-05-28 - Green Agent Scope Deployment
 

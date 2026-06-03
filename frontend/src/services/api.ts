@@ -749,7 +749,7 @@ export const facebookCommentsService = {
     comments_per_post?: number;
     post_ids?: string[];
     run_auto_reply?: boolean;
-  }) => api.post("/facebook/comments/sync", data || {}),
+  }) => api.post("/facebook/comments/sync", data || {}, { timeout: 180000 }),
   getSettings: () => api.get("/facebook/comments/settings"),
   updateSettings: (data: Record<string, unknown>) =>
     api.put("/facebook/comments/settings", data),
