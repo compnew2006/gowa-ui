@@ -22,6 +22,7 @@ frontend_audit.json
 # Generated reports and analysis
 diagnostics_report.md
 session_summary.md
+summary.md
 ARCHITECTURE_REVIEW.md
 ARCHITECTURE_RISK_REPORT.md
 CORS_WEBSOCKET_ORIGIN_HARDENING_REPORT.md
@@ -98,5 +99,10 @@ test-results/
 .claude/
 # Code health tool artifacts
 .desloppify/
+# Serena memories
+.serena/
+# Vector DB artifacts
+ruvector.db
+*.db
 # CocoIndex Code (ccc)
 /.cocoindex_code/

@@ -58,6 +58,7 @@ type ConnectionManager struct {
 	// the handlers layer can run post-processing (chatbot, agent selection,
 	// welcome menus, etc.) for the whatsmeow provider path.
 	inboundMessageHook InboundMessageHook
+	eventDispatcher    *asyncEventDispatcher
 
 	healthMonitorMu     sync.Mutex
 	healthMonitorCancel context.CancelFunc
@@ -116,6 +117,13 @@ func NewConnectionManager(db *gorm.DB, store *sqlstore.Container, logger logf.Lo
 		qrCodes:          make(map[uuid.UUID]cachedQRCode),
 		typingIndicator:  newTypingIndicatorPlanner(cfg),
 	}
+	cm.eventDispatcher = newAsyncEventDispatcher(
+		whatsmeowEventBufferSize(cfg),
+		logger,
+		cm.handleEvent,
+		cm.SetQueueDepth,
+		cm.MarkEventDropped,
+	)
 	if cm.typingIndicator != nil {
 		cm.typingIndicator.warn = logger.Warn
 	}
@@ -192,6 +200,7 @@ func (cm *ConnectionManager) Disconnect(ctx context.Context, instanceID uuid.UUI
 	if client != nil {
 		client.Disconnect()
 	}
+	cm.stopEventDispatcherInstance(instanceID)
 	cm.clearActiveCalls(instanceID)
 	cm.ClearCachedQRCode(instanceID)
 
@@ -228,6 +237,7 @@ func (cm *ConnectionManager) Logout(ctx context.Context, instanceID uuid.UUID) e
 			}
 		}
 	}
+	cm.stopEventDispatcherInstance(instanceID)
 	cm.clearActiveCalls(instanceID)
 	cm.ClearCachedQRCode(instanceID)
 
@@ -579,6 +589,7 @@ func (cm *ConnectionManager) resolvePoolConflict(ctx context.Context, conflictID
 			if client != nil {
 				client.Disconnect()
 			}
+			cm.stopEventDispatcherInstance(conflictID)
 			return true, nil
 		}
 		return false, fmt.Errorf("failed to inspect conflicting instance %s: %w", conflictID, err)
@@ -622,6 +633,7 @@ func (cm *ConnectionManager) connectNewClient(ctx context.Context, instance mode
 	client := cm.newClient(instance, deviceStore)
 	if err := client.Connect(); err != nil {
 		cm.pool.removeInstance(instance.ID)
+		cm.stopEventDispatcherInstance(instance.ID)
 		return fmt.Errorf("failed to connect to WhatsApp: %w", err)
 	}
 
@@ -690,10 +702,43 @@ func (cm *ConnectionManager) newClient(instance models.WhatsAppInstance, deviceS
 	}
 
 	client.AddEventHandler(func(evt interface{}) {
-		cm.handleEvent(evt, instance.ID, instance.OrganizationID)
+		if !whatsmeowEventDispatchEnabled(cm.cfg) || cm.eventDispatcher == nil {
+			cm.handleEvent(evt, instance.ID, instance.OrganizationID)
+			return
+		}
+		cm.eventDispatcher.Dispatch(evt, instance.ID, instance.OrganizationID)
 	})
 
 	return client
+}
+
+func whatsmeowEventBufferSize(cfg *config.WhatsmeowConfig) int {
+	if cfg == nil || cfg.EventBufferSize <= 0 {
+		return defaultEventBufferSize
+	}
+	return cfg.EventBufferSize
+}
+
+func whatsmeowEventDispatchEnabled(cfg *config.WhatsmeowConfig) bool {
+	if cfg == nil || cfg.EventDispatchEnabled == nil {
+		return true
+	}
+	return *cfg.EventDispatchEnabled
+}
+
+func (cm *ConnectionManager) stopEventDispatcherInstance(instanceID uuid.UUID) {
+	if cm == nil || cm.eventDispatcher == nil {
+		return
+	}
+	cm.eventDispatcher.StopInstance(instanceID)
+}
+
+// StopEventDispatcher stops all async event workers owned by the manager.
+func (cm *ConnectionManager) StopEventDispatcher() {
+	if cm == nil || cm.eventDispatcher == nil {
+		return
+	}
+	cm.eventDispatcher.StopAll()
 }
 
 func (cm *ConnectionManager) syncRuntimeEntry(instanceID uuid.UUID, client *whatsmeow.Client, phoneNumber string) {
@@ -774,6 +819,7 @@ func (cm *ConnectionManager) runHealthMonitorPass(ctx context.Context) {
 				if client != nil {
 					client.Disconnect()
 				}
+				cm.stopEventDispatcherInstance(entry.InstanceID)
 				continue
 			}
 			cm.logger.Warn("Health monitor failed to load instance", "component", "whatsmeow", "event", "health_monitor_load_error", "instance_id", entry.InstanceID, "error", err)
@@ -792,6 +838,7 @@ func (cm *ConnectionManager) runHealthMonitorPass(ctx context.Context) {
 				if removedClient != nil && removedClient != client {
 					removedClient.Disconnect()
 				}
+				cm.stopEventDispatcherInstance(instance.ID)
 			}
 			continue
 		}

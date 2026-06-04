@@ -59,6 +59,7 @@ func TestNewInstanceMetrics(t *testing.T) {
 	assert.Equal(t, uint64(0), result.messagesSent.Load(), "Messages sent should start at 0")
 	assert.Equal(t, uint64(0), result.messagesReceived.Load(), "Messages received should start at 0")
 	assert.Equal(t, uint64(0), result.messagesFailed.Load(), "Messages failed should start at 0")
+	assert.Equal(t, uint64(0), result.eventsDropped.Load(), "Events dropped should start at 0")
 	assert.Equal(t, uint64(0), result.errors.Load(), "Errors should start at 0")
 	assert.Equal(t, int64(0), result.queueDepth.Load(), "Queue depth should start at 0")
 	assert.Equal(t, int64(0), result.connectedSinceUnix.Load(), "Connected since should start at 0")
@@ -111,6 +112,7 @@ func TestInstanceMetrics_ResetIfDayChanged(t *testing.T) {
 				m.messagesSent.Store(10)
 				m.messagesReceived.Store(20)
 				m.messagesFailed.Store(3)
+				m.eventsDropped.Store(2)
 				m.errors.Store(5)
 			}
 
@@ -125,6 +127,7 @@ func TestInstanceMetrics_ResetIfDayChanged(t *testing.T) {
 			sent := m.messagesSent.Load()
 			received := m.messagesReceived.Load()
 			failed := m.messagesFailed.Load()
+			dropped := m.eventsDropped.Load()
 			errs := m.errors.Load()
 
 			if tt.expectReset {
@@ -135,6 +138,7 @@ func TestInstanceMetrics_ResetIfDayChanged(t *testing.T) {
 					assert.Equal(t, uint64(0), sent, "Messages sent should be reset")
 					assert.Equal(t, uint64(0), received, "Messages received should be reset")
 					assert.Equal(t, uint64(0), failed, "Messages failed should be reset")
+					assert.Equal(t, uint64(0), dropped, "Events dropped should be reset")
 					assert.Equal(t, uint64(0), errs, "Errors should be reset")
 				}
 			} else if tt.setCounters && tt.initialDayKey == currentDay {
@@ -142,6 +146,7 @@ func TestInstanceMetrics_ResetIfDayChanged(t *testing.T) {
 				assert.Equal(t, uint64(10), sent, "Messages sent should be preserved")
 				assert.Equal(t, uint64(20), received, "Messages received should be preserved")
 				assert.Equal(t, uint64(3), failed, "Messages failed should be preserved")
+				assert.Equal(t, uint64(2), dropped, "Events dropped should be preserved")
 				assert.Equal(t, uint64(5), errs, "Errors should be preserved")
 			}
 		})
@@ -158,6 +163,7 @@ func TestInstanceMetrics_ResetCountersOnly(t *testing.T) {
 	m.messagesSent.Store(100)
 	m.messagesReceived.Store(200)
 	m.messagesFailed.Store(10)
+	m.eventsDropped.Store(4)
 	m.errors.Store(15)
 	m.queueDepth.Store(5)
 	m.connectedSinceUnix.Store(12345)
@@ -173,6 +179,7 @@ func TestInstanceMetrics_ResetCountersOnly(t *testing.T) {
 	assert.Equal(t, uint64(0), m.messagesSent.Load(), "Messages sent should be reset")
 	assert.Equal(t, uint64(0), m.messagesReceived.Load(), "Messages received should be reset")
 	assert.Equal(t, uint64(0), m.messagesFailed.Load(), "Messages failed should be reset")
+	assert.Equal(t, uint64(0), m.eventsDropped.Load(), "Events dropped should be reset")
 	assert.Equal(t, uint64(0), m.errors.Load(), "Errors should be reset")
 
 	// Verify other fields are not affected
@@ -216,11 +223,11 @@ func TestInstanceMetrics_DayKeyFormat(t *testing.T) {
 
 	// Test specific dates
 	tests := []struct {
-		name         string
-		year         int
-		month        time.Month
-		day          int
-		expectedKey  int64
+		name        string
+		year        int
+		month       time.Month
+		day         int
+		expectedKey int64
 	}{
 		{
 			name:        "2024-01-01",

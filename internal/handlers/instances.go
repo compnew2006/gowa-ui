@@ -67,6 +67,7 @@ type InstanceHealthResponse struct {
 	MessagesSentToday     uint64  `json:"messages_sent_today"`
 	MessagesReceivedToday uint64  `json:"messages_received_today"`
 	MessagesFailedToday   uint64  `json:"messages_failed_today"`
+	EventsDroppedToday    uint64  `json:"events_dropped_today"`
 	ErrorRatePercent      float64 `json:"error_rate_percent"`
 	QueueDepth            int64   `json:"queue_depth"`
 }
@@ -754,6 +755,7 @@ func (a *App) GetInstanceHealth(r *fastglue.Request) error {
 			MessagesSentToday:     current.MessagesSentToday,
 			MessagesReceivedToday: current.MessagesReceivedToday,
 			MessagesFailedToday:   current.MessagesFailedToday,
+			EventsDroppedToday:    current.EventsDroppedToday,
 			ErrorRatePercent:      current.ErrorRatePercent,
 			QueueDepth:            current.QueueDepth,
 		}

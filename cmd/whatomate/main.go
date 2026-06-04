@@ -294,6 +294,7 @@ func runServer(args []string) {
 
 	// Initialize whatsmeow manager
 	whatsmeowManager := whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, wsHub, cfg.Storage.LocalPath)
+	defer whatsmeowManager.StopEventDispatcher()
 	whatsmeowManager.SetInboundMediaQueue(jobQueue)
 	whatsmeowManager.SetCampaignStatsPublisher(queue.NewPublisher(rdb, lo))
 	whatsmeowManager.SetMediaService(whatsmeow.NewMediaService(db, storedObjects, lo, whatsmeowManager.GetClient))
@@ -735,6 +736,7 @@ func runWorker(args []string) {
 		}
 
 		whatsmeowManager = whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
+		defer whatsmeowManager.StopEventDispatcher()
 		whatsmeowQueue := queue.NewRedisQueue(rdb, lo)
 		whatsmeowManager.SetInboundMediaQueue(whatsmeowQueue)
 		whatsmeowManager.SetCampaignStatsPublisher(queue.NewPublisher(rdb, lo))

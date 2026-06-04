@@ -117,6 +117,14 @@ watch(
 
           <div class="flex items-center justify-between text-white/70 light:text-gray-700">
             <div class="flex items-center gap-2">
+              <AlertTriangle class="h-4 w-4 opacity-70" />
+              <span>Events dropped</span>
+            </div>
+            <span class="font-medium text-white light:text-gray-900">{{ instance.health?.events_dropped_today ?? 0 }}</span>
+          </div>
+
+          <div class="flex items-center justify-between text-white/70 light:text-gray-700">
+            <div class="flex items-center gap-2">
               <Activity class="h-4 w-4 opacity-70" />
               <span>Error rate</span>
             </div>

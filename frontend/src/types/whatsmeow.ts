@@ -61,6 +61,7 @@ export interface InstanceHealth {
   messages_sent_today: number;
   messages_received_today: number;
   messages_failed_today: number;
+  events_dropped_today: number;
   error_rate_percent: number;
   queue_depth: number;
 }

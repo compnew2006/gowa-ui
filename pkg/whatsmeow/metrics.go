@@ -13,6 +13,7 @@ type InstanceHealthMetrics struct {
 	MessagesSentToday     uint64  `json:"messages_sent_today"`
 	MessagesReceivedToday uint64  `json:"messages_received_today"`
 	MessagesFailedToday   uint64  `json:"messages_failed_today"`
+	EventsDroppedToday    uint64  `json:"events_dropped_today"`
 	ErrorRatePercent      float64 `json:"error_rate_percent"`
 	QueueDepth            int64   `json:"queue_depth"`
 }
@@ -23,6 +24,7 @@ type instanceMetrics struct {
 	messagesSent       atomic.Uint64
 	messagesReceived   atomic.Uint64
 	messagesFailed     atomic.Uint64
+	eventsDropped      atomic.Uint64
 	errors             atomic.Uint64
 	queueDepth         atomic.Int64
 }
@@ -48,6 +50,7 @@ func (m *instanceMetrics) resetIfDayChanged() {
 		m.messagesSent.Store(0)
 		m.messagesReceived.Store(0)
 		m.messagesFailed.Store(0)
+		m.eventsDropped.Store(0)
 		m.errors.Store(0)
 	}
 }
@@ -100,6 +103,13 @@ func (cm *ConnectionManager) MarkError(instanceID uuid.UUID) {
 	metrics.errors.Add(1)
 }
 
+// MarkEventDropped increments the async event ingestion drop counter.
+func (cm *ConnectionManager) MarkEventDropped(instanceID uuid.UUID) {
+	metrics := cm.getOrCreateMetrics(instanceID)
+	metrics.eventsDropped.Add(1)
+	metrics.errors.Add(1)
+}
+
 // SetQueueDepth tracks queue depth for the instance.
 func (cm *ConnectionManager) SetQueueDepth(instanceID uuid.UUID, depth int64) {
 	if depth < 0 {
@@ -133,6 +143,7 @@ func (cm *ConnectionManager) GetInstanceHealth(instanceID uuid.UUID) InstanceHea
 		MessagesSentToday:     sent,
 		MessagesReceivedToday: metrics.messagesReceived.Load(),
 		MessagesFailedToday:   failed,
+		EventsDroppedToday:    metrics.eventsDropped.Load(),
 		ErrorRatePercent:      errorRate,
 		QueueDepth:            metrics.queueDepth.Load(),
 	}

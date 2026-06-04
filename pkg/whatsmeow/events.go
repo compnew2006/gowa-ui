@@ -151,6 +151,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 	case *events.Disconnected:
 		cm.ClearCachedQRCode(instanceID)
 		cm.clearActiveCalls(instanceID)
+		cm.stopEventDispatcherInstance(instanceID)
 		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusDisconnected); err != nil {
 			cm.logger.Error("Failed to update status on disconnect", "error", err)
 			cm.MarkError(instanceID)
@@ -190,6 +191,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if cm.pool != nil {
 			cm.pool.removeInstance(instanceID)
 		}
+		cm.stopEventDispatcherInstance(instanceID)
 		cm.MarkDisconnected(instanceID)
 
 		notification, err := cm.createInstanceNotification(
@@ -237,6 +239,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		if cm.pool != nil {
 			cm.pool.removeInstance(instanceID)
 		}
+		cm.stopEventDispatcherInstance(instanceID)
 		cm.MarkDisconnected(instanceID)
 
 		notification, err := cm.createInstanceNotification(

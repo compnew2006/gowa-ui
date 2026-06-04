@@ -120,6 +120,8 @@ type WhatsmeowConfig struct {
 	InboundMediaAsyncRetryCount      int    `koanf:"inbound_media_async_retry_count"`
 	InboundMediaAsyncRetryDelayMs    int    `koanf:"inbound_media_async_retry_delay_ms"`
 	InboundMediaAsyncRetryMaxDelayMs int    `koanf:"inbound_media_async_retry_max_delay_ms"`
+	EventBufferSize                  int    `koanf:"event_buffer_size"`
+	EventDispatchEnabled             *bool  `koanf:"event_dispatch_enabled"`
 	Identity                         string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")
 	HealthMonitorIntervalSeconds     int    `koanf:"health_monitor_interval_seconds"`
 	ReconnectTimeoutSeconds          int    `koanf:"reconnect_timeout_seconds"`
@@ -358,6 +360,13 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Whatsmeow.InboundMediaAsyncRetryMaxDelayMs == 0 {
 		cfg.Whatsmeow.InboundMediaAsyncRetryMaxDelayMs = 60000
+	}
+	if cfg.Whatsmeow.EventBufferSize == 0 {
+		cfg.Whatsmeow.EventBufferSize = 4096
+	}
+	if cfg.Whatsmeow.EventDispatchEnabled == nil {
+		enabled := true
+		cfg.Whatsmeow.EventDispatchEnabled = &enabled
 	}
 	if cfg.Whatsmeow.HealthMonitorIntervalSeconds == 0 {
 		cfg.Whatsmeow.HealthMonitorIntervalSeconds = 30
