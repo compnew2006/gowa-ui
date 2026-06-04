@@ -1,7 +1,7 @@
 # خطة الإصلاح الشاملة — مشروع Whatomate
 
 > **تاريخ الإعداد:** يونيو 2026  
-> **الإصدار:** 1.0  
+> **الإصدار:** 2.0  
 > **الهدف:** تحويل المنصة من حالة "مثيل واحد فقط" إلى بنية قابلة للتوسع الأفقي تدعم 50,000+ مستخدم متزامن
 
 ---
@@ -10,14 +10,53 @@
 
 | المرحلة | المدة | الأولوية | عدد الإصلاحات | الهدف |
 |---------|-------|----------|---------------|-------|
-| **P0 — حرج** | أسبوع واحد | 🔴 حرج | 6 | استقرار الإنتاج ومنع الانهيار |
-| **P1 — مهم** | 4 أسابيع | 🟠 عالي | 6 | إزالة حواجز التوسع الأفقي |
-| **P2 — تحسين** | 8 أسابيع | 🟡 متوسط | 7 | أداء الإنتاج وتجربة المستخدم |
+| **P0 — حرج** | أسبوعان | 🔴 حرج | 8 (5 أصلية + 3 جديدة من التحليل العميق) | استقرار الإنتاج ومنع الانهيار وتجنب الإرسال المكرر |
+| **P1 — مهم** | 6 أسابيع | 🟠 عالي | 7 (5 أصلية + 2 جديدة من التحليل العميق) | إزالة حواجز التوسع الأفقي وإصلاح Scaler |
+| **P2 — تحسين** | 8 أسابيع | 🟡 متوسط | 6 (1 تم الإصلاح = 5 فعّالة) | أداء الإنتاج وتجربة المستخدم |
 | **P3 — استراتيجي** | 12+ أسبوع | 🟢 منخفض | 7 | Enterprise-Grade ومراقبة متقدمة |
+
+### ✅ إصلاحات مُنجزة (تمت إزالتها من الخطة)
+- ~~P0-2: تقليم Redis Streams بـ MAXLEN~~ — **تم الإصلاح**
+- ~~P1-1: Redis-backed WebSocket Hub~~ — **تم الإصلاح**
+- ~~P2-1: WebSocket Hub sharding~~ — **تم الإصلاح (كجزء من P1-1)**
 
 ---
 
-# المرحلة P0 — إصلاحات حرجة (أسبوع واحد)
+# نتائج التحليل العميق — سرب الوكلاء المتخصصين
+
+> تم إجراء هذا التحليل بواسطة سرب مكون من ثلاثة وكلاء برمجين متخصصين قاموا بمسح وتحليل الكود المصدري بالتوازي لاستخلاص أدق التفاصيل وتحديد الفجوات الأدائية التي تؤثر على بيئات الإنتاج.
+
+## الوكلاء والمهام
+
+| الوكيل | النطاق |
+|--------|--------|
+| **Whatsmeow Reception Analyzer** | تتبع نقطة الاستقبال لشبكة WhatsApp، تهيئة اتصال العميل، تسجيل معالجات الأحداث، تحويل الرسائل الخام إلى نماذج بيانات داخلية |
+| **Lifecycle & Queues Analyzer** | تتبع تدفق الرسائل في قنوات الانتظار (Redis Streams)، عمليات قواعد البيانات (ORM/GORM)، قفل السطور لمنع التكرار (Skip Locked)، توزيع التحديثات عبر WebSocket |
+| **Worker Pool Analyzer** | تحليل دورة حياة العمال، الجدولة والتحجيم التلقائي (Scaler)، تحميل وتحويل الملفات والصور في الخلفية، إعادة المحاولة في حال فشل التحميل الأولي للوسائط |
+
+## المكونات المعمارية الأساسية (تؤكدها التحليل العميق)
+
+### A. Connection & Event Reception (الاستقبال والاتصال)
+- **Manager Lifecycle** (`manager.go`): Connection Manager يهيئ عملاء WhatsMeow باستخدام SQLite/Postgres storage للجلسات. فحص صحة يمر كل 30 ثانية (`healthMonitorInterval`).
+- **Event Multiplexing**: كل اتصال نشط يربط callback عبر `AddEventHandler` يستدعي `cm.handleEvent(evt, instanceID, orgID)`.
+
+### B. Redis Queues & Consumers (قنوات الانتظار)
+- **Campaigns Queue**: محصورة لكل مستأجر (`whatomate:campaigns:<org_id>`) مع consumer groups (`campaign-workers:<org_id>`).
+- **Inbound Media Queue**: طابور عام (`whatomate:inbound_media`) مع consumer group `inbound-media-workers`.
+- **PEL Recovery**: يستخدم `XPendingExt` + `XClaim` لاستعادة المهام غير المؤكدة لأكثر من 5 دقائق.
+- **Memory Protection**: نمط `ackAndDelete` يحذف الرسالة من Stream فوراً بعد الإقرار (`XDel` بعد `XAck`).
+
+### C. Database GORM Multi-Tenancy (تعدد المستأجرين)
+- **Scoped Queries**: `ScopedDB` modifier داخل `TenantScope` middleware يضيف تلقائياً `organization_id = ?` لكل استعلام.
+- **Concurrency Locking**: `SKIP LOCKED` مطبق على تحديثات الصفوف لمنع التنافس بين العمال.
+
+### D. WebSocket Hub (البث الفوري)
+- **Page-Scoped Subscriptions**: العملاء يحددون المحادثة التي يشاهدونها. التحديثات معزولة عبر `BroadcastToContact`.
+- **Hub Safety**: استخدام non-blocking writes (`select { case client.send <- data: default: }`) لمنع إبطاء البث بسبب عميل بطيء.
+
+---
+
+# المرحلة P0 — إصلاحات حرجة (أسبوعان)
 
 > **الهدف:** منع انهيار الإنتاج تحت الحمل. كل إصلاح هنا يمثل خطرًا فوريًا على الاستقرار.
 
@@ -105,68 +144,7 @@ redis-cli INFO clients | grep blocked_clients
 
 ---
 
-## P0-2: تقليم Redis Streams بـ MAXLEN
-
-**الملف:** `internal/queue/redis.go:104-110` (وكل `XAdd` في الملف)  
-**التأثير:** 🔴 حرج — بدون MAXLEN، الـ Streams تنمو بلا حدود → OOM  
-**الجهد:** ساعتان
-
-### المشكلة
-كل `XAdd` في الملف لا يحدد `MaxLen`:
-```go
-q.client.XAdd(ctx, &redis.XAddArgs{
-    Stream: CampaignStreamName(job.OrganizationID),
-    Values: map[string]interface{}{
-        "type":    string(JobTypeRecipient),
-        "payload": string(payload),
-    },
-}).Result()
-```
-في حمل عالٍ (10,000 رسالة حمل ≈ 1KB لكل رسالة = 10MB/حمل)، الـ Stream تنمو بدون أي حد.
-
-### الإصلاح المطلوب
-إضافة ثابت جديد + تطبيقه على كل `XAdd`:
-```go
-const (
-    // StreamMaxLen is the approximate maximum length for campaign streams.
-    StreamMaxLen = 50000
-)
-
-// استبدال كل XAdd بإضافة MaxLen + Approximate trimming
-q.client.XAdd(ctx, &redis.XAddArgs{
-    Stream: CampaignStreamName(job.OrganizationID),
-    MaxLen: StreamMaxLen,
-    Approx: true, // استخدام ~ لتجنب حظر Redis
-    Values: map[string]interface{}{
-        "type":    string(JobTypeRecipient),
-        "payload": string(payload),
-    },
-}).Result()
-```
-
-### المواقع المطلوب تعديلها (كل `XAdd` في الملف):
-1. `EnqueueRecipient` — السطر 104
-2. `EnqueueRecipients` (pipeline) — السطر 150
-3. `EnqueueInboundMedia` — السطر 180
-4. `EnqueueContactRepair` — السطر 211
-5. `EnqueueWhatsAppFilter` — السطر 242
-6. `EnqueueGroupJoin` — السطر 273
-7. `EnqueueGroupJoins` (pipeline) — السطر 312
-8. `EnqueueMessageExtraction` — السطر 344
-9. `EnqueueGroupExtraction` — السطر 372
-10. `EnqueueMemberExtraction` — السطر 400
-11. `moveToDeadLetter` — السطر 780
-
-### كيفية التحقق
-```bash
-# التأكد من أن الـ Stream لا يتجاوز MAXLEN
-redis-cli XLEN whatomate:campaigns:<org-id>
-redis-cli XINFO STREAM whatomate:campaigns:<org-id>
-```
-
----
-
-## P0-3: ضمان تسليم Pub/Sub لإحصائيات الحملات
+## P0-2: ضمان تسليم Pub/Sub لإحصائيات الحملات (⚠️ تم اكتشافه عميقًا)
 
 **الملف:** `internal/queue/pubsub.go:44-57`  
 **التأثير:** 🔴 حرج — إحصائيات الحملات قد تُفقد بدون أي تنبيه  
@@ -232,7 +210,7 @@ func (p *Publisher) PublishCampaignStats(ctx context.Context, update *CampaignSt
 
 ---
 
-## P0-4: إضافة سجل إرسال محسّن للأخطاء (Send Policy Caching)
+## P0-3: إضافة سجل إرسال محسّن للأخطاء (Send Policy Caching)
 
 **الملف:** `internal/worker/send_policy.go:35-59`  
 **التأثير:** 🔴 حرج — استعلام قاعدة بيانات لكل رسالة حملة = قفل القاعدة  
@@ -288,7 +266,7 @@ func (w *Worker) loadOrganizationSendPolicy(orgID uuid.UUID) (organizationSendPo
 
 ---
 
-## P0-5: سياسة كلمات مرور أقوى
+## P0-4: سياسة كلمات مرور أقوى
 
 **الملف:** `internal/handlers/password_policy.go:1-35`  
 **التأثير:** 🟠 عالي — لا يوجد فحص للأحرف الخاصة  
@@ -344,7 +322,7 @@ func validatePasswordStrength(password string) error {
 
 ---
 
-## P0-6: منع Webhook URLs غير مشفرة (HTTP)
+## P0-5: منع Webhook URLs غير مشفرة (HTTP)
 
 **الملف:** `config.example.toml` + منطق التحقق  
 **التأثير:** 🟠 عالي — بيانات حساسة عبر HTTP  
@@ -375,66 +353,240 @@ func (c *Config) Validate() error {
 
 ---
 
-# المرحلة P1 — إزالة حواجز التوسع (4 أسابيع)
+## P0-6: 🆕 إدخال أحداث WhatsMeow بشكل غير متزامن (Async Event Ingestion)
+
+**الملف:** `pkg/whatsmeow/adapter_send.go`, `pkg/whatsmeow/manager.go`  
+**التأثير:** 🔴 حرج — عمليات I/O متزامنة في خيط القراءة الرئيسي تسبب قطع الاتصال  
+**الجهد:** 5 أيام  
+**المصدر:** سرب التحليل العميق — Gap 1
+
+### المشكلة
+WhatsMeow يطلق الأحداث بشكل تسلسلي على خيط القراءة الرئيسي (main reader goroutine). في Whatomate، جميع تحديثات قاعدة البيانات، تحميلات الوسائط المضمنة، وحتى تنفيذ chatbot webhooks تعمل **بشكل متزامن** داخل callback thread.
+
+```
+WhatsMeow reader goroutine
+  → handleEvent()
+    → DB insert (GORM)           ← انتظار connection pool
+    → media download (inline)    ← انتظار شبكة بطيئة
+    → chatbot webhook call       ← انتظار 2-3 ثواني
+    → return                     ← THEN يمكن قراءة الرسالة التالية
+```
+
+**التأثير المتسلسل:**
+1. إذا وصل `GORM` إلى حد connection pool → كل الأحداث تتوقف
+2. إذا كان تحميل الوسائط بطيئًا → يتم حظر خيط القراءة
+3. العميل لا يستطيع قراءة Ping/Pong keep-alive من خوادم WhatsApp
+4. السيرفر يفصل الاتصال → إعادة اتصال متكررة
+5. تأخير تسليم الرسائل (head-of-line blocking)
+
+### الإصلاح المطلوب
+تمرير الأحداث فورًا إلى قناة داخلية (buffered channel) ومعالجة DB + الوسائط في خلفية منفصلة:
+
+```go
+const eventBufferSize = 4096
+
+type AsyncEventDispatcher struct {
+    events   chan whatsmeow.Event
+    handlers []func(evt whatsmeow.Event, instanceID, orgID uuid.UUID)
+    wg       sync.WaitGroup
+    workers  int
+}
+
+func NewAsyncEventDispatcher(workers int) *AsyncEventDispatcher {
+    d := &AsyncEventDispatcher{
+        events:  make(chan whatsmeow.Event, eventBufferSize),
+        workers: workers,
+    }
+    for i := 0; i < workers; i++ {
+        d.wg.Add(1)
+        go d.processLoop()
+    }
+    return d
+}
+
+func (d *AsyncEventDispatcher) Dispatch(evt whatsmeow.Event) {
+    select {
+    case d.events <- evt:
+    default:
+        // القناة ممتلئة — تسجيل تحذير بدون حظر خيط القراءة
+        log.Warn("Event buffer full, dropping event", "type", fmt.Sprintf("%T", evt))
+    }
+}
+
+func (d *AsyncEventDispatcher) processLoop() {
+    defer d.wg.Done()
+    for evt := range d.events {
+        for _, h := range d.handlers {
+            h(evt)
+        }
+    }
+}
+```
+
+**في مكان `AddEventHandler`:**
+```go
+// قبل (متزامن — يسبب الحظر)
+cm.client.AddEventHandler(func(evt interface{}) {
+    cm.handleEvent(evt, instanceID, orgID) // DB + media + webhook هنا!
+})
+
+// بعد (غير متزامن — لا يحظر)
+cm.client.AddEventHandler(func(evt interface{}) {
+    cm.asyncDispatcher.Dispatch(evt) // يعود فورًا
+})
+```
+
+### كيفية التحقق
+- مراقبة عدد إعادة الاتصال لكل مثيل whatsmeow (يجب أن ينخفض بشكل كبير)
+- قياس زمن استجابة handleEvent (يجب أن يكون < 1ms بعد التغيير)
+- تأكيد أن الرسائل لا تُفقد عند حمل عالٍ (event buffer drop count = 0)
+
+---
+
+## P0-7: 🆕 تجنب الإسبات المحلي في العمال — منع الإرسال المكرر (Duplicate Send Race)
+
+**الملف:** `internal/worker/worker.go`, `internal/worker/campaign_delay.go`  
+**التأثير:** 🔴 حرج — سباق إعادة المطالبة يسبب إرسال رسائل مكررة للمستخدمين  
+**الجهد:** 5 أيام  
+**المصدر:** سرب التحليل العميق — Gap 2
+
+### المشكلة
+في وحدة حملات العمال، يتم حساب تأخير الفتحة (slot delay) عبر Lua script ثم النوم محليًا داخل goroutine العامل:
+
+```go
+// العامل يسحب الوظيفة من Redis Stream
+// لكنه لا يؤكدها (No ACK) لأنه يجب أن ينتظر قبل الإرسال
+waitDuration := computeSlotDelay(...)
+time.Sleep(waitDuration) // قد ينام 5-15 دقيقة!
+// بعد الاستيقاظ → يرسل الرسالة
+```
+
+**سيناريو الكارثة:**
+1. تُطلق حملة. تأخير الإرسال: 5، 10، 15 دقيقة
+2. العامل يسحب الوظيفة من Redis Stream لكنه لا يؤكدها (`Ack`) لأنه يجب أن ينتظر
+3. العامل ينام لمدة 10 دقائق
+4. بما أن الوظيفة غير مؤكدة، بعد 5 دقائق (`ClaimMinIdleTime`)، دورة الاستشفاف الذاتي في Redis تضع علامة على الوظيفة كـ "قديمة" وتعيدها لعامل ثانٍ عبر `XClaim`
+5. العامل الثاني يفحص حالة الرسالة في DB — لا تزال `Pending` لأن العامل الأول نائم
+6. العامل الثاني يقفل جهة الاتصال (lock TTL = دقيقتان فقط) وينام
+7. كلا العاملين يستيقظان ويرسلان الرسالة → **إرسال مكرر للمستخدم النهائي**
+
+**التأثير:**
+- إزعاج المستخدمين برسائل مكررة
+- فوترة مزدوجة (duplicate billing)
+- حظر حسابات WhatsApp بسبب السلوك الآلي المكرر
+
+### الإصلاح المطلوب (نهج Redis Sorted Sets المجدولة)
+
+```go
+// بدلاً من إبقاء الوظيفة غير مؤكدة والنوم:
+// 1. سحب الوظيفة → إقرار فوري (Ack + Delete)
+// 2. جدولة الإرسال الفعلي في Redis ZSET بدرجة = وقت الإرسال
+
+const ScheduledSendsKey = "whatomate:scheduled_sends"
+
+func (q *RedisQueue) ScheduleRecipient(ctx context.Context, job *RecipientJob, sendAt time.Time) error {
+    payload, _ := json.Marshal(job)
+    score := float64(sendAt.UnixMilli())
+    return q.client.ZAdd(ctx, ScheduledSendsKey, redis.Z{
+        Score:  score,
+        Member: payload,
+    }).Err()
+}
+
+// العمال يقرأون من ZSET بشكل دوري:
+func (w *Worker) pollScheduledSends(ctx context.Context) {
+    now := float64(time.Now().UnixMilli())
+    jobs, _ := w.Redis.ZRangeByScore(ctx, ScheduledSendsKey, &redis.ZRangeBy{
+        Min: "-inf",
+        Max: fmt.Sprintf("%f", now),
+    }).Result()
+    
+    for _, jobJSON := range jobs {
+        // معالجة الوظيفة الجاهزة
+        // إزالة من ZSET بعد النجاح
+        w.Redis.ZRem(ctx, ScheduledSendsKey, jobJSON)
+    }
+}
+```
+
+**ميزة إضافية:** عامل آخر يمكنه التقاط الوظيفة المجدولة بدون سباق `XClaim` لأن الحالة محفوظة في ZSET وليس في PEL.
+
+---
+
+## P0-8: 🆕 إصلاح العمليات التسلسلية في Scaler — منع تسرب الذاكرة وجوع الحملات
+
+**الملف:** `internal/worker/scaler.go`  
+**التأثير:** 🟠 عالي — توقف المجدول يمنع إنشاء عمال جدد ويسرب الذاكرة  
+**الجهد:** 4 أيام  
+**المصدر:** سرب التحليل العميق — Gap 3
+
+### المشكلة
+في `scaler.go`، حلقة التوفيق (reconciliation) بين scale-up و scale-down تعمل **بشكل متزامن**:
+
+```go
+func (s *WorkerScaler) reconcile() {
+    // إيقاف العمال الزائدة — تسلسلي!
+    for _, handle := range excessWorkers {
+        s.stopWorkerHandle(handle) // ينتظر حتى 10 ثواني لكل عامل
+    }
+    // 5 عمال × 10 ثواني = 50 ثانية توقف!
+}
+```
+
+**سلسلة الفشل:**
+1. عند إيقاف 5 عمال زائدين، `stopWorkerHandle` يُستدعى تسلسليًا في حلقة
+2. كل استدعاء ينتظر حتى 10 ثواني حتى ينتهي العامل (`workerStopTimeout`)
+3. خلال هذا التوقف (50 ثانية)، حلقة `reconcile` لا تقرأ أحداث `s.events`
+4. بمجرد امتلاء القناة (buffer = 256)، أحداث الخروج تُسقط نهائيًا عبر `select default`
+5. لأن أحداث الخروج مفقودة، سجل Scaler الداخلي (`runtime.Workers`) يظن أن العمال الميتين أحياء
+
+**التأثير:**
+- النظام يرفض إنشاء عمال جدد للحملات (campaign starvation)
+- تسرب ذاكرة مستمر عبر الوقت
+- فشل صامت بدون تنبيهات
+
+### الإصلاح المطلوب
+
+```go
+func (s *WorkerScaler) stopWorkersConcurrently(handles []*managedWorkerHandle) {
+    var wg sync.WaitGroup
+    for _, h := range handles {
+        wg.Add(1)
+        go func(handle *managedWorkerHandle) {
+            defer wg.Done()
+            s.stopWorkerHandle(handle)
+        }(h)
+    }
+    wg.Wait()
+}
+```
+
+**زيادة حجم قناة الأحداث:**
+```go
+// قبل
+events: make(chan workerRuntimeEvent, 256)
+
+// بعد
+events: make(chan workerRuntimeEvent, 2048)
+```
+
+**إضافة goroutine مخصص لقراءة الأحداث:**
+```go
+go func() {
+    for evt := range s.events {
+        s.processRuntimeEvent(evt) // لا يحظر حلقة reconcile الرئيسية
+    }
+}()
+
+---
+
+# المرحلة P1 — إزالة حواجز التوسع (6 أسابيع)
 
 > **الهدف:** تمكين تشغيل مثيلات متعددة خلف Load Balancer
 
 ---
 
-## P1-1: Redis-backed WebSocket Hub (الحاجز الأكبر)
-
-**الملف:** `internal/websocket/hub.go:1-243`  
-**التأثير:** 🔴 حرج — يمنع التوسع الأفقي تمامًا  
-**الجهد:** 5 أيام
-
-### المشكلة
-```go
-type Hub struct {
-    clients map[uuid.UUID]map[uuid.UUID]map[*Client]struct{} // خريطة في الذاكرة فقط
-    broadcast chan BroadcastMessage
-    register  chan *Client
-    unregister chan *Client
-    mu        sync.RWMutex // قفل واحد لكل شيء
-}
-```
-- الـ Hub يعمل في الذاكرة فقط — لا يمكن مشاركته بين مثيلات
-- `sync.RWMutex` واحد يحمي كل العمليات
-- لا يمكن تشغيل أكثر من مثيل واحد
-
-### حل معماري مقترح (3 مراحل)
-
-#### المرحلة 1: فصل البنية (أسبوع)
-```go
-// Hub interface — للسماح بالتبديل بين implementations
-type HubBackend interface {
-    BroadcastToOrg(ctx context.Context, orgID uuid.UUID, msg WSMessage) error
-    BroadcastToUser(ctx context.Context, orgID, userID uuid.UUID, msg WSMessage) error
-    BroadcastToContact(ctx context.Context, orgID, contactID uuid.UUID, msg WSMessage) error
-}
-```
-
-#### المرحلة 2: Redis Pub/Sub Backend (أسبوعان)
-```go
-type RedisHubBackend struct {
-    client *redis.Client
-    localHub *LocalHub // يدير العملاء المحليين فقط
-}
-
-func (r *RedisHubBackend) BroadcastToOrg(ctx context.Context, orgID uuid.UUID, msg WSMessage) error {
-    data, _ := json.Marshal(msg)
-    return r.client.Publish(ctx, "ws:org:"+orgID.String(), data).Err()
-}
-```
-
-#### المرحلة 3: Redis Streams Backend (أسبوعان)
-للرسائل الحرجة (إشعارات المحادثات الجديدة)، استبدال Pub/Sub بـ Streams مع:
-- Consumer Group لكل مثيل
-- ACK + إعادة معالجة
-- `MAXLEN ~ 10000`
-
----
-
-## P1-2: Object Storage Retry + Circuit Breaker
+## P1-1: Object Storage Retry + Circuit Breaker
 
 **الملف:** `internal/storage/object_storage.go:1-233`  
 **التأثير:** 🟠 عالي — فشل رفع الملفات = رسائل مفقودة  
@@ -488,7 +640,7 @@ func (r *retryableObjectStorage) PutObject(ctx context.Context, key string, body
 
 ---
 
-## P1-3: إضافة Readiness Gate للتأكد من جاهزية العامل
+## P1-2: إضافة Readiness Gate للتأكد من جاهزية العامل
 
 **الملف:** `internal/worker/scaler.go:1-657`  
 **التأثير:** 🟡 متوسط  
@@ -502,7 +654,7 @@ func (r *retryableObjectStorage) PutObject(ctx context.Context, key string, body
 
 ---
 
-## P1-4: إضافة Observability شامل (Prometheus Metrics)
+## P1-3: إضافة Observability شامل (Prometheus Metrics)
 
 **الملفات الجديدة:** `internal/metrics/metrics.go`, `internal/metrics/prometheus.go`  
 **التأثير:** 🟡 متوسط — بدون مقاييس، لا يمكن تشخيص المشاكل  
@@ -524,7 +676,7 @@ whatomate_queue_dead_letter_total{stream_name}
 
 ---
 
-## P1-5: إضافة معالجة أخطاء محسّنة في ObjectStorage S3
+## P1-4: إضافة معالجة أخطاء محسّنة في ObjectStorage S3
 
 **الملف:** `internal/storage/object_storage.go` (جزء MinIO)  
 **التأثير:** 🟡 متوسط  
@@ -550,7 +702,7 @@ func newMinIOObjectStorage(cfg *config.StorageConfig) (ObjectStorage, error) {
 
 ---
 
-## P1-6: إضافة Health Check Endpoints شاملة
+## P1-5: إضافة Health Check Endpoints شاملة
 
 **الملفات:** `internal/handlers/health.go` (جديد أو تعديل)  
 **التأثير:** 🟡 متوسط  
@@ -565,29 +717,164 @@ GET /health/live     → فحص حيوية (goroutine count + memory)
 
 ---
 
+## P1-6: 🆕 إصلاح Reconciiler للوسائط العالقة — إزالة فحص التأخر الصارم
+
+**الملف:** `internal/worker/inbound_media_reconciler.go`  
+**التأثير:** 🟡 متوسط — وسائط عالقة للأبد تحت حمل مستمر  
+**الجهد:** يومان  
+**المصدر:** سرب التحليل العميق — Gap 4
+
+### المشكلة
+دالة `ReconcileStaleQueuedInboundMedia` تتحقق من تأخر الطابور (queue lag) قبل أي عمل مصالحة:
+
+```go
+func (r *InboundMediaReconciler) ReconcileStaleQueuedInboundMedia(ctx context.Context) error {
+    lag, _ := r.redis.XLen(ctx, "whatomate:inbound_media").Result()
+    if lag > 0 {
+        // رفض! يفترض أن الطابور يعمل
+        return nil // لا يفعل أي شيء
+    }
+    // ... منطق المصالحة الفعلي
+}
+```
+
+**المشكلة:** في الإنتاج تحت حمل مستمر، الطابور دائمًا يحتوي على رسائل (`lag > 0`). هذا يعني أن **المصالحة لا تعمل أبدًا** في بيئات الإنتاج الحقيقية.
+
+**النتيجة:**
+- وسائط عالقة بحالة `queued` في قاعدة البيانات
+- لا توجد آلية لاستعادتها
+- تراكم مستمر للوسائط المفقودة
+
+### الإصلاح المطلوب
+استبدال فحص التأخر بفحص عمر الرسالة:
+
+```go
+func (r *InboundMediaReconciler) ReconcileStaleQueuedInboundMedia(ctx context.Context) error {
+    // بدلاً من فحص التأخر، ابحث عن رسائل أقدم من عتبة زمنية
+    staleThreshold := time.Now().Add(-30 * time.Minute)
+    
+    var staleMedia []models.InboundMedia
+    err := r.db.WithContext(ctx).
+        Where("status = ? AND created_at < ?", "queued", staleThreshold).
+        Limit(100).
+        Find(&staleMedia).Error
+    if err != nil {
+        return err
+    }
+    
+    for _, media := range staleMedia {
+        // إعادة إدراج في الطابور
+        r.redis.XAdd(ctx, &redis.XAddArgs{
+            Stream: "whatomate:inbound_media",
+            Values: map[string]interface{}{
+                "media_id": media.ID.String(),
+                "org_id":   media.OrganizationID.String(),
+            },
+        })
+    }
+    return nil
+}
+```
+
+---
+
+## P1-7: 🆕 تجنب عنق الزجاجة في ترميز JSON داخل WebSocket Hub
+
+**الملف:** `internal/websocket/hub.go`  
+**التأثير:** 🟡 متوسط — عنق زجاجة في البث عند وجود آلاف العملاء  
+**الجهد:** 3 أيام  
+**المصدر:** سرب التحليل العميق — Gap 5
+
+### المشكلة
+في حلقة البث الرئيسية، يتم ترميز JSON بشكل متسلسل لكل رسالة:
+
+```go
+func (h *Hub) broadcastToClients(msg BroadcastMessage) {
+    data, err := json.Marshal(msg) // ترميز واحد لكل رسالة — جيد
+    if err != nil {
+        return
+    }
+    // لكن هذا يتم في الخيط الرئيسي للـ Hub
+    // وكل عميل يستقبل نفس البيانات
+    for _, client := range h.getClients(msg) {
+        select {
+        case client.send <- data: // استخدام البيانات المرمزة مسبقًا
+        default:
+        }
+    }
+}
+```
+
+عندما تكون الرسالة كبيرة (مثل قائمة محادثات أو بيانات وسائط متعددة)، الترميز يحظر حلقة البث بأكملها. مع آلاف العملاء المتصلين، هذا يسبب تأخيرات ملحوظة.
+
+### الإصلاح المطلوب
+ترميز JSON مسبقًا خارج حلقة البث:
+
+```go
+type PreEncodedBroadcast struct {
+    OrgID     uuid.UUID
+    ContactID uuid.UUID
+    Data      []byte // تم ترميزه مسبقًا
+}
+
+func (h *Hub) Broadcast(msg BroadcastMessage) {
+    // ترميز مرة واحدة في goroutine منفصلة
+    data, err := json.Marshal(msg)
+    if err != nil {
+        return
+    }
+    
+    // إدخال في قناة البث
+    h.broadcast <- PreEncodedBroadcast{
+        OrgID:     msg.OrgID,
+        ContactID: msg.ContactID,
+        Data:      data,
+    }
+}
+```
+
+**تحسين إضافي — تجميع البث (batching):**
+```go
+func (h *Hub) runBatchedBroadcast() {
+    ticker := time.NewTicker(16 * time.Millisecond) // ~60fps
+    defer ticker.Stop()
+    
+    batch := make([]PreEncodedBroadcast, 0, 64)
+    
+    for {
+        select {
+        case msg := <-h.broadcast:
+            batch = append(batch, msg)
+            // تجميع الرسائل المتاحة
+            drain:
+            for len(batch) < cap(batch) {
+                select {
+                case m := <-h.broadcast:
+                    batch = append(batch, m)
+                default:
+                    break drain
+                }
+            }
+            h.flushBatch(batch)
+            batch = batch[:0]
+        case <-ticker.C:
+            // إرسال أي رسائل متراكمة
+            if len(batch) > 0 {
+                h.flushBatch(batch)
+                batch = batch[:0]
+            }
+        }
+    }
+}
+```
+
+---
+
 # المرحلة P2 — تحسين الأداء (8 أسابيع)
 
 ---
 
-## P2-1: تحسين WebSocket Hub — sharding حسب المؤسسة
-
-**الملف:** `internal/websocket/hub.go`  
-**الجهد:** أسبوعان
-
-### الإصلاح
-```go
-type ShardedHub struct {
-    shards    [16]*LocalHub // 16 shard حسب orgID % 16
-    shardFunc func(uuid.UUID) int
-}
-
-func (s *ShardedHub) getShard(orgID uuid.UUID) *LocalHub {
-    hash := fnv.New32a()
-    hash.Write(orgID[:])
-    return s.shards[hash.Sum32()%16]
-}
-```
-كل shard لديه `sync.RWMutex` خاص → تقليل المنافسة بنسبة 16×.
+## ~~P2-1: تحسين WebSocket Hub — sharding حسب المؤسسة~~ ✅ تم الإصلاح (كجزء من P1-1)
 
 ---
 

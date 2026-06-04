@@ -38,8 +38,8 @@ func (a *App) wsUpgrader() websocket.FastHTTPUpgrader {
 }
 
 // WebSocketHandler handles WebSocket connections.
-// Authentication is performed via message-based auth after the upgrade:
-// the client must send {"type":"auth","payload":{"token":"<jwt>"}} within 5 seconds.
+// Authentication is performed during the HTTP handshake request before the upgrade.
+// The client must supply a valid JWT token via either the Authorization header or the Sec-WebSocket-Protocol header.
 func (a *App) WebSocketHandler(r *fastglue.Request) error {
 	if a.License != nil && a.License.IsLocked() {
 		return r.SendErrorEnvelope(fasthttp.StatusLocked, "A valid license is required to open WebSocket connections", nil, "")
@@ -61,7 +61,8 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
 	if tokenString == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Missing WebSocket token", nil, "")
 	}
-	if _, _, err := a.validateWSToken(tokenString); err != nil {
+	userID, orgID, err := a.validateWSToken(tokenString)
+	if err != nil {
 		a.Log.Warn("WebSocket handshake authentication failed", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired WebSocket token", nil, "")
 	}
@@ -70,12 +71,14 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
 	up := a.wsUpgrader()
 	up.Subprotocols = []string{"whm.v1"}
 	err = up.Upgrade(r.RequestCtx, func(conn *websocket.Conn) {
-		// Create unauthenticated client — auth happens via first message
-		client := ws.NewUnauthenticatedClient(a.WSHub, conn, a.validateWSTokenFn())
+		// Create authenticated client directly using userID and orgID from handshake.
+		client := ws.NewClient(a.WSHub, conn, userID, orgID)
 		client.SetContactAccessFn(a.canSubscribeToContactUpdates)
 
-		// Start pumps in goroutines
-		// Client self-registers with hub after successful auth message
+		// Immediately register the authenticated client with the hub.
+		a.WSHub.Register(client)
+
+		// Start pumps in goroutines.
 		go client.WritePump()
 		client.ReadPump() // Blocking - runs until connection closes
 	})

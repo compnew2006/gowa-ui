@@ -1319,7 +1319,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		g.POST("/api/webhook", app.WebhookHandler)
 	}
 
-	// WebSocket route (auth via message-based flow after upgrade)
+	// WebSocket route (auth performed during handshake request before upgrade)
 	g.GET("/ws", app.WebSocketHandler)
 
 	// For protected routes, we'll use a path-based middleware approach
