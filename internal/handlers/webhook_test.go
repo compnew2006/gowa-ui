@@ -373,7 +373,7 @@ func TestUpdateMessageStatus_FailedBroadcastsErrorMessageViaWebSocket(t *testing
 	// Create app with a real WebSocket hub
 	db := testutil.SetupTestDB(t)
 	log := testutil.NopLogger()
-	hub := websocket.NewHub(log)
+	hub := websocket.NewHub(log, nil)
 	go hub.Run()
 
 	app := &App{
@@ -454,7 +454,7 @@ func TestUpdateMessageStatus_DeliveredBroadcastsViaWebSocket_NoErrorMessage(t *t
 	// Create app with a real WebSocket hub
 	db := testutil.SetupTestDB(t)
 	log := testutil.NopLogger()
-	hub := websocket.NewHub(log)
+	hub := websocket.NewHub(log, nil)
 	go hub.Run()
 
 	app := &App{

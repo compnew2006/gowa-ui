@@ -40,7 +40,7 @@ func withHTTPClient(client *http.Client) appOption {
 // withWSHub starts a real websocket.Hub on the test App so tests can observe broadcasts.
 func withWSHub() appOption {
 	return func(a *handlers.App) {
-		a.WSHub = websocket.NewHub(testutil.NopLogger())
+		a.WSHub = websocket.NewHub(testutil.NopLogger(), nil)
 		go a.WSHub.Run()
 	}
 }

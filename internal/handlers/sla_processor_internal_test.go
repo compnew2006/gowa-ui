@@ -17,7 +17,7 @@ func newSLATestApp(t *testing.T) *App {
 	t.Helper()
 	db := testutil.SetupTestDB(t)
 	log := testutil.NopLogger()
-	hub := websocket.NewHub(log)
+	hub := websocket.NewHub(log, nil)
 	go hub.Run()
 
 	app := &App{

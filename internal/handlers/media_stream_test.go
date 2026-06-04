@@ -402,7 +402,7 @@ func TestServeMedia_RestoresMissingLegacyLocalMedia(t *testing.T) {
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
 	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 
-	hub := appwebsocket.NewHub(logf.New(logf.Opts{}))
+	hub := appwebsocket.NewHub(logf.New(logf.Opts{}), nil)
 	go hub.Run()
 	app.WSHub = hub
 	client := appwebsocket.NewClient(hub, nil, user.ID, org.ID)

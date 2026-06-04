@@ -1,25 +1,22 @@
-# Project Session Summary - Redis Streams MAXLEN Fix
+# Summary of Changes — WebSocket Hub Redis Pub/Sub Scaling & Testing (P1-1)
 
-## Task
-Fix the Redis Streams without MAXLEN vulnerability (P0-2) as described in `FIX_PLAN_AR.md`.
+## Overview
+We resolved the in-memory only WebSocket Hub limitation (P1-1) with a scalable Redis Pub/Sub architecture:
+- **Direct Local Delivery + Redis Fanout:** Hub broadcasts are delivered locally to connected clients immediately, and also fanned out via Redis with a unique `SenderInstanceID` to avoid duplicate self-echo delivery.
+- **Dynamic Org-Scoped Channels:** Instead of a single global Redis channel, we subscribe dynamically to organization-scoped channels `whatomate:ws_broadcast:org:<org_id>` only when clients for that organization are connected to the local instance. This scales cleanly under heavy load.
+- **Deterministic miniredis Tests:** Replaced skipped/flaky tests with a mock-free `miniredis`-backed integration test that runs deterministically on every environment/CI.
 
-## Approach & Key Decisions
-- Added constant `StreamMaxLen = int64(50000)` to `internal/queue/redis.go`.
-- Configured all 11 instances of `XAdd` across campaign streams, inbound media streams, group extraction streams, and the dead-letter queue (DLQ) to use the maximum stream length with approximate trimming (`Approx: true`). This prevents Redis streams from growing indefinitely and consuming all available system memory.
-- Fixed a compilation error in `internal/queue/queue_test.go` by implementing the missing `JobHandler` methods (`HandleMessageExtractionJob`, `HandleGroupExtractionJob`, and `HandleMemberExtractionJob`) on `mockHandler`.
+## Files Modified
+1. **[internal/websocket/messages.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/websocket/messages.go)**: Added `SenderInstanceID` tracking to `BroadcastMessage`.
+2. **[internal/websocket/hub.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/websocket/hub.go)**: Added instance ID tracking, dynamic pub/sub channel subscribes/unsubscribes on client register/unregister, and local-first delivery with echo suppression.
+3. **[internal/websocket/websocket_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/websocket/websocket_test.go)**: Integrated `miniredis` and rewrote `TestHub_RedisPubSubBroadcast`.
+4. **[internal/websocket/client_internal_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/websocket/client_internal_test.go)**: Adjusted NewHub signatures in tests.
+5. **[internal/handlers/media_stream_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/media_stream_test.go)**: Adjusted NewHub signatures.
+6. **[internal/handlers/sla_processor_internal_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/sla_processor_internal_test.go)**: Adjusted NewHub signatures.
+7. **[internal/handlers/testhelpers_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/testhelpers_test.go)**: Adjusted NewHub signatures.
+8. **[internal/handlers/webhook_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/webhook_test.go)**: Adjusted NewHub signatures.
+9. **[cmd/whatomate/main.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/cmd/whatomate/main.go)**: Passed the initialized Redis client to the WebSocket Hub constructor on startup.
 
-## Modified Files
-- [internal/queue/redis.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/queue/redis.go)
-- [internal/queue/queue_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/queue/queue_test.go)
-
-## Verification & Testing
-- Executed unit tests in `internal/queue` package:
-  ```bash
-  go test -v ./internal/queue
-  ```
-  Result: **PASS** (all tests passed successfully).
-- Verified static correctness:
-  ```bash
-  go vet ./internal/queue
-  ```
-  Result: **PASS** (no vet errors found).
+## Testing & Verification
+- `go test -v ./internal/websocket/...` -> PASS (miniredis covers the Redis Pub/Sub paths).
+- `go test -v ./internal/handlers/...` -> PASS.

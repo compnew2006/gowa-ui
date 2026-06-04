@@ -288,7 +288,7 @@ func runServer(args []string) {
 	waClient := whatsapp.NewWithBaseURL(lo, cfg.WhatsApp.BaseURL)
 
 	// Initialize WebSocket hub
-	wsHub := websocket.NewHub(lo)
+	wsHub := websocket.NewHub(lo, rdb)
 	go wsHub.Run()
 	lo.Info("WebSocket hub started")
 

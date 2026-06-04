@@ -56,10 +56,11 @@ const (
 
 // BroadcastMessage represents a message to be broadcast to clients
 type BroadcastMessage struct {
-	OrgID     uuid.UUID
-	UserID    uuid.UUID // Optional: only send to specific user
-	ContactID uuid.UUID // Optional: only send to users viewing this contact
-	Message   WSMessage
+	OrgID            uuid.UUID
+	UserID           uuid.UUID // Optional: only send to specific user
+	ContactID        uuid.UUID // Optional: only send to users viewing this contact
+	Message          WSMessage
+	SenderInstanceID uuid.UUID // Tracks which Hub instance sent this broadcast to avoid self-echo
 }
 
 // AuthPayload is the payload for auth messages from client

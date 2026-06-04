@@ -12,7 +12,7 @@ import (
 func TestClientHandleSetContact_RespectsAccessValidator(t *testing.T) {
 	t.Parallel()
 
-	hub := NewHub(logf.New(logf.Opts{}))
+	hub := NewHub(logf.New(logf.Opts{}), nil)
 	client := NewClient(hub, nil, uuid.New(), uuid.New())
 	targetContact := uuid.New()
 
@@ -28,7 +28,7 @@ func TestClientHandleSetContact_RespectsAccessValidator(t *testing.T) {
 func TestClientHandleSetContact_SetsAndClearsCurrentContact(t *testing.T) {
 	t.Parallel()
 
-	hub := NewHub(logf.New(logf.Opts{}))
+	hub := NewHub(logf.New(logf.Opts{}), nil)
 	client := NewClient(hub, nil, uuid.New(), uuid.New())
 	targetContact := uuid.New()
 
