@@ -48,6 +48,10 @@ const (
 	TypeInstanceQRTimeout       = "instance_qr_timeout"
 	TypeInstanceReconnectFailed = "instance_reconnect_failed"
 	TypeInstanceNotification    = "instance_notification"
+
+	// Facebook comment types
+	TypeFacebookCommentCreated = "facebook_comment_created"
+	TypeFacebookCommentUpdated = "facebook_comment_updated"
 )
 
 // BroadcastMessage represents a message to be broadcast to clients

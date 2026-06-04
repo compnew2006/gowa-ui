@@ -26,6 +26,7 @@
     "refresh": "تحديث",
     "select": "تحديد",
     "retry": "إعادة المحاولة",
+    "undo": "تراجع",
     "copy": "نسخ",
     "copied": "تم النسخ!",
     "download": "تنزيل",
@@ -3037,9 +3038,17 @@
     "sendReply": "إرسال الرد",
     "close": "إغلاق",
     "reopen": "إعادة فتح",
-    "autoReply": "رد تلقائي",
-    "agentReply": "رد الوكيل",
-    "productionNote": "الردود الخاصة تعتمد على صلاحيات صفحة فيسبوك وقواعد Graph API. أي فشل يتم حفظه بحالته.",
+  "autoReply": "رد تلقائي",
+  "agentReply": "رد الوكيل",
+  "adminReply": "مسؤول الصفحة",
+  "dmNotAvailable": "الرسالة الخاصة غير متاحة (لا يمكن مراسلة المستخدم)",
+  "replyStatus": {
+    "sent": "تم الإرسال",
+    "partial": "جزئي",
+    "failed": "فشل",
+    "skipped": "تم التخطي"
+  },
+  "productionNote": "الردود الخاصة تعتمد على صلاحيات صفحة فيسبوك وقواعد Graph API. أي فشل يتم حفظه بحالته.",
     "enableFeature": "تفعيل صندوق التعليقات",
     "enableAutoReply": "تفعيل الرد التلقائي",
     "autoCommentText": "الرد التلقائي على التعليق",
@@ -3065,6 +3074,8 @@
       "replySent": "تم إرسال الرد",
       "replyFailed": "فشل إرسال الرد",
       "statusUpdated": "تم تحديث حالة التعليق",
+      "statusUpdatedDesc": "تم التغيير من {from} إلى {to}",
+      "statusReverted": "تم التراجع عن حالة التعليق",
       "statusFailed": "فشل تحديث حالة التعليق"
     }
   }

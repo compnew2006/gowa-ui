@@ -186,6 +186,10 @@ const WS_TYPE_CONVERSATION_NOTE_CREATED = "conversation_note_created";
 const WS_TYPE_CONVERSATION_NOTE_UPDATED = "conversation_note_updated";
 const WS_TYPE_CONVERSATION_NOTE_DELETED = "conversation_note_deleted";
 
+// Facebook comment types
+const WS_TYPE_FACEBOOK_COMMENT_CREATED = "facebook_comment_created";
+const WS_TYPE_FACEBOOK_COMMENT_UPDATED = "facebook_comment_updated";
+
 interface WSMessage {
   type: string;
   payload: any;
@@ -945,6 +949,11 @@ class WebSocketService {
 
 // Export singleton instance
 export const wsService = new WebSocketService();
+
+export {
+  WS_TYPE_FACEBOOK_COMMENT_CREATED,
+  WS_TYPE_FACEBOOK_COMMENT_UPDATED,
+};
 
 declare global {
   interface Window {

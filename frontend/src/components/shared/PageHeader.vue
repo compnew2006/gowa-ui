@@ -44,24 +44,22 @@ defineProps<{
       </div>
       <div class="flex-1">
         <h1 class="text-xl font-semibold text-foreground">{{ title }}</h1>
-        <template v-if="breadcrumbs?.length">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <template v-for="(crumb, index) in breadcrumbs" :key="index">
-                <BreadcrumbItem>
-                  <BreadcrumbLink v-if="crumb.href" :href="crumb.href">
-                    {{ crumb.label }}
-                  </BreadcrumbLink>
-                  <BreadcrumbPage v-else>{{ crumb.label }}</BreadcrumbPage>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator v-if="index < breadcrumbs.length - 1" />
-              </template>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </template>
+        <Breadcrumb v-if="breadcrumbs?.length" class="mt-1">
+          <BreadcrumbList>
+            <template v-for="(crumb, index) in breadcrumbs" :key="index">
+              <BreadcrumbItem>
+                <BreadcrumbLink v-if="crumb.href" :href="crumb.href">
+                  {{ crumb.label }}
+                </BreadcrumbLink>
+                <BreadcrumbPage v-else>{{ crumb.label }}</BreadcrumbPage>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator v-if="index < breadcrumbs.length - 1" />
+            </template>
+          </BreadcrumbList>
+        </Breadcrumb>
         <p
-          v-else-if="description || subtitle"
-          class="text-sm text-muted-foreground"
+          v-if="description || subtitle"
+          class="mt-1 text-sm text-muted-foreground"
         >
           {{ description || subtitle }}
         </p>

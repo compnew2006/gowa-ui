@@ -11,6 +11,7 @@
     "previous": "Anterior",
     "next": "Siguiente",
     "retry": "Reintentar",
+    "undo": "Deshacer",
     "loading": "Cargando",
     "search": "Buscar",
     "add": "Agregar",
@@ -587,9 +588,17 @@
     "sendReply": "Enviar respuesta",
     "close": "Cerrar",
     "reopen": "Reabrir",
-    "autoReply": "Respuesta automática",
-    "agentReply": "Respuesta de agente",
-    "productionNote": "Las respuestas privadas dependen de permisos de página y reglas de Graph API. Los fallos se guardan con su estado.",
+  "autoReply": "Respuesta automática",
+  "agentReply": "Respuesta de agente",
+  "adminReply": "Administrador de la página",
+  "dmNotAvailable": "Mensaje privado no disponible (el usuario no puede ser contactado)",
+  "replyStatus": {
+    "sent": "Enviado",
+    "partial": "Parcial",
+    "failed": "Fallido",
+    "skipped": "Omitido"
+  },
+  "productionNote": "Las respuestas privadas dependen de permisos de página y reglas de Graph API. Los fallos se guardan con su estado.",
     "enableFeature": "Activar bandeja de comentarios",
     "enableAutoReply": "Activar respuestas automáticas",
     "autoCommentText": "Respuesta pública automática",
@@ -615,6 +624,8 @@
       "replySent": "Respuesta enviada",
       "replyFailed": "Error al enviar respuesta",
       "statusUpdated": "Estado del comentario actualizado",
+      "statusUpdatedDesc": "Cambiado de {from} a {to}",
+      "statusReverted": "Estado del comentario revertido",
       "statusFailed": "Error al actualizar estado"
     }
   }

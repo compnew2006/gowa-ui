@@ -39,6 +39,7 @@ type FacebookComment struct {
 	Permalink      string                   `gorm:"type:text" json:"permalink"`
 	Status         FacebookCommentStatus    `gorm:"type:varchar(20);default:'open';index" json:"status"`
 	Direction      FacebookCommentDirection `gorm:"type:varchar(20);default:'incoming';index" json:"direction"`
+	IsAdminReply   bool                     `gorm:"default:false;index" json:"is_admin_reply"`
 	CommentedAt    time.Time                `gorm:"index" json:"commented_at"`
 	LastSyncedAt   *time.Time               `gorm:"index" json:"last_synced_at,omitempty"`
 	LastRepliedAt  *time.Time               `gorm:"index" json:"last_replied_at,omitempty"`
@@ -87,7 +88,7 @@ type FacebookCommentSettings struct {
 	SyncEnabled                bool      `gorm:"default:true" json:"sync_enabled"`
 	AutoReplyEnabled           bool      `gorm:"default:false" json:"auto_reply_enabled"`
 	AutoCommentReplyEnabled    bool      `gorm:"default:true" json:"auto_comment_reply_enabled"`
-	AutoPrivateReplyEnabled    bool      `gorm:"default:true" json:"auto_private_reply_enabled"`
+	AutoPrivateReplyEnabled    bool      `gorm:"default:false" json:"auto_private_reply_enabled"`
 	AutoCommentReplyText       string    `gorm:"type:text;default:'تم الرد خاص'" json:"auto_comment_reply_text"`
 	AutoPrivateMessageText     string    `gorm:"type:text;default:'اهلا كيف اقدر اساعدك'" json:"auto_private_message_text"`
 	OnlyAutoReplyUnanswered    bool      `gorm:"default:true" json:"only_auto_reply_unanswered"`

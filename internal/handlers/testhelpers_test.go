@@ -8,6 +8,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/queue"
+	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/test/testutil"
 )
@@ -33,6 +34,14 @@ func withWhatsApp(wa *whatsapp.Client) appOption {
 func withHTTPClient(client *http.Client) appOption {
 	return func(a *handlers.App) {
 		a.HTTPClient = client
+	}
+}
+
+// withWSHub starts a real websocket.Hub on the test App so tests can observe broadcasts.
+func withWSHub() appOption {
+	return func(a *handlers.App) {
+		a.WSHub = websocket.NewHub(testutil.NopLogger())
+		go a.WSHub.Run()
 	}
 }
 

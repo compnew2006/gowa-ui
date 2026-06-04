@@ -29,6 +29,7 @@ export interface FacebookComment {
   permalink?: string;
   status: FacebookCommentStatus;
   direction: "incoming" | "outgoing";
+  is_admin_reply: boolean;
   commented_at: string;
   last_synced_at?: string;
   last_replied_at?: string;

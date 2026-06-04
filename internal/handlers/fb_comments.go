@@ -16,6 +16,7 @@ import (
 
 	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -33,6 +34,7 @@ const (
 	fbCommentReplyStatusSent    = "sent"
 	fbCommentReplyStatusPartial = "partial"
 	fbCommentReplyStatusFailed  = "failed"
+	fbCommentReplyStatusSkipped = "skipped"
 )
 
 type facebookCommentSettingsRequest struct {
@@ -85,17 +87,46 @@ type facebookCommentsWebhookChange struct {
 	Value facebookCommentsWebhookValue `json:"value"`
 }
 
+type facebookCommentsWebhookActor struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type facebookCommentsWebhookValue struct {
-	Item        string `json:"item"`
-	Verb        string `json:"verb"`
-	CommentID   string `json:"comment_id"`
-	PostID      string `json:"post_id"`
-	ParentID    string `json:"parent_id"`
-	SenderID    string `json:"sender_id"`
-	SenderName  string `json:"sender_name"`
-	Message     string `json:"message"`
-	CreatedTime int64  `json:"created_time"`
-	Permalink   string `json:"permalink_url"`
+	Item        string                        `json:"item"`
+	Verb        string                        `json:"verb"`
+	CommentID   string                        `json:"comment_id"`
+	PostID      string                        `json:"post_id"`
+	ParentID    string                        `json:"parent_id"`
+	SenderID    string                        `json:"sender_id"`
+	SenderName  string                        `json:"sender_name"`
+	From        facebookCommentsWebhookActor  `json:"from"`
+	Message     string                        `json:"message"`
+	CreatedTime int64                         `json:"created_time"`
+	Permalink   string                        `json:"permalink_url"`
+}
+
+func (v facebookCommentsWebhookValue) commenterID() string {
+	if v.From.ID != "" {
+		return v.From.ID
+	}
+	return v.SenderID
+}
+
+func (v facebookCommentsWebhookValue) commenterName() string {
+	if v.From.Name != "" {
+		return v.From.Name
+	}
+	return v.SenderName
+}
+
+func isFacebookPageAdminCommenter(pageID, commenterID string) bool {
+	pageID = strings.TrimSpace(pageID)
+	commenterID = strings.TrimSpace(commenterID)
+	if pageID == "" || commenterID == "" {
+		return false
+	}
+	return pageID == commenterID
 }
 
 type facebookCommentListResponse struct {
@@ -121,6 +152,7 @@ type facebookCommentResponse struct {
 	Permalink     string                          `json:"permalink"`
 	Status        models.FacebookCommentStatus    `json:"status"`
 	Direction     models.FacebookCommentDirection `json:"direction"`
+	IsAdminReply  bool                            `json:"is_admin_reply"`
 	CommentedAt   string                          `json:"commented_at"`
 	LastSyncedAt  string                          `json:"last_synced_at,omitempty"`
 	LastRepliedAt string                          `json:"last_replied_at,omitempty"`
@@ -366,9 +398,9 @@ func (a *App) ReplyFacebookComment(r *fastglue.Request) error {
 	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
 		return nil
 	}
-	commentID, err := parsePathUUID(r, "id", "Facebook comment")
-	if err != nil {
-		return nil
+	commentRef := strings.TrimSpace(fmt.Sprint(r.RequestCtx.UserValue("id")))
+	if commentRef == "" || commentRef == "<nil>" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid Facebook comment ID", nil, "")
 	}
 
 	var req facebookCommentReplyRequest
@@ -395,7 +427,7 @@ func (a *App) ReplyFacebookComment(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Select at least one reply channel", nil, "")
 	}
 
-	comment, account, pageToken, err := a.facebookCommentOperationContext(requestDB, orgID, commentID)
+	comment, account, pageToken, err := a.facebookCommentOperationContext(a.DB, orgID, commentRef)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Facebook comment not found", nil, "")
@@ -413,7 +445,6 @@ func (a *App) ReplyFacebookComment(r *fastglue.Request) error {
 }
 
 func (a *App) UpdateFacebookCommentStatus(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -421,9 +452,9 @@ func (a *App) UpdateFacebookCommentStatus(r *fastglue.Request) error {
 	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
 		return nil
 	}
-	commentID, err := parsePathUUID(r, "id", "Facebook comment")
-	if err != nil {
-		return nil
+	commentRef := strings.TrimSpace(fmt.Sprint(r.RequestCtx.UserValue("id")))
+	if commentRef == "" || commentRef == "<nil>" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid Facebook comment ID", nil, "")
 	}
 	var req facebookCommentStatusRequest
 	if err := a.decodeRequest(r, &req); err != nil {
@@ -432,11 +463,23 @@ func (a *App) UpdateFacebookCommentStatus(r *fastglue.Request) error {
 	if !validFacebookCommentStatus(req.Status) {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid comment status", nil, "status")
 	}
-	if err := requestDB.Model(&models.FacebookComment{}).
-		Where("id = ? AND organization_id = ?", commentID, orgID).
-		Update("status", req.Status).Error; err != nil {
-		a.Log.Error("Failed to update Facebook comment status", "error", err, "comment_id", commentID)
+	commentQuery := a.DB.Model(&models.FacebookComment{}).Where("organization_id = ?", orgID)
+	if commentID, err := uuid.Parse(commentRef); err == nil {
+		commentQuery = commentQuery.Where("id = ? OR external_id = ?", commentID, commentRef)
+	} else {
+		commentQuery = commentQuery.Where("external_id = ?", commentRef)
+	}
+	if err := commentQuery.Update("status", req.Status).Error; err != nil {
+		a.Log.Error("Failed to update Facebook comment status", "error", err, "comment_id", commentRef)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update Facebook comment", nil, "")
+	}
+	if a.WSHub != nil {
+		updated := models.FacebookComment{}
+		_ = commentQuery.First(&updated).Error
+		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+			Type:    websocket.TypeFacebookCommentUpdated,
+			Payload: facebookCommentToResponse(updated),
+		})
 	}
 	return r.SendEnvelope(map[string]any{"status": req.Status})
 }
@@ -498,9 +541,19 @@ func (a *App) ReceiveFacebookCommentsWebhook(r *fastglue.Request) error {
 				failures = append(failures, fmt.Sprintf("%s: failed to save webhook comment", pageID))
 				continue
 			}
+			if a.WSHub != nil {
+				wsType := websocket.TypeFacebookCommentCreated
+				if !created {
+					wsType = websocket.TypeFacebookCommentUpdated
+				}
+				a.WSHub.BroadcastToOrg(account.OrganizationID, websocket.WSMessage{
+					Type:    wsType,
+					Payload: facebookCommentToResponse(*comment),
+				})
+			}
 			processed++
-			if created && settings.AutoReplyEnabled && shouldAutoReplyFacebookComment(a.DB, settings, *comment) {
-				if _, err := a.sendAndStoreFacebookCommentReply(a.DB, account, comment, uuid.Nil, settings.AutoCommentReplyText, settings.AutoPrivateMessageText, settings.AutoCommentReplyEnabled, settings.AutoPrivateReplyEnabled, true, pageToken); err == nil {
+			if created && !comment.IsAdminReply && settings.AutoReplyEnabled && shouldAutoReplyFacebookComment(a.DB, settings, *comment) {
+				if _, err := a.sendAndStoreFacebookCommentReply(a.DB, account, comment, account.UserID, settings.AutoCommentReplyText, settings.AutoPrivateMessageText, settings.AutoCommentReplyEnabled, settings.AutoPrivateReplyEnabled, true, pageToken); err == nil {
 					autoReplies++
 				} else {
 					failures = append(failures, fmt.Sprintf("%s: auto reply failed", change.Value.CommentID))
@@ -598,6 +651,7 @@ func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.Facebook
 	if value.CreatedTime > 0 {
 		commentedAt = time.Unix(value.CreatedTime, 0)
 	}
+	isAdminReply := isFacebookPageAdminCommenter(pageID, value.commenterID())
 	comment := models.FacebookComment{
 		OrganizationID: account.OrganizationID,
 		AccountID:      account.ID,
@@ -608,12 +662,13 @@ func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.Facebook
 		PostMessage:    "",
 		ExternalID:     value.CommentID,
 		ParentID:       value.ParentID,
-		FromID:         value.SenderID,
-		FromName:       value.SenderName,
+		FromID:         value.commenterID(),
+		FromName:       value.commenterName(),
 		Message:        value.Message,
 		Permalink:      value.Permalink,
 		Status:         models.FBCommentStatusOpen,
 		Direction:      models.FBCommentDirectionIncoming,
+		IsAdminReply:   isAdminReply,
 		CommentedAt:    commentedAt,
 		LastSyncedAt:   &now,
 		Metadata: models.JSONB{
@@ -627,7 +682,8 @@ func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.Facebook
 		Columns: []clause.Column{{Name: "organization_id"}, {Name: "external_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"page_name", "post_id", "parent_id", "from_id", "from_name", "message",
-			"permalink", "commented_at", "last_synced_at", "metadata", "updated_at",
+			"permalink", "commented_at", "last_synced_at", "metadata",
+			"is_admin_reply", "updated_at",
 		}),
 	}).Create(&comment)
 	if tx.Error != nil {
@@ -790,18 +846,13 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 			if strings.TrimSpace(edge.ID) == "" {
 				continue
 			}
-			if settings.IgnorePageAdminComments && edge.From.ID == pageID {
-				continue
-			}
 			actor := edge.From
 			if strings.TrimSpace(actor.ID) == "" && strings.TrimSpace(actor.Name) == "" {
 				if fetchedActor, ok := actorFallbacks[edge.ID]; ok {
 					actor = fetchedActor
 				}
 			}
-			if settings.IgnorePageAdminComments && actor.ID == pageID {
-				continue
-			}
+			isAdminReply := isFacebookPageAdminCommenter(pageID, actor.ID) || isFacebookPageAdminCommenter(pageID, edge.From.ID)
 			commentedAt := parseFacebookTime(edge.CreatedTime, now)
 			comment := models.FacebookComment{
 				OrganizationID: orgID,
@@ -819,6 +870,7 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 				Permalink:      edge.PermalinkURL,
 				Status:         models.FBCommentStatusOpen,
 				Direction:      models.FBCommentDirectionIncoming,
+				IsAdminReply:   isAdminReply,
 				CommentedAt:    commentedAt,
 				LastSyncedAt:   &now,
 				Metadata: models.JSONB{
@@ -832,7 +884,8 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 				Columns: []clause.Column{{Name: "organization_id"}, {Name: "external_id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
 					"page_name", "post_permalink", "post_message", "parent_id", "from_id", "from_name",
-					"message", "permalink", "commented_at", "last_synced_at", "metadata", "updated_at",
+					"message", "permalink", "commented_at", "last_synced_at", "metadata",
+					"is_admin_reply", "updated_at",
 				}),
 			}).Create(&comment)
 			if tx.Error != nil {
@@ -997,6 +1050,9 @@ func shouldAutoReplyFacebookComment(db *gorm.DB, settings *models.FacebookCommen
 	if settings == nil || !settings.AutoReplyEnabled || comment.ID == uuid.Nil {
 		return false
 	}
+	if comment.IsAdminReply {
+		return false
+	}
 	if comment.AutoRepliedAt != nil {
 		return false
 	}
@@ -1010,9 +1066,15 @@ func shouldAutoReplyFacebookComment(db *gorm.DB, settings *models.FacebookCommen
 	return true
 }
 
-func (a *App) facebookCommentOperationContext(db *gorm.DB, orgID, commentID uuid.UUID) (*models.FacebookComment, *models.FacebookAccount, string, error) {
+func (a *App) facebookCommentOperationContext(db *gorm.DB, orgID uuid.UUID, commentRef string) (*models.FacebookComment, *models.FacebookAccount, string, error) {
 	var comment models.FacebookComment
-	if err := db.Where("id = ? AND organization_id = ?", commentID, orgID).First(&comment).Error; err != nil {
+	query := db.Where("organization_id = ?", orgID)
+	if commentID, err := uuid.Parse(strings.TrimSpace(commentRef)); err == nil {
+		query = query.Where("id = ? OR external_id = ?", commentID, commentRef)
+	} else {
+		query = query.Where("external_id = ?", commentRef)
+	}
+	if err := query.First(&comment).Error; err != nil {
 		return nil, nil, "", err
 	}
 	var account models.FacebookAccount
@@ -1046,6 +1108,7 @@ func (a *App) sendAndStoreFacebookCommentReply(db *gorm.DB, account *models.Face
 	}
 
 	var errorsOut []string
+	var dmSkipped bool
 	if sendCommentReply {
 		payload, err := a.sendFacebookCommentReply(comment.ExternalID, reply.ReplyText, pageToken)
 		if err != nil {
@@ -1055,20 +1118,33 @@ func (a *App) sendAndStoreFacebookCommentReply(db *gorm.DB, account *models.Face
 		}
 	}
 	if sendPrivateMessage {
-		payload, err := a.sendFacebookPrivateReply(comment.ExternalID, reply.PrivateMessageText, pageToken)
+		payload, err := a.sendFacebookPrivateReply(comment.PageID, comment.ExternalID, comment.FromID, reply.PrivateMessageText, pageToken)
 		if err != nil {
-			errorsOut = append(errorsOut, "private reply: "+err.Error())
+			if isFacebookUserCantDMError(err) {
+				dmSkipped = true
+				reply.Metadata["dm_skipped"] = true
+				reply.Metadata["dm_skip_reason"] = "user_cant_be_dmed"
+				a.Log.Warn("Facebook DM skipped: user cannot be messaged", "error", err, "comment_id", comment.ExternalID, "from_id", comment.FromID)
+			} else {
+				errorsOut = append(errorsOut, "private reply: "+err.Error())
+			}
 		} else {
-			reply.GraphPrivateReplyID = strings.TrimSpace(fmt.Sprint(payload["id"]))
+			reply.GraphPrivateReplyID = facebookGraphMessageID(payload)
 		}
 	}
-	if len(errorsOut) > 0 {
+	commentLegSucceeded := sendCommentReply && reply.GraphCommentReplyID != ""
+	dmLegSucceeded := sendPrivateMessage && reply.GraphPrivateReplyID != ""
+	switch {
+	case len(errorsOut) > 0 && (commentLegSucceeded || dmLegSucceeded):
 		reply.ErrorMessage = strings.Join(errorsOut, "; ")
-		if (sendCommentReply && reply.GraphCommentReplyID != "") || (sendPrivateMessage && reply.GraphPrivateReplyID != "") {
-			reply.Status = fbCommentReplyStatusPartial
-		} else {
-			reply.Status = fbCommentReplyStatusFailed
-		}
+		reply.Status = fbCommentReplyStatusPartial
+	case len(errorsOut) > 0:
+		reply.ErrorMessage = strings.Join(errorsOut, "; ")
+		reply.Status = fbCommentReplyStatusFailed
+	case dmSkipped && !commentLegSucceeded:
+		reply.Status = fbCommentReplyStatusSkipped
+	default:
+		reply.Status = fbCommentReplyStatusSent
 	}
 	if err := db.Create(&reply).Error; err != nil {
 		return reply, err
@@ -1080,7 +1156,17 @@ func (a *App) sendAndStoreFacebookCommentReply(db *gorm.DB, account *models.Face
 	if isAuto {
 		updates["auto_replied_at"] = &now
 	}
-	_ = db.Model(comment).Updates(updates).Error
+	updateDB := db.Session(&gorm.Session{NewDB: true})
+	_ = updateDB.Model(&models.FacebookComment{}).Where("id = ?", comment.ID).Updates(updates).Error
+	if a.WSHub != nil {
+		updated := models.FacebookComment{}
+		_ = db.Where("id = ?", comment.ID).First(&updated).Error
+		updated.Replies = []models.FacebookCommentReply{reply}
+		a.WSHub.BroadcastToOrg(updated.OrganizationID, websocket.WSMessage{
+			Type:    websocket.TypeFacebookCommentUpdated,
+			Payload: facebookCommentToResponse(updated),
+		})
+	}
 	return reply, nil
 }
 
@@ -1094,14 +1180,74 @@ func (a *App) sendFacebookCommentReply(commentExternalID, message, pageToken str
 	return a.facebookGraphFormPost(endpoint, form)
 }
 
-func (a *App) sendFacebookPrivateReply(commentExternalID, message, pageToken string) (map[string]any, error) {
+func (a *App) sendFacebookPrivateReply(pageID, commentExternalID, senderID, message, pageToken string) (map[string]any, error) {
 	oauthCfg, err := a.facebookOAuthRuntimeConfig(nil)
 	if err != nil {
 		return nil, err
 	}
-	endpoint := fmt.Sprintf("%s/%s/%s/private_replies", oauthCfg.BaseURL, oauthCfg.APIVersion, url.PathEscape(commentExternalID))
-	form := url.Values{"message": {message}, "access_token": {pageToken}}
-	return a.facebookGraphFormPost(endpoint, form)
+	payload, err := a.sendFacebookCommentPrivateMessage(oauthCfg, pageID, commentExternalID, message, pageToken)
+	if err == nil {
+		return payload, nil
+	}
+	if strings.TrimSpace(senderID) == "" {
+		return payload, err
+	}
+	return a.sendFacebookDirectMessengerMessage(oauthCfg, senderID, message, pageToken)
+}
+
+func (a *App) sendFacebookCommentPrivateMessage(oauthCfg facebookOAuthRuntimeConfig, pageID, commentID, message, pageToken string) (map[string]any, error) {
+	endpoint := fmt.Sprintf("%s/%s/%s/messages?access_token=%s", oauthCfg.BaseURL, oauthCfg.APIVersion, url.PathEscape(pageID), url.QueryEscape(pageToken))
+	body := map[string]any{
+		"recipient": map[string]any{"comment_id": commentID},
+		"message":   map[string]any{"text": message},
+	}
+	return a.facebookGraphJSONPost(endpoint, body)
+}
+
+func (a *App) sendFacebookDirectMessengerMessage(oauthCfg facebookOAuthRuntimeConfig, senderID, message, pageToken string) (map[string]any, error) {
+	endpoint := fmt.Sprintf("%s/%s/me/messages?access_token=%s", oauthCfg.BaseURL, oauthCfg.APIVersion, url.QueryEscape(pageToken))
+	body := map[string]any{
+		"messaging_type": "RESPONSE",
+		"recipient":      map[string]any{"id": senderID},
+		"message":        map[string]any{"text": message},
+	}
+	return a.facebookGraphJSONPost(endpoint, body)
+}
+
+func facebookPrivateReplyCommentID(commentExternalID string) string {
+	commentExternalID = strings.TrimSpace(commentExternalID)
+	if idx := strings.LastIndex(commentExternalID, "_"); idx >= 0 && idx+1 < len(commentExternalID) {
+		return commentExternalID[idx+1:]
+	}
+	return commentExternalID
+}
+
+func isFacebookUnsupportedObjectError(payload map[string]any) bool {
+	rawErr, ok := payload["error"].(map[string]any)
+	if !ok {
+		return false
+	}
+	return strings.TrimSpace(fmt.Sprint(rawErr["code"])) == "100" &&
+		strings.TrimSpace(fmt.Sprint(rawErr["error_subcode"])) == "33"
+}
+
+func isFacebookUserCantDMError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "10903") ||
+		strings.Contains(msg, "can't reply to this activity") ||
+		strings.Contains(msg, "cant reply to this activity")
+}
+
+func facebookGraphMessageID(payload map[string]any) string {
+	for _, key := range []string{"id", "message_id", "recipient_id"} {
+		if value := strings.TrimSpace(fmt.Sprint(payload[key])); value != "" && value != "<nil>" {
+			return value
+		}
+	}
+	return ""
 }
 
 func facebookCommentToResponse(comment models.FacebookComment) facebookCommentResponse {
@@ -1125,6 +1271,7 @@ func facebookCommentToResponse(comment models.FacebookComment) facebookCommentRe
 		Permalink:     comment.Permalink,
 		Status:        comment.Status,
 		Direction:     comment.Direction,
+		IsAdminReply:  comment.IsAdminReply,
 		CommentedAt:   comment.CommentedAt.Format(time.RFC3339),
 		LastSyncedAt:  optionalTimeRFC3339(comment.LastSyncedAt),
 		LastRepliedAt: optionalTimeRFC3339(comment.LastRepliedAt),

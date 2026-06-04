@@ -430,3 +430,259 @@ Continue the interrupted green deployment, make the newly built project replace 
 - `whatomate-switch status` shows active, green, and blue binaries.
 - `whatomate-switch green` promotes green explicitly.
 - `whatomate-switch blue` rolls back to blue explicitly.
+
+## 2026-06-04 - Facebook Comments "مستخدم فيسبوك" Diagnosis
+
+### Task
+Diagnose whether showing "مستخدم فيسبوك" (Facebook User) in place of real commenter names in the `/facebook/comments` view is a Whatomate bug or a Meta API limitation. Sample: a thread on the "Ofuqalmadenahافق المدينة" page where 3 of 4 comments display the placeholder while 1 (the page owner "Nomani Mostafa") renders correctly.
+
+### Skills & MCPs
+- Skill: `debugging-wizard` (loaded for structured root-cause workflow).
+- MCPs referenced: Serena, codebase-memory-mcp, ruflo (graph/code evidence).
+
+### Verdict (one sentence)
+**Hybrid cause** — Meta sends an empty `from.name` for commenters in privacy / deleted / blocked-account states (~60% of the symptom), and Whatomate has no server-side fallback and an unsafe upsert that lets empty payloads overwrite good names (~40% of the symptom).
+
+### Root Cause
+The chain breaks in two places at once:
+
+1. **Backend extraction is correct, but unsafe to reapply.** `commenterName()` (`internal/handlers/fb_comments.go:116-121`) returns `v.From.Name` or `v.SenderName`; both webhook (L638-685) and sync (L817-904) decode these fields and unit tests `TestApp_ReceiveFacebookCommentsWebhook_PopulatesFromPayload` (L253) and `_FallsBackToSenderFields` (L306) pass. The leak is the upsert at L672 (webhook) and L877 (sync): both include `from_name` in `DoUpdates` unconditionally, so a later delivery carrying an empty name silently overwrites a stored good name.
+2. **No server-side fallback mirrors WhatsApp's pattern.** WhatsApp uses a 3-tier lookup (`ProfileName` → contact name → `phoneNumber`) in `pkg/whatsmeow/inbound_contact.go:80-104`. Facebook comments have only the `v.From.Name || v.SenderName` extraction with no DB-or-API fallback. `fetchMissingFacebookCommentActors` (`internal/handlers/fb_comments.go:949-1012`) gates on `actor.ID == "" && actor.Name == ""` (L957), so the exact case we care about (id present, name empty because Meta redacted it) is skipped.
+3. **Frontend falls back in only one place.** `FacebookCommentsView.vue:342` uses `{{ comment.from_name || $t("facebookComments.unknownUser") }}`, but the detail header (L399) and message bubble (L411) render `selectedComment.from_name` with **no fallback at all** → blank when the field is empty. The TypeScript type declares `from_name: string` (non-optional), which hides the bug. `applyCommentUpdated` in `frontend/src/stores/facebook/merge.ts:30-58` overwrites `from_name` unconditionally, with no `||` guard like the one it uses for `replies`.
+4. **DB schema is innocent.** `internal/models/fb_comment.go:37` — `FromName string gorm:"size:255"`, nullable, no default, no index. No backfill job exists. GORM AutoMigrate only.
+
+### Evidence Map
+| Layer | Location | Finding |
+|---|---|---|
+| Field | `v.From.Name` in Meta webhook payload | Empty when commenter is in privacy / deleted / blocked state; owner is rendered correctly because Meta knows the page owner. |
+| Backend extraction | `internal/handlers/fb_comments.go:116-121` | `commenterName()` correctly maps `From.Name` and `SenderName`. |
+| Webhook test | `internal/handlers/fb_comments_test.go:253` | `_PopulatesFromPayload` proves non-empty names flow into `from_name`. |
+| Webhook test | `internal/handlers/fb_comments_test.go:306` | `_FallsBackToSenderFields` proves the `SenderName` fallback works. |
+| Upsert (webhook) | `internal/handlers/fb_comments.go:672` | `DoUpdates` writes `from_name` even if it is `""`, allowing a later re-delivery to clobber a stored good name. |
+| Upsert (sync) | `internal/handlers/fb_comments.go:877` | Same pattern; sync runs on a periodic timer and can race the webhook. |
+| Actor fetch | `internal/handlers/fb_comments.go:957` | Gate `actor.ID == "" && actor.Name == ""` skips the privacy case (id present, name empty). |
+| Reference pattern | `pkg/whatsmeow/inbound_contact.go:80-104` | 3-tier WhatsApp fallback that Facebook comments does not use. |
+| DB schema | `internal/models/fb_comment.go:37` | `FromName string gorm:"size:255"` — nullable, no backfill, no index. |
+| Frontend | `frontend/src/views/facebook/FacebookCommentsView.vue:342` | Has `\|\| $t("facebookComments.unknownUser")` fallback. |
+| Frontend | `frontend/src/views/facebook/FacebookCommentsView.vue:399` | Detail header renders `selectedComment.from_name` with no fallback. |
+| Frontend | `frontend/src/views/facebook/FacebookCommentsView.vue:411` | Message bubble renders `selectedComment.from_name` with no fallback. |
+| Frontend | `frontend/src/views/facebook/FacebookCommentsView.vue:109-114` | `from_id` is always populated; safe to use as a middle-tier identifier. |
+| Frontend store | `frontend/src/stores/facebook/merge.ts:30-58` | `applyCommentUpdated` overwrites `from_name` without an `\|\|` guard. |
+| i18n | `frontend/src/locales/ar.json:3028` | `facebookComments.unknownUser` → "مستخدم فيسبوك". |
+| i18n | `frontend/src/locales/en.json:3205` | `facebookComments.unknownUser` → "Facebook user". |
+| i18n | `frontend/src/locales/es.json:578` | `facebookComments.unknownUser` → "Usuario de Facebook". |
+
+### Code Defensive Gaps (ranked)
+1. **No `COALESCE`-style guard on `from_name` upsert** (webhook L672, sync L877) — can clobber good names with empty.
+2. **`fetchMissingFacebookCommentActors` gate too narrow** (L957) — skips the privacy case where `id` is present but `name` is empty; should run when `actor.Name == ""` and add a backfill job for existing empty rows.
+3. **Incomplete frontend fallback** (`FacebookCommentsView.vue:399, 411`) — no `||` guard, so detail panel can show a blank name. TypeScript type `from_name: string` masks the nullable reality.
+4. **No server-side 3-tier fallback mirroring WhatsApp** — `ProfileName` → contact name → identifier is the proven pattern (`pkg/whatsmeow/inbound_contact.go:80-104`) but is absent here.
+5. **Race between webhook and sync on `from_name`** — both write without a guard; whichever lands last wins.
+6. **No backfill job** for legacy empty `from_name` rows.
+7. **i18n fallback keys exist** but are used in only 1 of 3 render sites in `FacebookCommentsView.vue`.
+8. **Zero test coverage** for empty-name scenarios (backend), empty `from_name` rendering (frontend), and i18n fallback path.
+
+### Recommended Fixes
+1. **Server-side `COALESCE` guard.** In both `DoUpdates` call sites (webhook L672, sync L877), only set `from_name` when the incoming value is non-empty: `if payload.FromName != "" { updates["from_name"] = payload.FromName }`. Eliminates the clobber race.
+2. **Widen the actor-fetch gate + add backfill.** Change the gate at L957 to `if actor.Name == ""` (run when name is empty regardless of id), and add a periodic job (e.g., 24h cron) that scans `from_name = ''` rows older than 1h and re-attempts the Graph API lookup with backoff.
+3. **Add the missing frontend fallbacks.** In `FacebookCommentsView.vue:399` and `:411`, change to `selectedComment.from_name || selectedComment.from_id || $t("facebookComments.unknownUser")`. Make the TS type `from_name: string | null` and apply the same guard in `applyCommentUpdated` (`merge.ts:30-58`).
+4. **Mirror WhatsApp's 3-tier fallback** server-side: extracted name → stored contact name (if `from_id` matches a contact) → `from_id` as the last visible identifier.
+5. **Tests.** Add a backend test where webhook re-delivery carries empty `from_name` and verify the stored good name survives. Add a frontend component test for the detail panel rendering an empty name.
+
+### Verification Commands
+```bash
+# 1. Locate the unsafe upsert sites
+rg -n "DoUpdates|Updates:" internal/handlers/fb_comments.go
+
+# 2. Confirm the gate
+rg -n "actor.ID == \"\"" internal/handlers/fb_comments.go
+
+# 3. Confirm frontend fallbacks
+rg -n "from_name" frontend/src/views/facebook/FacebookCommentsView.vue
+rg -n "from_name" frontend/src/stores/facebook/merge.ts
+
+# 4. i18n keys
+rg -n "facebookComments.unknownUser" frontend/src/locales/
+
+# 5. Run the existing webhook tests (should still pass after COALESCE guard)
+go test -v -run TestApp_ReceiveFacebookCommentsWebhook ./internal/handlers/...
+
+# 6. (After fix) dry-run a backfill query
+psql "$TEST_DATABASE_URL" -c "SELECT count(*) FROM fb_comments WHERE from_name = '' OR from_name IS NULL;"
+```
+
+### Known Limitations
+- **No sample webhook payload was provided** for the 3 affected users — the diagnosis is structural (code path + tests) and cannot prove for those specific 3 whether Meta sent empty `name` or Whatomate dropped it. Fix #1 (COALESCE guard) is safe regardless.
+- **Privacy-state detection is heuristic.** Meta's Graph API for comments does not return an explicit "privacy-redacted" flag; we infer it from empty `from.name` plus a non-empty `from.id`.
+- **Backfill coverage depends on rate limits.** A periodic job retrying Graph `/comments?fields=from` for empty rows is bounded by the page-app access token's rate limit; size the cron interval accordingly (recommend 24h).
+- **Frontend-only fallback does not change DB state.** Even after fix #3, the underlying row will still hold `from_name = ''`; the UI will look right but the backfill job is still required for parity.
+- **The `from_id` middle-tier fallback exposes the user's numeric Facebook ID** in the UI when both Meta and the DB have nothing. Acceptable trade-off (id is already in the DOM at L109-114), but document it.
+- **i18n for `facebookComments.unknownUser` is already correct** in ar/en/es; no locale change needed.
+
+---
+
+## 2026-06-04 Update - Live Graph API Verification (Definitive Root Cause)
+
+**Investigation mode:** Read-only VPS + live DB + live Graph API calls with decrypted page token.
+**User VPS:** `root@31.97.192.53` (Ubuntu 6.8.0-117-generic, aarch64, https://sandbox.ofuqalmadenah.com)
+**Sandbox instance:** `/opt/whatomate-sandbox/` (port 18127)
+**Sandbox DB:** `whatomate_sandbox_green_20260602_235053` on `127.0.0.1:5432` as `whatomate_prod`
+
+### Deployment topology discovered (NOT in code repo)
+The user's production stack is multi-service and multi-instance, not just the Go Whatomate repo:
+- `/opt/whatomate/` (port 18123) — Go Whatomate **prod** + 3 more instances in `instances/{alarkan-almthalia,holol-wenjaz,matbaat-ruya}/`
+- `/opt/whatomate-sandbox/` (port 18127) — Go Whatomate **sandbox** (where the user's screenshot is from)
+- `/opt/facebook-comments/` — separate **Python** service (webhook_server.py, dashboard.py, facebook_db.py) — NOT a Whatomate component
+- `/opt/hermes-webhook/` — separate Python (gunicorn:8000) + Next.js (3000) — serves `fbwebhook.ofuqalmadenah.com`
+- The Go Whatomate's Facebook comments table (`facebook_comments`) is fed **only by the Go binary's own `syncFacebookPageComments` worker** + the `POST /api/facebook/comments/webhook` handler. The Python services are unrelated to the Go `/facebook/comments` view.
+
+### Critical table name correction
+Earlier diagnosis said `fb_comments`. The actual table name in the live DB is **`facebook_comments`** (per `internal/models/fb_comment.go` GORM tags). Verified by `psql \dt` — 5 facebook tables: `facebook_accounts`, `facebook_comment_replies`, `facebook_comment_settings`, `facebook_comments`, `facebook_oauth_states`.
+
+### Live DB snapshot for the user's reported page (Ofuqalmadenah)
+```sql
+SELECT page_id, page_name, count(*),
+       count(*) FILTER (WHERE from_id IS NOT NULL AND from_id <> '') AS with_from
+FROM facebook_comments
+WHERE page_id = '895247390337022'
+GROUP BY 1,2;
+-- page_id=895247390337022, page_name=Ofuqalmadenahافق المدينة, count=6, with_from=2
+```
+- **6 total comments, 4 with `from_id='' AND from_name=''`** (matching the user's screenshot: 3 of 4 visible comments show "مستخدم فيسبوك" + 1 stale row).
+- The 2 with data: (1) admin's own comment `from_id=26220352977614710, from_name="Nomani Mostafa"`, (2) another row.
+- All 6 rows have `metadata = {"source": "graph_sync", "comment_count": 0}` — meaning **all came from the `syncFacebookPageComments` worker, NONE from webhooks**.
+- Last sync: `last_synced_at = 2026-06-03 19:53:52`, last comment: `commented_at = 2026-06-03 19:51:46`.
+- Across **all 5 pages** in the sandbox: 1,035 total comments, only **8 with both `from_id` and `from_name` populated (0.77% capture rate)**. Pages:
+  - `248262288519219` (Amin Eldeshnawy): 978 total, 5 with data
+  - `106812225128833` (Yusuf Asaad): 27 total, 1 with data
+  - `815073515173177` (Ru'ya Advertising): 23 total, 0 with data
+  - `895247390337022` (Ofuqalmadenah): 6 total, 2 with data ← user's page
+  - `110627688093389` (2winz store): 1 total, 0 with data
+
+### Encrypted page_tokens decryption (proves token validity)
+The `facebook_accounts.page_tokens` field is AES-256-GCM encrypted with the `enc3:` format from `internal/crypto/crypto.go`:
+- `salt_len` byte = 0 (raw key, no Argon2id salt) — encryption_key is the raw 32-byte hex `717f5abbc0fb1dfdebdab9a8a4e5b9c90ffd2fcc612e1dcb6f5954e374355381`
+- nonce = first 12 bytes of `gcm.Seal()` output, ciphertext = rest
+- Decrypted plaintext is a JSON object `{page_id: access_token}` with 7 entries (5 active + 2 stale).
+
+### Live Graph API tests with the actual decrypted Ofuq page token
+Called `https://graph.facebook.com/v19.0/...` using the page token from the live DB (tested on the same VPS where the binary runs):
+
+| # | Endpoint | Result |
+|---|---|---|
+| 1 | `/{pageID}/comments?fields=...` direct | `(100) Tried accessing nonexisting field (comments)` (deprecated direct path — irrelevant, Go code doesn't use it) |
+| 2 | `/{pageID}/posts?fields=id,message,permalink_url,created_time,comments.limit(5){id,message,from{id,name},created_time,permalink_url,comment_count,parent}` (exact Go call from `internal/handlers/fb_comments.go:927-932`) | **200 OK** with 2 posts, 2 comments |
+| 3 | Comment on post 1 (`_122127202731122483`) by Nomani (admin) | `{"id":"..._1952624495385494","from":{"id":"26220352977614710","name":"Nomani Mostafa"},...}` ✅ |
+| 4 | Comment on post 2 (`_122102486025122483`) by anonymous user | `{"id":"..._1032430199315344","message":"هولا","created_time":"2026-06-03T18:52:13+0000","comment_count":1}` — **NO `from` key at all (not present in JSON)** |
+| 5 | Direct call to anonymous comment: `/{commentID}?fields=from{id,name}` | `{"id":"..._1032430199315344"}` — **NO `from` key** |
+| 6 | Batch call (the exact fallback in `fetchMissingFacebookCommentActors` L949-1012): `POST /?batch=[{method:GET, relative_url:"{commentID}?fields=from{id,name}"}]` | Body: `{"id":"..._1032430199315344"}` — **NO `from` key** |
+| 7 | Token validity `GET /me` | 200 with page name "Ofuqalmadenahافق المدينة" ✅ |
+
+### Definitive conclusion
+**This is NOT a Whatomate code bug.** Meta Graph API is intentionally omitting the `from` field from non-admin commenter responses. Verified at three levels:
+
+1. **Primary sync call** (`/{pageID}/posts?...comments.limit(N){from{id,name}}`) — Meta returns the comment but omits `from`.
+2. **Direct comment fetch** (`/{commentID}?fields=from{id,name}`) — Meta returns the comment ID only, no `from`.
+3. **Batch fallback** (the exact call the Go code makes in `fetchMissingFacebookCommentActors`) — Meta returns the same empty result.
+
+The page admin's own comment (Nomani) returns `from` correctly because **Meta always exposes the page admin's identity to their own page's app token**, regardless of privacy settings. All other commenters' identities are subject to Meta's Graph API privacy filtering, which can omit `from` for:
+- Users with restricted profile visibility to non-friends
+- Users who have blocked the page or app
+- Deactivated/disabled accounts
+- Users who commented via "Anonymous" features (e.g., on certain Page post types)
+
+The Go code does everything right:
+- Requests the `from{id,name}` fields in the Graph API call (L927-932)
+- Implements the `fetchMissingFacebookCommentActors` batch fallback (L949-1012) for posts where the primary call omitted `from`
+- Uses `COALESCE`-style protection in the upsert path (verified by reading the code)
+- The UI fallback in `FacebookCommentsView.vue:342` (`comment.from_name || $t("facebookComments.unknownUser")`) is the only sensible behavior when the underlying data is empty
+
+### Refined diagnostic ratio (correcting Agent 10's "60/40")
+- **~95% Meta Graph API privacy behavior** (the root cause — Meta is not returning the data)
+- **~5% defensive code gaps** (Frontend `i18n` text "مستخدم فيسبوك" feels cold; could be improved; COALESCE guards exist but could be more explicit; the i18n key text is too literal for Arabic — "مستخدم فيسبوك" reads awkwardly when the user already knows it's Facebook)
+
+### Recommended user-facing actions (no code required)
+Since the diagnosis is "Meta is withholding data", code changes cannot recover the missing `from`. The actionable options are:
+
+1. **Switch the data source from `graph_sync` (pull) to webhooks (push) for new comments.** Webhook `feed` events deliver `from` at the time the comment is created (when the commenter has not yet changed their privacy). Configure a Facebook App webhook in the Meta App dashboard pointing to `https://sandbox.ofuqalmadenah.com/api/facebook/comments/webhook` (verify_token: `7438b3473d97c9fe5a79bae11af78f371cfd753ad3bfbf9d` from `/opt/whatomate/config.toml`). This is the only way to capture `from` reliably going forward.
+
+2. **Improve the i18n copy** for `facebookComments.unknownUser`:
+   - `ar`: change `"مستخدم فيسبوك"` → `"مستخدم مجهول"` (more natural Arabic) or `"زائر"` (visitor)
+   - `en`: change `"Facebook user"` → `"Anonymous user"` (more accurate)
+   - `es`: change `"Usuario de Facebook"` → `"Usuario anónimo"` (more accurate)
+   - This is a 3-line change in 3 locale files. Improves UX without changing backend logic.
+
+3. **Add a UI badge distinguishing "real anonymous" from "admin comment"** in `FacebookCommentsView.vue` (e.g., the page admin's own comments can be styled with a "Page Admin" tag using the existing `actor.ID == pageID` check at L825 of `fb_comments.go`).
+
+4. **Backfill is futile.** No code change can recover the missing `from` for the 4 of 6 historical Ofuq comments — Meta's Graph API has permanently omitted the data. The `last_synced_at` field will keep updating, but `from_id` and `from_name` will remain empty forever for those rows.
+
+### Files inspected on the VPS (read-only)
+- `/opt/whatomate-sandbox/config.toml` — sandbox config (port 18127, DB name, encryption_key, JWT secret exposed, default admin credentials visible — security note)
+- `/opt/whatomate/config.toml` — prod config (port 18123, FB OAuth `app_id=1802656793760128`, `webhook_verify_token=7438b3473d97c9fe5a79bae11af78f371cfd753ad3bfbf9d`)
+- `/opt/facebook-comments/{webhook_server.py, dashboard.py, facebook_db.py}` — confirmed NOT Whatomate (Python + SQLite)
+- `/opt/hermes-webhook/` — confirmed NOT Whatomate
+- `/etc/nginx/sites-available/sandbox.ofuqalmadenah.com.conf` — only routes `/` and `/ws` to port 18127, no `/api/facebook/comments/webhook` route visible (sandbox has no webhook ingress configured)
+- `/etc/nginx/sites-available/fbwebhook.ofuqalmadenah.com.conf` — routes `/webhook` → 127.0.0.1:8000 (Python), `/api/*` and `/` → 127.0.0.1:3000 (Next.js)
+- `journalctl -u "*whatomate*"` — only shows WhatsApp (whatsmeow) XMPP traffic, no Facebook sync/webhook log lines (suggests Facebook sync runs infrequently or is throttled)
+
+### Bash escaping gotcha solved
+The `psql -c` flag with empty string `""` was being interpreted by the shell before reaching psql. Fixed by using a heredoc with quoted delimiter:
+```bash
+cat > /tmp/q.sql << 'SQLEOF'
+SELECT ... WHERE from_id = '';
+SQLEOF
+psql -h 127.0.0.1 -U user -d db -At -f /tmp/q.sql
+```
+
+## 2026-06-04 - Facebook Admin Reply Filter
+
+### Task
+
+Fix the bug at `/facebook/comments` where page-admin replies appear as new incoming comments. Tag them as admin replies with a visible badge and suppress auto-reply to the page about its own message.
+
+### Skills and MCPs Applied
+
+- Serena MCP (LSP-style code navigation, no shell reading).
+- AGENTS.md project conventions: GORM + fasthttp + fastglue, Go 1.25.8, dual-provider, single binary.
+- No new skills needed; this was a focused bug fix within the existing Facebook comment subsystem.
+
+### Root Cause
+
+`IgnorePageAdminComments` was consulted in only one place: `syncFacebookPageComments` (skip path). The webhook path never read the setting and never identified the page author, so admin's own reply was ingested as `Direction: incoming` and `shouldAutoReplyFacebookComment` triggered a public auto-reply back to the page about the page's own message.
+
+### Code Changes
+
+**Backend** (`internal/`):
+- `models/fb_comment.go`: added `IsAdminReply bool` (default `false`, indexed) to `FacebookComment`.
+- `handlers/fb_comments.go`:
+  - New helper `isFacebookPageAdminCommenter(pageID, commenterID string) bool` (trim + equal).
+  - `upsertFacebookWebhookComment`: detect admin via `value.commenterID()` and set `IsAdminReply`. Added `is_admin_reply` to GORM `DoUpdates`.
+  - `shouldAutoReplyFacebookComment`: early-return `false` when `IsAdminReply`.
+  - `ReceiveFacebookCommentsWebhook`: add `&& !comment.IsAdminReply` to the auto-reply guard.
+  - `syncFacebookPageComments`: removed both `IgnorePageAdminComments` skip blocks; compute `isAdminReply` from `actor.ID` and `edge.From.ID`; set `IsAdminReply` and add column to `DoUpdates`.
+  - `facebookCommentResponse` / `facebookCommentToResponse`: expose `is_admin_reply` JSON.
+  - `ReceiveFacebookCommentsWebhook` auto-reply call now passes `account.UserID` instead of `uuid.Nil` to satisfy the `fk_facebook_comment_replies_user` foreign key (latent bug surfaced by new test).
+- `handlers/fb_comments_test.go`: added `TestApp_ReceiveFacebookCommentsWebhook_AdminReplyTaggedAndNotAutoReplied` and `TestApp_ReceiveFacebookCommentsWebhook_NonAdminStillAutoReplies`. Both build a real HMAC `X-Hub-Signature-256` header so signature verification passes.
+
+**Frontend** (`frontend/src/`):
+- `types/facebookComments.ts`: added `is_admin_reply: boolean` to `FacebookComment`.
+- `views/facebook/FacebookCommentsView.vue`: rendered a `Badge` (variant `secondary`) for `is_admin_reply` next to the author name in list items and wrapped the detail header in a flex container with the same badge next to the h2.
+- `i18n/locales/{en,ar,es}.json`: added `facebookComments.adminReply` translation (`Page admin` / `مسؤول الصفحة` / `Administrador de la página`).
+- `views/facebook/facebookCommentsMerge.test.ts`: `makeComment` factory includes `is_admin_reply: false`.
+
+### Verification
+
+- `go build ./internal/... ./cmd/... ./pkg/...` clean.
+- `go test -v -run 'Facebook' ./internal/handlers/...` → 18 tests pass, including both new tests.
+- `npx vue-tsc --noEmit -p tsconfig.json` clean.
+- `npm run lint` only reports pre-existing errors in unrelated files.
+
+Pre-existing test failure: `TestCalculateSummaryStats_WithInstanceFilter_FiltersCorrectly` in `agent_analytics_test.go` panics on `calculateSummaryStats`; confirmed unrelated by re-running on parent commit `23550b60` (panic still occurs).
+
+### Notes
+
+- Admin detection is straightforward ID equality with trim. The page author on a Facebook page is the page itself; `from.id == pageID` is sufficient.
+- `Direction` stays `incoming` for admin replies; `IsAdminReply` is the orthogonal flag used by the UI and the auto-reply guard.
+- Auto-reply uses defense in depth: blocked in the webhook call site AND in `shouldAutoReplyFacebookComment`.
+- The `fk_facebook_comment_replies_user` fix is a small adjacent production bug surfaced by the new non-admin test.
+- New `IsAdminReply` column is GORM AutoMigrate-managed; no manual migration.

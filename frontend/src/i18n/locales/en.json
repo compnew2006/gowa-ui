@@ -26,6 +26,7 @@
     "refresh": "Refresh",
     "select": "Select",
     "retry": "Retry",
+    "undo": "Undo",
     "copy": "Copy",
     "copied": "Copied!",
     "download": "Download",
@@ -3214,9 +3215,17 @@
     "sendReply": "Send reply",
     "close": "Close",
     "reopen": "Reopen",
-    "autoReply": "Auto reply",
-    "agentReply": "Agent reply",
-    "productionNote": "Private replies depend on Facebook page permissions and Graph API rules. Failed Graph calls are saved with their error status.",
+  "autoReply": "Auto reply",
+  "agentReply": "Agent reply",
+  "adminReply": "Page admin",
+  "dmNotAvailable": "DM not available (user cannot be messaged)",
+  "replyStatus": {
+    "sent": "Sent",
+    "partial": "Partial",
+    "failed": "Failed",
+    "skipped": "Skipped"
+  },
+  "productionNote": "Private replies depend on Facebook page permissions and Graph API rules. Failed Graph calls are saved with their error status.",
     "enableFeature": "Enable comment inbox",
     "enableAutoReply": "Enable automatic replies",
     "autoCommentText": "Automatic public comment reply",
@@ -3242,6 +3251,8 @@
       "replySent": "Reply sent",
       "replyFailed": "Failed to send reply",
       "statusUpdated": "Comment status updated",
+      "statusUpdatedDesc": "Changed from {from} to {to}",
+      "statusReverted": "Comment status reverted",
       "statusFailed": "Failed to update comment status"
     }
   }

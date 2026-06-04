@@ -4,7 +4,134 @@ Generated: 2026-02-25 23:25:52 UTC
 Server IP: 31.97.192.53
 Base Domain Pattern (suggested): <tenant>.ofuqalmadenah.com
 
+## Sandbox Deploy Note - 2026-06-03 19:34 UTC — fbcomments-realtime-push-10903-skip
+
+- Sandbox green hotfix: 2026-06-03 19:34 UTC
+- Active sandbox green binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_223000_fbcomments_realtime_push_10903_skip
+- Sandbox blue rollback binary: /opt/whatomate/bin/whatomate.sandbox.blue.20260603_193118_before_realtime_push
+- Installed SHA256: cbef8d21b9c9818bc2e867a9ffdfe2c35ba3e0e5f5411b76ba0e11f6e34d5ca5
+- Version: sandbox-green-20260603_223000-fbcomments-realtime-push-10903-skip
+- Build: linux/amd64, CGO disabled, embedded license public key ring (kid=deploy-20260416), embedded frontend dist.
+- Source HEAD: 23550b60 with uncommitted changes:
+  - **Backend** (`internal/`):
+    - `internal/websocket/messages.go` — added `TypeFacebookCommentCreated` and `TypeFacebookCommentUpdated` constants
+    - `internal/handlers/fb_comments.go` — `ReceiveFacebookCommentsWebhook` now broadcasts `Created`/`Updated` per row after upsert. `sendAndStoreFacebookCommentReply` rewritten: catches 10903 ("user can't be DM'd") and records reply as `status=skipped` with `metadata.dm_skipped=true` (was `partial`), so the comment stays `replied` when the public reply succeeded. `UpdateFacebookCommentStatus` also broadcasts `Updated`. Added `isFacebookUserCantDMError` helper.
+    - `internal/handlers/export_test.go` (new) — exposes `IsFacebookUserCantDMError` to external test packages
+    - `internal/handlers/testhelpers_test.go` — `withWSHub()` option to inject a real `*websocket.Hub`
+    - `internal/handlers/fb_comments_test.go` — 4 new tests: `TestHandleFacebookWebhookComment_BroadcastsCreated`, `_BroadcastsUpdatedOnDuplicate`, `TestUpdateFacebookCommentStatus_BroadcastsUpdated`, `TestSendAndStoreFacebookCommentReply_SkipsOnFacebookUserCantDMError`. 9/9 facebook-package tests pass.
+    - `internal/models/fb_comment.go` — `AutoPrivateReplyEnabled` default flipped from `true` to `false`
+  - **Frontend** (`frontend/src/`):
+    - `frontend/src/services/websocket.ts` — added `WS_TYPE_FACEBOOK_COMMENT_CREATED` and `WS_TYPE_FACEBOOK_COMMENT_UPDATED` constants (exported)
+    - `frontend/src/views/facebook/FacebookCommentsView.vue` — `onMounted` subscribes `handleCommentCreated`/`handleCommentUpdated`; `onUnmounted` unsubscribes. Reply Badge uses localized `replyStatus.{sent,partial,failed,skipped}` with variant mapping (destructive/secondary/outline/default). "DM not available" indicator via `isReplySkipped(reply)`.
+    - `frontend/src/views/facebook/facebookCommentsMerge.ts` (new) — pure helpers `applyCommentCreated`, `applyCommentUpdated`, `isReplySkipped`. Returns `MergeResult{comments, appended, replaced, prependIndex}`. Preserves `replies` when payload omits them.
+    - `frontend/src/views/facebook/facebookCommentsMerge.test.ts` (new) — 13 vitest tests, 4ms
+    - `frontend/src/i18n/locales/{en,ar,es}.json` — `dmNotAvailable` + `replyStatus.{sent,partial,failed,skipped}` keys
+- Verification:
+  - `systemctl restart whatomate-sandbox` → active since 2026-06-03 19:34 UTC
+  - `curl http://127.0.0.1:18127/api/license/bootstrap` → `{"status":"active","key_id":"deploy-20260416","tier":"production",...}`
+  - **E2E live**: Python WS client on `wss://sandbox.ofuqalmadenah.com/ws` (via `whm_access` cookie → `/api/auth/ws-token` → `Authorization: Bearer <token>`) received `{"type":"facebook_comment_created","payload":{...full comment with from_id, from_name, status:"open", replies:[]}}` within 1 second of the HMAC-signed webhook POST. Test data (temp OAuth account + 4 comments + replies) cleaned up after verify.
+  - **Frontend**: 13/13 vitest tests pass, eslint clean, vue-tsc --noEmit clean
+- Open items: 10903 path unit-tested but not yet exercised live on a real comment; `AutoPrivateReplyEnabled` default flip pending DB row awareness; 1018 historical empty-from_id rows still awaiting backfill decision; 401s on `/api/facebook/comments` and `/api/auth/logout` root-caused to production frontend JWT 15min TTL + missing silent refresh (OUT OF SCOPE).
+
+## Sandbox Deploy Note - 2026-06-03 18:24 UTC — fbcomments-from-payload-fix
+
+- Sandbox green hotfix: 2026-06-03 18:24:33 UTC
+- Active sandbox green binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_182041_fbcomments_from_payload_fix
+- Sandbox blue rollback binary (unchanged from prior deploy): /opt/whatomate/bin/whatomate.sandbox.green.20260603_155700_fbcomment_page_messages_private_reply_license
+- Archived pre-fix green: /opt/whatomate/bin/whatomate.sandbox.green.20260603_172836_fbpage_comments_harden_license.archived-20260603_182243
+- Installed SHA256: 7eb9180d46eda60dbe811793c16921fd6cb30c400804c72e55b6785fd01147f8
+- Version: sandbox-green-20260603_182041-fbcomments-from-payload-fix
+- Build: linux/amd64, CGO disabled, embedded license public key ring (kid=deploy-20260416), embedded frontend dist.
+- Source HEAD: 23550b60 with uncommitted Facebook from-payload fix:
+  - internal/handlers/fb_comments.go: added `From facebookCommentsWebhookActor` field on `facebookCommentsWebhookValue` + `commenterID()` / `commenterName()` helpers; `upsertFacebookWebhookComment` now uses them. Prevents the `value.sender_*` legacy keys from being read for comment/feed webhooks (which deliver `value.from.{id,name}`), which was the cause of all 2026-06-03 webhooks storing `from_id=NULL, from_name=NULL`.
+  - internal/handlers/fb_comments_test.go (new): 3 tests added — `PopulatesFromPayload`, `FallsBackToSenderFields`, `FromWebhookEndToEnd`. All 7 facebook-package tests pass.
+  - test/testutil/db.go: per-test unique pageID via `fmt.Sprintf("page-%s", t.Name())` so `t.Parallel()` stays safe.
+- Bug impact: 1018 rows in last 30 days were stored with `from_id=NULL` (965 on page 248262288519219 Amin Eldeshnawy, 26 on 106812225128833, 23 on 815073515173177, 3 on 895247390337022, 1 on 110627688093389). Same root cause also blocked `sendFacebookPrivateReply` → `sendFacebookDirectMessengerMessage` fallback on `code=10903` (skipped silently when senderID was empty).
+- Verification:
+  - `systemctl restart whatomate-sandbox` → active since 2026-06-03 18:24:33 UTC, PID 2175027
+  - `curl http://127.0.0.1:18127/api/license/bootstrap` → `{"enabled":true,"status":"active","locked":false,"key_id":"deploy-20260416",...}`
+  - `POST https://sandbox.ofuqalmadenah.com/api/facebook/comments/webhook` with HMAC-SHA256-signed `verb=add` payload containing `from:{id:"psid-1780511343-69956",name:"Live Verify Bot"}` → `{"processed":1,"status":"ok","auto_replies":0}`. DB row inserted with `from_id=psid-1780511343-69956`, `from_name="Live Verify Bot"`. **Fix verified end-to-end.**
+  - Test comment row + reply row cleaned up after verify (1 row each).
+- Open items: 1018 historical empty-from_id rows awaiting backfill decision; 401s on `/api/facebook/comments` and `/api/auth/logout` to be investigated.
+
+## Sandbox Deploy Note - 2026-06-03 17:32 UTC
+
+- Sandbox green hotfix: 2026-06-03 17:32 UTC
+- Sandbox domain: sandbox.ofuqalmadenah.com
+- Sandbox service: whatomate-sandbox.service
+- Active sandbox selector: /opt/whatomate/bin/whatomate.sandbox.active
+- Active sandbox green binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_172836_fbpage_comments_harden_license
+- Sandbox blue rollback binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_155700_fbcomment_page_messages_private_reply_license
+- Pre-deploy backup: /root/whatomate_backups/sandbox-predeploy-20260603_172906
+- Installed SHA256: 2eb6cf8a31137be1293ec9ed319c4be5c69b7d9942153bad9391178797f3a1f2
+- Version: sandbox-green-23550b60-fbpage-comments-harden-20260603_172836
+- Build: linux/amd64, CGO disabled, embedded license public key ring (kid=deploy-20260416), embedded frontend dist.
+- Source HEAD: 23550b60 with uncommitted Facebook hardening changes:
+  - internal/handlers/fb_oauth.go: nil-safe `facebookOAuthCallbackURL` (was panicking when request was nil)
+  - internal/handlers/fb_comments.go: removed broken bare-suffix retry in `sendFacebookPrivateReply`; fixed pre-existing GORM session bug in `sendAndStoreFacebookCommentReply` using `db.Session(&gorm.Session{NewDB: true})` to avoid `Statement.Dest` reuse from prior `db.Create(&reply)`
+  - test/testutil/db.go: added Facebook models to migrations and cleanup
+  - internal/handlers/fb_comments_test.go: 4/4 Facebook reply tests pass locally
+- Sandbox switch script: /usr/local/sbin/whatomate-sandbox-switch (also linked at /opt/whatomate/bin/switch-sandbox-blue-green.sh).
+  - Usage: `whatomate-sandbox-switch {status|green|blue|toggle|version}`.
+  - Performs health check on `http://127.0.0.1:18127/api/license/bootstrap`; auto-rolls back to blue if green is not active.
+- Verification:
+  - `systemctl restart whatomate-sandbox` → `active`
+  - `curl http://127.0.0.1:18127/api/license/bootstrap` → `{"status":"success","data":{"enabled":true,"status":"active","locked":false,"key_id":"deploy-20260416",...}}`
+  - `curl -I https://sandbox.ofuqalmadenah.com/` → HTTP/2 200 from nginx (HEAD not supported by SPA, GET returns full HTML with embedded dist)
+  - `POST https://sandbox.ofuqalmadenah.com/api/auth/login` with admin@whatomate.local → success with user object, full organization tree
+  - Production binary untouched: /opt/whatomate/bin/whatomate.green.20260528_111523
+  - All four live tenant services (`whatomate`, `whatomate@holol-wenjaz`, `whatomate@alarkan-almthalia`, `whatomate@matbaat-ruya`) unchanged
+- Change: One command to toggle sandbox blue↔green: `whatomate-sandbox-switch`
+
 ## Sandbox Deploy Note - 2026-06-03
+
+- Sandbox green hotfix: 2026-06-03 15:57 UTC
+- Active sandbox green binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_155700_fbcomment_page_messages_private_reply_license
+- Sandbox blue rollback binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_154100_fbcomment_private_reply_fallback_license
+- Installed SHA256: 612bd20b4c3988f845c44f3c700db9f4b06cb75a1e058c356f38fe65233626e3
+- Version: sandbox-green-23550b60-fbcomment-page-messages-private-reply-20260603_155700
+- Change: Facebook private replies now use the Dashboard-proven Messenger Private Reply API: POST /{page_id}/messages with JSON recipient.comment_id and message.text. If Meta still rejects the comment private reply with code=100/subcode=33, the code falls back to the direct Messenger /me/messages RESPONSE path using the comment sender id.
+- Verification: service active, https://sandbox.ofuqalmadenah.com/login returned 200, license bootstrap remained enabled=true/status=active/key_id=deploy-20260416.
+
+- Sandbox green hotfix: 2026-06-03 15:41 UTC
+- Active sandbox green binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_154100_fbcomment_private_reply_fallback_license
+- Sandbox blue rollback binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_152900_fbcomment_graph_error_license
+- Installed SHA256: 96e0dfe78ba202887058b258ad9b94834582ca37c3829266798c23017e0ac226
+- Version: sandbox-green-23550b60-fbcomment-private-reply-fallback-20260603_154100
+- Change: Facebook private replies now retry once with the bare comment ID when Meta rejects the stored post_comment composite ID with code=100/subcode=33. Public comment replies still use the original external ID.
+- Verification: service active, https://sandbox.ofuqalmadenah.com/login returned 200, license bootstrap remained enabled=true/status=active/key_id=deploy-20260416.
+
+- Sandbox green hotfix: 2026-06-03 15:29 UTC
+- Active sandbox green binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_152900_fbcomment_graph_error_license
+- Sandbox blue rollback binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_152200_fbcomment_reply_scopefix_license
+- Installed SHA256: d7aed0da2aa60de3e7255e9782e91c9ec0ff510af71020cb1d69b29547cc4312
+- Version: sandbox-green-23550b60-fbcomment-grapherr-20260603_152900
+- Change: Facebook Graph API non-2xx responses now preserve the Graph error message/code/subcode/type in the stored reply error, so private-reply failures expose the exact Meta rejection reason instead of only status 400.
+- Verification: service active, https://sandbox.ofuqalmadenah.com/login returned 200, license bootstrap remained enabled=true/status=active/key_id=deploy-20260416.
+
+- Sandbox green hotfix: 2026-06-03 15:22 UTC
+- Active sandbox green binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_152200_fbcomment_reply_scopefix_license
+- Sandbox blue rollback binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_151400_fbcomment_reply_lookup_license
+- Backup binary created: /opt/whatomate/bin/whatomate.sandbox.green.20260603_151400_fbcomment_reply_lookup_license.predeploy_20260603_152200.bak
+- Installed SHA256: 0e051a4f8d832c638365ccfd0069f07a136f09e718c6a040a60299ebca55724f
+- Version: sandbox-green-23550b60-fbcomment-reply-scopefix-20260603_152200
+- Change: Facebook comment reply/status lookup now uses the base DB with explicit organization_id filters, avoiding stale request-scoped tenant DB conflicts that returned 404 for existing comments.
+- Verification: service active, https://sandbox.ofuqalmadenah.com/login returned 200, license bootstrap returned enabled=true/status=active/key_id=deploy-20260416.
+
+- Sandbox green redeploy: 2026-06-03 15:14 UTC
+- Sandbox domain: sandbox.ofuqalmadenah.com
+- Sandbox service: whatomate-sandbox.service
+- Active sandbox selector: /opt/whatomate/bin/whatomate.sandbox.active
+- Active sandbox green binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_151400_fbcomment_reply_lookup_license
+- Sandbox blue rollback binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_145935_fbcomments_scope_fix
+- Backup binary created: /opt/whatomate/bin/whatomate.sandbox.green.20260603_145935_fbcomments_scope_fix.predeploy_20260603_150900.bak
+- Installed SHA256: 20f1943b265f29611c4e8cd8f728c7b2354a29dbef6beaed315f30f991a449ad
+- Version: sandbox-green-23550b60-fbcomment-reply-20260603_151400
+- Change: deployed current local build with Facebook comment reply lookup accepting internal UUID or Facebook external_id, with embedded license public key ring.
+- License verification: /api/license/bootstrap returned enabled=true, status=active, key_id=deploy-20260416.
+- Browser verification: Chrome DevTools loaded https://sandbox.ofuqalmadenah.com/login, no console errors, license bootstrap returned active.
+- Switch command: `whatomate-sandbox-switch green`, `whatomate-sandbox-switch blue`, or `whatomate-sandbox-switch toggle`.
+- Temporary build source removed from VPS after install; only binaries/config/uploads/docs remain.
 
 - Sandbox domain: sandbox.ofuqalmadenah.com
 - Sandbox service: whatomate-sandbox.service

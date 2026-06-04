@@ -132,6 +132,11 @@ func runMigrations(db *gorm.DB) error {
 		&models.AgentSelectionOption{},
 		&models.AgentSelectionSession{},
 		&models.AgentSelectionAuditEvent{},
+		// Facebook models
+		&models.FacebookAccount{},
+		&models.FacebookComment{},
+		&models.FacebookCommentReply{},
+		&models.FacebookCommentSettings{},
 	)
 	// Mirror the production pre-migration fix so tests use the partial unique
 	// index and can reproduce the "delete then re-add" scenario.
@@ -205,6 +210,11 @@ func cleanupTables(db *gorm.DB) {
 		"agent_selection_options",
 		"agent_selection_participants",
 		"agent_selection_settings",
+		// Facebook tables
+		"facebook_comment_replies",
+		"facebook_comments",
+		"facebook_comment_settings",
+		"facebook_accounts",
 	}
 
 	for _, table := range tables {
@@ -261,6 +271,11 @@ func TruncateTables(db *gorm.DB) {
 		"agent_selection_options",
 		"agent_selection_participants",
 		"agent_selection_settings",
+		// Facebook tables
+		"facebook_comment_replies",
+		"facebook_comments",
+		"facebook_comment_settings",
+		"facebook_accounts",
 	}
 
 	for _, table := range tables {

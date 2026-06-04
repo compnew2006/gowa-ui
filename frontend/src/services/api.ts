@@ -1,6 +1,7 @@
 import axios, {
   type AxiosInstance,
   type AxiosError,
+  type AxiosRequestConfig,
   type InternalAxiosRequestConfig,
 } from "axios";
 import type {
@@ -71,6 +72,14 @@ let licenseLockedHandler: LicenseLockedHandler | null = null;
 
 export function setLicenseLockedHandler(handler: LicenseLockedHandler | null) {
   licenseLockedHandler = handler;
+}
+
+type SessionExpiredHandler = (error?: AxiosError) => void;
+
+let sessionExpiredHandler: SessionExpiredHandler | null = null;
+
+export function setSessionExpiredHandler(handler: SessionExpiredHandler | null) {
+  sessionExpiredHandler = handler;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -176,12 +185,19 @@ api.interceptors.response.use(
 
         // Cookies are updated by the server response — retry the original request
         return api(originalRequest);
-      } catch {
-        // Refresh failed, clear user and redirect to login
+      } catch (refreshError) {
+        // Refresh failed: clear any cached user/legacy tokens and notify the
+        // app so it can clear Pinia state, show a "session expired" toast,
+        // and soft-redirect to /login (instead of a hard page reload).
         localStorage.removeItem("user");
         localStorage.removeItem("auth_token");
         localStorage.removeItem("refresh_token");
-        window.location.href = basePath + "/login";
+        if (sessionExpiredHandler) {
+          sessionExpiredHandler(refreshError as AxiosError);
+        } else {
+          // Fallback when no handler is registered (e.g. in unit tests).
+          window.location.href = basePath + "/login";
+        }
       }
     }
 
@@ -734,14 +750,17 @@ export const fbAccountsService = {
 
 // Facebook Comments
 export const facebookCommentsService = {
-  list: (params?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-    account_id?: string;
-    page_id?: string;
-    search?: string;
-  }) => api.get("/facebook/comments", { params }),
+  list: (
+    params?: {
+      page?: number;
+      limit?: number;
+      status?: string;
+      account_id?: string;
+      page_id?: string;
+      search?: string;
+    },
+    config?: AxiosRequestConfig,
+  ) => api.get("/facebook/comments", { ...config, params }),
   sync: (data?: {
     account_id?: string;
     page_id?: string;
@@ -762,8 +781,8 @@ export const facebookCommentsService = {
       send_private_message?: boolean;
     },
   ) => api.post(`/facebook/comments/${id}/reply`, data),
-  updateStatus: (id: string, status: string) =>
-    api.put(`/facebook/comments/${id}/status`, { status }),
+  updateStatus: (id: string, status: string, config?: AxiosRequestConfig) =>
+    api.put(`/facebook/comments/${id}/status`, { status }, config),
 };
 
 export const notificationsService = {

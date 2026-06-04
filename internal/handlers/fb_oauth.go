@@ -380,14 +380,18 @@ func (a *App) facebookOAuthRuntimeConfig(r *fastglue.Request) (facebookOAuthRunt
 
 func (a *App) facebookOAuthCallbackURL(r *fastglue.Request) string {
 	scheme := "https"
-	if a != nil && a.Config != nil && !r.RequestCtx.IsTLS() && a.Config.App.Environment == "development" {
+	if a != nil && a.Config != nil && r != nil && !r.RequestCtx.IsTLS() && a.Config.App.Environment == "development" {
 		scheme = "http"
+	}
+	host := "localhost"
+	if r != nil {
+		host = string(r.RequestCtx.Host())
 	}
 	basePath := ""
 	if a != nil && a.Config != nil {
 		basePath = sanitizeRedirectPath(a.Config.Server.BasePath)
 	}
-	return fmt.Sprintf("%s://%s%s/api/facebook/oauth/callback", scheme, string(r.RequestCtx.Host()), basePath)
+	return fmt.Sprintf("%s://%s%s/api/facebook/oauth/callback", scheme, host, basePath)
 }
 
 func facebookOAuthAuthURL(cfg facebookOAuthRuntimeConfig, state string) string {
@@ -664,9 +668,29 @@ func (a *App) facebookGraphRequest(req *http.Request) (map[string]any, error) {
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return payload, fmt.Errorf("Facebook Graph API returned status %d", resp.StatusCode)
+		return payload, facebookGraphResponseError(resp.StatusCode, payload)
 	}
 	return payload, nil
+}
+
+func facebookGraphResponseError(statusCode int, payload map[string]any) error {
+	if rawErr, ok := payload["error"].(map[string]any); ok {
+		parts := []string{fmt.Sprintf("Facebook Graph API returned status %d", statusCode)}
+		if message := strings.TrimSpace(fmt.Sprint(rawErr["message"])); message != "" && message != "<nil>" {
+			parts = append(parts, message)
+		}
+		if code := strings.TrimSpace(fmt.Sprint(rawErr["code"])); code != "" && code != "<nil>" {
+			parts = append(parts, "code="+code)
+		}
+		if subcode := strings.TrimSpace(fmt.Sprint(rawErr["error_subcode"])); subcode != "" && subcode != "<nil>" {
+			parts = append(parts, "subcode="+subcode)
+		}
+		if typ := strings.TrimSpace(fmt.Sprint(rawErr["type"])); typ != "" && typ != "<nil>" {
+			parts = append(parts, "type="+typ)
+		}
+		return errors.New(strings.Join(parts, ": "))
+	}
+	return fmt.Errorf("Facebook Graph API returned status %d", statusCode)
 }
 
 func (a *App) facebookJSONRequest(method, endpoint string, body io.Reader, out any) error {

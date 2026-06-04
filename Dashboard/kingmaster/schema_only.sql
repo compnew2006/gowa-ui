@@ -30,7 +30,9 @@ CREATE TABLE `accounts` (
 -- ------------------------------------------
 -- Table: announcements (0 rows)
 -- ------------------------------------------
+SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS `announcements`;
+SET FOREIGN_KEY_CHECKS = 1;
 CREATE TABLE `announcements` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `title` varchar(255) NOT NULL,
@@ -538,8 +540,8 @@ CREATE TABLE `messenger_templates` (
 DROP TABLE IF EXISTS `mlm_commissions`;
 CREATE TABLE `mlm_commissions` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `user_id` int(11) NOT NULL,
-  `from_user_id` int(11) NOT NULL,
+  `user_id` varchar(255) NOT NULL,
+  `from_user_id` varchar(255) NOT NULL,
   `commission_type` enum('direct','indirect') NOT NULL,
   `level_number` int(11) NOT NULL,
   `amount` decimal(10,2) NOT NULL,
@@ -551,9 +553,7 @@ CREATE TABLE `mlm_commissions` (
   PRIMARY KEY (`id`),
   KEY `idx_user_id` (`user_id`),
   KEY `idx_from_user_id` (`from_user_id`),
-  KEY `idx_created_at` (`created_at`),
-  CONSTRAINT `mlm_commissions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `mlm_users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `mlm_commissions_ibfk_2` FOREIGN KEY (`from_user_id`) REFERENCES `mlm_users` (`id`) ON DELETE CASCADE
+  KEY `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------
