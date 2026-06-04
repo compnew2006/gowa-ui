@@ -11,7 +11,7 @@ import (
 
 const (
 	recipientLockKeyPrefix = "whatomate:campaign:recipient:lock:"
-	recipientLockTTL       = 2 * time.Minute
+	recipientLockTTL       = 30 * time.Minute
 )
 
 func recipientLockKey(recipientID uuid.UUID) string {

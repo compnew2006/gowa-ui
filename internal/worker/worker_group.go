@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/contactutil"
 	"github.com/compnew2006/whatomate/internal/models"
@@ -65,8 +66,29 @@ func (w *Worker) handleGroupRecipientJob(ctx context.Context, job *queue.Recipie
 	recipient.TemplateParams = mergedTemplateParams
 
 	delayScopeKey := resolveCampaignDelayScopeKey(campaign.WhatsAppAccount, campaign.ID)
-	if err := w.applyCampaignSendDelay(ctx, delayScopeKey, campaign.MinDelaySeconds, campaign.MaxDelaySeconds); err != nil {
-		return fmt.Errorf("failed to apply campaign send delay: %w", err)
+	delayDuration, delayErr := w.computeCampaignDelayDuration(ctx, delayScopeKey, campaign.MinDelaySeconds, campaign.MaxDelaySeconds)
+	if delayErr != nil {
+		return fmt.Errorf("failed to compute campaign send delay: %w", delayErr)
+	}
+
+	if delayDuration > 0 && w.Redis != nil {
+		if transErr := w.transitionRecipientToSending(ctx, job.RecipientID); transErr != nil {
+			w.Log.Warn("Group recipient already being sent by another worker", "recipient_id", job.RecipientID, "error", transErr)
+			return nil
+		}
+		sendAt := time.Now().Add(delayDuration)
+		if schedErr := w.scheduleRecipientSend(ctx, job, sendAt); schedErr != nil {
+			w.Log.Error("Failed to schedule group send, falling back to immediate", "error", schedErr, "recipient_id", job.RecipientID)
+			w.updateRecipientStatus(job.RecipientID, models.MessageStatusPending, "", "")
+		} else {
+			return nil
+		}
+	}
+
+	if delayDuration > 0 && w.Redis == nil {
+		if sleepErr := sleepWithContext(ctx, delayDuration); sleepErr != nil {
+			return fmt.Errorf("campaign delay interrupted: %w", sleepErr)
+		}
 	}
 
 	if w.MessageProvider == nil {

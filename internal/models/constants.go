@@ -45,6 +45,7 @@ const (
 	MessageStatusRead      MessageStatus = "read"
 	MessageStatusFailed    MessageStatus = "failed"
 	MessageStatusReceived  MessageStatus = "received"
+	MessageStatusSending   MessageStatus = "sending"
 )
 
 // WhatsAppStatusType represents the type of a WhatsApp status/story payload.

@@ -123,7 +123,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 
 	startConsumer := func(name string, consumer queue.Consumer) {
 		if consumer == nil {
@@ -146,6 +146,14 @@ func (w *Worker) Run(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			w.runInboundMediaSelfHealLoop(runCtx)
+		}()
+	}
+
+	if w.Redis != nil && w.Consumer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.runScheduledSendsPoller(runCtx)
 		}()
 	}
 
@@ -206,17 +214,15 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		return nil
 	}
 
-	// Check if campaign is still active before sending
 	var campaign models.BulkMessageCampaign
 	if err := w.DB.Where("id = ?", job.CampaignID).Preload("Template").First(&campaign).Error; err != nil {
 		w.Log.Error("Failed to load campaign", "error", err, "campaign_id", job.CampaignID)
 		return fmt.Errorf("failed to load campaign: %w", err)
 	}
 
-	// Skip if campaign is paused or cancelled
 	if campaign.Status == models.CampaignStatusPaused || campaign.Status == models.CampaignStatusCancelled {
 		w.Log.Info("Campaign not active, skipping recipient", "campaign_id", job.CampaignID, "status", campaign.Status, "recipient_id", job.RecipientID)
-		return nil // Not an error, just skip
+		return nil
 	}
 
 	orgPolicy, err := w.loadOrganizationSendPolicy(job.OrganizationID)
@@ -230,18 +236,16 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		return nil
 	}
 
-	// Group recipients follow a separate path that skips contact creation.
 	if existingRecipient.RecipientType == models.RecipientTypeGroup {
 		return w.handleGroupRecipientJob(ctx, job, existingRecipient, campaign)
 	}
 
-	// Get or create contact for this recipient
 	contact, _, err := contactutil.GetOrCreateContact(w.DB, job.OrganizationID, job.PhoneNumber, job.RecipientName)
 	if err != nil || contact == nil {
 		w.Log.Error("Failed to get or create contact", "error", err, "phone", job.PhoneNumber)
 		w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", "Failed to create contact")
 		w.incrementCampaignCount(job.CampaignID, "failed_count")
-		return nil // Don't retry
+		return nil
 	}
 
 	if w.isWhatsmeowProvider() {
@@ -267,7 +271,76 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		}
 	}
 
-	// Build recipient for sending
+	delayScopeKey := resolveCampaignDelayScopeKey(campaign.WhatsAppAccount, campaign.ID)
+	delayDuration, err := w.computeCampaignDelayDuration(ctx, delayScopeKey, campaign.MinDelaySeconds, campaign.MaxDelaySeconds)
+	if err != nil {
+		return fmt.Errorf("failed to compute campaign send delay: %w", err)
+	}
+
+	if delayDuration > 0 && w.Redis != nil {
+		if err := w.transitionRecipientToSending(ctx, job.RecipientID); err != nil {
+			w.Log.Warn("Recipient already being sent by another worker, skipping schedule", "recipient_id", job.RecipientID, "error", err)
+			return nil
+		}
+		sendAt := time.Now().Add(delayDuration)
+		if err := w.scheduleRecipientSend(ctx, job, sendAt); err != nil {
+			w.Log.Error("Failed to schedule send, falling back to immediate send", "error", err, "recipient_id", job.RecipientID)
+			w.updateRecipientStatus(job.RecipientID, models.MessageStatusPending, "", "")
+		} else {
+			return nil
+		}
+	}
+
+	if delayDuration > 0 && w.Redis == nil {
+		if err := sleepWithContext(ctx, delayDuration); err != nil {
+			return fmt.Errorf("campaign delay interrupted: %w", err)
+		}
+	}
+
+	return w.executeRecipientSend(ctx, job)
+}
+
+func (w *Worker) executeRecipientSend(ctx context.Context, job *queue.RecipientJob) error {
+	var existingRecipient models.BulkMessageRecipient
+	if err := w.DB.Where("id = ?", job.RecipientID).First(&existingRecipient).Error; err != nil {
+		w.Log.Error("Failed to load recipient for send", "error", err, "recipient_id", job.RecipientID)
+		return fmt.Errorf("failed to load recipient: %w", err)
+	}
+	if existingRecipient.Status != models.MessageStatusPending && existingRecipient.Status != models.MessageStatusSending {
+		w.Log.Info("Skipping already-processed recipient in executeRecipientSend",
+			"recipient_id", job.RecipientID,
+			"campaign_id", job.CampaignID,
+			"status", existingRecipient.Status,
+		)
+		return nil
+	}
+
+	if !w.claimScheduledSend(ctx, job.RecipientID) {
+		w.Log.Info("Another worker is already sending to this recipient", "recipient_id", job.RecipientID)
+		return nil
+	}
+
+	var campaign models.BulkMessageCampaign
+	if err := w.DB.Where("id = ?", job.CampaignID).Preload("Template").First(&campaign).Error; err != nil {
+		w.Log.Error("Failed to load campaign for send", "error", err, "campaign_id", job.CampaignID)
+		return fmt.Errorf("failed to load campaign: %w", err)
+	}
+
+	if campaign.Status == models.CampaignStatusPaused || campaign.Status == models.CampaignStatusCancelled {
+		w.Log.Info("Campaign no longer active at send time", "campaign_id", job.CampaignID, "status", campaign.Status)
+		w.updateRecipientStatusConditional(job.RecipientID, existingRecipient.Status, models.MessageStatusFailed, "", "Campaign paused or cancelled")
+		w.incrementCampaignCount(job.CampaignID, "failed_count")
+		return nil
+	}
+
+	contact, _, err := contactutil.GetOrCreateContact(w.DB, job.OrganizationID, job.PhoneNumber, job.RecipientName)
+	if err != nil || contact == nil {
+		w.Log.Error("Failed to get or create contact for send", "error", err, "phone", job.PhoneNumber)
+		w.updateRecipientStatusConditional(job.RecipientID, existingRecipient.Status, models.MessageStatusFailed, "", "Failed to create contact")
+		w.incrementCampaignCount(job.CampaignID, "failed_count")
+		return nil
+	}
+
 	templateBody := ""
 	if campaign.Template != nil {
 		templateBody = campaign.Template.BodyContent
@@ -287,11 +360,6 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		TemplateParams: mergedTemplateParams,
 	}
 
-	delayScopeKey := resolveCampaignDelayScopeKey(campaign.WhatsAppAccount, campaign.ID)
-	if err := w.applyCampaignSendDelay(ctx, delayScopeKey, campaign.MinDelaySeconds, campaign.MaxDelaySeconds); err != nil {
-		return fmt.Errorf("failed to apply campaign send delay: %w", err)
-	}
-
 	var (
 		waMessageID       string
 		sendErr           error
@@ -302,7 +370,7 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		if w.MessageProvider == nil {
 			sendErr = fmt.Errorf("message provider is not configured")
 			w.Log.Error("Failed to send message", "error", sendErr, "recipient", job.PhoneNumber)
-			w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", sendErr.Error())
+			w.updateRecipientStatusConditional(job.RecipientID, existingRecipient.Status, models.MessageStatusFailed, "", sendErr.Error())
 			w.incrementCampaignCount(job.CampaignID, "failed_count")
 			return nil
 		}
@@ -314,17 +382,16 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 
 		waMessageID, sendErr = w.sendTemplateMessageViaProvider(ctx, instanceID, &campaign, campaign.Template, recipient)
 	} else {
-		// Get WhatsApp account
 		var account models.WhatsAppAccount
 		if err := w.DB.Where("name = ? AND organization_id = ?", campaign.WhatsAppAccount, job.OrganizationID).First(&account).Error; err != nil {
 			w.Log.Error("Failed to load WhatsApp account", "error", err, "account_name", campaign.WhatsAppAccount)
-			w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", "WhatsApp account not found")
+			w.updateRecipientStatusConditional(job.RecipientID, existingRecipient.Status, models.MessageStatusFailed, "", "WhatsApp account not found")
 			w.incrementCampaignCount(job.CampaignID, "failed_count")
-			return nil // Don't retry, mark as failed
+			return nil
 		}
 		if err := w.decryptAccountSecrets(&account); err != nil {
 			w.Log.Error("Failed to decrypt WhatsApp account secrets", "error", err, "account_name", campaign.WhatsAppAccount)
-			w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", "Failed to decrypt WhatsApp account secrets")
+			w.updateRecipientStatusConditional(job.RecipientID, existingRecipient.Status, models.MessageStatusFailed, "", "Failed to decrypt WhatsApp account secrets")
 			w.incrementCampaignCount(job.CampaignID, "failed_count")
 			return nil
 		}
@@ -332,7 +399,6 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		waMessageID, sendErr = w.sendTemplateMessage(ctx, &account, campaign.Template, recipient, campaign.HeaderMediaID)
 	}
 
-	// Create Message record
 	message := models.Message{
 		OrganizationID:    job.OrganizationID,
 		InstanceID:        messageInstanceID,
@@ -357,23 +423,20 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		w.Log.Error("Failed to send message", "error", sendErr, "recipient", job.PhoneNumber)
 		message.Status = models.MessageStatusFailed
 		message.ErrorMessage = sendErr.Error()
-		w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", sendErr.Error())
+		w.updateRecipientStatusConditional(job.RecipientID, existingRecipient.Status, models.MessageStatusFailed, "", sendErr.Error())
 		w.incrementCampaignCount(job.CampaignID, "failed_count")
 	} else {
 		w.Log.Info("Message sent", "recipient", job.PhoneNumber, "message_id", waMessageID)
 		message.Status = models.MessageStatusSent
-		w.updateRecipientStatus(job.RecipientID, models.MessageStatusSent, waMessageID, "")
+		w.updateRecipientStatusConditional(job.RecipientID, existingRecipient.Status, models.MessageStatusSent, waMessageID, "")
 		w.incrementCampaignCount(job.CampaignID, "sent_count")
 	}
 
-	// Save message record
 	if err := w.DB.Create(&message).Error; err != nil {
 		w.Log.Error("Failed to save message", "error", err, "recipient", job.PhoneNumber)
 	}
 
-	// Check if campaign is complete (all recipients processed)
 	w.checkCampaignCompletion(ctx, job.CampaignID, job.OrganizationID)
-
 	return nil
 }
 
@@ -434,6 +497,86 @@ func (w *Worker) HandleInboundMediaJob(ctx context.Context, job *queue.InboundMe
 	}
 
 	return nil
+}
+
+func (w *Worker) computeCampaignDelayDuration(ctx context.Context, delayScopeKey string, minDelaySeconds, maxDelaySeconds int) (time.Duration, error) {
+	minDelaySeconds, maxDelaySeconds = normalizeCampaignDelaySeconds(minDelaySeconds, maxDelaySeconds)
+	if minDelaySeconds == 0 && maxDelaySeconds == 0 {
+		return 0, nil
+	}
+
+	gapMs, err := randomDelayMilliseconds(minDelaySeconds, maxDelaySeconds)
+	if err != nil {
+		return 0, err
+	}
+	if gapMs <= 0 {
+		return 0, nil
+	}
+
+	if w.Redis == nil {
+		return time.Duration(gapMs) * time.Millisecond, nil
+	}
+
+	nowMs := time.Now().UnixMilli()
+	ttlMs := int64(campaignDelayReservationTTL / time.Millisecond)
+	rawSendAt, err := reserveCampaignDelaySlotScript.Run(
+		ctx,
+		w.Redis,
+		[]string{campaignDelayRedisKey(delayScopeKey)},
+		nowMs,
+		gapMs,
+		ttlMs,
+	).Result()
+	if err != nil {
+		w.Log.Warn("Failed to reserve campaign delay slot, using local delay", "delay_scope", strings.TrimSpace(delayScopeKey), "error", err)
+		return time.Duration(gapMs) * time.Millisecond, nil
+	}
+
+	sendAtMs, err := parseScriptResultInt64(rawSendAt)
+	if err != nil {
+		w.Log.Warn("Failed to parse reserved campaign delay slot, using local delay", "delay_scope", strings.TrimSpace(delayScopeKey), "error", err)
+		return time.Duration(gapMs) * time.Millisecond, nil
+	}
+
+	waitMs := sendAtMs - nowMs
+	if waitMs <= 0 {
+		return 0, nil
+	}
+
+	return time.Duration(waitMs) * time.Millisecond, nil
+}
+
+func (w *Worker) transitionRecipientToSending(ctx context.Context, recipientID uuid.UUID) error {
+	result := w.DB.Model(&models.BulkMessageRecipient{}).
+		Where("id = ? AND status = ?", recipientID, models.MessageStatusPending).
+		Update("status", models.MessageStatusSending)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("recipient %s is no longer pending ( RowsAffected=0)", recipientID)
+	}
+	return nil
+}
+
+func (w *Worker) updateRecipientStatusConditional(recipientID uuid.UUID, expectedCurrentStatus models.MessageStatus, newStatus models.MessageStatus, waMessageID, errorMsg string) {
+	updates := map[string]interface{}{
+		"status":               newStatus,
+		"whats_app_message_id": waMessageID,
+		"error_message":        errorMsg,
+	}
+	if newStatus == models.MessageStatusSent {
+		updates["sent_at"] = time.Now()
+	}
+	result := w.DB.Model(&models.BulkMessageRecipient{}).
+		Where("id = ? AND status IN ?", recipientID, []models.MessageStatus{expectedCurrentStatus, models.MessageStatusSending}).
+		Updates(updates)
+	if result.Error != nil {
+		w.Log.Error("Failed to conditionally update recipient status", "error", result.Error, "recipient_id", recipientID, "new_status", newStatus)
+	}
+	if result.RowsAffected == 0 {
+		w.Log.Warn("Recipient status update skipped (already processed)", "recipient_id", recipientID, "expected_status", expectedCurrentStatus, "new_status", newStatus)
+	}
 }
 
 func (w *Worker) isWhatsmeowProvider() bool {
@@ -712,6 +855,7 @@ func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID 
 
 	return w.MessageProvider.SendText(sendCtx, instanceID, recipient.PhoneNumber, body)
 }
+
 
 func classifyCampaignMediaType(mimeType, filename string) string {
 	normalizedMIME := strings.ToLower(strings.TrimSpace(mimeType))
