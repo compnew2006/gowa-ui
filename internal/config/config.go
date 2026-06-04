@@ -45,6 +45,13 @@ type Config struct {
 	Cookie        CookieConfig        `koanf:"cookie"`
 	License       LicenseConfig       `koanf:"license"`
 	FacebookOAuth FacebookOAuthConfig `koanf:"facebook_oauth"`
+	Facebook      FacebookConfig      `koanf:"facebook"`
+}
+
+type FacebookConfig struct {
+	AccessToken string `koanf:"access_token"` // Optional: server-side default access token used by /api/facebook/page-search
+	APIVersion  string `koanf:"api_version"`
+	BaseURL     string `koanf:"base_url"`
 }
 
 type AppConfig struct {

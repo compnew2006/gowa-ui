@@ -78,7 +78,7 @@ func SetupTestDBWithCleanup(t *testing.T, cleanup bool) *gorm.DB {
 
 // runMigrations runs all model migrations.
 func runMigrations(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		// Core models
 		&models.Organization{},
 		&models.OrganizationConfig{},
@@ -137,7 +137,11 @@ func runMigrations(db *gorm.DB) error {
 		&models.FacebookComment{},
 		&models.FacebookCommentReply{},
 		&models.FacebookCommentSettings{},
-	)
+		&models.FBPageSearch{},
+		&models.FBPeopleSearch{},
+	); err != nil {
+		return err
+	}
 	// Mirror the production pre-migration fix so tests use the partial unique
 	// index and can reproduce the "delete then re-add" scenario.
 	if err := db.Exec(`
@@ -215,6 +219,7 @@ func cleanupTables(db *gorm.DB) {
 		"facebook_comments",
 		"facebook_comment_settings",
 		"facebook_accounts",
+		"fb_people_searches",
 	}
 
 	for _, table := range tables {
@@ -276,6 +281,7 @@ func TruncateTables(db *gorm.DB) {
 		"facebook_comments",
 		"facebook_comment_settings",
 		"facebook_accounts",
+		"fb_people_searches",
 	}
 
 	for _, table := range tables {

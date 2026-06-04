@@ -71,6 +71,13 @@ base_url = "https://graph.facebook.com"
 redirect_uri = "https://fbwebhook.ofuqalmadenah.com" # Optional exact callback URL. Empty = derived from current host: /api/facebook/oauth/callback
 webhook_verify_token = "change-me-facebook-comments-webhook"
 
+[facebook]
+# Optional: per-organization default access token used by /api/facebook/page-search
+# when the operator has not connected via OAuth. Empty = no default.
+access_token = ""
+api_version = "v20.0"
+base_url = "https://graph.facebook.com"
+
 [whatsmeow]
 rate_limit_min_delay_ms = 1000
 rate_limit_max_delay_ms = 3000

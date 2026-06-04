@@ -2806,3 +2806,43 @@ From a local machine:
 ```bash
 ssh root@31.97.192.53 'whatomate-switch'
 ```
+
+## Sandbox Deploy Note - 2026-06-04 01:12 UTC — facebook-admin-reply-filter
+
+- Sandbox green deploy: 2026-06-04 01:12:28 UTC
+- Active sandbox binary: /opt/whatomate/bin/whatomate.sandbox.green.20260604_010000_fb_admin_reply_filter_3f31242c
+- Sandbox blue rollback binary: /opt/whatomate/bin/whatomate.sandbox.green.20260603_223000_fbcomments_realtime_push_10903_skip
+- Installed SHA256: a03a18355403ea2ec01ad58860cd2f461729f878b39746dfac49be14224599cd
+- Version: sandbox-green-20260604_010000_fb_admin_reply_filter_3f31242c
+- Build: linux/amd64 (cross-compiled from darwin/arm64 host), CGO disabled, ldflags `-s -w -X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X github.com/compnew2006/whatomate/internal/license.EmbeddedPublicKeyRingBase64=$LICENSE_KEY_RING_B64`, embedded license public key ring (kids: deploy-20260415, deploy-20260416, vendor-1), embedded frontend dist.
+- Source HEAD: 3f31242c (agent/facebook-admin-reply-filter) — working tree clean.
+- Bug fixes included:
+  1. FB webhook + sync: admin/page-author replies now tagged with `IsAdminReply bool` (indexed) and skipped from auto-reply (defense in depth: guard in BOTH webhook call site AND `shouldAutoReplyFacebookComment`). UI badge "Page admin" / "مسؤول الصفحة" / "Administrador de la página".
+  2. Latent FK fix: `sendAndStoreFacebookCommentReply` was passing `uuid.Nil` for userID in webhook auto-reply path; FK `fk_facebook_comment_replies_user` was rejecting zero UUID. Replaced with `account.UserID` — auto-reply was silently failing before.
+- Verification:
+  - `systemctl restart whatomate-sandbox` → active since 2026-06-04 01:12:28 UTC, PID 2263440 (was 2191864), new binary
+  - `curl http://127.0.0.1:18127/api/license/bootstrap` → status=active, tier=production, key_id=deploy-20260416, hwid=d87d9d77e173, updated_at=2026-06-04T01:12:46Z (fresh, confirms new build is serving)
+  - External `https://sandbox.ofuqalmadenah.com/` → 200 "Whatomate" SPA served
+  - WebSocket upgrade: `GET /ws` → 101 (user 156.207.95.198 in active session on `/facebook/page-search`)
+  - FB webhooks flowing: POST /api/facebook/comments/webhook → 200 from 173.252.95.2/33/16 etc.
+  - License usage: 1/5 orgs, 29/50 users, 16/50 endpoints — all under quota
+  - 18/18 facebook test functions pass (TestApp_ReceiveFacebookCommentsWebhook_AdminReplyTaggedAndNotAutoReplied + TestApp_ReceiveFacebookCommentsWebhook_NonAdminStillAutoReplies new)
+- Symlink chain post-deploy:
+  - active → whatomate.sandbox.green.20260604_010000_fb_admin_reply_filter_3f31242c
+  - green  → whatomate.sandbox.green.20260604_010000_fb_admin_reply_filter_3f31242c
+  - blue   → whatomate.sandbox.green.20260603_223000_fbcomments_realtime_push_10903_skip (rollback)
+- Toggle: `whatomate-sandbox-switch {status|green|blue|toggle|version}` (one-command rollback to previous prod).
+- Pre-existing unrelated dirty files in agent's working tree: NOT touched.
+- Local build artifact: /tmp/whatomate-sandbox-green-20260604_010000-linux-amd64 (58683576 bytes).
+
+## Sandbox Deploy - 2026-06-04 01:36 UTC — comments-scroll-fix
+
+- Branch: main (HEAD 3f31242c), 1 file changed in src: `frontend/src/views/facebook/FacebookCommentsView.vue` (added `lg:grid-rows-[minmax(0,1fr)]` to the 3-column grid wrapper).
+- Bug fixed: `/facebook/comments` Inbox (left) sidebar had no scroll because the grid container's default `grid-auto-rows: auto` sized the row to content. With many comments, the Inbox grew past the viewport and the ScrollArea never had overflow to trigger. Adding `minmax(0, 1fr)` to the row makes it fill the grid container (bounded by the parent's `min-h-0 flex-1` flex chain).
+- Build: `env -u GOOS -u GOARCH GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.Version=comments-scroll-fix-20260604_013200-3f31242c -X main.BuildTime=… -X …/license.EmbeddedPublicKeyRingBase64=…"` → ELF 64-bit, statically linked.
+- SHA256: `6def64dfb72ec38879a862fe1f206732cc9684b3ba961173d4dad475ac4e7d6f`, 58966178 bytes.
+- Verified: `file` → `ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked`. Deployed CSS bundle (`/assets/index-BM73qrpE.css`) contains `lg\:grid-rows-\[minmax\(0\,1fr\)\]{grid-template-rows:minmax(0,1fr)}`.
+- Lessons: ALWAYS run `cp -r frontend/dist/* internal/frontend/dist/` BEFORE `go build` (the Makefile's `build-prod` does it via `embed-frontend`); running `go build` directly produces a binary that still embeds the OLD frontend dist. Symptom: API is live and reports new version, but the SPA's CSS bundle is the old hash.
+- Deploy: scp to /tmp on VPS → cp into /opt/whatomate/bin/ → ln -sfn to .active + .green → systemctl restart.
+- Verification post-restart: PID 2268910 active since 2026-06-04 01:36:35 UTC, `curl /` → 200, license bootstrap → status=active tier=production key_id=deploy-20260416, new CSS hash served.
+- Rollback target (.blue): whatomate.sandbox.green.20260604_010000_fb_admin_reply_filter_3f31242c (previous green).

@@ -785,6 +785,21 @@ export const facebookCommentsService = {
     api.put(`/facebook/comments/${id}/status`, { status }, config),
 };
 
+// Facebook People Search
+export const fbPeopleSearchService = {
+  search: (params: {
+    campaign_id: string;
+    page?: number;
+    per_page?: number;
+    q?: string;
+  }) => api.get("/facebook/people-search", { params }),
+
+  addContacts: (data: {
+    name: string;
+    data: Array<{ identifier: string; name: string }>;
+  }) => api.post("/facebook/people-search/add-contacts", data),
+};
+
 export const notificationsService = {
   list: (params?: { include_dismissed?: boolean }) =>
     api.get("/notifications", { params }),

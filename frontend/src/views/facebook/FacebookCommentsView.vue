@@ -411,10 +411,10 @@ watchDebounced(
     </PageHeader>
 
     <div
-      class="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[360px_minmax(0,1fr)_320px]"
+      class="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[360px_minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)]"
     >
       <!-- Inbox column -->
-      <Card class="min-h-0 overflow-hidden">
+      <Card class="flex h-full min-h-0 flex-col overflow-hidden">
         <CardHeader class="space-y-3 border-b py-3">
           <div class="flex items-center justify-between">
             <CardTitle class="text-base font-medium">
@@ -467,7 +467,7 @@ watchDebounced(
           />
         </CardHeader>
 
-        <CardContent class="flex min-h-0 flex-col p-0">
+        <CardContent class="flex min-h-0 flex-1 flex-col p-0">
           <ScrollArea class="min-h-0 flex-1">
             <div
               ref="inboxListRef"
@@ -588,8 +588,8 @@ watchDebounced(
       </Card>
 
       <!-- Thread column -->
-      <Card class="min-h-0 overflow-hidden">
-        <CardContent v-if="selectedComment" class="flex h-full min-h-0 flex-col p-0">
+      <Card class="flex h-full min-h-0 flex-col overflow-hidden">
+        <CardContent v-if="selectedComment" class="flex min-h-0 flex-1 flex-col p-0">
           <div class="border-b p-4">
             <div class="mb-2 flex flex-wrap items-center gap-2">
               <Badge variant="outline" class="max-w-[12rem] truncate">
@@ -816,7 +816,7 @@ watchDebounced(
 
         <CardContent
           v-else
-          class="flex h-full items-center justify-center"
+          class="flex min-h-0 flex-1 items-center justify-center"
         >
           <EmptyState
             :icon="MessageSquareReply"
@@ -830,13 +830,13 @@ watchDebounced(
       </Card>
 
       <!-- Overview column -->
-      <Card class="min-h-0 overflow-hidden">
+      <Card class="flex h-full min-h-0 flex-col overflow-hidden">
         <CardHeader class="border-b py-3">
           <CardTitle class="text-base font-medium">
             {{ $t("facebookComments.overview") }}
           </CardTitle>
         </CardHeader>
-        <CardContent class="space-y-3 p-4 text-sm">
+        <CardContent class="flex-1 overflow-y-auto space-y-3 p-4 text-sm">
           <div class="card-depth grid grid-cols-2 gap-2.5 rounded-lg border border-border p-2.5">
             <button
               v-for="chip in statusChips"
