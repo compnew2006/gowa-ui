@@ -315,14 +315,14 @@ func TestRetryableObjectStorage_GetObject_SuccessFirstAttempt(t *testing.T) {
 		inner:     mock,
 		maxRetry:  2,
 		baseDelay: 0,
-		breaker:   newCircuitBreaker(5, 30*time.Second),
+		getBreaker: newCircuitBreaker(5, 30*time.Second),
 	}
 
 	_, _, err := retryStorage.GetObject(context.Background(), "test-key")
 	assert.NoError(t, err)
 	assert.Equal(t, int32(1), mock.getCalls.Load())
 
-	cb := retryStorage.breaker
+	cb := retryStorage.getBreaker
 	assert.Equal(t, circuitClosed, cb.state)
 	assert.Equal(t, 0, cb.failures)
 }
@@ -333,7 +333,7 @@ func TestRetryableObjectStorage_GetObject_SuccessOnRetry(t *testing.T) {
 		inner:     mock,
 		maxRetry:  2,
 		baseDelay: 0,
-		breaker:   newCircuitBreaker(5, 30*time.Second),
+		getBreaker: newCircuitBreaker(5, 30*time.Second),
 	}
 
 	mock.getFunc = func(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
@@ -356,7 +356,7 @@ func TestRetryableObjectStorage_GetObject_NotFound_NoRetry(t *testing.T) {
 		inner:     mock,
 		maxRetry:  3,
 		baseDelay: 0,
-		breaker:   newCircuitBreaker(5, 30*time.Second),
+		getBreaker: newCircuitBreaker(5, 30*time.Second),
 	}
 
 	mock.getFunc = func(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
@@ -374,7 +374,7 @@ func TestRetryableObjectStorage_GetObject_MaxRetriesExhausted(t *testing.T) {
 		inner:     mock,
 		maxRetry:  2,
 		baseDelay: 0,
-		breaker:   newCircuitBreaker(5, 30*time.Second),
+		getBreaker: newCircuitBreaker(5, 30*time.Second),
 	}
 
 	mock.getFunc = func(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
@@ -386,17 +386,17 @@ func TestRetryableObjectStorage_GetObject_MaxRetriesExhausted(t *testing.T) {
 	assert.Contains(t, err.Error(), "GetObject failed after 3 attempts")
 	assert.Equal(t, int32(3), mock.getCalls.Load())
 
-	cb := retryStorage.breaker
+	cb := retryStorage.getBreaker
 	assert.Equal(t, 1, cb.failures)
 }
 
 func TestRetryableObjectStorage_DeleteObject_SuccessFirstAttempt(t *testing.T) {
 	mock := &mockStorage{}
 	retryStorage := &retryableObjectStorage{
-		inner:     mock,
-		maxRetry:  2,
-		baseDelay: 0,
-		breaker:   newCircuitBreaker(5, 30*time.Second),
+		inner:         mock,
+		maxRetry:      2,
+		baseDelay:     0,
+		deleteBreaker: newCircuitBreaker(5, 30*time.Second),
 	}
 
 	err := retryStorage.DeleteObject(context.Background(), "test-key")
@@ -407,10 +407,10 @@ func TestRetryableObjectStorage_DeleteObject_SuccessFirstAttempt(t *testing.T) {
 func TestRetryableObjectStorage_DeleteObject_SuccessOnRetry(t *testing.T) {
 	mock := &mockStorage{}
 	retryStorage := &retryableObjectStorage{
-		inner:     mock,
-		maxRetry:  2,
-		baseDelay: 0,
-		breaker:   newCircuitBreaker(5, 30*time.Second),
+		inner:         mock,
+		maxRetry:      2,
+		baseDelay:     0,
+		deleteBreaker: newCircuitBreaker(5, 30*time.Second),
 	}
 
 	mock.deleteFunc = func(ctx context.Context, key string) error {
@@ -428,10 +428,10 @@ func TestRetryableObjectStorage_DeleteObject_SuccessOnRetry(t *testing.T) {
 func TestRetryableObjectStorage_DeleteObject_MaxRetriesExhausted(t *testing.T) {
 	mock := &mockStorage{}
 	retryStorage := &retryableObjectStorage{
-		inner:     mock,
-		maxRetry:  2,
-		baseDelay: 0,
-		breaker:   newCircuitBreaker(5, 30*time.Second),
+		inner:         mock,
+		maxRetry:      2,
+		baseDelay:     0,
+		deleteBreaker: newCircuitBreaker(5, 30*time.Second),
 	}
 
 	mock.deleteFunc = func(ctx context.Context, key string) error {
@@ -448,10 +448,10 @@ func TestCircuitBreaker_OpensAfterThreshold(t *testing.T) {
 	mock := &mockStorage{}
 	breaker := newCircuitBreaker(3, 100*time.Millisecond)
 	retryStorage := &retryableObjectStorage{
-		inner:     mock,
-		maxRetry:  0,
-		baseDelay: 0,
-		breaker:   breaker,
+		inner:      mock,
+		maxRetry:   0,
+		baseDelay:  0,
+		putBreaker: breaker,
 	}
 
 	mock.putFunc = func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
@@ -511,14 +511,14 @@ func TestCircuitBreaker_GetObjectBlockedWhenOpen(t *testing.T) {
 	breaker.recordFailure()
 
 	retryStorage := &retryableObjectStorage{
-		inner:     mock,
-		maxRetry:  2,
-		baseDelay: 0,
-		breaker:   breaker,
+		inner:      mock,
+		maxRetry:   2,
+		baseDelay:  0,
+		getBreaker: breaker,
 	}
 
 	_, _, err := retryStorage.GetObject(context.Background(), "key")
-	assert.ErrorIs(t, err, ErrCircuitOpen)
+	assert.ErrorIs(t, err, ErrCircuitGetOpen)
 	assert.Equal(t, int32(0), mock.getCalls.Load())
 }
 
@@ -528,14 +528,14 @@ func TestCircuitBreaker_DeleteObjectBlockedWhenOpen(t *testing.T) {
 	breaker.recordFailure()
 
 	retryStorage := &retryableObjectStorage{
-		inner:     mock,
-		maxRetry:  2,
-		baseDelay: 0,
-		breaker:   breaker,
+		inner:         mock,
+		maxRetry:      2,
+		baseDelay:     0,
+		deleteBreaker: breaker,
 	}
 
 	err := retryStorage.DeleteObject(context.Background(), "key")
-	assert.ErrorIs(t, err, ErrCircuitOpen)
+	assert.ErrorIs(t, err, ErrCircuitDeleteOpen)
 	assert.Equal(t, int32(0), mock.delCalls.Load())
 }
 
@@ -543,10 +543,10 @@ func TestCircuitBreaker_PermanentError_CountsAsFailure(t *testing.T) {
 	mock := &mockStorage{}
 	breaker := newCircuitBreaker(2, 30*time.Second)
 	retryStorage := &retryableObjectStorage{
-		inner:     mock,
-		maxRetry:  0,
-		baseDelay: 0,
-		breaker:   breaker,
+		inner:      mock,
+		maxRetry:   0,
+		baseDelay:  0,
+		putBreaker: breaker,
 	}
 
 	mock.putFunc = func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
@@ -558,4 +558,120 @@ func TestCircuitBreaker_PermanentError_CountsAsFailure(t *testing.T) {
 
 	_ = retryStorage.PutObject(context.Background(), "key", strings.NewReader("data"), 4, "text/plain")
 	assert.Equal(t, circuitOpen, breaker.state)
+}
+
+func TestCircuitBreaker_ContextErrorsDoNotCountAsFailure(t *testing.T) {
+	mock := &mockStorage{}
+	breaker := newCircuitBreaker(2, 30*time.Second)
+	retryStorage := &retryableObjectStorage{
+		inner:      mock,
+		maxRetry:   0,
+		baseDelay:  0,
+		putBreaker: breaker,
+	}
+
+	mock.putFunc = func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
+		return context.Canceled
+	}
+
+	_ = retryStorage.PutObject(context.Background(), "key", strings.NewReader("data"), 4, "text/plain")
+	assert.Equal(t, 0, breaker.failures, "context.Canceled should not increment failures")
+	assert.Equal(t, circuitClosed, breaker.state, "circuit should remain closed after context errors")
+
+	mock.putFunc = func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
+		return context.DeadlineExceeded
+	}
+
+	_ = retryStorage.PutObject(context.Background(), "key", strings.NewReader("data"), 4, "text/plain")
+	assert.Equal(t, 0, breaker.failures, "context.DeadlineExceeded should not increment failures")
+	assert.Equal(t, circuitClosed, breaker.state)
+}
+
+func TestCircuitBreaker_HalfOpenLimitsConcurrentProbes(t *testing.T) {
+	breaker := newCircuitBreaker(1, 50*time.Millisecond)
+
+	breaker.recordFailure()
+	assert.Equal(t, circuitOpen, breaker.state)
+
+	time.Sleep(80 * time.Millisecond)
+
+	assert.True(t, breaker.allow(), "first probe in half-open should be allowed")
+	assert.Equal(t, circuitHalfOpen, breaker.state)
+	assert.True(t, breaker.allow(), "second probe (halfOpenRequired=2) should be allowed")
+	assert.False(t, breaker.allow(), "third probe should be rejected (in-flight limit reached)")
+}
+
+func TestCircuitBreaker_HalfOpenInFlightDecrementsOnSuccess(t *testing.T) {
+	breaker := newCircuitBreaker(1, 50*time.Millisecond)
+
+	breaker.recordFailure()
+	time.Sleep(80 * time.Millisecond)
+
+	assert.True(t, breaker.allow())
+	assert.True(t, breaker.allow())
+	assert.False(t, breaker.allow())
+
+	breaker.recordSuccess()
+	assert.True(t, breaker.allow(), "after one success, one slot freed")
+}
+
+func TestCircuitBreaker_HalfOpenInFlightResetsOnFailure(t *testing.T) {
+	breaker := newCircuitBreaker(1, 50*time.Millisecond)
+
+	breaker.recordFailure()
+	time.Sleep(80 * time.Millisecond)
+
+	assert.True(t, breaker.allow())
+	breaker.recordFailure()
+	assert.Equal(t, circuitOpen, breaker.state)
+	assert.Equal(t, 0, breaker.halfOpenInFlight)
+}
+
+func TestCircuitBreaker_PutOpenDoesNotBlockGet(t *testing.T) {
+	mock := &mockStorage{}
+	putBreaker := newCircuitBreaker(1, 1*time.Hour)
+	putBreaker.recordFailure()
+
+	retryStorage := &retryableObjectStorage{
+		inner:         mock,
+		maxRetry:      0,
+		baseDelay:     0,
+		putBreaker:    putBreaker,
+		getBreaker:    newCircuitBreaker(5, 30*time.Second),
+		deleteBreaker: newCircuitBreaker(5, 30*time.Second),
+	}
+
+	putErr := retryStorage.PutObject(context.Background(), "k", strings.NewReader("x"), 1, "text/plain")
+	assert.ErrorIs(t, putErr, ErrCircuitOpen)
+	assert.Equal(t, int32(0), mock.putCalls.Load())
+
+	_, _, getErr := retryStorage.GetObject(context.Background(), "k")
+	assert.NoError(t, getErr, "GetObject must succeed even when PutObject breaker is open")
+	assert.Equal(t, int32(1), mock.getCalls.Load())
+
+	delErr := retryStorage.DeleteObject(context.Background(), "k")
+	assert.NoError(t, delErr, "DeleteObject must succeed even when PutObject breaker is open")
+	assert.Equal(t, int32(1), mock.delCalls.Load())
+}
+
+func TestCircuitBreaker_GetOpenDoesNotBlockPut(t *testing.T) {
+	mock := &mockStorage{}
+	getBreaker := newCircuitBreaker(1, 1*time.Hour)
+	getBreaker.recordFailure()
+
+	retryStorage := &retryableObjectStorage{
+		inner:         mock,
+		maxRetry:      0,
+		baseDelay:     0,
+		putBreaker:    newCircuitBreaker(5, 30*time.Second),
+		getBreaker:    getBreaker,
+		deleteBreaker: newCircuitBreaker(5, 30*time.Second),
+	}
+
+	_, _, getErr := retryStorage.GetObject(context.Background(), "k")
+	assert.ErrorIs(t, getErr, ErrCircuitGetOpen)
+
+	putErr := retryStorage.PutObject(context.Background(), "k", strings.NewReader("x"), 1, "text/plain")
+	assert.NoError(t, putErr, "PutObject must succeed even when GetObject breaker is open")
+	assert.Equal(t, int32(1), mock.putCalls.Load())
 }

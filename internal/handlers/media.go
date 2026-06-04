@@ -304,6 +304,11 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 
 	reader, objectInfo, err := a.ObjectStorage.GetObject(ctx, message.MediaAsset.S3Key)
 	if err != nil {
+		if errors.Is(err, storage.ErrCircuitGetOpen) {
+			a.Log.Warn("ServeMedia: object storage GetObject circuit open", "media_asset_id", message.MediaAssetID, "error", err)
+			r.RequestCtx.Response.Header.Set("Retry-After", "30")
+			return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Object storage temporarily unavailable", nil, "")
+		}
 		if errors.Is(err, storage.ErrObjectNotFound) {
 			now := time.Now().UTC()
 			// File is missing from Object Storage/local disk — self-heal by updating all matching messages and the asset.
@@ -397,6 +402,8 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 						_ = reader.Close()
 					}
 					mediaAvailable = true
+				} else if errors.Is(err, storage.ErrCircuitGetOpen) {
+					a.Log.Warn("RetryMediaDownload: object storage GetObject circuit open; treating as unavailable", "message_id", message.ID, "organization_id", orgID, "error", err)
 				} else {
 					a.Log.Warn("Object-backed media is missing during retry", "message_id", message.ID, "organization_id", orgID, "media_asset_id", message.MediaAssetID, "s3_key", message.MediaAsset.S3Key, "error", err)
 				}

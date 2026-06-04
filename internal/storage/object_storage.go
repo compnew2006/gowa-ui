@@ -58,10 +58,12 @@ func NewObjectStorage(cfg *config.StorageConfig) (ObjectStorage, error) {
 	}
 
 	return &retryableObjectStorage{
-		inner:     store,
-		maxRetry:  3,
-		baseDelay: 500 * time.Millisecond,
-		breaker:   newCircuitBreaker(5, 30*time.Second),
+		inner:         store,
+		maxRetry:      3,
+		baseDelay:     500 * time.Millisecond,
+		putBreaker:    newCircuitBreaker(5, 30*time.Second),
+		getBreaker:    newCircuitBreaker(5, 30*time.Second),
+		deleteBreaker: newCircuitBreaker(5, 30*time.Second),
 	}, nil
 }
 
@@ -258,14 +260,15 @@ const (
 )
 
 type circuitBreaker struct {
-	mu              sync.Mutex
-	state           circuitState
-	failures        int
+	mu               sync.Mutex
+	state            circuitState
+	failures         int
 	failureThreshold int
 	resetTimeout     time.Duration
-	lastFailureTime time.Time
+	lastFailureTime  time.Time
 	halfOpenSuccesses int
 	halfOpenRequired  int
+	halfOpenInFlight  int
 }
 
 func newCircuitBreaker(failureThreshold int, resetTimeout time.Duration) *circuitBreaker {
@@ -288,11 +291,16 @@ func (cb *circuitBreaker) allow() bool {
 		if time.Since(cb.lastFailureTime) > cb.resetTimeout {
 			cb.state = circuitHalfOpen
 			cb.halfOpenSuccesses = 0
+			cb.halfOpenInFlight = 1
 			return true
 		}
 		return false
 	case circuitHalfOpen:
-		return true
+		if cb.halfOpenInFlight < cb.halfOpenRequired {
+			cb.halfOpenInFlight++
+			return true
+		}
+		return false
 	default:
 		return false
 	}
@@ -304,9 +312,11 @@ func (cb *circuitBreaker) recordSuccess() {
 
 	cb.failures = 0
 	if cb.state == circuitHalfOpen {
+		cb.halfOpenInFlight--
 		cb.halfOpenSuccesses++
 		if cb.halfOpenSuccesses >= cb.halfOpenRequired {
 			cb.state = circuitClosed
+			cb.halfOpenInFlight = 0
 		}
 	}
 }
@@ -318,6 +328,7 @@ func (cb *circuitBreaker) recordFailure() {
 	cb.failures++
 	cb.lastFailureTime = time.Now()
 	if cb.state == circuitHalfOpen {
+		cb.halfOpenInFlight = 0
 		cb.state = circuitOpen
 	} else if cb.failures >= cb.failureThreshold {
 		cb.state = circuitOpen
@@ -325,17 +336,25 @@ func (cb *circuitBreaker) recordFailure() {
 }
 
 type retryableObjectStorage struct {
-	inner      ObjectStorage
-	maxRetry   int
-	baseDelay  time.Duration
-	breaker    *circuitBreaker
+	inner         ObjectStorage
+	maxRetry      int
+	baseDelay     time.Duration
+	putBreaker    *circuitBreaker
+	getBreaker    *circuitBreaker
+	deleteBreaker *circuitBreaker
 }
 
 // ErrCircuitOpen is returned when the circuit breaker is open and requests are rejected.
 var ErrCircuitOpen = errors.New("object storage circuit breaker is open")
 
+// ErrCircuitGetOpen is returned when the get circuit breaker is open and read requests are rejected.
+var ErrCircuitGetOpen = fmt.Errorf("%w: get", ErrCircuitOpen)
+
+// ErrCircuitDeleteOpen is returned when the delete circuit breaker is open and delete requests are rejected.
+var ErrCircuitDeleteOpen = fmt.Errorf("%w: delete", ErrCircuitOpen)
+
 func (r *retryableObjectStorage) PutObject(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
-	if r.breaker != nil && !r.breaker.allow() {
+	if r.putBreaker != nil && !r.putBreaker.allow() {
 		return fmt.Errorf("%w: PutObject %q", ErrCircuitOpen, key)
 	}
 
@@ -377,28 +396,32 @@ func (r *retryableObjectStorage) PutObject(ctx context.Context, key string, body
 
 		lastErr = r.inner.PutObject(ctx, key, seekableBody, actualSize, mimeType)
 		if lastErr == nil {
-			if r.breaker != nil {
-				r.breaker.recordSuccess()
+			if r.putBreaker != nil {
+				r.putBreaker.recordSuccess()
 			}
 			return nil
 		}
 
+		if isContextError(lastErr) {
+			return lastErr
+		}
+
 		if !isTransientError(lastErr) {
-			if r.breaker != nil {
-				r.breaker.recordFailure()
+			if r.putBreaker != nil {
+				r.putBreaker.recordFailure()
 			}
 			return lastErr
 		}
 	}
-	if r.breaker != nil {
-		r.breaker.recordFailure()
+	if r.putBreaker != nil {
+		r.putBreaker.recordFailure()
 	}
 	return fmt.Errorf("PutObject failed after %d attempts: %w", r.maxRetry+1, lastErr)
 }
 
 func (r *retryableObjectStorage) GetObject(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
-	if r.breaker != nil && !r.breaker.allow() {
-		return nil, ObjectInfo{}, fmt.Errorf("%w: GetObject %q", ErrCircuitOpen, key)
+	if r.getBreaker != nil && !r.getBreaker.allow() {
+		return nil, ObjectInfo{}, fmt.Errorf("%w: GetObject %q", ErrCircuitGetOpen, key)
 	}
 
 	var lastErr error
@@ -428,36 +451,39 @@ func (r *retryableObjectStorage) GetObject(ctx context.Context, key string) (io.
 
 		rc, info, err := r.inner.GetObject(ctx, key)
 		if err == nil {
-			if r.breaker != nil {
-				r.breaker.recordSuccess()
+			if r.getBreaker != nil {
+				r.getBreaker.recordSuccess()
 			}
 			return rc, info, nil
 		}
 
 		if errors.Is(err, ErrObjectNotFound) {
-			if r.breaker != nil {
-				r.breaker.recordSuccess()
+			if r.getBreaker != nil {
+				r.getBreaker.recordSuccess()
 			}
 			return nil, ObjectInfo{}, err
 		}
 
 		lastErr = err
+		if isContextError(err) {
+			return nil, ObjectInfo{}, err
+		}
 		if !isTransientError(err) {
-			if r.breaker != nil {
-				r.breaker.recordFailure()
+			if r.getBreaker != nil {
+				r.getBreaker.recordFailure()
 			}
 			return nil, ObjectInfo{}, err
 		}
 	}
-	if r.breaker != nil {
-		r.breaker.recordFailure()
+	if r.getBreaker != nil {
+		r.getBreaker.recordFailure()
 	}
 	return nil, ObjectInfo{}, fmt.Errorf("GetObject failed after %d attempts: %w", r.maxRetry+1, lastErr)
 }
 
 func (r *retryableObjectStorage) DeleteObject(ctx context.Context, key string) error {
-	if r.breaker != nil && !r.breaker.allow() {
-		return fmt.Errorf("%w: DeleteObject %q", ErrCircuitOpen, key)
+	if r.deleteBreaker != nil && !r.deleteBreaker.allow() {
+		return fmt.Errorf("%w: DeleteObject %q", ErrCircuitDeleteOpen, key)
 	}
 
 	var lastErr error
@@ -487,22 +513,25 @@ func (r *retryableObjectStorage) DeleteObject(ctx context.Context, key string) e
 
 		err := r.inner.DeleteObject(ctx, key)
 		if err == nil {
-			if r.breaker != nil {
-				r.breaker.recordSuccess()
+			if r.deleteBreaker != nil {
+				r.deleteBreaker.recordSuccess()
 			}
 			return nil
 		}
 
 		lastErr = err
+		if isContextError(err) {
+			return err
+		}
 		if !isTransientError(err) {
-			if r.breaker != nil {
-				r.breaker.recordFailure()
+			if r.deleteBreaker != nil {
+				r.deleteBreaker.recordFailure()
 			}
 			return err
 		}
 	}
-	if r.breaker != nil {
-		r.breaker.recordFailure()
+	if r.deleteBreaker != nil {
+		r.deleteBreaker.recordFailure()
 	}
 	return fmt.Errorf("DeleteObject failed after %d attempts: %w", r.maxRetry+1, lastErr)
 }
@@ -567,6 +596,10 @@ func toSeekableReader(body io.Reader, size int64) (io.ReadSeeker, int64, int64, 
 	}
 
 	return tmpFile, n, 0, cleanup, nil
+}
+
+func isContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func isTransientError(err error) bool {

@@ -198,8 +198,14 @@ func (w *MediaRetentionWorker) deleteAssetIfUnused(ctx context.Context, assetID 
 		return fmt.Errorf("load media asset: %w", err)
 	}
 
-	if err := w.app.ObjectStorage.DeleteObject(ctx, asset.S3Key); err != nil && !errors.Is(err, objectstorage.ErrObjectNotFound) {
-		return fmt.Errorf("delete media asset from object storage: %w", err)
+	if err := w.app.ObjectStorage.DeleteObject(ctx, asset.S3Key); err != nil {
+		if errors.Is(err, objectstorage.ErrCircuitDeleteOpen) {
+			w.app.Log.Warn("MediaRetention: object storage DeleteObject circuit open; deferring delete", "media_asset_id", asset.ID, "s3_key", asset.S3Key, "error", err)
+			return nil
+		}
+		if !errors.Is(err, objectstorage.ErrObjectNotFound) {
+			return fmt.Errorf("delete media asset from object storage: %w", err)
+		}
 	}
 
 	return w.app.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
