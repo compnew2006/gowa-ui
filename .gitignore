@@ -104,5 +104,9 @@ test-results/
 # Vector DB artifacts
 ruvector.db
 *.db
+# Ruflo swarm runtime state (local dev only)
+.swarm/
+# pprof / heap / cpu profiles
+*.prof
 # CocoIndex Code (ccc)
 /.cocoindex_code/

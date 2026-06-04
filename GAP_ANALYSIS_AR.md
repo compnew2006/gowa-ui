@@ -1,324 +1,448 @@
 # تحليل الفجوات وخارطة التحسين — منصة Whatomate
 
 **التاريخ:** يونيو 2026  
-**الإصدار:** 1.0  
-**النطاق:** البنية الخلفية (Go + fastglue/fasthttp) + البنية التحتية (PostgreSQL 17 + Redis 7 + S3) + طبقة WebSocket
+**الإصدار:** 2.0 (تحديث شامل)  
+**النطاق:** البنية الخلفية (Go) + البنية التحتية (PostgreSQL + Redis + S3) + الفرونت إند (Vue 3) + الأمان + الأداء + الاختبارات  
+**المنهجية:** Swarm analysis — 5 وكلاء متخصصين بالتوازي
 
 ---
 
-## 1. الفجوات المعمارية (Architectural Gaps)
+## الملخص التنفيذي
 
-### 1.1 مركزية WebSocket Hub — عنق زجاجة التوسع الأفقي
+تم تحليل المشروع عبر 5 محاور: **البنية المعمارية**، **الفرونت إند**، **الأمان**، **الاختبارات**، **والأداء**. النتائج:
 
-**الملف:** `internal/websocket/hub.go:12–30`
+| المحور | درجة النضج | فجوات P0 | فجوات P1 | فجوات P2 |
+|--------|-----------|----------|----------|----------|
+| البنية المعمارية | 7/10 | 1 | 4 | 2 |
+| الفرونت إند | 5/10 | 3 | 3 | 2 |
+| الأمان | 7/10 | 0 | 3 | 4 |
+| الاختبارات | 6/10 | 0 | 4 | 3 |
+| الأداء | 6/10 | 0 | 2 | 5 |
+| **الإجمالي** | **6.2/10** | **4** | **16** | **16** |
 
-الـ `Hub` عبارة عن singleton يعمل بـ goroutine واحد عبر `select` على ثلاث قنوات فقط (`register`, `unregister`, `broadcast`). الخريطة `clients map[uuid.UUID]map[uuid.UUID]map[*Client]struct{}` محمية بـ `sync.RWMutex` واحد.
+**النقاط القوية:**
+- تشفير AES-256-GCM ممتاز مع Argon2id
+- Redis Pub/Sub bridge للـ WebSocket (مُضاف حديثاً)
+- Circuit breaker لكل عملية في Object Storage
+- بنية اختبارات E2E شاملة (65 ملف Playwright)
+- بنية تحتية CI/CD ممتازة
 
-- **المشكلة:** عند آلاف الاتصالات المتزامنة، يصبح الـ mutex نقطة تضارب (contention). عملية `broadcastMessage` تقفل القراءة على كامل الخريطة لكل رسالة (hub.go:117–173).
-- **التأثير:** لا يمكن تشغيل أكثر من نسخة خلفية (instance) من الخادم لأن الحالة في الذاكرة فقط — لا يوجد Redis Pub/Sub bridge.
-- **التوصية:** تقديم Sharded Hub (by orgID) + Redis Pub/Sub لـ cross-instance broadcast.
-
-### 1.2 غياب Circuit Breaker للاتصالات الخارجية
-
-**الملفات:** `internal/database/redis.go:14–28`, `internal/storage/object_storage.go:120–144`, `pkg/whatsapp/` (Cloud API)
-
-- اتصال Redis (redis.go:14–19) لا يحتوي على إعدادات `PoolSize`, `MinIdleConns`, `ConnMaxIdleTime`, `DialTimeout`, `ReadTimeout`, `RetryBackoff`.
-- اتصال MinIO/S3 (object_storage.go:130–135) لا يملك retry logic أو circuit breaker.
-- لا يوجد sonde صحية دورية (health check) لأي اتصال خارجي.
-- **التوصية:** إضافة `github.com/sony/gobreaker` أو `github.com/streadway/handy/breaker` + إعدادات pool كاملة لـ Redis.
-
-### 1.3 غياب Abstracted Event Bus
-
-- النظام يستخدم Redis Streams مباشرة في `internal/queue/redis.go` بدون واجهة (interface). هذا يربط الكود بـ Redis بشكل محكم.
-- **التوصية:** تعريف `EventBus` interface يسمح بالتبديل بين Redis Streams و Kafka أو NATS مستقبلاً.
-
-### 1.4 إدارة التخزين — غياب Lifecycle Management
-
-**الملف:** `internal/storage/object_storage.go`
-
-- لا توجد آلية لتنظيف الملفات القديمة (retention policy).
-- `fileSystemObjectStorage` (object_storage.go:67–82) لا يتحقق من path traversal — `key` يُدمج مباشرة مع `filepath.Join`.
-- لا يوجد تحقق من حجم الملف قبل الرفع (size limit enforcement).
-- **التوصية:** إضافة sanitization لـ key + تحقق من المسار + حد أقصى للحجم + S3 lifecycle rules.
+**الفجوات الحرجة:**
+1. Redis pool configuration مفقود بالكامل
+2. ChatView.vue — 6,485 سطر (غير قابل للصيانة)
+3. إمكانية الوصول (Accessibility) شبه معدومة
+4. localStorage بدون تشفير + غياب CSP headers
 
 ---
 
-## 2. مخاطر الإنتاج (Production Risks)
+## 1. البنية المعمارية (Architecture)
 
-### 2.1 Redis Configuration — أحادي النقطة (Single Point of Failure)
+### 1.1 Redis Pool Configuration — P0 حرج
 
-**الملف:** `internal/database/redis.go:14–19` + `internal/config/config.go:90–95`
+**الملف:** `internal/database/redis.go:14-27`  
+**الحالة الحالية:** إعدادات مفقودة بالكامل
 
 ```go
 client := redis.NewClient(&redis.Options{
     Addr:     net.JoinHostPort(cfg.Host, strconv.Itoa(int(cfg.Port))),
     Password: cfg.Password,
     DB:       cfg.DB,
+    // لا يوجد PoolSize, MinIdleConns, Timeouts, RetryBackoff
 })
 ```
 
-- **لا يوجد:** `PoolSize` (افتراضي = 10*GOMAXPROCS في go-redis v9 لكن بدون تحكم)، `MinIdleConns`، `ConnMaxIdleTime`، `DialTimeout`، `ReadTimeout`، `WriteTimeout`، retry policy.
-- `RedisConfig` (config.go:90–95) لا تعرض أي إعدادات pool.
-- **المخاطرة:** تحت حمل عالي، يتم استنفاد الاتصالات بدون إعادة استخدام كافية. انقطاع Redis يُسقط النظام بالكامل.
-- **التوصية:** إضافة `RedisPoolConfig` كاملة مع قيم افتراضية آمنة + sentinel/cluster support.
+**التأثير:** استنفاد الاتصالات تحت حمل عالي، لا Sentinel/Cluster support  
+**الجهد:** S (نصف يوم)  
+**الملفات:** `internal/database/redis.go`, `internal/config/config.go:90-95`
 
-### 2.2 Rate Limiter — Fixed-Window مع ثغرات
+### 1.2 Graceful Shutdown غير مكتمل — P1
 
-**الملف:** `internal/middleware/ratelimit.go`
+**الملف:** `cmd/whatomate/main.go:562-654`  
+**الحالة الحالية:** Signal handling موجود لكن:
 
-- Fixed-window counting (INCR + EXPIRE) يسمح بـ burst عند حدود النافذة (2× الحد المسموح في transition period).
-- Fails-closed عند خطأ Redis (رفض جميع الطلبات) — هذا جيد للأمان لكن سيء للتوفر.
-- **التوصية:** الانتقال إلى sliding-window (sorted set) أو token bucket مع fail-open مؤقت مع logging.
+- لا يوجد drain timeout — الانتظار غير محدد
+- Redis Pub/Sub لا يتم إلغاء الاشتراك
+- لا يوجد force-kill بعد timeout
+- WebSocket clients لا يحصلون على إشعار إغلاق
 
-### 2.3 غياب Graceful Shutdown موثوق
+**التأثير:** فقدان رسائل قيد المعالجة أثناء deployment  
+**الجهد:** M (يومان)
 
-**الملف:** `cmd/whatomate/main.go`
+### 1.3 Object Storage — ثغرات أمنية — P1
 
-- الـ signal handling يتوفر لكن لا يوجد drain واضح لـ Redis Streams consumers — رسائل قيد المعالجة قد تُفقد أو تُكرر.
-- WebSocket clients لا يحصلون على إشعار `CloseGoingAway` قبل الإغلاق.
-- **التوصية:** إضافة `Shutdown(ctx)` method لكل component (Hub, Worker, Queue consumer) مع timeout.
+**الملف:** `internal/storage/object_storage.go`  
+**ما تم إصلاحه:** Circuit breaker لكل عملية (Put/Get/Delete) + retry logic  
+**ما زال مفقوداً:**
 
-### 2.4 تسرب بيانات الاعتماد في Config
+- لا يوجد path traversal validation (key يُدمج مباشرة مع `filepath.Join`)
+- لا يوجد حد أقصى لحجم الملف
+- لا يوجد content type validation
+- لا يوجد malware scanning
 
-**الملف:** `internal/config/config.go:56–65`
+**التأثير:** رفع ملفات ضارة أو بحجم غير محدود  
+**الجهد:** S (نصف يوم)
 
-```go
-EncryptionKey string `koanf:"encryption_key"`
-```
+### 1.4 Health Checks أساسية — P1
 
-- `AIConfig` يحتوي على مفاتيح API مباشرة (config.go:139–143): `OpenAIKey`, `AnthropicKey`, `GoogleKey`.
-- لا يوجد تحقق من عدم طباعة الـ config في logs (logf لا يطبعه لكن أي خطأ في التهيئة قد يكشفه).
-- **التوصية:** استخدام secret store أو على الأقل mark الحقول كـ `***` في أي log output + تحقق من redaction في error paths.
+**الملف:** `internal/handlers/app.go:1418-1438`  
+**الحالة الحالية:** DB ping + Redis ping فقط  
+**المفقود:**
 
-### 2.5 غياب Health Check شامل
+- لا يوجد version info أو uptime
+- لا يوجد S3/MinIO health check
+- لا يوجد circuit breaker state exposure
+- لا يوجد resource utilization metrics
 
-**الملف:** `internal/observability/observability.go`
+**الجهد:** S (نصف يوم)
 
-- الـ observability manager يقدم مقاييس جيدة (DB pool, Redis pool, goroutines, heap) لكن:
-  - لا يوجد `/health` endpoint يتحقق فعلياً من PostgreSQL + Redis + S3.
-  - `/ready` غير مُعرَّف بشكل منفصل (readiness vs liveness).
-- **التوصية:** إضافة readiness probe تتحقق من: DB ping + Redis ping + S3 head-bucket (optional).
+### 1.5 Config Secret Redaction — P1
 
----
+**الملف:** `internal/config/config.go`  
+**الحالة:** لا يوجد `String()` method لأي config struct يحتوي على secrets  
+**المخاطرة:** طباعة passwords و API keys في logs  
+**الجهد:** S (نصف يوم)
 
-## 3. تحسينات الأداء (Performance Optimization)
+### 1.6 WebSocket Hub — P2 (تم التحسين)
 
-### 3.1 WebSocket Broadcast — تكرار Marshal
+**الملف:** `internal/websocket/hub.go`  
+**ما تم إصلاحه:** Redis Pub/Sub bridge + cross-instance broadcast  
+**ما زال مفقوداً:**
 
-**الملف:** `internal/websocket/hub.go:126–127`
+- لا يوجد sharding (جميع المنظمات تشارك نفس hub)
+- لا يوجد backpressure (الرسائل تُفقد عند امتلاء buffer)
+- لا يوجد pre-marshal caching
 
-```go
-data, err := json.Marshal(msg.Message)
-```
+**الجهد:** L (5 أيام)
 
-- يتم `json.Marshal` لكل رسالة broadcast حتى لو أُرسلت لنفس المستخدم عدة مرات. لا يوجد caching للرسائل المتكررة.
-- **التوصية:** pre-marshal مرة واحدة خارج القفل وتمرير `[]byte` بدلاً من `WSMessage`.
+### 1.7 Event Bus Abstraction — P2
 
-### 3.2 Observability Mutex Contention
-
-**الملف:** `internal/observability/observability.go:184–215`
-
-- `observeRequest` تقفل `m.mu` (mutex واحد) لكل طلب HTTP. هذا يعني كل request يتنافس على نفس القفل.
-- **التوصية:** استخدام `sync.Map` أو sharded counters أو atomic counters مع periodic aggregation.
-
-### 3.3 Redis Pool غير مُحسَّن
-
-**الملف:** `internal/database/redis.go:15–19`
-
-- إعدادات pool الافتراضية في go-redis v9 (`PoolSize = 10 * GOMAXPROCS`) قد تكون زائدة أو ناقصة حسب الحمل.
-- **التوصية:** إضافة `PoolSize`, `MinIdleConns` (≈ 25% من PoolSize), `ConnMaxIdleTime` (5min), `ConnMaxLifetime` (30min) إلى config.
-
-### 3.4 GORM Performance
-
-**الملف:** `internal/database/postgres.go`
-
-- يجب التحقق من:
-  - استخدام `PrepareStmt: true` لprepared statements.
-  - تجنب N+1 queries في handlers عبر `Preload()` أو joins.
-  - إضافة فهرسة (indexing) على الأعمدة المستخدمة في `WHERE` المتكررة.
-
-### 3.5 Queue Consumer — Batch Processing
-
-**الملف:** `internal/queue/redis.go`
-
-- `XREADGROUP` يستخدم `COUNT(1)` — معالجة رسالة واحدة في كل مرة.
-- **التوصية:** استخدام `COUNT(10-50)` مع batch processing لتقليل round-trips إلى Redis.
+**الملف:** `internal/queue/redis.go`  
+**الحالة:** `RedisQueue` يعتمد مباشرة على `*redis.Client` بدون interface  
+**الجهد:** L (5 أيام)
 
 ---
 
-## 4. تحسينات الاستقرار (Stability Improvements)
+## 2. الفرونت إند (Frontend)
 
-### 4.1 إعادة محاولات الاتصال (Connection Retries)
+### 2.1 مكونات ضخمة — P0 حرج
 
-**الملف:** `internal/database/redis.go:22–25`
+**المشكلة:** مكونات تتجاوز 500 سطر بشكل كبير:
 
-```go
-if err := client.Ping(ctx).Err(); err != nil {
-    return nil, fmt.Errorf("failed to connect to redis: %w", err)
-}
-```
+| الملف | الحجم |
+|-------|-------|
+| `src/views/chat/ChatView.vue` | **6,485 سطر** |
+| `src/views/settings/CampaignsView.vue` | 3,915 سطر |
+| `src/views/dashboard/DashboardView.vue` | 2,272 سطر |
+| `src/views/settings/SettingsView.vue` | 2,164 سطر |
+| `src/services/api.ts` | 2,164 سطر |
+| `src/stores/contacts.ts` | 1,430 سطر |
 
-- إذا فشل الاتصال الأول بـ Redis، يفشل التطبيق بالكامل بدون إعادة محاولة.
-- **التوصية:** إضافة retry with exponential backoff (3-5 محاولات) أثناء التهيئة.
+**التأثير:** غير قابل للصيانة، بطء في التطوير، صعوبة في debugging  
+**الجهد:** XL (أسبوعان)
 
-### 4.2 DLQ Monitoring
+### 2.2 إمكانية الوصول (Accessibility) — P0 حرج
 
-**الملف:** `internal/queue/redis.go` (DLQ streams)
+**الحالة الحالية:**
 
-- يوجد DLQ لكن لا يوجد:
-  - تنبيه عند accumulation في DLQ.
-  - آلية إعادة معالجة تلقائية من DLQ.
-  - Dashboard لعرض الرسائل الفاشلة.
-- **التوصية:** إضافة Prometheus counter لـ DLQ entries + periodic reprocessing job + admin UI.
+- فقط 32 `role=` attribute عبر 333 مكون
+- فقط 115 `aria-` attribute
+- 11 keyboard handler فقط
+- لا يوجد focus management
+- لا يوجد screen reader support
 
-### 4.3 WebSocket Client Cleanup
+**التأثير:** لا يمكن استخدام التطبيق من قبل ذوي الاحتياجات الخاصة + مخاطر قانونية  
+**الجهد:** L (5 أيام)
 
-**الملف:** `internal/websocket/client.go:96–161`
+### 2.3 localStorage بدون تشفير + غياب CSP — P0
 
-- `ReadPump` يتعافى من panic (client.go:98–100) — جيد. لكن لا يوجد timeout على الاتصالات الصامتة (zombie connections).
-- `pongWait = 60s` و `pingPeriod = 54s` — كافيان لكن يجب مراقبة عدد zombies.
-- **التوصية:** إضافة periodic sweep للاتصالات التي لم تتجاوز ping/pong بنجاح + metric لعدد zombies.
+**الحالة:**
 
-### 4.4 Worker Crash Recovery
+- 101 استخدام لـ localStorage بدون تشفير
+- لا يوجد Content Security Policy headers
+- لا يوجد input validation باستخدام Zod أو مشابه
 
-**الملف:** `internal/worker/worker.go`
+**التأثير:** XSS يمكنه سرقة بيانات المستخدمين  
+**الجهد:** M (يومان)
 
-- Pending message recovery يحدث كل 30s (queue/redis.go) بـ `ClaimMinIdleTime = 5min`.
-- إذا تعطل الـ worker أثناء معالجة رسالة، ستنتظر 5 دقائق قبل أن يلتقطها worker آخر.
-- **التوصية:** تقليل `ClaimMinIdleTime` إلى 2-3 دقائق + إضافة heartbeat mechanism.
+### 2.4 TypeScript — `any` types — P1
 
-### 4.5 File Upload Safety
+**30+ استخدام لـ `any`:**
 
-**الملف:** `internal/storage/object_storage.go:67–82`
+- `src/composables/useWhatsAppFilter.ts`: `catch (err: any)`
+- `src/composables/useApiMocker.ts`: `function getNestedValue(obj: any, path: string): any`
+- `src/types/whatsmeow.ts`: `[key: string]: any`
 
-```go
-func (s *fileSystemObjectStorage) PutObject(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
-    path := filepath.Join(s.rootPath, key)
-```
+**الجهد:** S (نصف يوم)
 
-- `key` لا يتم تطهيره (sanitize) — يمكن أن يحتوي على `../` مما يتيح path traversal.
-- لا يوجد تحقق من `size` — يمكن رفع ملفات بحجم غير محدود.
-- `io.Copy` بدون limit — استهلاك ذاكرة/قرص غير محدود.
-- **التوصية:** إضافة `filepath.Clean` + تحقق من أن المسار يبدأ بـ `rootPath` + `io.LimitReader` + حد أقصى configurable.
+### 2.5 Bundle Size — P1
 
----
+**الحجم الحالي:**
 
-## 5. مشاكل القابلية للصيانة (Maintainability Issues)
+- `index-BjhwrnTh.js`: 656KB
+- `index-CKYC2x_m.js`: 380KB
+- `ChatView-D6G5eMwq.js`: 276KB
 
-### 5.1 Tight Coupling بين Worker و Whatsmeow
+**المفقود:** Route-based code splitting، lazy loading (فقط 2 `defineAsyncComponent`)  
+**الجهد:** M (يومان)
 
-**الملف:** `internal/worker/worker.go`
+### 2.6 API Layer — P1
 
-- الـ worker يحتوي على حقل `whatsmeowMgr` مباشرة — dependency injection محدود.
-- **التوصية:** استخدام `MessageProvider` interface (المعرّف في `pkg/provider/interface.go`) بشكل كامل في worker.
+**الملف:** `src/services/api.ts` (2,164 سطر)  
+**المفقود:**
 
-### 5.2 غياب Structured Errors
+- Retry logic مع exponential backoff
+- Request cancellation (AbortController)
+- Response typing غير متسق (بعض endpoints تستخدم `JsonRecord`)
 
-- الأخطاء عبر الكود عبارة عن `fmt.Errorf` بسلاسل نصية — لا يوجد error codes أو error types.
-- **التوصية:** تعريف error types مع codes (`ErrNotFound`, `ErrUnauthorized`, `ErrRateLimited`) + استخدام `errors.Is/As`.
+**الجهد:** M (يومان)
 
-### 5.3 Observability — مقاييس مفقودة
+### 2.7 i18n — P2
 
-**الملف:** `internal/observability/observability.go`
-
-- مقاييس HTTP متوفرة (request counts, latency histogram, DB pool, Redis pool) — ممتاز.
-- **مفقود:**
-  - WebSocket connections count per org
-  - Queue depth per stream (pending messages)
-  - Campaign send rate / error rate
-  - WhatsApp API call latency + error rate
-  - Worker job processing time
-  - Storage operation latency
-- **التوصية:** إضافة مقاييس لكل component رئيسي.
-
-### 5.4 اختبارات التكامل
-
-- الاختبارات تتطلب PostgreSQL + Redis حقيقيين (لا mocks لـ DB).
-- `-p 1` مطلوب لتجنب تضارب قاعدة البيانات — بطيء في CI.
-- **التوصية:** 
-  - استخدام test containers مع isolated schemas لكل package.
-  - إضافة unit tests مع interfaces/mockable dependencies.
-  - فصل integration tests عن unit tests.
-
-### 5.5 Documentation وCode Comments
-
-- الكود يحتوي على minimal comments — معظم الدوال بدون doc comments.
-- **التوصية:** إضافة godoc comments لكل exported function/type.
+**3 لغات فقط** (ar, en, es) مع 6,154 استدعاء i18n  
+**المفقود:** RTL optimization، locale-aware formatting  
+**الجهد:** M (يومان)
 
 ---
 
-## 6. خارطة التحسين ذات الأولويات (Prioritized Roadmap)
+## 3. الأمان (Security) — درجة 7/10
 
-### P0 — حرج (Critical) — يجب التنفيذ قبل الإنتاج
+### 3.1 Rate Limiter فشل مفتوح (Fail-Open) — P1
 
-| # | التوصية | الجهد | الملفات المعنية |
-|---|---------|-------|----------------|
-| P0.1 | إضافة Redis pool tuning (PoolSize, MinIdleConns, Timeouts) | S | `internal/database/redis.go`, `internal/config/config.go` |
-| P0.2 | Path traversal protection في file storage | S | `internal/storage/object_storage.go` |
-| P0.3 | إضافة readiness/liveness health checks | S | `internal/observability/observability.go`, handlers |
-| P0.4 | Secret redaction في logs وerror paths | S | `internal/config/config.go` |
-| P0.5 | Graceful shutdown مع drain لكل component | M | `cmd/whatomate/main.go`, hub, worker, queue |
-| P0.6 | تحديد حجم ملف الرفع الأقصى | S | `internal/storage/object_storage.go` |
+**الملف:** `internal/middleware/ratelimit.go:49-54`  
+**الحالة:** عند تعطل Redis، يُسمح بجميع الطلبات  
+**المخاطرة:** DoS على Redis يتيح brute force attacks  
+**الجهد:** S (نصف يوم)
+
+### 3.2 كلمات المرور — لا يوجد حرف خاص — P1
+
+**الملف:** `internal/handlers/password_policy.go:10-35`  
+**الحالة:** يتطلب uppercase + lowercase + digits فقط  
+**المخاطرة:** كلمات مرور ضعيفة susceptible to brute force  
+**الجهد:** S (ربع يوم)
+
+### 3.3 RBAC غير مركزي — P1
+
+**الحالة:** فحوصات الصلاحيات متوزعة عبر handlers بدون middleware مركزي  
+**المخاطرة:** horizontal privilege escalation إذا نسي مطور إضافة فحص  
+**الجهد:** M (3 أيام)
+
+### 3.4 File Upload — لا يوجد Magic Byte Verification — P2
+
+**الملف:** `internal/handlers/media.go:86-200`  
+**الحالة:** MIME type validation فقط بدون التحقق من محتوى الملف  
+**المخاطرة:** رفع ملفات ضارة بامتدادات مشروعة  
+**الجهد:** S (نصف يوم)
+
+### 3.5 Fixed-Window Rate Limiting — P2
+
+**الملف:** `internal/middleware/ratelimit.go:28-83`  
+**المخاطرة:** burst attacks عند حدود النافذة (ضعف الحد المسموح)  
+**الجهد:** M (يومان)
+
+### 3.6 CSRF — لا يوجد SameSite Enforcement — P2
+
+**الحالة:** Double-submit cookie pattern موجود لكن بدون SameSite check  
+**الجهد:** S (ربع يوم)
+
+### 3.7 Error Message Information Leakage — P3
+
+بعض error messages تكشف حالة داخلية  
+**الجهد:** S (نصف يوم)
+
+### 3.8 Dependency Vulnerability Scanning — P3
+
+لا يوجد `govulncheck` أو `npm audit` في CI pipeline  
+**الجهد:** S (ربع يوم)
+
+---
+
+## 4. الاختبارات (Testing) — تغطية 70% backend
+
+### 4.1 Backend — حزم بدون تغطية — P1
+
+| الحزمة | التغطية | المفقود |
+|--------|---------|---------|
+| `internal/campaignstats` | **0%** | Receipt processing, stats aggregation |
+| `internal/queue` | **25%** | Stream management, DLQ, retries |
+| `internal/worker` | **36%** | 9 ملفات مصدر بدون اختبارات |
+| `pkg/chat_close_ratings` | **0%** | 320 سطر منطق معقد |
+| `pkg/provider` | **0%** | Interface contracts |
+
+**الجهد لكل حزمة:** M (يومان)
+
+### 4.2 Frontend Components — 2% تغطية — P1
+
+**333 مكون Vue — فقط 7 مكونات بها اختبارات**
+
+- 264 مكون بدون أي اختبار
+- Chat components (أكبر منطقة UI) — بدون تغطية
+- Form components — بدون تغطية
+
+**الجهد:** XL (مستمر)
+
+### 4.3 Backend — فصل Integration عن Unit — P2
+
+**الحالة:** معظم الاختبارات integration tests تتطلب PostgreSQL + Redis حقيقيين  
+**المشكلة:** `-p 1` مطلوب = بطيء في CI  
+**الجهد:** L (5 أيام)
+
+### 4.4 Frontend — لا يوجد Visual Regression — P2
+
+لا يوجد screenshot comparison tests  
+**الجهد:** M (يومان)
+
+### 4.5 Frontend — لا يوجد Accessibility Testing — P2
+
+لا يوجد aXe أو مشابه لفحص WCAG  
+**الجهد:** S (نصف يوم)
+
+---
+
+## 5. الأداء (Performance)
+
+### 5.1 Observability Mutex Contention — P1 حرج
+
+**الملف:** `internal/observability/observability.go:46-49`  
+**الحالة:** Mutex واحد لجميع المقاييس — كل طلب HTTP يتنافس على نفس القفل
+
+```go
+mu            sync.Mutex
+requestCounts map[requestKey]uint64
+durations     map[string]*histogramSnapshot
+```
+
+**التأثير:** bottleneck عند high QPS  
+**الحل:** atomic counters أو sharded locks  
+**الجهد:** M (يومان)
+
+### 5.2 Redis Queue — معالجة رسالة واحدة — P1
+
+**الملف:** `internal/queue/redis.go`  
+**الحالة:** `XREADGROUP` يستخدم `COUNT(1)`  
+**التأثير:** limited throughput — round-trip لكل رسالة  
+**الحل:** `COUNT(10-50)` مع batch processing  
+**الجهد:** M (يومان)
+
+### 5.3 Database N+1 Queries — P2
+
+**الملفات:** `internal/handlers/*.go`  
+**الحالة:** استخدام غير متسق لـ `Preload()` مقابل JOINs  
+**أمثلة:** `contacts.go` (1,431 سطر) يحتوي على loop-based operations  
+**التأثير:** 50-200ms إضافية لكل طلب  
+**الجهد:** M (يومان)
+
+### 5.4 WebSocket Marshal — P2
+
+**الملف:** `internal/websocket/hub.go:126-127`  
+**الحالة:** `json.Marshal` لكل رسالة broadcast بدون caching  
+**الجهد:** S (نصف يوم)
+
+### 5.5 ReadMemStats — P2
+
+**الملف:** `internal/observability/observability.go:313`  
+**الحالة:** `runtime.ReadMemStats` يُستدعى عند كل `/metrics` request — Stop-The-World GC pause  
+**الجهد:** S (ربع يوم)
+
+### 5.6 HTTP Server — لا يوجد IdleTimeout — P2
+
+**الملف:** `cmd/whatomate/main.go:423-430`  
+**المفقود:** `IdleTimeout`, `TCPKeepalive`, connection reuse strategy  
+**الجهد:** S (ربع يوم)
+
+### 5.7 Goroutine Lifecycle — P2
+
+**الملف:** `cmd/whatomate/main.go`  
+**الحالة:** `context.CancelFunc` متوزعة بدون lifecycle management موحد  
+**الجهد:** M (يومان)
+
+---
+
+## 6. خارطة التحسين ذات الأولويات
+
+### P0 — حرج (Critical) — يجب التنفيذ فوراً
+
+| # | التوصية | المحور | الجهد | الملفات |
+|---|---------|--------|-------|---------|
+| P0.1 | Redis pool tuning (PoolSize, MinIdleConns, Timeouts) | Architecture | S | `internal/database/redis.go`, `internal/config/config.go` |
+| P0.2 | تفكيك ChatView.vue (6,485→<500 سطر) | Frontend | XL | `src/views/chat/ChatView.vue` |
+| P0.3 | إضافة Accessibility (ARIA, keyboard, focus) | Frontend | L | جميع المكونات |
+| P0.4 | CSP headers + تشفير localStorage | Security | M | `src/services/api.ts`, middleware |
 
 ### P1 — مهم (High) — يجب التنفيذ خلال الربع الأول
 
-| # | التوصية | الجهد | الملفات المعنية |
-|---|---------|-------|----------------|
-| P1.1 | Circuit breaker لـ Redis + S3 + WhatsApp API | M | `internal/database/redis.go`, `internal/storage/object_storage.go` |
-| P1.2 | إضافة DLQ monitoring + Prometheus counters | M | `internal/queue/redis.go`, `internal/observability/` |
-| P1.3 | WebSocket Hub sharding (per-org) | L | `internal/websocket/hub.go` |
-| P1.4 | Structured error types مع codes | M | عبر الكود |
-| P1.5 | إضافة مقاييس لـ WebSocket + Queue + Worker + Storage | M | `internal/observability/observability.go` |
-| P1.6 | Connection retry مع exponential backoff | S | `internal/database/redis.go` |
+| # | التوصية | المحور | الجهد | الملفات |
+|---|---------|--------|-------|---------|
+| P1.1 | Graceful shutdown مع drain timeout | Architecture | M | `cmd/whatomate/main.go` |
+| P1.2 | Object storage validation (path, size, type) | Architecture | S | `internal/storage/object_storage.go` |
+| P1.3 | Enhanced health checks (S3, version, breakers) | Architecture | S | `internal/handlers/app.go` |
+| P1.4 | Config secret redaction | Architecture | S | `internal/config/config.go` |
+| P1.5 | Rate limiter → fail-closed | Security | S | `internal/middleware/ratelimit.go` |
+| P1.6 | Password policy — إضافة حرف خاص | Security | S | `internal/handlers/password_policy.go` |
+| P1.7 | RBAC middleware مركزي | Security | M | `internal/middleware/` |
+| P1.8 | Observability → atomic/sharded counters | Performance | M | `internal/observability/observability.go` |
+| P1.9 | Redis queue batch processing | Performance | M | `internal/queue/redis.go` |
+| P1.10 | اختبارات worker + queue | Testing | M | `internal/worker/`, `internal/queue/` |
+| P1.11 | Frontend component tests (الحد الأدنى) | Testing | L | `src/components/`, `src/views/` |
+| P1.12 | إزالة `any` types (30+ موقع) | Frontend | S | عدة ملفات |
+| P1.13 | Route-based code splitting | Frontend | M | `src/router/index.ts`, `vite.config.ts` |
+| P1.14 | API layer: retry + cancellation | Frontend | M | `src/services/api.ts` |
 
 ### P2 — متوسط (Medium) — خلال الربع الثاني
 
-| # | التوصية | الجهد | الملفات المعنية |
-|---|---------|-------|----------------|
-| P2.1 | Redis Pub/Sub bridge لـ cross-instance WS broadcast | L | `internal/websocket/hub.go`, جديد |
-| P2.2 | Sliding-window rate limiter | M | `internal/middleware/ratelimit.go` |
-| P2.3 | Batch processing في Redis Streams consumer | M | `internal/queue/redis.go` |
-| P2.4 | EventBus interface لفصل queue abstraction | L | `internal/queue/`, جديد |
-| P2.5 | File retention / lifecycle management | M | `internal/storage/object_storage.go` |
-| P2.6 | Pre-marshal optimization في WS broadcast | S | `internal/websocket/hub.go` |
-| P2.7 | Observability atomic/sharded counters | M | `internal/observability/observability.go` |
+| # | التوصية | المحور | الجهد |
+|---|---------|--------|-------|
+| P2.1 | WebSocket hub sharding | Architecture | L |
+| P2.2 | EventBus interface abstraction | Architecture | L |
+| P2.3 | Sliding-window rate limiter | Security | M |
+| P2.4 | Magic byte file validation | Security | S |
+| P2.5 | CSRF SameSite enforcement | Security | S |
+| P2.6 | Database N+1 audit | Performance | M |
+| P2.7 | WebSocket pre-marshal caching | Performance | S |
+| P2.8 | ReadMemStats rate limiting | Performance | S |
+| P2.9 | HTTP IdleTimeout + keep-alive | Performance | S |
+| P2.10 | Goroutine lifecycle manager | Performance | M |
+| P2.11 | Integration/unit test split | Testing | L |
+| P2.12 | Visual regression testing | Testing | M |
+| P2.13 | Accessibility testing (aXe) | Testing | S |
+| P2.14 | Frontend bundle optimization | Frontend | M |
+| P2.15 | i18n RTL optimization | Frontend | M |
 
-### P3 — تحسين طويل الأمد (Low) — حسب الحاجة
+---
 
-| # | التوصية | الجهد | الملفات المعنية |
-|---|---------|-------|----------------|
-| P3.1 | Redis Sentinel/Cluster support | XL | `internal/database/redis.go`, `internal/config/` |
-| P3.2 | Testcontainers isolation + unit/integration split | XL | `test/`, CI config |
-| P3.3 | Godoc comments لكل exported symbol | M | عبر الكود |
-| P3.4 | Worker heartbeat + faster claim | M | `internal/queue/redis.go`, `internal/worker/` |
-| P3.5 | Zombie WebSocket connection sweeper | S | `internal/websocket/hub.go` |
-| P3.6 | GORM prepared statements + N+1 audit | M | `internal/database/`, `internal/handlers/` |
-| P3.7 | S3 lifecycle rules for media retention | S | Infrastructure (Terraform/CloudFormation) |
+## 7. مقارنة مع الإصدار السابق (v1.0 → v2.0)
+
+### ما تم إصلاحه منذ التحليل السابق
+
+| التوصية السابقة | الحالة |
+|----------------|--------|
+| Circuit breaker لـ Object Storage | مُنفذ — breakers منفصلة لكل عملية |
+| Retry logic لـ GetObject/DeleteObject | مُنفذ مع exponential backoff + jitter |
+| Per-operation circuit breakers | مُنفذ — put/get/delete مستقلة |
+| Redis Pub/Sub bridge للـ WebSocket | مُنفذ — cross-instance broadcast |
+| Caller-aware error mapping | مُنفذ — 503 + Retry-After |
+
+### ما زال مفقوداً
+
+| التوصية السابقة | الحالة |
+|----------------|--------|
+| Redis pool tuning | **لم يُنفذ** — P0 |
+| Path traversal protection | **لم يُنفذ** — P1 |
+| File size limits | **لم يُنفذ** — P1 |
+| Graceful shutdown drain | **لم يُنفذ** — P1 |
+| Health check enhancement | **لم يُنفذ** — P1 |
+| Secret redaction | **لم يُنفذ** — P1 |
 
 ---
 
 ## مقياس الجهد
 
-- **S (Small):** < يوم واحد — تغيير ملف واحد أو اثنين
-- **M (Medium):** 1–3 أيام — تغيير عدة ملفات في نفس الحزمة
-- **L (Large):** 3–7 أيام — تغيير عبر حزم متعددة أو تصميم جديد
-- **XL (Extra Large):** 1–2 أسبوع — إعادة هيكلة رئيسية أو infrastructure changes
+- **S (Small):** < نصف يوم — تغيير ملف واحد أو اثنين
+- **M (Medium):** 1-3 أيام — تغيير عدة ملفات في نفس الحزمة
+- **L (Large):** 3-7 أيام — تغيير عبر حزم متعددة
+- **XL (Extra Large):** 1-2 أسبوع — إعادة هيكلة رئيسية
 
 ---
 
-## ملخص تنفيذي
+## الخلاصة
 
-المنصة تتمتع بأساس معماري جيد مع:
-- Observability مدمج مع Prometheus metrics + pprof
-- Multi-tenancy مع tenant isolation
-- Queue system مع DLQ و retry logic
-- Dual provider support (Meta + Whatsmeow)
-
-**الفجوات الحرجة** تتركز في:
-1. **Redis configuration** — pool tuning مفقود بالكامل (redis.go:28 سطر فقط)
-2. **File storage safety** — path traversal + حجم غير محدود
-3. **WebSocket scalability** — singleton hub بدون path للتوسع الأفقي
-4. **Missing health checks** — لا يوجد readiness probe حقيقي
-5. **Graceful shutdown** — drain غير مكتمل
-
-**الأولوية القصوى:** P0 items (6 عناصر بجهد S–M) يمكن إنجازها في أسبوع واحد وتغلق أهم الثغرات الإنتاجية.
+المشروع يمتلك **أساساً قوياً** مع تشفير ممتاز، بنية CI/CD متينة، وE2E tests شاملة. **4 فجوات P0 حرجة** تتطلب تدخلاً فورياً: Redis pool، تفكيك ChatView، Accessibility، وأمان Frontend. المجموع المتوقع لإغلاق جميع P0 + P1: **4-6 أسابيع** لفريق من 2-3 مطورين.

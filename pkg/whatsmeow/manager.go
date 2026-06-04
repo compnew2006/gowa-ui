@@ -45,6 +45,11 @@ type ConnectionManager struct {
 	cfg           *config.WhatsmeowConfig
 	hub           *websocket.Hub
 	connectFn     func(context.Context, uuid.UUID) error
+	// existingClientConnectFn dials the websocket on an already-registered
+	// whatsmeow client. Default is client.Connect(); tests can override it
+	// to short-circuit the real network call while still exercising the
+	// surrounding reconnect logic.
+	existingClientConnectFn func(context.Context, *whatsmeow.Client) error
 
 	qrCodesMu       sync.RWMutex
 	qrCodes         map[uuid.UUID]cachedQRCode
@@ -128,6 +133,9 @@ func NewConnectionManager(db *gorm.DB, store *sqlstore.Container, logger logf.Lo
 		cm.typingIndicator.warn = logger.Warn
 	}
 	cm.connectFn = cm.Connect
+	cm.existingClientConnectFn = func(ctx context.Context, c *whatsmeow.Client) error {
+		return c.Connect()
+	}
 	return cm
 }
 
@@ -610,8 +618,21 @@ func (cm *ConnectionManager) connectExistingClient(ctx context.Context, instance
 		return nil
 	}
 
-	if err := client.Connect(); err != nil {
+	// Re-allow the dispatcher before dialing so events are not silently
+	// dropped after a Disconnected -> StopInstance sequence. The paired
+	// new-client path (newClient) does the same thing; the existing-client
+	// path was previously missing this call, so reconnected clients never
+	// recovered their event queue.
+	if cm.eventDispatcher != nil {
+		cm.eventDispatcher.AllowInstance(instance.ID, instance.OrganizationID)
+	}
+
+	if err := cm.dialExistingClient(ctx, client); err != nil {
 		cm.pool.markDisconnected(instance.ID)
+		// Roll the dispatcher back to the stopped state so late events
+		// do not silently recreate the queue. Mirrors newClient which
+		// calls stopEventDispatcherInstance on client.Connect failure.
+		cm.stopEventDispatcherInstance(instance.ID)
 		return fmt.Errorf("failed to reconnect existing client: %w", err)
 	}
 
@@ -619,6 +640,17 @@ func (cm *ConnectionManager) connectExistingClient(ctx context.Context, instance
 	cm.markInstanceConnectionState(ctx, instance, client)
 	cm.logger.Info("Instance reconnected using existing client", "component", "whatsmeow", "event", "reconnect_existing_client", "instance_id", instance.ID)
 	return nil
+}
+
+// dialExistingClient performs the actual websocket dial for a reconnect on an
+// already-registered client. Pulled out of connectExistingClient so tests can
+// inject a stub without spinning up a real whatsmeow.Client against a real
+// device store.
+func (cm *ConnectionManager) dialExistingClient(ctx context.Context, client *whatsmeow.Client) error {
+	if cm.existingClientConnectFn != nil {
+		return cm.existingClientConnectFn(ctx, client)
+	}
+	return client.Connect()
 }
 
 func (cm *ConnectionManager) connectNewClient(ctx context.Context, instance models.WhatsAppInstance, entry *connectionEntry) error {
@@ -699,6 +731,10 @@ func (cm *ConnectionManager) newClient(instance models.WhatsAppInstance, deviceS
 		payload := deviceStore.GetClientPayload()
 		applyLinkedDeviceName(payload, linkedDeviceName)
 		return payload
+	}
+
+	if cm.eventDispatcher != nil {
+		cm.eventDispatcher.AllowInstance(instance.ID, instance.OrganizationID)
 	}
 
 	client.AddEventHandler(func(evt interface{}) {

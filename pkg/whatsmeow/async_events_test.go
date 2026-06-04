@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -174,4 +175,49 @@ func TestAsyncEventDispatcherStopInstanceDrainsQueueAndStopAllClosesDispatcher(t
 
 	d.StopAll()
 	assert.False(t, d.Dispatch("after-stop", instanceID, orgID))
+}
+
+func TestAsyncEventDispatcherStopInstancePreventsQueueRecreation(t *testing.T) {
+	instanceID := uuid.New()
+	orgID := uuid.New()
+
+	var dropped atomic.Uint64
+	d := newAsyncEventDispatcher(4, logf.New(logf.Opts{}), func(evt interface{}, instanceID, orgID uuid.UUID) {
+	}, nil, func(uuid.UUID) {
+		dropped.Add(1)
+	})
+	defer d.StopAll()
+
+	require.True(t, d.Dispatch("first", instanceID, orgID))
+	d.StopInstance(instanceID)
+
+	assert.False(t, d.Dispatch("late-event", instanceID, orgID))
+	assert.Equal(t, uint64(1), dropped.Load())
+
+	d.AllowInstance(instanceID, orgID)
+	assert.True(t, d.Dispatch("after-allow", instanceID, orgID))
+}
+
+func TestAsyncEventDispatcherPanicRecovery(t *testing.T) {
+	instanceID := uuid.New()
+	orgID := uuid.New()
+	processed := make(chan string, 3)
+
+	d := newAsyncEventDispatcher(4, logf.New(logf.Opts{}), func(evt interface{}, instanceID, orgID uuid.UUID) {
+		if evt == "panic" {
+			panic("test panic")
+		}
+		processed <- evt.(string)
+	}, nil, nil)
+	defer d.StopAll()
+
+	require.True(t, d.Dispatch("before", instanceID, orgID))
+	require.True(t, d.Dispatch("panic", instanceID, orgID))
+	require.True(t, d.Dispatch("after", instanceID, orgID))
+
+	require.Eventually(t, func() bool {
+		return len(processed) == 2
+	}, time.Second, 10*time.Millisecond)
+	assert.Equal(t, "before", <-processed)
+	assert.Equal(t, "after", <-processed)
 }

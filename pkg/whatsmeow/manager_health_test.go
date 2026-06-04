@@ -105,6 +105,89 @@ func newHealthTestManager(db *gorm.DB) *ConnectionManager {
 	}, nil, "./uploads")
 }
 
+// TestConnectionManager_ReconnectExistingClient_AllowsDispatcherAfterStop
+// proves the contract that connectExistingClient must call AllowInstance on the
+// event dispatcher so events are not silently dropped after a
+// Disconnected → reconnect-existing sequence.
+//
+// Reproduces the bug: previously connectExistingClient did not call
+// AllowInstance, so the dispatcher kept the instance ID in its `stopped` map
+// and Dispatch returned false for all subsequent events.
+func TestConnectionManager_ReconnectExistingClient_AllowsDispatcherAfterStop(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	instance := createHealthTestInstance(t, db, models.InstanceStatusConnected, "Reconnect", "15550005555@s.whatsapp.net")
+	cm := newHealthTestManager(db)
+	require.NotNil(t, cm.eventDispatcher)
+
+	// Step 1: simulate the dispatcher state right after a Disconnected event.
+	// stopEventDispatcherInstance -> StopInstance deletes the queue and adds
+	// the instance to the dispatcher's `stopped` map.
+	cm.eventDispatcher.StopInstance(instance.ID)
+
+	// Sanity: while stopped, Dispatch must return false.
+	require.False(t,
+		cm.eventDispatcher.Dispatch("while-stopped", instance.ID, instance.OrganizationID),
+		"sanity: Dispatch must return false while the instance is stopped",
+	)
+
+	// Step 2: short-circuit the real websocket dial so we can exercise
+	// connectExistingClient without a real network or device store.
+	cm.existingClientConnectFn = func(_ context.Context, _ *waClient.Client) error { return nil }
+
+	// Step 3: invoke the reconnect-existing path directly (same package).
+	// With the fix, this should call AllowInstance BEFORE the dial stub runs.
+	require.NoError(t,
+		cm.connectExistingClient(context.Background(), instance, &waClient.Client{}),
+		"connectExistingClient must succeed when the dial stub returns nil",
+	)
+
+	// Step 4: the dispatcher must now accept events for this instance.
+	require.True(t,
+		cm.eventDispatcher.Dispatch("after-reconnect", instance.ID, instance.OrganizationID),
+		"after connectExistingClient, the dispatcher must accept events for the reconnected instance",
+	)
+}
+
+// TestConnectionManager_ReconnectExistingClientFailure_RestoresDispatcherStop
+// proves the failure-side contract: when dialExistingClient returns an error,
+// connectExistingClient must roll the dispatcher back to the stopped state so
+// late events do not silently recreate the queue. Mirrors the rollback in
+// newClient (client.Connect failure → stopEventDispatcherInstance).
+func TestConnectionManager_ReconnectExistingClientFailure_RestoresDispatcherStop(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	instance := createHealthTestInstance(t, db, models.InstanceStatusConnected, "ReconnectFail", "15550006666@s.whatsapp.net")
+	cm := newHealthTestManager(db)
+	require.NotNil(t, cm.eventDispatcher)
+
+	// Step 1: dispatcher enters the stopped state for this instance.
+	cm.eventDispatcher.StopInstance(instance.ID)
+	require.False(t,
+		cm.eventDispatcher.Dispatch("while-stopped", instance.ID, instance.OrganizationID),
+		"sanity: Dispatch must return false while the instance is stopped",
+	)
+
+	// Step 2: dial stub returns an error.
+	dialErr := assert.AnError
+	cm.existingClientConnectFn = func(_ context.Context, _ *waClient.Client) error { return dialErr }
+
+	// Step 3: connectExistingClient must propagate the dial error.
+	err := cm.connectExistingClient(context.Background(), instance, &waClient.Client{})
+	require.ErrorIs(t, err, dialErr, "connectExistingClient must surface the dial error")
+
+	// Step 4: dispatcher must be back in the stopped state. Without the
+	// rollback, AllowInstance would have cleared the `stopped` entry and
+	// late events would silently recreate the queue and be processed,
+	// defeating the purpose of the original StopInstance.
+	require.False(t,
+		cm.eventDispatcher.Dispatch("after-failed-reconnect", instance.ID, instance.OrganizationID),
+		"after a failed reconnect, the dispatcher must remain in the stopped state for the instance",
+	)
+}
+
 func createHealthTestInstance(t *testing.T, db *gorm.DB, status models.InstanceStatus, name, jid string) models.WhatsAppInstance {
 	t.Helper()
 

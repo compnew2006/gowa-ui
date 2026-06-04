@@ -27,9 +27,6 @@ type asyncEventQueue struct {
 	closed     bool
 }
 
-// asyncEventDispatcher decouples whatsmeow's reader callback from event I/O.
-// Each instance has one FIFO worker to preserve event ordering for that
-// connection while still returning immediately from AddEventHandler.
 type asyncEventDispatcher struct {
 	bufferSize  int
 	handler     asyncEventHandler
@@ -37,10 +34,11 @@ type asyncEventDispatcher struct {
 	updateDepth func(uuid.UUID, int64)
 	markDropped func(uuid.UUID)
 
-	mu     sync.Mutex
-	queues map[uuid.UUID]*asyncEventQueue
-	wg     sync.WaitGroup
-	closed bool
+	mu       sync.Mutex
+	queues   map[uuid.UUID]*asyncEventQueue
+	wg       sync.WaitGroup
+	closed   bool
+	stopped  map[uuid.UUID]struct{}
 }
 
 func newAsyncEventDispatcher(bufferSize int, logger logf.Logger, handler asyncEventHandler, updateDepth func(uuid.UUID, int64), markDropped func(uuid.UUID)) *asyncEventDispatcher {
@@ -54,6 +52,7 @@ func newAsyncEventDispatcher(bufferSize int, logger logf.Logger, handler asyncEv
 		updateDepth: updateDepth,
 		markDropped: markDropped,
 		queues:      make(map[uuid.UUID]*asyncEventQueue),
+		stopped:     make(map[uuid.UUID]struct{}),
 	}
 }
 
@@ -64,6 +63,8 @@ func (d *asyncEventDispatcher) Dispatch(evt interface{}, instanceID, orgID uuid.
 
 	queue := d.queueFor(instanceID, orgID)
 	if queue == nil {
+		d.markEventDropped(instanceID)
+		d.logEventDrop(instanceID, evt)
 		return false
 	}
 
@@ -72,6 +73,7 @@ func (d *asyncEventDispatcher) Dispatch(evt interface{}, instanceID, orgID uuid.
 	defer queue.mu.Unlock()
 
 	if queue.closed {
+		d.markEventDropped(instanceID)
 		d.logEventDrop(instanceID, evt)
 		return false
 	}
@@ -95,6 +97,7 @@ func (d *asyncEventDispatcher) StopInstance(instanceID uuid.UUID) {
 	d.mu.Lock()
 	queue := d.queues[instanceID]
 	delete(d.queues, instanceID)
+	d.stopped[instanceID] = struct{}{}
 	d.mu.Unlock()
 
 	if queue == nil {
@@ -103,6 +106,15 @@ func (d *asyncEventDispatcher) StopInstance(instanceID uuid.UUID) {
 	}
 	d.closeQueue(queue)
 	d.updateQueueDepth(instanceID, 0)
+}
+
+func (d *asyncEventDispatcher) AllowInstance(instanceID, orgID uuid.UUID) {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	delete(d.stopped, instanceID)
+	d.mu.Unlock()
 }
 
 const defaultStopTimeout = 30 * time.Second
@@ -150,6 +162,9 @@ func (d *asyncEventDispatcher) queueFor(instanceID, orgID uuid.UUID) *asyncEvent
 	if d.closed {
 		return nil
 	}
+	if _, stopped := d.stopped[instanceID]; stopped {
+		return nil
+	}
 	if queue := d.queues[instanceID]; queue != nil {
 		return queue
 	}
@@ -170,10 +185,24 @@ func (d *asyncEventDispatcher) processLoop(queue *asyncEventQueue) {
 
 	for event := range queue.events {
 		d.updateQueueDepth(event.instanceID, len(queue.events))
-		if d.handler != nil {
-			d.handler(event.evt, event.instanceID, event.orgID)
-		}
+		d.safeHandle(event)
 		d.updateQueueDepth(event.instanceID, len(queue.events))
+	}
+}
+
+func (d *asyncEventDispatcher) safeHandle(event asyncEvent) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Error("Panic in async event handler; event skipped",
+				"component", "whatsmeow",
+				"event", "async_event_panic",
+				"instance_id", event.instanceID,
+				"panic", r,
+			)
+		}
+	}()
+	if d.handler != nil {
+		d.handler(event.evt, event.instanceID, event.orgID)
 	}
 }
 
