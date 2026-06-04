@@ -366,3 +366,12 @@ func (c *Client) sendPong() {
 	default:
 	}
 }
+
+// Close closes the client's connection safely to trigger unregistration
+func (c *Client) Close() {
+	c.connMu.Lock()
+	if c.conn != nil {
+		_ = c.conn.Close()
+	}
+	c.connMu.Unlock()
+}

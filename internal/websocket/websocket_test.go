@@ -1,13 +1,18 @@
 package websocket_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/compnew2006/whatomate/internal/websocket"
+	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zerodha/logf"
@@ -17,7 +22,7 @@ import (
 func newTestHub(t *testing.T) *websocket.Hub {
 	t.Helper()
 	log := logf.New(logf.Opts{})
-	hub := websocket.NewHub(log)
+	hub := websocket.NewHub(log, nil)
 	go hub.Run()
 	return hub
 }
@@ -46,13 +51,13 @@ func waitForClientCount(t *testing.T, hub *websocket.Hub, expected int) {
 
 func TestNewHub_ReturnsNonNil(t *testing.T) {
 	log := logf.New(logf.Opts{})
-	hub := websocket.NewHub(log)
+	hub := websocket.NewHub(log, nil)
 	require.NotNil(t, hub)
 }
 
 func TestNewHub_InitialClientCountIsZero(t *testing.T) {
 	log := logf.New(logf.Opts{})
-	hub := websocket.NewHub(log)
+	hub := websocket.NewHub(log, nil)
 	assert.Equal(t, 0, hub.GetClientCount())
 }
 
@@ -648,4 +653,124 @@ func TestHandleAuthMessage_FailedAuth_DoesNotReceiveBroadcast(t *testing.T) {
 	hub.BroadcastToOrg(orgID, broadcast)
 
 	assertNoMessage(t, client)
+}
+
+func TestHub_RedisPubSubBroadcast(t *testing.T) {
+	s := miniredis.RunT(t)
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr: s.Addr(),
+	})
+	defer rdb.Close()
+
+	log := logf.New(logf.Opts{})
+
+	// Create two different Hub instances connected to the same Redis client
+	hubA := websocket.NewHub(log, rdb)
+	hubB := websocket.NewHub(log, rdb)
+
+	go hubA.Run()
+	go hubB.Run()
+
+	// Register client A on hub A
+	orgID := uuid.New()
+	userA := uuid.New()
+	cA := websocket.NewClient(hubA, nil, userA, orgID)
+	hubA.Register(cA)
+
+	// Register client B on hub B
+	userB := uuid.New()
+	cB := websocket.NewClient(hubB, nil, userB, orgID)
+	hubB.Register(cB)
+
+	// Wait until both clients are registered in their hubs
+	waitForClientCount(t, hubA, 1)
+	waitForClientCount(t, hubB, 1)
+
+	// Wait until both hubs are subscribed to the channel in Redis
+	channelName := "whatomate:ws_broadcast:org:" + orgID.String()
+	testutil.AssertEventually(t, func() bool {
+		numSub, err := rdb.PubSubNumSub(context.Background(), channelName).Result()
+		return err == nil && numSub[channelName] == 2
+	}, 2*time.Second, "waiting for Redis subscriptions to be active")
+
+	// Broadcast from hub A to the organization
+	msg := websocket.WSMessage{Type: websocket.TypeNewMessage, Payload: "hello from A"}
+	hubA.BroadcastToOrg(orgID, msg)
+
+	// Client A (on hub A) and Client B (on hub B) should both receive it!
+	// Client A receives it immediately via local delivery.
+	// Client B receives it via Redis Pub/Sub.
+	assertReceivesMessage(t, cA, websocket.TypeNewMessage)
+	assertReceivesMessage(t, cB, websocket.TypeNewMessage)
+}
+
+func TestHub_RedisSubscriptionReconciliationRetry(t *testing.T) {
+	s := miniredis.RunT(t)
+
+	// Custom dialer that fails when blockConnection is true
+	var blockConnection bool
+	rdb := redis.NewClient(&redis.Options{
+		Addr: s.Addr(),
+		Dialer: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if blockConnection {
+				return nil, fmt.Errorf("simulated connection failure")
+			}
+			return net.Dial(network, addr)
+		},
+	})
+	defer rdb.Close()
+
+	log := logf.New(logf.Opts{})
+	
+	// Start with connection blocked
+	blockConnection = true
+
+	hub := websocket.NewHub(log, rdb)
+	go hub.Run()
+
+	orgID := uuid.New()
+	userID := uuid.New()
+	client := websocket.NewClient(hub, nil, userID, orgID)
+	hub.Register(client)
+
+	waitForClientCount(t, hub, 1)
+
+	// Since connection is blocked, subscription should fail.
+	// We'll give the hub's run loop and background routine a tiny moment to try and fail.
+	time.Sleep(100 * time.Millisecond)
+
+	// Create an unblocked admin client to query Redis state
+	adminRdb := redis.NewClient(&redis.Options{
+		Addr: s.Addr(),
+	})
+	defer adminRdb.Close()
+
+	// Verify no subscription is active yet
+	channelName := "whatomate:ws_broadcast:org:" + orgID.String()
+	numSub, err := adminRdb.PubSubNumSub(context.Background(), channelName).Result()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), numSub[channelName])
+
+	// Now unblock the connection
+	blockConnection = false
+
+	// Register a client for a new organization. This triggers reconciliation
+	// for all organizations (both orgID and otherOrgID).
+	otherOrgID := uuid.New()
+	otherClient := websocket.NewClient(hub, nil, uuid.New(), otherOrgID)
+	hub.Register(otherClient)
+	waitForClientCount(t, hub, 2)
+
+	// Wait for the reconciliation of the original organization to succeed deterministically
+	testutil.AssertEventually(t, func() bool {
+		numSub, err := adminRdb.PubSubNumSub(context.Background(), channelName).Result()
+		return err == nil && numSub[channelName] == 1
+	}, 2*time.Second, "waiting for subscription to succeed after unblocking and reconciliation trigger")
+
+	// Verify other organization is also subscribed
+	otherChannelName := "whatomate:ws_broadcast:org:" + otherOrgID.String()
+	numSubOther, err := adminRdb.PubSubNumSub(context.Background(), otherChannelName).Result()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), numSubOther[otherChannelName])
 }
