@@ -44,6 +44,9 @@ const (
 
 	// MaxDeliveryAttempts is the number of retries before moving a message to DLQ.
 	MaxDeliveryAttempts = int64(5)
+
+	// StreamMaxLen is the approximate maximum length for campaign streams.
+	StreamMaxLen = int64(50000)
 )
 
 // CampaignStreamName returns the tenant-scoped campaign stream name.
@@ -103,6 +106,8 @@ func (q *RedisQueue) EnqueueRecipient(ctx context.Context, job *RecipientJob) er
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: CampaignStreamName(job.OrganizationID),
+		MaxLen: StreamMaxLen,
+		Approx: true,
 		Values: map[string]interface{}{
 			"type":    string(JobTypeRecipient),
 			"payload": string(payload),
@@ -149,6 +154,8 @@ func (q *RedisQueue) EnqueueRecipients(ctx context.Context, jobs []*RecipientJob
 
 			pipe.XAdd(ctx, &redis.XAddArgs{
 				Stream: streamName,
+				MaxLen: StreamMaxLen,
+				Approx: true,
 				Values: map[string]interface{}{
 					"type":    string(JobTypeRecipient),
 					"payload": string(payload),
@@ -179,6 +186,8 @@ func (q *RedisQueue) EnqueueInboundMedia(ctx context.Context, job *InboundMediaJ
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: InboundMediaStreamName,
+		MaxLen: StreamMaxLen,
+		Approx: true,
 		Values: map[string]interface{}{
 			"type":    string(JobTypeInboundMedia),
 			"payload": string(payload),
@@ -210,6 +219,8 @@ func (q *RedisQueue) EnqueueContactRepair(ctx context.Context, job *ContactRepai
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: CampaignStreamName(job.OrganizationID),
+		MaxLen: StreamMaxLen,
+		Approx: true,
 		Values: map[string]interface{}{
 			"type":    string(JobTypeContactRepair),
 			"payload": string(payload),
@@ -241,6 +252,8 @@ func (q *RedisQueue) EnqueueWhatsAppFilter(ctx context.Context, job *WhatsAppFil
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: CampaignStreamName(job.OrganizationID),
+		MaxLen: StreamMaxLen,
+		Approx: true,
 		Values: map[string]interface{}{
 			"type":    string(JobTypeWhatsAppFilter),
 			"payload": string(payload),
@@ -272,6 +285,8 @@ func (q *RedisQueue) EnqueueGroupJoin(ctx context.Context, job *GroupJoinJob) er
 
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: CampaignStreamName(job.OrganizationID),
+		MaxLen: StreamMaxLen,
+		Approx: true,
 		Values: map[string]interface{}{
 			"type":    string(JobTypeGroupJoin),
 			"payload": string(payload),
@@ -311,6 +326,8 @@ func (q *RedisQueue) EnqueueGroupJoins(ctx context.Context, jobs []*GroupJoinJob
 
 		pipe.XAdd(ctx, &redis.XAddArgs{
 			Stream: CampaignStreamName(job.OrganizationID),
+			MaxLen: StreamMaxLen,
+			Approx: true,
 			Values: map[string]interface{}{
 				"type":    string(JobTypeGroupJoin),
 				"payload": string(payload),
@@ -343,6 +360,8 @@ func (q *RedisQueue) EnqueueMessageExtraction(ctx context.Context, job *MessageE
 	}
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: CampaignStreamName(job.OrganizationID),
+		MaxLen: StreamMaxLen,
+		Approx: true,
 		Values: map[string]interface{}{
 			"type":    string(JobTypeMessageExtraction),
 			"payload": string(payload),
@@ -371,6 +390,8 @@ func (q *RedisQueue) EnqueueGroupExtraction(ctx context.Context, job *GroupExtra
 	}
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: CampaignStreamName(job.OrganizationID),
+		MaxLen: StreamMaxLen,
+		Approx: true,
 		Values: map[string]interface{}{
 			"type":    string(JobTypeGroupExtraction),
 			"payload": string(payload),
@@ -399,6 +420,8 @@ func (q *RedisQueue) EnqueueMemberExtraction(ctx context.Context, job *MemberExt
 	}
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: CampaignStreamName(job.OrganizationID),
+		MaxLen: StreamMaxLen,
+		Approx: true,
 		Values: map[string]interface{}{
 			"type":    string(JobTypeMemberExtraction),
 			"payload": string(payload),
@@ -779,6 +802,8 @@ func (c *RedisConsumer) moveToDeadLetter(ctx context.Context, msg redis.XMessage
 
 	if _, err := c.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: c.deadLetterStreamName,
+		MaxLen: StreamMaxLen,
+		Approx: true,
 		Values: values,
 	}).Result(); err != nil {
 		return fmt.Errorf("failed to write dead-letter message: %w", err)

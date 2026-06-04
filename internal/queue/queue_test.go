@@ -146,6 +146,18 @@ func (h *mockHandler) HandleGroupJoinJob(_ context.Context, job *queue.GroupJoin
 	return h.err
 }
 
+func (h *mockHandler) HandleMessageExtractionJob(_ context.Context, job *queue.MessageExtractionJob) error {
+	return h.err
+}
+
+func (h *mockHandler) HandleGroupExtractionJob(_ context.Context, job *queue.GroupExtractionJob) error {
+	return h.err
+}
+
+func (h *mockHandler) HandleMemberExtractionJob(_ context.Context, job *queue.MemberExtractionJob) error {
+	return h.err
+}
+
 func (h *mockHandler) getJobs() []*queue.RecipientJob {
 	h.mu.Lock()
 	defer h.mu.Unlock()
