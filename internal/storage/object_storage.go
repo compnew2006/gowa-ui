@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
@@ -60,6 +61,7 @@ func NewObjectStorage(cfg *config.StorageConfig) (ObjectStorage, error) {
 		inner:     store,
 		maxRetry:  3,
 		baseDelay: 500 * time.Millisecond,
+		breaker:   newCircuitBreaker(5, 30*time.Second),
 	}, nil
 }
 
@@ -247,13 +249,96 @@ func isObjectNotFound(err error) bool {
 	return resp.Code == "NoSuchKey" || resp.Code == "NoSuchObject" || resp.Code == "NoSuchBucket"
 }
 
-type retryableObjectStorage struct {
-	inner     ObjectStorage
-	maxRetry  int
-	baseDelay time.Duration
+type circuitState int32
+
+const (
+	circuitClosed   circuitState = iota
+	circuitOpen
+	circuitHalfOpen
+)
+
+type circuitBreaker struct {
+	mu              sync.Mutex
+	state           circuitState
+	failures        int
+	failureThreshold int
+	resetTimeout     time.Duration
+	lastFailureTime time.Time
+	halfOpenSuccesses int
+	halfOpenRequired  int
 }
 
+func newCircuitBreaker(failureThreshold int, resetTimeout time.Duration) *circuitBreaker {
+	return &circuitBreaker{
+		state:            circuitClosed,
+		failureThreshold: failureThreshold,
+		resetTimeout:     resetTimeout,
+		halfOpenRequired: 2,
+	}
+}
+
+func (cb *circuitBreaker) allow() bool {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	switch cb.state {
+	case circuitClosed:
+		return true
+	case circuitOpen:
+		if time.Since(cb.lastFailureTime) > cb.resetTimeout {
+			cb.state = circuitHalfOpen
+			cb.halfOpenSuccesses = 0
+			return true
+		}
+		return false
+	case circuitHalfOpen:
+		return true
+	default:
+		return false
+	}
+}
+
+func (cb *circuitBreaker) recordSuccess() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.failures = 0
+	if cb.state == circuitHalfOpen {
+		cb.halfOpenSuccesses++
+		if cb.halfOpenSuccesses >= cb.halfOpenRequired {
+			cb.state = circuitClosed
+		}
+	}
+}
+
+func (cb *circuitBreaker) recordFailure() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.failures++
+	cb.lastFailureTime = time.Now()
+	if cb.state == circuitHalfOpen {
+		cb.state = circuitOpen
+	} else if cb.failures >= cb.failureThreshold {
+		cb.state = circuitOpen
+	}
+}
+
+type retryableObjectStorage struct {
+	inner      ObjectStorage
+	maxRetry   int
+	baseDelay  time.Duration
+	breaker    *circuitBreaker
+}
+
+// ErrCircuitOpen is returned when the circuit breaker is open and requests are rejected.
+var ErrCircuitOpen = errors.New("object storage circuit breaker is open")
+
 func (r *retryableObjectStorage) PutObject(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
+	if r.breaker != nil && !r.breaker.allow() {
+		return fmt.Errorf("%w: PutObject %q", ErrCircuitOpen, key)
+	}
+
 	seekableBody, actualSize, startOffset, cleanup, err := toSeekableReader(body, size)
 	if err != nil {
 		return fmt.Errorf("buffer storage body: %w", err)
@@ -265,7 +350,6 @@ func (r *retryableObjectStorage) PutObject(ctx context.Context, key string, body
 	for attempt := 0; attempt <= r.maxRetry; attempt++ {
 		if attempt > 0 {
 			if baseDelay > 0 {
-				// Exponential backoff: baseDelay * 2^(attempt-1)
 				delay := baseDelay * time.Duration(1<<(attempt-1))
 				var jitter time.Duration
 				if delay > 2 {
@@ -286,7 +370,6 @@ func (r *retryableObjectStorage) PutObject(ctx context.Context, key string, body
 				}
 			}
 
-			// Seek back to startOffset for the next attempt
 			if _, err := seekableBody.Seek(startOffset, io.SeekStart); err != nil {
 				return fmt.Errorf("seek body for retry: %w", err)
 			}
@@ -294,22 +377,134 @@ func (r *retryableObjectStorage) PutObject(ctx context.Context, key string, body
 
 		lastErr = r.inner.PutObject(ctx, key, seekableBody, actualSize, mimeType)
 		if lastErr == nil {
+			if r.breaker != nil {
+				r.breaker.recordSuccess()
+			}
 			return nil
 		}
 
 		if !isTransientError(lastErr) {
+			if r.breaker != nil {
+				r.breaker.recordFailure()
+			}
 			return lastErr
 		}
+	}
+	if r.breaker != nil {
+		r.breaker.recordFailure()
 	}
 	return fmt.Errorf("PutObject failed after %d attempts: %w", r.maxRetry+1, lastErr)
 }
 
 func (r *retryableObjectStorage) GetObject(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
-	return r.inner.GetObject(ctx, key)
+	if r.breaker != nil && !r.breaker.allow() {
+		return nil, ObjectInfo{}, fmt.Errorf("%w: GetObject %q", ErrCircuitOpen, key)
+	}
+
+	var lastErr error
+	baseDelay := r.baseDelay
+	for attempt := 0; attempt <= r.maxRetry; attempt++ {
+		if attempt > 0 {
+			if baseDelay > 0 {
+				delay := baseDelay * time.Duration(1<<(attempt-1))
+				var jitter time.Duration
+				if delay > 2 {
+					// #nosec G404 - math/rand is safe for retry backoff jitter
+					jitter = time.Duration(rand.Int63n(int64(delay) / 2))
+				}
+				select {
+				case <-ctx.Done():
+					return nil, ObjectInfo{}, ctx.Err()
+				case <-time.After(delay + jitter):
+				}
+			} else {
+				select {
+				case <-ctx.Done():
+					return nil, ObjectInfo{}, ctx.Err()
+				default:
+				}
+			}
+		}
+
+		rc, info, err := r.inner.GetObject(ctx, key)
+		if err == nil {
+			if r.breaker != nil {
+				r.breaker.recordSuccess()
+			}
+			return rc, info, nil
+		}
+
+		if errors.Is(err, ErrObjectNotFound) {
+			if r.breaker != nil {
+				r.breaker.recordSuccess()
+			}
+			return nil, ObjectInfo{}, err
+		}
+
+		lastErr = err
+		if !isTransientError(err) {
+			if r.breaker != nil {
+				r.breaker.recordFailure()
+			}
+			return nil, ObjectInfo{}, err
+		}
+	}
+	if r.breaker != nil {
+		r.breaker.recordFailure()
+	}
+	return nil, ObjectInfo{}, fmt.Errorf("GetObject failed after %d attempts: %w", r.maxRetry+1, lastErr)
 }
 
 func (r *retryableObjectStorage) DeleteObject(ctx context.Context, key string) error {
-	return r.inner.DeleteObject(ctx, key)
+	if r.breaker != nil && !r.breaker.allow() {
+		return fmt.Errorf("%w: DeleteObject %q", ErrCircuitOpen, key)
+	}
+
+	var lastErr error
+	baseDelay := r.baseDelay
+	for attempt := 0; attempt <= r.maxRetry; attempt++ {
+		if attempt > 0 {
+			if baseDelay > 0 {
+				delay := baseDelay * time.Duration(1<<(attempt-1))
+				var jitter time.Duration
+				if delay > 2 {
+					// #nosec G404 - math/rand is safe for retry backoff jitter
+					jitter = time.Duration(rand.Int63n(int64(delay) / 2))
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(delay + jitter):
+				}
+			} else {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
+			}
+		}
+
+		err := r.inner.DeleteObject(ctx, key)
+		if err == nil {
+			if r.breaker != nil {
+				r.breaker.recordSuccess()
+			}
+			return nil
+		}
+
+		lastErr = err
+		if !isTransientError(err) {
+			if r.breaker != nil {
+				r.breaker.recordFailure()
+			}
+			return err
+		}
+	}
+	if r.breaker != nil {
+		r.breaker.recordFailure()
+	}
+	return fmt.Errorf("DeleteObject failed after %d attempts: %w", r.maxRetry+1, lastErr)
 }
 
 func toSeekableReader(body io.Reader, size int64) (io.ReadSeeker, int64, int64, func(), error) {

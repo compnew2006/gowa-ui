@@ -7,18 +7,23 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/stretchr/testify/assert"
 )
 
 type mockStorage struct {
-	putFunc func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error
-	calls   atomic.Int32
+	putFunc    func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error
+	getFunc    func(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error)
+	deleteFunc func(ctx context.Context, key string) error
+	putCalls   atomic.Int32
+	getCalls   atomic.Int32
+	delCalls   atomic.Int32
 }
 
 func (m *mockStorage) PutObject(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
-	m.calls.Add(1)
+	m.putCalls.Add(1)
 	if m.putFunc != nil {
 		return m.putFunc(ctx, key, body, size, mimeType)
 	}
@@ -26,10 +31,18 @@ func (m *mockStorage) PutObject(ctx context.Context, key string, body io.Reader,
 }
 
 func (m *mockStorage) GetObject(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
+	m.getCalls.Add(1)
+	if m.getFunc != nil {
+		return m.getFunc(ctx, key)
+	}
 	return nil, ObjectInfo{}, nil
 }
 
 func (m *mockStorage) DeleteObject(ctx context.Context, key string) error {
+	m.delCalls.Add(1)
+	if m.deleteFunc != nil {
+		return m.deleteFunc(ctx, key)
+	}
 	return nil
 }
 
@@ -51,7 +64,7 @@ func TestRetryableObjectStorage_PutObject_SuccessFirstAttempt(t *testing.T) {
 	body := strings.NewReader("hello-world")
 	err := retryStorage.PutObject(context.Background(), "test-key", body, int64(body.Len()), "text/plain")
 	assert.NoError(t, err)
-	assert.Equal(t, int32(1), mock.calls.Load())
+	assert.Equal(t, int32(1), mock.putCalls.Load())
 }
 
 func TestRetryableObjectStorage_PutObject_SuccessOnRetry(t *testing.T) {
@@ -66,7 +79,7 @@ func TestRetryableObjectStorage_PutObject_SuccessOnRetry(t *testing.T) {
 			return errors.New("unexpected body content")
 		}
 
-		if mock.calls.Load() < 3 {
+		if mock.putCalls.Load() < 3 {
 			// Return a transient string error
 			return errors.New("EOF during connection")
 		}
@@ -81,7 +94,7 @@ func TestRetryableObjectStorage_PutObject_SuccessOnRetry(t *testing.T) {
 	body := strings.NewReader("hello-world")
 	err := retryStorage.PutObject(context.Background(), "test-key", body, int64(body.Len()), "text/plain")
 	assert.NoError(t, err)
-	assert.Equal(t, int32(3), mock.calls.Load())
+	assert.Equal(t, int32(3), mock.putCalls.Load())
 }
 
 func TestRetryableObjectStorage_PutObject_FailureMaxRetriesExhausted(t *testing.T) {
@@ -100,7 +113,7 @@ func TestRetryableObjectStorage_PutObject_FailureMaxRetriesExhausted(t *testing.
 	err := retryStorage.PutObject(context.Background(), "test-key", body, int64(body.Len()), "text/plain")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "PutObject failed after 3 attempts")
-	assert.Equal(t, int32(3), mock.calls.Load())
+	assert.Equal(t, int32(3), mock.putCalls.Load())
 }
 
 func TestRetryableObjectStorage_NonSeekable_SizeZero(t *testing.T) {
@@ -123,7 +136,7 @@ func TestRetryableObjectStorage_NonSeekable_SizeZero(t *testing.T) {
 
 	err := retryStorage.PutObject(context.Background(), "test-key", body, 0, "text/plain")
 	assert.NoError(t, err)
-	assert.Equal(t, int32(1), mock.calls.Load())
+	assert.Equal(t, int32(1), mock.putCalls.Load())
 }
 
 func TestRetryableObjectStorage_NonSeekable_SizeMinusOne(t *testing.T) {
@@ -146,7 +159,7 @@ func TestRetryableObjectStorage_NonSeekable_SizeMinusOne(t *testing.T) {
 
 	err := retryStorage.PutObject(context.Background(), "test-key", body, -1, "text/plain")
 	assert.NoError(t, err)
-	assert.Equal(t, int32(1), mock.calls.Load())
+	assert.Equal(t, int32(1), mock.putCalls.Load())
 }
 
 func TestRetryableObjectStorage_ShortBody_MemoryBuffer(t *testing.T) {
@@ -160,7 +173,7 @@ func TestRetryableObjectStorage_ShortBody_MemoryBuffer(t *testing.T) {
 	err := retryStorage.PutObject(context.Background(), "test-key", body, 100, "text/plain")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "read body to memory")
-	assert.Equal(t, int32(0), mock.calls.Load())
+	assert.Equal(t, int32(0), mock.putCalls.Load())
 }
 
 func TestRetryableObjectStorage_ShortBody_TempFile(t *testing.T) {
@@ -175,7 +188,7 @@ func TestRetryableObjectStorage_ShortBody_TempFile(t *testing.T) {
 	err := retryStorage.PutObject(context.Background(), "test-key", body, 11*1024*1024, "text/plain")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "body size mismatch")
-	assert.Equal(t, int32(0), mock.calls.Load())
+	assert.Equal(t, int32(0), mock.putCalls.Load())
 }
 
 func TestRetryableObjectStorage_PermanentError(t *testing.T) {
@@ -199,7 +212,7 @@ func TestRetryableObjectStorage_PermanentError(t *testing.T) {
 	err := retryStorage.PutObject(context.Background(), "test-key", body, int64(body.Len()), "text/plain")
 	assert.Error(t, err)
 	assert.Equal(t, permanentErr, err)
-	assert.Equal(t, int32(1), mock.calls.Load())
+	assert.Equal(t, int32(1), mock.putCalls.Load())
 }
 
 func TestRetryableObjectStorage_TransientError_Succeeds(t *testing.T) {
@@ -211,7 +224,7 @@ func TestRetryableObjectStorage_TransientError_Succeeds(t *testing.T) {
 	}
 
 	mock.putFunc = func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
-		if mock.calls.Load() < 2 {
+		if mock.putCalls.Load() < 2 {
 			return transientErr
 		}
 		return nil
@@ -225,7 +238,7 @@ func TestRetryableObjectStorage_TransientError_Succeeds(t *testing.T) {
 	body := strings.NewReader("hello")
 	err := retryStorage.PutObject(context.Background(), "test-key", body, int64(body.Len()), "text/plain")
 	assert.NoError(t, err)
-	assert.Equal(t, int32(2), mock.calls.Load())
+	assert.Equal(t, int32(2), mock.putCalls.Load())
 }
 
 func TestIsTransientError(t *testing.T) {
@@ -282,7 +295,7 @@ func TestRetryableObjectStorage_PartiallyReadSeeker_RetryOffset(t *testing.T) {
 		assert.Equal(t, expectedUploadContent, string(data))
 		assert.Equal(t, expectedSize, size)
 
-		if mock.calls.Load() < 2 {
+		if mock.putCalls.Load() < 2 {
 			return minio.ErrorResponse{
 				StatusCode: 503,
 				Code:       "ServiceUnavailable",
@@ -293,5 +306,256 @@ func TestRetryableObjectStorage_PartiallyReadSeeker_RetryOffset(t *testing.T) {
 
 	err = retryStorage.PutObject(context.Background(), "test-key", body, expectedSize, "text/plain")
 	assert.NoError(t, err)
-	assert.Equal(t, int32(2), mock.calls.Load())
+	assert.Equal(t, int32(2), mock.putCalls.Load())
+}
+
+func TestRetryableObjectStorage_GetObject_SuccessFirstAttempt(t *testing.T) {
+	mock := &mockStorage{}
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  2,
+		baseDelay: 0,
+		breaker:   newCircuitBreaker(5, 30*time.Second),
+	}
+
+	_, _, err := retryStorage.GetObject(context.Background(), "test-key")
+	assert.NoError(t, err)
+	assert.Equal(t, int32(1), mock.getCalls.Load())
+
+	cb := retryStorage.breaker
+	assert.Equal(t, circuitClosed, cb.state)
+	assert.Equal(t, 0, cb.failures)
+}
+
+func TestRetryableObjectStorage_GetObject_SuccessOnRetry(t *testing.T) {
+	mock := &mockStorage{}
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  2,
+		baseDelay: 0,
+		breaker:   newCircuitBreaker(5, 30*time.Second),
+	}
+
+	mock.getFunc = func(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
+		if mock.getCalls.Load() < 2 {
+			return nil, ObjectInfo{}, minio.ErrorResponse{StatusCode: 503, Code: "ServiceUnavailable"}
+		}
+		return io.NopCloser(strings.NewReader("data")), ObjectInfo{Size: 4, ContentType: "text/plain"}, nil
+	}
+
+	rc, _, err := retryStorage.GetObject(context.Background(), "test-key")
+	assert.NoError(t, err)
+	assert.NotNil(t, rc)
+	assert.Equal(t, int32(2), mock.getCalls.Load())
+	_ = rc.Close()
+}
+
+func TestRetryableObjectStorage_GetObject_NotFound_NoRetry(t *testing.T) {
+	mock := &mockStorage{}
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  3,
+		baseDelay: 0,
+		breaker:   newCircuitBreaker(5, 30*time.Second),
+	}
+
+	mock.getFunc = func(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
+		return nil, ObjectInfo{}, ErrObjectNotFound
+	}
+
+	_, _, err := retryStorage.GetObject(context.Background(), "missing-key")
+	assert.ErrorIs(t, err, ErrObjectNotFound)
+	assert.Equal(t, int32(1), mock.getCalls.Load())
+}
+
+func TestRetryableObjectStorage_GetObject_MaxRetriesExhausted(t *testing.T) {
+	mock := &mockStorage{}
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  2,
+		baseDelay: 0,
+		breaker:   newCircuitBreaker(5, 30*time.Second),
+	}
+
+	mock.getFunc = func(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
+		return nil, ObjectInfo{}, minio.ErrorResponse{StatusCode: 500, Code: "InternalError"}
+	}
+
+	_, _, err := retryStorage.GetObject(context.Background(), "test-key")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "GetObject failed after 3 attempts")
+	assert.Equal(t, int32(3), mock.getCalls.Load())
+
+	cb := retryStorage.breaker
+	assert.Equal(t, 1, cb.failures)
+}
+
+func TestRetryableObjectStorage_DeleteObject_SuccessFirstAttempt(t *testing.T) {
+	mock := &mockStorage{}
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  2,
+		baseDelay: 0,
+		breaker:   newCircuitBreaker(5, 30*time.Second),
+	}
+
+	err := retryStorage.DeleteObject(context.Background(), "test-key")
+	assert.NoError(t, err)
+	assert.Equal(t, int32(1), mock.delCalls.Load())
+}
+
+func TestRetryableObjectStorage_DeleteObject_SuccessOnRetry(t *testing.T) {
+	mock := &mockStorage{}
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  2,
+		baseDelay: 0,
+		breaker:   newCircuitBreaker(5, 30*time.Second),
+	}
+
+	mock.deleteFunc = func(ctx context.Context, key string) error {
+		if mock.delCalls.Load() < 2 {
+			return minio.ErrorResponse{StatusCode: 503, Code: "ServiceUnavailable"}
+		}
+		return nil
+	}
+
+	err := retryStorage.DeleteObject(context.Background(), "test-key")
+	assert.NoError(t, err)
+	assert.Equal(t, int32(2), mock.delCalls.Load())
+}
+
+func TestRetryableObjectStorage_DeleteObject_MaxRetriesExhausted(t *testing.T) {
+	mock := &mockStorage{}
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  2,
+		baseDelay: 0,
+		breaker:   newCircuitBreaker(5, 30*time.Second),
+	}
+
+	mock.deleteFunc = func(ctx context.Context, key string) error {
+		return minio.ErrorResponse{StatusCode: 500, Code: "InternalError"}
+	}
+
+	err := retryStorage.DeleteObject(context.Background(), "test-key")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "DeleteObject failed after 3 attempts")
+	assert.Equal(t, int32(3), mock.delCalls.Load())
+}
+
+func TestCircuitBreaker_OpensAfterThreshold(t *testing.T) {
+	mock := &mockStorage{}
+	breaker := newCircuitBreaker(3, 100*time.Millisecond)
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  0,
+		baseDelay: 0,
+		breaker:   breaker,
+	}
+
+	mock.putFunc = func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
+		return minio.ErrorResponse{StatusCode: 500, Code: "InternalError"}
+	}
+
+	for i := 0; i < 3; i++ {
+		_ = retryStorage.PutObject(context.Background(), "key", strings.NewReader("data"), 4, "text/plain")
+	}
+
+	assert.Equal(t, circuitOpen, breaker.state)
+
+	err := retryStorage.PutObject(context.Background(), "key", strings.NewReader("data"), 4, "text/plain")
+	assert.ErrorIs(t, err, ErrCircuitOpen)
+}
+
+func TestCircuitBreaker_HalfOpenAfterResetTimeout(t *testing.T) {
+	breaker := newCircuitBreaker(1, 50*time.Millisecond)
+
+	breaker.recordFailure()
+	assert.Equal(t, circuitOpen, breaker.state)
+
+	time.Sleep(80 * time.Millisecond)
+
+	assert.True(t, breaker.allow())
+	assert.Equal(t, circuitHalfOpen, breaker.state)
+}
+
+func TestCircuitBreaker_ClosesAfterHalfOpenRecovery(t *testing.T) {
+	breaker := newCircuitBreaker(1, 50*time.Millisecond)
+
+	breaker.recordFailure()
+	assert.Equal(t, circuitOpen, breaker.state)
+
+	time.Sleep(80 * time.Millisecond)
+
+	assert.True(t, breaker.allow())
+	breaker.recordSuccess()
+	breaker.recordSuccess()
+	assert.Equal(t, circuitClosed, breaker.state)
+}
+
+func TestCircuitBreaker_ReOpensOnHalfOpenFailure(t *testing.T) {
+	breaker := newCircuitBreaker(1, 50*time.Millisecond)
+
+	breaker.recordFailure()
+	time.Sleep(80 * time.Millisecond)
+
+	assert.True(t, breaker.allow())
+	breaker.recordFailure()
+	assert.Equal(t, circuitOpen, breaker.state)
+}
+
+func TestCircuitBreaker_GetObjectBlockedWhenOpen(t *testing.T) {
+	mock := &mockStorage{}
+	breaker := newCircuitBreaker(1, 1*time.Hour)
+	breaker.recordFailure()
+
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  2,
+		baseDelay: 0,
+		breaker:   breaker,
+	}
+
+	_, _, err := retryStorage.GetObject(context.Background(), "key")
+	assert.ErrorIs(t, err, ErrCircuitOpen)
+	assert.Equal(t, int32(0), mock.getCalls.Load())
+}
+
+func TestCircuitBreaker_DeleteObjectBlockedWhenOpen(t *testing.T) {
+	mock := &mockStorage{}
+	breaker := newCircuitBreaker(1, 1*time.Hour)
+	breaker.recordFailure()
+
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  2,
+		baseDelay: 0,
+		breaker:   breaker,
+	}
+
+	err := retryStorage.DeleteObject(context.Background(), "key")
+	assert.ErrorIs(t, err, ErrCircuitOpen)
+	assert.Equal(t, int32(0), mock.delCalls.Load())
+}
+
+func TestCircuitBreaker_PermanentError_CountsAsFailure(t *testing.T) {
+	mock := &mockStorage{}
+	breaker := newCircuitBreaker(2, 30*time.Second)
+	retryStorage := &retryableObjectStorage{
+		inner:     mock,
+		maxRetry:  0,
+		baseDelay: 0,
+		breaker:   breaker,
+	}
+
+	mock.putFunc = func(ctx context.Context, key string, body io.Reader, size int64, mimeType string) error {
+		return errors.New("permanent error: access denied")
+	}
+
+	_ = retryStorage.PutObject(context.Background(), "key", strings.NewReader("data"), 4, "text/plain")
+	assert.Equal(t, 1, breaker.failures)
+
+	_ = retryStorage.PutObject(context.Background(), "key", strings.NewReader("data"), 4, "text/plain")
+	assert.Equal(t, circuitOpen, breaker.state)
 }
