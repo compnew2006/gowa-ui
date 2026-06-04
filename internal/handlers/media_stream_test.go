@@ -798,3 +798,83 @@ func TestServeMedia_RollsBackRestoredFileWhenMessageUpdateFails(t *testing.T) {
 	require.NoError(t, app.DB.First(&refreshed, "id = ?", message.ID).Error)
 	assert.Equal(t, message.MediaURL, refreshed.MediaURL)
 }
+
+func TestServeMedia_SelfHealingOnMissingObject(t *testing.T) {
+	app := newTestApp(t)
+	testutil.TruncateTables(app.DB)
+
+	// Stub the ObjectStorage to return storage.ErrObjectNotFound
+	storageMock := &handlerFakeStorage{
+		getFunc: func(ctx context.Context, key string) (io.ReadCloser, objectstorage.ObjectInfo, error) {
+			return nil, objectstorage.ObjectInfo{}, objectstorage.ErrObjectNotFound
+		},
+	}
+	app.ObjectStorage = storageMock
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createUserWithPermissionKeys(t, app, org.ID, "chat-reader", []string{"chat:read"})
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	asset := models.MediaAsset{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		FileHash:  "missing-self-heal-hash",
+		S3Key:     "whatsmeow/media/mi/ss/missing-self-heal-hash",
+		MimeType:  "application/pdf",
+		Size:      123,
+	}
+	require.NoError(t, app.DB.Create(&asset).Error)
+
+	message1 := models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       contact.ID,
+		WhatsAppAccount: "whatsmeow",
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeDocument,
+		Content:         "Missing PDF Document 1",
+		MediaAssetID:    &asset.ID,
+		MediaURL:        "/api/media/" + uuid.NewString(),
+		MediaMimeType:   "application/pdf",
+		MediaFilename:   "missing-report-1.pdf",
+		Status:          models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(&message1).Error)
+
+	message2 := models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		ContactID:       contact.ID,
+		WhatsAppAccount: "whatsmeow",
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeDocument,
+		Content:         "Missing PDF Document 2",
+		MediaAssetID:    &asset.ID,
+		MediaURL:        "/api/media/" + uuid.NewString(),
+		MediaMimeType:   "application/pdf",
+		MediaFilename:   "missing-report-2.pdf",
+		Status:          models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(&message2).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", message1.ID.String())
+
+	err := app.ServeMedia(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+
+	// Verify that media_deleted_at was updated to a non-nil timestamp for BOTH messages in the DB
+	var updatedMessage1 models.Message
+	require.NoError(t, app.DB.First(&updatedMessage1, "id = ?", message1.ID).Error)
+	assert.NotNil(t, updatedMessage1.MediaDeletedAt)
+
+	var updatedMessage2 models.Message
+	require.NoError(t, app.DB.First(&updatedMessage2, "id = ?", message2.ID).Error)
+	assert.NotNil(t, updatedMessage2.MediaDeletedAt)
+
+	// Verify that the MediaAsset is soft-deleted
+	var count int64
+	require.NoError(t, app.DB.Model(&models.MediaAsset{}).Where("id = ?", asset.ID).Count(&count).Error)
+	assert.Equal(t, int64(0), count)
+}

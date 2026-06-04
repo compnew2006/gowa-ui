@@ -12,12 +12,54 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
+	"github.com/compnew2006/whatomate/internal/storage"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
 )
+
+type safeRequestCtx struct {
+	*fasthttp.RequestCtx
+}
+
+func (s safeRequestCtx) Done() (ch <-chan struct{}) {
+	defer func() {
+		if r := recover(); r != nil {
+			ch = nil
+		}
+	}()
+	return s.RequestCtx.Done()
+}
+
+func (s safeRequestCtx) Err() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = nil
+		}
+	}()
+	return s.RequestCtx.Err()
+}
+
+func (s safeRequestCtx) Deadline() (deadline time.Time, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			deadline = time.Time{}
+			ok = false
+		}
+	}()
+	return s.RequestCtx.Deadline()
+}
+
+func (s safeRequestCtx) Value(key any) (val any) {
+	defer func() {
+		if r := recover(); r != nil {
+			val = nil
+		}
+	}()
+	return s.RequestCtx.Value(key)
+}
 
 // getMediaStoragePath returns the base path for media storage
 func (a *App) getMediaStoragePath() string {
@@ -177,6 +219,7 @@ func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 // ServeMedia serves media files from local storage
 // Only authorized users who have access to the message can view the media
 func (a *App) ServeMedia(r *fastglue.Request) error {
+	ctx := safeRequestCtx{r.RequestCtx}
 	requestDB :=
 		// Get auth context
 		a.requestDB(r)
@@ -201,7 +244,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	}
 
 	var message models.Message
-	if err := requestDB.WithContext(r.RequestCtx).
+	if err := requestDB.WithContext(ctx).
 		Preload("MediaAsset").
 		Where("id = ? AND organization_id = ?", messageID, orgID).
 		First(&message).Error; err != nil {
@@ -237,7 +280,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	if message.MediaAssetID == nil || message.MediaAsset == nil || strings.TrimSpace(message.MediaAsset.S3Key) == "" {
 		if relativePath := strings.TrimSpace(message.MediaURL); relativePath != "" {
 			if missing, missingErr := isMissingLegacyMediaPath(a.getMediaStoragePath(), relativePath); missingErr == nil && missing {
-				if restoredMessage, restored := a.maybeRestoreLegacyMedia(r.RequestCtx, requestDB, &message); restored && restoredMessage != nil {
+				if restoredMessage, restored := a.maybeRestoreLegacyMedia(ctx, requestDB, &message); restored && restoredMessage != nil {
 					message = *restoredMessage
 					relativePath = strings.TrimSpace(message.MediaURL)
 				} else {
@@ -259,8 +302,29 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Media storage is not configured", nil, "")
 	}
 
-	reader, objectInfo, err := a.ObjectStorage.GetObject(r.RequestCtx, message.MediaAsset.S3Key)
+	reader, objectInfo, err := a.ObjectStorage.GetObject(ctx, message.MediaAsset.S3Key)
 	if err != nil {
+		if errors.Is(err, storage.ErrObjectNotFound) {
+			now := time.Now().UTC()
+			// File is missing from Object Storage/local disk — self-heal by updating all matching messages and the asset.
+			errDb := requestDB.Transaction(func(tx *gorm.DB) error {
+				if err := tx.Model(&models.Message{}).
+					Where("media_asset_id = ? AND media_deleted_at IS NULL", message.MediaAssetID).
+					Updates(map[string]any{
+						"media_deleted_at": now,
+						"updated_at":       now,
+					}).Error; err != nil {
+					return fmt.Errorf("update messages media_deleted_at for asset %s: %w", message.MediaAssetID, err)
+				}
+				if err := tx.Delete(message.MediaAsset).Error; err != nil {
+					return fmt.Errorf("delete media asset %s: %w", message.MediaAssetID, err)
+				}
+				return nil
+			})
+			if errDb != nil {
+				a.Log.Error("ServeMedia: failed to sync missing media asset state in database", "media_asset_id", message.MediaAssetID, "error", errDb)
+			}
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Media not found", nil, "")
 	}
 
@@ -289,6 +353,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 //  1. Legacy (Meta Cloud API): re-downloads synchronously from Meta CDN within 30-day TTL.
 //  2. Whatsmeow async: re-enqueues the stored protobuf payload for worker-driven recovery.
 func (a *App) RetryMediaDownload(r *fastglue.Request) error {
+	ctx := safeRequestCtx{r.RequestCtx}
 	requestDB := a.requestDB(r)
 
 	orgID, userID, err := a.getOrgAndUserID(r)
@@ -310,7 +375,7 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 	}
 
 	var message models.Message
-	if err := requestDB.WithContext(r.RequestCtx).
+	if err := requestDB.WithContext(ctx).
 		Preload("MediaAsset").
 		Where("id = ? AND organization_id = ?", messageID, orgID).
 		First(&message).Error; err != nil {
@@ -326,7 +391,7 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 		if message.MediaAssetID != nil {
 			mediaAvailable = false
 			if message.MediaAsset != nil && strings.TrimSpace(message.MediaAsset.S3Key) != "" && a.ObjectStorage != nil {
-				reader, _, err := a.ObjectStorage.GetObject(r.RequestCtx, message.MediaAsset.S3Key)
+				reader, _, err := a.ObjectStorage.GetObject(ctx, message.MediaAsset.S3Key)
 				if err == nil {
 					if reader != nil {
 						_ = reader.Close()
@@ -352,7 +417,7 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 		return a.retryLegacyMediaDownload(r, requestDB, message)
 	}
 
-	if a.retryWhatsmeowMediaRecovery(r.RequestCtx, requestDB, &message) {
+	if a.retryWhatsmeowMediaRecovery(ctx, requestDB, &message) {
 		return r.SendEnvelope(map[string]any{
 			"status":  "queued",
 			"message": "Media recovery re-queued",
@@ -369,9 +434,10 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 }
 
 func (a *App) retryLegacyMediaDownload(r *fastglue.Request, requestDB *gorm.DB, message models.Message) error {
+	ctx := safeRequestCtx{r.RequestCtx}
 	result, err, _ := a.legacyMediaRestoreGroup.Do(message.ID.String(), func() (any, error) {
 		recoveryInfo, _, _ := inspectLegacyMediaRecovery(&message, time.Now().UTC())
-		msg, _, err := a.performLegacyMediaRestore(r.RequestCtx, requestDB, message, recoveryInfo)
+		msg, _, err := a.performLegacyMediaRestore(ctx, requestDB, message, recoveryInfo)
 		return msg, err
 	})
 	if err != nil {

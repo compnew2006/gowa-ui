@@ -12,6 +12,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 const uploadsCleanupWorkerLockKey int64 = 2026041301
@@ -350,7 +351,7 @@ func (w *UploadsCleanupWorker) deleteExpiredUploadFiles(now time.Time, retention
 	deletedFiles := 0
 	for _, relativeDir := range uploadsCleanupTargetDirs {
 		dirPath := filepath.Join(rootPath, relativeDir)
-		count, err := w.deleteExpiredFilesFromDir(dirPath, cutoff, retentionDays)
+		count, err := w.deleteExpiredFilesFromDir(rootPath, dirPath, cutoff, retentionDays)
 		if err != nil {
 			return 0, err
 		}
@@ -384,7 +385,7 @@ func (w *UploadsCleanupWorker) deleteExpiredOrganizationUploadFiles(rootPath str
 
 		for _, relativeDir := range uploadsCleanupTargetDirs {
 			dirPath := filepath.Join(orgsRoot, entry.Name(), relativeDir)
-			count, err := w.deleteExpiredFilesFromDir(dirPath, cutoff, retentionDays)
+			count, err := w.deleteExpiredFilesFromDir(rootPath, dirPath, cutoff, retentionDays)
 			if err != nil {
 				return 0, err
 			}
@@ -395,7 +396,7 @@ func (w *UploadsCleanupWorker) deleteExpiredOrganizationUploadFiles(rootPath str
 	return deletedFiles, nil
 }
 
-func (w *UploadsCleanupWorker) deleteExpiredFilesFromDir(dirPath string, cutoff time.Time, retentionDays int) (int, error) {
+func (w *UploadsCleanupWorker) deleteExpiredFilesFromDir(rootPath, dirPath string, cutoff time.Time, retentionDays int) (int, error) {
 	info, err := os.Stat(dirPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -427,12 +428,56 @@ func (w *UploadsCleanupWorker) deleteExpiredFilesFromDir(dirPath string, cutoff 
 			return nil
 		}
 
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("delete upload file %q: %w", path, err)
+		relPath, err := filepath.Rel(rootPath, path)
+		if err != nil {
+			return fmt.Errorf("resolve upload relative path %q: %w", path, err)
+		}
+
+		now := time.Now().UTC()
+		errDb := w.app.DB.Transaction(func(tx *gorm.DB) error {
+			// 1. Mark legacy local file messages as deleted.
+			if err := tx.Model(&models.Message{}).
+				Where("media_url = ? AND media_deleted_at IS NULL", relPath).
+				Updates(map[string]any{
+					"media_deleted_at": now,
+					"updated_at":       now,
+				}).Error; err != nil {
+				return fmt.Errorf("update legacy local media_deleted_at: %w", err)
+			}
+
+			// 2. Mark object-storage/minio assets with the matching S3Key as deleted.
+			var asset models.MediaAsset
+			if err := tx.Where("s3_key = ?", relPath).First(&asset).Error; err == nil {
+				if err := tx.Model(&models.Message{}).
+					Where("media_asset_id = ? AND media_deleted_at IS NULL", asset.ID).
+					Updates(map[string]any{
+						"media_deleted_at": now,
+						"updated_at":       now,
+					}).Error; err != nil {
+					return fmt.Errorf("update messages media_deleted_at for asset %s: %w", asset.ID, err)
+				}
+
+				if err := tx.Delete(&asset).Error; err != nil {
+					return fmt.Errorf("delete media asset %s: %w", asset.ID, err)
+				}
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("lookup media asset for s3_key %s: %w", relPath, err)
+			}
+
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("delete upload file %q: %w", path, err)
+			}
+
+			return nil
+		})
+		if errDb != nil {
+			w.app.Log.Error("Uploads cleanup worker failed to sync database on file deletion", "path", path, "error", errDb)
+			return errDb
 		}
 
 		deletedFiles++
 		w.app.Log.Info("Uploads cleanup worker deleted file", "path", path, "retention_days", retentionDays)
+
 		return nil
 	})
 	if err != nil {
