@@ -72,15 +72,13 @@ func (w *Worker) handleGroupRecipientJob(ctx context.Context, job *queue.Recipie
 	}
 
 	if delayDuration > 0 && w.Redis != nil {
-		if transErr := w.transitionRecipientToSending(ctx, job.RecipientID); transErr != nil {
-			w.Log.Warn("Group recipient already being sent by another worker", "recipient_id", job.RecipientID, "error", transErr)
-			return nil
-		}
 		sendAt := time.Now().Add(delayDuration)
 		if schedErr := w.scheduleRecipientSend(ctx, job, sendAt); schedErr != nil {
 			w.Log.Error("Failed to schedule group send, falling back to immediate", "error", schedErr, "recipient_id", job.RecipientID)
-			w.updateRecipientStatus(job.RecipientID, models.MessageStatusPending, "", "")
 		} else {
+			if transErr := w.transitionRecipientToSending(ctx, job.RecipientID, uuid.New().String()); transErr != nil {
+				w.Log.Warn("Group recipient already being sent by another worker (scheduled send will be skipped at poll time)", "recipient_id", job.RecipientID, "error", transErr)
+			}
 			return nil
 		}
 	}

@@ -66,6 +66,7 @@ type BulkMessageRecipient struct {
 	GroupJID          string        `gorm:"size:100;index" json:"group_jid,omitempty"`               // e.g. "1203631234567-1601234567@g.us"
 	GroupName         string        `gorm:"size:255" json:"group_name,omitempty"`
 	ParticipantCount  int           `json:"participant_count"`
+	SendAttemptID     string        `gorm:"size:36;index;default:''" json:"send_attempt_id,omitempty"`
 
 	// Relations
 	Campaign *BulkMessageCampaign `gorm:"foreignKey:CampaignID" json:"campaign,omitempty"`

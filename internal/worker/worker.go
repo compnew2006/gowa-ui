@@ -157,6 +157,14 @@ func (w *Worker) Run(ctx context.Context) error {
 		}()
 	}
 
+	if w.DB != nil && w.Redis != nil && w.Consumer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.runSendingRecoveryLoop(runCtx)
+		}()
+	}
+
 	var retErr error
 	select {
 	case <-ctx.Done():
@@ -278,15 +286,13 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 	}
 
 	if delayDuration > 0 && w.Redis != nil {
-		if err := w.transitionRecipientToSending(ctx, job.RecipientID); err != nil {
-			w.Log.Warn("Recipient already being sent by another worker, skipping schedule", "recipient_id", job.RecipientID, "error", err)
-			return nil
-		}
 		sendAt := time.Now().Add(delayDuration)
 		if err := w.scheduleRecipientSend(ctx, job, sendAt); err != nil {
 			w.Log.Error("Failed to schedule send, falling back to immediate send", "error", err, "recipient_id", job.RecipientID)
-			w.updateRecipientStatus(job.RecipientID, models.MessageStatusPending, "", "")
 		} else {
+			if err := w.transitionRecipientToSending(ctx, job.RecipientID, uuid.New().String()); err != nil {
+				w.Log.Warn("Recipient already being sent by another worker (scheduled send will be skipped at poll time)", "recipient_id", job.RecipientID, "error", err)
+			}
 			return nil
 		}
 	}
@@ -297,6 +303,22 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		}
 	}
 
+	return w.executeRecipientSend(ctx, job)
+}
+
+func (w *Worker) executeRecipientSendWithAttempt(ctx context.Context, job *queue.RecipientJob, attemptID string) error {
+	var existingRecipient models.BulkMessageRecipient
+	if err := w.DB.Where("id = ?", job.RecipientID).First(&existingRecipient).Error; err != nil {
+		return fmt.Errorf("failed to load recipient for attempt check: %w", err)
+	}
+	if existingRecipient.SendAttemptID != attemptID {
+		w.Log.Info("Skipping recipient with mismatched attempt ID — recovery or another worker owns it",
+			"recipient_id", job.RecipientID,
+			"expected_attempt", attemptID,
+			"actual_attempt", existingRecipient.SendAttemptID,
+		)
+		return nil
+	}
 	return w.executeRecipientSend(ctx, job)
 }
 
@@ -315,11 +337,6 @@ func (w *Worker) executeRecipientSend(ctx context.Context, job *queue.RecipientJ
 		return nil
 	}
 
-	if !w.claimScheduledSend(ctx, job.RecipientID) {
-		w.Log.Info("Another worker is already sending to this recipient", "recipient_id", job.RecipientID)
-		return nil
-	}
-
 	var campaign models.BulkMessageCampaign
 	if err := w.DB.Where("id = ?", job.CampaignID).Preload("Template").First(&campaign).Error; err != nil {
 		w.Log.Error("Failed to load campaign for send", "error", err, "campaign_id", job.CampaignID)
@@ -331,6 +348,12 @@ func (w *Worker) executeRecipientSend(ctx context.Context, job *queue.RecipientJ
 		w.updateRecipientStatusConditional(job.RecipientID, existingRecipient.Status, models.MessageStatusFailed, "", "Campaign paused or cancelled")
 		w.incrementCampaignCount(job.CampaignID, "failed_count")
 		return nil
+	}
+
+	isGroup := existingRecipient.RecipientType == models.RecipientTypeGroup || job.RecipientType == models.RecipientTypeGroup
+
+	if isGroup {
+		return w.executeGroupRecipientSend(ctx, job, existingRecipient, campaign)
 	}
 
 	contact, _, err := contactutil.GetOrCreateContact(w.DB, job.OrganizationID, job.PhoneNumber, job.RecipientName)
@@ -434,6 +457,109 @@ func (w *Worker) executeRecipientSend(ctx context.Context, job *queue.RecipientJ
 
 	if err := w.DB.Create(&message).Error; err != nil {
 		w.Log.Error("Failed to save message", "error", err, "recipient", job.PhoneNumber)
+	}
+
+	w.checkCampaignCompletion(ctx, job.CampaignID, job.OrganizationID)
+	return nil
+}
+
+func (w *Worker) executeGroupRecipientSend(ctx context.Context, job *queue.RecipientJob, recipient models.BulkMessageRecipient, campaign models.BulkMessageCampaign) error {
+	groupJID := recipient.GroupJID
+	if groupJID == "" {
+		groupJID = job.GroupJID
+	}
+
+	if !contactutil.IsValidGroupJID(groupJID) {
+		reason := fmt.Sprintf("Invalid group JID format: %s", groupJID)
+		w.updateRecipientStatusConditional(job.RecipientID, recipient.Status, models.MessageStatusFailed, "", reason)
+		w.incrementCampaignCount(job.CampaignID, "failed_count")
+		return nil
+	}
+
+	if !w.isWhatsmeowProvider() {
+		reason := "Group messaging is not supported by this provider (Meta Cloud API). Use a whatsmeow instance."
+		w.updateRecipientStatusConditional(job.RecipientID, recipient.Status, models.MessageStatusFailed, "", reason)
+		w.incrementCampaignCount(job.CampaignID, "failed_count")
+		return nil
+	}
+
+	instanceID := strings.TrimSpace(campaign.WhatsAppAccount)
+
+	if gp, ok := w.MessageProvider.(provider.GroupProvider); ok {
+		if _, err := gp.VerifyGroupMembership(ctx, instanceID, groupJID); err != nil {
+			reason := fmt.Sprintf("Group not found or inaccessible: %s", groupJID)
+			w.updateRecipientStatusConditional(job.RecipientID, recipient.Status, models.MessageStatusFailed, "", reason)
+			w.incrementCampaignCount(job.CampaignID, "failed_count")
+			return nil
+		}
+	}
+
+	recipient.PhoneNumber = groupJID
+
+	templateBody := ""
+	if campaign.Template != nil {
+		templateBody = campaign.Template.BodyContent
+	}
+	mergedTemplateParams := w.resolveCampaignTemplateParams(
+		ctx,
+		job.OrganizationID,
+		nil,
+		groupJID,
+		recipient.GroupName,
+		templateBody,
+		job.TemplateParams,
+	)
+	recipient.TemplateParams = mergedTemplateParams
+
+	if w.MessageProvider == nil {
+		sendErr := fmt.Errorf("message provider is not configured")
+		w.updateRecipientStatusConditional(job.RecipientID, recipient.Status, models.MessageStatusFailed, "", sendErr.Error())
+		w.incrementCampaignCount(job.CampaignID, "failed_count")
+		return nil
+	}
+
+	waMessageID, sendErr := w.sendTemplateMessageViaProvider(ctx, instanceID, &campaign, campaign.Template, &recipient)
+
+	var messageInstanceID *uuid.UUID
+	if parsedInstanceID, parseErr := uuid.Parse(instanceID); parseErr == nil {
+		messageInstanceID = &parsedInstanceID
+	}
+
+	message := models.Message{
+		OrganizationID:    job.OrganizationID,
+		InstanceID:        messageInstanceID,
+		WhatsAppAccount:   campaign.WhatsAppAccount,
+		WhatsAppMessageID: waMessageID,
+		Direction:         models.DirectionOutgoing,
+		MessageType:       models.MessageTypeTemplate,
+		TemplateParams:    recipient.TemplateParams,
+		Metadata: models.JSONB{
+			"campaign_id":    job.CampaignID.String(),
+			"recipient_name": job.RecipientName,
+			"group_jid":      groupJID,
+			"group_name":     recipient.GroupName,
+		},
+	}
+	if campaign.Template != nil {
+		message.TemplateName = campaign.Template.Name
+		message.Content = renderCampaignTemplateBody(campaign.Template.BodyContent, recipient.TemplateParams)
+	}
+
+	if sendErr != nil {
+		w.Log.Error("Failed to send group message", "error", sendErr, "group_jid", groupJID)
+		message.Status = models.MessageStatusFailed
+		message.ErrorMessage = sendErr.Error()
+		w.updateRecipientStatusConditional(job.RecipientID, recipient.Status, models.MessageStatusFailed, "", sendErr.Error())
+		w.incrementCampaignCount(job.CampaignID, "failed_count")
+	} else {
+		w.Log.Info("Group message sent", "group_jid", groupJID, "message_id", waMessageID)
+		message.Status = models.MessageStatusSent
+		w.updateRecipientStatusConditional(job.RecipientID, recipient.Status, models.MessageStatusSent, waMessageID, "")
+		w.incrementCampaignCount(job.CampaignID, "sent_count")
+	}
+
+	if err := w.DB.Create(&message).Error; err != nil {
+		w.Log.Error("Failed to save group message", "error", err, "group_jid", groupJID)
 	}
 
 	w.checkCampaignCompletion(ctx, job.CampaignID, job.OrganizationID)
@@ -546,15 +672,18 @@ func (w *Worker) computeCampaignDelayDuration(ctx context.Context, delayScopeKey
 	return time.Duration(waitMs) * time.Millisecond, nil
 }
 
-func (w *Worker) transitionRecipientToSending(ctx context.Context, recipientID uuid.UUID) error {
+func (w *Worker) transitionRecipientToSending(ctx context.Context, recipientID uuid.UUID, attemptID string) error {
 	result := w.DB.Model(&models.BulkMessageRecipient{}).
 		Where("id = ? AND status = ?", recipientID, models.MessageStatusPending).
-		Update("status", models.MessageStatusSending)
+		Updates(map[string]interface{}{
+			"status":          models.MessageStatusSending,
+			"send_attempt_id": attemptID,
+		})
 	if result.Error != nil {
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("recipient %s is no longer pending ( RowsAffected=0)", recipientID)
+		return fmt.Errorf("recipient %s is no longer pending (RowsAffected=0)", recipientID)
 	}
 	return nil
 }
@@ -682,17 +811,15 @@ func (w *Worker) publishCampaignStats(ctx context.Context, campaignID, organizat
 
 // checkCampaignCompletion checks if all recipients are processed and marks campaign as completed
 func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organizationID uuid.UUID) {
-	// Count pending recipients
-	var pendingCount int64
+	var unfinishedCount int64
 	if err := w.DB.Model(&models.BulkMessageRecipient{}).
-		Where("campaign_id = ? AND status = ?", campaignID, models.MessageStatusPending).
-		Count(&pendingCount).Error; err != nil {
-		w.Log.Error("Failed to count pending campaign recipients", "error", err, "campaign_id", campaignID)
+		Where("campaign_id = ? AND status IN ?", campaignID, []models.MessageStatus{models.MessageStatusPending, models.MessageStatusSending}).
+		Count(&unfinishedCount).Error; err != nil {
+		w.Log.Error("Failed to count unfinished campaign recipients", "error", err, "campaign_id", campaignID)
 		return
 	}
 
-	// If no pending recipients, mark campaign as completed
-	if pendingCount == 0 {
+	if unfinishedCount == 0 {
 		now := time.Now()
 		result := w.DB.Model(&models.BulkMessageCampaign{}).
 			Where("id = ? AND status = ?", campaignID, models.CampaignStatusProcessing).
@@ -705,7 +832,6 @@ func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organi
 			return
 		}
 		if result.RowsAffected == 0 {
-			// Another worker already completed or campaign no longer processing.
 			return
 		}
 
@@ -717,7 +843,6 @@ func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organi
 
 		w.Log.Info("Campaign completed", "campaign_id", campaignID, "sent", campaign.SentCount, "failed", campaign.FailedCount)
 
-		// Publish completion status
 		_ = w.Publisher.PublishCampaignStats(ctx, &queue.CampaignStatsUpdate{
 			CampaignID:     campaignID.String(),
 			OrganizationID: organizationID,
@@ -728,7 +853,6 @@ func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organi
 			FailedCount:    campaign.FailedCount,
 		})
 	} else {
-		// Publish current stats
 		w.publishCampaignStats(ctx, campaignID, organizationID)
 	}
 }
