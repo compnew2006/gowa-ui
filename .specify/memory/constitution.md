@@ -1,38 +1,30 @@
 <!--
   Sync Impact Report
 
-  Version change: (new) v1.0.0
-  Modified principles: N/A (initial creation)
+  Version change: v1.0.0 → v1.1.0
+  Modified principles: N/A (minor version additions)
   Added sections:
-    - Preamble
-    - §1 Project Identity
-    - §2 Governance
-    - §3 Backend Rules (Go)
-    - §4 Frontend Rules (Vue)
-    - §5 API Compatibility
-    - §6 Database & Migration Rules
-    - §7 Testing Requirements
-    - §8 Security & Authentication
-    - §9 Forbidden Changes
-    - §10 Code Style Conventions
-    - §11 Architecture Integrity
-    - §12 Amendment Procedure
+    - §1.5 Licensing System Pathways
+    - §3.8 Campaign Execution & Worker Policies
+    - §4.9 Chat Workflows & Collaboration
+    - §8.9 Security Audit Rules
+    - §8.10 Unified Safe Origin Evaluator
   Removed sections: N/A
 
   Templates requiring updates:
-    ✅ .opencode/skills/04-speckit.plan/templates/plan-template.md (Constitution Check section references this file)
-    ✅ .opencode/skills/02-speckit.specify/templates/spec-template.md (no changes needed)
-    ✅ .opencode/skills/05-speckit.tasks/templates/tasks-template.md (no changes needed)
-    ✅ AGENTS.md (no changes needed — already aligned)
+    ✅ .opencode/skills/04-speckit.plan/templates/plan-template.md
+    ✅ .opencode/skills/02-speckit.specify/templates/spec-template.md
+    ✅ .opencode/skills/05-speckit.tasks/templates/tasks-template.md
+    ✅ AGENTS.md
 
   Follow-up TODOs: None
 -->
 
 # Constitution of the Whatomate Project
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Ratification Date**: 2026-01-01
-**Last Amended**: 2026-06-04
+**Last Amended**: 2026-06-06
 
 ## Preamble
 
@@ -80,6 +72,22 @@ The Vue SPA MUST be compiled into the Go binary via
 build MUST run `make build-prod` which builds the frontend first, then
 compiles the binary. Raw `go build` without the frontend build step
 will produce an incomplete artifact.
+
+### 1.5 Licensing System Pathways
+
+The licensing system supports two distinct deployment pathways:
+
+1.  **Self-Hosted Pathway**:
+    - The `/api/license/bootstrap` endpoint MUST remain public, returning the hardware identifier (`hwid_full`).
+    - The `/api/license/activate` endpoint MUST verify the license token locally using Ed25519 cryptographic signatures.
+    - All token tappings/activation requests on `/api/license/activate` MUST be rate-limited to a maximum of 5 attempts per hour per IP. Audit logs for failed activations MUST store only a hash of the token (`hash(token)`), never the raw token string.
+2.  **Hosted Pathway**:
+    - The internal `/internal/license/bootstrap` endpoint MUST be protected by mTLS or signed internal JWTs, returning `instance_id`, `hwid_full`, `hwid_hash`, and a single-use `bootstrap_nonce` (TTL <= 5 minutes, bound to a specific `deployment_id`).
+    - The Issuer service MUST enforce idempotency via a client-supplied `request_id` cached for 24 hours.
+    - Hosted license tokens MUST carry a `deployment_id` claim, and instances MUST reject any tokens where the claim does not match their own local `deployment_id`.
+3.  **Key Isolation and Key Rotation**:
+    - The private key (`private.key`) MUST reside exclusively within the isolated Private Issuer Service and MUST NOT leak to other backend binaries.
+    - Tokens MUST carry a Key ID (`kid`) claim. The system MUST support current and previous key IDs simultaneously. The previous key MUST enter a verify-only state for a grace window of 90 days, after which it is completely rejected.
 
 ---
 
@@ -184,6 +192,26 @@ Use the `logf.Logger` instance from `handlers.App.Log`. Structured
 logging with key-value pairs is REQUIRED. Log messages MUST include
 sufficient context (user ID, org ID, operation) for debugging.
 
+### 3.8 Campaign Execution & Worker Policies
+
+1.  **Anti-Ban Throttling / Delay Floor**:
+    - Every campaign MUST define `MinDelaySeconds` and `MaxDelaySeconds` for inter-message delays.
+    - The queue worker MUST apply a random delay within this range for each recipient, enforcing a strict minimum floor of 10 seconds.
+2.  **Queue Isolation & Consumer Groups**:
+    - All campaigns MUST process jobs via tenant-scoped Redis Streams: stream names MUST follow the pattern `whatomate:campaigns:<orgID>` and consumer groups `campaign-workers:<orgID>`.
+    - Idempotency locks (2-minute TTL) MUST be acquired in Redis on recipient IDs during processing.
+3.  **Worker Autoscaling**:
+    - The `WorkerScaler` MUST run a reconcile loop to dynamically scale workers based on organization queue depth.
+    - Organizations MUST NOT exceed the maximum workers quota (`max_workers_per_org`) defined by their active license.
+    - Scaling cooldowns MUST be applied to prevent thrashing.
+    - The scaler MUST temporarily freeze processing for organizations that experience 3 consecutive start failures or have no healthy WhatsApp instances connected.
+4.  **Campaign State and Recipient Modification**:
+    - Recipient lists are mutable ONLY in `draft` status.
+    - Once a campaign status changes to `processing`, modifications to the recipient list are strictly FORBIDDEN.
+    - Auto-pause MUST be triggered if a WhatsApp instance is banned or disconnected during campaign execution.
+5.  **Strict Sending Restrictions (Inbound-Only)**:
+    - When `strict_sending_restrictions_enabled` is true, and the outbound mode is set to `inbound_only`, campaigns MUST reject sending messages to any phone numbers that do not have prior inbound history (excluding system override parameters).
+
 ---
 
 ## §4 Frontend Rules (Vue)
@@ -252,6 +280,25 @@ FORBIDDEN for new code.
 | Pinia stores | camelCase | `auth.ts` |
 | Services/API | camelCase | `api.ts` |
 | Type definitions | camelCase | `contacts.ts` |
+
+### 4.9 Chat Workflows & Collaboration
+
+1.  **Chat Lifecycle States**:
+    - Conversations (contacts) MUST follow three lifecycle states: `ChatStatusPending` (incoming, unassigned), `ChatStatusOpen` (assigned to an agent, active), and `ChatStatusClosed` (marked resolved).
+    - If `assigned_user_id` is populated, the chat is considered active (effectively open), regardless of its raw database state.
+2.  **Multi-Account Integration**:
+    - When a contact communicates across multiple WhatsApp accounts/instances, the frontend MUST support account toggling.
+    - Sidebar state for selected accounts MUST be unified and persisted via `ChatSidebarUnifier`.
+3.  **Collaborator Permissions**:
+    - Chats sharing MUST support three collaborator roles:
+      - `Owner`: Full access and administrative operations.
+      - `Editor`: Allowed to send messages and update status.
+      - `Viewer`: Read-only message history, blocked from sending.
+4.  **Phone Number Masking**:
+    - If phone number masking is enabled, phone numbers in UI elements MUST be formatted as `+1**********23` (retaining country code and the last 2 digits).
+    - Masking is bypassed ONLY for super-admins or users with `mask_phone_numbers: false` explicitly set in settings.
+5.  **Service Window Tracking**:
+    - The UI MUST show a 24-hour service window indicator based on `last_inbound_at`. If `last_inbound_at` is within the past 24 hours, the service window is considered open.
 
 ---
 
@@ -502,6 +549,32 @@ The system MUST support three authentication methods in priority order:
 - CSP with nonce for inline scripts is REQUIRED.
 - HSTS is REQUIRED.
 - X-Frame-Options is REQUIRED.
+
+### 8.9 Security Audit Rules
+
+1.  **Password Strength Policy**:
+    - The password validation function (`ValidatePassword`) MUST enforce a minimum of 12 characters and require at least one uppercase letter, one lowercase letter, one digit, and at least one special character (punctuation or symbol).
+2.  **Webhook Constraints**:
+    - In production environments, webhook URLs MUST strictly use the `https` scheme.
+    - Webhook URLs MUST NOT target internal ports (ports under 1024, except standard port 443, and known database/cache ports like 5432 or 6379).
+    - Custom headers on outgoing webhooks MUST be filtered to block sensitive headers such as `Host`, `Authorization`, and `Cookie` (case-insensitive).
+3.  **Secrets Encryption at Rest**:
+    - All webhook secrets and SSO `client_secret` values MUST be encrypted at rest using the `internal/crypto` package.
+    - API endpoints MUST NOT return plaintext secrets in GET requests (use boolean indicators like `has_secret: true` instead).
+4.  **WebSocket Handshake and Auth Timeout**:
+    - Post-upgrade WebSocket authentication MUST be completed within a strict 3-second timeout. If the client fails to authenticate within this window, the server MUST close the connection.
+    - Rate limiting MUST be applied to WebSocket connections per IP to prevent connection exhaustion.
+5.  **API Key Allocation Cap**:
+    - Organizations are limited to a maximum of 10 active API keys to prevent CPU exhaustion during bcrypt password hashing verification.
+
+### 8.10 Unified Safe Origin Evaluator
+
+1.  **Fail-Closed Default**:
+    - If the `allowed_origins` config is empty, the system MUST fallback to allowing only same-origin and localhost loopback connections. All other cross-origin requests MUST be blocked.
+2.  **Origin Normalization**:
+    - Configured origins MUST be normalized (scheme, host, and port normalization) before being matched.
+3.  **Centralized Validation**:
+    - Both CORS and WebSocket upgrade validators (`CheckOrigin`) MUST use the centralized `IsOriginAllowedForRequest` helper to enforce the exact same origin policy.
 
 ---
 

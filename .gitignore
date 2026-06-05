@@ -97,6 +97,7 @@ test-results/
 .kilo/
 .claude-flow/
 .claude/
+.opencode/
 # Code health tool artifacts
 .desloppify/
 # Serena memories
