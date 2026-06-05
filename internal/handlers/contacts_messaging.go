@@ -126,10 +126,17 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		replyToID, err := uuid.Parse(req.ReplyToMessageID)
 		if err == nil {
 			var replyTo models.Message
-			if err := requestDB.Where("id = ? AND contact_id = ?", replyToID, contactID).First(&replyTo).Error; err == nil {
+			if err := a.DB.Where("id = ? AND contact_id = ? AND organization_id = ?", replyToID, contactID, orgID).First(&replyTo).Error; err == nil {
 				replyToMessage = &replyTo
+				a.Log.Info("Found reply message in DB", "req.ReplyToMessageID", req.ReplyToMessageID, "whats_app_message_id", replyToMessage.WhatsAppMessageID)
+			} else {
+				a.Log.Error("Reply message not found in DB", "req.ReplyToMessageID", req.ReplyToMessageID, "err", err)
 			}
+		} else {
+			a.Log.Error("Invalid ReplyToMessageID UUID", "req.ReplyToMessageID", req.ReplyToMessageID, "err", err)
 		}
+	} else {
+		a.Log.Info("No ReplyToMessageID provided in request")
 	}
 
 	// Build request and send using unified sender

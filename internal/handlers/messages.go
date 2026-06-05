@@ -447,7 +447,6 @@ func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, m
 
 	switch req.Type {
 	case models.MessageTypeText:
-		// Check if this is a reply and the provider supports it
 		if req.ReplyToMessage != nil && req.ReplyToMessage.WhatsAppMessageID != "" {
 			if rp, ok := a.MessageProvider.(provider.ReplyProvider); ok {
 				return rp.SendTextReply(ctx, instanceID, to, req.Content, req.ReplyToMessage.WhatsAppMessageID)

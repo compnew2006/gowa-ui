@@ -55,6 +55,8 @@ func setupTestAdapterDB(t *testing.T) *gorm.DB {
 		CREATE TABLE messages (
 			id TEXT PRIMARY KEY,
 			organization_id TEXT,
+			instance_id TEXT,
+			conversation_id TEXT,
 			whats_app_message_id TEXT,
 			direction TEXT,
 			message_type TEXT,
@@ -71,23 +73,24 @@ func TestResolveReplyContext_DirectChat_Incoming(t *testing.T) {
 	db := setupTestAdapterDB(t)
 
 	orgID := uuid.New()
+	instanceID := uuid.New().String()
 	contactPhone := "1234567890"
 	quotedMsgID := "wamid.incoming123"
+	jid := waTypes.NewJID(contactPhone, waTypes.DefaultUserServer)
+	conversationID := jid.String()
 
 	// Seed an incoming message using raw SQL
 	err := db.Exec(`
-		INSERT INTO messages (id, organization_id, whats_app_message_id, direction, message_type, content, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		uuid.New().String(), orgID.String(), quotedMsgID, string(models.DirectionIncoming), string(models.MessageTypeText), "Hello agent!", "{}",
+		INSERT INTO messages (id, organization_id, instance_id, conversation_id, whats_app_message_id, direction, message_type, content, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(), orgID.String(), instanceID, conversationID, quotedMsgID, string(models.DirectionIncoming), string(models.MessageTypeText), "Hello agent!", "{}",
 	).Error
 	require.NoError(t, err)
 
 	adapter := &WhatsmeowAdapter{db: db}
-
-	jid := waTypes.NewJID(contactPhone, waTypes.DefaultUserServer)
 	myJID := waTypes.NewJID("9999999999", waTypes.DefaultUserServer)
 
-	participant, quotedText := adapter.resolveReplyContext(jid, quotedMsgID, myJID)
+	participant, quotedText := adapter.resolveReplyContext(jid, quotedMsgID, myJID, instanceID)
 
 	assert.Equal(t, jid.String(), participant)
 	assert.Equal(t, "Hello agent!", quotedText)
@@ -98,23 +101,24 @@ func TestResolveReplyContext_DirectChat_Outgoing(t *testing.T) {
 	db := setupTestAdapterDB(t)
 
 	orgID := uuid.New()
+	instanceID := uuid.New().String()
 	contactPhone := "1234567890"
 	quotedMsgID := "wamid.outgoing456"
+	jid := waTypes.NewJID(contactPhone, waTypes.DefaultUserServer)
+	conversationID := jid.String()
 
 	// Seed an outgoing message using raw SQL
 	err := db.Exec(`
-		INSERT INTO messages (id, organization_id, whats_app_message_id, direction, message_type, content, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		uuid.New().String(), orgID.String(), quotedMsgID, string(models.DirectionOutgoing), string(models.MessageTypeText), "Hello customer! How can I assist?", "{}",
+		INSERT INTO messages (id, organization_id, instance_id, conversation_id, whats_app_message_id, direction, message_type, content, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(), orgID.String(), instanceID, conversationID, quotedMsgID, string(models.DirectionOutgoing), string(models.MessageTypeText), "Hello customer! How can I assist?", "{}",
 	).Error
 	require.NoError(t, err)
 
 	adapter := &WhatsmeowAdapter{db: db}
-
-	jid := waTypes.NewJID(contactPhone, waTypes.DefaultUserServer)
 	myJID := waTypes.NewJID("9999999999", waTypes.DefaultUserServer)
 
-	participant, quotedText := adapter.resolveReplyContext(jid, quotedMsgID, myJID)
+	participant, quotedText := adapter.resolveReplyContext(jid, quotedMsgID, myJID, instanceID)
 
 	assert.Equal(t, myJID.ToNonAD().String(), participant)
 	assert.Equal(t, "Hello customer! How can I assist?", quotedText)
@@ -125,25 +129,26 @@ func TestResolveReplyContext_GroupChat_Incoming(t *testing.T) {
 	db := setupTestAdapterDB(t)
 
 	orgID := uuid.New()
+	instanceID := uuid.New().String()
 	groupJidStr := "12345-group@g.us"
 	quotedMsgID := "wamid.groupincoming789"
 	senderPhone := "5556667777"
+	jid, err := waTypes.ParseJID(groupJidStr)
+	require.NoError(t, err)
+	conversationID := jid.String()
 
 	// Seed an incoming group message with sender_phone in metadata JSON
-	err := db.Exec(`
-		INSERT INTO messages (id, organization_id, whats_app_message_id, direction, message_type, content, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		uuid.New().String(), orgID.String(), quotedMsgID, string(models.DirectionIncoming), string(models.MessageTypeText), "Hello group!", `{"sender_phone":"5556667777"}`,
+	err = db.Exec(`
+		INSERT INTO messages (id, organization_id, instance_id, conversation_id, whats_app_message_id, direction, message_type, content, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(), orgID.String(), instanceID, conversationID, quotedMsgID, string(models.DirectionIncoming), string(models.MessageTypeText), "Hello group!", `{"sender_phone":"5556667777"}`,
 	).Error
 	require.NoError(t, err)
 
 	adapter := &WhatsmeowAdapter{db: db}
-
-	jid, err := waTypes.ParseJID(groupJidStr)
-	require.NoError(t, err)
 	myJID := waTypes.NewJID("9999999999", waTypes.DefaultUserServer)
 
-	participant, quotedText := adapter.resolveReplyContext(jid, quotedMsgID, myJID)
+	participant, quotedText := adapter.resolveReplyContext(jid, quotedMsgID, myJID, instanceID)
 
 	expectedParticipant := senderPhone + "@s.whatsapp.net"
 	assert.Equal(t, expectedParticipant, participant)
@@ -155,24 +160,26 @@ func TestResolveReplyContext_EmptyContentFallback(t *testing.T) {
 	db := setupTestAdapterDB(t)
 
 	orgID := uuid.New()
+	instanceID := uuid.New().String()
 	contactPhone := "1234567890"
 	quotedMsgID := "wamid.media_no_caption"
+	jid := waTypes.NewJID(contactPhone, waTypes.DefaultUserServer)
+	conversationID := jid.String()
 
 	// Seed a media message with empty content using raw SQL
 	err := db.Exec(`
-		INSERT INTO messages (id, organization_id, whats_app_message_id, direction, message_type, content, metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		uuid.New().String(), orgID.String(), quotedMsgID, string(models.DirectionIncoming), string(models.MessageTypeImage), "", "{}",
+		INSERT INTO messages (id, organization_id, instance_id, conversation_id, whats_app_message_id, direction, message_type, content, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(), orgID.String(), instanceID, conversationID, quotedMsgID, string(models.DirectionIncoming), string(models.MessageTypeImage), "", "{}",
 	).Error
 	require.NoError(t, err)
 
 	adapter := &WhatsmeowAdapter{db: db}
-
-	jid := waTypes.NewJID(contactPhone, waTypes.DefaultUserServer)
 	myJID := waTypes.NewJID("9999999999", waTypes.DefaultUserServer)
 
-	_, quotedText := adapter.resolveReplyContext(jid, quotedMsgID, myJID)
+	_, quotedText := adapter.resolveReplyContext(jid, quotedMsgID, myJID, instanceID)
 
 	assert.Equal(t, "Message", quotedText)
 }
+
 

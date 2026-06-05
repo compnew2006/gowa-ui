@@ -111,13 +111,6 @@ func (cm *ConnectionManager) resolveIncomingReplyContext(
 	query := cm.db.WithContext(ctx).
 		Where("organization_id = ? AND whats_app_message_id = ?", orgID, replyCtx.ReplyToWAMID)
 
-	if instanceID != uuid.Nil {
-		query = query.Where("(instance_id = ? OR instance_id IS NULL)", instanceID)
-	}
-	if strings.TrimSpace(conversationID) != "" {
-		query = query.Where("(conversation_id = ? OR conversation_id = '')", strings.TrimSpace(conversationID))
-	}
-
 	// Prefer the real companion message over synthetic placeholders when duplicates share one WAMID.
 	query = query.Order(`
 		CASE

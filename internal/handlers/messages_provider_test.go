@@ -5,19 +5,37 @@ import (
 	"testing"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/pkg/provider"
+	"github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/stretchr/testify/require"
+	"github.com/zerodha/logf"
 )
 
 type captureDocumentProvider struct {
-	instanceID string
-	to         string
-	docURL     string
-	filename   string
-	caption    string
+	instanceID       string
+	to               string
+	text             string
+	replyToMessageID string
+	textReplyCalled  bool
+	docURL           string
+	filename         string
+	caption          string
 }
 
 func (p *captureDocumentProvider) SendText(ctx context.Context, instanceID string, to string, text string) (string, error) {
-	return "", nil
+	p.instanceID = instanceID
+	p.to = to
+	p.text = text
+	return "wamid-text", nil
+}
+
+func (p *captureDocumentProvider) SendTextReply(ctx context.Context, instanceID string, to string, text string, replyToMessageID string) (string, error) {
+	p.instanceID = instanceID
+	p.to = to
+	p.text = text
+	p.replyToMessageID = replyToMessageID
+	p.textReplyCalled = true
+	return "wamid-reply", nil
 }
 
 func (p *captureDocumentProvider) SendImage(ctx context.Context, instanceID string, to string, imageURL string, caption string) (string, error) {
@@ -88,4 +106,36 @@ func TestSendViaProviderDocumentPreservesFilenameAndCaption(t *testing.T) {
 	require.Equal(t, "orgs/test/documents/report.pdf", provider.docURL)
 	require.Equal(t, "report.pdf", provider.filename)
 	require.Equal(t, "Monthly report", provider.caption)
+}
+
+func TestSendViaProviderTextReplyUsesReplyProvider(t *testing.T) {
+	provider := &captureDocumentProvider{}
+	app := &App{MessageProvider: provider}
+
+	req := OutgoingMessageRequest{
+		Contact: &models.Contact{
+			PhoneNumber: "120363419978360489@g.us",
+		},
+		Type:    models.MessageTypeText,
+		Content: "Quoted response",
+		ReplyToMessage: &models.Message{
+			WhatsAppMessageID: "wamid-original",
+		},
+	}
+
+	wamid, err := app.sendViaProvider(context.Background(), req, nil, "instance-123")
+
+	require.NoError(t, err)
+	require.Equal(t, "wamid-reply", wamid)
+	require.True(t, provider.textReplyCalled)
+	require.Equal(t, "instance-123", provider.instanceID)
+	require.Equal(t, "120363419978360489@g.us", provider.to)
+	require.Equal(t, "Quoted response", provider.text)
+	require.Equal(t, "wamid-original", provider.replyToMessageID)
+}
+
+func TestWhatsmeowAdapterImplementsReplyProvider(t *testing.T) {
+	adapter := whatsmeow.NewWhatsmeowAdapter(nil, nil, logf.New(logf.Opts{}))
+
+	require.Implements(t, (*provider.ReplyProvider)(nil), adapter)
 }

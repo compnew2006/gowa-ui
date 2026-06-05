@@ -194,7 +194,7 @@ function triggerBlobDownload(blob: Blob, filename: string) {
 .media-group-bar {
   display: flex;
   justify-content: flex-start;
-  padding: 0 0 0 12px;
+  padding-inline-start: 12px;
   max-width: 340px;
 }
 

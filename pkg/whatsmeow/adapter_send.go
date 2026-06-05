@@ -77,7 +77,7 @@ func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string,
 		myJID = *client.Store.ID
 	}
 
-	participant, quotedText := a.resolveReplyContext(jid, replyToMsgID, myJID)
+	participant, quotedText := a.resolveReplyContext(jid, replyToMsgID, myJID, instanceID)
 
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
@@ -99,7 +99,7 @@ func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string,
 }
 
 // resolveReplyContext queries the database to resolve the participant JID and the quoted message content.
-func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID string, myJID waTypes.JID) (string, string) {
+func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID string, myJID waTypes.JID, instanceID string) (string, string) {
 	participant := jid.String()
 	quotedText := ""
 	if a.db != nil && replyToMsgID != "" {
@@ -109,13 +109,18 @@ func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID str
 			Metadata  models.JSONB `gorm:"column:metadata"`
 		}
 		var row msgRow
+
 		// Clone database session to avoid statement/query pollution
 		db := a.db.Session(&gorm.Session{})
-		if err := db.Table("messages").
+		query := db.Table("messages").
 			Select("direction, content, metadata").
-			Where("whats_app_message_id = ?", replyToMsgID).
-			Take(&row).Error; err == nil {
+			Where("whats_app_message_id = ?", replyToMsgID)
+
+		if err := query.Take(&row).Error; err == nil {
 			quotedText = row.Content
+			if quotedText == "" {
+				quotedText = "Media" // Fallback for media messages without caption
+			}
 			if row.Direction == directionOutgoing {
 				if myJID.User != "" {
 					participant = myJID.ToNonAD().String()
@@ -137,6 +142,18 @@ func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID str
 					participant = jid.ToNonAD().String()
 				}
 			}
+		} else {
+			// Log error if reply context could not be resolved from DB
+			a.logger.Warn("Failed to resolve reply context from DB", "replyToMsgID", replyToMsgID, "error", err)
+		}
+
+		if participant == "" {
+			a.logger.Warn("Participant is empty after resolving reply context, falling back to customer jid", "replyToMsgID", replyToMsgID, "jid", jid.String())
+			participant = jid.ToNonAD().String()
+		}
+		
+		if quotedText == "" {
+			quotedText = "Message" // Better fallback
 		}
 	}
 

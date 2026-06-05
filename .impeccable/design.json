@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-05T00:00:00Z",
+  "title": "Design System: Whatomate",
+  "extensions": {
+    "colorMeta": {
+      "twitter-primary-light": { "role": "primary", "displayName": "Sky Blue", "canonical": "#1e9df1", "tonalRamp": ["#0a3a5c", "#0f4d7a", "#155f95", "#1a72af", "#1f85c9", "#2398e0", "#27abf5", "#1e9df1", "#4eb1f4", "#7fc4f7", "#aed6fa", "#dceafc"] },
+      "twitter-primary-dark": { "role": "primary", "displayName": "Sky Blue (dark)", "canonical": "#1c9cf0", "tonalRamp": ["#062c4d", "#0a3d6b", "#0f4e88", "#155fa6", "#1a70c3", "#1f81e1", "#1c9cf0", "#43aef3", "#6dc1f6", "#97d3f9", "#c0e5fc", "#e9f6fe"] },
+      "twitter-bg-light": { "role": "neutral", "displayName": "Pure Paper", "canonical": "#ffffff" },
+      "twitter-bg-dark": { "role": "neutral", "displayName": "Dispatch Black", "canonical": "#000000" },
+      "twitter-fg-light": { "role": "neutral", "displayName": "Ink", "canonical": "#0f1419" },
+      "twitter-fg-dark": { "role": "neutral", "displayName": "Bone", "canonical": "#e7e9ea" },
+      "twitter-destructive": { "role": "destructive", "displayName": "Signal Red", "canonical": "#f4212e" },
+      "ocean-breeze-primary-light": { "role": "primary", "displayName": "Meadow Green", "canonical": "#22c55e" },
+      "ocean-breeze-primary-dark": { "role": "primary", "displayName": "Sea Green", "canonical": "#34d399" },
+      "softpop-primary-light": { "role": "primary", "displayName": "Indigo", "canonical": "#4f46e5" },
+      "softpop-secondary-light": { "role": "secondary", "displayName": "Teal", "canonical": "#14b8a6" },
+      "softpop-accent-light": { "role": "accent", "displayName": "Amber Spark", "canonical": "#f59e0b" },
+      "amber-primary-light": { "role": "primary", "displayName": "Warm Amber", "canonical": "#f59e0b" },
+      "amber-primary-dark": { "role": "primary", "displayName": "Amber Glow", "canonical": "#fbbf24" },
+      "whatsapp-green": { "role": "brand", "displayName": "WhatsApp Green", "canonical": "#25D366" },
+      "whatsapp-teal": { "role": "brand", "displayName": "WhatsApp Teal", "canonical": "#128C7E" },
+      "whatsapp-teal-dark": { "role": "brand", "displayName": "WhatsApp Teal Dark", "canonical": "#075E54" },
+      "whatsapp-light": { "role": "brand", "displayName": "WhatsApp Bubble", "canonical": "#DCF8C6" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Page Title", "purpose": "Dashboard greetings and primary page titles (h1)." },
+      "headline": { "displayName": "Section Header", "purpose": "Panel titles, section headers (h2)." },
+      "title": { "displayName": "Card Title", "purpose": "Card titles and list group headers (h3)." },
+      "body": { "displayName": "Body", "purpose": "Default reading text. 14px base, 1.5 line-height, 400 weight." },
+      "label": { "displayName": "Label", "purpose": "Form labels, table headers, widget titles, micro-copy." },
+      "mono": { "displayName": "Mono", "purpose": "Identifiers, instance tags, phone numbers in admin views." },
+      "serif": { "displayName": "Serif", "purpose": "Marketing surfaces only (auth shell, public pages). Never in the work console." }
+    },
+    "shadows": [
+      { "name": "shadow-2xs", "value": "0px 2px 0px 0px rgb(var(--shadow-color) / 0)", "purpose": "Reserved for focus halos; invisible at rest." },
+      { "name": "shadow-xs", "value": "0px 2px 0px 0px rgb(var(--shadow-color) / 0)", "purpose": "Reserved for focus halos; invisible at rest." },
+      { "name": "shadow-sm", "value": "0px 2px 0px 0px rgb(var(--shadow-color) / 0), 0px 1px 2px -1px rgb(var(--shadow-color) / 0)", "purpose": "Workhorse. Cards, .glass surfaces, default button shadow." },
+      { "name": "shadow", "value": "0px 2px 0px 0px rgb(var(--shadow-color) / 0), 0px 1px 2px -1px rgb(var(--shadow-color) / 0)", "purpose": "Alias for shadow-sm; Tailwind shadow utility." },
+      { "name": "shadow-md", "value": "0px 2px 0px 0px rgb(var(--shadow-color) / 0), 0px 2px 4px -1px rgb(var(--shadow-color) / 0)", "purpose": "Card-interactive hover lift, dialog content." },
+      { "name": "shadow-lg", "value": "0px 2px 0px 0px rgb(var(--shadow-color) / 0), 0px 4px 6px -1px rgb(var(--shadow-color) / 0)", "purpose": "Drawer, large dialog." },
+      { "name": "shadow-xl", "value": "0px 2px 0px 0px rgb(var(--shadow-color) / 0), 0px 8px 10px -1px rgb(var(--shadow-color) / 0)", "purpose": "Auth shell auth-card, modal-on-modal." },
+      { "name": "shadow-2xl", "value": "0px 2px 0px 0px rgb(var(--shadow-color) / 0)", "purpose": "Reserved." }
+    ],
+    "motion": [
+      { "name": "transition-colors-default", "value": "150ms ease-out", "purpose": "Hover, focus, active state changes on buttons, list items, links." },
+      { "name": "transition-all-default", "value": "200ms ease-out", "purpose": "Card hover, widget surface, elevation changes." },
+      { "name": "transition-bubble-entrance", "value": "200ms cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Chat bubble slide-in (incoming, outgoing, system)." },
+      { "name": "transition-accordion", "value": "200ms ease-out", "purpose": "Accordion open/close (reka-ui primitive, keyframes accordion-down/up)." },
+      { "name": "animation-highlight-pulse", "value": "500ms ease-in-out 2 iterations", "purpose": "Scroll-to-message target highlight (primary/15 background)." },
+      { "name": "animation-gentle-float", "value": "3s ease-in-out infinite", "purpose": "Empty-state floating illustration." },
+      { "name": "reduced-motion-fallback", "value": "animation-duration 0.01ms; transition-duration 0.01ms; scroll-behavior auto", "purpose": "Respects prefers-reduced-motion: reduce." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1400px" }
+    ],
+    "radii": [
+      { "name": "theme-radius-twitter", "value": "1.3rem", "purpose": "twitter preset base radius (largest in system)." },
+      { "name": "theme-radius-ocean-breeze", "value": "0.5rem", "purpose": "ocean-breeze preset base radius." },
+      { "name": "theme-radius-soft-pop", "value": "1rem", "purpose": "soft-pop / caffeine preset base radius." },
+      { "name": "theme-radius-amber-minimal", "value": "0.375rem", "purpose": "amber-minimal preset base radius (tightest)." },
+      { "name": "bubble-default", "value": "1rem", "purpose": "Chat bubble corner radius on three sides." },
+      { "name": "bubble-tail", "value": "0.375rem", "purpose": "Chat bubble corner radius on the conversation-edge side (asymmetric tail)." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Pill-shaped, theme-primary background, white text. The canonical go affordance.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Send reply</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; height: 2.25rem; padding: 0 1.25rem; background: rgb(var(--primary)); color: rgb(var(--primary-foreground)); border: none; border-radius: 9999px; font-size: 0.875rem; font-weight: 600; line-height: 1; box-shadow: var(--shadow-sm); cursor: pointer; transition: background-color 150ms ease-out, box-shadow 150ms ease-out; } .ds-btn-primary:hover:not(:disabled) { background: rgb(var(--primary) / 0.9); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--background)), 0 0 0 4px rgb(var(--ring) / 0.25); } .ds-btn-primary:disabled { opacity: 0.5; pointer-events: none; } .ds-btn-primary svg { width: 1rem; height: 1rem; flex-shrink: 0; }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Pill, signal red. Reserved for irreversible actions only.",
+      "html": "<button class=\"ds-btn-destructive\" type=\"button\">Delete contact</button>",
+      "css": ".ds-btn-destructive { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; height: 2.25rem; padding: 0 1.25rem; background: rgb(var(--destructive)); color: rgb(var(--destructive-foreground)); border: none; border-radius: 9999px; font-size: 0.875rem; font-weight: 600; line-height: 1; box-shadow: var(--shadow-sm); cursor: pointer; transition: background-color 150ms ease-out; } .ds-btn-destructive:hover:not(:disabled) { background: rgb(var(--destructive) / 0.9); } .ds-btn-destructive:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--background)), 0 0 0 4px rgb(var(--destructive) / 0.4); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Transparent by default; accent background on hover. Default for toolbar and list-item actions.",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\"><path d=\"M8 2v12M2 8h12\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg></button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; height: 2.25rem; padding: 0 1.25rem; background: transparent; color: rgb(var(--muted-foreground)); border: none; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; line-height: 1; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; } .ds-btn-ghost:hover { background: rgb(var(--accent)); color: rgb(var(--foreground)); } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--ring) / 0.4); }"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Translucent card over the chat background. The canonical container.",
+      "html": "<div class=\"ds-card-surface\"><h3 class=\"ds-card-title\">Contact info</h3><p class=\"ds-card-body\">Phone, email, and notes for the current conversation.</p></div>",
+      "css": ".ds-card-surface { background: rgb(var(--card) / 0.95); color: rgb(var(--card-foreground)); border: 1px solid rgb(var(--border)); border-radius: calc(var(--radius) + 0.35rem); padding: 1rem; box-shadow: var(--shadow-sm); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); transition: background-color 150ms ease-out, border-color 150ms ease-out; } .ds-card-title { margin: 0 0 0.25rem; font-size: 1.125rem; font-weight: 500; line-height: 1.5; color: rgb(var(--card-foreground)); } .ds-card-body { margin: 0; font-size: 0.875rem; line-height: 1.5; color: rgb(var(--muted-foreground)); }"
+    },
+    {
+      "name": "Interactive Card (hover-lift)",
+      "kind": "card",
+      "refersTo": "card-interactive",
+      "description": "Clickable card with translateY hover lift and accent background shift.",
+      "html": "<button class=\"ds-card-interactive\" type=\"button\"><h3>Open conversation</h3><p>2 unread messages</p></button>",
+      "css": ".ds-card-interactive { display: block; width: 100%; text-align: left; background: rgb(var(--card)); color: rgb(var(--card-foreground)); border: 1px solid rgb(var(--border)); border-radius: calc(var(--radius) + 0.35rem); padding: 1rem; box-shadow: var(--shadow-sm); cursor: pointer; transition: background-color 200ms ease-out, transform 200ms ease-out, box-shadow 200ms ease-out, border-color 200ms ease-out; } .ds-card-interactive:hover { background: rgb(var(--accent) / 0.82); border-color: rgb(var(--border)); transform: translateY(-2px); box-shadow: var(--shadow-md); } .ds-card-interactive:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--ring) / 0.4); } .ds-card-interactive h3 { margin: 0 0 0.25rem; font-size: 1.125rem; font-weight: 500; } .ds-card-interactive p { margin: 0; font-size: 0.8125rem; color: rgb(var(--muted-foreground)); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Single-line form field. Default background, 2.25rem height, ring on focus.",
+      "html": "<label class=\"ds-input-wrap\"><span class=\"ds-input-label\">Email</span><input class=\"ds-input\" type=\"email\" placeholder=\"agent@team.com\" aria-label=\"Email address\" /></label>",
+      "css": ".ds-input-wrap { display: flex; flex-direction: column; gap: 0.375rem; } .ds-input-label { font-size: 0.75rem; font-weight: 500; letter-spacing: 0.025em; color: rgb(var(--muted-foreground)); } .ds-input { display: block; width: 100%; height: 2.25rem; padding: 0 0.75rem; background: rgb(var(--background)); color: rgb(var(--foreground)); border: 1px solid rgb(var(--input)); border-radius: calc(var(--radius) - 2px); font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.5; transition: border-color 150ms ease-out, box-shadow 150ms ease-out; } .ds-input::placeholder { color: rgb(var(--muted-foreground) / 0.7); } .ds-input:focus-visible { outline: none; border-color: rgb(var(--ring)); box-shadow: 0 0 0 2px rgb(var(--ring) / 0.25); } .ds-input[aria-invalid=\"true\"] { border-color: rgb(var(--destructive)); box-shadow: 0 0 0 2px rgb(var(--destructive) / 0.4); }"
+    },
+    {
+      "name": "Sidebar Item (selectable list)",
+      "kind": "nav",
+      "refersTo": "sidebar-item",
+      "description": "Ghost-variant list item with avatar, name, optional role badge. Used in conversation lists, contact pickers, and the org switcher.",
+      "html": "<ul class=\"ds-listbox\" role=\"listbox\" aria-label=\"Conversations\"><li class=\"ds-option\" role=\"option\" aria-selected=\"true\"><span class=\"ds-avatar\" aria-hidden=\"true\">A</span><span class=\"ds-option-text\"><span class=\"ds-option-name\">Acme Support</span><span class=\"ds-option-meta\">+1 555 0142</span></span><span class=\"ds-option-badge\">Owner</span></li></ul>",
+      "css": ".ds-listbox { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.125rem; max-height: 420px; overflow-y: auto; } .ds-option { display: flex; align-items: center; gap: 0.75rem; width: 100%; padding: 0.5rem 0.75rem; background: transparent; border: 1px solid transparent; border-radius: calc(var(--radius) - 2px); cursor: pointer; transition: background-color 150ms ease-out, border-color 150ms ease-out; font-family: inherit; } .ds-option[aria-selected=\"true\"] { background: rgb(var(--primary) / 0.1); border-color: rgb(var(--primary) / 0.2); } .ds-option:hover { background: rgb(var(--accent) / 0.75); } .ds-option:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--ring) / 0.4); } .ds-avatar { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 9999px; background: rgb(var(--primary)); color: rgb(var(--primary-foreground)); font-size: 0.875rem; font-weight: 600; flex-shrink: 0; } .ds-option-text { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; flex: 1; } .ds-option-name { font-size: 0.875rem; font-weight: 500; color: rgb(var(--foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-option-meta { font-size: 0.75rem; color: rgb(var(--muted-foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-option-badge { font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.025em; padding: 0.125rem 0.5rem; background: rgb(var(--accent)); color: rgb(var(--accent-foreground)); border-radius: 9999px; flex-shrink: 0; }"
+    },
+    {
+      "name": "Chat Bubble (incoming)",
+      "kind": "custom",
+      "refersTo": "chat-bubble-incoming",
+      "description": "Customer message bubble. Asymmetric tail bottom-left, slides in from -12px.",
+      "html": "<div class=\"ds-bubble ds-bubble-incoming\"><p>Hi, I have a question about my order.</p><span class=\"ds-bubble-time\"><span>10:42</span></span></div>",
+      "css": ".ds-bubble { position: relative; max-width: 65%; padding: 0.625rem 1rem; font-size: 0.875rem; line-height: 1.5; color: rgb(var(--foreground)); border: 1px solid rgb(var(--border) / 0.72); border-radius: 1rem 1rem 1rem 0.375rem; box-shadow: var(--shadow-sm); animation: ds-bubble-in-left 200ms cubic-bezier(0.25, 1, 0.5, 1) both; word-wrap: break-word; } .ds-bubble-incoming { background: rgb(var(--card) / 0.98); } .ds-bubble p { margin: 0; } .ds-bubble-time { display: flex; align-items: center; gap: 0.375rem; float: right; font-size: 0.625rem; margin-top: 0.25rem; margin-left: 0.5rem; color: rgb(var(--muted-foreground)); } .ds-bubble-incoming .ds-bubble-time { color: rgb(var(--muted-foreground)); } @keyframes ds-bubble-in-left { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } } @media (prefers-reduced-motion: reduce) { .ds-bubble-incoming { animation: none; } }"
+    },
+    {
+      "name": "Chat Bubble (outgoing)",
+      "kind": "custom",
+      "refersTo": "chat-bubble-outgoing",
+      "description": "Agent message bubble. Primary-tinted gradient, asymmetric tail bottom-right, slides in from +12px.",
+      "html": "<div class=\"ds-bubble ds-bubble-outgoing\"><p>Of course — let me look that up for you.</p><span class=\"ds-bubble-time\"><svg class=\"ds-status-icon\" width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\"><path d=\"M2 8l4 4 8-8\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>10:43</span></span></div>",
+      "css": ".ds-bubble-outgoing { background: linear-gradient(180deg, rgb(var(--primary) / 0.16), rgb(var(--primary) / 0.10)); border-color: rgb(var(--primary) / 0.24); border-radius: 1rem 1rem 0.375rem 1rem; color: rgb(var(--foreground)); animation: ds-bubble-in-right 200ms cubic-bezier(0.25, 1, 0.5, 1) both; } .ds-bubble-outgoing .ds-bubble-time { color: rgb(var(--primary)); } .ds-bubble-outgoing .ds-status-icon { width: 1rem; height: 1rem; color: rgb(var(--primary)); } @keyframes ds-bubble-in-right { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } } @media (prefers-reduced-motion: reduce) { .ds-bubble-outgoing { animation: none; } }"
+    },
+    {
+      "name": "Dialog",
+      "kind": "custom",
+      "refersTo": "dialog-content",
+      "description": "Centered modal with backdrop, zoom + slide entrance, optional resize handle.",
+      "html": "<div class=\"ds-dialog-backdrop\"></div><div class=\"ds-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"ds-dialog-title\"><h2 id=\"ds-dialog-title\" class=\"ds-dialog-title\">Confirm delete</h2><p class=\"ds-dialog-body\">This will permanently remove the contact and all associated conversations.</p><div class=\"ds-dialog-actions\"><button class=\"ds-btn-ghost\">Cancel</button><button class=\"ds-btn-destructive\">Delete</button></div><button class=\"ds-dialog-close\" aria-label=\"Close\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\"><path d=\"M3 3l10 10M13 3L3 13\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg></button></div>",
+      "css": ".ds-dialog-backdrop { position: fixed; inset: 0; z-index: 50; background: rgb(0 0 0 / 0.8); animation: ds-fade-in 200ms ease-out both; } .ds-dialog { position: fixed; left: 50%; top: 50%; z-index: 50; transform: translate(-50%, -50%); width: 100%; max-width: 32rem; padding: 1.5rem; background: rgb(var(--background)); color: rgb(var(--foreground)); border: 1px solid rgb(var(--border)); border-radius: var(--radius); box-shadow: var(--shadow-lg); animation: ds-dialog-in 200ms cubic-bezier(0.25, 1, 0.5, 1) both; } .ds-dialog-title { margin: 0 0 0.5rem; font-size: 1.25rem; font-weight: 500; line-height: 1.4; } .ds-dialog-body { margin: 0 0 1.25rem; font-size: 0.875rem; line-height: 1.5; color: rgb(var(--muted-foreground)); } .ds-dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; } .ds-dialog-close { position: absolute; right: 1rem; top: 1rem; width: 1.5rem; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 0.25rem; color: rgb(var(--muted-foreground)); opacity: 0.7; cursor: pointer; transition: opacity 150ms ease-out, background-color 150ms ease-out; } .ds-dialog-close:hover { opacity: 1; background: rgb(var(--accent)); } .ds-dialog-close:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--ring) / 0.4); } @keyframes ds-fade-in { from { opacity: 0; } to { opacity: 1; } } @keyframes ds-dialog-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } } @media (prefers-reduced-motion: reduce) { .ds-dialog-backdrop, .ds-dialog { animation: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Dispatch Console",
+    "overview": "Whatomate is a workspace, not a destination. Agents process dozens of WhatsApp conversations per shift and the interface must support that tempo without competing for attention. Visual calm is load-bearing: when the surface is restrained, the conversation becomes the focus. The opposite of a marketing site — this is a tool a person stares at for eight hours, so every pixel answers the question, *does this help an agent respond faster?*\n\nThe system is multi-tenant and multi-theme. Operators can switch between four named theme presets (twitter, ocean-breeze, soft-pop, amber-minimal) and toggle dark mode independently, so the same token graph has to look intentional in 8 combinations. Density is high by default — chat list, conversation thread, and contact panel share one viewport — but the visual language stays calm by relying on background-contrast elevation rather than shadow.\n\nAnti-references: not Intercom (too productized, too soft), not Salesforce (no dense data tables, no modal-stacked-on-modal flows), not generic AI-chat tools (no animated gradient hero, no \"magic\" empty states, no mascot). The system is not a landing page. There is no marketing layer. Sign in and you are in the work.",
+    "keyCharacteristics": [
+      "Restrained color: tinted neutrals carry the surface; one saturated primary per theme carries interactive weight.",
+      "Tonal elevation: depth is conveyed by background shifts (background → card → popover), not by shadow.",
+      "Pill geometry: buttons are fully rounded; cards inherit a generous theme radius.",
+      "Bubble-based chat: customer and agent messages are first-class surfaces with their own typography and density rules.",
+      "Multi-theme core: 4 theme presets × 2 color schemes (light/dark) = 8 validated combinations.",
+      "RTL-first: Arabic locale is a first-class citizen; logical properties and dir flows apply throughout."
+    ],
+    "rules": [
+      { "name": "The Recede Rule", "body": "90% of every screen is tinted neutrals. The primary accent occupies ≤10% of the surface; it appears on actions, active state, and the ring of focused controls. A screen where primary dominates is broken.", "section": "colors" },
+      { "name": "The Destructive Singularity", "body": "destructive (#F4212E) is reserved for irreversible actions: delete, revoke, force-disconnect. Never use it for warnings, never for chart-3, never for branding.", "section": "colors" },
+      { "name": "The Hard-Border Exception", "body": "The soft-pop / caffeine preset uses full-saturation borders (#000 light, #FFF dark) deliberately. This is the only preset where borders carry visual weight. Do not transplant the treatment to other themes.", "section": "colors" },
+      { "name": "The Tracking-Opt-Out Rule", "body": "Tracking tokens are defined (--tracking-tighter through --tracking-widest) but --tracking-normal (0em) is the default for body and headings. Apply positive tracking only to uppercase labels and micro-copy. Never to body, never to headings.", "section": "typography" },
+      { "name": "The 14px Compact Rule", "body": "The base size is 14px, not 16px. The interface is dense by design. Do not \"fix\" this by raising the base to 16px in new components — you will break the rhythm of every existing screen.", "section": "typography" },
+      { "name": "The Flat-At-Rest Rule", "body": "Cards, panels, and list rows are flat by default. A surface is only elevated in response to: hover (lift via shadow-sm or translateY(-2px)), focus (ring + shadow-xs), or drag (shadow-md). At-rest surfaces are never shadowed.", "section": "elevation" },
+      { "name": "The Glass-By-Invitation Rule", "body": "Glass is allowed on the auth shell, the sidebar in collapsed-overlay mode, and the chat composer. It is forbidden as a default card or button treatment. If a component is starting to look glass-y everywhere, the system is drifting.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do drive every color through var(--token). Never hardcode hex in component templates. The token graph exists so themes can be swapped.",
+      "Do test every new component against all 4 theme presets (twitter, ocean-breeze, soft-pop, amber-minimal) in both light and dark. A bug that appears in one of 8 combinations is still a bug.",
+      "Do use bg-card/95 backdrop-blur-sm for surface cards over the chat background. The translucency is part of the look.",
+      "Do keep shadows minimal. If you need to add shadow to a card at rest, you have probably chosen the wrong background contrast.",
+      "Do use transition-colors for hover, focus, and active state changes. 150ms is the workhorse duration.",
+      "Do wrap long lists in ScrollArea with a reasonable max-h (420px is the convention).",
+      "Do use role=\"listbox\" / role=\"option\" with aria-selected for any selectable list. The keyboard model depends on it.",
+      "Do provide aria-label for inputs without visible labels.",
+      "Do use the useResizable composable for resizable dialogs.",
+      "Do use $t() (vue-i18n) for every user-visible string. English and Arabic locales are both first-class.",
+      "Do verify RTL flow. Test every layout in dir=\"rtl\". Logical properties (margin-inline-*, padding-inline-*) over physical ones."
+    ],
+    "donts": [
+      "Don't use net/http / http.Handler patterns in the backend — this project uses fasthttp / fastglue. (This is a backend convention, but it reinforces the rule that the system is the way it is for a reason.)",
+      "Don't use CSS resize on position: fixed elements. Unreliable cross-browser.",
+      "Don't hardcode English strings in templates. Always $t().",
+      "Don't use min-w on dialogs that might render on small screens. Use viewport-aware widths.",
+      "Don't nest cards inside cards. If a card needs grouping, use a CardHeader / CardContent split, not a child <Card>.",
+      "Don't use gradient text (background-clip: text with gradients). It conflicts with the system's restraint.",
+      "Don't use glassmorphism as a default visual treatment. Glass is by-invitation only (auth shell, sidebar overlay, chat composer).",
+      "Don't use side-stripe borders (> 1px colored left/right border) as accents on cards or list items. The system uses surface contrast and full borders instead.",
+      "Don't use bounce or elastic easing curves. Use ease-out for state changes; cubic-bezier(0.25, 1, 0.5, 1) (ease-out-quart) for chat bubble entrances.",
+      "Don't add decorative animations that don't convey meaning. Every animation must answer: what state is this communicating?",
+      "Don't ship a 16px base font size fix. The 14px base is load-bearing for density.",
+      "Don't add a feature that requires a new theme preset without first checking whether the existing 4 can express it. The presets are committed brand positions, not a free palette.",
+      "Don't reintroduce hardcoded hex in component templates. The token graph is the single source of truth."
+    ]
+  }
+}

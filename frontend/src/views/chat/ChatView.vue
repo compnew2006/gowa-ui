@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   ref,
+  reactive,
   watch,
   onMounted,
   onUnmounted,
@@ -111,6 +112,8 @@ import {
   Video,
   Music,
   RefreshCw,
+  MoreHorizontal,
+  ChevronDown,
 } from "lucide-vue-next";
 import { getInitials, getAvatarGradient } from "@/lib/utils";
 import {
@@ -233,6 +236,7 @@ const TYPING_COMPOSING_THROTTLE_MS = 2500;
 const TYPING_IDLE_PAUSE_MS = 3500;
 
 const messageInput = ref("");
+const messageInputDrafts = reactive<Record<string, string>>({});
 const messagesEndRef = ref<HTMLElement | null>(null);
 const messageInputRef = ref<HTMLTextAreaElement | null>(null);
 const isSending = ref(false);
@@ -635,7 +639,7 @@ const mediaUploadProgress = ref<{ current: number; total: number } | null>(
 );
 const isPreparingBatchPrint = ref(false);
 const isExportingChat = ref(false);
-const isExportMenuOpen = ref(false);
+
 const isBatchPrintSelectionMode = ref(false);
 const selectedBatchPrintMessageIds = ref<string[]>([]);
 const selectedMediaCount = computed(() => selectedMediaUploads.value.length);
@@ -778,7 +782,6 @@ const isContactsSidebarResizing = ref(false);
 const isContactsSidebarCompact = computed(
   () => contactsSidebarWidth.value <= 320,
 );
-const isContactsSidebarWide = computed(() => contactsSidebarWidth.value >= 420);
 let contactsSidebarResizeStartX = 0;
 let contactsSidebarResizeStartWidth = contactsSidebarWidth.value;
 
@@ -1470,13 +1473,47 @@ function handleCollaboratorUpdate(payload: any) {
   void refreshContactsSidebar();
 }
 
+function handleChatShortcuts(e: KeyboardEvent) {
+  const tag = (e.target as HTMLElement)?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) {
+    if (e.key === "Escape") {
+      (e.target as HTMLElement).blur();
+      return;
+    }
+    return;
+  }
+  if (!contactsStore.currentContact) return;
+  switch (e.key.toLowerCase()) {
+    case "a":
+      if (canAssignContacts.value) { e.preventDefault(); isAssignDialogOpen.value = true; }
+      break;
+    case "n":
+      e.preventDefault(); isNotesPanelOpen.value = !isNotesPanelOpen.value;
+      break;
+    case "e":
+      if (!isExportingChat.value) { e.preventDefault(); exportChatAsPDF(); }
+      break;
+    case "i":
+      e.preventDefault(); isInfoPanelOpen.value = !isInfoPanelOpen.value;
+      break;
+    case "m":
+      e.preventDefault();
+      break;
+    case "escape":
+      e.preventDefault();
+      isNotesPanelOpen.value = false;
+      isInfoPanelOpen.value = false;
+      isAssignDialogOpen.value = false;
+      break;
+  }
+}
+
 // Fetch contacts on mount (WebSocket is connected in AppLayout)
 onMounted(async () => {
-  document.addEventListener("click", () => {
-    if (isExportMenuOpen.value) isExportMenuOpen.value = false;
-  });
   refreshChatSidebarViewModePreference();
   window.addEventListener("storage", refreshChatSidebarViewModePreference);
+
+  document.addEventListener("keydown", handleChatShortcuts);
 
   // Ensure auth session is restored
   if (!authStore.isAuthenticated) {
@@ -1539,6 +1576,7 @@ watch(
 );
 
 onUnmounted(() => {
+  document.removeEventListener("keydown", handleChatShortcuts);
   wsService.unsubscribe("chat_collaborator_invite", handleCollaboratorInvite);
   wsService.unsubscribe("chat_collaborator_update", handleCollaboratorUpdate);
   const activeContact = contactsStore.currentContact;
@@ -1637,6 +1675,11 @@ watch(contactId, (newId) => {
 
 async function selectContact(id: string, selectionSequence: number) {
   const isSelectionStale = () => selectionSequence !== contactSelectionSequence;
+
+  if (contactsStore.currentContact?.id && messageInput.value.trim()) {
+    messageInputDrafts[contactsStore.currentContact.id] = messageInput.value;
+  }
+
   resetMediaLoadingPipeline();
   resetBatchPrintSelection();
   let contact = contactsStore.contacts.find((c) => c.id === id);
@@ -1722,6 +1765,9 @@ async function selectContact(id: string, selectionSequence: number) {
   }
 
   contactsStore.setCurrentContact(activeContact);
+
+  messageInput.value = messageInputDrafts[activeContact.id] || "";
+  delete messageInputDrafts[activeContact.id];
 
   const allowViewWithoutClaim = (() => {
     const restrictions = authStore.user?.settings?.send_restrictions || {};
@@ -3710,7 +3756,6 @@ async function exportChatAsText() {
     return;
   }
   isExportingChat.value = true;
-  isExportMenuOpen.value = false;
   try {
     const account = selectedAccountFilter(selectedAccount.value);
     const allMsgs = await fetchAllMessages(contact.id, account);
@@ -3733,7 +3778,6 @@ async function exportChatAsPDF() {
     return;
   }
   isExportingChat.value = true;
-  isExportMenuOpen.value = false;
   try {
     const account = selectedAccountFilter(selectedAccount.value);
     const allMsgs = await fetchAllMessages(contact.id, account);
@@ -4310,15 +4354,23 @@ async function sendMediaMessage() {
                     entry.displayContact.phone_number
                   }}
                 </p>
-                <span
-                  v-if="!isContactsSidebarCompact"
-                  class="shrink-0 text-[11px] text-sidebar-foreground/55"
-                >
-                  {{ formatContactTime(entry.displayContact.last_message_at) }}
-                </span>
+                <div class="shrink-0 flex items-center gap-1">
+                  <span
+                    v-if="!isContactsSidebarCompact"
+                    class="text-[11px] text-sidebar-foreground/55"
+                  >
+                    {{ formatContactTime(entry.displayContact.last_message_at) }}
+                  </span>
+                  <Badge
+                    v-if="entry.displayContact.unread_count > 0"
+                    class="h-5 min-w-[20px] justify-center border-0 bg-primary text-[10px] text-primary-foreground"
+                  >
+                    {{ entry.displayContact.unread_count }}
+                  </Badge>
+                </div>
               </div>
-              <div class="flex items-center justify-between gap-1.5">
-                <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <div class="min-w-0 flex-1">
                   <div class="flex min-w-0 items-center gap-1.5">
                     <p
                       v-if="!isContactsSidebarCompact"
@@ -4326,59 +4378,92 @@ async function sendMediaMessage() {
                     >
                       {{ entry.displayContact.phone_number }}
                     </p>
-                    <div
-                      v-if="
-                        isSidebarUnifiedMode &&
-                        hasSidebarEntryMultipleInstances(entry)
-                      "
-                      class="flex min-w-0 flex-wrap items-center gap-1"
-                      data-testid="sidebar-multi-instance-tags"
-                      :data-instance-count="
-                        String(getSidebarEntryInstanceCount(entry))
-                      "
-                    >
-                      <InstanceTag
-                        v-for="instanceID in resolveSidebarEntryInstanceIDs(
-                          entry,
-                        )"
-                        :key="`sidebar-instance-tag-${entry.key}-${instanceID}`"
-                        :fallback-label="
-                          resolveSidebarEntryInstanceLabel(entry, instanceID)
-                        "
-                        :instance-id="instanceID"
-                        placement="sidebar"
-                      />
-                    </div>
                     <InstanceTag
-                      v-else-if="getSidebarEntryPrimaryInstanceID(entry)"
+                      v-if="getSidebarEntryPrimaryInstanceID(entry)"
                       :fallback-label="
                         getSidebarEntryPrimaryInstanceLabel(entry)
                       "
                       :instance-id="getSidebarEntryPrimaryInstanceID(entry)"
-                      :class="[
-                        isContactsSidebarCompact ? 'max-w-[92px]' : '',
-                        isContactsSidebarWide ? 'max-w-[190px]' : '',
-                      ]"
                       placement="sidebar"
                     />
-                  </div>
-                  <div
-                    v-if="
-                      isSidebarUnifiedMode &&
-                      entry.accountNames.length > 1 &&
-                      !hasSidebarEntryMultipleInstances(entry) &&
-                      !isContactsSidebarCompact
-                    "
-                    class="mt-1 flex flex-wrap items-center gap-1"
-                  >
-                    <span
-                      v-for="acct in entry.accountNames"
-                      :key="`sidebar-account-${entry.key}-${acct}`"
-                      class="inline-flex max-w-[130px] items-center rounded-full border border-sidebar-border bg-sidebar-accent/70 px-2 py-0.5 text-[10px] leading-none text-sidebar-foreground/75"
-                      :title="acct"
+                    <button
+                      v-if="
+                        isSidebarUnifiedMode &&
+                        hasSidebarEntryMultipleInstances(entry)
+                      "
+                      type="button"
+                      class="inline-flex h-5 shrink-0 items-center rounded-full bg-sidebar-accent px-1.5 text-[10px] font-medium text-sidebar-foreground/70"
+                      :data-testid="`sidebar-instance-count-${entry.key}`"
+                      :data-instance-count="
+                        String(getSidebarEntryInstanceCount(entry))
+                      "
+                      @click.stop
                     >
-                      <span class="truncate">{{ acct }}</span>
-                    </span>
+                      <Popover>
+                        <PopoverTrigger as-child>
+                          <span class="flex items-center gap-0.5">
+                            {{ getSidebarEntryInstanceCount(entry) }}x
+                            <ChevronDown class="h-2.5 w-2.5 opacity-50" />
+                          </span>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          class="w-48 p-1.5"
+                          side="bottom"
+                          align="start"
+                        >
+                          <div
+                            v-for="instanceID in resolveSidebarEntryInstanceIDs(
+                              entry,
+                            )"
+                            :key="`popover-instance-${entry.key}-${instanceID}`"
+                            class="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
+                          >
+                            <InstanceTag
+                              :fallback-label="
+                                resolveSidebarEntryInstanceLabel(
+                                  entry,
+                                  instanceID,
+                                )
+                              "
+                              :instance-id="instanceID"
+                              placement="sidebar"
+                            />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </button>
+                    <button
+                      v-if="
+                        isSidebarUnifiedMode &&
+                        entry.accountNames.length > 1 &&
+                        !hasSidebarEntryMultipleInstances(entry)
+                      "
+                      type="button"
+                      class="inline-flex h-5 shrink-0 items-center rounded-full bg-sidebar-accent px-1.5 text-[10px] font-medium text-sidebar-foreground/70"
+                      @click.stop
+                    >
+                      <Popover>
+                        <PopoverTrigger as-child>
+                          <span class="flex items-center gap-0.5">
+                            {{ entry.accountNames.length }}
+                            <ChevronDown class="h-2.5 w-2.5 opacity-50" />
+                          </span>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          class="w-48 p-1.5"
+                          side="bottom"
+                          align="start"
+                        >
+                          <span
+                            v-for="acct in entry.accountNames"
+                            :key="`popover-account-${entry.key}-${acct}`"
+                            class="block truncate rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/75"
+                          >
+                            {{ acct }}
+                          </span>
+                        </PopoverContent>
+                      </Popover>
+                    </button>
                   </div>
                   <p
                     v-if="
@@ -4392,7 +4477,7 @@ async function sendMediaMessage() {
                     {{ getAssignedAgentName(entry.displayContact) }}
                   </p>
                 </div>
-                <div class="ml-2 flex items-center gap-1">
+                <div class="flex shrink-0 items-center gap-1">
                   <Badge
                     v-if="entry.displayContact.is_public"
                     class="h-5 border-0 bg-primary/12 text-[10px] text-primary"
@@ -4405,66 +4490,94 @@ async function sendMediaMessage() {
                   >
                     {{ entry.displayContact.status }}
                   </Badge>
-                  <Badge
-                    v-if="entry.displayContact.unread_count > 0"
-                    class="h-5 border-0 bg-primary/12 text-[10px] text-primary"
-                  >
-                    {{ entry.displayContact.unread_count }}
-                  </Badge>
-                  <button
-                    v-if="canSoftDeleteChats"
-                    type="button"
-                    class="inline-flex h-5 w-5 items-center justify-center rounded-md border transition-colors"
-                    :class="
-                      pendingSidebarSoftDeleteEntryKey === entry.key
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-primary/20 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary'
-                    "
-                    :aria-label="
-                      pendingSidebarSoftDeleteEntryKey === entry.key
-                        ? `${$t('chat.softDeleteConfirmLabel')}: ${entry.displayContact.name || entry.displayContact.phone_number}`
-                        : `${$t('chat.softDeleteChat')}: ${entry.displayContact.name || entry.displayContact.phone_number}`
-                    "
-                    :disabled="softDeletingSidebarEntryKey === entry.key"
-                    @click.stop="softDeleteSidebarEntry(entry)"
-                  >
-                    <Loader2
-                      v-if="softDeletingSidebarEntryKey === entry.key"
-                      class="h-3.5 w-3.5 animate-spin"
-                    />
-                    <Check
-                      v-else-if="pendingSidebarSoftDeleteEntryKey === entry.key"
-                      class="h-3.5 w-3.5"
-                    />
-                    <Archive v-else class="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    v-if="isAdminUser"
-                    type="button"
-                    class="inline-flex h-5 w-5 items-center justify-center rounded-md border transition-colors"
-                    :class="
-                      pendingSidebarDeleteEntryKey === entry.key
-                        ? 'border-destructive bg-destructive text-destructive-foreground'
-                        : 'border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive'
-                    "
-                    :aria-label="
-                      pendingSidebarDeleteEntryKey === entry.key
-                        ? `Confirm delete chat: ${entry.displayContact.name || entry.displayContact.phone_number}`
-                        : `Delete chat: ${entry.displayContact.name || entry.displayContact.phone_number}`
-                    "
-                    :disabled="deletingSidebarEntryKey === entry.key"
-                    @click.stop="deleteSidebarEntry(entry)"
-                  >
-                    <Loader2
-                      v-if="deletingSidebarEntryKey === entry.key"
-                      class="h-3.5 w-3.5 animate-spin"
-                    />
-                    <Check
-                      v-else-if="pendingSidebarDeleteEntryKey === entry.key"
-                      class="h-3.5 w-3.5"
-                    />
-                    <Trash2 v-else class="h-3.5 w-3.5" />
-                  </button>
+                  <Popover v-if="canSoftDeleteChats || isAdminUser">
+                    <PopoverTrigger as-child>
+                      <button
+                        type="button"
+                        class="inline-flex h-6 w-6 items-center justify-center rounded-md text-sidebar-foreground/40 opacity-0 transition-all hover:bg-sidebar-accent hover:text-sidebar-foreground group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        :aria-label="`${$t('chat.sidebarEntryActions')}: ${entry.displayContact.name || entry.displayContact.phone_number}`"
+                        @click.stop
+                      >
+                        <MoreHorizontal class="h-3.5 w-3.5" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      class="w-40 p-1"
+                      side="bottom"
+                      align="end"
+                    >
+                      <button
+                        type="button"
+                        class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
+                        :aria-label="`${$t('resources.ProfilePhoto')}: ${entry.displayContact.name || entry.displayContact.phone_number}`"
+                        @click="openProfilePhotoDialog(entry.displayContact)"
+                      >
+                        <User class="h-3.5 w-3.5" />
+                        {{ $t("chat.viewProfile") }}
+                      </button>
+                      <button
+                        v-if="canSoftDeleteChats"
+                        type="button"
+                        class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
+                        :class="
+                          pendingSidebarSoftDeleteEntryKey === entry.key
+                            ? 'text-primary'
+                            : 'text-sidebar-foreground'
+                        "
+                        :aria-label="
+                          pendingSidebarSoftDeleteEntryKey === entry.key
+                            ? `${$t('chat.softDeleteConfirmLabel')}: ${entry.displayContact.name || entry.displayContact.phone_number}`
+                            : `${$t('chat.softDeleteChat')}: ${entry.displayContact.name || entry.displayContact.phone_number}`
+                        "
+                        :disabled="softDeletingSidebarEntryKey === entry.key"
+                        @click="softDeleteSidebarEntry(entry)"
+                      >
+                        <Loader2
+                          v-if="softDeletingSidebarEntryKey === entry.key"
+                          class="h-3.5 w-3.5 animate-spin"
+                        />
+                        <Check
+                          v-else-if="
+                            pendingSidebarSoftDeleteEntryKey === entry.key
+                          "
+                          class="h-3.5 w-3.5"
+                        />
+                        <Archive v-else class="h-3.5 w-3.5" />
+                        {{
+                          pendingSidebarSoftDeleteEntryKey === entry.key
+                            ? $t("chat.softDeleteConfirmLabel")
+                            : $t("chat.softDeleteChat")
+                        }}
+                      </button>
+                      <button
+                        v-if="isAdminUser"
+                        type="button"
+                        class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-destructive transition-colors hover:bg-destructive/10"
+                        :aria-label="
+                          pendingSidebarDeleteEntryKey === entry.key
+                            ? `Confirm delete chat: ${entry.displayContact.name || entry.displayContact.phone_number}`
+                            : `Delete chat: ${entry.displayContact.name || entry.displayContact.phone_number}`
+                        "
+                        :disabled="deletingSidebarEntryKey === entry.key"
+                        @click="deleteSidebarEntry(entry)"
+                      >
+                        <Loader2
+                          v-if="deletingSidebarEntryKey === entry.key"
+                          class="h-3.5 w-3.5 animate-spin"
+                        />
+                        <Check
+                          v-else-if="pendingSidebarDeleteEntryKey === entry.key"
+                          class="h-3.5 w-3.5"
+                        />
+                        <Trash2 v-else class="h-3.5 w-3.5" />
+                        {{
+                          pendingSidebarDeleteEntryKey === entry.key
+                            ? $t("chat.deleteConfirmLabel")
+                            : $t("chat.deleteChat")
+                        }}
+                      </button>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
             </div>
@@ -4608,131 +4721,16 @@ async function sendMediaMessage() {
                   variant="ghost"
                   size="icon"
                   class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label="Assign agent (A)"
                   @click="isAssignDialogOpen = true"
                 >
                   <UserPlus class="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t("chat.assignToAgent") }}</TooltipContent>
-            </Tooltip>
-            <Tooltip v-if="canToggleCurrentChatPublic">
-              <TooltipTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  :disabled="isUpdatingCurrentChatPublic"
-                  @click="toggleCurrentChatPublicVisibility"
-                >
-                  <Loader2
-                    v-if="isUpdatingCurrentChatPublic"
-                    class="h-4 w-4 animate-spin"
-                  />
-                  <Pin
-                    v-else
-                    class="h-4 w-4"
-                    :class="
-                      contactsStore.currentContact?.is_public
-                        ? 'text-primary'
-                        : ''
-                    "
-                  />
-                </Button>
-              </TooltipTrigger>
               <TooltipContent>
-                {{
-                  contactsStore.currentContact?.is_public
-                    ? $t("chat.removePublicChat")
-                    : $t("chat.makePublicChat")
-                }}
+                <span>{{ $t("chat.assignToAgent") }}</span>
+                <kbd class="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-border/50 bg-muted px-0.5 font-mono text-[10px] text-muted-foreground">A</kbd>
               </TooltipContent>
-            </Tooltip>
-            <Tooltip v-if="canClaimCurrentChat && !isCurrentChatRestricted">
-              <TooltipTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  :disabled="isClaimingCurrentChat"
-                  @click="claimCurrentChat"
-                >
-                  <Loader2
-                    v-if="isClaimingCurrentChat"
-                    class="h-4 w-4 animate-spin"
-                  />
-                  <Check v-else class="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{{ $t("chat.claimChat") }}</TooltipContent>
-            </Tooltip>
-            <Tooltip v-if="canCloseCurrentChat">
-              <TooltipTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  :disabled="isClosingCurrentChat"
-                  @click="closeCurrentChat"
-                >
-                  <Loader2
-                    v-if="isClosingCurrentChat"
-                    class="h-4 w-4 animate-spin"
-                  />
-                  <Check v-else class="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Close Chat</TooltipContent>
-            </Tooltip>
-            <Tooltip v-if="canManageTransfers && !activeTransferId">
-              <TooltipTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  :disabled="isTransferring"
-                  @click="transferToAgent"
-                >
-                  <UserX class="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{{ $t("chat.transferToAgent") }}</TooltipContent>
-            </Tooltip>
-            <Tooltip v-if="canManageTransfers && activeTransferId">
-              <TooltipTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  :disabled="isResuming"
-                  @click="resumeChatbot"
-                >
-                  <Play class="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{{ $t("chat.resumeChatbot") }}</TooltipContent>
-            </Tooltip>
-            <!-- Custom Action Buttons -->
-            <Tooltip v-for="action in customActions" :key="action.id">
-              <TooltipTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  :disabled="executingActionId === action.id"
-                  @click="executeCustomAction(action)"
-                >
-                  <Loader2
-                    v-if="executingActionId === action.id"
-                    class="h-4 w-4 animate-spin"
-                  />
-                  <component
-                    v-else
-                    :is="getActionIcon(action.icon)"
-                    class="h-4 w-4"
-                  />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{{ action.name }}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
@@ -4744,6 +4742,7 @@ async function sendMediaMessage() {
                   :class="
                     isNotesPanelOpen && 'bg-accent text-accent-foreground'
                   "
+                  aria-label="Internal notes (N)"
                   @click="isNotesPanelOpen = !isNotesPanelOpen"
                 >
                   <StickyNote class="h-4 w-4" />
@@ -4756,31 +4755,39 @@ async function sendMediaMessage() {
                   </span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t("chat.internalNotes") }}</TooltipContent>
+              <TooltipContent>
+                <span>{{ $t("chat.internalNotes") }}</span>
+                <kbd class="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-border/50 bg-muted px-0.5 font-mono text-[10px] text-muted-foreground">N</kbd>
+              </TooltipContent>
             </Tooltip>
-            <div class="relative">
+            <Popover>
               <Tooltip>
                 <TooltipTrigger as-child>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
-                    :disabled="isExportingChat"
-                    @click.stop="isExportMenuOpen = !isExportMenuOpen"
-                  >
-                    <Loader2 v-if="isExportingChat" class="h-4 w-4 animate-spin" />
-                    <Download v-else class="h-4 w-4" />
-                  </Button>
+                  <PopoverTrigger as-child>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="relative h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      :disabled="isExportingChat"
+                      aria-label="Export chat (E)"
+                    >
+                      <Loader2 v-if="isExportingChat" class="h-4 w-4 animate-spin" />
+                      <Download v-else class="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
                 </TooltipTrigger>
-                <TooltipContent>{{ $t("chat.exportChatTooltip") }}</TooltipContent>
+                <TooltipContent>
+                  <span>{{ $t("chat.exportChatTooltip") }}</span>
+                  <kbd class="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-border/50 bg-muted px-0.5 font-mono text-[10px] text-muted-foreground">E</kbd>
+                </TooltipContent>
               </Tooltip>
-              <div
-                v-if="isExportMenuOpen"
-                class="absolute right-0 top-full mt-1 z-[9999] min-w-[160px] rounded-md border border-border bg-popover p-1 shadow-md"
-                @click.stop
+              <PopoverContent
+                class="min-w-[160px] p-1"
+                side="bottom"
+                align="end"
               >
                 <button
-                  class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
                   :disabled="isExportingChat"
                   @click="exportChatAsPDF()"
                 >
@@ -4788,15 +4795,15 @@ async function sendMediaMessage() {
                   {{ $t("chat.exportAsPDF") }}
                 </button>
                 <button
-                  class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent"
                   :disabled="isExportingChat"
                   @click="exportChatAsText()"
                 >
                   <Download class="h-4 w-4" />
                   {{ $t("chat.exportAsText") }}
                 </button>
-              </div>
-            </div>
+              </PopoverContent>
+            </Popover>
             <Tooltip>
               <TooltipTrigger as-child>
                 <Button
@@ -4805,13 +4812,120 @@ async function sendMediaMessage() {
                   id="info-button"
                   class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                   :class="isInfoPanelOpen && 'bg-accent text-accent-foreground'"
+                  aria-label="Contact info (I)"
                   @click="isInfoPanelOpen = !isInfoPanelOpen"
                 >
                   <Info class="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{{ $t("chat.contactInfo") }}</TooltipContent>
+              <TooltipContent>
+                <span>{{ $t("chat.contactInfo") }}</span>
+                <kbd class="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-border/50 bg-muted px-0.5 font-mono text-[10px] text-muted-foreground">I</kbd>
+              </TooltipContent>
             </Tooltip>
+            <Popover v-if="(canToggleCurrentChatPublic || canClaimCurrentChat || canCloseCurrentChat || canManageTransfers) && !isCurrentChatRestricted">
+              <Tooltip>
+                <TooltipTrigger as-child>
+                  <PopoverTrigger as-child>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      aria-label="More actions (M)"
+                    >
+                      <MoreHorizontal class="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <span>{{ $t("chat.moreActions") }}</span>
+                  <kbd class="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-border/50 bg-muted px-0.5 font-mono text-[10px] text-muted-foreground">M</kbd>
+                </TooltipContent>
+              </Tooltip>
+              <PopoverContent
+                class="w-48 p-1"
+                side="bottom"
+                align="end"
+              >
+                <button
+                  v-if="canToggleCurrentChatPublic"
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
+                  :class="contactsStore.currentContact?.is_public ? 'text-primary' : ''"
+                  :disabled="isUpdatingCurrentChatPublic"
+                  @click="toggleCurrentChatPublicVisibility"
+                >
+                  <Pin class="h-3.5 w-3.5" />
+                  {{
+                    contactsStore.currentContact?.is_public
+                      ? $t("chat.removePublicChat")
+                      : $t("chat.makePublicChat")
+                  }}
+                </button>
+                <button
+                  v-if="canClaimCurrentChat"
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
+                  :disabled="isClaimingCurrentChat"
+                  @click="claimCurrentChat"
+                >
+                  <Check class="h-3.5 w-3.5" />
+                  {{ $t("chat.claimChat") }}
+                </button>
+                <button
+                  v-if="canCloseCurrentChat"
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
+                  :disabled="isClosingCurrentChat"
+                  @click="closeCurrentChat"
+                >
+                  <Check class="h-3.5 w-3.5" />
+                  Close Chat
+                </button>
+                <button
+                  v-if="canManageTransfers && !activeTransferId"
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
+                  :disabled="isTransferring"
+                  @click="transferToAgent"
+                >
+                  <UserX class="h-3.5 w-3.5" />
+                  {{ $t("chat.transferToAgent") }}
+                </button>
+                <button
+                  v-if="canManageTransfers && activeTransferId"
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
+                  :disabled="isResuming"
+                  @click="resumeChatbot"
+                >
+                  <Play class="h-3.5 w-3.5" />
+                  {{ $t("chat.resumeChatbot") }}
+                </button>
+                <template v-if="customActions.length > 0">
+                  <div class="my-1 h-px bg-border" />
+                  <button
+                    v-for="action in customActions"
+                    :key="action.id"
+                    type="button"
+                    class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
+                    :disabled="executingActionId === action.id"
+                    @click="executeCustomAction(action)"
+                  >
+                    <Loader2
+                      v-if="executingActionId === action.id"
+                      class="h-3.5 w-3.5 animate-spin"
+                    />
+                    <component
+                      v-else
+                      :is="getActionIcon(action.icon)"
+                      class="h-3.5 w-3.5"
+                    />
+                    {{ action.name }}
+                  </button>
+                </template>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
@@ -5007,6 +5121,19 @@ async function sendMediaMessage() {
                     >
                       {{ getGroupSenderPhone(message) }}
                     </p>
+                    <InstanceTag
+                      v-if="
+                        isSidebarUnifiedMode &&
+                        contactAccounts.length > 1 &&
+                        message.whatsapp_account &&
+                        selectedAccount &&
+                        toAccountToggleKey(message.whatsapp_account?.trim() || '') !== selectedAccount
+                      "
+                      :fallback-label="message.whatsapp_account || ''"
+                      :instance-id="message.whatsapp_account"
+                      placement="message"
+                      class="mb-1"
+                    />
                     <!-- Reply preview (if this message is replying to another) -->
                     <div
                       v-if="message.is_reply && message.reply_to_message"

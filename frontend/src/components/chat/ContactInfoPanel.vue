@@ -259,11 +259,11 @@ function getColorClass(color?: string): string {
     case "success":
       return "bg-primary/12 text-primary";
     case "warning":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      return "bg-warning/12 text-warning dark:bg-warning/15 dark:text-warning";
     case "error":
-      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+      return "bg-destructive/12 text-destructive dark:bg-destructive/15 dark:text-destructive";
     case "info":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+      return "bg-chart/12 text-chart-foreground dark:bg-chart/15 dark:text-chart-foreground";
     default:
       return "bg-muted text-muted-foreground";
   }
@@ -502,7 +502,12 @@ async function softDeleteChat() {
   >
     <!-- Resize Handle -->
     <div
-      class="absolute top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 z-10"
+      role="separator"
+      tabindex="0"
+      aria-orientation="vertical"
+      :aria-valuenow="panelWidth"
+      aria-label="Resize panel"
+      class="absolute top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 z-10 outline-none focus-visible:ring-2 focus-visible:ring-primary"
       :class="[
         isRTL ? 'right-0 border-r' : 'left-0 border-l',
         { 'bg-primary/30': isResizing },
