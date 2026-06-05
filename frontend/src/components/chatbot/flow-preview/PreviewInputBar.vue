@@ -71,8 +71,8 @@ function handleKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="bg-[#f0f2f5] dark:bg-[#202c33] px-3 py-2 flex items-center gap-2">
-    <div class="flex-1 bg-white dark:bg-[#2a3942] rounded-full px-4 py-2">
+  <div class="bg-wa-panel-toolbar px-3 py-2 flex items-center gap-2">
+    <div class="flex-1 bg-wa-panel-input rounded-full px-4 py-2">
       <input
         v-if="isEnabled"
         v-model="inputValue"
@@ -89,7 +89,7 @@ function handleKeydown(event: KeyboardEvent) {
     <button
       class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
       :class="{
-        'bg-[#00a884] hover:bg-[#008f6d] cursor-pointer': isEnabled && inputString,
+        'bg-wa-panel-accent hover:bg-wa-panel-accent/90 cursor-pointer': isEnabled && inputString,
         'bg-gray-300 dark:bg-gray-600 cursor-not-allowed': !isEnabled || !inputString
       }"
       :disabled="!isEnabled || !inputString"

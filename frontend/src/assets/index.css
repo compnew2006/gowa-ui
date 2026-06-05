@@ -534,6 +534,37 @@
   }
 }
 
+/* WhatsApp Web panel surface tokens (theme-independent) */
+:root,
+:root.light,
+:root[data-theme-preset] {
+  --wa-panel-canvas: 239 234 226;
+  --wa-panel-surface: 255 255 255;
+  --wa-panel-header: 7 94 84;
+  --wa-panel-toolbar: 240 242 245;
+  --wa-panel-input: 255 255 255;
+  --wa-panel-sheet: 255 255 255;
+  --wa-panel-hover: 240 242 245;
+  --wa-panel-bubble-in: 255 255 255;
+  --wa-panel-bubble-out: 217 253 211;
+  --wa-panel-tint: 229 221 213;
+}
+
+:root.dark,
+:root.dark[data-theme-preset],
+.dark {
+  --wa-panel-canvas: 11 20 26;
+  --wa-panel-surface: 17 27 33;
+  --wa-panel-header: 32 44 51;
+  --wa-panel-toolbar: 32 44 51;
+  --wa-panel-input: 42 57 66;
+  --wa-panel-sheet: 31 44 52;
+  --wa-panel-hover: 42 57 66;
+  --wa-panel-bubble-in: 32 44 51;
+  --wa-panel-bubble-out: 0 92 75;
+  --wa-panel-tint: 42 57 66;
+}
+
 @layer base {
   * {
     @apply border-border;

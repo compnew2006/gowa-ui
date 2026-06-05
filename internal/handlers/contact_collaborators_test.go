@@ -221,3 +221,35 @@ func TestApp_RemoveContactCollaborator_AllowsSelfRemovalWithoutWritePermission(t
 		Count(&count).Error)
 	assert.Zero(t, count)
 }
+
+func TestApp_ListContactCollaborators_Success(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	manager := createCollaboratorManagerUser(t, app, org.ID, "collab-manager-list")
+	collaboratorUser := testutil.CreateTestUser(t, app.DB, org.ID)
+	contact := createPublicContact(t, app, org.ID)
+
+	seedContactCollaborator(t, app, org.ID, contact.ID, collaboratorUser.ID, manager.ID, models.CollaboratorStatusAccepted)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod(fasthttp.MethodGet)
+	testutil.SetAuthContext(req, org.ID, manager.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	err := app.ListContactCollaborators(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp map[string]interface{}
+	testutil.ParseEnvelopeResponse(t, req, &resp)
+	collaborators, ok := resp["collaborators"].([]interface{})
+	require.True(t, ok, "expected collaborators array")
+	require.Len(t, collaborators, 1, "expected one collaborator")
+
+	c := collaborators[0].(map[string]interface{})
+	assert.Equal(t, collaboratorUser.ID.String(), c["user_id"])
+	assert.Equal(t, string(models.CollaboratorStatusAccepted), c["status"])
+}
+

@@ -83,6 +83,21 @@ module.exports = {
           "teal-dark": "#075E54",
           light: "#DCF8C6",
         },
+        // WhatsApp Web panel surface tokens (theme-independent)
+        "wa-panel": {
+          canvas: colorVar("--wa-panel-canvas"),
+          surface: colorVar("--wa-panel-surface"),
+          header: colorVar("--wa-panel-header"),
+          toolbar: colorVar("--wa-panel-toolbar"),
+          input: colorVar("--wa-panel-input"),
+          sheet: colorVar("--wa-panel-sheet"),
+          hover: colorVar("--wa-panel-hover"),
+          "bubble-in": colorVar("--wa-panel-bubble-in"),
+          "bubble-out": colorVar("--wa-panel-bubble-out"),
+          tint: colorVar("--wa-panel-tint"),
+          accent: "#00a884",
+          link: "#53bdeb",
+        },
         // Violet color palette (primary accent)
         violet: {
           50: "#f5f3ff",

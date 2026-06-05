@@ -97,9 +97,9 @@ function handlePlayPause() {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-gray-50 dark:bg-[#111b21] border-l border-gray-200 dark:border-gray-700">
+  <div class="h-full flex flex-col bg-gray-50 dark:bg-wa-panel-surface border-l border-gray-200 dark:border-gray-700">
     <!-- Header -->
-    <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-[#202c33]">
+    <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-wa-panel-bubble-in">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <div
@@ -173,7 +173,7 @@ function handlePlayPause() {
             <span class="ml-auto text-xs text-gray-400">{{ variableEntries.length }}</span>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div class="mt-1 px-2 py-1 bg-white dark:bg-[#202c33] rounded border border-gray-200 dark:border-gray-700">
+            <div class="mt-1 px-2 py-1 bg-wa-panel-bubble-in rounded border border-gray-200 dark:border-gray-700">
               <div v-if="variableEntries.length === 0" class="text-xs text-gray-400 py-2 text-center">
                 No variables set
               </div>
@@ -203,7 +203,7 @@ function handlePlayPause() {
             <span class="ml-auto text-xs text-gray-400">{{ steps.length }}</span>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div class="mt-1 px-2 py-1 bg-white dark:bg-[#202c33] rounded border border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
+            <div class="mt-1 px-2 py-1 bg-wa-panel-bubble-in rounded border border-gray-200 dark:border-gray-700 max-h-40 overflow-y-auto">
               <div
                 v-for="(step, idx) in steps"
                 :key="step.step_name"
@@ -237,7 +237,7 @@ function handlePlayPause() {
             <span class="ml-auto text-xs text-gray-400">{{ state.executionLog.length }}</span>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div class="mt-1 bg-white dark:bg-[#202c33] rounded border border-gray-200 dark:border-gray-700 max-h-60 overflow-y-auto">
+            <div class="mt-1 bg-wa-panel-bubble-in rounded border border-gray-200 dark:border-gray-700 max-h-60 overflow-y-auto">
               <ExecutionTimeline
                 :entries="state.executionLog"
                 :current-step-name="state.currentStepName"

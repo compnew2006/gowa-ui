@@ -1329,7 +1329,7 @@ function parseFormatPreview(text: string, samples: any[]): PreviewPart[] {
 
         <div v-if="previewTemplate" class="py-4">
           <!-- WhatsApp-style preview -->
-          <div class="bg-gray-800 light:bg-[#e5ddd5] rounded-lg p-4">
+          <div class="bg-gray-800 light:bg-wa-panel-tint rounded-lg p-4">
             <div
               class="bg-gray-700 light:bg-white rounded-lg shadow max-w-[280px] overflow-hidden"
             >

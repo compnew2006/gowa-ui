@@ -8,10 +8,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/compnew2006/whatomate/internal/models"
 	"go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	waTypes "go.mau.fi/whatsmeow/types"
 	"google.golang.org/protobuf/proto"
+	"gorm.io/gorm"
 )
 
 const directionOutgoing = "outgoing"
@@ -70,21 +72,12 @@ func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string,
 	}
 	a.simulateTypingIndicator(ctx, client, jid, text)
 
-	participant := jid.String()
-	if a.db != nil && replyToMsgID != "" {
-		type msgRow struct {
-			Direction string `gorm:"column:direction"`
-		}
-		var row msgRow
-		if err := a.db.Table("messages").
-			Select("direction").
-			Where("whats_app_message_id = ?", replyToMsgID).
-			Take(&row).Error; err == nil && row.Direction == directionOutgoing {
-			if client.Store != nil && client.Store.ID != nil {
-				participant = client.Store.ID.ToNonAD().String()
-			}
-		}
+	myJID := waTypes.JID{}
+	if client.Store != nil && client.Store.ID != nil {
+		myJID = *client.Store.ID
 	}
+
+	participant, quotedText := a.resolveReplyContext(jid, replyToMsgID, myJID)
 
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
@@ -92,7 +85,7 @@ func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string,
 			ContextInfo: &waE2E.ContextInfo{
 				StanzaID:      proto.String(replyToMsgID),
 				Participant:   proto.String(participant),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
+				QuotedMessage: &waE2E.Message{Conversation: proto.String(quotedText)},
 			},
 		},
 	}
@@ -104,6 +97,56 @@ func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string,
 
 	return resp.ID, nil
 }
+
+// resolveReplyContext queries the database to resolve the participant JID and the quoted message content.
+func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID string, myJID waTypes.JID) (string, string) {
+	participant := jid.String()
+	quotedText := ""
+	if a.db != nil && replyToMsgID != "" {
+		type msgRow struct {
+			Direction string       `gorm:"column:direction"`
+			Content   string       `gorm:"column:content"`
+			Metadata  models.JSONB `gorm:"column:metadata"`
+		}
+		var row msgRow
+		// Clone database session to avoid statement/query pollution
+		db := a.db.Session(&gorm.Session{})
+		if err := db.Table("messages").
+			Select("direction, content, metadata").
+			Where("whats_app_message_id = ?", replyToMsgID).
+			Take(&row).Error; err == nil {
+			quotedText = row.Content
+			if row.Direction == directionOutgoing {
+				if myJID.User != "" {
+					participant = myJID.ToNonAD().String()
+				}
+			} else {
+				// Incoming message
+				// For group chats, we need the JID of the actual sender from metadata
+				if strings.HasSuffix(jid.String(), "@g.us") {
+					if senderPhone, ok := row.Metadata["sender_phone"].(string); ok && senderPhone != "" {
+						senderPhone = strings.TrimSpace(senderPhone)
+						if !strings.Contains(senderPhone, "@") {
+							participant = senderPhone + "@s.whatsapp.net"
+						} else {
+							participant = senderPhone
+						}
+					}
+				} else {
+					// Direct chat: sender is the other person (customer)
+					participant = jid.ToNonAD().String()
+				}
+			}
+		}
+	}
+
+	if quotedText == "" {
+		quotedText = "Message"
+	}
+
+	return participant, quotedText
+}
+
 
 // SendImage sends an image message.
 func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to string, imageURL string, caption string) (string, error) {

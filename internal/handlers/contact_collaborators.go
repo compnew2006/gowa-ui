@@ -50,7 +50,7 @@ type updateCollaboratorStatusRequest struct {
 }
 
 func (a *App) loadContactForCollaboration(r *fastglue.Request, orgID, userID, contactID uuid.UUID) (*models.Contact, error) {
-	requestDB := a.requestDB(r)
+	requestDB := a.requestDB(r).Session(&gorm.Session{})
 	var contact models.Contact
 	query := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
@@ -76,7 +76,7 @@ func (a *App) loadContactForCollaboration(r *fastglue.Request, orgID, userID, co
 
 // ListContactCollaborators lists collaborators for a contact.
 func (a *App) ListContactCollaborators(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
+	requestDB := a.requestDB(r).Session(&gorm.Session{})
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -136,7 +136,7 @@ func (a *App) ListContactCollaborators(r *fastglue.Request) error {
 
 // InviteContactCollaborator invites a user to collaborate on a contact.
 func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
+	requestDB := a.requestDB(r).Session(&gorm.Session{})
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -271,7 +271,7 @@ func (a *App) InviteContactCollaborator(r *fastglue.Request) error {
 
 // AcceptContactCollaborator accepts a collaboration invite for the current user.
 func (a *App) AcceptContactCollaborator(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
+	requestDB := a.requestDB(r).Session(&gorm.Session{})
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -344,7 +344,7 @@ func (a *App) AcceptContactCollaborator(r *fastglue.Request) error {
 
 // DeclineContactCollaborator declines a collaboration invite for the current user.
 func (a *App) DeclineContactCollaborator(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
+	requestDB := a.requestDB(r).Session(&gorm.Session{})
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -399,7 +399,7 @@ func (a *App) DeclineContactCollaborator(r *fastglue.Request) error {
 
 // RemoveContactCollaborator removes a collaborator from a contact.
 func (a *App) RemoveContactCollaborator(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
+	requestDB := a.requestDB(r).Session(&gorm.Session{})
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")

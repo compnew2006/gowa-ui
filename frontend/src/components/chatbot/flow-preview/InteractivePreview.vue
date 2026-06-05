@@ -113,10 +113,10 @@ function handleGoToStep(stepName: string) {
     <!-- Chat Area -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Phone Frame Container -->
-      <div class="flex-1 flex items-center justify-center p-4 bg-[#efeae2] dark:bg-[#0b141a]">
-        <div id="preview-phone-frame" class="w-full max-w-sm bg-[#efeae2] dark:bg-[#0b141a] rounded-2xl overflow-hidden shadow-xl flex flex-col h-[600px] relative">
+      <div class="flex-1 flex items-center justify-center p-4 bg-wa-panel-canvas">
+        <div id="preview-phone-frame" class="w-full max-w-sm bg-wa-panel-canvas rounded-2xl overflow-hidden shadow-xl flex flex-col h-[600px] relative">
           <!-- Chat Header -->
-          <div class="bg-[#075e54] dark:bg-[#202c33] text-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
+          <div class="bg-wa-panel-header text-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
             <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
               <MessageSquare class="h-5 w-5" />
             </div>

@@ -642,7 +642,7 @@ onMounted(() => fetchWebhooks());
               >Response Payload</Label
             >
             <pre
-              class="bg-[#141414] p-3 rounded border border-white/[0.08] text-[11px] overflow-x-auto max-h-48"
+              class="bg-zinc-900 p-3 rounded border border-white/[0.08] text-[11px] overflow-x-auto max-h-48"
             ><code>{{ JSON.stringify(testResult.data, null, 2) }}</code></pre>
           </div>
         </div>

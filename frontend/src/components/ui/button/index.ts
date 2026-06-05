@@ -20,17 +20,13 @@ export const buttonVariants = cva(
           "bg-secondary text-secondary-foreground shadow-sm hover:opacity-90",
         ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        glass:
-          "border border-border bg-card/90 text-foreground shadow-sm hover:bg-accent hover:text-foreground",
       },
       size: {
         default: "h-10 px-5 py-2",
         xs: "h-7 px-2.5 text-[11px]",
         sm: "h-9 px-4 text-xs",
-        lg: "h-11 px-6",
         icon: "h-10 w-10",
         "icon-sm": "size-8",
-        "icon-lg": "size-10",
       },
     },
     defaultVariants: {
