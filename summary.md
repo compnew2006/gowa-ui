@@ -1,67 +1,29 @@
-# P1-1: Object Storage Retry + Circuit Breaker
+# Whatomate — Session Summary (Messaging and Reaction Fixes)
 
-## Task
-Fix the P1-1 vulnerability from FIX_PLAN_AR.md: Object Storage had no retry on GetObject/DeleteObject and no circuit breaker, meaning transient S3 failures caused permanent file loss.
+This session focused on fixing three distinct messaging-related bugs on the backend and Whatsmeow adapter.
 
-## Approach and Key Decisions
-- **Existing state**: `retryableObjectStorage` already wrapped `PutObject` with retry + exponential backoff. `GetObject` and `DeleteObject` delegated directly with no retry.
-- **Added**: Retry with exponential backoff + jitter for both `GetObject` and `DeleteObject`.
-- **Added**: Circuit breaker (`circuitBreaker` struct) with closed -> open -> half-open state machine.
-  - Opens after 5 consecutive failures (configurable `failureThreshold`).
-  - Resets to half-open after 30 seconds (`resetTimeout`).
-  - Requires 2 consecutive successes in half-open to close (`halfOpenRequired`).
-- **Nil-safe**: breaker fields are nil-checked so existing tests (which don't set them) continue to work.
-- `ErrObjectNotFound` is explicitly excluded from retry (not transient).
-- `isTransientError` already handles: net errors, MinIO 429/5xx, string matching for connection reset/broken pipe/timeout.
-- Added shutdown hooks so server and worker paths stop dispatcher workers on process shutdown.
+## Bugs Resolved
 
-## Gap 1 — Caller error handling (committed `bc9a25d2`)
-The initial implementation had three callers that conflated `ErrCircuitOpen` with `ErrObjectNotFound` / generic errors. Fixed:
-- **`media.go ServeMedia` (line 305)**: when `GetObject` returns `ErrCircuitGetOpen`, the request now returns **503 + `Retry-After: 30`** instead of falling into the `ErrObjectNotFound` self-heal branch. Without this fix, a temporarily unhealthy S3 would have caused the handler to delete the `MediaAsset` row and mark the message as `media_deleted_at`, permanently losing a recoverable file.
-- **`media.go RetryMediaDownload` (line 394)**: the existence probe now distinguishes circuit-open (log warn, treat as unavailable) from not-found (existing behavior).
-- **`media_retention_worker.go` (line 201)**: when the delete breaker is open, the worker logs and returns `nil` instead of failing the row. Failing the row would have made the worker re-process the same asset forever, hammering the breaker. The next sweep picks it up once the circuit closes.
+### 1. Messaging Queue Rate Limiting Delay
+- **File**: `pkg/whatsmeow/queue.go`
+- **Issue**: Sending a message showed a pending clock icon for 4–5 seconds because `process()` unconditionally slept for a random rate-limiting delay on every job, even when the queue had been idle.
+- **Fix**: Added a `lastProcessed time.Time` field to `InstanceQueue` to track the actual send timestamp. In `process()`, it now calculates the time elapsed since `lastProcessed` and sleeps only for the remaining required rate-limit duration (`requiredDelay - elapsed`).
+- **Tests Added**: `TestQueueDelayRespectsIdleQueue` in `pkg/whatsmeow/queue_test.go` confirms that the first message sent on an idle queue goes out instantly (< 100ms) and consecutive messages are correctly rate-limited.
 
-## Gap 2 — Per-operation circuit breakers (committed `bc9a25d2`)
-The initial design used a single shared breaker. That was too coarse: a wave of slow `PutObject` failures (e.g. media uploads timing out) would have opened the breaker for the entire object storage, blocking `GetObject` (live user downloads) and `DeleteObject` (retention cleanup) too.
-- `retryableObjectStorage` now has three independent breakers: `putBreaker`, `getBreaker`, `deleteBreaker`. `NewObjectStorage` constructs three `newCircuitBreaker(5, 30*time.Second)` instances.
-- Added two wrapper sentinels — `ErrCircuitGetOpen` and `ErrCircuitDeleteOpen` — both still satisfy `errors.Is(err, ErrCircuitOpen)`. The wrappers let callers distinguish which breaker tripped when handling the error.
-- Two new tests assert the independence: `TestCircuitBreaker_PutOpenDoesNotBlockGet` and `TestCircuitBreaker_GetOpenDoesNotBlockPut`.
+### 2. Contact Message Reaction 404
+- **File**: `internal/handlers/contacts_messaging.go`
+- **Issue**: Sending a reaction returned a 404 response. The query `requestDB.Where("id = ? AND contact_id = ?", messageID, contactID).First(&message)` failed because `requestDB` was polluted by GORM's method chaining optimization from a previous contact query on the same request session. GORM ran the query against `"contacts"` table instead of `"messages"`, raising a database error and returning 404.
+- **Fix**: Cloned the DB session using `.Session(&gorm.Session{})` for all subsequent queries in `SendReaction()` to avoid GORM statement pollution. Also replaced direct path parameter type assertion with the standard `parsePathUUID` helper.
+- **Tests Added**: `internal/handlers/reaction_test.go` tests all reaction endpoint validation branches (invalid UUIDs, non-existent rows, successful reaction, and reaction removal).
 
-## Gap 3 — Skipped
-Local-disk fallback queue for `PutObject` (write-side graceful degradation) was identified as a third gap but **deferred**: it duplicates the recovery work already captured by P1-4 (media retry/regeneration) and P1-6 (async media recovery worker) in FIX_PLAN_AR.md. Scope was intentionally limited to retry + circuit breaker + caller safety.
+### 3. Quote Replies Sent as Normal Messages
+- **File**: `pkg/whatsmeow/adapter_send.go`
+- **Issue**: Quoting an outgoing message sent by the agent/user themselves caused the reply context to be dropped on WhatsApp, sending a normal text instead.
+- **Fix**: Added a query in `SendTextReply` to resolve the direction of the quoted message. If it was `outgoing`, it sets `Participant` in the WhatsApp message `ContextInfo` to the client's own JID (`client.Store.ID.ToNonAD().String()`).
 
-## Files Modified
-| File | Change |
-|------|--------|
-| `internal/storage/object_storage.go` | Added `circuitBreaker` struct + state machine; added `putBreaker`/`getBreaker`/`deleteBreaker` to `retryableObjectStorage`; added retry logic to `GetObject` and `DeleteObject`; integrated per-op breakers into all 3 methods; added `ErrCircuitOpen`/`ErrCircuitGetOpen`/`ErrCircuitDeleteOpen` sentinel errors |
-| `internal/storage/object_storage_test.go` | Updated `mockStorage` with `getFunc`/`deleteFunc` + separate call counters; updated all existing tests to per-op field names; added 17 new tests (15 in commit `2343d1d6`, +2 per-op independence in `bc9a25d2`) |
-| `internal/handlers/media.go` | `ServeMedia` returns 503 + `Retry-After: 30` on `ErrCircuitGetOpen`; `RetryMediaDownload` distinguishes circuit-open from not-found |
-| `internal/handlers/media_retention_worker.go` | `ErrCircuitDeleteOpen` logged and skipped (returns nil) so the next sweep catches the asset once the circuit closes |
-- Modified `pkg/whatsmeow/metrics_unit_test.go`
-- Modified `internal/config/config.go`
-- Modified `internal/config/config_test.go`
-- Modified `internal/handlers/instances.go`
-- Modified `cmd/whatomate/main.go`
-- Modified `config.example.toml`
+## Verification Results
 
-## Tests Added (17 new total)
-- GetObject: success first attempt, success on retry, NotFound skips retry, max retries exhausted
-- DeleteObject: success first attempt, success on retry, max retries exhausted
-- Circuit breaker: opens after threshold, half-open after reset timeout, closes after recovery, re-opens on half-open failure
-- Circuit breaker blocks GetObject/DeleteObject when open (now uses `ErrCircuitGetOpen` / `ErrCircuitDeleteOpen`)
-- Per-op breaker independence: `TestCircuitBreaker_PutOpenDoesNotBlockGet`, `TestCircuitBreaker_GetOpenDoesNotBlockPut`
-- Permanent errors count as breaker failures
-- Config defaults and environment overrides cover `event_buffer_size` and `event_dispatch_enabled`.
-
-## Verification
-- `go build ./...` -- clean (modulo pre-existing tmp/scratch noise unrelated to this work)
-- `go vet ./internal/storage/... ./internal/handlers/...` -- clean
-- `go test ./internal/storage/... -v` -- **26/26 pass** (9 existing + 17 new)
-- `go test ./internal/handlers/...` -- compiles cleanly (no tests added; behavior changes are HTTP-status mapping)
-- `git diff --check` passed.
-
-Playwright was not run because this task only changes backend WhatsMeow ingestion/config/metrics behavior and does not touch UI, routing, forms, or browser behavior.
-
-## Known Limitations
-- Circuit breaker parameters (threshold=5, reset=30s) are hardcoded in `NewObjectStorage`. A future enhancement could expose them via config.
-- No metrics/observability for circuit breaker state transitions yet (tracked as P1-3).
+All tests pass:
+- `go test -v ./internal/handlers -run TestSendReaction` (PASS)
+- `go test -v ./pkg/whatsmeow -run TestQueue` (PASS)
+- `go build ./...` (Clean compilation)

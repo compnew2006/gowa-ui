@@ -14,6 +14,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const directionOutgoing = "outgoing"
+
 var textURLPattern = regexp.MustCompile(`(?i)\b(?:https?://|www\.)\S+`)
 
 // SendText sends a text message.
@@ -68,12 +70,28 @@ func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string,
 	}
 	a.simulateTypingIndicator(ctx, client, jid, text)
 
+	participant := jid.String()
+	if a.db != nil && replyToMsgID != "" {
+		type msgRow struct {
+			Direction string `gorm:"column:direction"`
+		}
+		var row msgRow
+		if err := a.db.Table("messages").
+			Select("direction").
+			Where("whats_app_message_id = ?", replyToMsgID).
+			Take(&row).Error; err == nil && row.Direction == directionOutgoing {
+			if client.Store != nil && client.Store.ID != nil {
+				participant = client.Store.ID.ToNonAD().String()
+			}
+		}
+	}
+
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
 			Text: proto.String(text),
 			ContextInfo: &waE2E.ContextInfo{
 				StanzaID:      proto.String(replyToMsgID),
-				Participant:   proto.String(jid.String()),
+				Participant:   proto.String(participant),
 				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
 			},
 		},

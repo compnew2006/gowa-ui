@@ -20,6 +20,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	waTypes "go.mau.fi/whatsmeow/types"
+	"gorm.io/gorm"
 )
 
 // SendMessageRequest represents a send message request
@@ -628,11 +629,9 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 		return nil
 	}
 
-	messageIDStr := r.RequestCtx.UserValue("message_id").(string)
-
-	messageID, err := uuid.Parse(messageIDStr)
+	messageID, err := parsePathUUID(r, "message_id", "message")
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid message ID", nil, "")
+		return nil
 	}
 
 	// Parse request body
@@ -643,7 +642,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 	// Agent-role users keep chat-scoped visibility even though they carry contacts:read.
 	var contact models.Contact
-	query := requestDB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := requestDB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", contactID, orgID)
 	if a.shouldRestrictChatVisibilityToAgentScope(userID, orgID) {
 		query = applyAgentVisibleChatAccessFilter(query, userID)
 	}
@@ -653,7 +652,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 	// Get message
 	var message models.Message
-	if err := requestDB.Where("id = ? AND contact_id = ?", messageID, contactID).First(&message).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Where("id = ? AND contact_id = ?", messageID, contactID).First(&message).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
 	}
 
@@ -704,7 +703,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 	// Remove existing reaction from this user (each user can only have one reaction)
 	userIDStr := userID.String()
-	var newReactions []Reaction
+	newReactions := make([]Reaction, 0)
 	for _, r := range reactions {
 		if r.FromUser != userIDStr {
 			newReactions = append(newReactions, r)
@@ -721,7 +720,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 	// Update metadata
 	metadata["reactions"] = newReactions
-	if err := requestDB.Model(&message).Update("metadata", metadata).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Model(&message).Update("metadata", metadata).Error; err != nil {
 		a.Log.Error("Failed to update message reactions", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update reaction", nil, "")
 	}

@@ -80,3 +80,47 @@ func waitDepthValue(t *testing.T, depths <-chan int64, timeout time.Duration) in
 		return -1
 	}
 }
+
+func TestQueueDelayRespectsIdleQueue(t *testing.T) {
+	// Configure a substantial delay (e.g. 500ms)
+	manager := NewQueueManager(config.WhatsmeowConfig{
+		RateLimitMinDelayMs: 500,
+		RateLimitMaxDelayMs: 500,
+		QueueTimeoutSeconds: 5,
+	}, logf.New(logf.Opts{}))
+	t.Cleanup(manager.Close)
+
+	// Enqueue the first job on a fresh/idle queue
+	start := time.Now()
+	done1 := make(chan struct{})
+	require.NoError(t, manager.Enqueue("instance-delay", func(ctx context.Context) error {
+		close(done1)
+		return nil
+	}))
+
+	select {
+	case <-done1:
+		duration := time.Since(start)
+		// First job should run immediately (under 100ms)
+		assert.Less(t, duration, 100*time.Millisecond, "idle queue job should execute immediately without rate-limit sleep")
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for first job execution")
+	}
+
+	// Enqueue a second job back-to-back
+	start2 := time.Now()
+	done2 := make(chan struct{})
+	require.NoError(t, manager.Enqueue("instance-delay", func(ctx context.Context) error {
+		close(done2)
+		return nil
+	}))
+
+	select {
+	case <-done2:
+		duration2 := time.Since(start2)
+		// Second job must be delayed by at least 400ms (accounting for scheduling overhead)
+		assert.GreaterOrEqual(t, duration2, 400*time.Millisecond, "consecutive job should be rate-limited")
+	case <-time.After(1 * time.Second):
+		t.Fatal("timed out waiting for second job execution")
+	}
+}

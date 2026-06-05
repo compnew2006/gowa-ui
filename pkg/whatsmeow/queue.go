@@ -15,14 +15,15 @@ type Job func(ctx context.Context) error
 
 // InstanceQueue manages the message queue for a single WhatsApp instance
 type InstanceQueue struct {
-	instanceID string
-	jobs       chan Job
-	stop       chan struct{}
-	config     config.WhatsmeowConfig
-	logger     logf.Logger
-	lastActive time.Time
-	mu         sync.Mutex // protects lastActive and checks
-	onDepth    func(instanceID string, depth int64)
+	instanceID    string
+	jobs          chan Job
+	stop          chan struct{}
+	config        config.WhatsmeowConfig
+	logger        logf.Logger
+	lastActive    time.Time
+	lastProcessed time.Time
+	mu            sync.Mutex // protects lastActive and checks
+	onDepth       func(instanceID string, depth int64)
 }
 
 // QueueManager manages queues for multiple instances
@@ -195,8 +196,20 @@ func (q *InstanceQueue) process(job Job) {
 	if maxDelay > minDelay {
 		delayMs += secureRandomIntn(maxDelay - minDelay + 1)
 	}
-	delay := time.Duration(delayMs) * time.Millisecond
-	time.Sleep(delay)
+	requiredDelay := time.Duration(delayMs) * time.Millisecond
+
+	// Only sleep if not enough time has elapsed since last processed message.
+	q.mu.Lock()
+	elapsed := time.Since(q.lastProcessed)
+	q.mu.Unlock()
+
+	if remaining := requiredDelay - elapsed; remaining > 0 {
+		time.Sleep(remaining)
+	}
+
+	q.mu.Lock()
+	q.lastProcessed = time.Now()
+	q.mu.Unlock()
 
 	// 2. Execution with Exponential Backoff
 	maxRetries := 3
