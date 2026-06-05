@@ -3,7 +3,9 @@ package testutil
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -15,6 +17,7 @@ func NewJSONRequest(t *testing.T, body any) *fastglue.Request {
 	t.Helper()
 
 	ctx := &fasthttp.RequestCtx{}
+	initSafeRequestCtx(ctx)
 	ctx.Request.Header.SetContentType("application/json")
 	ctx.Request.Header.SetMethod("POST")
 
@@ -32,6 +35,7 @@ func NewGETRequest(t *testing.T) *fastglue.Request {
 	t.Helper()
 
 	ctx := &fasthttp.RequestCtx{}
+	initSafeRequestCtx(ctx)
 	ctx.Request.Header.SetMethod("GET")
 
 	return &fastglue.Request{RequestCtx: ctx}
@@ -42,6 +46,7 @@ func NewRequest(t *testing.T) *fastglue.Request {
 	t.Helper()
 
 	ctx := &fasthttp.RequestCtx{}
+	initSafeRequestCtx(ctx)
 	return &fastglue.Request{RequestCtx: ctx}
 }
 
@@ -129,4 +134,15 @@ func AssertErrorResponse(t *testing.T, req *fastglue.Request, expectedStatus int
 	require.Equal(t, "error", envelope.Status, "expected error status")
 	require.NotNil(t, envelope.Message, "expected message in envelope")
 	require.Contains(t, *envelope.Message, expectedMessage, "error message mismatch")
+}
+
+func initSafeRequestCtx(ctx *fasthttp.RequestCtx) {
+	if ctx == nil {
+		return
+	}
+	val := reflect.ValueOf(ctx).Elem()
+	sField := val.FieldByName("s")
+	if sField.IsValid() && sField.CanAddr() {
+		reflect.NewAt(sField.Type(), unsafe.Pointer(sField.UnsafeAddr())).Elem().Set(reflect.ValueOf(&fasthttp.Server{}))
+	}
 }

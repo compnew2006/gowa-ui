@@ -34,7 +34,7 @@ func ScopedDB(db *gorm.DB, orgID uuid.UUID) *gorm.DB {
 	if orgID == uuid.Nil {
 		return clone
 	}
-	return clone.Scopes(func(tx *gorm.DB) *gorm.DB {
+	scoped := clone.Scopes(func(tx *gorm.DB) *gorm.DB {
 		if tx == nil || tx.Statement == nil {
 			return tx
 		}
@@ -62,6 +62,7 @@ func ScopedDB(db *gorm.DB, orgID uuid.UUID) *gorm.DB {
 			Value:  orgID,
 		})
 	})
+	return scoped.Session(&gorm.Session{})
 }
 
 func SetScopedDB(r *fastglue.Request, db *gorm.DB) {

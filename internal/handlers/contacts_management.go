@@ -171,7 +171,7 @@ func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUser
 // handler agree on who is visible.
 func (a *App) userBelongsToOrg(db *gorm.DB, userID, orgID uuid.UUID) bool {
 	var count int64
-	db.Raw(
+	db.Session(&gorm.Session{}).Raw(
 		"SELECT COUNT(*) FROM users WHERE id = ? AND deleted_at IS NULL AND ("+
 			"organization_id = ? "+
 			"OR EXISTS (SELECT 1 FROM user_organizations WHERE user_id = ? AND organization_id = ? AND deleted_at IS NULL)"+

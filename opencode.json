@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "serena": {
+      "type": "local",
+      "command": [
+        "/Users/noiemany/.local/bin/serena",
+        "start-mcp-server",
+        "--project=/Users/noiemany/Downloads/whatomate_GOWA/whatomate",
+        "--context=ide"
+      ],
+      "enabled": true
+    },
+    "codegraph": {
+      "type": "local",
+      "command": [
+        "codegraph",
+        "mcp"
+      ],
+      "enabled": true
+    }
+  }
+}

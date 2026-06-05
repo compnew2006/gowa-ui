@@ -568,7 +568,17 @@ func CreateTestAgentSelectionSettings(t *testing.T, db *gorm.DB, orgID uuid.UUID
 	for _, opt := range opts {
 		opt(settings)
 	}
+
+	shouldBeFalse := !settings.HideUnavailableAgents
+	settings.HideUnavailableAgents = true
+
 	require.NoError(t, db.Create(settings).Error)
+
+	if shouldBeFalse {
+		require.NoError(t, db.Model(settings).Update("hide_unavailable_agents", false).Error)
+		settings.HideUnavailableAgents = false
+	}
+
 	return settings
 }
 

@@ -157,7 +157,7 @@ func (a *App) requireAgentSelectionPermission(r *fastglue.Request, userID uuid.U
 func (a *App) resolveAgentSelectionSettings(db *gorm.DB, orgID uuid.UUID, instanceID *uuid.UUID) (*models.AgentSelectionSettings, error) {
 	var settings models.AgentSelectionSettings
 	if instanceID != nil && *instanceID != uuid.Nil {
-		err := db.Where("organization_id = ? AND instance_id = ?", orgID, *instanceID).First(&settings).Error
+		err := db.Session(&gorm.Session{}).Where("organization_id = ? AND instance_id = ?", orgID, *instanceID).First(&settings).Error
 		if err == nil {
 			return &settings, nil
 		}
@@ -166,7 +166,7 @@ func (a *App) resolveAgentSelectionSettings(db *gorm.DB, orgID uuid.UUID, instan
 		}
 	}
 
-	err := db.Where("organization_id = ? AND instance_id IS NULL", orgID).First(&settings).Error
+	err := db.Session(&gorm.Session{}).Where("organization_id = ? AND instance_id IS NULL", orgID).First(&settings).Error
 	if err == nil {
 		return &settings, nil
 	}
@@ -182,9 +182,9 @@ func (a *App) resolveExactAgentSelectionSettings(db *gorm.DB, orgID uuid.UUID, i
 	var settings models.AgentSelectionSettings
 	var err error
 	if instanceID != nil && *instanceID != uuid.Nil {
-		err = db.Where("organization_id = ? AND instance_id = ?", orgID, *instanceID).First(&settings).Error
+		err = db.Session(&gorm.Session{}).Where("organization_id = ? AND instance_id = ?", orgID, *instanceID).First(&settings).Error
 	} else {
-		err = db.Where("organization_id = ? AND instance_id IS NULL", orgID).First(&settings).Error
+		err = db.Session(&gorm.Session{}).Where("organization_id = ? AND instance_id IS NULL", orgID).First(&settings).Error
 	}
 	if err == nil {
 		return &settings, nil
@@ -231,14 +231,14 @@ func agentSelectionWriteDB(db *gorm.DB) *gorm.DB {
 	if db == nil {
 		return db
 	}
-	return db.Session(&gorm.Session{NewDB: true})
+	return db.Session(&gorm.Session{})
 }
 
 func agentSelectionReadDB(db *gorm.DB) *gorm.DB {
 	if db == nil {
 		return db
 	}
-	return db.Session(&gorm.Session{NewDB: true})
+	return db.Session(&gorm.Session{})
 }
 
 func trimOptionalString(value *string) string {
@@ -444,17 +444,17 @@ func (a *App) DeleteAgentSelectionSettings(r *fastglue.Request) error {
 	}
 
 	if err := agentSelectionWriteDB(requestDB).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().
+		if err := tx.Session(&gorm.Session{}).Unscoped().
 			Where("organization_id = ? AND settings_id = ?", orgID, id).
 			Delete(&models.AgentSelectionParticipant{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Unscoped().
+		if err := tx.Session(&gorm.Session{}).Unscoped().
 			Where("organization_id = ? AND settings_id = ?", orgID, id).
 			Delete(&models.AgentSelectionOption{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Unscoped().
+		if err := tx.Session(&gorm.Session{}).Unscoped().
 			Where("id = ? AND organization_id = ?", id, orgID).
 			Delete(&models.AgentSelectionSettings{}).Error; err != nil {
 			return err
@@ -1077,11 +1077,10 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 		return nil, errors.New("settings is nil")
 	}
 
-	readDB := agentSelectionReadDB(db)
 	options := make([]agentSelectionRenderedOption, 0)
 	if settings.ID != uuid.Nil {
 		var participants []models.AgentSelectionParticipant
-		if err := readDB.Where("organization_id = ? AND settings_id = ? AND is_enabled = ?", orgID, settings.ID, true).
+		if err := db.Session(&gorm.Session{}).Where("organization_id = ? AND settings_id = ? AND is_enabled = ?", orgID, settings.ID, true).
 			Order("sort_order ASC, display_name ASC").
 			Find(&participants).Error; err != nil {
 			return nil, err
@@ -1097,7 +1096,7 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 				}
 				if participant.MaxOpenChats != nil && *participant.MaxOpenChats >= 0 {
 					var openCount int64
-					readDB.Model(&models.Contact{}).
+					db.Session(&gorm.Session{}).Model(&models.Contact{}).
 						Where("organization_id = ? AND assigned_user_id = ? AND status = ?", orgID, participant.UserID, models.ChatStatusOpen).
 						Count(&openCount)
 					if openCount >= int64(*participant.MaxOpenChats) {
@@ -1122,7 +1121,7 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 		}
 
 		var configuredOptions []models.AgentSelectionOption
-		if err := readDB.Where("organization_id = ? AND settings_id = ? AND is_enabled = ?", orgID, settings.ID, true).
+		if err := db.Session(&gorm.Session{}).Where("organization_id = ? AND settings_id = ? AND is_enabled = ?", orgID, settings.ID, true).
 			Order("sort_order ASC, label ASC").
 			Find(&configuredOptions).Error; err != nil {
 			return nil, err
@@ -1133,7 +1132,7 @@ func (a *App) buildAgentSelectionMenu(db *gorm.DB, orgID uuid.UUID, settings *mo
 			}
 			if configured.OptionType == models.AgentSelectionOptionTeam && configured.TeamID != nil {
 				var team models.Team
-				if err := readDB.Where("id = ? AND organization_id = ? AND is_active = ?", *configured.TeamID, orgID, true).First(&team).Error; err != nil {
+				if err := db.Session(&gorm.Session{}).Where("id = ? AND organization_id = ? AND is_active = ?", *configured.TeamID, orgID, true).First(&team).Error; err != nil {
 					continue
 				}
 			}

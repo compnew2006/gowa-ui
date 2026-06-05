@@ -185,6 +185,9 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 	} else {
 		// Route through Meta client (existing behavior)
 		sendFn = func(sendCtx context.Context) (string, error) {
+			if a.WhatsApp == nil {
+				return "", fmt.Errorf("whatsapp client not configured")
+			}
 			waAccount := a.toWhatsAppAccount(req.Account)
 
 			// Get reply-to message ID if this is a reply

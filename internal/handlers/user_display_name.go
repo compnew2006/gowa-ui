@@ -5,6 +5,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 func NormalizeDisplayText(value string, limit int) string {
@@ -27,7 +28,7 @@ func (a *App) ResolveUserDisplayName(userID uuid.UUID) string {
 		FullName string `gorm:"column:full_name"`
 		Email    string `gorm:"column:email"`
 	}
-	if err := a.DB.Model(&models.User{}).
+	if err := a.DB.Session(&gorm.Session{}).Model(&models.User{}).
 		Select("full_name", "email").
 		Where("id = ?", userID).
 		Take(&user).Error; err != nil {
