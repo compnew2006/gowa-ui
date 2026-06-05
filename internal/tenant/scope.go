@@ -27,10 +27,14 @@ type HostOrganization struct {
 
 // ScopedDB returns a request-scoped GORM clone with tenant filtering enabled.
 func ScopedDB(db *gorm.DB, orgID uuid.UUID) *gorm.DB {
-	if db == nil || orgID == uuid.Nil {
-		return db
+	if db == nil {
+		return nil
 	}
-	return db.Session(&gorm.Session{}).Scopes(func(tx *gorm.DB) *gorm.DB {
+	clone := db.Session(&gorm.Session{})
+	if orgID == uuid.Nil {
+		return clone
+	}
+	return clone.Scopes(func(tx *gorm.DB) *gorm.DB {
 		if tx == nil || tx.Statement == nil {
 			return tx
 		}

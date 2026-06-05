@@ -463,8 +463,8 @@ onUnmounted(() => {
       :title="$t('whatsappFilter.title')"
       :subtitle="$t('whatsappFilter.subtitle')"
       :icon="Layers"
-      icon-gradient="bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20"
-      :back-link="viewBatchId ? undefined : '/settings'"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
+      :back-link="viewBatchId ? undefined : '/whatsapp'"
       @back="viewBatchId = null; stopPolling(); filterStore.fetchBatches(campaignsPage, campaignsLimit)"
     >
       <template #actions v-if="viewBatchId">
@@ -531,9 +531,9 @@ onUnmounted(() => {
 
                 <!-- Stats breakdown widgets -->
                 <div class="grid grid-cols-3 gap-4">
-                  <div class="p-4 rounded-xl border bg-slate-500/5 hover:bg-slate-500/10 transition-colors flex flex-col items-center justify-center">
+                  <div class="p-4 rounded-xl border bg-muted/30 hover:bg-muted/50 transition-colors flex flex-col items-center justify-center">
                     <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider">Total</span>
-                    <span class="text-2xl font-bold mt-1 text-slate-800 dark:text-slate-100">{{ filterStore.activeBatch.value.total_numbers }}</span>
+                    <span class="text-2xl font-bold mt-1 text-foreground">{{ filterStore.activeBatch.value.total_numbers }}</span>
                   </div>
                   <div class="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/10 hover:bg-emerald-500/10 transition-colors flex flex-col items-center justify-center">
                     <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider">Registered</span>
@@ -558,7 +558,7 @@ onUnmounted(() => {
                   <Download class="h-4 w-4" />
                   Export Selected ({{ selectedCount }})
                 </Button>
-                <Button variant="default" class="w-full justify-start gap-2 shadow-sm bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700" @click="importToContacts" :disabled="isImportingContacts || selectedCount === 0">
+                <Button variant="default" class="w-full justify-start gap-2 shadow-sm" @click="importToContacts" :disabled="isImportingContacts || selectedCount === 0">
                   <Loader2 v-if="isImportingContacts" class="h-4 w-4 animate-spin" />
                   <UserPlus v-else class="h-4 w-4" />
                   Import Selected ({{ selectedCount }}) to Contacts
@@ -711,8 +711,8 @@ onUnmounted(() => {
                   @dragleave="onDragLeave"
                   @drop="onDrop"
                   :class="[
-                    'border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all hover:bg-slate-500/5',
-                    isDragActive ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-300 dark:border-slate-800'
+                    'border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all hover:bg-muted/30',
+                    isDragActive ? 'border-emerald-500 bg-emerald-500/5' : 'border-border'
                   ]"
                   @click="triggerFileSelect"
                 >
@@ -725,7 +725,7 @@ onUnmounted(() => {
 
               <Button
                 variant="default"
-                class="w-full gap-2 bg-gradient-to-br from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-md text-white font-semibold pt-1.5"
+                class="w-full gap-2 font-semibold pt-1.5"
                 @click="startVerification"
                 :disabled="filterStore.isSubmitting.value"
               >

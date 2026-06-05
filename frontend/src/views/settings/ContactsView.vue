@@ -364,7 +364,7 @@ function getInstanceLabel(contact: Contact): string {
       :title="$t('contacts.title')"
       :subtitle="$t('contacts.subtitle')"
       :icon="Users"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
     >
       <template
         v-if="canWriteContacts || canImportContacts || canExportContacts"

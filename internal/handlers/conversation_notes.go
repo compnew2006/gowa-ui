@@ -251,7 +251,7 @@ func (a *App) DeleteConversationNote(r *fastglue.Request) error {
 
 	contactID := note.ContactID
 
-	if err := requestDB.Delete(note).Error; err != nil {
+	if err := a.DB.Delete(note).Error; err != nil {
 		a.Log.Error("Failed to delete conversation note", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError,
 			"Failed to delete note", nil, "")

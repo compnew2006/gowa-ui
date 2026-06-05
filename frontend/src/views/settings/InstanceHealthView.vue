@@ -10,7 +10,7 @@ import HealthDashboard from "@/components/HealthDashboard.vue";
       title="Instance Health Dashboard"
       subtitle="Live uptime, throughput, error, and queue metrics for each connected number."
       :icon="Activity"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
     />
     <div class="flex-1 p-6 overflow-y-auto">
       <HealthDashboard />

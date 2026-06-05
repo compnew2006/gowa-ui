@@ -333,7 +333,7 @@ const webhookUrl = window.location.origin + basePath + "/api/webhook";
     <PageHeader
       :title="$t('accounts.title')"
       :icon="Phone"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
       back-link="/settings"
       :breadcrumbs="[
         { label: $t('settings.title'), href: '/settings' },

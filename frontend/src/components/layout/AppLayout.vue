@@ -342,7 +342,7 @@ const navigation = computed(() => {
     .map((item) => {
       // Filter children that are Meta-only
       let filteredChildren = item.children?.filter((child) => {
-        if (child.path === "/campaigns" && !f.campaigns) return false;
+        if (child.path === "/whatsapp/campaigns" && !f.campaigns) return false;
         if (metaOnlyChildPaths.has(child.path) && !f.business_profile)
           return false;
         if (child.adminOnly && !isAdminUser.value) return false;

@@ -268,9 +268,9 @@ onMounted(() => {
       :subtitle="$t('closedChats.subtitle')"
       :icon="Archive"
       icon-gradient="bg-primary text-primary-foreground shadow-none"
-      back-link="/settings"
+      back-link="/whatsapp"
       :breadcrumbs="[
-        { label: $t('settings.title'), href: '/settings' },
+        { label: $t('nav.whatsappTools'), href: '/whatsapp' },
         { label: $t('closedChats.title') },
       ]"
     >

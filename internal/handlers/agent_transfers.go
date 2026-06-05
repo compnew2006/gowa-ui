@@ -538,10 +538,17 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		if err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent_id", nil, "")
 		}
-		// Verify agent exists and is available
-		agent, err := findByIDAndOrg[models.User](newQuery(), r, parsedAgentID, orgID, "Agent")
-		if err != nil {
-			return nil
+		// Verify agent exists and is available (checks both native and cross-org members via user_organizations)
+		var agent models.User
+		if err := a.DB.Where("id = ? AND deleted_at IS NULL", parsedAgentID).First(&agent).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
+			}
+			a.Log.Error("CreateAgentTransfer: Failed to fetch agent", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch agent", nil, "")
+		}
+		if !a.userBelongsToOrg(a.DB, parsedAgentID, orgID) {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
 		}
 		if !agent.IsAvailable {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Agent is currently away", nil, "")
@@ -723,6 +730,9 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 // ResumeFromTransfer resumes chatbot processing for a transferred contact
 func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
+	newQuery := func() *gorm.DB {
+		return requestDB.Session(&gorm.Session{})
+	}
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -733,7 +743,7 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 		return nil
 	}
 
-	transfer, err := findByIDAndOrg[models.AgentTransfer](requestDB, r, transferID, orgID, "Transfer")
+	transfer, err := findByIDAndOrg[models.AgentTransfer](newQuery(), r, transferID, orgID, "Transfer")
 	if err != nil {
 		return nil
 	}
@@ -753,7 +763,7 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 	transfer.ResumedAt = &now
 	transfer.ResumedBy = &userID
 
-	if err := requestDB.Save(transfer).Error; err != nil {
+	if err := newQuery().Save(transfer).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to resume transfer", nil, "")
 	}
 
@@ -765,7 +775,7 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 
 	// If AssignToSameAgent is disabled, unassign the contact
 	if settings != nil && !settings.AgentAssignment.AssignToSameAgent {
-		requestDB.
+		newQuery().
 			Model(&models.Contact{}).
 			Where("id = ?", transfer.ContactID).
 			Updates(chatAssignmentUpdates(nil))
@@ -776,7 +786,7 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 
 	// Get contact for webhook data
 	var contact models.Contact
-	requestDB.
+	newQuery().
 		Where("id = ?", transfer.ContactID).First(&contact)
 
 	// Dispatch webhook for transfer resumed
@@ -797,6 +807,9 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 // AssignAgentTransfer assigns a transfer to a specific agent
 func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
+	newQuery := func() *gorm.DB {
+		return requestDB.Session(&gorm.Session{})
+	}
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -816,7 +829,7 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 	}
 
 	var transfer models.AgentTransfer
-	if err := requestDB.Where("id = ? AND organization_id = ?", transferID, orgID).
+	if err := newQuery().Where("id = ? AND organization_id = ?", transferID, orgID).
 		Preload("Contact").First(&transfer).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Transfer not found", nil, "")
 	}
@@ -839,10 +852,17 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent_id", nil, "")
 		}
 
-		// Verify agent exists and is available
-		agent, err := findByIDAndOrg[models.User](requestDB, r, parsedAgentID, orgID, "Agent")
-		if err != nil {
-			return nil
+		// Verify agent exists and is available (checks both native and cross-org members via user_organizations)
+		var agent models.User
+		if err := a.DB.Where("id = ? AND deleted_at IS NULL", parsedAgentID).First(&agent).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
+			}
+			a.Log.Error("ResolveAgentTransfer: Failed to fetch agent", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch agent", nil, "")
+		}
+		if !a.userBelongsToOrg(a.DB, parsedAgentID, orgID) {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
 		}
 		if !agent.IsAvailable {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Agent is currently away", nil, "")
@@ -870,7 +890,7 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 			}
 			// Verify team exists
 			var team models.Team
-			if err := requestDB.Where("id = ? AND organization_id = ?", parsedTeamID, orgID).First(&team).Error; err != nil {
+			if err := newQuery().Where("id = ? AND organization_id = ?", parsedTeamID, orgID).First(&team).Error; err != nil {
 				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Team not found", nil, "")
 			}
 			transfer.TeamID = &parsedTeamID
@@ -880,7 +900,7 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 	if targetAgentID != nil {
 		if transfer.Contact == nil {
 			var contact models.Contact
-			if err := requestDB.Where("id = ? AND organization_id = ?", transfer.ContactID, orgID).First(&contact).Error; err != nil {
+			if err := newQuery().Where("id = ? AND organization_id = ?", transfer.ContactID, orgID).First(&contact).Error; err != nil {
 				a.Log.Error("Failed to load contact for transfer assignment", "error", err, "transfer_id", transfer.ID, "contact_id", transfer.ContactID)
 				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load contact", nil, "")
 			}
@@ -905,7 +925,7 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 		a.UpdateSLAOnPickup(&transfer)
 	}
 
-	if err := requestDB.Save(&transfer).Error; err != nil {
+	if err := newQuery().Save(&transfer).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to assign transfer", nil, "")
 	}
 
@@ -916,15 +936,15 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 		previousContactAssigneeID = &prev
 	}
 	if targetAgentID != nil && transfer.Contact != nil {
-		requestDB.
+		newQuery().
 			Model(transfer.Contact).Updates(chatAssignmentUpdates(targetAgentID))
 	} else if targetAgentID == nil && transfer.Contact != nil {
-		requestDB.
+		newQuery().
 			// Clear assignment when unassigning
 			Model(transfer.Contact).Updates(chatAssignmentUpdates(nil))
 	}
 	if transfer.Contact != nil {
-		_ = requestDB.Where("id = ?", transfer.Contact.ID).First(transfer.Contact).Error
+		_ = newQuery().Where("id = ?", transfer.Contact.ID).First(transfer.Contact).Error
 		if targetAgentID != nil {
 			assigneeChanged := previousContactAssigneeID == nil || *previousContactAssigneeID != *targetAgentID
 			if assigneeChanged {
@@ -944,7 +964,7 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 		agentIDStr = &idStr
 		// Get agent name
 		var agent models.User
-		if requestDB.Where("id = ?", targetAgentID).First(&agent).Error == nil {
+		if newQuery().Where("id = ?", targetAgentID).First(&agent).Error == nil {
 			agentName = &agent.FullName
 		}
 	}
@@ -1002,7 +1022,7 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 	// Get user's team memberships
 	var userTeamIDs []uuid.UUID
 	var memberships []models.TeamMember
-	if err := requestDB.Where("user_id = ?", userID).Find(&memberships).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Where("user_id = ?", userID).Find(&memberships).Error; err != nil {
 		a.Log.Error("Failed to fetch team memberships for pick", "error", err, "user_id", userID)
 	}
 	for _, m := range memberships {
@@ -1016,7 +1036,7 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 	}
 
 	// Use transaction with FOR UPDATE lock to prevent race conditions
-	tx := requestDB.Begin()
+	tx := requestDB.Session(&gorm.Session{}).Begin()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
@@ -1025,8 +1045,8 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 
 	// Build query for picking transfer with row-level locking
 	query := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
-		Where("organization_id = ? AND status = ? AND agent_id IS NULL", orgID, models.TransferStatusActive).
-		Order("transferred_at ASC")
+		Where("agent_transfers.organization_id = ? AND agent_transfers.status = ? AND agent_transfers.agent_id IS NULL", orgID, models.TransferStatusActive).
+		Order("agent_transfers.transferred_at ASC")
 	if len(restrictedInstanceIDs) > 0 {
 		query = query.Joins("JOIN contacts ON contacts.id = agent_transfers.contact_id")
 		query = applyTransferRestrictedInstanceVisibilityFilter(query, restrictedInstanceIDs)
@@ -1035,7 +1055,7 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 	if teamIDStr != "" {
 		// Pick from specific team
 		if teamIDStr == "general" {
-			query = query.Where("team_id IS NULL")
+			query = query.Where("agent_transfers.team_id IS NULL")
 		} else {
 			teamID, err := uuid.Parse(teamIDStr)
 			if err == nil {
@@ -1053,15 +1073,15 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 						return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You are not a member of this team", nil, "")
 					}
 				}
-				query = query.Where("team_id = ?", teamID)
+				query = query.Where("agent_transfers.team_id = ?", teamID)
 			}
 		}
 	} else if !hasFullAccess {
 		// Users without full access can only pick from their teams or general queue
 		if len(userTeamIDs) > 0 {
-			query = query.Where("team_id IS NULL OR team_id IN ?", userTeamIDs)
+			query = query.Where("agent_transfers.team_id IS NULL OR agent_transfers.team_id IN ?", userTeamIDs)
 		} else {
-			query = query.Where("team_id IS NULL")
+			query = query.Where("agent_transfers.team_id IS NULL")
 		}
 	}
 	// Users with full access can pick from any queue if no team_id specified
@@ -1104,18 +1124,17 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 	if err := tx.Commit().Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to complete pickup", nil, "")
 	}
-	requestDB.
-
+	requestDB.Session(&gorm.Session{}).
 		// Load related data for response (outside transaction)
 		Where("id = ?", transfer.ContactID).First(&transfer.Contact)
 	if transfer.TeamID != nil {
-		requestDB.
+		requestDB.Session(&gorm.Session{}).
 			Where("id = ?", transfer.TeamID).First(&transfer.Team)
 	}
 
 	// Load agent info
 	var agent models.User
-	requestDB.
+	requestDB.Session(&gorm.Session{}).
 		First(&agent, userID)
 
 	// Broadcast WebSocket notification

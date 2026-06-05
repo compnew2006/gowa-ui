@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"errors"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // TeamRequest represents create/update team request
@@ -62,25 +64,25 @@ func (a *App) ListTeams(r *fastglue.Request) error {
 
 	// Users with teams:read permission can see all teams, others see only their teams
 	if a.HasPermission(userID, models.ResourceTeams, models.ActionRead, orgID) {
-		baseQuery := a.ScopeToOrg(requestDB, userID, orgID)
+		baseQuery := a.ScopeToOrg(requestDB.Session(&gorm.Session{}), userID, orgID)
 		if search != "" {
 			baseQuery = baseQuery.Where("name ILIKE ?", "%"+search+"%")
 		}
-		baseQuery.Model(&models.Team{}).Count(&total)
-		if err := pg.Apply(baseQuery.
+		baseQuery.Session(&gorm.Session{}).Model(&models.Team{}).Count(&total)
+		if err := pg.Apply(baseQuery.Session(&gorm.Session{}).
 			Preload("Members").Preload("Members.User").
 			Order("name ASC")).Find(&teams).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list teams", nil, "")
 		}
 	} else {
 		// Users only see teams they belong to
-		baseQuery := a.ScopeToOrg(requestDB.Joins("JOIN team_members ON team_members.team_id = teams.id"), userID, orgID).
+		baseQuery := a.ScopeToOrg(requestDB.Session(&gorm.Session{}).Joins("JOIN team_members ON team_members.team_id = teams.id"), userID, orgID).
 			Where("team_members.user_id = ?", userID)
 		if search != "" {
 			baseQuery = baseQuery.Where("teams.name ILIKE ?", "%"+search+"%")
 		}
-		baseQuery.Model(&models.Team{}).Count(&total)
-		if err := pg.Apply(baseQuery.
+		baseQuery.Session(&gorm.Session{}).Model(&models.Team{}).Count(&total)
+		if err := pg.Apply(baseQuery.Session(&gorm.Session{}).
 			Preload("Members").Preload("Members.User").
 			Order("teams.name ASC")).Find(&teams).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list teams", nil, "")
@@ -115,7 +117,7 @@ func (a *App) GetTeam(r *fastglue.Request) error {
 	}
 
 	var team models.Team
-	if err := requestDB.Where("id = ? AND organization_id = ?", teamID, orgID).
+	if err := requestDB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", teamID, orgID).
 		Preload("Members").Preload("Members.User").
 		First(&team).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Team not found", nil, "")
@@ -176,7 +178,7 @@ func (a *App) CreateTeam(r *fastglue.Request) error {
 		IsActive:           true,
 	}
 
-	if err := requestDB.Create(&team).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Create(&team).Error; err != nil {
 		a.Log.Error("Failed to create team", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create team", nil, "")
 	}
@@ -198,7 +200,7 @@ func (a *App) UpdateTeam(r *fastglue.Request) error {
 	}
 
 	var team models.Team
-	if err := requestDB.Where("id = ? AND organization_id = ?", teamID, orgID).
+	if err := requestDB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", teamID, orgID).
 		Preload("Members").First(&team).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Team not found", nil, "")
 	}
@@ -236,7 +238,7 @@ func (a *App) UpdateTeam(r *fastglue.Request) error {
 		team.AssignmentStrategy = req.AssignmentStrategy
 	}
 
-	if err := requestDB.Save(&team).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Save(&team).Error; err != nil {
 		a.Log.Error("Failed to update team", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update team", nil, "")
 	}
@@ -262,13 +264,13 @@ func (a *App) DeleteTeam(r *fastglue.Request) error {
 	}
 
 	// Delete team members first
-	if err := requestDB.Where("team_id = ?", teamID).Delete(&models.TeamMember{}).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Where("team_id = ?", teamID).Delete(&models.TeamMember{}).Error; err != nil {
 		a.Log.Error("Failed to delete team members", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete team", nil, "")
 	}
 
 	// Delete team
-	result := requestDB.Where("id = ? AND organization_id = ?", teamID, orgID).Delete(&models.Team{})
+	result := requestDB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", teamID, orgID).Delete(&models.Team{})
 	if result.Error != nil {
 		a.Log.Error("Failed to delete team", "error", result.Error)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete team", nil, "")
@@ -296,7 +298,7 @@ func (a *App) ListTeamMembers(r *fastglue.Request) error {
 
 	// Verify team exists and user has access
 	var team models.Team
-	if err := requestDB.Where("id = ? AND organization_id = ?", teamID, orgID).
+	if err := requestDB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", teamID, orgID).
 		Preload("Members").Preload("Members.User").
 		First(&team).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Team not found", nil, "")
@@ -347,7 +349,7 @@ func (a *App) AddTeamMember(r *fastglue.Request) error {
 
 	// Verify team exists
 	var team models.Team
-	if err := requestDB.Where("id = ? AND organization_id = ?", teamID, orgID).
+	if err := requestDB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", teamID, orgID).
 		Preload("Members").First(&team).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Team not found", nil, "")
 	}
@@ -378,15 +380,22 @@ func (a *App) AddTeamMember(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid user ID", nil, "")
 	}
 
-	// Verify user exists in org
-	user, err := findByIDAndOrg[models.User](requestDB, r, memberUserID, orgID, "User")
-	if err != nil {
-		return nil
+	// Verify user exists in org (checks both native and cross-org members via user_organizations)
+	var user models.User
+	if err := a.DB.Where("id = ? AND deleted_at IS NULL", memberUserID).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "User not found", nil, "")
+		}
+		a.Log.Error("AddTeamMember: Failed to fetch user", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch user", nil, "")
+	}
+	if !a.userBelongsToOrg(a.DB, memberUserID, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "User not found", nil, "")
 	}
 
 	// Check if already a member
 	var existingMember models.TeamMember
-	if err := requestDB.Where("team_id = ? AND user_id = ?", teamID, memberUserID).First(&existingMember).Error; err == nil {
+	if err := requestDB.Session(&gorm.Session{}).Where("team_id = ? AND user_id = ?", teamID, memberUserID).First(&existingMember).Error; err == nil {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "User is already a member of this team", nil, "")
 	}
 
@@ -410,7 +419,7 @@ func (a *App) AddTeamMember(r *fastglue.Request) error {
 		Role:   role,
 	}
 
-	if err := requestDB.Create(&member).Error; err != nil {
+	if err := requestDB.Session(&gorm.Session{}).Create(&member).Error; err != nil {
 		a.Log.Error("Failed to add team member", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to add member", nil, "")
 	}
@@ -445,7 +454,7 @@ func (a *App) RemoveTeamMember(r *fastglue.Request) error {
 
 	// Verify team exists
 	var team models.Team
-	if err := requestDB.Where("id = ? AND organization_id = ?", teamID, orgID).
+	if err := requestDB.Session(&gorm.Session{}).Where("id = ? AND organization_id = ?", teamID, orgID).
 		Preload("Members").First(&team).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Team not found", nil, "")
 	}
@@ -473,7 +482,7 @@ func (a *App) RemoveTeamMember(r *fastglue.Request) error {
 		}
 	}
 
-	result := requestDB.Where("team_id = ? AND user_id = ?", teamID, memberUserID).Delete(&models.TeamMember{})
+	result := requestDB.Session(&gorm.Session{}).Where("team_id = ? AND user_id = ?", teamID, memberUserID).Delete(&models.TeamMember{})
 	if result.Error != nil {
 		a.Log.Error("Failed to remove team member", "error", result.Error)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to remove member", nil, "")

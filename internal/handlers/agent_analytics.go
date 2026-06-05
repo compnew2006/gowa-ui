@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"errors"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // AgentAnalyticsSummary represents overall agent analytics
@@ -188,7 +190,6 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 
 // GetAgentDetails returns detailed analytics for a specific agent
 func (a *App) GetAgentDetails(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -227,10 +228,17 @@ func (a *App) GetAgentDetails(r *fastglue.Request) error {
 		periodEnd = now
 	}
 
-	// Verify agent exists
-	_, err = findByIDAndOrg[models.User](requestDB, r, agentID, orgID, "Agent")
-	if err != nil {
-		return nil
+	// Verify agent exists (checks both native and cross-org members via user_organizations)
+	var agent models.User
+	if err := a.DB.Where("id = ? AND deleted_at IS NULL", agentID).First(&agent).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
+		}
+		a.Log.Error("GetAgentAnalytics: Failed to fetch agent", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch agent", nil, "")
+	}
+	if !a.userBelongsToOrg(a.DB, agentID, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
 	}
 
 	filterInstanceID, instanceErr := a.parseAnalyticsInstanceID(orgID, string(r.RequestCtx.QueryArgs().Peek("instance_id")))
@@ -347,6 +355,9 @@ func (a *App) calculateSummaryStats(orgID uuid.UUID, start, end time.Time, summa
 		Group("source").
 		Scan(&sourceCounts)
 
+	if summary.TransfersBySource == nil {
+		summary.TransfersBySource = make(map[string]int64)
+	}
 	for _, sc := range sourceCounts {
 		summary.TransfersBySource[sc.Source] = sc.Count
 	}
@@ -396,6 +407,9 @@ func (a *App) calculateAgentSummaryStats(orgID, agentID uuid.UUID, start, end ti
 		Group("source").
 		Scan(&sourceCounts)
 
+	if summary.TransfersBySource == nil {
+		summary.TransfersBySource = make(map[string]int64)
+	}
 	for _, sc := range sourceCounts {
 		summary.TransfersBySource[sc.Source] = sc.Count
 	}

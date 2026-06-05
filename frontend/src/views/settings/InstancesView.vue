@@ -819,16 +819,16 @@ async function handleAssignedChatResetSettingsUpdate(
       :title="$t('settings.instances.title')"
       :subtitle="$t('settings.instances.subtitle')"
       :icon="Smartphone"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
-      back-link="/campaigns"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
+      back-link="/whatsapp"
       :breadcrumbs="[
-        { label: $t('nav.whatsappTools'), href: '/campaigns' },
+        { label: $t('nav.whatsappTools'), href: '/whatsapp' },
         { label: $t('settings.instances.title') },
       ]"
     >
       <template #actions>
         <div class="flex gap-2">
-          <RouterLink to="/instances/health">
+          <RouterLink to="/whatsapp/instances/health">
             <Button variant="outline" size="sm">
               {{ $t("settings.instances.healthDashboard") }}
             </Button>

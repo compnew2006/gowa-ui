@@ -393,7 +393,7 @@ watchDebounced(
       :title="$t('facebookComments.title')"
       :subtitle="$t('facebookComments.subtitle')"
       :breadcrumbs="[
-        { label: $t('nav.facebookTools'), href: '/facebook/page-search' },
+        { label: $t('nav.facebookTools'), href: '/facebook' },
         { label: $t('facebookComments.title') },
       ]"
     >

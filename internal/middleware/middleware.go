@@ -30,7 +30,7 @@ const (
 	ContextKeyOrganization   = "organization"
 )
 
-const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; frame-src 'self' data: blob: https:; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss: blob:"
+const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; frame-src 'self' data: blob: https:; object-src 'none'; form-action 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ws: wss: blob:"
 const defaultStrictTransportSecurity = "max-age=31536000; includeSubDomains"
 const accessTokenSubject = "access"
 
@@ -40,7 +40,7 @@ func ContentSecurityPolicyWithNonce(nonce string) string {
 	if nonce == "" {
 		return defaultContentSecurityPolicy
 	}
-	return strings.Replace(defaultContentSecurityPolicy, "script-src 'self';", "script-src 'self' 'nonce-"+nonce+"';", 1)
+	return strings.Replace(defaultContentSecurityPolicy, "script-src 'self' 'unsafe-eval';", "script-src 'self' 'unsafe-eval' 'nonce-"+nonce+"';", 1)
 }
 
 func shouldDeferCSPToFrontend(path string) bool {

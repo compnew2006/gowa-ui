@@ -493,7 +493,7 @@ const emptyDescription = computed(() => {
           <div class="space-y-2">
             <Label for="match_type">{{ $t("keywords.matchTypeLabel") }}</Label>
             <Select v-model="formData.match_type">
-              <SelectTrigger>
+              <SelectTrigger id="match_type">
                 <SelectValue :placeholder="$t('keywords.selectMatchType')" />
               </SelectTrigger>
               <SelectContent>
@@ -512,7 +512,7 @@ const emptyDescription = computed(() => {
           <div class="space-y-2">
             <Label for="response_type">{{ $t("keywords.responseType") }}</Label>
             <Select v-model="formData.response_type">
-              <SelectTrigger>
+              <SelectTrigger id="response_type">
                 <SelectValue :placeholder="$t('keywords.selectResponseType')" />
               </SelectTrigger>
               <SelectContent>

@@ -285,7 +285,21 @@
     "facebookAccounts": "Facebook Accounts",
     "facebookAccountsDesc": "Manage your connected Facebook accounts and sessions.",
     "groupExtraction": "Group Extraction",
-    "memberExtraction": "Member Extraction"
+    "memberExtraction": "Member Extraction",
+    "campaignsDesc": "Create and manage bulk message campaigns to send templates to your contacts.",
+    "whatsappAccountsDesc": "Manage your connected WhatsApp web sessions and Cloud API instances.",
+    "contactsDesc": "Manage customer profiles, labels, custom fields, and contact information.",
+    "cannedResponsesDesc": "Create quick replies and predefined templates to reply to customers instantly.",
+    "savedContentsDesc": "Manage media and text templates in your content library for quick access.",
+    "closedChatsDesc": "Review previously handled conversations and chat histories.",
+    "whatsappFilterDesc": "Validate and filter phone numbers to identify active WhatsApp accounts.",
+    "groupSearchDesc": "Find and extract target WhatsApp groups based on keywords and categories.",
+    "groupJoinCampaignsDesc": "Create automated campaigns to join target WhatsApp groups.",
+    "groupParticipantsDesc": "Manage members, details, and permissions of WhatsApp groups.",
+    "extractDesc": "Extract messages, media, and chat data from WhatsApp conversations.",
+    "groupExtractionDesc": "Export list of groups from active WhatsApp sessions.",
+    "memberExtractionDesc": "Export group participants list from active WhatsApp groups.",
+    "customerRoutingDesc": "Configure agent assignment rules and client selection menus."
   },
   "userMenu": {
     "myAccount": "My Account",

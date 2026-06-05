@@ -40,7 +40,7 @@ defineProps<{
           'bg-primary/10 text-primary shadow-none'
         "
       >
-        <component :is="icon" class="h-4 w-4 text-white" />
+        <component :is="icon" class="h-4 w-4" />
       </div>
       <div class="flex-1">
         <h1 class="text-xl font-semibold text-foreground">{{ title }}</h1>

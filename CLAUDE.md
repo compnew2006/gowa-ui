@@ -1,175 +1,184 @@
-# Ruflo — Claude Code Configuration
+# CLAUDE.md
 
-## Rules
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Do what has been asked; nothing more, nothing less
-- NEVER create files unless absolutely necessary — prefer editing existing files
-- NEVER create documentation files unless explicitly requested
-- NEVER save working files or tests to root — use `/src`, `/tests`, `/docs`, `/config`, `/scripts`
-- ALWAYS read a file before editing it
-- NEVER commit secrets, credentials, or .env files
-- Keep files under 500 lines
-- Validate input at system boundaries
+## Project Overview
 
-## Agent Comms (SendMessage-First Coordination)
+Whatomate is a WhatsApp Business Platform with dual-provider support: **Meta Cloud API** and **Whatsmeow** (WhatsApp Web protocol). Go backend (FastHTTP + fastglue router), Vue 3 + TypeScript frontend, PostgreSQL, Redis. Single binary production build with embedded frontend.
 
-Named agents coordinate via `SendMessage`, not polling or shared state.
-
-```
-Lead (you) ←→ architect ←→ developer ←→ tester ←→ reviewer
-              (named agents message each other directly)
-```
-
-### Spawning a Coordinated Team
-
-```javascript
-// ALL agents in ONE message, each knows WHO to message next
-Agent({ prompt: "Research the codebase. SendMessage findings to 'architect'.",
-  subagent_type: "researcher", name: "researcher", run_in_background: true })
-Agent({ prompt: "Wait for 'researcher'. Design solution. SendMessage to 'coder'.",
-  subagent_type: "system-architect", name: "architect", run_in_background: true })
-Agent({ prompt: "Wait for 'architect'. Implement it. SendMessage to 'tester'.",
-  subagent_type: "coder", name: "coder", run_in_background: true })
-Agent({ prompt: "Wait for 'coder'. Write tests. SendMessage results to 'reviewer'.",
-  subagent_type: "tester", name: "tester", run_in_background: true })
-Agent({ prompt: "Wait for 'tester'. Review code quality and security.",
-  subagent_type: "reviewer", name: "reviewer", run_in_background: true })
-
-// Kick off the pipeline
-SendMessage({ to: "researcher", summary: "Start", message: "[task context]" })
-```
-
-### Patterns
-
-| Pattern | Flow | Use When |
-|---------|------|----------|
-| **Pipeline** | A → B → C → D | Sequential dependencies (feature dev) |
-| **Fan-out** | Lead → A, B, C → Lead | Independent parallel work (research) |
-| **Supervisor** | Lead ↔ workers | Ongoing coordination (complex refactor) |
-
-### Rules
-
-- ALWAYS name agents — `name: "role"` makes them addressable
-- ALWAYS include comms instructions in prompts — who to message, what to send
-- Spawn ALL agents in ONE message with `run_in_background: true`
-- After spawning: STOP, tell user what's running, wait for results
-- NEVER poll status — agents message back or complete automatically
-
-## Swarm & Routing
-
-### Config
-- **Topology**: hierarchical-mesh (anti-drift)
-- **Max Agents**: 15
-- **Memory**: hybrid
-- **HNSW**: Enabled
-- **Neural**: Enabled
+## Build & Run Commands
 
 ```bash
-npx @claude-flow/cli@latest swarm init --topology hierarchical --max-agents 8 --strategy specialized
+# Backend only (dev)
+make build && ./whatomate server -config config.toml -migrate
+
+# Frontend only (dev)
+make frontend-dev
+
+# Production build (single binary with embedded frontend)
+make build-prod && ./whatomate server -config config.toml -migrate
+
+# Backend with hot-reload (air)
+make backend-watch
+
+# Both backend (hot-reload) + frontend dev server
+make dev-watch
+
+# Run all Go tests
+make test
+
+# Run a specific Go test
+go test -v -run TestFunctionName ./internal/handlers/...
+
+# Run database integration tests (starts ephemeral Postgres container)
+make test-db
+
+# Frontend unit tests
+cd frontend && npm run test:unit
+
+# Frontend E2E tests (requires running backend)
+cd frontend && npm run test:e2e
+
+# Frontend lint
+cd frontend && npm run lint
+
+# Frontend type check
+cd frontend && npm run typecheck
+
+# Go lint
+make lint
 ```
 
-### Agent Routing
+## Architecture
 
-| Task | Agents | Topology |
-|------|--------|----------|
-| Bug Fix | researcher, coder, tester | hierarchical |
-| Feature | architect, coder, tester, reviewer | hierarchical |
-| Refactor | architect, coder, reviewer | hierarchical |
-| Performance | perf-engineer, coder | hierarchical |
-| Security | security-architect, auditor | hierarchical |
+### Backend (Go — `internal/`)
 
-### When to Swarm
-- **YES**: 3+ files, new features, cross-module refactoring, API changes, security, performance
-- **NO**: single file edits, 1-2 line fixes, docs updates, config changes, questions
+Entry point: `cmd/whatomate/main.go`
 
-### 3-Tier Model Routing
+- **`internal/handlers/`** — All HTTP handlers. `app.go` defines `App` struct (dependency container injected into all handlers). Routes are registered in `app.go` via `fastglue`. 230+ files, one domain concept per file (e.g., `auth_handlers.go`, `campaign_policy.go`, `agent_transfers.go`).
+- **`internal/models/`** — GORM database models and domain types. `models.go` is the central file.
+- **`internal/database/`** — PostgreSQL (GORM) and Redis connection setup. Migrations in `postgres.go`.
+- **`internal/websocket/`** — WebSocket hub for real-time chat. `hub.go` broadcasts, `client.go` per connection, `messages.go` defines message types.
+- **`internal/middleware/`** — Auth JWT, CSRF protection, rate limiting, tenant scoping.
+- **`internal/worker/`** — Background job processors: campaigns, scheduled sends, group operations, WhatsApp filter, send policy enforcement.
+- **`internal/queue/`** — Job queue abstraction over Redis (pubsub + ordered queues).
+- **`internal/tenant/`** — Multi-tenant scope filtering applied per request.
+- **`internal/storage/`** — Object storage abstraction (local filesystem or S3/MinIO).
+- **`internal/crypto/`** — AES-256 encryption for secrets at rest (API keys, tokens).
+- **`internal/license/`** — Host-bound license enforcement with RSA key verification.
 
-| Tier | Handler | Use Cases |
-|------|---------|-----------|
-| 1 | Agent Booster (WASM) | Simple transforms — skip LLM, use Edit directly |
-| 2 | Haiku | Simple tasks, low complexity |
-| 3 | Sonnet/Opus | Architecture, security, complex reasoning |
+### Dual Provider System (`pkg/`)
 
-## Memory & Learning
+- **`pkg/whatsapp/`** — Meta Cloud API client (official WhatsApp Business API).
+- **`pkg/whatsmeow/`** — Whatsmeow protocol client (WhatsApp Web via QR code). Includes per-instance message queue (`QueueManager`), connection manager, event dispatcher, and media retry.
+- **`pkg/provider/`** — `MessageProvider` interface abstracting both providers. Handlers call this interface; provider selection is per-instance via config (`whatsapp.provider = "meta" | "whatsmeow"`).
 
-### Before Any Task
-```bash
-npx @claude-flow/cli@latest memory search --query "[task keywords]" --namespace patterns
-npx @claude-flow/cli@latest hooks route --task "[task description]"
-```
+### Frontend (Vue 3 + TypeScript — `frontend/`)
 
-### After Success
-```bash
-npx @claude-flow/cli@latest memory store --namespace patterns --key "[name]" --value "[what worked]"
-npx @claude-flow/cli@latest hooks post-task --task-id "[id]" --success true --store-results true
-```
+- **`frontend/src/stores/`** — Pinia stores for state management (`auth.ts`, `instances.ts`, `contacts.ts`, `transfers.ts`, etc.).
+- **`frontend/src/services/`** — API layer (`api.ts` = axios instance, `websocket.ts` = WS client, domain services per feature).
+- **`frontend/src/views/`** — Page components organized by feature: `chat/`, `settings/`, `chatbot/`, `facebook/`, `analytics/`, `dashboard/`, `auth/`.
+- **`frontend/src/components/`** — Reusable components organized by domain (`chat/`, `chatbot/`, `layout/`, `shared/`).
+- **`frontend/src/composables/`** — Vue composables for shared logic.
+- **`frontend/src/i18n/`** — Multi-language support (en, ar, es JSON locales).
+- **`frontend/src/router/`** — Vue Router with route guards.
+- **`frontend/vite.config.ts`** — Vite with `@` alias to `src/`.
 
-### MCP Tools (use `ToolSearch("keyword")` to discover)
+### Key Flows
 
-| Category | Key Tools |
-|----------|-----------|
-| **Memory** | `memory_store`, `memory_search`, `memory_search_unified` |
-| **Bridge** | `memory_import_claude`, `memory_bridge_status` |
-| **Swarm** | `swarm_init`, `swarm_status`, `swarm_health` |
-| **Agents** | `agent_spawn`, `agent_list`, `agent_status` |
-| **Hooks** | `hooks_route`, `hooks_post-task`, `hooks_worker-dispatch` |
-| **Security** | `aidefence_scan`, `aidefence_is_safe`, `aidefence_has_pii` |
-| **Hive-Mind** | `hive-mind_init`, `hive-mind_consensus`, `hive-mind_spawn` |
+1. **Message send**: Frontend → API handler → `MessageProvider.Send()` → Meta API or Whatsmeow queue → WebSocket broadcasts delivery status back to chat UI.
+2. **Webhook receive**: Meta/Whatsmeow webhook → handler processes event → stores in DB → WebSocket pushes to connected clients.
+3. **Multi-tenancy**: Each request is scoped via `tenant.Scope` middleware filtering DB queries by organization.
+4. **Auth**: JWT tokens in httpOnly cookies. Access token (15min) + refresh token (1 day). CSRF token in separate cookie/header pair.
 
-### Background Workers
+### Configuration
 
-| Worker | When |
-|--------|------|
-| `audit` | After security changes |
-| `optimize` | After performance work |
-| `testgaps` | After adding features |
-| `map` | Every 5+ file changes |
-| `document` | After API changes |
+Config via `config.toml` (TOML, parsed with koanf). Key sections: `app`, `server`, `database`, `redis`, `jwt`, `whatsapp`, `whatsmeow`, `storage`, `license`, `rate_limit`. See `config.example.toml` for all options.
 
-```bash
-npx @claude-flow/cli@latest hooks worker dispatch --trigger audit
-```
+## Conventions
 
-## Agents
+- Go module: `github.com/compnew2006/whatomate`
+- HTTP framework: `fasthttp` + `fastglue` (NOT net/http). Handlers receive `*fastglue.Request`.
+- ORM: GORM with PostgreSQL. Models use soft deletes (`gorm.DeletedAt`).
+- Frontend: Composition API only. Pinia for stores, Vue Query for server state, VeeValidate + Zod for forms.
+- Tests: Go uses `testify`. Frontend uses Vitest (unit) + Playwright (E2E).
+- Files under 500 lines. Extract when exceeding.
+- Always read a file before editing it.
 
-**Core**: `coder`, `reviewer`, `tester`, `planner`, `researcher`
-**Architecture**: `system-architect`, `backend-dev`, `mobile-dev`
-**Security**: `security-architect`, `security-auditor`
-**Performance**: `performance-engineer`, `perf-analyzer`
-**Coordination**: `hierarchical-coordinator`, `mesh-coordinator`, `adaptive-coordinator`
-**GitHub**: `pr-manager`, `code-review-swarm`, `issue-tracker`, `release-manager`
+## Codegraph
 
-Any string works as a custom agent type.
+This project uses codegraph for dependency analysis. The graph is at `.codegraph/graph.db`.
 
-## Build & Test
+### Before modifying code:
+1. `codegraph where <name>` — find where the symbol lives
+2. `codegraph audit --quick <target>` — understand the structure
+3. `codegraph context <name> -T` — get full context (source, deps, callers)
+4. `codegraph fn-impact <name> -T` — check blast radius before editing
 
-- ALWAYS run tests after code changes
-- ALWAYS verify build succeeds before committing
+### After modifying code:
+5. `codegraph diff-impact --staged -T` — verify impact before committing
 
-```bash
-npm run build && npm test
-```
+### Navigation
+- `codegraph where --file <path>` — file inventory (symbols, imports, exports)
+- `codegraph query <name> -T` — function call chain (callers + callees)
+- `codegraph path <from> <to> -T` — shortest call path between two symbols
+- `codegraph deps <file>` — file-level dependencies
+- `codegraph exports <file> -T` — per-symbol export consumers
+- `codegraph children <name> -T` — sub-declarations (parameters, properties, constants)
+- `codegraph search "<query>"` — semantic search (requires `codegraph embed`)
+- `codegraph search "<query>" --mode keyword` — BM25 keyword search
 
-## CLI Quick Reference
+### Impact & analysis
+- `codegraph diff-impact main -T` — impact of branch vs main
+- `codegraph audit <target> -T` — structural summary + impact + health in one report
+- `codegraph triage -T` — ranked audit priority queue
+- `codegraph check --staged --no-new-cycles` — CI validation predicates (exit 0/1)
+- `codegraph batch t1 t2 t3 -T --json` — batch query multiple targets
 
-```bash
-npx @claude-flow/cli@latest init --wizard           # Setup
-npx @claude-flow/cli@latest swarm init --v3-mode     # Start swarm
-npx @claude-flow/cli@latest memory search --query "" # Vector search
-npx @claude-flow/cli@latest hooks route --task ""    # Route to agent
-npx @claude-flow/cli@latest doctor --fix             # Diagnostics
-npx @claude-flow/cli@latest security scan            # Security scan
-npx @claude-flow/cli@latest performance benchmark    # Benchmarks
-```
+### Overview
+- `codegraph build .` — rebuild the graph (incremental by default)
+- `codegraph map` — module overview (most-connected files)
+- `codegraph stats` — graph health and quality score
+- `codegraph structure --depth 2` — directory tree with cohesion scores
+- `codegraph cycles` — circular dependency detection
+- `codegraph triage --level file --sort coupling` — file-level hotspot analysis
+- `codegraph roles --role dead -T` — find dead code (unreferenced symbols)
+- `codegraph roles --role core -T` — find core symbols (high fan-in)
+- `codegraph complexity -T` — per-function complexity metrics
+- `codegraph communities --drift -T` — module boundary drift analysis
+- `codegraph co-change <file>` — files that historically change together
+- `codegraph branch-compare main HEAD -T` — structural diff between refs
 
-26 commands, 140+ subcommands. Use `--help` on any command for details.
+### Deep analysis
+- `codegraph dataflow <name> -T` — data flow edges (requires `build --dataflow`)
+- `codegraph cfg <name> -T` — control flow graph (requires `build --cfg`)
+- `codegraph ast --kind call <name> -T` — search stored AST nodes
+- `codegraph owners [target]` — CODEOWNERS mapping for symbols
+- `codegraph snapshot save <name>` — checkpoint graph DB before refactoring
+- `codegraph plot` — interactive HTML dependency graph viewer
 
-## Setup
+### Flags
+- `-T` / `--no-tests` — exclude test files (use by default)
+- `-j` / `--json` — JSON output for programmatic use
+- `-f, --file <path>` — scope to a specific file
+- `-k, --kind <kind>` — filter by symbol kind
 
-```bash
-claude mcp add claude-flow -- npx -y @claude-flow/cli@latest
-npx @claude-flow/cli@latest daemon start
-npx @claude-flow/cli@latest doctor --fix
-```
+### Semantic search
 
-**Agent tool** handles execution (agents, files, code, git). **MCP tools** handle coordination (swarm, memory, hooks). **CLI** is the same via Bash.
+Use `codegraph search` to find functions by intent rather than exact name.
+Combine multiple angles with `;` for better recall:
+
+    codegraph search "validate auth; check token; verify JWT"
+
+Multi-query uses Reciprocal Rank Fusion — functions ranking highly across
+queries surface first. Use 2-4 sub-queries (2-4 words each):
+- **Naming variants**: "send email; notify user; deliver message"
+- **Abstraction levels**: "handle payment; charge credit card"
+- **Input/output**: "parse config; apply settings"
+- **Domain + technical**: "onboard tenant; create organization"
+
+### Hooks (optional)
+
+Hooks in `.claude/hooks/` can automatically inject dependency context on reads,
+block commits with cycles or dead exports, and show diff-impact before commits.
+See `docs/examples/claude-code-hooks/` for setup.

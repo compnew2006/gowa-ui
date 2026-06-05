@@ -500,7 +500,7 @@ async function toggleContext(context: AIContext) {
                 $t("aiContexts.contextType")
               }}</Label>
               <Select v-model="formData.context_type">
-                <SelectTrigger>
+                <SelectTrigger id="context_type">
                   <SelectValue :placeholder="$t('aiContexts.selectType')" />
                 </SelectTrigger>
                 <SelectContent>
@@ -559,7 +559,7 @@ async function toggleContext(context: AIContext) {
               <div class="col-span-1 space-y-2">
                 <Label for="api_method">{{ $t("aiContexts.method") }}</Label>
                 <Select v-model="formData.api_method">
-                  <SelectTrigger>
+                  <SelectTrigger id="api_method">
                     <SelectValue :placeholder="$t('aiContexts.method')" />
                   </SelectTrigger>
                   <SelectContent>

@@ -64,7 +64,7 @@ onMounted(loadPendingChats);
       title="Pending Chats"
       subtitle="Chats waiting to be claimed by an agent."
       :icon="Clock3"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
     />
 
     <div class="p-6 space-y-4">

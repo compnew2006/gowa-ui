@@ -279,7 +279,7 @@ onMounted(() => {
       :title="$t('sso.title')"
       :subtitle="$t('sso.subtitle')"
       :icon="ShieldCheck"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
     />
 
     <ScrollArea class="flex-1">

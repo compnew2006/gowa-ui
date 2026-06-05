@@ -232,7 +232,7 @@ async function handleActivationSubmit() {
       :title="t('licenseSettings.title')"
       :subtitle="t('licenseSettings.subtitle')"
       :icon="ShieldCheck"
-      icon-gradient="bg-gradient-to-br from-cyan-500 to-blue-600 shadow-cyan-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
     >
       <template #actions>
         <Button

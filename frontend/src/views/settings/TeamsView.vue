@@ -358,7 +358,7 @@ function getStrategyIcon(strategy: string) {
     <PageHeader
       :title="$t('teams.title')"
       :icon="Users"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
       back-link="/settings"
       :breadcrumbs="breadcrumbs"
     >
@@ -569,7 +569,7 @@ function getStrategyIcon(strategy: string) {
         <div class="space-y-2">
           <Label for="strategy">{{ $t("teams.assignmentStrategy") }}</Label>
           <Select v-model="formData.assignment_strategy"
-            ><SelectTrigger
+            ><SelectTrigger id="strategy"
               ><SelectValue
                 :placeholder="$t('teams.selectStrategy')" /></SelectTrigger
             ><SelectContent

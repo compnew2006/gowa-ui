@@ -268,7 +268,7 @@ watch(deleteDialogOpen, (open) => {
           >
             <!-- Gradient accent line -->
             <div
-              class="absolute top-0 left-3 right-3 h-[2px] rounded-full bg-gradient-to-r from-amber-500/60 via-orange-500/40 to-transparent"
+              class="absolute top-0 left-3 right-3 h-[1px] bg-border"
             />
 
             <!-- Editing mode -->

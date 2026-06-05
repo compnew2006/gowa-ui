@@ -638,7 +638,7 @@ async function saveStrictSendingRestrictions() {
     <PageHeader
       :title="$t('users.title')"
       :icon="Users"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
       back-link="/settings"
       :breadcrumbs="breadcrumbs"
     >
@@ -976,7 +976,7 @@ async function saveStrictSendingRestrictions() {
             <span class="text-destructive">*</span></Label
           >
           <Select v-model="formData.role_id">
-            <SelectTrigger>
+            <SelectTrigger id="role">
               <SelectValue :placeholder="$t('users.selectRole')">
                 <template v-if="formData.role_id">
                   <span class="capitalize">{{

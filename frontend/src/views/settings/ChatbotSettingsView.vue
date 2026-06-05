@@ -467,7 +467,7 @@ function removeEscalationUser(userId: string) {
       :title="$t('chatbotSettings.title')"
       :subtitle="$t('chatbotSettings.subtitle')"
       :icon="Bot"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
     />
     <ScrollArea class="flex-1">
       <div class="p-6 space-y-4 max-w-4xl mx-auto">

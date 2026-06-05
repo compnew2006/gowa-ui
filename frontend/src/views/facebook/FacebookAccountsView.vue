@@ -311,9 +311,9 @@ async function handleDelete() {
       :title="$t('fbAccounts.title')"
       :subtitle="$t('fbAccounts.subtitle')"
       :icon="Facebook"
-      icon-gradient="bg-gradient-to-br from-blue-600 to-indigo-700 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
       :breadcrumbs="[
-        { label: $t('nav.facebookTools'), href: '/facebook/page-search' },
+        { label: $t('nav.facebookTools'), href: '/facebook' },
         { label: $t('fbAccounts.title') },
       ]"
     >

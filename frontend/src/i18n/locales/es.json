@@ -58,7 +58,21 @@
     "facebookRetargeting": "Retargeting",
     "facebookRetargetingDesc": "Diríjase a sus clientes potenciales, clientes existentes y visitantes del sitio web con audiencias personalizadas de anuncios de Facebook altamente optimizadas.",
     "facebookAccounts": "Cuentas de Facebook",
-    "facebookAccountsDesc": "Gestione sus cuentas y sesiones de Facebook conectadas."
+    "facebookAccountsDesc": "Gestione sus cuentas y sesiones de Facebook conectadas.",
+    "campaignsDesc": "Cree y gestione campañas de mensajes masivos para enviar plantillas a sus contactos.",
+    "whatsappAccountsDesc": "Gestione sus sesiones web de WhatsApp conectadas e instancias de Cloud API.",
+    "contactsDesc": "Gestione perfiles de clientes, etiquetas, campos personalizados e información de contacto.",
+    "cannedResponsesDesc": "Cree respuestas rápidas y plantillas predefinidas para responder a los clientes al instante.",
+    "savedContentsDesc": "Gestione plantillas de texto y archivos multimedia en su biblioteca de contenido para un acceso rápido.",
+    "closedChatsDesc": "Revise conversaciones atendidas anteriormente e historiales de chat.",
+    "whatsappFilterDesc": "Valide y filtre números de teléfono para identificar cuentas activas de WhatsApp.",
+    "groupSearchDesc": "Busque y extraiga grupos de WhatsApp de destino según palabras clave y categorías.",
+    "groupJoinCampaignsDesc": "Cree campañas automatizadas para unirse a grupos de WhatsApp de destino.",
+    "groupParticipantsDesc": "Gestione miembros, detalles y permisos de grupos de WhatsApp.",
+    "extractDesc": "Extraiga mensajes, archivos multimedia y datos de chat de las conversaciones de WhatsApp.",
+    "groupExtractionDesc": "Exporte la lista de grupos de las sesiones activas de WhatsApp.",
+    "memberExtractionDesc": "Exporte la lista de participantes de los grupos activos de WhatsApp.",
+    "customerRoutingDesc": "Configure reglas de asignación de agentes y menús de selección de clientes."
   },
   "agentSelection": {
     "page": {

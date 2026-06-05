@@ -27,7 +27,7 @@ const isDebug = computed(() => props.message.type === 'debug')
     <div class="max-w-[85%]">
       <div
         class="bg-wa-panel-bubble-in rounded-lg rounded-tl-none shadow-sm p-3"
-        :class="{ 'border-l-2 border-red-400': message.isValidationError }"
+        :class="{ 'border-2 border-destructive': message.isValidationError }"
       >
         <p class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
           {{ message.content }}

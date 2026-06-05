@@ -193,12 +193,12 @@ func parseContextUUID(value any) (uuid.UUID, bool) {
 
 func (a *App) requestDB(r *fastglue.Request) *gorm.DB {
 	if db, ok := tenant.GetScopedDB(r); ok && db != nil {
-		return db
+		return db.Session(&gorm.Session{})
 	}
 
 	orgID, err := a.getOrgID(r)
 	if err != nil {
-		return a.DB
+		return a.DB.Session(&gorm.Session{})
 	}
 
 	return tenant.ScopedDB(a.DB, orgID)

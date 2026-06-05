@@ -328,7 +328,7 @@ onMounted(() => fetchWebhooks());
       :title="$t('webhooks.title')"
       :subtitle="$t('webhooks.subtitle')"
       :icon="WebhookIcon"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-sky-600 shadow-blue-500/20"
+      icon-gradient="bg-primary text-primary-foreground shadow-none"
     >
       <template #actions>
         <Button variant="outline" size="sm" @click="openCreateDialog"

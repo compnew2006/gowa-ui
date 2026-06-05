@@ -212,7 +212,7 @@ const timingSummaryLabel = computed(
   },
 );
 const breadcrumbs = [
-  { label: t("nav.settings"), href: "/settings" },
+  { label: t("nav.whatsappTools"), href: "/whatsapp" },
   { label: t("agentSelection.page.title") },
 ];
 

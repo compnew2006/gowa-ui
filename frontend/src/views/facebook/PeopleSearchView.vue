@@ -36,7 +36,6 @@ import {
   Square,
   Import,
   Facebook,
-  Award,
 } from "lucide-vue-next";
 import { toast } from "vue-sonner";
 import { fbPeopleSearchService, api } from "@/services/api";
@@ -244,35 +243,23 @@ function avatarGradient(name: string) {
 </script>
 
 <template>
-  <div :dir="isRTL ? 'rtl' : 'ltr'" class="relative min-h-screen bg-slate-950/40 text-slate-100 flex flex-col justify-between overflow-hidden">
-    <!-- Glowing background decorative meshes -->
-    <div class="absolute -top-40 -left-40 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
-    <div class="absolute -bottom-40 -right-40 w-[24rem] h-[24rem] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none animate-pulse duration-5000"></div>
-
-    <div class="flex-1 flex flex-col p-4 md:p-8 relative z-10 max-w-7xl w-full mx-auto pb-24">
+  <div :dir="isRTL ? 'rtl' : 'ltr'" class="relative min-h-screen bg-background text-foreground flex flex-col justify-between overflow-hidden">
+    <div class="flex-1 flex flex-col p-4 md:p-8 max-w-7xl w-full mx-auto pb-24">
       <PageHeader
         :title="t('nav.facebookPeopleSearch')"
         :subtitle="t('nav.facebookPeopleSearchDesc')"
         :breadcrumbs="[
-          { label: t('nav.facebookTools'), href: '/facebook/page-search' },
+          { label: t('nav.facebookTools'), href: '/facebook' },
           { label: t('nav.facebookPeopleSearch') },
         ]"
-      >
-        <template #actions>
-          <Badge variant="outline" class="bg-blue-950/40 border-blue-500/30 text-blue-400 flex items-center gap-1.5 py-1 px-3 rounded-full">
-            <Award class="h-3 w-3 text-yellow-400 animate-bounce" />
-            <span>v1.0 Premium</span>
-          </Badge>
-        </template>
-      </PageHeader>
+      />
 
       <div class="grid gap-6 mt-6">
         <!-- Campaign Selector Card -->
-        <Card class="bg-slate-900/40 border-slate-800/80 backdrop-blur-xl shadow-xl overflow-hidden rounded-2xl relative">
-          <div class="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+        <Card class="bg-card border-border shadow-lg overflow-hidden rounded-2xl relative">
           <CardHeader class="pb-4">
             <CardTitle class="text-base font-medium flex items-center gap-2">
-              <Database class="h-4.5 w-4.5 text-blue-400" />
+              <Database class="h-4.5 w-4.5 text-blue-500 dark:text-blue-400" />
               {{ isRTL ? 'اختر حملة البحث' : 'Select Search Campaign' }}
             </CardTitle>
             <CardDescription>
@@ -282,26 +269,26 @@ function avatarGradient(name: string) {
           <CardContent>
             <div class="flex flex-col sm:flex-row gap-4 items-end">
               <div class="flex-1 min-w-[240px]">
-                <Label for="campaign-select" class="text-xs text-slate-400 mb-1.5 block">
+                <Label for="campaign-select" class="text-xs text-muted-foreground mb-1.5 block">
                   {{ isRTL ? 'الحملات المتاحة' : 'Available Campaigns' }}
                 </Label>
-                <div v-if="loadingCampaigns" class="h-10 flex items-center px-3 border border-slate-800 bg-slate-950/40 rounded-xl">
-                  <Loader2 class="h-4 w-4 animate-spin text-blue-400 mr-2" />
-                  <span class="text-xs text-slate-500">{{ isRTL ? 'جاري تحميل الحملات...' : 'Loading campaigns...' }}</span>
+                <div v-if="loadingCampaigns" class="h-10 flex items-center px-3 border border-border bg-card/40 rounded-xl">
+                  <Loader2 class="h-4 w-4 animate-spin text-blue-500 mr-2" />
+                  <span class="text-xs text-muted-foreground">{{ isRTL ? 'جاري تحميل الحملات...' : 'Loading campaigns...' }}</span>
                 </div>
                 <Select v-else v-model="selectedCampaign" id="campaign-select">
-                  <SelectTrigger class="w-full bg-slate-950/40 border-slate-800 rounded-xl text-slate-200">
+                  <SelectTrigger class="w-full bg-card/40 dark:bg-slate-950/40 border-border dark:border-slate-800 rounded-xl text-foreground">
                     <SelectValue :placeholder="isRTL ? 'اختر حملة...' : 'Select a campaign...'" />
                   </SelectTrigger>
-                  <SelectContent class="bg-slate-900 border-slate-800 text-slate-200">
-                    <SelectItem v-for="camp in campaigns" :key="camp" :value="camp" class="hover:bg-slate-800 focus:bg-slate-800">
+                  <SelectContent class="bg-popover border-border text-popover-foreground">
+                    <SelectItem v-for="camp in campaigns" :key="camp" :value="camp" class="hover:bg-accent focus:bg-accent">
                       {{ camp }}
                     </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <Button variant="outline" class="border-slate-800 bg-slate-950/40 hover:bg-slate-800 rounded-xl" @click="fetchCampaigns" :disabled="loadingCampaigns">
+              <Button variant="outline" class="border-border bg-card/40 hover:bg-accent rounded-xl" @click="fetchCampaigns" :disabled="loadingCampaigns">
                 <Loader2 v-if="loadingCampaigns" class="h-4 w-4 animate-spin" />
                 <span v-else>{{ isRTL ? 'تحديث القائمة' : 'Refresh' }}</span>
               </Button>
@@ -310,23 +297,23 @@ function avatarGradient(name: string) {
         </Card>
 
         <!-- No campaign chosen view -->
-        <div v-if="!selectedCampaign" class="flex-1 flex flex-col items-center justify-center p-12 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/10 min-h-[300px]">
-          <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 shadow-md">
-            <Sparkles class="h-7 w-7 animate-pulse" />
+        <div v-if="!selectedCampaign" class="flex-1 flex flex-col items-center justify-center p-12 text-center border border-dashed border-border rounded-2xl bg-muted/20 min-h-[300px]">
+          <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Sparkles class="h-7 w-7" />
           </div>
-          <h3 class="mt-4 text-lg font-semibold text-slate-200">{{ isRTL ? 'لم يتم تحديد حملة' : 'No Campaign Selected' }}</h3>
-          <p class="mt-2 text-sm text-slate-500 max-w-sm">
+          <h3 class="mt-4 text-lg font-semibold text-foreground/90">{{ isRTL ? 'لم يتم تحديد حملة' : 'No Campaign Selected' }}</h3>
+          <p class="mt-2 text-sm text-muted-foreground max-w-sm">
             {{ isRTL ? 'يرجى اختيار حملة بحث من القائمة أعلاه لعرض البيانات واستخراجها.' : 'Please select a campaign from the selector above to load target profiles.' }}
           </p>
         </div>
 
         <!-- Campaign results view -->
-        <Card v-else class="bg-slate-900/40 border-slate-800/80 backdrop-blur-xl shadow-xl overflow-hidden rounded-2xl">
+        <Card v-else class="bg-card border-border shadow-lg overflow-hidden rounded-2xl">
           <!-- Toolbar -->
-          <CardHeader class="pb-3 border-b border-slate-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <CardHeader class="pb-3 border-b border-border/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <CardTitle class="text-base font-semibold flex items-center gap-2">
-                <Facebook class="h-4.5 w-4.5 text-blue-500" />
+                <Facebook class="h-4.5 w-4.5 text-primary" />
                 {{ isRTL ? 'نتائج البحث عن الأشخاص' : 'Search Profiles' }}
               </CardTitle>
               <CardDescription class="mt-1">
@@ -337,11 +324,11 @@ function avatarGradient(name: string) {
             <!-- Filters -->
             <div class="flex items-center gap-3 w-full md:w-auto">
               <div class="relative w-full md:w-64">
-                <Search class="absolute left-3 top-2.5 h-4 w-4 text-slate-500" :class="isRTL ? 'left-auto right-3' : ''" />
+                <Search class="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" :class="isRTL ? 'left-auto right-3' : ''" />
                 <Input
                   v-model="searchQuery"
                   :placeholder="isRTL ? 'بحث بالاسم أو المعرف...' : 'Search by name or ID...'"
-                  class="bg-slate-950/40 border-slate-800 pl-9 rounded-xl text-slate-200"
+                  class="bg-card border-border pl-9 rounded-xl text-foreground"
                   :class="isRTL ? 'pl-3 pr-9' : ''"
                 />
               </div>
@@ -351,22 +338,22 @@ function avatarGradient(name: string) {
           <!-- Table Container -->
           <CardContent class="p-0">
             <div v-if="loadingResults" class="h-64 flex flex-col items-center justify-center gap-3">
-              <Loader2 class="h-8 w-8 animate-spin text-blue-500" />
-              <span class="text-sm text-slate-500">{{ isRTL ? 'جاري تحميل النتائج...' : 'Loading results...' }}</span>
+              <Loader2 class="h-8 w-8 animate-spin text-primary" />
+              <span class="text-sm text-muted-foreground">{{ isRTL ? 'جاري تحميل النتائج...' : 'Loading results...' }}</span>
             </div>
 
             <div v-else-if="results.length === 0" class="h-64 flex flex-col items-center justify-center text-center p-8">
-              <Users class="h-10 w-10 text-slate-600 mb-2" />
-              <h4 class="text-sm font-semibold text-slate-300">{{ isRTL ? 'لا توجد نتائج' : 'No records found' }}</h4>
-              <p class="text-xs text-slate-500 mt-1 max-w-xs">{{ isRTL ? 'لم نجد أي ملفات تطابق شروط البحث الحالية.' : 'No profiles match the filter criteria.' }}</p>
+              <Users class="h-10 w-10 text-muted-foreground mb-2" />
+              <h4 class="text-sm font-semibold text-foreground/80">{{ isRTL ? 'لا توجد نتائج' : 'No records found' }}</h4>
+              <p class="text-xs text-muted-foreground mt-1 max-w-xs">{{ isRTL ? 'لم نجد أي ملفات تطابق شروط البحث الحالية.' : 'No profiles match the filter criteria.' }}</p>
             </div>
 
             <div v-else class="overflow-x-auto w-full">
-              <table class="w-full text-sm text-left text-slate-300 border-collapse" :class="isRTL ? 'text-right' : ''">
+              <table class="w-full text-sm text-left text-foreground border-collapse" :class="isRTL ? 'text-right' : ''">
                 <thead>
-                  <tr class="bg-slate-950/60 border-b border-slate-800/80 text-slate-400 font-semibold text-xs tracking-wider uppercase">
+                  <tr class="bg-card/60 dark:bg-slate-950/60 border-b border-border/80 dark:border-slate-800/80 text-muted-foreground font-semibold text-xs tracking-wider uppercase">
                     <th scope="col" class="px-6 py-4 w-[60px] text-center">
-                      <button @click="toggleSelectAll" class="text-slate-400 hover:text-slate-100 transition-colors">
+                      <button @click="toggleSelectAll" class="text-muted-foreground hover:text-foreground transition-colors">
                         <CheckSquare v-if="isAllSelected" class="h-4.5 w-4.5 text-blue-500" />
                         <Square v-else class="h-4.5 w-4.5" />
                       </button>
@@ -376,15 +363,15 @@ function avatarGradient(name: string) {
                     <th scope="col" class="px-6 py-4">{{ isRTL ? 'مؤشرات / المتابعين' : 'Followers / Data' }}</th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800/40">
+                <tbody class="divide-y divide-border/40">
                   <tr
                     v-for="row in results"
                     :key="row.page_id"
-                    class="hover:bg-slate-800/20 transition-colors cursor-pointer"
+                    class="hover:bg-muted/30 transition-colors cursor-pointer"
                     @click="toggleSelect(row)"
                   >
                     <td class="px-6 py-4 text-center" @click.stop="toggleSelect(row)">
-                      <button class="text-slate-400 transition-colors">
+                      <button class="text-muted-foreground transition-colors">
                         <CheckSquare v-if="selectedRows.has(row.page_id)" class="h-4.5 w-4.5 text-blue-500" />
                         <Square v-else class="h-4.5 w-4.5" />
                       </button>
@@ -399,12 +386,12 @@ function avatarGradient(name: string) {
                         >
                           {{ getInitials(row.name || "?") }}
                         </span>
-                        <span class="font-medium text-slate-200">{{ row.name || 'Anonymous' }}</span>
+                        <span class="font-medium text-foreground/90">{{ row.name || 'Anonymous' }}</span>
                       </div>
                     </td>
-                    <td class="px-6 py-4 font-mono text-slate-400 text-xs">{{ row.page_id }}</td>
+                    <td class="px-6 py-4 font-mono text-muted-foreground text-xs">{{ row.page_id }}</td>
                     <td class="px-6 py-4">
-                      <Badge variant="secondary" class="bg-slate-800/60 text-slate-300 border border-slate-700/30">
+                      <Badge variant="secondary" class="bg-muted text-muted-foreground border border-border">
                         {{ row.followers_count || 'N/A' }}
                       </Badge>
                     </td>
@@ -415,7 +402,7 @@ function avatarGradient(name: string) {
           </CardContent>
 
           <!-- Table Footer / Pagination -->
-          <div v-if="results.length > 0 && totalPages > 1" class="border-t border-slate-800/60 px-6 py-4 flex items-center justify-between text-xs text-slate-500">
+          <div v-if="results.length > 0 && totalPages > 1" class="border-t border-border/60 px-6 py-4 flex items-center justify-between text-xs text-muted-foreground">
             <div>
               {{ isRTL ? `عرض الصفحة ${page} من ${totalPages}` : `Showing page ${page} of ${totalPages}` }}
             </div>
@@ -423,7 +410,7 @@ function avatarGradient(name: string) {
               <Button
                 variant="ghost"
                 size="sm"
-                class="hover:bg-slate-800 rounded-lg p-1.5"
+                class="hover:bg-muted rounded-lg p-1.5"
                 :disabled="page <= 1 || loadingResults"
                 @click="page = page - 1"
               >
@@ -436,7 +423,7 @@ function avatarGradient(name: string) {
                   variant="ghost"
                   size="sm"
                   class="rounded-lg h-7 w-7 text-xs font-semibold"
-                  :class="p === page ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'hover:bg-slate-800 text-slate-400'"
+                  :class="p === page ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'hover:bg-muted text-muted-foreground'"
                   @click="page = p"
                 >
                   {{ p }}
@@ -445,7 +432,7 @@ function avatarGradient(name: string) {
               <Button
                 variant="ghost"
                 size="sm"
-                class="hover:bg-slate-800 rounded-lg p-1.5"
+                class="hover:bg-muted rounded-lg p-1.5"
                 :disabled="page >= totalPages || loadingResults"
                 @click="page = page + 1"
               >
@@ -466,22 +453,22 @@ function avatarGradient(name: string) {
       leave-from-class="translate-y-0 opacity-100"
       leave-to-class="translate-y-full opacity-0"
     >
-      <div v-if="selectedCount > 0" class="fixed bottom-6 inset-x-4 max-w-2xl mx-auto z-50 bg-slate-900/90 border border-slate-800 backdrop-blur-md rounded-2xl shadow-2xl p-4 flex items-center justify-between gap-4">
+      <div v-if="selectedCount > 0" class="fixed bottom-6 inset-x-4 max-w-2xl mx-auto z-50 bg-card/90 dark:bg-slate-900/90 border border-border dark:border-slate-800 backdrop-blur-md rounded-2xl shadow-2xl p-4 flex items-center justify-between gap-4">
         <div class="flex items-center gap-2">
-          <div class="h-8 w-8 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-lg flex items-center justify-center">
+          <div class="h-8 w-8 bg-primary/10 text-primary rounded-lg flex items-center justify-center">
             <UserCheck class="h-4.5 w-4.5" />
           </div>
           <div>
-            <span class="text-sm font-semibold text-slate-100">
+            <span class="text-sm font-semibold text-foreground">
               {{ isRTL ? `تم تحديد ${selectedCount} صف` : `Selected ${selectedCount} profiles` }}
             </span>
-            <span class="text-[10px] text-slate-500 block mt-0.5">
+            <span class="text-[10px] text-muted-foreground block mt-0.5">
               {{ isRTL ? 'جاهز للاستيراد كجهات اتصال' : 'Ready to import to contacts' }}
             </span>
           </div>
         </div>
 
-        <Button class="bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-lg shadow-blue-600/20 px-4 py-2 flex items-center gap-2 font-medium" @click="openImportModal">
+        <Button class="rounded-xl shadow-lg px-4 py-2 flex items-center gap-2 font-medium" @click="openImportModal">
           <Import class="h-4 w-4" />
           <span>{{ isRTL ? 'استيراد جهات الاتصال' : 'Import Contacts' }}</span>
         </Button>
@@ -490,36 +477,36 @@ function avatarGradient(name: string) {
 
     <!-- Confirm Import Dialog -->
     <Dialog v-model:open="isImportModalOpen">
-      <DialogContent class="bg-slate-900 border-slate-800 text-slate-100 max-w-md rounded-2xl">
+      <DialogContent class="bg-popover border-border text-popover-foreground max-w-md rounded-2xl">
         <DialogHeader>
           <DialogTitle class="flex items-center gap-2 text-lg font-bold">
-            <Users class="h-5 w-5 text-blue-400" />
+            <Users class="h-5 w-5 text-primary" />
             {{ isRTL ? 'حفظ جهات الاتصال' : 'Import Contacts List' }}
           </DialogTitle>
-          <DialogDescription class="text-slate-400 text-xs">
+          <DialogDescription class="text-muted-foreground text-xs">
             {{ isRTL ? `سيتم حفظ ${selectedCount} جهة اتصال في النظام باسم القائمة المحدد` : `Will save ${selectedCount} selected profiles as Whatomate contacts under the specified list tag.` }}
           </DialogDescription>
         </DialogHeader>
 
         <div class="space-y-4 py-3">
           <div class="space-y-1.5">
-            <Label for="list-name" class="text-xs text-slate-400">
+            <Label for="list-name" class="text-xs text-muted-foreground">
               {{ isRTL ? 'اسم قائمة جهات الاتصال' : 'Contacts List Name / Tag' }}
             </Label>
             <Input
               id="list-name"
               v-model="importListName"
               placeholder="e.g. Leads Campaign 2026"
-              class="bg-slate-950 border-slate-800 rounded-xl text-slate-200"
+              class="bg-background border-border rounded-xl text-foreground"
             />
           </div>
         </div>
 
         <DialogFooter class="gap-2 sm:gap-0">
-          <Button variant="ghost" class="hover:bg-slate-800 rounded-xl text-slate-400" @click="isImportModalOpen = false" :disabled="importing">
+          <Button variant="ghost" class="hover:bg-muted rounded-xl text-muted-foreground" @click="isImportModalOpen = false" :disabled="importing">
             {{ isRTL ? 'إلغاء' : 'Cancel' }}
           </Button>
-          <Button class="bg-blue-600 hover:bg-blue-500 text-white rounded-xl" @click="submitImport" :disabled="importing">
+          <Button class="rounded-xl" @click="submitImport" :disabled="importing">
             <Loader2 v-if="importing" class="h-4 w-4 animate-spin mr-2" />
             <span>{{ isRTL ? 'استيراد الآن' : 'Import Now' }}</span>
           </Button>

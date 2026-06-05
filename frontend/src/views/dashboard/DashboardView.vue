@@ -154,121 +154,101 @@ const SHORTCUT_REGISTRY = computed(() => ({
     label: t("dashboard.startChat"),
     to: "/chat",
     icon: MessageSquare,
-    gradient: "from-emerald-500 to-green-600",
   },
   campaigns: {
     label: t("nav.campaigns"),
-    to: "/campaigns",
+    to: "/whatsapp/campaigns",
     icon: Megaphone,
-    gradient: "from-orange-500 to-amber-600",
   },
   templates: {
     label: t("nav.templates"),
     to: "/templates",
     icon: FileText,
-    gradient: "from-blue-500 to-cyan-600",
   },
   chatbot: {
     label: t("nav.chatbot"),
     to: "/chatbot",
     icon: Bot,
-    gradient: "from-purple-500 to-pink-600",
   },
   contacts: {
     label: t("nav.contacts"),
-    to: "/contacts",
+    to: "/whatsapp/contacts",
     icon: Contact,
-    gradient: "from-cyan-500 to-blue-600",
   },
   flows: {
     label: t("nav.flows"),
     to: "/flows",
     icon: Workflow,
-    gradient: "from-indigo-500 to-violet-600",
   },
   transfers: {
     label: t("nav.transfers"),
     to: "/chatbot/transfers",
     icon: UserX,
-    gradient: "from-rose-500 to-red-600",
   },
   agentAnalytics: {
     label: t("nav.agentAnalytics"),
     to: "/analytics/agents",
     icon: BarChart3,
-    gradient: "from-teal-500 to-cyan-600",
   },
   metaInsights: {
     label: t("nav.metaInsights"),
     to: "/analytics/meta-insights",
     icon: LineChart,
-    gradient: "from-sky-500 to-blue-600",
   },
   settings: {
     label: t("nav.settings"),
     to: "/settings",
     icon: Settings,
-    gradient: "from-gray-500 to-zinc-600",
   },
   accounts: {
     label: t("nav.accounts"),
     to: "/settings/accounts",
     icon: Users,
-    gradient: "from-violet-500 to-purple-600",
   },
   cannedResponses: {
     label: t("nav.cannedResponses"),
-    to: "/canned-responses",
+    to: "/whatsapp/canned-responses",
     icon: MessageSquareText,
-    gradient: "from-amber-500 to-yellow-600",
   },
   tags: {
     label: t("nav.tags"),
     to: "/settings/tags",
     icon: Tags,
-    gradient: "from-pink-500 to-rose-600",
   },
   teams: {
     label: t("nav.teams"),
     to: "/settings/teams",
     icon: Users,
-    gradient: "from-lime-500 to-green-600",
   },
   users: {
     label: t("nav.users"),
     to: "/settings/users",
     icon: Users,
-    gradient: "from-fuchsia-500 to-pink-600",
   },
   roles: {
     label: t("nav.roles"),
     to: "/settings/roles",
     icon: Shield,
-    gradient: "from-slate-500 to-gray-600",
   },
   apiKeys: {
     label: t("nav.apiKeys"),
     to: "/settings/api-keys",
     icon: Key,
-    gradient: "from-yellow-500 to-orange-600",
   },
   webhooks: {
     label: t("nav.webhooks"),
     to: "/settings/webhooks",
     icon: Webhook,
-    gradient: "from-red-500 to-rose-600",
   },
   customActions: {
     label: t("nav.customActions"),
     to: "/settings/custom-actions",
     icon: Zap,
-    gradient: "from-amber-500 to-orange-600",
   },
   sso: {
     label: t("nav.sso"),
     to: "/settings/sso",
     icon: ShieldCheck,
-    gradient: "from-emerald-500 to-teal-600",
   },
 }));
 
@@ -1620,10 +1600,10 @@ onMounted(() => {
                     >
                       <div
                         :class="[
-                          'h-10 w-10 rounded-lg flex items-center justify-center text-sm font-medium shrink-0',
+                        'h-10 w-10 rounded-lg flex items-center justify-center text-sm font-medium shrink-0',
                           row.direction === 'incoming'
-                            ? 'bg-gradient-to-br from-emerald-500 to-green-600 text-white'
-                            : 'bg-gradient-to-br from-blue-500 to-cyan-600 text-white',
+                            ? 'bg-primary/15 text-primary'
+                            : 'bg-accent text-accent-foreground',
                         ]"
                       >
                         {{
@@ -1775,13 +1755,7 @@ onMounted(() => {
                       class="card-interactive flex flex-col items-center justify-center rounded-[calc(var(--radius)+0.1rem)] border border-border bg-background/70 p-4"
                     >
                       <div
-                        :class="[
-                          'h-12 w-12 rounded-lg bg-gradient-to-br flex items-center justify-center mb-2 shadow-lg',
-                          SHORTCUT_REGISTRY[
-                            key as keyof typeof SHORTCUT_REGISTRY
-                          ].gradient,
-                          'shadow-' + (key as string) + '-500/20',
-                        ]"
+                        class="h-12 w-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-2"
                       >
                         <component
                           :is="
@@ -1789,14 +1763,14 @@ onMounted(() => {
                               key as keyof typeof SHORTCUT_REGISTRY
                             ].icon
                           "
-                          class="h-6 w-6 text-white"
-                        />
-                      </div>
-                      <span class="text-sm font-medium text-foreground">{{
-                        SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY]
-                          .label
-                      }}</span>
-                    </RouterLink>
+                        class="h-6 w-6"
+                      />
+                    </div>
+                    <span class="text-sm font-medium text-foreground">{{
+                      SHORTCUT_REGISTRY[key as keyof typeof SHORTCUT_REGISTRY]
+                        .label
+                    }}</span>
+                  </RouterLink>
                   </template>
                 </div>
               </div>
@@ -2016,12 +1990,7 @@ onMounted(() => {
                 />
                 <div class="flex items-center gap-2">
                   <div
-                    :class="[
-                      'h-8 w-8 rounded-lg bg-gradient-to-br flex items-center justify-center',
-                      SHORTCUT_REGISTRY[
-                        key as keyof typeof SHORTCUT_REGISTRY
-                      ].gradient,
-                    ]"
+                    class="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center"
                   >
                     <component
                       :is="
@@ -2029,7 +1998,7 @@ onMounted(() => {
                           key as keyof typeof SHORTCUT_REGISTRY
                         ].icon
                       "
-                      class="h-4 w-4 text-white"
+                      class="h-4 w-4"
                     />
                   </div>
                   <span class="text-sm text-foreground/80">{{

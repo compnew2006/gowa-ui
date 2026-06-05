@@ -1,29 +1,39 @@
-# Whatomate — Session Summary (Messaging and Reaction Fixes)
+# Whatomate — Analysis: Agent Selection vs. Chatbot Flows
 
-This session focused on fixing three distinct messaging-related bugs on the backend and Whatsmeow adapter.
+This analysis investigates whether **Customer Agent Selection** (`/settings/agent-selection` or `/agent-selection`) and **Chatbot Flows** (`/chatbot/flows`) are the same feature or separate features in the Whatomate codebase.
 
-## Bugs Resolved
+## Summary of Findings
 
-### 1. Messaging Queue Rate Limiting Delay
-- **File**: `pkg/whatsmeow/queue.go`
-- **Issue**: Sending a message showed a pending clock icon for 4–5 seconds because `process()` unconditionally slept for a random rate-limiting delay on every job, even when the queue had been idle.
-- **Fix**: Added a `lastProcessed time.Time` field to `InstanceQueue` to track the actual send timestamp. In `process()`, it now calculates the time elapsed since `lastProcessed` and sleeps only for the remaining required rate-limit duration (`requiredDelay - elapsed`).
-- **Tests Added**: `TestQueueDelayRespectsIdleQueue` in `pkg/whatsmeow/queue_test.go` confirms that the first message sent on an idle queue goes out instantly (< 100ms) and consecutive messages are correctly rate-limited.
+These are **two distinct, complementary features** with different scopes, database models, and execution lifecycles, though they both belong to the routing and automation domain and integrate with each other.
 
-### 2. Contact Message Reaction 404
-- **File**: `internal/handlers/contacts_messaging.go`
-- **Issue**: Sending a reaction returned a 404 response. The query `requestDB.Where("id = ? AND contact_id = ?", messageID, contactID).First(&message)` failed because `requestDB` was polluted by GORM's method chaining optimization from a previous contact query on the same request session. GORM ran the query against `"contacts"` table instead of `"messages"`, raising a database error and returning 404.
-- **Fix**: Cloned the DB session using `.Session(&gorm.Session{})` for all subsequent queries in `SendReaction()` to avoid GORM statement pollution. Also replaced direct path parameter type assertion with the standard `parsePathUUID` helper.
-- **Tests Added**: `internal/handlers/reaction_test.go` tests all reaction endpoint validation branches (invalid UUIDs, non-existent rows, successful reaction, and reaction removal).
+---
 
-### 3. Quote Replies Sent as Normal Messages
-- **File**: `pkg/whatsmeow/adapter_send.go`
-- **Issue**: Quoting an outgoing message sent by the agent/user themselves caused the reply context to be dropped on WhatsApp, sending a normal text instead.
-- **Fix**: Added a query in `SendTextReply` to resolve the direction of the quoted message. If it was `outgoing`, it sets `Participant` in the WhatsApp message `ContextInfo` to the client's own JID (`client.Store.ID.ToNonAD().String()`).
+## 1. Chatbot Flows (`/chatbot/flows`)
 
-## Verification Results
+- **Primary Models**: `ChatbotFlow`, `ChatbotFlowStep`, `ChatbotSession` (stored in `chatbot_flows`, `chatbot_flow_steps`, and `chatbot_sessions` tables).
+- **Purpose**: A multi-step interactive conversation builder (dialog tree) used to automate communication with customers.
+- **Features**:
+  - Allows mapping multi-turn conversation trees.
+  - Collects user inputs, validates them (e.g., regex, email, phone, numbers, dates), and stores responses in variables (via `StoreAs` fields in session data).
+  - Integrates with external APIs (`api_fetch` steps) and formats templates.
+  - Supports transferring the chat to a human agent/team queue at a designated step using the `FlowStepTypeTransfer` type.
 
-All tests pass:
-- `go test -v ./internal/handlers -run TestSendReaction` (PASS)
-- `go test -v ./pkg/whatsmeow -run TestQueue` (PASS)
-- `go build ./...` (Clean compilation)
+---
+
+## 2. Customer Agent Selection (`/settings/agent-selection`)
+
+- **Primary Models**: `AgentSelectionSettings`, `AgentSelectionParticipant`, `AgentSelectionOption`, `AgentSelectionSession`, `AgentSelectionAuditEvent` (stored in `agent_selection_*` family of tables).
+- **Purpose**: A specialized customer-driven routing setting that allows incoming customers to choose which agent, team, or queue should handle their chat.
+- **Features**:
+  - Automatically prompts incoming WhatsApp customers with a dynamic menu of available choices (e.g., `"1. Agent A"`, `"2. Agent B"`, `"3. Team C"`).
+  - Can delay sending the menu by a configurable amount of time (`prompt_delay_minutes`) to allow staff to manually claim the chat first.
+  - Dynamically builds the menu at send-time, checking if agents are active, marked as available (`IsAvailable`), within their maximum open chats capacity (`MaxOpenChats`), and allowed to access the WhatsApp instance.
+  - Automatically manages timeouts, retries for invalid responses, and logs every event to a dedicated append-only audit trail (`agent_selection_audit_events`).
+
+---
+
+## 3. How They Integrate
+
+While separate, the two features interact in the following way:
+- **`chatbot_step` Trigger**: The Agent Selection menu trigger mode (`TriggerMode`) can be set to `chatbot_step`. This means that instead of triggering automatically on the first pending message, it can be launched directly from a specific step inside a Chatbot Flow.
+- **Inbound Message Flow**: On incoming messages, the system first intercepts selection responses for active agent routing sessions. If none exist, it runs the standard chatbot/keyword rules logic.
