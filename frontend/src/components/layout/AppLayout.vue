@@ -642,6 +642,16 @@ const handleLogout = async () => {
 
             <!-- Submenu items -->
             <template v-if="item.children && item.children.length > 0 && isGroupExpanded(item) && isSidebarExpanded">
+              <div
+                :class="[
+                  'px-2.5 pb-1 pt-1 text-xs font-medium text-muted-foreground/80',
+                  isRTL ? 'mr-4 text-right' : 'ml-4 text-left',
+                ]"
+                role="presentation"
+                :aria-label="$t(item.name)"
+              >
+                {{ $t(item.name) }}
+              </div>
               <RouterLink
                 v-for="child in item.children"
                 :key="child.path"

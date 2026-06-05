@@ -414,6 +414,8 @@
     "resumeChatbot": "استئناف الروبوت",
     "publicChat": "عامة",
     "publicShort": "عام",
+    "groupShort": "مجموعة",
+    "channelShort": "قناة",
     "makePublicChat": "جعل المحادثة عامة (مثبتة لكل الوكلاء)",
     "removePublicChat": "إلغاء إتاحة المحادثة العامة",
     "publicChatEnabled": "أصبحت المحادثة عامة لجميع الوكلاء",
@@ -2327,7 +2329,10 @@
     "ratingMessageColumn": "رسالة التقييم",
     "contextMessagesColumn": "رسائل السياق",
     "noDataAvailable": "لا توجد بيانات متاحة",
-    "noAgentsFound": "لم يتم العثور على وكلاء"
+    "noAgentsFound": "لم يتم العثور على وكلاء",
+    "failedLoadAgents": "فشل تحميل الوكلاء",
+    "failedLoadAnalytics": "فشل تحميل تحليلات الوكلاء",
+    "failedExportRatings": "فشل تصدير التقييمات"
   },
   "metaInsights": {
     "title": "رؤى ميتا",

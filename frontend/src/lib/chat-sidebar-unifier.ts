@@ -78,7 +78,7 @@ function readConversationID(contact: Contact): string {
   return ''
 }
 
-function isGroupOrChannelContact(contact: Contact): boolean {
+export function isGroupOrChannelContact(contact: Contact): boolean {
   if (contact.is_group_chat === true || contact.metadata?.is_group_chat === true) {
     return true
   }

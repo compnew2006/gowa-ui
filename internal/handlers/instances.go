@@ -395,8 +395,7 @@ func (a *App) DeleteInstance(r *fastglue.Request) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := a.WhatsmeowManager.Logout(ctx, instance.ID); err != nil {
-		a.Log.Error("Failed to log out instance during deletion", "error", err, "instance_id", instance.ID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to log out instance", nil, "")
+		a.Log.Warn("Failed to log out WhatsApp session cleanly during deletion, proceeding with deletion", "error", err, "instance_id", instance.ID)
 	}
 
 	if err := a.deleteWhatsAppInstanceWithOptionalChatPurge(&instance, orgID, deleteChats); err != nil {

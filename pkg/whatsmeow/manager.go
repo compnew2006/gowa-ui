@@ -225,7 +225,7 @@ func (cm *ConnectionManager) Disconnect(ctx context.Context, instanceID uuid.UUI
 func (cm *ConnectionManager) Logout(ctx context.Context, instanceID uuid.UUID) error {
 	var instance models.WhatsAppInstance
 	if err := cm.db.WithContext(ctx).
-		Select("id", "organization_id").
+		Select("id", "organization_id", "jid").
 		Where("id = ?", instanceID).
 		First(&instance).Error; err != nil {
 		return fmt.Errorf("failed to load instance: %w", err)
@@ -241,6 +241,16 @@ func (cm *ConnectionManager) Logout(ctx context.Context, instanceID uuid.UUID) e
 			if client.Store != nil {
 				if deleteErr := client.Store.Delete(ctx); deleteErr != nil {
 					cm.logger.Warn("Failed to delete local store during forced logout", "component", "whatsmeow", "event", "logout_store_delete_error", "instance_id", instanceID, "error", deleteErr)
+				}
+			}
+		}
+	} else if instance.JID != "" {
+		jid, err := types.ParseJID(instance.JID)
+		if err == nil {
+			deviceStore, err := cm.store.GetDevice(ctx, jid)
+			if err == nil && deviceStore != nil {
+				if deleteErr := deviceStore.Delete(ctx); deleteErr != nil {
+					cm.logger.Warn("Failed to delete local store for JID during forced logout", "component", "whatsmeow", "event", "logout_store_delete_error", "instance_id", instanceID, "error", deleteErr)
 				}
 			}
 		}
@@ -274,7 +284,7 @@ func (cm *ConnectionManager) Logout(ctx context.Context, instanceID uuid.UUID) e
 	cm.logger.Info("Instance logged out", "component", "whatsmeow", "event", "logout", "instance_id", instanceID)
 
 	if logoutErr != nil {
-		return fmt.Errorf("failed to logout WhatsApp session cleanly: %w", logoutErr)
+		cm.logger.Warn("WhatsApp session logout was not clean, but local cleanup completed", "component", "whatsmeow", "event", "logout_imperfect", "instance_id", instanceID, "error", logoutErr)
 	}
 
 	return nil
@@ -633,6 +643,15 @@ func (cm *ConnectionManager) connectExistingClient(ctx context.Context, instance
 		// do not silently recreate the queue. Mirrors newClient which
 		// calls stopEventDispatcherInstance on client.Connect failure.
 		cm.stopEventDispatcherInstance(instance.ID)
+		if cm.isDeletedDeviceError(err) {
+			cm.handleDeletedDeviceCleanup(ctx, instance.ID, client, nil)
+			instance.JID = ""
+			instance.PhoneNumber = ""
+			newEntry, ensureErr := cm.ensurePoolEntry(ctx, instance)
+			if ensureErr == nil && newEntry != nil {
+				return cm.connectNewClient(ctx, instance, newEntry)
+			}
+		}
 		return fmt.Errorf("failed to reconnect existing client: %w", err)
 	}
 
@@ -666,6 +685,15 @@ func (cm *ConnectionManager) connectNewClient(ctx context.Context, instance mode
 	if err := client.Connect(); err != nil {
 		cm.pool.removeInstance(instance.ID)
 		cm.stopEventDispatcherInstance(instance.ID)
+		if cm.isDeletedDeviceError(err) {
+			cm.handleDeletedDeviceCleanup(ctx, instance.ID, client, deviceStore)
+			instance.JID = ""
+			instance.PhoneNumber = ""
+			newEntry, ensureErr := cm.ensurePoolEntry(ctx, instance)
+			if ensureErr == nil && newEntry != nil {
+				return cm.connectNewClient(ctx, instance, newEntry)
+			}
+		}
 		return fmt.Errorf("failed to connect to WhatsApp: %w", err)
 	}
 
@@ -815,6 +843,44 @@ func (cm *ConnectionManager) connectedPhoneNumber(current string, client *whatsm
 		}
 	}
 	return phoneNumber
+}
+
+func (cm *ConnectionManager) isDeletedDeviceError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "deleted device")
+}
+
+func (cm *ConnectionManager) handleDeletedDeviceCleanup(ctx context.Context, instanceID uuid.UUID, client *whatsmeow.Client, deviceStore *store.Device) {
+	cm.logger.Warn(
+		"Detected deleted device, performing local cleanup and resetting instance identity",
+		"component", "whatsmeow",
+		"event", "deleted_device_cleanup",
+		"instance_id", instanceID,
+	)
+
+	// Remove from pool
+	cm.pool.removeInstance(instanceID)
+	cm.stopEventDispatcherInstance(instanceID)
+	cm.ClearCachedQRCode(instanceID)
+
+	// Delete from local device store
+	if client != nil && client.Store != nil {
+		if deleteErr := client.Store.Delete(ctx); deleteErr != nil {
+			cm.logger.Warn("Failed to delete local store for client during deleted device cleanup", "component", "whatsmeow", "instance_id", instanceID, "error", deleteErr)
+		}
+	} else if deviceStore != nil {
+		if deleteErr := deviceStore.Delete(ctx); deleteErr != nil {
+			cm.logger.Warn("Failed to delete local store for device during deleted device cleanup", "component", "whatsmeow", "instance_id", instanceID, "error", deleteErr)
+		}
+	}
+
+	// Reset DB identity
+	if err := cm.updateInstanceIdentity(ctx, instanceID, "", ""); err != nil {
+		cm.logger.Error("Failed to reset instance identity after deleted device detection", "component", "whatsmeow", "instance_id", instanceID, "error", err)
+	}
+	_ = cm.updateInstanceStatus(ctx, instanceID, models.InstanceStatusDisconnected)
 }
 
 func (cm *ConnectionManager) healthMonitor(ctx context.Context) {

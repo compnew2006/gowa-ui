@@ -308,7 +308,10 @@
     "ratingMessageColumn": "Mensaje de valoración",
     "contextMessagesColumn": "Mensajes de contexto",
     "noDataAvailable": "No hay datos disponibles",
-    "noAgentsFound": "No se encontraron agentes"
+    "noAgentsFound": "No se encontraron agentes",
+    "failedLoadAgents": "Error al cargar agentes",
+    "failedLoadAnalytics": "Error al cargar análisis de agentes",
+    "failedExportRatings": "Error al exportar valoraciones"
   },
   "userMenu": {
     "myAccount": "Mi Cuenta",
@@ -364,6 +367,9 @@
     "softDeleteConfirmLabel": "Confirmar ocultar chat",
     "softDeleteSuccess": "Chat oculto",
     "softDeleteFailed": "No se pudo ocultar el chat",
+    "publicShort": "Público",
+    "groupShort": "Grupo",
+    "channelShort": "Canal",
     "chatDeletedByUserNotification": "{user} ocultó el chat {chat}",
     "unknownUser": "Un usuario",
     "unknownChat": "un chat"

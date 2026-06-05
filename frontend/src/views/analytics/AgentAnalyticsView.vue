@@ -64,6 +64,8 @@ import type { DateRange } from "reka-ui";
 import { CalendarDate } from "@internationalized/date";
 // Centralized Chart.js setup (registered once)
 import { Line, Bar, Doughnut } from "@/lib/charts";
+import { toast } from "vue-sonner";
+import { getErrorMessage } from "@/lib/api-utils";
 
 interface AgentAnalyticsSummary {
   total_transfers_handled: number;
@@ -196,8 +198,8 @@ const loadSavedPreferences = () => {
           ),
         };
       }
-    } catch (e) {
-      console.error("Failed to parse saved custom range:", e);
+    } catch {
+      // Invalid saved custom range; fall back to default
     }
   }
 
@@ -444,7 +446,9 @@ const fetchAgents = async () => {
       role: u.role?.name || "",
     }));
   } catch (error) {
-    console.error("Failed to load agents:", error);
+    toast.error(t("common.error"), {
+      description: getErrorMessage(error, t("agentAnalytics.failedLoadAgents")),
+    });
   }
 };
 
@@ -479,7 +483,9 @@ const fetchAnalytics = async () => {
     const data = response.data.data || response.data;
     analytics.value = data;
   } catch (error) {
-    console.error("Failed to load agent analytics:", error);
+    toast.error(t("common.error"), {
+      description: getErrorMessage(error, t("agentAnalytics.failedLoadAnalytics")),
+    });
     analytics.value = null;
   } finally {
     isLoading.value = false;
@@ -528,7 +534,9 @@ const exportRatings = async () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.error("Failed to export ratings:", error);
+    toast.error(t("common.error"), {
+      description: getErrorMessage(error, t("agentAnalytics.failedExportRatings")),
+    });
   } finally {
     isExporting.value = false;
   }
@@ -578,6 +586,15 @@ onMounted(() => {
 });
 
 // Chart configurations
+const getChartColor = (token: string, alpha = 1): string => {
+  if (typeof window === "undefined") return "";
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(`--${token}`)
+    .trim();
+  if (!value) return "";
+  return alpha < 1 ? `rgb(${value} / ${alpha})` : `rgb(${value})`;
+};
+
 const trendChartData = computed(() => {
   if (!analytics.value?.trend_data?.length) {
     return {
@@ -598,8 +615,8 @@ const trendChartData = computed(() => {
       {
         label: t("agentAnalytics.transfersHandled"),
         data: analytics.value.trend_data.map((d) => d.transfers_handled),
-        borderColor: "rgb(59, 130, 246)",
-        backgroundColor: "rgba(59, 130, 246, 0.1)",
+        borderColor: getChartColor("chart-1"),
+        backgroundColor: getChartColor("chart-1", 0.12),
         fill: true,
         tension: 0.3,
       },
@@ -645,10 +662,11 @@ const sourceChartData = computed(() => {
       {
         data,
         backgroundColor: [
-          "rgba(59, 130, 246, 0.8)",
-          "rgba(16, 185, 129, 0.8)",
-          "rgba(245, 158, 11, 0.8)",
-          "rgba(139, 92, 246, 0.8)",
+          getChartColor("chart-1", 0.85),
+          getChartColor("chart-2", 0.85),
+          getChartColor("chart-3", 0.85),
+          getChartColor("chart-4", 0.85),
+          getChartColor("chart-5", 0.85),
         ],
         borderWidth: 0,
       },
@@ -680,12 +698,12 @@ const comparisonChartData = computed(() => {
       {
         label: t("agentAnalytics.transfersHandled"),
         data: analytics.value.agent_stats.map((a) => a.transfers_handled),
-        backgroundColor: "rgba(59, 130, 246, 0.8)",
+        backgroundColor: getChartColor("chart-1", 0.85),
       },
       {
         label: t("agentAnalytics.messagesSent"),
         data: analytics.value.agent_stats.map((a) => a.messages_sent),
-        backgroundColor: "rgba(16, 185, 129, 0.8)",
+        backgroundColor: getChartColor("chart-2", 0.85),
       },
     ],
   };
@@ -705,15 +723,6 @@ const comparisonChartOptions = {
     },
   },
 };
-
-// Stats to display based on role (reserved for future use)
-const _displayStats = computed(() => {
-  if (canViewOrganizationAnalytics.value) {
-    return analytics.value?.summary;
-  }
-  return analytics.value?.my_stats;
-});
-void _displayStats.value; // Suppress unused warning
 </script>
 
 <template>
@@ -726,7 +735,6 @@ void _displayStats.value; // Suppress unused warning
           : $t('agentAnalytics.myMetrics')
       "
       :icon="BarChart3"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20"
     >
       <template #actions>
         <!-- Agent Filter -->
@@ -949,51 +957,50 @@ void _displayStats.value; // Suppress unused warning
             <div
               v-for="i in 5"
               :key="i"
-              class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200"
+              class="rounded-[calc(var(--radius)+0.35rem)] border border-border bg-card/95 p-4 shadow-sm"
             >
               <div
                 class="flex flex-row items-center justify-between space-y-0 pb-2"
               >
-                <Skeleton class="h-4 w-24 bg-white/[0.08] light:bg-gray-200" />
-                <Skeleton
-                  class="h-10 w-10 rounded-lg bg-white/[0.08] light:bg-gray-200"
-                />
+                <Skeleton class="h-4 w-24" />
+                <Skeleton class="h-10 w-10 rounded-lg" />
               </div>
               <div class="pt-2">
-                <Skeleton
-                  class="h-8 w-20 mb-2 bg-white/[0.08] light:bg-gray-200"
-                />
-                <Skeleton class="h-3 w-32 bg-white/[0.08] light:bg-gray-200" />
+                <Skeleton class="h-8 w-20 mb-2" />
+                <Skeleton class="h-3 w-32" />
               </div>
             </div>
           </template>
           <template v-else-if="analytics">
             <!-- Transfers Handled -->
             <div
-              class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm"
+              class="card-depth rounded-[calc(var(--radius)+0.35rem)] border border-border bg-card/95 p-4 shadow-sm"
             >
               <div
                 class="flex flex-row items-center justify-between space-y-0 pb-2"
               >
-                <span
-                  class="text-sm font-medium text-white/50 light:text-gray-500"
+                <span class="text-sm font-medium text-muted-foreground"
                   >{{ $t("agentAnalytics.transfersHandled") }}</span
                 >
                 <div
-                  class="h-10 w-10 rounded-lg bg-emerald-500/20 flex items-center justify-center"
+                  class="h-10 w-10 rounded-lg flex items-center justify-center"
+                  style="background-color: rgb(var(--chart-2) / 0.15)"
                 >
-                  <CheckCircle class="h-5 w-5 text-emerald-400" />
+                  <CheckCircle
+                    class="h-5 w-5"
+                    style="color: rgb(var(--chart-2))"
+                  />
                 </div>
               </div>
               <div class="pt-2">
-                <div class="text-3xl font-bold text-white light:text-gray-900">
+                <div class="text-3xl font-bold text-foreground">
                   {{
                     selectedAgentId === "all"
                       ? (analytics.summary?.total_transfers_handled ?? 0)
                       : (analytics.my_stats?.transfers_handled ?? 0)
                   }}
                 </div>
-                <p class="text-xs text-white/40 light:text-gray-500 mt-1">
+                <p class="text-xs text-muted-foreground mt-1">
                   {{ $t("agentAnalytics.completedConversations") }}
                 </p>
               </div>
@@ -1001,30 +1008,33 @@ void _displayStats.value; // Suppress unused warning
 
             <!-- Active Conversations -->
             <div
-              class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm"
+              class="card-depth rounded-[calc(var(--radius)+0.35rem)] border border-border bg-card/95 p-4 shadow-sm"
             >
               <div
                 class="flex flex-row items-center justify-between space-y-0 pb-2"
               >
-                <span
-                  class="text-sm font-medium text-white/50 light:text-gray-500"
+                <span class="text-sm font-medium text-muted-foreground"
                   >{{ $t("agentAnalytics.activeConversations") }}</span
                 >
                 <div
-                  class="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center"
+                  class="h-10 w-10 rounded-lg flex items-center justify-center"
+                  style="background-color: rgb(var(--chart-1) / 0.15)"
                 >
-                  <Activity class="h-5 w-5 text-blue-400" />
+                  <Activity
+                    class="h-5 w-5"
+                    style="color: rgb(var(--chart-1))"
+                  />
                 </div>
               </div>
               <div class="pt-2">
-                <div class="text-3xl font-bold text-white light:text-gray-900">
+                <div class="text-3xl font-bold text-foreground">
                   {{
                     selectedAgentId === "all"
                       ? (analytics.summary?.active_transfers ?? 0)
                       : (analytics.my_stats?.active_transfers ?? 0)
                   }}
                 </div>
-                <p class="text-xs text-white/40 light:text-gray-500 mt-1">
+                <p class="text-xs text-muted-foreground mt-1">
                   {{ $t("agentAnalytics.currentlyInProgress") }}
                 </p>
               </div>
@@ -1032,23 +1042,23 @@ void _displayStats.value; // Suppress unused warning
 
             <!-- Avg Resolution Time -->
             <div
-              class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm"
+              class="card-depth rounded-[calc(var(--radius)+0.35rem)] border border-border bg-card/95 p-4 shadow-sm"
             >
               <div
                 class="flex flex-row items-center justify-between space-y-0 pb-2"
               >
-                <span
-                  class="text-sm font-medium text-white/50 light:text-gray-500"
+                <span class="text-sm font-medium text-muted-foreground"
                   >{{ $t("agentAnalytics.avgResolutionTime") }}</span
                 >
                 <div
-                  class="h-10 w-10 rounded-lg bg-orange-500/20 flex items-center justify-center"
+                  class="h-10 w-10 rounded-lg flex items-center justify-center"
+                  style="background-color: rgb(var(--chart-3) / 0.15)"
                 >
-                  <Clock class="h-5 w-5 text-orange-400" />
+                  <Clock class="h-5 w-5" style="color: rgb(var(--chart-3))" />
                 </div>
               </div>
               <div class="pt-2">
-                <div class="text-3xl font-bold text-white light:text-gray-900">
+                <div class="text-3xl font-bold text-foreground">
                   {{
                     formatMinutes(
                       selectedAgentId === "all"
@@ -1057,7 +1067,7 @@ void _displayStats.value; // Suppress unused warning
                     )
                   }}
                 </div>
-                <p class="text-xs text-white/40 light:text-gray-500 mt-1">
+                <p class="text-xs text-muted-foreground mt-1">
                   {{ $t("agentAnalytics.timeToResolve") }}
                 </p>
               </div>
@@ -1066,54 +1076,57 @@ void _displayStats.value; // Suppress unused warning
             <!-- Messages Sent (for specific agent) or Queue Time (for all agents) -->
             <div
               v-if="canViewOrganizationAnalytics && selectedAgentId === 'all'"
-              class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm"
+              class="card-depth rounded-[calc(var(--radius)+0.35rem)] border border-border bg-card/95 p-4 shadow-sm"
             >
               <div
                 class="flex flex-row items-center justify-between space-y-0 pb-2"
               >
-                <span
-                  class="text-sm font-medium text-white/50 light:text-gray-500"
+                <span class="text-sm font-medium text-muted-foreground"
                   >{{ $t("agentAnalytics.avgQueueTime") }}</span
                 >
                 <div
-                  class="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center"
+                  class="h-10 w-10 rounded-lg flex items-center justify-center"
+                  style="background-color: rgb(var(--chart-4) / 0.15)"
                 >
-                  <Clock class="h-5 w-5 text-purple-400" />
+                  <Clock class="h-5 w-5" style="color: rgb(var(--chart-4))" />
                 </div>
               </div>
               <div class="pt-2">
-                <div class="text-3xl font-bold text-white light:text-gray-900">
+                <div class="text-3xl font-bold text-foreground">
                   {{
                     formatMinutes(analytics.summary?.avg_queue_time_mins || 0)
                   }}
                 </div>
-                <p class="text-xs text-white/40 light:text-gray-500 mt-1">
+                <p class="text-xs text-muted-foreground mt-1">
                   {{ $t("agentAnalytics.waitBeforeAssignment") }}
                 </p>
               </div>
             </div>
             <div
               v-else
-              class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm"
+              class="card-depth rounded-[calc(var(--radius)+0.35rem)] border border-border bg-card/95 p-4 shadow-sm"
             >
               <div
                 class="flex flex-row items-center justify-between space-y-0 pb-2"
               >
-                <span
-                  class="text-sm font-medium text-white/50 light:text-gray-500"
+                <span class="text-sm font-medium text-muted-foreground"
                   >{{ $t("agentAnalytics.messagesSent") }}</span
                 >
                 <div
-                  class="h-10 w-10 rounded-lg bg-purple-500/20 flex items-center justify-center"
+                  class="h-10 w-10 rounded-lg flex items-center justify-center"
+                  style="background-color: rgb(var(--chart-4) / 0.15)"
                 >
-                  <MessageSquare class="h-5 w-5 text-purple-400" />
+                  <MessageSquare
+                    class="h-5 w-5"
+                    style="color: rgb(var(--chart-4))"
+                  />
                 </div>
               </div>
               <div class="pt-2">
-                <div class="text-3xl font-bold text-white light:text-gray-900">
+                <div class="text-3xl font-bold text-foreground">
                   {{ analytics.my_stats?.messages_sent || 0 }}
                 </div>
-                <p class="text-xs text-white/40 light:text-gray-500 mt-1">
+                <p class="text-xs text-muted-foreground mt-1">
                   {{ $t("agentAnalytics.outgoingMessages") }}
                 </p>
               </div>
@@ -1121,23 +1134,23 @@ void _displayStats.value; // Suppress unused warning
 
             <!-- Break Time -->
             <div
-              class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm"
+              class="card-depth rounded-[calc(var(--radius)+0.35rem)] border border-border bg-card/95 p-4 shadow-sm"
             >
               <div
                 class="flex flex-row items-center justify-between space-y-0 pb-2"
               >
-                <span
-                  class="text-sm font-medium text-white/50 light:text-gray-500"
+                <span class="text-sm font-medium text-muted-foreground"
                   >{{ $t("agentAnalytics.breakTime") }}</span
                 >
                 <div
-                  class="h-10 w-10 rounded-lg bg-amber-500/20 flex items-center justify-center"
+                  class="h-10 w-10 rounded-lg flex items-center justify-center"
+                  style="background-color: rgb(var(--chart-3) / 0.15)"
                 >
-                  <Coffee class="h-5 w-5 text-amber-400" />
+                  <Coffee class="h-5 w-5" style="color: rgb(var(--chart-3))" />
                 </div>
               </div>
               <div class="pt-2">
-                <div class="text-3xl font-bold text-white light:text-gray-900">
+                <div class="text-3xl font-bold text-foreground">
                   {{
                     formatMinutes(
                       analytics.my_stats?.total_break_time_mins ??
@@ -1146,7 +1159,7 @@ void _displayStats.value; // Suppress unused warning
                     )
                   }}
                 </div>
-                <p class="text-xs text-white/40 light:text-gray-500 mt-1">
+                <p class="text-xs text-muted-foreground mt-1">
                   {{
                     $t("agentAnalytics.breaksTaken", {
                       count:
@@ -1160,30 +1173,30 @@ void _displayStats.value; // Suppress unused warning
             </div>
 
             <div
-              class="card-depth rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 p-6 shadow-sm"
+              class="card-depth rounded-[calc(var(--radius)+0.35rem)] border border-border bg-card/95 p-4 shadow-sm"
             >
               <div
                 class="flex flex-row items-center justify-between space-y-0 pb-2"
               >
-                <span
-                  class="text-sm font-medium text-white/50 light:text-gray-500"
+                <span class="text-sm font-medium text-muted-foreground"
                   >{{ $t("agentAnalytics.averageRating") }}</span
                 >
                 <div
-                  class="h-10 w-10 rounded-lg bg-yellow-500/20 flex items-center justify-center"
+                  class="h-10 w-10 rounded-lg flex items-center justify-center"
+                  style="background-color: rgb(var(--chart-5) / 0.15)"
                 >
-                  <Star class="h-5 w-5 text-yellow-400" />
+                  <Star class="h-5 w-5" style="color: rgb(var(--chart-5))" />
                 </div>
               </div>
               <div class="pt-2">
-                <div class="text-3xl font-bold text-white light:text-gray-900">
+                <div class="text-3xl font-bold text-foreground">
                   {{
                     Number(
                       analytics.rating_summary?.average_rating || 0,
                     ).toFixed(1)
                   }}
                 </div>
-                <p class="text-xs text-white/40 light:text-gray-500 mt-1">
+                <p class="text-xs text-muted-foreground mt-1">
                   {{
                     $t("agentAnalytics.totalRatingsLabel", {
                       count: analytics.rating_summary?.total_ratings || 0,
@@ -1307,7 +1320,7 @@ void _displayStats.value; // Suppress unused warning
               </template>
               <template v-else-if="analytics?.rating_records?.length">
                 <div
-                  class="overflow-x-auto rounded-md border border-white/[0.08] light:border-gray-200"
+                  class="overflow-x-auto rounded-md border border-border"
                 >
                   <Table>
                     <TableHeader>
@@ -1342,13 +1355,21 @@ void _displayStats.value; // Suppress unused warning
                       <TableRow
                         v-for="record in analytics.rating_records"
                         :key="record.id"
+                        class="transition-colors hover:bg-accent/50"
                       >
                         <TableCell>{{ record.agent_name || "-" }}</TableCell>
                         <TableCell class="font-mono text-xs">
                           <button
                             type="button"
-                            class="text-primary hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:text-muted-foreground"
+                            class="text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 rounded-sm disabled:cursor-not-allowed disabled:no-underline disabled:text-muted-foreground"
                             :disabled="!record.contact_id"
+                            :aria-label="
+                              record.contact_id
+                                ? $t('agentAnalytics.openChat', {
+                                    phone: record.contact_phone,
+                                  })
+                                : undefined
+                            "
                             @click="openRatingChat(record)"
                           >
                             {{ record.contact_phone || "-" }}

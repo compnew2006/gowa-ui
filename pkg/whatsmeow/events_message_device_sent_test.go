@@ -172,9 +172,8 @@ func TestHandleMessage_PersistsGroupFromMeWithoutDeviceSentMetadata(t *testing.T
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
-	require.NoError(t, cm.RegisterInstanceClient(instance, &waClient.Client{
-		Store: &store.Device{ID: &myJID},
-	}))
+	deviceStore := &store.Device{ID: &myJID}
+	require.NoError(t, cm.RegisterInstanceClient(instance, waClient.NewClient(deviceStore, nil)))
 
 	groupJID, err := types.ParseJID("120363123456789012@g.us")
 	require.NoError(t, err)
@@ -236,9 +235,8 @@ func TestHandleMessage_ReconcilesPendingOutgoingGroupMessageWithoutDeviceSentMet
 
 	myJID, err := types.ParseJID("15550009999@s.whatsapp.net")
 	require.NoError(t, err)
-	require.NoError(t, cm.RegisterInstanceClient(instance, &waClient.Client{
-		Store: &store.Device{ID: &myJID},
-	}))
+	deviceStore := &store.Device{ID: &myJID}
+	require.NoError(t, cm.RegisterInstanceClient(instance, waClient.NewClient(deviceStore, nil)))
 
 	groupJID, err := types.ParseJID("120363999999999999@g.us")
 	require.NoError(t, err)

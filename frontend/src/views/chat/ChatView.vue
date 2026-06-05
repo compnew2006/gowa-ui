@@ -89,6 +89,8 @@ import {
   UserPlus,
   UserMinus,
   UserX,
+  Users,
+  Hash,
   Play,
   Reply,
   X,
@@ -1027,6 +1029,22 @@ function isSidebarEntryActive(entry: SidebarContactEntry): boolean {
   const currentContactID = contactsStore.currentContact?.id;
   if (!currentContactID) return false;
   return entry.sourceContactIDs.includes(currentContactID);
+}
+
+function isSidebarGroupContact(entry: SidebarContactEntry): boolean {
+  const contact = entry.displayContact;
+  if (contact.metadata?.is_channel_chat === true) return false;
+  if (contact.is_group_chat === true) return true;
+  if (contact.metadata?.is_group_chat === true) return true;
+  const phone = typeof contact.phone_number === 'string' ? contact.phone_number : '';
+  return phone.endsWith('@g.us');
+}
+
+function isSidebarChannelContact(entry: SidebarContactEntry): boolean {
+  const contact = entry.displayContact;
+  if (contact.metadata?.is_channel_chat === true) return true;
+  const phone = typeof contact.phone_number === 'string' ? contact.phone_number : '';
+  return phone.endsWith('@newsletter');
 }
 
 // Get active transfer for current contact from the store (reactive)
@@ -4478,6 +4496,22 @@ async function sendMediaMessage() {
                   </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
+                  <Badge
+                    v-if="isSidebarGroupContact(entry)"
+                    class="h-5 gap-1 border-0 bg-sidebar-accent text-[10px] text-sidebar-foreground/75"
+                    :title="$t('chat.groupShort')"
+                  >
+                    <Users class="h-2.5 w-2.5" aria-hidden="true" />
+                    {{ $t("chat.groupShort") }}
+                  </Badge>
+                  <Badge
+                    v-else-if="isSidebarChannelContact(entry)"
+                    class="h-5 gap-1 border-0 bg-sidebar-accent text-[10px] text-sidebar-foreground/75"
+                    :title="$t('chat.channelShort')"
+                  >
+                    <Hash class="h-2.5 w-2.5" aria-hidden="true" />
+                    {{ $t("chat.channelShort") }}
+                  </Badge>
                   <Badge
                     v-if="entry.displayContact.is_public"
                     class="h-5 border-0 bg-primary/12 text-[10px] text-primary"

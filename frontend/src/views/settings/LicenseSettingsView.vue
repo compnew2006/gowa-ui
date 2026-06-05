@@ -9,6 +9,11 @@ import {
   Loader2,
   LockKeyhole,
   ShieldCheck,
+  Clock,
+  Users,
+  HardDrive,
+  MessageSquare,
+  Building2,
 } from "lucide-vue-next";
 import { PageHeader } from "@/components/shared";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -25,7 +30,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useLicenseActivation } from "@/composables/useLicenseActivation";
 
 const { t } = useI18n();
@@ -45,6 +50,13 @@ const {
   copyHWID,
   submitActivation,
 } = useLicenseActivation();
+
+const quotaIcons: Record<string, typeof Building2> = {
+  organizations: Building2,
+  users: Users,
+  whatsapp: MessageSquare,
+  storage: HardDrive,
+};
 
 function parseDurationDays(durationLabel?: string | null): number | null {
   if (!durationLabel || durationLabel === "lifetime") {
@@ -209,6 +221,10 @@ const durationUsageLabel = computed(() => {
   });
 });
 
+const isInitialLoad = computed(
+  () => bootstrapPending.value && !licenseStore.state.enabled,
+);
+
 onMounted(() => {
   void loadBootstrap();
 });
@@ -237,130 +253,170 @@ async function handleActivationSubmit() {
       <template #actions>
         <Button
           variant="outline"
+          size="sm"
           :disabled="bootstrapPending"
           @click="refreshStatus"
         >
-          <Loader2 v-if="bootstrapPending" class="mr-2 h-4 w-4 animate-spin" />
+          <Loader2 v-if="bootstrapPending" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
           {{ t("licenseSettings.actions.refresh") }}
         </Button>
       </template>
     </PageHeader>
 
     <ScrollArea class="flex-1">
-      <div class="mx-auto flex max-w-6xl flex-col gap-6 p-6">
-        <div class="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_420px]">
-          <section class="space-y-6">
-            <Card class="border-border/70 bg-card/95 shadow-sm">
-              <CardHeader class="space-y-4">
-                <div
-                  class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"
-                >
-                  <div class="space-y-2">
-                    <CardDescription
-                      class="text-[11px] uppercase tracking-[0.18em]"
-                    >
-                      {{ t("licenseSettings.sections.deploymentStatus") }}
-                    </CardDescription>
-                    <CardTitle class="text-2xl">
-                      {{ t("licenseSettings.sections.overview") }}
-                    </CardTitle>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <Badge :variant="statusVariant">{{ statusLabel }}</Badge>
-                    <Badge v-if="licenseStore.state.tier" variant="outline">
-                      {{ entitlementLabel }}
-                    </Badge>
-                    <Badge v-if="licenseMetaLabel" variant="outline">
-                      {{ licenseMetaLabel }}
-                    </Badge>
-                    <Badge
-                      v-if="licenseStore.showQuotaOverage"
-                      variant="warning"
-                    >
-                      {{ t("licenseSettings.status.quotaOverage") }}
-                    </Badge>
-                  </div>
+      <div class="mx-auto max-w-5xl space-y-6 p-6">
+        <template v-if="isInitialLoad">
+          <Card class="border-border/70 bg-card/95">
+            <CardHeader class="space-y-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <Skeleton class="h-6 w-28 rounded-full" />
+                <Skeleton class="h-6 w-24 rounded-full" />
+              </div>
+              <Skeleton class="h-4 w-96 max-w-full" />
+            </CardHeader>
+            <CardContent class="space-y-5">
+              <div class="space-y-3">
+                <Skeleton v-for="i in 4" :key="i" class="h-14 w-full rounded-lg" />
+              </div>
+            </CardContent>
+          </Card>
+          <div class="grid gap-6 md:grid-cols-2">
+            <Skeleton class="h-48 w-full rounded-xl" />
+            <Skeleton class="h-48 w-full rounded-xl" />
+          </div>
+        </template>
+
+        <template v-else>
+          <Card class="border-border/70 bg-card/95">
+            <CardHeader class="space-y-4">
+              <div
+                class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div class="space-y-1.5">
+                  <p class="text-xs font-medium text-muted-foreground">
+                    {{ t("licenseSettings.sections.deploymentStatus") }}
+                  </p>
+                  <CardTitle class="text-xl">
+                    {{ t("licenseSettings.sections.overview") }}
+                  </CardTitle>
                 </div>
-                <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
-                  {{ statusSummary }}
-                </p>
-              </CardHeader>
-              <CardContent class="space-y-4">
-                <Alert
-                  v-if="licenseStore.isGrace"
-                  variant="warning"
-                  class="border-amber-500/35"
-                >
-                  <AlertTriangle class="h-4 w-4" />
-                  <AlertTitle>
-                    {{ t("licenseSettings.alerts.graceTitle") }}
-                  </AlertTitle>
-                  <AlertDescription>
-                    {{
-                      t("licenseSettings.alerts.graceDescription", {
-                        deadline: graceDeadlineLabel,
-                      })
-                    }}
-                  </AlertDescription>
-                </Alert>
-
-                <Alert
-                  v-else-if="licenseStore.showQuotaOverage"
-                  variant="warning"
-                  class="border-amber-500/35"
-                >
-                  <AlertTriangle class="h-4 w-4" />
-                  <AlertTitle>
-                    {{ t("licenseSettings.alerts.quotaTitle") }}
-                  </AlertTitle>
-                  <AlertDescription>
-                    {{ t("licenseSettings.alerts.quotaDescription") }}
-                  </AlertDescription>
-                </Alert>
-
-                <Alert
-                  v-else-if="licenseStore.showExpiryWarning"
-                  variant="info"
-                  class="border-primary/25"
-                >
-                  <ShieldCheck class="h-4 w-4" />
-                  <AlertTitle>
-                    {{ t("licenseSettings.alerts.expiryTitle") }}
-                  </AlertTitle>
-                  <AlertDescription>
-                    {{ getExpiryMessage(licenseStore.daysUntilExpiry) }}
-                  </AlertDescription>
-                </Alert>
-
-                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <Card
-                    v-for="item in quotaCards"
-                    :key="item.key"
-                    class="border-border/70 bg-background/80 shadow-sm"
+                <div class="flex flex-wrap gap-1.5">
+                  <Badge :variant="statusVariant">{{ statusLabel }}</Badge>
+                  <Badge v-if="licenseStore.state.tier" variant="outline">
+                    {{ entitlementLabel }}
+                  </Badge>
+                  <Badge v-if="licenseMetaLabel" variant="outline">
+                    {{ licenseMetaLabel }}
+                  </Badge>
+                  <Badge
+                    v-if="licenseStore.showQuotaOverage"
+                    variant="warning"
                   >
-                    <CardHeader class="pb-3">
-                      <CardDescription
-                        class="text-[11px] uppercase tracking-[0.16em]"
-                      >
-                        {{ item.label }}
-                      </CardDescription>
-                      <CardTitle class="text-2xl">
-                        {{ formatQuotaValue(item.key, item.usage.current) }}/{{
-                          getQuotaLimitLabel(item.key, item.usage.limit)
-                        }}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent class="space-y-3 pt-0">
-                      <Progress
-                        :model-value="
-                          usagePercentage(item.usage.current, item.usage.limit)
-                        "
-                      />
-                      <p
-                        class="text-xs"
+                    {{ t("licenseSettings.status.quotaOverage") }}
+                  </Badge>
+                </div>
+              </div>
+              <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
+                {{ statusSummary }}
+              </p>
+            </CardHeader>
+            <CardContent class="space-y-5">
+              <Alert
+                v-if="licenseStore.isGrace"
+                variant="warning"
+                class="border-amber-500/35"
+              >
+                <AlertTriangle class="h-4 w-4" />
+                <AlertTitle>
+                  {{ t("licenseSettings.alerts.graceTitle") }}
+                </AlertTitle>
+                <AlertDescription>
+                  {{
+                    t("licenseSettings.alerts.graceDescription", {
+                      deadline: graceDeadlineLabel,
+                    })
+                  }}
+                </AlertDescription>
+              </Alert>
+
+              <Alert
+                v-else-if="licenseStore.showQuotaOverage"
+                variant="warning"
+                class="border-amber-500/35"
+              >
+                <AlertTriangle class="h-4 w-4" />
+                <AlertTitle>
+                  {{ t("licenseSettings.alerts.quotaTitle") }}
+                </AlertTitle>
+                <AlertDescription>
+                  {{ t("licenseSettings.alerts.quotaDescription") }}
+                </AlertDescription>
+              </Alert>
+
+              <Alert
+                v-else-if="licenseStore.showExpiryWarning"
+                variant="info"
+                class="border-primary/25"
+              >
+                <ShieldCheck class="h-4 w-4" />
+                <AlertTitle>
+                  {{ t("licenseSettings.alerts.expiryTitle") }}
+                </AlertTitle>
+                <AlertDescription>
+                  {{ getExpiryMessage(licenseStore.daysUntilExpiry) }}
+                </AlertDescription>
+              </Alert>
+
+              <div class="space-y-0 divide-y divide-border/50 rounded-lg border border-border/50 bg-background/60">
+                <div
+                  v-for="item in quotaCards"
+                  :key="item.key"
+                  class="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-accent/50 first:rounded-t-lg last:rounded-b-lg sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
+                  <div class="flex items-center gap-2.5">
+                    <component
+                      :is="quotaIcons[item.key] ?? Building2"
+                      class="h-4 w-4 shrink-0 text-muted-foreground/70"
+                    />
+                    <span class="text-sm font-medium text-foreground">
+                      {{ item.label }}
+                    </span>
+                  </div>
+                  <div class="flex flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4">
+                    <div class="flex items-baseline gap-1.5 text-sm tabular-nums">
+                      <span class="font-semibold text-foreground">
+                        {{ formatQuotaValue(item.key, item.usage.current) }}
+                      </span>
+                      <span class="text-muted-foreground">/</span>
+                      <span class="text-muted-foreground">
+                        {{ getQuotaLimitLabel(item.key, item.usage.limit) }}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-3 sm:w-40">
+                      <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/80">
+                        <div
+                          class="h-full rounded-full transition-all duration-300"
+                          :class="
+                            item.usage.over_quota
+                              ? 'bg-amber-500 dark:bg-amber-400'
+                              : item.usage.limit > 0 &&
+                                  usagePercentage(item.usage.current, item.usage.limit) >= 80
+                                ? 'bg-primary/70'
+                                : 'bg-primary/40'
+                          "
+                          :style="{
+                            width:
+                              item.usage.limit > 0
+                                ? `${Math.min(100, usagePercentage(item.usage.current, item.usage.limit))}%`
+                                : '0%',
+                          }"
+                        />
+                      </div>
+                      <span
+                        class="shrink-0 text-[11px] tabular-nums"
                         :class="
                           item.usage.over_quota
-                            ? 'text-amber-600 dark:text-amber-400'
+                            ? 'font-medium text-amber-600 dark:text-amber-400'
                             : 'text-muted-foreground'
                         "
                       >
@@ -372,75 +428,88 @@ async function handleActivationSubmit() {
                             item.usage.overage,
                           )
                         }}
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card class="border-border/70 bg-background/80 shadow-sm">
-                    <CardHeader class="pb-3">
-                      <CardDescription
-                        class="text-[11px] uppercase tracking-[0.16em]"
-                      >
-                        {{ t("licenseSettings.quota.subscriptionDays") }}
-                      </CardDescription>
-                      <CardTitle class="text-2xl">
-                        {{ durationHeadline }}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent class="space-y-3 pt-0">
-                      <Progress :model-value="durationProgressValue" />
-                      <p class="text-xs text-muted-foreground">
-                        {{ durationUsageLabel }}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card
-                  v-if="
-                    licenseStore.state.usage.organization_details.length > 0
-                  "
-                  class="border-border/70 bg-background/80 shadow-sm"
-                >
-                  <CardHeader class="pb-3">
-                    <CardTitle class="flex items-center gap-2 text-base">
-                      <CheckCircle2 class="h-4 w-4 text-emerald-500" />
-                      {{ t("licenseSettings.sections.currentOrgUsage") }}
-                    </CardTitle>
-                    <CardDescription>
-                      {{ t("licenseSettings.descriptions.orgUsage") }}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent class="space-y-2">
-                    <div
-                      v-for="org in licenseStore.state.usage
-                        .organization_details"
-                      :key="org.organization_id"
-                      class="flex flex-col gap-1 rounded-xl border border-border/60 bg-card px-3 py-2 text-sm md:flex-row md:items-center md:justify-between"
-                    >
-                      <span class="font-medium text-foreground">
-                        {{ org.organization_name }}
-                      </span>
-                      <span class="text-muted-foreground">
-                        {{
-                          getOrganizationUsageLabel(
-                            org.user_count,
-                            org.whatsapp_endpoint_count,
-                            org.storage_bytes,
-                          )
-                        }}
                       </span>
                     </div>
-                  </CardContent>
-                </Card>
-              </CardContent>
-            </Card>
-          </section>
+                  </div>
+                </div>
 
-          <aside class="space-y-6">
-            <Card class="border-border/70 bg-card/95 shadow-sm">
+                <div class="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-accent/50 last:rounded-b-lg sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                  <div class="flex items-center gap-2.5">
+                    <Clock class="h-4 w-4 shrink-0 text-muted-foreground/70" />
+                    <span class="text-sm font-medium text-foreground">
+                      {{ t("licenseSettings.quota.subscriptionDays") }}
+                    </span>
+                  </div>
+                  <div class="flex flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4">
+                    <div class="flex items-baseline gap-1.5 text-sm tabular-nums">
+                      <span class="font-semibold text-foreground">
+                        {{ durationHeadline }}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-3 sm:w-40">
+                      <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/80">
+                        <div
+                          class="h-full rounded-full transition-all duration-300"
+                          :class="
+                            durationProgressValue <= 20 && durationProgressValue > 0
+                              ? 'bg-amber-500 dark:bg-amber-400'
+                              : 'bg-primary/40'
+                          "
+                          :style="{
+                            width: `${durationProgressValue}%`,
+                          }"
+                        />
+                      </div>
+                      <span class="shrink-0 text-[11px] text-muted-foreground">
+                        {{ durationUsageLabel }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-if="
+                  licenseStore.state.usage.organization_details.length > 0
+                "
+                class="space-y-2"
+              >
+                <h3 class="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <CheckCircle2 class="h-3.5 w-3.5 text-emerald-500" />
+                  {{ t("licenseSettings.sections.currentOrgUsage") }}
+                </h3>
+                <p class="text-xs text-muted-foreground">
+                  {{ t("licenseSettings.descriptions.orgUsage") }}
+                </p>
+                <div class="space-y-1.5">
+                  <div
+                    v-for="org in licenseStore.state.usage
+                      .organization_details"
+                    :key="org.organization_id"
+                    class="flex flex-col gap-1 rounded-lg border border-border/40 bg-card/60 px-3 py-2.5 text-sm transition-colors hover:bg-accent/30 md:flex-row md:items-center md:justify-between"
+                  >
+                    <span class="font-medium text-foreground">
+                      {{ org.organization_name }}
+                    </span>
+                    <span class="text-muted-foreground">
+                      {{
+                        getOrganizationUsageLabel(
+                          org.user_count,
+                          org.whatsapp_endpoint_count,
+                          org.storage_bytes,
+                        )
+                      }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div class="grid gap-6 md:grid-cols-2">
+            <Card class="border-border/50 bg-muted/30">
               <CardHeader>
-                <CardTitle>
+                <CardTitle class="text-base">
                   {{ t("licenseSettings.sections.serverIdentity") }}
                 </CardTitle>
                 <CardDescription>
@@ -448,7 +517,7 @@ async function handleActivationSubmit() {
                 </CardDescription>
               </CardHeader>
               <CardContent class="space-y-3">
-                <Label for="license-hwid">
+                <Label for="license-hwid" class="text-xs">
                   {{ t("licenseSettings.fields.hwid") }}
                 </Label>
                 <div class="flex flex-col gap-2">
@@ -461,13 +530,14 @@ async function handleActivationSubmit() {
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     class="justify-start"
                     :disabled="
                       bootstrapPending || !licenseStore.state.hwid_full
                     "
                     @click="copyHWID"
                   >
-                    <Copy class="mr-2 h-4 w-4" />
+                    <Copy class="mr-1.5 h-3.5 w-3.5" />
                     {{ t("licenseSettings.actions.copyHwid") }}
                   </Button>
                 </div>
@@ -481,9 +551,9 @@ async function handleActivationSubmit() {
               </CardContent>
             </Card>
 
-            <Card class="border-border/70 bg-card/95 shadow-sm">
+            <Card class="border-border/50 bg-muted/30">
               <CardHeader>
-                <CardTitle>
+                <CardTitle class="text-base">
                   {{ t("licenseSettings.sections.activation") }}
                 </CardTitle>
                 <CardDescription>
@@ -492,15 +562,15 @@ async function handleActivationSubmit() {
               </CardHeader>
               <CardContent class="space-y-4">
                 <div class="space-y-2">
-                  <Label for="license-security-key">
+                  <Label for="license-security-key" class="text-xs">
                     {{ t("licenseSettings.fields.securityKey") }}
                   </Label>
                   <Textarea
                     id="license-security-key"
                     v-model="securityKey"
-                    :rows="8"
+                    :rows="6"
                     :disabled="licenseStore.activationPending"
-                    class="min-h-[220px] font-mono text-xs"
+                    class="min-h-[160px] font-mono text-xs"
                     :placeholder="t('licenseSettings.placeholders.securityKey')"
                   />
                 </div>
@@ -519,8 +589,9 @@ async function handleActivationSubmit() {
                   </AlertDescription>
                 </Alert>
 
-                <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-2 sm:flex-row">
                   <Button
+                    size="sm"
                     :disabled="
                       licenseStore.activationPending || bootstrapPending
                     "
@@ -528,28 +599,29 @@ async function handleActivationSubmit() {
                   >
                     <Loader2
                       v-if="licenseStore.activationPending"
-                      class="mr-2 h-4 w-4 animate-spin"
+                      class="mr-1.5 h-3.5 w-3.5 animate-spin"
                     />
-                    <KeyRound v-else class="mr-2 h-4 w-4" />
+                    <KeyRound v-else class="mr-1.5 h-3.5 w-3.5" />
                     {{ t("licenseSettings.actions.activateLicense") }}
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     :disabled="bootstrapPending"
                     @click="refreshStatus"
                   >
                     <Loader2
                       v-if="bootstrapPending"
-                      class="mr-2 h-4 w-4 animate-spin"
+                      class="mr-1.5 h-3.5 w-3.5 animate-spin"
                     />
                     {{ t("licenseSettings.actions.refreshStatus") }}
                   </Button>
                 </div>
               </CardContent>
             </Card>
-          </aside>
-        </div>
+          </div>
+        </template>
       </div>
     </ScrollArea>
   </div>

@@ -390,6 +390,8 @@
     "resumeChatbot": "Resume Chatbot",
     "publicChat": "Public",
     "publicShort": "Public",
+    "groupShort": "Group",
+    "channelShort": "Channel",
     "makePublicChat": "Make chat public (pin for all agents)",
     "removePublicChat": "Remove public chat visibility",
     "publicChatEnabled": "Chat is now public for all agents",
@@ -2385,7 +2387,10 @@
     "ratingMessageColumn": "Rating Message",
     "contextMessagesColumn": "Context Messages",
     "noDataAvailable": "No data available",
-    "noAgentsFound": "No agents found"
+    "noAgentsFound": "No agents found",
+    "failedLoadAgents": "Failed to load agents",
+    "failedLoadAnalytics": "Failed to load agent analytics",
+    "failedExportRatings": "Failed to export ratings"
   },
   "metaInsights": {
     "title": "Meta Insights",
