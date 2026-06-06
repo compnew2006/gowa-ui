@@ -132,8 +132,8 @@ description: "Task list for Per-Instance Uploads Cleanup Retention"
 
 - [X] T043 [US3] Implement `POST /api/instances/{id}/uploads-cleanup/run` handler at `plugin/per-instance-uploads-cleanup/handler_run.go`: call `tryAcquireInstanceRun`; on conflict → 409; on success call `ResolveEffectiveRetention`; if `0` → 400 `uploads_cleanup_disabled`; else call the exported `RunManualCleanupForInstance(ctx, db, orgID, instanceID, &days)` function from T011 (in `internal/handlers/uploads_cleanup_worker_instance.go`); on success update `uploads_cleanup.last_run_date` in instance settings and return the result envelope (D-6, D-5)
 - [X] T044 [P] [US3] Add the "Run cleanup now" button to `PerInstanceUploadsCleanup.vue` (extend from T022) with the result inline + toast on 409; wire to `useRunInstanceUploadsCleanup`
-- [ ] T045 [US3] Add the per-instance breakdown `instances[]` field to the existing `POST /api/org/uploads-cleanup/run` response in `internal/handlers/uploads_cleanup_http.go` per C-2 in `research.md` and `contracts/org.uploads-cleanup.runs.yaml`; the legacy `deleted_files` and `retention_days` top-level fields are preserved
-- [ ] T046 [P] [US3] Update the `api.ts` `runUploadsCleanupNow` response type in `frontend/src/services/api.ts` to include the new `instances: PerInstanceRunRow[]` field (additive, non-breaking)
+- [X] T045 [US3] Add the per-instance breakdown `instances[]` field to the existing `POST /api/org/uploads-cleanup/run` response in `internal/handlers/uploads_cleanup_http.go` per C-2 in `research.md` and `contracts/org.uploads-cleanup.runs.yaml`; the legacy `deleted_files` and `retention_days` top-level fields are preserved
+- [X] T046 [P] [US3] Update the `api.ts` `runUploadsCleanupNow` response type in `frontend/src/services/api.ts` to include the new `instances: PerInstanceRunRow[]` field (additive, non-breaking)
 - [X] T047 [US3] Run `go test -v -race -p 1 ./plugin/per-instance-uploads-cleanup/...` and `cd frontend && npm run test:unit -- PerInstanceUploadsCleanup` to confirm T040..T042 pass
 
 **Checkpoint**: US3 is fully functional. Admins can trigger per-instance runs, see results inline, and observe the concurrency guard.
@@ -155,147 +155,29 @@ description: "Task list for Per-Instance Uploads Cleanup Retention"
 - [ ] T056 [P] Append a session summary to `summary.md` per the project protocol: branch, list of generated artifacts, blast radius, tests, gotchas
 - [ ] T057 [P] Update the existing `frontend/src/i18n/locales/*.json` README/CHANGELOG (if any) with a one-line note about the 15 new keys
 
-**Checkpoint**: All tests pass, lint clean, i18n complete, manual smoke test green, summary recorded.
+---
+
+## Phase 7: Bug Fixes
+
+- [X] T058 [Bug] Fix fatal "Cannot read properties of undefined (reading 'length')" on `/whatsapp/instances` — root cause: composables in `usePerInstanceUploadsCleanup.ts` used `res.data` directly instead of `unwrapResponse()`, returning the full API envelope `{ status, data, message }` instead of the inner data, making `history.entries` undefined. Fix: (1) import and use `unwrapResponse` from `@/lib/api-utils` in all five queryFn/mutationFn callbacks; (2) add optional chaining `history?.entries?.length` in `PerInstanceUploadsCleanup.vue` template as defensive guard
+- [X] T059 [Bug] Fix 403 on "Run cleanup now" and "Save" buttons — root cause: plugin's `hasPermission` checked `user_organizations.is_super_admin` but core checks `users.is_super_admin`. Fix: rewrote `hasPermission` in `plugin/per-instance-uploads-cleanup/handler_retention.go` to check `users.is_super_admin` first
+- [X] T060 [Bug] Fix 400 "uploads_cleanup_disabled" raw error code shown on "Run cleanup now" and "common.saved" literal key shown on "Save" — root cause: (1) backend `handleRun` returned error code string `"uploads_cleanup_disabled"` as the message instead of a user-friendly sentence; (2) i18n key `common.saved` was missing from all three locale files; (3) frontend error handlers used `err instanceof Error ? err.message` instead of `getErrorMessage()` which can't extract Axios response messages. Fix: (1) replaced backend error message with user-friendly description; (2) added `"saved"` key to en/es/ar locale `common` sections; (3) imported `getErrorMessage` from `@/lib/api-utils` and used it in both error handlers in `PerInstanceUploadsCleanup.vue`
+
+- [X] T061 [Bug] Fix misleading zero-value health stats shown for disconnected instances — root cause: backend `GetInstanceHealth` always returns a zero-valued `InstanceHealthResponse` struct (200 OK) even for disconnected instances with no active whatsmeow connection. Frontend stores this as a truthy object, so `v-if="instance.health"` passes and displays all-zero stats (uptime 0m, sent/received/failed/queue all 0). Fix: changed condition to `v-if="instance.health && isConnected"` in `InstanceCard.vue` so the health section only renders for connected instances where runtime metrics are meaningful. Disconnected instances no longer show misleading zero-value stats cards.
+- [X] T062 [UI] Redesign `InstanceCard.vue` layout into 6 clear sections for cleaner scannability — restructured template into: (1) Header/Status with compact badges, name, phone, JID; (2) Health stats as 2x2 grid with tinted backgrounds and uppercase labels, gated behind `isConnected`; (3) Settings in 2-column grid via container query (auto-sync, auto-download, auto-reject, auto-campaign, chat-close-rating, assigned-chat-reset); (4) PerInstanceUploadsCleanup as full-width section; (5) InstanceTagSettings as full-width section; (6) Action button in footer. Consistent border/radius/spacing tokens throughout.
+
+**Checkpoint**: `/whatsapp/instances` loads without crash; Save and Run buttons return 200 for super admin; health stats only visible for connected instances; card layout is clean and balanced.
 
 ---
 
-## Dependencies & Execution Order
+## Phase 8: Chat Export Fixes
 
-### Phase Dependencies
-
-- **Setup (Phase 1)**: No dependencies - can start immediately
-- **Foundational (Phase 2)**: Depends on Setup completion - **BLOCKS all user stories**
-- **User Stories (Phase 3+)**: All depend on Foundational phase completion
-  - User stories can then proceed in parallel (if staffed)
-  - Or sequentially in priority order (P1 → P2 → P3)
-- **Polish (Final Phase)**: Depends on all desired user stories being complete
-
-### User Story Dependencies
-
-- **User Story 1 (P1)**: Can start after Foundational (Phase 2). No dependencies on other stories. Self-contained: the GET/PUT retention endpoints and the per-instance UI block.
-- **User Story 2 (P2)**: Can start after Foundational (Phase 2). Builds on US1 by *reading* the data US1 writes (no shared code) and adds the workspace overview + history list. Independently testable: a workspace with no per-instance overrides still shows correct "Default" badges.
-- **User Story 3 (P3)**: Can start after Foundational (Phase 2). Builds on US1 (reuses `ResolveEffectiveRetention`) and US2 (reuses the "Last 5 changes" panel for the result display). Independently testable: a single instance with retention set can run a single-instance cleanup with no overview page being shown.
-
-### Within Each User Story
-
-- Tests (included) MUST be written and FAIL before implementation per constitution §7.2
-- Models before services (Phase 2 only — US1+ reuse the foundation)
-- Service resolution before handlers
-- Handlers before UI
-- UI i18n key addition can be parallel to handler implementation
-- Story complete before moving to next priority
-
-### Parallel Opportunities
-
-- All Setup tasks marked [P] can run in parallel (T003..T006)
-- All Foundational tasks marked [P] can run in parallel (T007, T008, T009, T013, T014, T015)
-- Once Foundational phase completes, US1 can start; US2 and US3 can start in parallel after US1 reaches its first checkpoint
-- Within US1: T017, T018, T019, T020, T021 (all tests) run in parallel; T022, T023, T028, T029 (component, composable, i18n es+ar) run in parallel
-- Within US2: T031, T032, T033 (tests) parallel; T036, T038 (composable + component extension) parallel after T037 wires them
-- Within US3: T040, T041, T042 (tests) parallel; T044, T046 (frontend touches) parallel after T043
+- [X] T063 [Bug] Fix export button click not working on `/chat/` — root cause: `PopoverTrigger` nested inside `TooltipTrigger` both with `as-child` caused Radix Vue click handler conflict, preventing the popover from opening. Nesting reorder alone did not fix it because Radix Vue's `as-child` slot merging breaks when `PopoverTrigger as-child` wraps a component (`Tooltip`) instead of a DOM element. Fix: removed the `Tooltip` + `TooltipTrigger` wrapper entirely from the export button. `PopoverTrigger as-child` now wraps the `Button` directly, so clicks propagate to the popover handler without interception. Tooltip hint preserved via native `title` attribute (`${t('chat.exportChatTooltip')} (E)`). Keyboard shortcut E continued to work because it calls `exportChatAsPDF()` directly.
+- [X] T064 [Bug] Fix images showing as "[Image]" text in PDF export instead of thumbnails — root cause: `buildHtmlForPrint` used `extractText()` which calls `mediaLabel()` returning placeholder strings like `"[Image]"`, `"[Video]"`. Fix: (1) added `fetchImageDataUrls()` to `chat-export.ts` that fetches image blobs via `prefetchMediaBlob()` and converts them to base64 data URLs with concurrency control; (2) updated `buildHtmlForPrint` to accept an `imageDataUrls` map and render `<img>` tags with thumbnails (max 220x180px) for image/sticker messages; (3) updated `exportChatAsPDF()` in ChatView.vue to call `fetchImageDataUrls()` before building the HTML.
 
 ---
 
-## Parallel Example: User Story 1
+## Phase 9: Group Chat Fixes
 
-```bash
-# Launch all tests for User Story 1 together (must FAIL before implementation):
-Task: "T017 [US1] Contract test for GET /api/instances/{id}/uploads-cleanup in plugin/per-instance-uploads-cleanup/handler_retention_test.go"
-Task: "T018 [US1] Contract test for PUT /api/instances/{id}/uploads-cleanup in plugin/per-instance-uploads-cleanup/handler_retention_test.go"
-Task: "T019 [US1] Unit test for retention validation in plugin/per-instance-uploads-cleanup/validation_test.go"
-Task: "T020 [US1] Unit test for ResolveEffectiveRetention in plugin/per-instance-uploads-cleanup/service_test.go"
-Task: "T021 [US1] Frontend component test in frontend/src/components/settings/PerInstanceUploadsCleanup.spec.ts"
-
-# Launch all frontend implementation in parallel (after backend tests pass):
-Task: "T022 [US1] Create PerInstanceUploadsCleanup.vue in frontend/src/components/settings/"
-Task: "T023 [US1] Create usePerInstanceUploadsCleanup composable in frontend/src/composables/"
-Task: "T028 [US1] Mirror i18n keys in es.json"
-Task: "T029 [US1] Mirror i18n keys in ar.json"
-```
-
----
-
-## Parallel Example: User Story 2
-
-```bash
-# Tests parallel:
-Task: "T031 [US2] Contract test for GET /api/org/uploads-cleanup/instances in plugin/per-instance-uploads-cleanup/handler_overview_test.go"
-Task: "T032 [US2] Contract test for GET /api/instances/{id}/uploads-cleanup/history in plugin/per-instance-uploads-cleanup/handler_history_test.go"
-Task: "T033 [US2] Frontend integration test extending frontend/src/views/settings/SettingsView.spec.ts"
-
-# After handlers land, frontend touches parallel:
-Task: "T036 [US2] Extend composable usePerInstanceUploadsCleanup.ts with history + overview"
-Task: "T038 [US2] Extend PerInstanceUploadsCleanup.vue with history list"
-```
-
----
-
-## Parallel Example: User Story 3
-
-```bash
-# Tests parallel:
-Task: "T040 [US3] Contract test for POST /api/instances/{id}/uploads-cleanup/run"
-Task: "T041 [US3] Concurrency test in service_test.go"
-Task: "T042 [US3] Frontend component test extending PerInstanceUploadsCleanup.spec.ts"
-
-# Frontend touches parallel after the run handler ships:
-Task: "T044 [US3] Add Run cleanup now button to PerInstanceUploadsCleanup.vue"
-Task: "T046 [US3] Update api.ts runUploadsCleanupNow response type"
-```
-
----
-
-## Implementation Strategy
-
-### MVP First (User Story 1 Only)
-
-1. Complete Phase 1: Setup (T001..T006)
-2. Complete Phase 2: Foundational (T007..T016) — **CRITICAL, blocks all stories**
-3. Complete Phase 3: User Story 1 (T017..T030)
-4. **STOP and VALIDATE**: per `quickstart.md` §"End-to-end happy path" steps 2–3
-5. Deploy/demo if ready — the per-instance retention save+read is shippable on its own
-
-### Incremental Delivery
-
-1. Complete Setup + Foundational → Foundation ready (T001..T016)
-2. Add User Story 1 → Test independently → Deploy/Demo (**MVP!**)
-3. Add User Story 2 → Test independently → Deploy/Demo (workspace overview + history land)
-4. Add User Story 3 → Test independently → Deploy/Demo (per-instance "Run now" lands)
-5. Polish phase (T048..T057) before declaring done
-6. Each story adds value without breaking previous stories (additive contracts preserve §5.1)
-
-### Parallel Team Strategy
-
-With multiple developers:
-
-1. Team completes Setup + Foundational together (T001..T016)
-2. Once Foundational is done:
-   - Developer A: User Story 1 (T017..T030) — ~2–3 days
-   - Developer B (in parallel after T008 lands): starts User Story 2 backend (T031, T032, T034, T035) while A works on the frontend
-   - Developer C (in parallel after T011 lands): starts User Story 3 backend (T040, T041, T043) while B works on the overview
-3. Frontend pieces of US2 and US3 land on the corresponding instance card / settings page in parallel with their backend stories
-4. Polish phase serializes: lint, typecheck, e2e, summary
-
----
-
-## Open items handed to implementation (must be resolved before MVP deploy)
-
-| ID | Item | Source | Default until told otherwise |
-|---|---|---|---|
-| C-1 | Audit retention policy | `research.md#c-1` | Forever (matches `AgentSelectionAuditEvent` precedent) |
-| Q-OPT-1 | History "Old / New" label format | `data-model.md` open Q | "Old: X / New: Y (days)" |
-| Q-OPT-2 | Inherit toggle clears `retention_days` vs keeps it | `data-model.md` open Q | Keep the old value; UI hides the input |
-| Worker-extension approval | Acceptable to add a new file `internal/handlers/uploads_cleanup_worker_instance.go` exporting `RunManualCleanupForInstance(...)` that calls the existing `RunManualCleanup` with the additive `RunOptions` parameter | `plan.md` §11.5 row R1 | Accept (avoids duplicating the filesystem walk; new file keeps the existing `uploads_cleanup_worker.go` untouched and preserves zero-blast-radius for the existing 2 call sites) |
-
----
-
-## Notes
-
-- [P] tasks = different files, no dependencies
-- [Story] label maps task to specific user story for traceability (US1, US2, US3)
-- Each user story should be independently completable and testable
-- Verify tests FAIL before implementing (§7.2)
-- Commit after each task or logical group
-- Stop at any checkpoint to validate story independently
-- Avoid: vague tasks, same-file conflicts, cross-story dependencies that break independence
-- The one core touchpoint (T011) is a new file `internal/handlers/uploads_cleanup_worker_instance.go` that exports `RunManualCleanupForInstance(...)` wrapping the existing `UploadsCleanupWorker.RunManualCleanup` with an additive `RunOptions{RetentionDaysOverride, InstanceID}` parameter; the existing `RunManualCleanup` signature is preserved (the `RunOptions` is a single new optional field; the 2 existing call sites in `internal/handlers/uploads_cleanup_http.go` continue to work unchanged). This is the only edit outside the `plugin/` directory beyond the one-line blank import in `cmd/whatomate/main.go` (T002).
+- [X] T065 [Bug] Fix group chat messages showing phone numbers instead of sender names — root cause: `getGroupSenderPhone()` in ChatView.vue called `getMessageSenderPhone()` which only returned `sender_phone`/`metadata.sender_phone`, never `sender_push_name`. The backend already stores `sender_push_name` in message metadata (message_persist.go stores `metadata["sender_push_name"] = evt.Info.PushName` for group messages) and the API returns it via `MessageResponse.SenderPushName`. Frontend `Message` type has `sender_push_name?: string`. Fix: updated `getGroupSenderPhone()` to check `message.sender_push_name` first (returning the push name when available), falling back to `getMessageSenderPhone(message)` for the phone number.
+- [ ] T066 [Feature] Auto-sync group members to WhatsApp contacts — **BLOCKED: requires core modification approval**. Current behavior: `persistParsedMessage` in `pkg/whatsmeow/message_persist.go` creates ONE contact per group (the group chat itself via the group JID), not individual contacts for each participant. The `inboundMessageHook` explicitly skips group messages (`!isGroup && !isChannel`), so plugin-based approaches cannot intercept group senders. Options: (a) Add a new call in `persistParsedMessage` to create/update a contact for each group message sender (core mod in `pkg/whatsmeow/`); (b) Remove the `!isGroup` exclusion from `inboundMessageHook` and handle group member contact creation via a plugin. Both options modify `pkg/whatsmeow/message_persist.go`. Awaiting explicit user approval per Plugin Architecture invariant.

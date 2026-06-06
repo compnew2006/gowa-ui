@@ -669,6 +669,14 @@ export const campaignsService = {
 };
 
 // Whatsmeow Instances
+export interface PerInstanceRunRow {
+  instance_id: string;
+  instance_name: string;
+  deleted_files: number;
+  retention_used: number;
+  source: "custom" | "default" | "disabled";
+}
+
 export const instancesService = {
   list: () => api.get("/instances"),
   get: (id: string) => api.get(`/instances/${id}`),
@@ -718,6 +726,24 @@ export const instancesService = {
       },
     );
   },
+  getInstanceUploadsCleanup: (id: string) =>
+    api.get(`/instances/${id}/uploads-cleanup`),
+  updateInstanceUploadsCleanup: (
+    id: string,
+    data: { inherit: boolean; retention_days?: number; reason?: string },
+  ) => api.put(`/instances/${id}/uploads-cleanup`, data),
+  getInstanceUploadsCleanupHistory: (
+    id: string,
+    params?: { limit?: number; offset?: number },
+  ) => api.get(`/instances/${id}/uploads-cleanup/history`, { params }),
+  runInstanceUploadsCleanup: (id: string) =>
+    api.post(`/instances/${id}/uploads-cleanup/run`),
+  getOrgUploadsCleanupOverview: (params?: {
+    limit?: number;
+    offset?: number;
+    q?: string;
+    source?: string;
+  }) => api.get("/org/uploads-cleanup/instances", { params }),
 };
 
 // Facebook Accounts
@@ -1516,7 +1542,13 @@ export const organizationService = {
     name?: string;
     slug?: string;
   }) => api.put("/org/settings", data),
-  runUploadsCleanupNow: () => api.post("/org/uploads-cleanup/run"),
+  runUploadsCleanupNow: () =>
+    api.post<{
+      message: string;
+      deleted_files: number;
+      retention_days: number;
+      instances: PerInstanceRunRow[];
+    }>("/org/uploads-cleanup/run"),
 };
 
 // Organizations

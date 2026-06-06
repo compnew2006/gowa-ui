@@ -1,0 +1,309 @@
+openapi: 3.0.3
+info:
+  title: Per-Instance Uploads Cleanup
+  version: 1.0.0
+  description: |
+    Endpoints that allow configuring and running Uploads Cleanup on a
+    per-WhatsApp-instance basis. Backed by the
+    `plugin/per-instance-uploads-cleanup` plugin. All responses use the
+    standard envelope (constitution §5.2); only the `data` payload is
+    documented here for brevity.
+
+    All endpoints are tenant-scoped to the caller's organization.
+    Authorization: `settings.uploads_cleanup:{read|write|execute}` per
+    `internal/models/roles.go:55,84-89`.
+servers:
+  - url: /api
+paths:
+  /instances/{id}/uploads-cleanup:
+    parameters:
+      - $ref: '#/components/parameters/InstanceId'
+    get:
+      summary: Get the uploads-cleanup sub-settings for an instance
+      description: |
+        Returns the effective retention block for the instance:
+        `inherit`, `retention_days`, `last_run_date`, plus the
+        computed `effective_retention_days` and `effective_source`
+        (`custom` | `default` | `disabled`) for the UI preview.
+      tags: [uploads-cleanup]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/InstanceUploadsCleanup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/InstanceNotFound' }
+    put:
+      summary: Update the uploads-cleanup sub-settings for an instance
+      description: |
+        Updates `inherit` and `retention_days`. On success, an audit
+        row is written. The `last_run_date` is **not** modifiable by
+        the client.
+      tags: [uploads-cleanup]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InstanceUploadsCleanupUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/InstanceUploadsCleanup' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/InstanceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /instances/{id}/uploads-cleanup/history:
+    parameters:
+      - $ref: '#/components/parameters/InstanceId'
+      - in: query
+        name: limit
+        schema: { type: integer, minimum: 1, maximum: 100, default: 5 }
+      - in: query
+        name: offset
+        schema: { type: integer, minimum: 0, default: 0 }
+    get:
+      summary: Last N retention changes for an instance
+      description: |
+        Returns the most recent audit rows for the instance, newest
+        first. The default `limit` is 5 per FR-016; pagination is
+        supported per §5.4.
+      tags: [uploads-cleanup]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/InstanceUploadsCleanupHistory' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/InstanceNotFound' }
+  /instances/{id}/uploads-cleanup/run:
+    parameters:
+      - $ref: '#/components/parameters/InstanceId'
+    post:
+      summary: Run cleanup now for a single instance
+      description: |
+        Sweeps only the files belonging to the specified instance, using
+        its effective retention. Returns the per-instance result. A
+        409 is returned if another run (workspace-wide or per-instance)
+        is in progress.
+      tags: [uploads-cleanup]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/InstanceUploadsCleanupRunResult' }
+        '400':
+          description: |
+            Retention resolves to `0` (cleanup disabled for this
+            instance). `code: uploads_cleanup_disabled`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/InstanceNotFound' }
+        '409':
+          description: Another cleanup run is in progress.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /org/uploads-cleanup/instances:
+    get:
+      summary: Paginated per-instance overview (workspace Uploads Cleanup section)
+      description: |
+        Returns one row per instance in the caller's organization, with
+        the effective retention (custom / default / disabled) and the
+        per-instance `last_run_date`. Supports pagination and search
+        per FR-014.
+      tags: [uploads-cleanup]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: q
+          schema: { type: string, maxLength: 100 }
+          description: Case-insensitive substring match against `instance.name`.
+        - in: query
+          name: source
+          schema: { type: string, enum: [custom, default, disabled, all], default: all }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/InstanceUploadsCleanupOverview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: whm_access }
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    apiKeyAuth: { type: apiKey, in: header, name: X-API-Key }
+  parameters:
+    InstanceId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Forbidden:
+      description: Authenticated but not permitted.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    InstanceNotFound:
+      description: Instance does not exist or is not in caller's org.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    ValidationError:
+      description: Validation failure.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Conflict:
+      description: State mismatch (e.g., concurrent edit).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    InternalError:
+      description: Internal error.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+  schemas:
+    Envelope:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [success, error] }
+        data: {}
+        message: { type: string }
+        meta: { nullable: true }
+    ErrorEnvelope:
+      type: object
+      required: [status, message]
+      properties:
+        status: { type: string, enum: [error] }
+        message: { type: string }
+        code: { type: string, description: 'Machine-readable error code.' }
+        meta: { nullable: true }
+    InstanceUploadsCleanup:
+      type: object
+      required: [instance_id, inherit, retention_days, effective_retention_days, effective_source, last_run_date]
+      properties:
+        instance_id: { type: string, format: uuid }
+        inherit: { type: boolean }
+        retention_days: { type: integer, nullable: true, minimum: 0, maximum: 3650, description: 'Nullable when inherit = true.' }
+        effective_retention_days: { type: integer, nullable: true, description: 'Computed; null when effective_source = "disabled".' }
+        effective_source: { type: string, enum: [custom, default, disabled] }
+        last_run_date: { type: string, nullable: true, description: 'ISO date (YYYY-MM-DD).' }
+    InstanceUploadsCleanupUpdate:
+      type: object
+      required: [inherit]
+      properties:
+        inherit: { type: boolean }
+        retention_days: { type: integer, nullable: true, minimum: 0, maximum: 3650, description: 'Required when inherit = false; ignored otherwise.' }
+        reason: { type: string, maxLength: 500, nullable: true, description: 'Optional free-form reason recorded in the audit row.' }
+    InstanceUploadsCleanupHistory:
+      type: object
+      required: [entries, total, limit, offset]
+      properties:
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/InstanceUploadsCleanupHistoryEntry' }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    InstanceUploadsCleanupHistoryEntry:
+      type: object
+      required: [id, created_at, old_inherit, new_inherit, new_retention_days]
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        actor_user_id: { type: string, format: uuid, nullable: true }
+        actor_email: { type: string, nullable: true }
+        old_inherit: { type: boolean, nullable: true }
+        new_inherit: { type: boolean }
+        old_retention_days: { type: integer, nullable: true }
+        new_retention_days: { type: integer, nullable: true }
+        reason: { type: string, nullable: true }
+    InstanceUploadsCleanupRunResult:
+      type: object
+      required: [instance_id, instance_name, deleted_files, retention_used]
+      properties:
+        instance_id: { type: string, format: uuid }
+        instance_name: { type: string }
+        deleted_files: { type: integer }
+        retention_used: { type: integer, description: 'Effective retention that was applied.' }
+    InstanceUploadsCleanupOverview:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/InstanceUploadsCleanupOverviewRow' }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    InstanceUploadsCleanupOverviewRow:
+      type: object
+      required: [instance_id, instance_name, effective_source, last_run_date]
+      properties:
+        instance_id: { type: string, format: uuid }
+        instance_name: { type: string }
+        effective_retention_days: { type: integer, nullable: true }
+        effective_source: { type: string, enum: [custom, default, disabled] }
+        last_run_date: { type: string, nullable: true }

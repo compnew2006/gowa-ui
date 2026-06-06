@@ -1,5 +1,6 @@
 import { chatsService } from "@/services/api";
 import { unwrapResponse } from "@/lib/api-utils";
+import { prefetchMediaBlob } from "@/lib/media_prefetch_cache";
 import type { Message } from "@/types/contacts";
 
 interface ExportContact {
@@ -152,12 +153,61 @@ export function buildTextExport(
 }
 
 /**
+ * Fetch image blobs for messages that have media, returning a map of message-id → base64 data URL.
+ * Limits concurrency and catches individual failures gracefully.
+ */
+export async function fetchImageDataUrls(
+  messages: Message[],
+  maxConcurrent = 4,
+  onProgress?: (loaded: number) => void,
+): Promise<Record<string, string>> {
+  const imageMessages = messages.filter(
+    (m) =>
+      (m.message_type === "image" || m.message_type === "sticker") &&
+      m.media_url,
+  );
+  const result: Record<string, string> = {};
+  let loaded = 0;
+
+  async function fetchOne(msg: Message): Promise<void> {
+    try {
+      const blob = await prefetchMediaBlob(msg.id);
+      if (!blob) return;
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve("");
+        reader.readAsDataURL(blob);
+      });
+      if (dataUrl) result[msg.id] = dataUrl;
+    } catch {
+      // skip failed images
+    } finally {
+      loaded++;
+      onProgress?.(loaded);
+    }
+  }
+
+  const queue = [...imageMessages];
+  async function worker() {
+    while (queue.length > 0) {
+      const msg = queue.shift()!;
+      await fetchOne(msg);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(maxConcurrent, queue.length) }, () => worker()));
+  return result;
+}
+
+/**
  * Build an HTML document for PDF export (opened in a new window for printing).
  */
 export function buildHtmlForPrint(
   contact: ExportContact,
   messages: Message[],
   locale: string = "en",
+  imageDataUrls: Record<string, string> = {},
 ): string {
   const displayName = contact.name || contact.phone_number;
   const isRTL = locale === "ar";
@@ -175,11 +225,21 @@ export function buildHtmlForPrint(
       const bubbleBg = isOut ? "#1e9df1" : "#e5e5e6";
       const bubbleColor = isOut ? "#fff" : "#0f1419";
 
+      const imgDataUrl = imageDataUrls[msg.id];
+      const imageHtml = imgDataUrl
+        ? `<img src="${imgDataUrl}" style="max-width:220px;max-height:180px;border-radius:8px;display:block;margin:4px 0;" />`
+        : "";
+
+      const hasImage = msg.message_type === "image" || msg.message_type === "sticker";
+      const textContent = hasImage && imgDataUrl
+        ? text.replace(/\[Image\]\s*/, "").trim()
+        : text;
+
       return `
         <div style="display:flex;justify-content:${align};margin:4px 0;padding:0 12px;">
           <div style="max-width:70%;padding:6px 10px;border-radius:12px;background:${bubbleBg};color:${bubbleColor};font-size:13px;line-height:1.5;word-wrap:break-word;">
             <div style="font-size:11px;opacity:0.7;margin-bottom:2px;">${escapeHtml(sender)} · ${time}</div>
-            ${text}
+            ${imageHtml}${textContent ? `<div>${textContent}</div>` : ""}
           </div>
         </div>`;
     })

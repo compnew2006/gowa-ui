@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
+	"github.com/compnew2006/whatomate/internal/core"
+	_ "github.com/compnew2006/whatomate/plugin/per-instance-uploads-cleanup"
 	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/database"
 	"github.com/compnew2006/whatomate/internal/frontend"
@@ -413,6 +416,18 @@ func runServer(args []string) {
 
 	// Setup routes
 	setupRoutes(g, app, lo, cfg.Server.BasePath, rdb, cfg, observabilityManager)
+
+	// Initialize and register plugins
+	if err := core.InitPlugins(app, db, rdb, slog.Default()); err != nil {
+		lo.Fatal("Failed to initialize plugins", "error", err)
+	}
+	if *migrate {
+		if err := core.RunPluginMigrations(db); err != nil {
+			lo.Fatal("Plugin migration failed", "error", err)
+		}
+		lo.Info("Plugin migrations completed")
+	}
+	core.RegisterPluginRoutes(g)
 
 	// Create server with CORS wrapper
 	maxRequestBodySizeMB := cfg.Server.MaxRequestBodySizeMB

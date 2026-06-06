@@ -124,6 +124,7 @@ import {
   buildHtmlForPrint,
   downloadTextFile,
   downloadHtmlAsPdf,
+  fetchImageDataUrls,
 } from "@/lib/chat-export";
 import { getMessageSenderPhone, isGroupContact } from "@/lib/group-chat";
 import {
@@ -1136,7 +1137,13 @@ const mentionContactResolver = new MentionContactResolver();
 const mentionResolutionVersion = ref(0);
 
 function getGroupSenderPhone(message: Message): string {
-  return getMessageSenderPhone(message);
+  const phone = getMessageSenderPhone(message)
+  const raw = message.sender_push_name
+    || (message.metadata as Record<string, unknown>)?.sender_push_name
+    || ''
+  const name = typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : ''
+  if (phone && name) return `${phone} - ${name}`
+  return phone || name
 }
 
 function isGroupMessage(message: Message): boolean {
@@ -3800,7 +3807,8 @@ async function exportChatAsPDF() {
     const account = selectedAccountFilter(selectedAccount.value);
     const allMsgs = await fetchAllMessages(contact.id, account);
     const locale = localStorage.getItem("locale") || "en";
-    const html = buildHtmlForPrint(contact, allMsgs, locale);
+    const imageDataUrls = await fetchImageDataUrls(allMsgs);
+    const html = buildHtmlForPrint(contact, allMsgs, locale, imageDataUrls);
     downloadHtmlAsPdf(html);
   } catch (error: any) {
     toast.error(error?.message || "Export failed");
@@ -4795,26 +4803,19 @@ async function sendMediaMessage() {
               </TooltipContent>
             </Tooltip>
             <Popover>
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <PopoverTrigger as-child>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="relative h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
-                      :disabled="isExportingChat"
-                      aria-label="Export chat (E)"
-                    >
-                      <Loader2 v-if="isExportingChat" class="h-4 w-4 animate-spin" />
-                      <Download v-else class="h-4 w-4" />
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <span>{{ $t("chat.exportChatTooltip") }}</span>
-                  <kbd class="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-border/50 bg-muted px-0.5 font-mono text-[10px] text-muted-foreground">E</kbd>
-                </TooltipContent>
-              </Tooltip>
+              <PopoverTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="relative h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  :disabled="isExportingChat"
+                  :title="`${t('chat.exportChatTooltip')} (E)`"
+                  aria-label="Export chat (E)"
+                >
+                  <Loader2 v-if="isExportingChat" class="h-4 w-4 animate-spin" />
+                  <Download v-else class="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
               <PopoverContent
                 class="min-w-[160px] p-1"
                 side="bottom"

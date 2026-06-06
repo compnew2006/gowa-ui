@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -124,7 +125,8 @@ func setupHandlerTestDB(t *testing.T) *gorm.DB {
 			updated_at DATETIME,
 			deleted_at DATETIME,
 			email TEXT,
-			name TEXT
+			name TEXT,
+			is_super_admin BOOLEAN DEFAULT FALSE
 		)
 	`).Error)
 
@@ -155,6 +157,10 @@ func seedOrg(t *testing.T, db *gorm.DB) uuid.UUID {
 
 func seedSuperAdmin(t *testing.T, db *gorm.DB, orgID, userID uuid.UUID) {
 	t.Helper()
+	require.NoError(t, db.Exec(
+		`INSERT INTO users (id, created_at, updated_at, email, name, is_super_admin) VALUES (?, ?, ?, ?, ?, ?)`,
+		userID.String(), time.Now().UTC(), time.Now().UTC(), "admin@test.com", "Admin", true,
+	).Error)
 	require.NoError(t, db.Exec(
 		`INSERT INTO user_organizations (id, created_at, updated_at, user_id, organization_id, is_super_admin) VALUES (?, ?, ?, ?, ?, ?)`,
 		uuid.New().String(), time.Now().UTC(), time.Now().UTC(), userID.String(), orgID.String(), true,

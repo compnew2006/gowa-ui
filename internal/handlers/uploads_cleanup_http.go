@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -61,9 +62,55 @@ func (a *App) RunUploadsCleanupNow(r *fastglue.Request) error {
 		"retention_days", result.RetentionDays,
 	)
 
+	scopedDB := tenant.ScopedDB(a.DB, orgID)
+	var instances []models.WhatsAppInstance
+	scopedDB.Find(&instances)
+
+	instancesBreakdown := make([]map[string]any, 0, len(instances))
+	for _, inst := range instances {
+		days, source := resolveInstanceRetention(inst.Settings, result.RetentionDays)
+		instDeleted := 0
+		if days > 0 {
+			d := days
+			instDeleted, _ = RunManualCleanupForInstance(context.Background(), a, orgID, inst.ID, &d)
+		}
+		instancesBreakdown = append(instancesBreakdown, map[string]any{
+			"instance_id":    inst.ID,
+			"instance_name":  inst.Name,
+			"deleted_files":  instDeleted,
+			"retention_used": days,
+			"source":         source,
+		})
+	}
+
 	return r.SendEnvelope(map[string]any{
-		"message":        fmt.Sprintf("Uploads cleanup completed. Deleted %d file(s).", result.DeletedFiles),
+		"message":        fmt.Sprintf("Uploads cleanup completed. Deleted %d file(s) across %d instance(s).", result.DeletedFiles, len(instances)),
 		"deleted_files":  result.DeletedFiles,
 		"retention_days": result.RetentionDays,
+		"instances":      instancesBreakdown,
 	})
+}
+
+// resolveInstanceRetention returns (days, source) for an instance based on its
+// settings JSONB, falling back to the workspace default.
+func resolveInstanceRetention(settings models.JSONB, workspaceDefault int) (int, string) {
+	uc, ok := settings["uploads_cleanup"].(map[string]interface{})
+	if !ok {
+		if workspaceDefault > 0 {
+			return workspaceDefault, "default"
+		}
+		return 0, "disabled"
+	}
+	inherit, _ := uc["inherit"].(bool)
+	if inherit {
+		if workspaceDefault > 0 {
+			return workspaceDefault, "default"
+		}
+		return 0, "disabled"
+	}
+	rd, ok := uc["retention_days"].(float64)
+	if !ok || int(rd) <= 0 {
+		return 0, "disabled"
+	}
+	return int(rd), "custom"
 }

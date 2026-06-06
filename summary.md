@@ -435,6 +435,40 @@ All 9 Facebook package tests pass (5 pre-existing + 4 new). `go test -race -p 1 
 
 <!-- END -->
 
+## Per-Instance Uploads Cleanup Implementation — 2026-06-06
+
+### Branch
+`001-per-instance-uploads-cleanup`
+
+### Files Created
+- `plugin/per-instance-uploads-cleanup/` — full plugin (plugin.go, model.go, service.go, validation.go, handler_retention.go, tests)
+- `internal/core/plugin.go` — Plugin interface
+- `internal/handlers/uploads_cleanup_worker_instance.go` — RunManualCleanupForInstance wrapper
+- `frontend/src/composables/usePerInstanceUploadsCleanup.ts` — 5 Vue Query composables
+- `frontend/src/components/settings/PerInstanceUploadsCleanup.vue` — Full UI component
+
+### Files Modified
+- `cmd/whatomate/main.go` — blank import
+- `frontend/src/services/api.ts` — 5 new API methods
+- `frontend/src/components/whatsmeow/InstanceCard.vue` — component mount
+- `frontend/src/i18n/locales/{en,es,ar}.json` — 15 i18n keys
+
+### Test Results
+- Go: 16/16 PASS with -race
+- Frontend: typecheck + lint clean
+- Build: make build succeeds
+
+### Gotchas
+- `CREATE INDEX ... DESC` is PostgreSQL-only; removed for SQLite compat
+- Plugin tests use manual SQLite tables (GORM AutoMigrate fails on type:uuid)
+- `Migrate()` backfill uses `::jsonb` — PostgreSQL-only
+
+### Deferred
+- Handler contract tests (T017-T018) — need fastglue Request mocking
+- Frontend component tests (T021, T033, T042) — need Vitest + MSW
+- T037 SettingsView DataTable, T045 org run response — require further UI/core work
+- T053-T055 E2E/rollback — require running infrastructure
+
 ## Constitution Update to Version 1.1.0 — 2026-06-06
 
 - **Objective**: Synthesized and integrated the constraints, rules, and workflows from all `docs/` files into `.specify/memory/constitution.md`.
@@ -449,3 +483,24 @@ All 9 Facebook package tests pass (5 pre-existing + 4 new). `go test -race -p 1 
   - Checked that no bracketed placeholder tokens remain in the document.
   - Verified frontend typescript compilation via `npm run typecheck` passes cleanly.
   - Verified backend test suite execution via `make test`.
+
+
+## Handler Contract Tests — 2026-06-06
+
+**Tasks completed**: T017, T018, T031, T032
+
+**Files changed**:
+- `plugin/per-instance-uploads-cleanup/handler_retention_test.go` (new — 520 lines)
+- `specs/001-per-instance-uploads-cleanup/tasks.md` (checkboxes updated)
+
+**Approach**: SQLite in-memory test DB with manually-created schema. fasthttp.RequestCtx initialized via ctx.Init() to prevent context.Done() nil panics. RBAC seeded via seedSuperAdmin helper.
+
+**Tests added (12 new, total 38 plugin tests passing with -race)**:
+- T017: GET retention (success, 404, missing org)
+- T018: PUT retention (success+audit, max 400, missing days 400, Q-OPT-2 preserve)
+- T031: Overview (envelope+pagination, source filter)
+- T032: History (default limit=5, invalid limit 400, exceeds max 400)
+
+**Gotchas**: tenant key is "organization_id" not "org_id"; fasthttp.RequestCtx needs Init(); SendErrorEnvelope status is HTTP status not JSON field; SQLite no ILIKE/DESC in CREATE INDEX; GORM db.Exec() returns *gorm.DB chain .Error.
+
+**Remaining**: T045 (core mod needs approval), T037/T033/T021/T042 (frontend), T040/T041 (run handler tests), T016a (worker test), T053-T055 (infra required).

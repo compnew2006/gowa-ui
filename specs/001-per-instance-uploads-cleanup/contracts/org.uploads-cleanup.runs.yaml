@@ -1,0 +1,101 @@
+openapi: 3.0.3
+info:
+  title: Org-Wide Uploads Cleanup Runs (extended response)
+  version: 1.0.0
+  description: |
+    Documents the **additive** change to the existing
+    `POST /api/org/uploads-cleanup/run` response so the workspace
+    Uploads Cleanup overview can render a per-instance breakdown
+    (per C-2 in `../research.md`). No new endpoint, no breaking
+    change to existing fields.
+servers:
+  - url: /api
+paths:
+  /org/uploads-cleanup/run:
+    post:
+      summary: Run cleanup now for the entire workspace
+      description: |
+        Existing endpoint. The response now includes a per-instance
+        breakdown in the new `instances` field. The legacy top-level
+        `deleted_files` and `retention_days` fields are kept and
+        represent the totals across all instances.
+      tags: [uploads-cleanup]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/OrgUploadsCleanupRunResult' }
+        '400':
+          description: Workspace default retention resolves to 0.
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Another cleanup run is in progress.
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+        '500': { $ref: '#/components/responses/InternalError' }
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: whm_access }
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    apiKeyAuth: { type: apiKey, in: header, name: X-API-Key }
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Forbidden:
+      description: Authenticated but not permitted.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    InternalError:
+      description: Internal error.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+  schemas:
+    Envelope:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [success, error] }
+        data: {}
+        message: { type: string }
+        meta: { nullable: true }
+    ErrorEnvelope:
+      type: object
+      required: [status, message]
+      properties:
+        status: { type: string, enum: [error] }
+        message: { type: string }
+        code: { type: string }
+        meta: { nullable: true }
+    OrgUploadsCleanupRunResult:
+      type: object
+      required: [message, deleted_files, retention_days, instances]
+      properties:
+        message: { type: string, example: 'Uploads cleanup completed. Deleted 137 file(s) across 3 instance(s).' }
+        deleted_files:
+          type: integer
+          description: 'LEGACY field — total across all instances. Kept for backward compatibility (constitution §5.1).'
+        retention_days:
+          type: integer
+          description: 'LEGACY field — most restrictive effective retention across all instances.'
+        instances:
+          type: array
+          items: { $ref: '#/components/schemas/PerInstanceRunRow' }
+    PerInstanceRunRow:
+      type: object
+      required: [instance_id, instance_name, deleted_files, retention_used, source]
+      properties:
+        instance_id: { type: string, format: uuid }
+        instance_name: { type: string }
+        deleted_files: { type: integer }
+        retention_used: { type: integer, description: 'Effective retention applied to this instance.' }
+        source: { type: string, enum: [custom, default, disabled], description: 'Whether retention_used came from the instance override or the workspace default.' }

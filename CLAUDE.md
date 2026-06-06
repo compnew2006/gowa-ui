@@ -998,3 +998,15 @@ Use for: cross-session entity tracking (users, orgs, recurring patterns).
 | `sequentialthinking` | Multi-step reasoning chain with backtracking |
 
 Use when: complex architectural decisions, multi-file refactors, ambiguous task decomposition.
+
+## Active Technologies
+- Go 1.25.8 (project CI version; module `github.com/compnew2006/whatomate`) + TypeScript / Vue 3 / Vite (frontend) + Backend — `fasthttp` + `fastglue` (NOT `net/http`), GORM + PostgreSQL 17, Redis 7, `gorm.io/gorm`, `github.com/google/uuid`, `github.com/zerodha/fastglue`, `github.com/valyala/fasthttp`. Frontend — Vue 3 Composition API, `@tanstack/vue-query`, `vue-i18n` (en/es/ar), `vue-sonner`, shadcn-vue + Tailwind CSS v3. (001-per-instance-uploads-cleanup)
+- PostgreSQL 17 via GORM `AutoMigrate`. New persistent data: (a) per-instance `WhatsAppInstance.settings` JSONB sub-keys `uploads_cleanup.retention_days` (int) and `uploads_cleanup.last_run_date` (string) — no schema change; (b) one new GORM model `InstanceUploadsCleanupAudit` registered in plugin `Migrate`. Filesystem storage path is unchanged (`<LocalPath>/orgs/<orgID>/...`); instance scope is resolved via `Message.instance_id` and `MediaAsset` linkage, falling back to workspace default for unscoped files. (001-per-instance-uploads-cleanup)
+
+## Recent Changes
+- 001-per-instance-uploads-cleanup: Added Go 1.25.8 (project CI version; module `github.com/compnew2006/whatomate`) + TypeScript / Vue 3 / Vite (frontend) + Backend — `fasthttp` + `fastglue` (NOT `net/http`), GORM + PostgreSQL 17, Redis 7, `gorm.io/gorm`, `github.com/google/uuid`, `github.com/zerodha/fastglue`, `github.com/valyala/fasthttp`. Frontend — Vue 3 Composition API, `@tanstack/vue-query`, `vue-i18n` (en/es/ar), `vue-sonner`, shadcn-vue + Tailwind CSS v3.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->
