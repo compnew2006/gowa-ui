@@ -455,6 +455,81 @@ func makeRequestWithQuery(t *testing.T, orgID, userID, instanceID uuid.UUID, que
 	return &fastglue.Request{RequestCtx: &ctx}
 }
 
+// --- GET /api/org/uploads-cleanup/instances (overview) ---
+
+func TestHandleOverview_BasicEnvelope(t *testing.T) {
+	t.Parallel()
+
+	db := setupHandlerTestDB(t)
+	p := setupPlugin(t, db)
+	orgID := seedOrg(t, db)
+	userID := uuid.New()
+	seedSuperAdmin(t, db, orgID, userID)
+
+	// Seed two instances with different settings.
+	seedInstanceHandlerTest(t, db, orgID, `{"uploads_cleanup":{"inherit":false,"retention_days":30}}`)
+	seedInstanceHandlerTest(t, db, orgID, `{"uploads_cleanup":{"inherit":true}}`)
+
+	r := makeRequest(t, orgID, userID, uuid.Nil, nil)
+
+	err := p.handleOverview(r)
+	require.NoError(t, err)
+
+	envelope := readResponseEnvelope(t, r.RequestCtx)
+	assert.Equal(t, "success", envelope["status"])
+
+	data, ok := envelope["data"].(map[string]interface{})
+	require.True(t, ok)
+
+	items, ok := data["items"].([]interface{})
+	require.True(t, ok, "items should be a slice")
+	assert.Equal(t, 2, len(items), "should have 2 instance rows")
+
+	// Verify envelope pagination fields.
+	assert.Equal(t, float64(20), data["limit"])
+	assert.Equal(t, float64(0), data["offset"])
+	assert.Equal(t, float64(2), data["total"])
+}
+
+func TestHandleOverview_FilterBySource(t *testing.T) {
+	t.Parallel()
+
+	db := setupHandlerTestDB(t)
+	p := setupPlugin(t, db)
+	orgID := seedOrgWithCleanup(t, db, 90) // workspace default = 90 days
+	userID := uuid.New()
+	seedSuperAdmin(t, db, orgID, userID)
+
+	// Instance with custom retention (source="custom").
+	seedInstanceHandlerTest(t, db, orgID, `{"uploads_cleanup":{"inherit":false,"retention_days":30}}`)
+	// Instance inheriting (source="default").
+	seedInstanceHandlerTest(t, db, orgID, `{"uploads_cleanup":{"inherit":true}}`)
+
+	// Filter for source=custom only.
+	r := makeRequestWithQuery(t, orgID, userID, uuid.Nil, "source=custom")
+	err := p.handleOverview(r)
+	require.NoError(t, err)
+
+	envelope := readResponseEnvelope(t, r.RequestCtx)
+	data := envelope["data"].(map[string]interface{})
+	items := data["items"].([]interface{})
+	assert.Equal(t, 1, len(items), "should have 1 custom instance")
+
+	row := items[0].(map[string]interface{})
+	assert.Equal(t, "custom", row["effective_source"])
+}
+
+func seedOrgWithCleanup(t *testing.T, db *gorm.DB, retentionDays int) uuid.UUID {
+	t.Helper()
+	orgID := uuid.New()
+	settings := fmt.Sprintf(`{"uploads_cleanup_retention_days":%d}`, retentionDays)
+	require.NoError(t, db.Exec(
+		`INSERT INTO organizations (id, created_at, updated_at, name, slug, settings) VALUES (?, ?, ?, ?, ?, ?)`,
+		orgID.String(), time.Now().UTC(), time.Now().UTC(), "Test Org", "test-org-"+orgID.String()[:8], settings,
+	).Error)
+	return orgID
+}
+
 func TestHandleRun_DisabledRetention(t *testing.T) {
 	t.Parallel()
 

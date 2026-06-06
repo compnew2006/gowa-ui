@@ -99,7 +99,7 @@ description: "Task list for Per-Instance Uploads Cleanup Retention"
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T031 [P] [US2] Contract test for `GET /api/org/uploads-cleanup/instances` at `plugin/per-instance-uploads-cleanup/handler_overview_test.go` asserting pagination envelope shape (data: items+total+limit+offset), filter by `source=custom|default|disabled|all`, search by `q` substring match, 403 on missing read permission
+- [X] T031 [P] [US2] Contract test for `GET /api/org/uploads-cleanup/instances` at `plugin/per-instance-uploads-cleanup/handler_overview_test.go` asserting pagination envelope shape (data: items+total+limit+offset), filter by `source=custom|default|disabled|all`, search by `q` substring match, 403 on missing read permission
 - [X] T032 [P] [US2] Contract test for `GET /api/instances/{id}/uploads-cleanup/history` at `plugin/per-instance-uploads-cleanup/handler_retention_test.go` asserting: default `limit=5`, max `limit=100`, ordering is `created_at DESC`, 400 on `limit=0` or `limit>100`
 - [ ] T033 [P] [US2] Frontend integration test at `frontend/src/views/settings/SettingsView.spec.ts` (extend existing file) asserting the per-instance overview renders, paginates, filters by `source`, and clicking a row navigates to the instance's settings
 
