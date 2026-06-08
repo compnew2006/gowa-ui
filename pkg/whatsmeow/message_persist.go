@@ -288,43 +288,10 @@ func (cm *ConnectionManager) persistParsedMessage(
 		conversationID = directConversationID(chatJID, contactDetails.PhoneNumber)
 	}
 
-	metadata := models.JSONB{
-		"push_name":  evt.Info.PushName,
-		"is_group":   isGroup,
-		"is_channel": isChannel,
-	}
-	if isGroup {
-		metadata["is_group_chat"] = true
-		metadata["group_jid"] = chatJID.String()
-		metadata["sender_phone"] = senderPhone
-		metadata["sender_push_name"] = evt.Info.PushName
-
-		if contactDetails.GroupName != "" {
-			metadata["group_name"] = contactDetails.GroupName
-		}
-		if contactDetails.GroupTopic != "" {
-			metadata["group_topic"] = contactDetails.GroupTopic
-		}
-	} else if isChannel {
-		metadata["is_channel_chat"] = true
-		metadata["channel_jid"] = chatJID.String()
-		if contactDetails.ChannelName != "" {
-			metadata["channel_name"] = contactDetails.ChannelName
-		}
-		if contactDetails.ChannelDescription != "" {
-			metadata["channel_description"] = contactDetails.ChannelDescription
-		}
-	}
+	metadata := buildMessageMetadata(evt.Info.PushName, isGroup, isChannel, chatJID, senderPhone, contactDetails)
 	replyCtx.applyMetadata(metadata)
 
-	direction := models.DirectionIncoming
-	status := models.MessageStatusReceived
-	if evt.Info.IsFromMe {
-		direction = models.DirectionOutgoing
-		status = models.MessageStatusSent
-	} else if opts.HistorySync {
-		status = models.MessageStatusRead
-	}
+	direction, status := messageDirectionAndStatus(evt.Info.IsFromMe, opts.HistorySync)
 
 	createdAt := evt.Info.Timestamp
 	if createdAt.IsZero() {
@@ -433,45 +400,7 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 
 	if direction == models.DirectionIncoming && mediaRetryArtifact != nil {
-		recoveryJob, enqueueErr := buildInboundMediaRecoveryJob(&message, mediaRetryArtifact)
-		if enqueueErr == nil {
-			enqueueErr = cm.enqueueInboundMediaRecovery(ctx, recoveryJob)
-		}
-
-		nextMetadata := cloneJSONBMap(message.Metadata)
-		if nextMetadata == nil {
-			nextMetadata = models.JSONB{}
-		}
-		if recoveryJob != nil {
-			setInboundMediaAsyncJobMetadata(nextMetadata, recoveryJob)
-		}
-		nextMetadata[inboundMediaAsyncLastErrorKey] = strings.TrimSpace(mediaRetryArtifact.LastError)
-		nextMetadata[inboundMediaAsyncRecoveredAtKey] = nil
-
-		var nextErrorMessage string
-		if enqueueErr == nil {
-			nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusQueued
-			nextMetadata[inboundMediaAsyncEnqueuedAtKey] = time.Now().UTC().Format(time.RFC3339Nano)
-			delete(nextMetadata, inboundMediaAsyncEnqueueErrorKey)
-			nextErrorMessage = "Inbound media download failed inline; queued for async recovery"
-		} else {
-			nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusEnqueueFail
-			nextMetadata[inboundMediaAsyncEnqueueErrorKey] = enqueueErr.Error()
-			nextErrorMessage = fmt.Sprintf("Inbound media download failed inline and async enqueue failed: %v", enqueueErr)
-		}
-
-		if err := cm.db.WithContext(ctx).
-			Model(&models.Message{}).
-			Where("id = ?", message.ID).
-			Updates(map[string]any{
-				"metadata":      nextMetadata,
-				"error_message": nextErrorMessage,
-			}).Error; err != nil {
-			cm.logger.Warn("Failed to persist inbound media async recovery marker", "message_id", message.ID, "error", err)
-		} else {
-			message.Metadata = nextMetadata
-			message.ErrorMessage = nextErrorMessage
-		}
+		cm.enqueueInboundMediaRecoveryWithMarker(ctx, &message, mediaRetryArtifact)
 	}
 
 	if direction == models.DirectionIncoming {
@@ -482,44 +411,9 @@ func (cm *ConnectionManager) persistParsedMessage(
 		cm.MarkMessageReceived(instanceID)
 	}
 
-	preview := content
-	if len(preview) > 100 {
-		preview = preview[:100] + "..."
-	}
-	if preview == "" {
-		preview = "[" + string(msgType) + "]"
-	}
+	preview := truncatePreview(content, msgType)
 
-	if opts.HistorySync {
-		updates := map[string]any{
-			"last_message_at":      message.CreatedAt,
-			"last_message_preview": preview,
-			"whats_app_account":    myAccount,
-		}
-		if direction == models.DirectionIncoming {
-			updates["is_read"] = true
-		}
-
-		if err := cm.db.WithContext(ctx).
-			Model(&models.Contact{}).
-			Where("id = ? AND (last_message_at IS NULL OR last_message_at <= ?)", contact.ID, message.CreatedAt).
-			Updates(updates).Error; err != nil {
-			cm.logger.Warn("Failed to update contact history preview", "contact_id", contact.ID, "error", err)
-		}
-	} else {
-		now := time.Now()
-		updates := map[string]any{
-			"last_message_at":      &now,
-			"last_message_preview": preview,
-			"whats_app_account":    myAccount,
-		}
-		if direction == models.DirectionIncoming {
-			updates["is_read"] = false
-		}
-		if err := cm.db.WithContext(ctx).Model(contact).Updates(updates).Error; err != nil {
-			cm.logger.Warn("Failed to update contact message preview", "contact_id", contact.ID, "error", err)
-		}
-	}
+	cm.updateContactPreview(ctx, contact, preview, direction, myAccount, message.CreatedAt, opts.HistorySync)
 
 	message.Contact = contact
 
@@ -554,6 +448,130 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 
 	return &message, nil
+}
+
+func messageDirectionAndStatus(isFromMe, isHistorySync bool) (models.Direction, models.MessageStatus) {
+	if isFromMe {
+		return models.DirectionOutgoing, models.MessageStatusSent
+	}
+	if isHistorySync {
+		return models.DirectionIncoming, models.MessageStatusRead
+	}
+	return models.DirectionIncoming, models.MessageStatusReceived
+}
+
+func buildMessageMetadata(pushName string, isGroup, isChannel bool, chatJID types.JID, senderPhone string, details inboundContactDetails) models.JSONB {
+	metadata := models.JSONB{
+		"push_name":  pushName,
+		"is_group":   isGroup,
+		"is_channel": isChannel,
+	}
+	if isGroup {
+		metadata["is_group_chat"] = true
+		metadata["group_jid"] = chatJID.String()
+		metadata["sender_phone"] = senderPhone
+		metadata["sender_push_name"] = pushName
+		if details.GroupName != "" {
+			metadata["group_name"] = details.GroupName
+		}
+		if details.GroupTopic != "" {
+			metadata["group_topic"] = details.GroupTopic
+		}
+	} else if isChannel {
+		metadata["is_channel_chat"] = true
+		metadata["channel_jid"] = chatJID.String()
+		if details.ChannelName != "" {
+			metadata["channel_name"] = details.ChannelName
+		}
+		if details.ChannelDescription != "" {
+			metadata["channel_description"] = details.ChannelDescription
+		}
+	}
+	return metadata
+}
+
+func truncatePreview(content string, msgType models.MessageType) string {
+	if len(content) > 100 {
+		return content[:100] + "..."
+	}
+	if content == "" {
+		return "[" + string(msgType) + "]"
+	}
+	return content
+}
+
+func (cm *ConnectionManager) enqueueInboundMediaRecoveryWithMarker(ctx context.Context, message *models.Message, artifact *inboundMediaRetryArtifact) {
+	recoveryJob, enqueueErr := buildInboundMediaRecoveryJob(message, artifact)
+	if enqueueErr == nil {
+		enqueueErr = cm.enqueueInboundMediaRecovery(ctx, recoveryJob)
+	}
+
+	nextMetadata := cloneJSONBMap(message.Metadata)
+	if nextMetadata == nil {
+		nextMetadata = models.JSONB{}
+	}
+	if recoveryJob != nil {
+		setInboundMediaAsyncJobMetadata(nextMetadata, recoveryJob)
+	}
+	nextMetadata[inboundMediaAsyncLastErrorKey] = strings.TrimSpace(artifact.LastError)
+	nextMetadata[inboundMediaAsyncRecoveredAtKey] = nil
+
+	var nextErrorMessage string
+	if enqueueErr == nil {
+		nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusQueued
+		nextMetadata[inboundMediaAsyncEnqueuedAtKey] = time.Now().UTC().Format(time.RFC3339Nano)
+		delete(nextMetadata, inboundMediaAsyncEnqueueErrorKey)
+		nextErrorMessage = "Inbound media download failed inline; queued for async recovery"
+	} else {
+		nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusEnqueueFail
+		nextMetadata[inboundMediaAsyncEnqueueErrorKey] = enqueueErr.Error()
+		nextErrorMessage = fmt.Sprintf("Inbound media download failed inline and async enqueue failed: %v", enqueueErr)
+	}
+
+	if err := cm.db.WithContext(ctx).
+		Model(&models.Message{}).
+		Where("id = ?", message.ID).
+		Updates(map[string]any{
+			"metadata":      nextMetadata,
+			"error_message": nextErrorMessage,
+		}).Error; err != nil {
+		cm.logger.Warn("Failed to persist inbound media async recovery marker", "message_id", message.ID, "error", err)
+	} else {
+		message.Metadata = nextMetadata
+		message.ErrorMessage = nextErrorMessage
+	}
+}
+
+func (cm *ConnectionManager) updateContactPreview(ctx context.Context, contact *models.Contact, preview string, direction models.Direction, myAccount string, messageCreatedAt time.Time, isHistorySync bool) {
+	if isHistorySync {
+		updates := map[string]any{
+			"last_message_at":      messageCreatedAt,
+			"last_message_preview": preview,
+			"whats_app_account":    myAccount,
+		}
+		if direction == models.DirectionIncoming {
+			updates["is_read"] = true
+		}
+		if err := cm.db.WithContext(ctx).
+			Model(&models.Contact{}).
+			Where("id = ? AND (last_message_at IS NULL OR last_message_at <= ?)", contact.ID, messageCreatedAt).
+			Updates(updates).Error; err != nil {
+			cm.logger.Warn("Failed to update contact history preview", "contact_id", contact.ID, "error", err)
+		}
+	} else {
+		now := time.Now()
+		updates := map[string]any{
+			"last_message_at":      &now,
+			"last_message_preview": preview,
+			"whats_app_account":    myAccount,
+		}
+		if direction == models.DirectionIncoming {
+			updates["is_read"] = false
+		}
+		if err := cm.db.WithContext(ctx).Model(contact).Updates(updates).Error; err != nil {
+			cm.logger.Warn("Failed to update contact message preview", "contact_id", contact.ID, "error", err)
+		}
+	}
 }
 
 func buildInboundMediaRecoveryJob(message *models.Message, artifact *inboundMediaRetryArtifact) (*queue.InboundMediaJob, error) {
