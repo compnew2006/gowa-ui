@@ -980,7 +980,7 @@ func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID 
 	// If the campaign has a poll configured, send a native WhatsApp poll instead of text.
 	if campaign != nil && strings.TrimSpace(campaign.PollQuestion) != "" {
 		if pollSender, ok := w.MessageProvider.(provider.PollProvider); ok {
-			options := pollOptionsToStrings(campaign.PollOptions)
+			options := campaign.PollOptions.Strings()
 			if len(options) >= 2 {
 				return pollSender.SendPoll(sendCtx, instanceID, recipient.PhoneNumber, campaign.PollQuestion, options, campaign.PollMaxSelections)
 			}
@@ -988,20 +988,6 @@ func (w *Worker) sendTemplateMessageViaProvider(ctx context.Context, instanceID 
 	}
 
 	return w.MessageProvider.SendText(sendCtx, instanceID, recipient.PhoneNumber, body)
-}
-
-// pollOptionsToStrings extracts a []string from JSONBArray poll options.
-func pollOptionsToStrings(raw models.JSONBArray) []string {
-	if raw == nil {
-		return nil
-	}
-	var out []string
-	for _, v := range raw {
-		if s, ok := v.(string); ok && s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func classifyCampaignMediaType(mimeType, filename string) string {

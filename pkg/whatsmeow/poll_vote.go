@@ -40,10 +40,8 @@ func (cm *ConnectionManager) handlePollVote(
 		return
 	}
 
-	// Find the original poll message to resolve selected option names.
 	selectedNames := cm.resolveSelectedOptionNames(ctx, orgID, instanceID, originalWAMID, vote.GetSelectedOptions())
 
-	// Find or create the contact for the voter.
 	senderPhone := cm.resolveSenderPhone(ctx, client, evt.Info)
 	if senderPhone == "" {
 		senderPhone = evt.Info.Sender.User
@@ -54,7 +52,6 @@ func (cm *ConnectionManager) handlePollVote(
 		return
 	}
 
-	// Find the original poll message to link as reply.
 	var originalMsg models.Message
 	err = cm.db.WithContext(ctx).
 		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?", orgID, instanceID, originalWAMID).

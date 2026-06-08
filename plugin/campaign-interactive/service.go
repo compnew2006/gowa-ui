@@ -9,7 +9,6 @@ import (
 )
 
 func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResponse, error) {
-	// Find the campaign to get poll config.
 	var campaign models.BulkMessageCampaign
 	if err := db.Where("id = ?", campaignID).First(&campaign).Error; err != nil {
 		return nil, fmt.Errorf("campaign not found: %w", err)
@@ -18,7 +17,6 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 		return nil, nil
 	}
 
-	// Get all recipient WA message IDs for this campaign.
 	var recipientMsgIDs []string
 	if err := db.Model(&models.BulkMessageRecipient{}).
 		Where("campaign_id = ? AND whats_app_message_id != ''", campaignID).
@@ -27,7 +25,7 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 	}
 
 	if len(recipientMsgIDs) == 0 {
-		options := pollOptionStrings(campaign.PollOptions)
+		options := campaign.PollOptions.Strings()
 		return &PollVotesResponse{
 			Question: campaign.PollQuestion,
 			Options:  options,
@@ -36,9 +34,8 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 		}, nil
 	}
 
-	options := pollOptionStrings(campaign.PollOptions)
+	options := campaign.PollOptions.Strings()
 
-	// Find poll vote messages that are replies to the campaign poll messages.
 	type voteRow struct {
 		Content   string `gorm:"column:content"`
 		CreatedAt string `gorm:"column:created_at"`
@@ -56,7 +53,6 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 		return nil, fmt.Errorf("failed to query votes: %w", err)
 	}
 
-	// Count votes per option.
 	counts := make(map[string]int64, len(options))
 	for _, v := range votes {
 		counts[v.Content]++
@@ -72,7 +68,6 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 			Count:  c,
 		})
 	}
-	// Calculate percentages.
 	for i := range results {
 		if total > 0 {
 			results[i].Percentage = fmt.Sprintf("%.1f%%", float64(results[i].Count)/float64(total)*100)
@@ -87,19 +82,6 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 		Total:    total,
 		Results:  results,
 	}, nil
-}
-
-func pollOptionStrings(raw models.JSONBArray) []string {
-	if raw == nil {
-		return nil
-	}
-	var out []string
-	for _, v := range raw {
-		if s, ok := v.(string); ok && s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func zeroResults(options []string) []PollVote {
