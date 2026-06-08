@@ -160,6 +160,11 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 | POST   | `/api/instances/{id}/reconnect`           | Reconnect instance                      |
 | POST   | `/api/instances/{id}/status/send`         | Post a status update from instance      |
 | POST   | `/api/instances/{id}/auto-campaign/media` | Upload media for instance auto-campaign |
+| GET    | `/api/instances/{id}/uploads-cleanup`     | Get per-instance uploads cleanup settings |
+| PUT    | `/api/instances/{id}/uploads-cleanup`     | Update per-instance uploads cleanup settings |
+| GET    | `/api/instances/{id}/uploads-cleanup/history` | Get uploads cleanup audit history |
+| POST   | `/api/instances/{id}/uploads-cleanup/run` | Manually trigger uploads cleanup |
+| GET    | `/api/org/uploads-cleanup/instances`      | Overview of all instance cleanup settings |
 
 ## Campaigns & Bulk Messaging
 
@@ -180,6 +185,7 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 | DELETE | `/api/campaigns/{id}/recipients/{recipientId}` | Remove recipient from campaign    |
 | POST   | `/api/campaigns/{id}/media`                    | Upload media for campaign         |
 | GET    | `/api/campaigns/{id}/media`                    | Serve campaign media              |
+| GET    | `/api/campaigns/{id}/poll/votes`               | Get poll vote analytics           |
 
 ## Chatbot & AI
 

@@ -52,6 +52,7 @@ This document provides a 100% exhaustive extraction of the Whatomate database sc
 | **Ops/Infra** | `license_records` | `LicenseRecord` | No | No | Deployment Entitlements |
 | **Ops/Infra** | `license_events` | `LicenseEvent` | No | No | Enforcement audit trail |
 | **Ops/Infra** | `user_availability_logs`| `UserAvailabilityLog` | Yes | No | Productivity tracking |
+| **Plugin** | `instance_uploads_cleanup_audits` | `InstanceUploadsCleanupAudit` | Yes | No | Uploads cleanup audit trail (per-instance-uploads-cleanup plugin) |
 
 ---
 
@@ -183,9 +184,10 @@ This document provides a 100% exhaustive extraction of the Whatomate database sc
 *   **Columns**:
     *   `contact_id`, `instance_id`: `UUID`
     *   `direction`: `TEXT` (incoming, outgoing)
-    *   `message_type`: `TEXT` (text, image, template, flow)
+    *   `message_type`: `TEXT` (text, image, template, flow, poll)
     *   `content`: `TEXT`
     *   `media_asset_id`: `UUID`
+    *   `interactive_data`: `JSONB` (Poll structure, vote selections, button responses)
     *   `status`: `TEXT` (pending, sent, delivered, read, failed)
 *   **Indexes**: `idx_messages_contact_created` (Composite for chat history).
 *   **API**: `GET /api/contacts/{id}/messages`.
@@ -281,6 +283,9 @@ This document provides a 100% exhaustive extraction of the Whatomate database sc
     *   `template_id`: `UUID`
     *   `min_delay_seconds`, `max_delay_seconds`: `INT` (Anti-ban throttling)
     *   `status`: `TEXT` (draft, queued, processing, completed)
+    *   `poll_question`: `TEXT` (Poll question text, empty = no poll)
+    *   `poll_options`: `JSONB` (Array of poll option strings, default `[]`)
+    *   `poll_max_selections`: `INT` (Max selectable options, default 0 = unlimited)
 *   **API**: `/api/campaigns`.
 
 #### `bulk_message_recipients`
@@ -317,6 +322,17 @@ This document provides a 100% exhaustive extraction of the Whatomate database sc
 #### `catalogs` & `catalog_products`
 *   **Columns**: `meta_catalog_id`, `meta_product_id`, `price`, `currency`.
 *   **API**: `/api/catalogs`.
+
+#### `instance_uploads_cleanup_audits` (Plugin: per-instance-uploads-cleanup)
+*   **Columns**:
+    *   `organization_id`, `instance_id`: `UUID`
+    *   `actor_user_id`: `UUID` (Nullable)
+    *   `actor_email`: `TEXT` (Nullable)
+    *   `old_inherit`: `BOOLEAN` (Nullable)
+    *   `new_inherit`: `BOOLEAN`
+    *   `old_retention_days`, `new_retention_days`: `INT`
+    *   `reason`: `TEXT` (Nullable)
+*   **Indexes**: `idx_iuca_org_instance_created` (Composite: organization_id, instance_id, created_at).
 
 #### `conversation_notes`
 *   **Columns**: `contact_id`, `created_by_id`, `content`.

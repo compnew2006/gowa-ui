@@ -95,20 +95,6 @@ func (j *JSONBArray) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, j)
 }
 
-// Strings returns the non-empty string elements of the array.
-func (j JSONBArray) Strings() []string {
-	if j == nil {
-		return nil
-	}
-	out := make([]string, 0, len(j))
-	for _, v := range j {
-		if s, ok := v.(string); ok && s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
 // StringArray is a custom type for PostgreSQL text[] columns
 type StringArray []string
 

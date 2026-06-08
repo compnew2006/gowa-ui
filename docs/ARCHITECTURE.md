@@ -98,6 +98,9 @@ Handler return convention: `(*handlers.Envelope, error)` — standardized JSON r
 - Meta Cloud API adapter: `pkg/whatsapp/`
 - WhatsMeow Web protocol adapter: `pkg/whatsmeow/`
 
+Optional extension interfaces:
+- `PollProvider` — `SendPoll(ctx, instanceID, to, question, options, maxSelections)` for native WhatsApp polls (whatsmeow only)
+
 Routes requiring Meta use `app.ProviderGuard("meta", handler)` wrapper.
 
 ### Multi-Tenancy (`internal/tenant/`)
@@ -229,6 +232,9 @@ FacebookAccount, FacebookOAuthState, FacebookComment, FacebookCommentReply, Face
 
 #### Other (4)
 CannedResponse, SavedContent, Catalog, CatalogProduct, Widget, UserAvailabilityLog, GroupDirectory
+
+#### Plugins (2 models)
+InstanceUploadsCleanupAudit (per-instance-uploads-cleanup plugin)
 
 ### Indexing
 Custom indexes defined in `getIndexes()` function, applied after AutoMigrate in `RunMigrationWithProgress()`.

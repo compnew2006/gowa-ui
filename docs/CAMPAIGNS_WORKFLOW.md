@@ -81,6 +81,9 @@ frontend/src/i18n/locales/{en,es,ar}.json  ~180 i18n keys
 | StartedAt | *time.Time | Actual start timestamp |
 | CompletedAt | *time.Time | Completion timestamp |
 | CreatedBy | uuid.UUID | Creator user ID |
+| PollQuestion | text | Poll question (empty = no poll) |
+| PollOptions | JSONBArray | Poll option strings (default []) |
+| PollMaxSelections | int | Max selectable options (default 0 = unlimited) |
 
 ### BulkMessageRecipient (`bulk_message_recipients`)
 
@@ -172,6 +175,12 @@ draft ──────────► scheduled* ──► processing ──�
 |--------|------|---------|------------|-------------|
 | POST | `/api/campaigns/{id}/media` | `UploadCampaignMedia` | campaigns:write | Upload header media (16MB max) |
 | GET | `/api/campaigns/{id}/media` | `ServeCampaignMedia` | campaigns:read | Serve media for preview |
+
+### Poll Analytics (Plugin: campaign-interactive)
+
+| Method | Path | Handler | Permission | Description |
+|--------|------|---------|------------|-------------|
+| GET | `/api/campaigns/{id}/poll/votes` | Plugin handler | campaigns:read | Get aggregated poll vote counts and percentages |
 
 ### Auto-Campaign (Whatsmeow Only)
 
@@ -285,6 +294,7 @@ All methods enforce:
 9. Send message:
    - **Meta**: `sendTemplateMessage` — builds template components, calls WhatsApp Cloud API
    - **Whatsmeow**: `sendTemplateMessageViaProvider` — renders body, attaches media, sends via protocol adapter
+   - **Whatsmeow Poll**: if campaign has `PollQuestion` set, sends native WhatsApp poll via `PollProvider.SendPoll()` instead of plain text
 10. Create `Message` record in DB
 11. Update recipient status to `sent` or `failed`
 12. Atomically increment campaign counter (`sent_count` or `failed_count`)

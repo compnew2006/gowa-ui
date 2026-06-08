@@ -92,6 +92,7 @@ The chat interface uses WebSocket for real-time synchronization:
 | Flow | WhatsApp Flows (interactive flows) | ✅ |
 | Reaction | Emoji reactions to messages | ✅ |
 | Status | WhatsApp Status replies | ✅ |
+| Poll | Native WhatsApp polls with vote rendering | ✅ |
 
 ### 4. Message Pagination and Loading
 
@@ -455,7 +456,7 @@ type Message struct {
     ContactID          uuid.UUID
     ConversationID     string  // For group chats
     Direction          string  // "incoming" or "outgoing"
-    MessageType        string  // "text", "image", "video", etc.
+    MessageType        string  // "text", "image", "video", "poll", etc.
     Content            string
     MediaURL           string
     MediaMimeType      string
