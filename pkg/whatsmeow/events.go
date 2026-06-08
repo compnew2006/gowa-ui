@@ -268,6 +268,23 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 	}
 }
 
+// isLifecycleEvent returns true for events that are critical for connection
+// state management and must never be queued behind data-heavy events.
+// These events are lightweight and handled synchronously to prevent the
+// async buffer from dropping them when it's full of Message/Receipt events.
+func isLifecycleEvent(evt interface{}) bool {
+	switch evt.(type) {
+	case *events.Connected,
+		*events.Disconnected,
+		*events.LoggedOut,
+		*events.TemporaryBan,
+		*events.PairSuccess,
+		*events.QR:
+		return true
+	}
+	return false
+}
+
 // handleReceipt processes incoming read/delivered/sent receipts from WhatsApp.
 func (cm *ConnectionManager) handleReceipt(ctx context.Context, evt *events.Receipt, instanceID, orgID uuid.UUID) {
 	if evt == nil {

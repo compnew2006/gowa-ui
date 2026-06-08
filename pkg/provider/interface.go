@@ -47,6 +47,13 @@ type ReplyProvider interface {
 	SendTextReply(ctx context.Context, instanceID string, to string, text string, replyToMsgID string) (string, error)
 }
 
+// PollProvider is an optional extension to MessageProvider for adapters that
+// support sending native WhatsApp polls. Only whatsmeow implements this;
+// Meta Cloud API does not. Callers should type-assert to check support.
+type PollProvider interface {
+	SendPoll(ctx context.Context, instanceID string, to string, question string, options []string, maxSelections int) (string, error)
+}
+
 // GroupInfo holds metadata for a WhatsApp group.
 type GroupInfo struct {
 	JID              string

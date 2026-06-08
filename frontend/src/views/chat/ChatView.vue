@@ -2506,6 +2506,7 @@ function getReplyPreviewContent(message: Message): string {
   if (reply.message_type === "contacts" || reply.message_type === "contact")
     return "[Contact]";
   if (reply.message_type === "sticker") return "[Sticker]";
+  if (reply.message_type === "poll") return "[Poll]";
   return "[Message]";
 }
 
@@ -3235,6 +3236,9 @@ function getMessageContentRaw(message: Message): string {
   if (message.message_type === "unsupported") {
     return ""; // Displayed as a visual card, not text
   }
+  if (message.message_type === "poll") {
+    return getContentBody(message.content) || "";
+  }
   return "[Message]";
 }
 
@@ -3287,6 +3291,44 @@ function getContactsData(message: Message): ContactData[] {
 
 function getGoogleMapsUrl(location: LocationData): string {
   return `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
+}
+
+interface PollData {
+  question: string;
+  options: string[];
+  max_selections: number;
+}
+
+interface PollVoteData {
+  selected_options: string[];
+  poll_message_id: string;
+}
+
+function getPollData(message: Message): PollData | null {
+  if (message.message_type !== "poll") return null;
+  if (!message.interactive_data) return null;
+  const d = message.interactive_data as Record<string, unknown>;
+  if (d.type !== "poll") return null;
+  return {
+    question: (d.question as string) || "",
+    options: (d.options as string[]) || [],
+    max_selections: (d.max_selections as number) || 0,
+  };
+}
+
+function isPollVote(message: Message): boolean {
+  if (message.message_type !== "poll") return false;
+  if (!message.interactive_data) return false;
+  return (message.interactive_data as Record<string, unknown>).type === "poll_vote";
+}
+
+function getPollVoteData(message: Message): PollVoteData | null {
+  if (!isPollVote(message)) return null;
+  const d = message.interactive_data as Record<string, unknown>;
+  return {
+    selected_options: (d.selected_options as string[]) || [],
+    poll_message_id: (d.poll_message_id as string) || "",
+  };
 }
 
 function getInteractiveButtons(
@@ -5586,6 +5628,48 @@ async function sendMediaMessage() {
                         <span class="text-sm italic"
                           >This message type is not supported</span
                         >
+                      </div>
+                    </div>
+                    <!-- Poll message -->
+                    <div
+                      v-else-if="message.message_type === 'poll' && getPollData(message)"
+                      class="mb-2"
+                    >
+                      <div class="bg-background/50 rounded-lg overflow-hidden">
+                        <div class="flex items-center gap-2 px-3 pt-3 pb-1">
+                          <svg class="h-4 w-4 text-muted-foreground shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6"/><path d="M9 13h4"/></svg>
+                          <span class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Poll</span>
+                        </div>
+                        <p class="px-3 pb-2 text-sm font-medium">
+                          {{ getPollData(message)?.question }}
+                        </p>
+                        <div class="border-t">
+                          <div
+                            v-for="(option, idx) in getPollData(message)?.options"
+                            :key="idx"
+                            :class="['px-3 py-2 text-sm', idx > 0 && 'border-t']"
+                          >
+                            <div class="flex items-center gap-2">
+                              <div class="h-4 w-4 rounded-full border-2 border-muted-foreground/40 shrink-0" />
+                              <span>{{ option }}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div v-if="getPollData(message)!.max_selections > 0" class="px-3 py-1.5 text-xs text-muted-foreground border-t">
+                          Select up to {{ getPollData(message)!.max_selections }}
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Poll vote message -->
+                    <div
+                      v-else-if="isPollVote(message)"
+                      class="mb-2"
+                    >
+                      <div class="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg">
+                        <svg class="h-4 w-4 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                        <span class="text-sm text-primary font-medium">
+                          {{ getPollVoteData(message)?.selected_options.join(', ') || 'Voted' }}
+                        </span>
                       </div>
                     </div>
                     <!-- Button reply - WhatsApp style -->

@@ -15,6 +15,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/core"
 	_ "github.com/compnew2006/whatomate/plugin/per-instance-uploads-cleanup"
+	_ "github.com/compnew2006/whatomate/plugin/campaign-interactive"
 	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/database"
 	"github.com/compnew2006/whatomate/internal/frontend"

@@ -25,6 +25,9 @@ type BulkMessageCampaign struct {
 	DeliveredCount       int            `gorm:"default:0" json:"delivered_count"`
 	ReadCount            int            `gorm:"default:0" json:"read_count"`
 	FailedCount          int            `gorm:"default:0" json:"failed_count"`
+	PollQuestion      string `gorm:"type:text" json:"poll_question,omitempty"`
+	PollOptions       JSONBArray `gorm:"type:jsonb;default:'[]'" json:"poll_options,omitempty"`
+	PollMaxSelections int    `gorm:"default:0" json:"poll_max_selections,omitempty"`
 	ScheduledAt          *time.Time     `json:"scheduled_at,omitempty"`
 	StartedAt            *time.Time     `json:"started_at,omitempty"`
 	CompletedAt          *time.Time     `json:"completed_at,omitempty"`

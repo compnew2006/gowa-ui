@@ -346,6 +346,28 @@ func (a *WhatsmeowAdapter) SendAudio(ctx context.Context, instanceID string, to 
 	return resp.ID, nil
 }
 
+// SendPoll sends a native WhatsApp poll message.
+func (a *WhatsmeowAdapter) SendPoll(ctx context.Context, instanceID string, to string, question string, options []string, maxSelections int) (string, error) {
+	client, err := a.getClient(ctx, instanceID)
+	if err != nil {
+		return "", err
+	}
+
+	jid, err := a.parseJID(to)
+	if err != nil {
+		return "", fmt.Errorf("invalid JID: %w", err)
+	}
+
+	msg := client.BuildPollCreation(question, options, maxSelections)
+
+	resp, err := client.SendMessage(ctx, jid, msg)
+	if err != nil {
+		return "", fmt.Errorf("failed to send poll message: %w", err)
+	}
+
+	return resp.ID, nil
+}
+
 func (a *WhatsmeowAdapter) simulateTypingIndicator(ctx context.Context, client *whatsmeow.Client, jid waTypes.JID, previewText string) {
 	if a == nil || a.manager == nil || a.manager.typingIndicator == nil {
 		return

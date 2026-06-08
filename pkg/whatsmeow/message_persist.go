@@ -411,6 +411,23 @@ func (cm *ConnectionManager) persistParsedMessage(
 		Metadata:          metadata,
 	}
 
+	if msgType == models.MessageTypePoll {
+		if poll := firstPollCreationMessage(evt.Message); poll != nil {
+			optNames := make([]string, 0, len(poll.GetOptions()))
+			for _, o := range poll.GetOptions() {
+				if name := strings.TrimSpace(o.GetOptionName()); name != "" {
+					optNames = append(optNames, name)
+				}
+			}
+			message.InteractiveData = models.JSONB{
+				"type":           "poll",
+				"question":       strings.TrimSpace(poll.GetName()),
+				"options":        optNames,
+				"max_selections": int(poll.GetSelectableOptionsCount()),
+			}
+		}
+	}
+
 	if err := cm.db.WithContext(ctx).Create(&message).Error; err != nil {
 		return nil, fmt.Errorf("failed to save message: %w", err)
 	}

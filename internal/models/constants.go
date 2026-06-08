@@ -32,6 +32,7 @@ const (
 	MessageTypeReaction    MessageType = "reaction"
 	MessageTypeLocation    MessageType = "location"
 	MessageTypeContact     MessageType = "contact"
+	MessageTypePoll        MessageType = "poll"
 	MessageTypeIgnore      MessageType = "ignore"
 )
 

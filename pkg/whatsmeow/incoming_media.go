@@ -356,11 +356,9 @@ func (cm *ConnectionManager) extractTextualIncomingMessage(ctx context.Context, 
 	if poll := firstPollCreationMessage(msg); poll != nil {
 		question := strings.TrimSpace(poll.GetName())
 		if question == "" {
-			question = "[Poll]"
-		} else {
-			question = "[Poll] " + question
+			question = "Poll"
 		}
-		return models.MessageTypeText, question, true
+		return models.MessageTypePoll, question, true
 	}
 
 	return models.MessageTypeText, "", false

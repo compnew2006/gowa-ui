@@ -770,6 +770,10 @@ func (cm *ConnectionManager) newClient(instance models.WhatsAppInstance, deviceS
 			cm.handleEvent(evt, instance.ID, instance.OrganizationID)
 			return
 		}
+		if isLifecycleEvent(evt) {
+			cm.handleEvent(evt, instance.ID, instance.OrganizationID)
+			return
+		}
 		cm.eventDispatcher.Dispatch(evt, instance.ID, instance.OrganizationID)
 	})
 

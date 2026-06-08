@@ -72,6 +72,22 @@ func (cm *ConnectionManager) handleMessage(ctx context.Context, evt *events.Mess
 		cm.MarkError(instanceID)
 		return
 	}
+
+	// Handle poll votes before normal message flow — they are update events, not new messages.
+	baseMsg := evt.Message
+	if baseMsg == nil {
+		baseMsg = evt.RawMessage
+	}
+	if baseMsg != nil {
+		if unwrapped := unwrapIncomingMessage(baseMsg); unwrapped != nil {
+			baseMsg = unwrapped
+		}
+	}
+	if baseMsg != nil && baseMsg.GetPollUpdateMessage() != nil {
+		cm.handlePollVote(ctx, client, evt, baseMsg.GetPollUpdateMessage(), instanceID, orgID)
+		return
+	}
+
 	normalizedEvt := cm.normalizeIncomingEventMessage(ctx, client, evt, instanceID)
 	if normalizedEvt == nil {
 		return
@@ -147,7 +163,6 @@ func (cm *ConnectionManager) normalizeIncomingEventMessage(
 	}
 
 	if normalizedMessage.GetPollUpdateMessage() != nil {
-		cm.logger.Debug("Skipping poll-update event", "instance_id", instanceID, "wa_message_id", evt.Info.ID)
 		return nil
 	}
 	if normalizedMessage.GetKeepInChatMessage() != nil {

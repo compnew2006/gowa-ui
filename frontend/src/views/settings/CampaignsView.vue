@@ -112,6 +112,9 @@ interface Campaign {
   header_media_id?: string;
   header_media_filename?: string;
   header_media_mime_type?: string;
+  poll_question?: string;
+  poll_options?: string[];
+  poll_max_selections?: number;
   status:
     | "draft"
     | "scheduled"
@@ -861,6 +864,10 @@ const newCampaign = ref({
   body_content: "",
   min_delay_minutes: 0,
   max_delay_minutes: 0,
+  poll_enabled: false,
+  poll_question: "",
+  poll_options: ["", ""] as string[],
+  poll_max_selections: 0,
 });
 const campaignPlaceholderTokens = [
   "{customer_name}",
@@ -870,6 +877,16 @@ const campaignPlaceholderTokens = [
   "{contact_name}",
   "{phone_number}",
 ];
+
+function addPollOption() {
+  if (newCampaign.value.poll_options.length >= 12) return;
+  newCampaign.value.poll_options = [...newCampaign.value.poll_options, ""];
+}
+
+function removePollOption(index: number) {
+  if (newCampaign.value.poll_options.length <= 2) return;
+  newCampaign.value.poll_options = newCampaign.value.poll_options.filter((_: string, i: number) => i !== index);
+}
 
 function appendCampaignPlaceholder(token: string) {
   newCampaign.value.body_content = `${newCampaign.value.body_content || ""}${token}`;
@@ -1136,6 +1153,16 @@ async function createCampaign() {
       payload.template_id = newCampaign.value.template_id;
     }
 
+    // Include poll data if enabled and valid
+    if (newCampaign.value.poll_enabled && newCampaign.value.poll_question.trim()) {
+      const validOptions = newCampaign.value.poll_options.filter((o: string) => o.trim() !== "");
+      if (validOptions.length >= 2) {
+        payload.poll_question = newCampaign.value.poll_question.trim();
+        payload.poll_options = validOptions;
+        payload.poll_max_selections = newCampaign.value.poll_max_selections || 0;
+      }
+    }
+
     const createResponse = await campaignsService.create(payload);
     const createdCampaign =
       (createResponse.data as any).data || createResponse.data;
@@ -1197,6 +1224,10 @@ function resetForm() {
     body_content: "",
     min_delay_minutes: 0,
     max_delay_minutes: 0,
+    poll_enabled: false,
+    poll_question: "",
+    poll_options: ["", ""],
+    poll_max_selections: 0,
   };
   clearCampaignMediaSelection();
 }
@@ -1217,6 +1248,10 @@ async function openEditDialog(campaign: Campaign) {
       0,
       Math.floor((campaign.max_delay_seconds || 0) / 60),
     ),
+    poll_enabled: !!(campaign.poll_question && campaign.poll_options?.length),
+    poll_question: campaign.poll_question || "",
+    poll_options: campaign.poll_options?.length ? campaign.poll_options : ["", ""],
+    poll_max_selections: campaign.poll_max_selections || 0,
   };
 
   if (isWhatsmeowProvider.value && campaign.template_id) {
@@ -2388,6 +2423,85 @@ async function addRecipientsFromCSV() {
                       : $t("campaigns.mediaNeedsHeaderTemplate")
                   }}
                 </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Poll Section (whatsmeow only) -->
+          <div v-if="isWhatsmeowProvider" class="space-y-3 pt-4 border-t mt-4">
+            <div class="flex items-center gap-2">
+              <input
+                id="poll-toggle"
+                type="checkbox"
+                v-model="newCampaign.poll_enabled"
+                class="h-4 w-4 rounded border-muted-foreground/40"
+                :disabled="isCreating"
+              />
+              <Label for="poll-toggle" class="text-sm font-semibold cursor-pointer">
+                Add Poll to Message
+              </Label>
+            </div>
+            <div v-if="newCampaign.poll_enabled" class="space-y-3 pl-6">
+              <div class="grid gap-1.5">
+                <Label for="poll-question" class="text-xs text-muted-foreground">Question</Label>
+                <Input
+                  id="poll-question"
+                  v-model="newCampaign.poll_question"
+                  placeholder="e.g. Did you enjoy this content?"
+                  :disabled="isCreating"
+                />
+              </div>
+              <div class="space-y-2">
+                <Label class="text-xs text-muted-foreground">Options</Label>
+                <div
+                  v-for="(_, idx) in newCampaign.poll_options"
+                  :key="idx"
+                  class="flex items-center gap-2"
+                >
+                  <Input
+                    v-model="newCampaign.poll_options[idx]"
+                    :placeholder="'Option ' + (idx + 1)"
+                    :disabled="isCreating"
+                    class="flex-1"
+                  />
+                  <Button
+                    v-if="newCampaign.poll_options.length > 2"
+                    variant="ghost"
+                    size="icon"
+                    class="h-8 w-8 shrink-0"
+                    :disabled="isCreating"
+                    @click="removePollOption(idx)"
+                  >
+                    <XCircle class="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <Button
+                  v-if="newCampaign.poll_options.length < 12"
+                  variant="outline"
+                  size="sm"
+                  :disabled="isCreating"
+                  @click="addPollOption"
+                >
+                  <Plus class="h-3.5 w-3.5 mr-1" />
+                  Add Option
+                </Button>
+                <p class="text-xs text-muted-foreground">
+                  Min 2, max 12 options. Leave empty options blank to exclude them.
+                </p>
+              </div>
+              <div class="grid gap-1.5">
+                <Label for="poll-max" class="text-xs text-muted-foreground">
+                  Max selections (0 = unlimited)
+                </Label>
+                <Input
+                  id="poll-max"
+                  v-model.number="newCampaign.poll_max_selections"
+                  type="number"
+                  min="0"
+                  :max="newCampaign.poll_options.length"
+                  :disabled="isCreating"
+                  class="w-24"
+                />
               </div>
             </div>
           </div>
