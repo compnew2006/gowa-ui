@@ -105,12 +105,16 @@ func (a *App) ListCampaigns(r *fastglue.Request) error {
 	if whatsappAccount != "" {
 		baseQuery = baseQuery.Where("whats_app_account = ?", whatsappAccount)
 	}
-	if from, ok := parseDateParam(r, "from"); ok {
-		baseQuery = baseQuery.Where("created_at >= ?", from)
+	from, hasFrom := parseDateParam(r, "from")
+	to, hasTo := parseDateParam(r, "to")
+	var fromPtr, toPtr *time.Time
+	if hasFrom {
+		fromPtr = &from
 	}
-	if to, ok := parseDateParam(r, "to"); ok {
-		baseQuery = baseQuery.Where("created_at <= ?", endOfDay(to))
+	if hasTo {
+		toPtr = &to
 	}
+	baseQuery = applyDateFilter(baseQuery, "created_at", fromPtr, toPtr)
 
 	// Get total count
 	var total int64

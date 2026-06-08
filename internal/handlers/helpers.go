@@ -125,6 +125,19 @@ func endOfDay(t time.Time) time.Time {
 	return t.Add(24*time.Hour - time.Nanosecond)
 }
 
+// applyDateFilter applies optional date range conditions to a GORM query.
+// If from is non-nil, adds "col >= ?". If to is non-nil, adds "col <= ?"
+// with endOfDay applied. Returns the modified query.
+func applyDateFilter(query *gorm.DB, col string, from, to *time.Time) *gorm.DB {
+	if from != nil {
+		query = query.Where(col+" >= ?", *from)
+	}
+	if to != nil {
+		query = query.Where(col+" <= ?", endOfDay(*to))
+	}
+	return query
+}
+
 // findByIDAndOrg fetches a single record scoped by ID and organization.
 //
 // On success, returns a pointer to the fetched model and nil error.

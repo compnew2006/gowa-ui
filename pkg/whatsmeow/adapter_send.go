@@ -31,6 +31,44 @@ func (a *WhatsmeowAdapter) resolveClientAndJID(ctx context.Context, instanceID, 
 	return client, jid, nil
 }
 
+// mediaUpload holds the resolved client, JID, downloaded bytes, MIME type, and
+// WhatsApp upload response needed to construct and send a media message.
+type mediaUpload struct {
+	client     *whatsmeow.Client
+	jid        waTypes.JID
+	data       []byte
+	mimeType   string
+	uploadResp whatsmeow.UploadResponse
+}
+
+// prepareMediaSend resolves the client, downloads media from the URL, and
+// uploads it to WhatsApp. Callers construct the protobuf message using the
+// returned upload fields, then call u.client.SendMessage.
+func (a *WhatsmeowAdapter) prepareMediaSend(ctx context.Context, instanceID, to, mediaURL string, mediaType whatsmeow.MediaType) (*mediaUpload, error) {
+	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
+	if err != nil {
+		return nil, err
+	}
+
+	data, mimeType, err := a.downloadMediaFromURL(mediaURL)
+	if err != nil {
+		return nil, err
+	}
+
+	uploadResp, err := a.uploadMediaToWhatsApp(ctx, client, data, mediaType)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mediaUpload{
+		client:     client,
+		jid:        jid,
+		data:       data,
+		mimeType:   mimeType,
+		uploadResp: uploadResp,
+	}, nil
+}
+
 var textURLPattern = regexp.MustCompile(`(?i)\b(?:https?://|www\.)\S+`)
 
 // SendText sends a text message.
@@ -171,17 +209,7 @@ func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID str
 
 // SendImage sends an image message.
 func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to string, imageURL string, caption string) (string, error) {
-	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
-	if err != nil {
-		return "", err
-	}
-
-	data, mimeType, err := a.downloadMediaFromURL(imageURL)
-	if err != nil {
-		return "", err
-	}
-
-	uploadResp, err := a.uploadMediaToWhatsApp(ctx, client, data, whatsmeow.MediaImage)
+	u, err := a.prepareMediaSend(ctx, instanceID, to, imageURL, whatsmeow.MediaImage)
 	if err != nil {
 		return "", err
 	}
@@ -189,17 +217,17 @@ func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to 
 	msg := &waE2E.Message{
 		ImageMessage: &waE2E.ImageMessage{
 			Caption:       proto.String(caption),
-			Mimetype:      proto.String(mimeType),
-			URL:           proto.String(uploadResp.URL),
-			DirectPath:    proto.String(uploadResp.DirectPath),
-			MediaKey:      uploadResp.MediaKey,
-			FileEncSHA256: uploadResp.FileEncSHA256,
-			FileSHA256:    uploadResp.FileSHA256,
-			FileLength:    proto.Uint64(uint64(len(data))),
+			Mimetype:      proto.String(u.mimeType),
+			URL:           proto.String(u.uploadResp.URL),
+			DirectPath:    proto.String(u.uploadResp.DirectPath),
+			MediaKey:      u.uploadResp.MediaKey,
+			FileEncSHA256: u.uploadResp.FileEncSHA256,
+			FileSHA256:    u.uploadResp.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(u.data))),
 		},
 	}
 
-	resp, err := client.SendMessage(ctx, jid, msg)
+	resp, err := u.client.SendMessage(ctx, u.jid, msg)
 	if err != nil {
 		return "", fmt.Errorf("failed to send image message: %w", err)
 	}
@@ -209,44 +237,34 @@ func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to 
 
 // SendDocument sends a document message.
 func (a *WhatsmeowAdapter) SendDocument(ctx context.Context, instanceID string, to string, docURL string, filename string, caption string) (string, error) {
-	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
+	u, err := a.prepareMediaSend(ctx, instanceID, to, docURL, whatsmeow.MediaDocument)
 	if err != nil {
 		return "", err
 	}
 
-	data, mimeType, err := a.downloadMediaFromURL(docURL)
-	if err != nil {
-		return "", err
-	}
-
+	mimeType := u.mimeType
 	if filename != "" && (mimeType == "application/octet-stream" || mimeType == "") {
-		ext := filepath.Ext(filename)
-		if m := mime.TypeByExtension(ext); m != "" {
+		if m := mime.TypeByExtension(filepath.Ext(filename)); m != "" {
 			mimeType = m
 		}
-	}
-
-	uploadResp, err := a.uploadMediaToWhatsApp(ctx, client, data, whatsmeow.MediaDocument)
-	if err != nil {
-		return "", err
 	}
 
 	msg := &waE2E.Message{
 		DocumentMessage: &waE2E.DocumentMessage{
 			Caption:       proto.String(caption),
 			Mimetype:      proto.String(mimeType),
-			URL:           proto.String(uploadResp.URL),
-			DirectPath:    proto.String(uploadResp.DirectPath),
-			MediaKey:      uploadResp.MediaKey,
-			FileEncSHA256: uploadResp.FileEncSHA256,
-			FileSHA256:    uploadResp.FileSHA256,
-			FileLength:    proto.Uint64(uint64(len(data))),
+			URL:           proto.String(u.uploadResp.URL),
+			DirectPath:    proto.String(u.uploadResp.DirectPath),
+			MediaKey:      u.uploadResp.MediaKey,
+			FileEncSHA256: u.uploadResp.FileEncSHA256,
+			FileSHA256:    u.uploadResp.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(u.data))),
 			FileName:      proto.String(filename),
 			Title:         proto.String(filename),
 		},
 	}
 
-	resp, err := client.SendMessage(ctx, jid, msg)
+	resp, err := u.client.SendMessage(ctx, u.jid, msg)
 	if err != nil {
 		return "", fmt.Errorf("failed to send document message: %w", err)
 	}
@@ -256,17 +274,7 @@ func (a *WhatsmeowAdapter) SendDocument(ctx context.Context, instanceID string, 
 
 // SendVideo sends a video message.
 func (a *WhatsmeowAdapter) SendVideo(ctx context.Context, instanceID string, to string, videoURL string, caption string) (string, error) {
-	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
-	if err != nil {
-		return "", err
-	}
-
-	data, mimeType, err := a.downloadMediaFromURL(videoURL)
-	if err != nil {
-		return "", err
-	}
-
-	uploadResp, err := a.uploadMediaToWhatsApp(ctx, client, data, whatsmeow.MediaVideo)
+	u, err := a.prepareMediaSend(ctx, instanceID, to, videoURL, whatsmeow.MediaVideo)
 	if err != nil {
 		return "", err
 	}
@@ -274,17 +282,17 @@ func (a *WhatsmeowAdapter) SendVideo(ctx context.Context, instanceID string, to 
 	msg := &waE2E.Message{
 		VideoMessage: &waE2E.VideoMessage{
 			Caption:       proto.String(caption),
-			Mimetype:      proto.String(mimeType),
-			URL:           proto.String(uploadResp.URL),
-			DirectPath:    proto.String(uploadResp.DirectPath),
-			MediaKey:      uploadResp.MediaKey,
-			FileEncSHA256: uploadResp.FileEncSHA256,
-			FileSHA256:    uploadResp.FileSHA256,
-			FileLength:    proto.Uint64(uint64(len(data))),
+			Mimetype:      proto.String(u.mimeType),
+			URL:           proto.String(u.uploadResp.URL),
+			DirectPath:    proto.String(u.uploadResp.DirectPath),
+			MediaKey:      u.uploadResp.MediaKey,
+			FileEncSHA256: u.uploadResp.FileEncSHA256,
+			FileSHA256:    u.uploadResp.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(u.data))),
 		},
 	}
 
-	resp, err := client.SendMessage(ctx, jid, msg)
+	resp, err := u.client.SendMessage(ctx, u.jid, msg)
 	if err != nil {
 		return "", fmt.Errorf("failed to send video message: %w", err)
 	}
@@ -294,35 +302,25 @@ func (a *WhatsmeowAdapter) SendVideo(ctx context.Context, instanceID string, to 
 
 // SendAudio sends an audio message.
 func (a *WhatsmeowAdapter) SendAudio(ctx context.Context, instanceID string, to string, audioURL string) (string, error) {
-	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
-	if err != nil {
-		return "", err
-	}
-
-	data, mimeType, err := a.downloadMediaFromURL(audioURL)
-	if err != nil {
-		return "", err
-	}
-
-	uploadResp, err := a.uploadMediaToWhatsApp(ctx, client, data, whatsmeow.MediaAudio)
+	u, err := a.prepareMediaSend(ctx, instanceID, to, audioURL, whatsmeow.MediaAudio)
 	if err != nil {
 		return "", err
 	}
 
 	msg := &waE2E.Message{
 		AudioMessage: &waE2E.AudioMessage{
-			Mimetype:      proto.String(mimeType),
-			URL:           proto.String(uploadResp.URL),
-			DirectPath:    proto.String(uploadResp.DirectPath),
-			MediaKey:      uploadResp.MediaKey,
-			FileEncSHA256: uploadResp.FileEncSHA256,
-			FileSHA256:    uploadResp.FileSHA256,
-			FileLength:    proto.Uint64(uint64(len(data))),
+			Mimetype:      proto.String(u.mimeType),
+			URL:           proto.String(u.uploadResp.URL),
+			DirectPath:    proto.String(u.uploadResp.DirectPath),
+			MediaKey:      u.uploadResp.MediaKey,
+			FileEncSHA256: u.uploadResp.FileEncSHA256,
+			FileSHA256:    u.uploadResp.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(u.data))),
 			PTT:           proto.Bool(true),
 		},
 	}
 
-	resp, err := client.SendMessage(ctx, jid, msg)
+	resp, err := u.client.SendMessage(ctx, u.jid, msg)
 	if err != nil {
 		return "", fmt.Errorf("failed to send audio message: %w", err)
 	}

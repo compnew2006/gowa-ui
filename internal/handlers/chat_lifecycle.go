@@ -124,21 +124,10 @@ func applyContactDateBasisFilter(
 		if instanceID != nil {
 			subquery = subquery.Where("messages.instance_id = ?", *instanceID)
 		}
-		if dateFrom != nil {
-			subquery = subquery.Where("messages.created_at >= ?", *dateFrom)
-		}
-		if dateTo != nil {
-			subquery = subquery.Where("messages.created_at <= ?", endOfDay(*dateTo))
-		}
+		subquery = applyDateFilter(subquery, "messages.created_at", dateFrom, dateTo)
 		return query.Where("EXISTS (?)", subquery)
 	default:
-		if dateFrom != nil {
-			query = query.Where("contacts.created_at >= ?", *dateFrom)
-		}
-		if dateTo != nil {
-			query = query.Where("contacts.created_at <= ?", endOfDay(*dateTo))
-		}
-		return query
+		return applyDateFilter(query, "contacts.created_at", dateFrom, dateTo)
 	}
 }
 

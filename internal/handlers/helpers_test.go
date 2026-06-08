@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+	"gorm.io/gorm"
 )
 
 // --- parsePathUUID ---
@@ -432,6 +433,71 @@ func TestParseDateRange_SameDay(t *testing.T) {
 	// Start at beginning of day, end at end of day
 	assert.Equal(t, 0, start.Hour())
 	assert.Equal(t, 23, end.Hour())
+}
+
+// --- applyDateFilter ---
+
+func TestApplyDateFilter_NilBoth(t *testing.T) {
+	t.Parallel()
+	db := testutil.SetupTestDB(t)
+	base := db.Model(&models.Contact{})
+
+	result := applyDateFilter(base, "created_at", nil, nil)
+
+	_, hasWhere := result.Statement.Clauses["WHERE"]
+	assert.False(t, hasWhere, "expected no WHERE clause when both nil")
+}
+
+func TestApplyDateFilter_BoundValues(t *testing.T) {
+	t.Parallel()
+
+	from := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name       string
+		from       *time.Time
+		to         *time.Time
+		wantValues []time.Time
+	}{
+		{
+			name:       "from_only",
+			from:       &from,
+			to:         nil,
+			wantValues: []time.Time{from},
+		},
+		{
+			name:       "to_only_applies_end_of_day",
+			from:       nil,
+			to:         &to,
+			wantValues: []time.Time{endOfDay(to)},
+		},
+		{
+			name:       "both_bounds",
+			from:       &from,
+			to:         &to,
+			wantValues: []time.Time{from, endOfDay(to)},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testutil.SetupTestDB(t)
+			base := db.Session(&gorm.Session{DryRun: true}).Model(&models.Contact{})
+			result := applyDateFilter(base, "created_at", tc.from, tc.to)
+
+			var sink []models.Contact
+			result.Find(&sink)
+
+			vars := result.Statement.Vars
+			require.Len(t, vars, len(tc.wantValues),
+				"expected %d bound variables, got %d", len(tc.wantValues), len(vars))
+			for i, want := range tc.wantValues {
+				assert.Equal(t, want, vars[i],
+					"bound variable[%d]: expected %v, got %v", i, want, vars[i])
+			}
+		})
+	}
 }
 
 // --- validateExportColumns ---
