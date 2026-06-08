@@ -216,7 +216,7 @@ func (s *MediaService) handleDownloadable(
 	streamErr := <-streamErrCh
 	if uploadErr != nil {
 		if streamErr != nil && !errors.Is(streamErr, context.Canceled) && !errors.Is(streamErr, io.ErrClosedPipe) {
-			return nil, fmt.Errorf("stream whatsapp media: %w", streamErr)
+			return nil, fmt.Errorf("upload media object: %w (stream also failed: %v)", uploadErr, streamErr)
 		}
 		return nil, fmt.Errorf("upload media object: %w", uploadErr)
 	}

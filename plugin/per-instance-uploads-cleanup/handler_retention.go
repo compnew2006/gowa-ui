@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -65,6 +66,49 @@ func (p *Plugin) canExecute(userID, orgID uuid.UUID) bool {
 	return p.hasPermission(userID, models.ResourceSettingsUploadsCleanup, models.ActionExecute, orgID)
 }
 
+var errResponseSent = errors.New("response already sent")
+
+// requireInstanceAccess resolves auth, checks permission, and parses the instance ID from the URL.
+func (p *Plugin) requireInstanceAccess(r *fastglue.Request, permCheck func(uuid.UUID, uuid.UUID) bool) (orgID, userID, instanceID uuid.UUID, err error) {
+	orgID, userID, err = p.getOrgAndUserID(r)
+	if err != nil {
+		r.SendErrorEnvelope(http.StatusUnauthorized, "Unauthorized", nil, "")
+		return uuid.Nil, uuid.Nil, uuid.Nil, errResponseSent
+	}
+	if !permCheck(userID, orgID) {
+		r.SendErrorEnvelope(http.StatusForbidden, "Insufficient permissions", nil, "")
+		return uuid.Nil, uuid.Nil, uuid.Nil, errResponseSent
+	}
+	instanceIDStr := r.RequestCtx.UserValue("id")
+	instanceID, err = uuid.Parse(fmt.Sprintf("%v", instanceIDStr))
+	if err != nil {
+		r.SendErrorEnvelope(http.StatusBadRequest, "Invalid instance ID", nil, "INVALID_ID")
+		return uuid.Nil, uuid.Nil, uuid.Nil, errResponseSent
+	}
+	return orgID, userID, instanceID, nil
+}
+
+// parsePagination extracts limit and offset from query args with defaults.
+func parsePagination(r *fastglue.Request, defaultLimit int) (limit, offset int, err error) {
+	args := r.RequestCtx.URI().QueryArgs()
+	limit = defaultLimit
+	if v := string(args.Peek("limit")); v != "" {
+		if n, e := strconv.Atoi(v); e == nil {
+			limit = n
+		}
+	}
+	if limit < 1 || limit > 100 {
+		return 0, 0, fmt.Errorf("limit must be between 1 and 100")
+	}
+	offset = 0
+	if v := string(args.Peek("offset")); v != "" {
+		if n, e := strconv.Atoi(v); e == nil {
+			offset = n
+		}
+	}
+	return limit, offset, nil
+}
+
 func parseUploadsCleanup(settings models.JSONB) (inherit bool, retentionDays *int, lastRunDate *string) {
 	uc, ok := settings["uploads_cleanup"].(map[string]interface{})
 	if !ok {
@@ -110,31 +154,26 @@ func respondRetention(r *fastglue.Request, instanceID uuid.UUID, settings models
 }
 
 func (p *Plugin) handleGetRetention(r *fastglue.Request) error {
-	orgID, userID, err := p.getOrgAndUserID(r)
+	orgID, _, instanceID, err := p.requireInstanceAccess(r, p.canAccess)
 	if err != nil {
-		return r.SendErrorEnvelope(401, "Unauthorized", nil, "")
-	}
-	if !p.canAccess(userID, orgID) {
-		return r.SendErrorEnvelope(403, "Insufficient permissions", nil, "")
-	}
-
-	instanceIDStr := r.RequestCtx.UserValue("id")
-	instanceID, err := uuid.Parse(fmt.Sprintf("%v", instanceIDStr))
-	if err != nil {
-		return r.SendErrorEnvelope(400, "Invalid instance ID", nil, "INVALID_ID")
+		return err
 	}
 
 	scopedDB := tenant.ScopedDB(p.db, orgID)
 	settings, err := getInstanceSettings(scopedDB, instanceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return r.SendErrorEnvelope(404, "Instance not found", nil, "INSTANCE_NOT_FOUND")
+			return r.SendErrorEnvelope(http.StatusNotFound, "Instance not found", nil, "INSTANCE_NOT_FOUND")
 		}
 		p.log.Error("handleGetRetention: failed to get instance", "err", err)
-		return r.SendErrorEnvelope(500, "Internal error", nil, "")
+		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 
-	days, source, _ := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, instanceID, time.Now())
+	days, source, err := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, instanceID, time.Now())
+	if err != nil {
+		p.log.Error("handleGetRetention: failed to resolve retention", "err", err)
+		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
+	}
 	return respondRetention(r, instanceID, settings, days, source)
 }
 
@@ -145,41 +184,64 @@ type retentionUpdateRequest struct {
 }
 
 func (p *Plugin) handlePutRetention(r *fastglue.Request) error {
-	orgID, userID, err := p.getOrgAndUserID(r)
+	orgID, userID, instanceID, err := p.requireInstanceAccess(r, p.canWrite)
 	if err != nil {
-		return r.SendErrorEnvelope(401, "Unauthorized", nil, "")
-	}
-	if !p.canWrite(userID, orgID) {
-		return r.SendErrorEnvelope(403, "Insufficient permissions", nil, "")
-	}
-
-	instanceIDStr := r.RequestCtx.UserValue("id")
-	instanceID, err := uuid.Parse(fmt.Sprintf("%v", instanceIDStr))
-	if err != nil {
-		return r.SendErrorEnvelope(400, "Invalid instance ID", nil, "INVALID_ID")
+		return err
 	}
 
 	var req retentionUpdateRequest
 	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(400, "Invalid request body", nil, "INVALID_BODY")
+		return r.SendErrorEnvelope(http.StatusBadRequest, "Invalid request body", nil, "INVALID_BODY")
 	}
 
 	if err := ValidateRetentionUpdate(req.Inherit, req.RetentionDays); err != nil {
-		return r.SendErrorEnvelope(400, err.Error(), nil, "")
+		return r.SendErrorEnvelope(http.StatusBadRequest, err.Error(), nil, "")
 	}
 
 	scopedDB := tenant.ScopedDB(p.db, orgID)
 	settings, err := getInstanceSettings(scopedDB, instanceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return r.SendErrorEnvelope(404, "Instance not found", nil, "INSTANCE_NOT_FOUND")
+			return r.SendErrorEnvelope(http.StatusNotFound, "Instance not found", nil, "INSTANCE_NOT_FOUND")
 		}
 		p.log.Error("handlePutRetention: failed to get instance", "err", err)
-		return r.SendErrorEnvelope(500, "Internal error", nil, "")
+		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
+	}
+
+	if err := p.updateInstanceRetention(scopedDB, instanceID, settings, req); err != nil {
+		p.log.Error("handlePutRetention: failed to update settings", "err", err)
+		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 
 	oldInherit, oldRetentionDays, _ := parseUploadsCleanup(settings)
+	var actorEmail *string
+	var user models.User
+	if p.db.Where("id = ?", userID).First(&user).Error == nil {
+		actorEmail = &user.Email
+	}
 
+	if err := p.srv.WriteAuditRow(r.RequestCtx, orgID, instanceID, &userID, actorEmail,
+		RetentionSnapshot{Inherit: oldInherit, RetentionDays: oldRetentionDays},
+		RetentionSnapshot{Inherit: req.Inherit, RetentionDays: req.RetentionDays},
+		req.Reason,
+	); err != nil {
+		p.log.Error("handlePutRetention: failed to write audit row", "err", err, "instance_id", instanceID)
+	}
+
+	newSettings, err := getInstanceSettings(scopedDB, instanceID)
+	if err != nil {
+		p.log.Error("handlePutRetention: failed to re-read settings", "err", err)
+		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
+	}
+	days, source, err := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, instanceID, time.Now())
+	if err != nil {
+		p.log.Error("handlePutRetention: failed to resolve retention", "err", err)
+		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
+	}
+	return respondRetention(r, instanceID, newSettings, days, source)
+}
+
+func (p *Plugin) updateInstanceRetention(scopedDB *gorm.DB, instanceID uuid.UUID, settings models.JSONB, req retentionUpdateRequest) error {
 	uc, ok := settings["uploads_cleanup"].(map[string]interface{})
 	if !ok {
 		uc = make(map[string]interface{})
@@ -192,62 +254,22 @@ func (p *Plugin) handlePutRetention(r *fastglue.Request) error {
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
-		return r.SendErrorEnvelope(500, "Internal error", nil, "")
+		return fmt.Errorf("marshal settings: %w", err)
 	}
 
-	if err := scopedDB.Model(&models.WhatsAppInstance{}).Where("id = ?", instanceID).
-		Update("settings", string(settingsJSON)).Error; err != nil {
-		p.log.Error("handlePutRetention: failed to update settings", "err", err)
-		return r.SendErrorEnvelope(500, "Internal error", nil, "")
-	}
-
-	var actorEmail *string
-	var user models.User
-	if p.db.Where("id = ?", userID).First(&user).Error == nil {
-		actorEmail = &user.Email
-	}
-
-	_ = p.srv.WriteAuditRow(r.RequestCtx, orgID, instanceID, &userID, actorEmail,
-		RetentionSnapshot{Inherit: oldInherit, RetentionDays: oldRetentionDays},
-		RetentionSnapshot{Inherit: req.Inherit, RetentionDays: req.RetentionDays},
-		req.Reason,
-	)
-
-	newSettings, _ := getInstanceSettings(scopedDB, instanceID)
-	days, source, _ := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, instanceID, time.Now())
-	return respondRetention(r, instanceID, newSettings, days, source)
+	return scopedDB.Model(&models.WhatsAppInstance{}).Where("id = ?", instanceID).
+		Update("settings", string(settingsJSON)).Error
 }
 
 func (p *Plugin) handleHistory(r *fastglue.Request) error {
-	orgID, userID, err := p.getOrgAndUserID(r)
+	orgID, _, instanceID, err := p.requireInstanceAccess(r, p.canAccess)
 	if err != nil {
-		return r.SendErrorEnvelope(401, "Unauthorized", nil, "")
-	}
-	if !p.canAccess(userID, orgID) {
-		return r.SendErrorEnvelope(403, "Insufficient permissions", nil, "")
+		return err
 	}
 
-	instanceIDStr := r.RequestCtx.UserValue("id")
-	instanceID, err := uuid.Parse(fmt.Sprintf("%v", instanceIDStr))
+	limit, offset, err := parsePagination(r, 5)
 	if err != nil {
-		return r.SendErrorEnvelope(400, "Invalid instance ID", nil, "INVALID_ID")
-	}
-
-	args := r.RequestCtx.URI().QueryArgs()
-	limit := 5
-	if v := string(args.Peek("limit")); v != "" {
-		if n, e := strconv.Atoi(v); e == nil {
-			limit = n
-		}
-	}
-	if limit < 1 || limit > 100 {
-		return r.SendErrorEnvelope(400, "limit must be between 1 and 100", nil, "invalid_limit")
-	}
-	offset := 0
-	if v := string(args.Peek("offset")); v != "" {
-		if n, e := strconv.Atoi(v); e == nil {
-			offset = n
-		}
+		return r.SendErrorEnvelope(http.StatusBadRequest, err.Error(), nil, "invalid_limit")
 	}
 
 	scopedDB := tenant.ScopedDB(p.db, orgID)
@@ -269,87 +291,85 @@ func (p *Plugin) handleHistory(r *fastglue.Request) error {
 }
 
 func (p *Plugin) handleRun(r *fastglue.Request) error {
-	orgID, userID, err := p.getOrgAndUserID(r)
+	orgID, _, instanceID, err := p.requireInstanceAccess(r, p.canExecute)
 	if err != nil {
-		return r.SendErrorEnvelope(401, "Unauthorized", nil, "")
-	}
-	if !p.canExecute(userID, orgID) {
-		return r.SendErrorEnvelope(403, "Insufficient permissions", nil, "")
-	}
-
-	instanceIDStr := r.RequestCtx.UserValue("id")
-	instanceID, err := uuid.Parse(fmt.Sprintf("%v", instanceIDStr))
-	if err != nil {
-		return r.SendErrorEnvelope(400, "Invalid instance ID", nil, "INVALID_ID")
+		return err
 	}
 
 	release, ok := p.srv.tryAcquireInstanceRun()
 	if !ok {
-		return r.SendErrorEnvelope(409, "Another cleanup run is already in progress", nil, "")
+		return r.SendErrorEnvelope(http.StatusConflict, "Another cleanup run is already in progress", nil, "")
 	}
 	defer release()
 
 	days, source, err := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, instanceID, time.Now())
 	if err != nil {
 		p.log.Error("handleRun: failed to resolve retention", "err", err)
-		return r.SendErrorEnvelope(500, "Internal error", nil, "")
+		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 	if source == "disabled" {
-		return r.SendErrorEnvelope(400, "Uploads cleanup is disabled for this instance. Set a retention value or configure a workspace default first.", nil, "uploads_cleanup_disabled")
+		return r.SendErrorEnvelope(http.StatusBadRequest, "Uploads cleanup is disabled for this instance. Set a retention value or configure a workspace default first.", nil, "uploads_cleanup_disabled")
 	}
 
 	deletedFiles, err := handlers.RunManualCleanupForInstance(r.RequestCtx, p.app, orgID, instanceID, &days)
 	if err != nil {
 		p.log.Error("handleRun: cleanup failed", "err", err)
-		return r.SendErrorEnvelope(500, "Cleanup failed", nil, "")
+		return r.SendErrorEnvelope(http.StatusInternalServerError, "Cleanup failed", nil, "")
 	}
 
-	scopedDB := tenant.ScopedDB(p.db, orgID)
-	var instance models.WhatsAppInstance
-	if err := scopedDB.Where("id = ?", instanceID).First(&instance).Error; err == nil {
-		uc, ok := instance.Settings["uploads_cleanup"].(map[string]interface{})
-		if !ok {
-			uc = make(map[string]interface{})
-		}
-		uc["last_run_date"] = time.Now().UTC().Format("2006-01-02")
-		instance.Settings["uploads_cleanup"] = uc
-		settingsJSON, _ := json.Marshal(instance.Settings)
-		scopedDB.Model(&instance).Update("settings", string(settingsJSON))
+	instanceName, err := p.recordLastRunDate(tenant.ScopedDB(p.db, orgID), instanceID)
+	if err != nil {
+		p.log.Error("handleRun: failed to record last run date", "err", err, "instance_id", instanceID)
 	}
-
-	var inst models.WhatsAppInstance
-	scopedDB.Where("id = ?", instanceID).First(&inst)
 
 	return r.SendEnvelope(map[string]interface{}{
 		"instance_id":    instanceID,
-		"instance_name":  inst.Name,
+		"instance_name":  instanceName,
 		"deleted_files":  deletedFiles,
 		"retention_used": days,
 	})
 }
 
+// recordLastRunDate writes last_run_date into the instance settings and returns the instance name.
+// Uses a single DB read + write instead of the previous double-read pattern.
+func (p *Plugin) recordLastRunDate(scopedDB *gorm.DB, instanceID uuid.UUID) (string, error) {
+	var instance models.WhatsAppInstance
+	if err := scopedDB.Where("id = ?", instanceID).First(&instance).Error; err != nil {
+		return "", fmt.Errorf("find instance: %w", err)
+	}
+
+	uc, ok := instance.Settings["uploads_cleanup"].(map[string]interface{})
+	if !ok {
+		uc = make(map[string]interface{})
+	}
+	uc["last_run_date"] = time.Now().UTC().Format("2006-01-02")
+	instance.Settings["uploads_cleanup"] = uc
+
+	settingsJSON, err := json.Marshal(instance.Settings)
+	if err != nil {
+		return instance.Name, fmt.Errorf("marshal settings: %w", err)
+	}
+	if err := scopedDB.Model(&instance).Update("settings", string(settingsJSON)).Error; err != nil {
+		return instance.Name, fmt.Errorf("update settings: %w", err)
+	}
+	return instance.Name, nil
+}
+
 func (p *Plugin) handleOverview(r *fastglue.Request) error {
 	orgID, userID, err := p.getOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(401, "Unauthorized", nil, "")
+		return r.SendErrorEnvelope(http.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	if !p.canAccess(userID, orgID) {
-		return r.SendErrorEnvelope(403, "Insufficient permissions", nil, "")
+		return r.SendErrorEnvelope(http.StatusForbidden, "Insufficient permissions", nil, "")
+	}
+
+	limit, offset, err := parsePagination(r, 20)
+	if err != nil {
+		return r.SendErrorEnvelope(http.StatusBadRequest, err.Error(), nil, "invalid_limit")
 	}
 
 	args := r.RequestCtx.URI().QueryArgs()
-	limit := 20
-	if v := string(args.Peek("limit")); v != "" {
-		if n, e := strconv.Atoi(v); e == nil {
-			limit = n
-		}
-	}
-	offset := 0
-	if v := string(args.Peek("offset")); v != "" {
-		if n, e := strconv.Atoi(v); e == nil {
-			offset = n
-		}
-	}
 	q := string(args.Peek("q"))
 	sourceFilter := string(args.Peek("source"))
 
@@ -375,7 +395,11 @@ func (p *Plugin) handleOverview(r *fastglue.Request) error {
 
 	rows := make([]overviewRow, 0, len(instances))
 	for _, inst := range instances {
-		days, source, _ := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, inst.ID, time.Now())
+		days, source, err := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, inst.ID, time.Now())
+		if err != nil {
+			p.log.Error("handleOverview: failed to resolve retention", "err", err, "instance_id", inst.ID)
+			continue
+		}
 
 		if sourceFilter != "" && sourceFilter != "all" && source != sourceFilter {
 			continue

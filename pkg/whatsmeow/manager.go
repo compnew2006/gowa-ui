@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -108,6 +109,16 @@ type cachedQRCode struct {
 func NewConnectionManager(db *gorm.DB, store *sqlstore.Container, logger logf.Logger, cfg *config.WhatsmeowConfig, hub *websocket.Hub, mediaStoragePath string) *ConnectionManager {
 	if mediaStoragePath == "" {
 		mediaStoragePath = "./uploads"
+	}
+	if info, err := os.Stat(mediaStoragePath); err != nil {
+		if os.IsNotExist(err) {
+			logger.Warn("Media storage path does not exist, creating it", "component", "whatsmeow", "path", mediaStoragePath)
+			if mkdirErr := os.MkdirAll(mediaStoragePath, 0o755); mkdirErr != nil {
+				logger.Error("Failed to create media storage directory", "component", "whatsmeow", "path", mediaStoragePath, "error", mkdirErr)
+			}
+		}
+	} else if !info.IsDir() {
+		logger.Error("Media storage path is not a directory", "component", "whatsmeow", "path", mediaStoragePath)
 	}
 
 	cm := &ConnectionManager{
@@ -450,16 +461,25 @@ func (cm *ConnectionManager) ReconnectAll(ctx context.Context) error {
 		connectInstance = cm.Connect
 	}
 
+	sem := make(chan struct{}, 5)
+	var wg sync.WaitGroup
 	for _, instance := range instances {
-		cm.logger.Info("Reconnecting instance", "component", "whatsmeow", "event", "reconnect_start", "instance_id", instance.ID)
-		if err := connectInstance(ctx, instance.ID); err != nil {
-			cm.logger.Error("Failed to reconnect instance", "component", "whatsmeow", "event", "reconnect_error", "instance_id", instance.ID, "error", err)
-			if statusErr := cm.updateInstanceStatus(ctx, instance.ID, models.InstanceStatusDisconnected); statusErr != nil {
-				cm.logger.Error("Failed to set reconnect-failed instance status", "component", "whatsmeow", "event", "reconnect_status_update_error", "instance_id", instance.ID, "error", statusErr)
+		wg.Add(1)
+		go func(inst models.WhatsAppInstance) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			cm.logger.Info("Reconnecting instance", "component", "whatsmeow", "event", "reconnect_start", "instance_id", inst.ID)
+			if err := connectInstance(ctx, inst.ID); err != nil {
+				cm.logger.Error("Failed to reconnect instance", "component", "whatsmeow", "event", "reconnect_error", "instance_id", inst.ID, "error", err)
+				if statusErr := cm.updateInstanceStatus(ctx, inst.ID, models.InstanceStatusDisconnected); statusErr != nil {
+					cm.logger.Error("Failed to set reconnect-failed instance status", "component", "whatsmeow", "event", "reconnect_status_update_error", "instance_id", inst.ID, "error", statusErr)
+				}
 			}
-			// Don't stop on single failure.
-		}
+		}(instance)
 	}
+	wg.Wait()
 	return nil
 }
 
@@ -913,22 +933,43 @@ func (cm *ConnectionManager) runHealthMonitorPass(ctx context.Context) {
 		connectInstance = cm.Connect
 	}
 
-	for _, entry := range cm.pool.snapshotEntries() {
+	entries := cm.pool.snapshotEntries()
+	if len(entries) == 0 {
+		return
+	}
+
+	instanceIDs := make([]uuid.UUID, 0, len(entries))
+	for _, entry := range entries {
+		if entry != nil {
+			instanceIDs = append(instanceIDs, entry.InstanceID)
+		}
+	}
+
+	var instances []models.WhatsAppInstance
+	if err := cm.db.WithContext(ctx).
+		Where("id IN ?", instanceIDs).
+		Find(&instances).Error; err != nil {
+		cm.logger.Error("Health monitor batch load failed", "component", "whatsmeow", "event", "health_monitor_batch_error", "error", err)
+		return
+	}
+
+	instanceMap := make(map[uuid.UUID]models.WhatsAppInstance, len(instances))
+	for _, inst := range instances {
+		instanceMap[inst.ID] = inst
+	}
+
+	for _, entry := range entries {
 		if entry == nil {
 			continue
 		}
 
-		instance, err := cm.loadInstance(ctx, entry.InstanceID)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				client := cm.pool.removeInstance(entry.InstanceID)
-				if client != nil {
-					client.Disconnect()
-				}
-				cm.stopEventDispatcherInstance(entry.InstanceID)
-				continue
+		instance, found := instanceMap[entry.InstanceID]
+		if !found {
+			client := cm.pool.removeInstance(entry.InstanceID)
+			if client != nil {
+				client.Disconnect()
 			}
-			cm.logger.Warn("Health monitor failed to load instance", "component", "whatsmeow", "event", "health_monitor_load_error", "instance_id", entry.InstanceID, "error", err)
+			cm.stopEventDispatcherInstance(entry.InstanceID)
 			continue
 		}
 
@@ -958,7 +999,7 @@ func (cm *ConnectionManager) runHealthMonitorPass(ctx context.Context) {
 		}
 
 		reconnectCtx, cancel := context.WithTimeout(ctx, cm.reconnectTimeout())
-		err = connectInstance(reconnectCtx, instance.ID)
+		err := connectInstance(reconnectCtx, instance.ID)
 		cancel()
 		entry.finishReconnect(err, instance.PhoneNumber)
 		if err != nil {

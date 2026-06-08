@@ -110,11 +110,12 @@ func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID str
 		}
 		var row msgRow
 
-		// Clone database session to avoid statement/query pollution
+		// Clone database session to avoid statement/query pollution.
+		// Scope by instance_id to prevent cross-tenant data access.
 		db := a.db.Session(&gorm.Session{})
 		query := db.Table("messages").
 			Select("direction, content, metadata").
-			Where("whats_app_message_id = ?", replyToMsgID)
+			Where("whats_app_message_id = ? AND instance_id = ?", replyToMsgID, instanceID)
 
 		if err := query.Take(&row).Error; err == nil {
 			quotedText = row.Content

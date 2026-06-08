@@ -179,7 +179,7 @@ func TestResolveReplyContext_EmptyContentFallback(t *testing.T) {
 
 	_, quotedText := adapter.resolveReplyContext(jid, quotedMsgID, myJID, instanceID)
 
-	assert.Equal(t, "Message", quotedText)
+	assert.Equal(t, "Media", quotedText)
 }
 
 

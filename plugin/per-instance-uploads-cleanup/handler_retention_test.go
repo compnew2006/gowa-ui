@@ -568,15 +568,18 @@ func TestHandleGetRetention_MissingOrgID(t *testing.T) {
 	userID := uuid.New()
 	instID := uuid.New()
 
+	var req fasthttp.Request
+	req.SetRequestURI("http://localhost/api/instances/" + instID.String() + "/uploads-cleanup")
 	var ctx fasthttp.RequestCtx
+	ctx.Init(&req, &net.TCPAddr{IP: net.ParseIP("127.0.0.1")}, nil)
 	ctx.SetUserValue("id", instID.String())
 	ctx.SetUserValue("user_id", userID.String())
 	// No org_id set — tenant resolution should fail.
 	r := &fastglue.Request{RequestCtx: &ctx}
 
 	err := p.handleGetRetention(r)
-	// Handler returns error envelope, not Go error.
-	require.NoError(t, err)
+	// requireInstanceAccess sends the error envelope and returns errResponseSent.
+	require.Error(t, err)
 
 	envelope := readResponseEnvelope(t, r.RequestCtx)
 	assert.Equal(t, "error", envelope["status"])

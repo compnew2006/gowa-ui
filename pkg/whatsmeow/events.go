@@ -15,24 +15,27 @@ import (
 
 // handleEvent processes incoming events from whatsmeow client.
 func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid.UUID) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	switch v := evt.(type) {
 	case *events.Message:
-		if cm.handleAnyReaction(context.Background(), v, instanceID, orgID) {
+		if cm.handleAnyReaction(ctx, v, instanceID, orgID) {
 			return
 		}
-		cm.handleMessage(context.Background(), v, instanceID, orgID)
+		cm.handleMessage(ctx, v, instanceID, orgID)
 
 	case *events.Receipt:
-		cm.handleReceipt(context.Background(), v, instanceID, orgID)
+		cm.handleReceipt(ctx, v, instanceID, orgID)
 
 	case *events.HistorySync:
-		cm.handleHistorySync(context.Background(), v, instanceID, orgID)
+		cm.handleHistorySync(ctx, v, instanceID, orgID)
 
 	case *events.CallOffer:
-		cm.handleCallOffer(context.Background(), v, instanceID, orgID)
+		cm.handleCallOffer(ctx, v, instanceID, orgID)
 
 	case *events.CallOfferNotice:
-		cm.handleCallOfferNotice(context.Background(), v, instanceID, orgID)
+		cm.handleCallOfferNotice(ctx, v, instanceID, orgID)
 
 	case *events.CallPreAccept:
 		cm.markCallActive(instanceID, v.CallID)
@@ -73,7 +76,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		jid := v.ID.String()
 		phoneNumber := v.ID.User
 
-		exists, err := cm.checkDuplicateJID(context.Background(), orgID, instanceID, jid)
+		exists, err := cm.checkDuplicateJID(ctx, orgID, instanceID, jid)
 		if err != nil {
 			cm.logger.Error("Failed to check duplicate JID", "component", "whatsmeow", "event", "duplicate_jid_check_error", "error", err)
 			cm.MarkError(instanceID)
@@ -89,22 +92,22 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 					},
 				})
 			}
-			if err := cm.Disconnect(context.Background(), instanceID); err != nil {
+			if err := cm.Disconnect(ctx, instanceID); err != nil {
 				cm.logger.Error("Failed to disconnect duplicate instance", "error", err, "instance_id", instanceID)
 			}
 			return
 		}
 
-		if err := cm.updateInstanceIdentity(context.Background(), instanceID, jid, phoneNumber); err != nil {
+		if err := cm.updateInstanceIdentity(ctx, instanceID, jid, phoneNumber); err != nil {
 			cm.logger.Error("Failed to update instance identity on pair success", "error", err)
 			cm.MarkError(instanceID)
 		}
 
-		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusConnected); err != nil {
+		if err := cm.updateInstanceStatus(ctx, instanceID, models.InstanceStatusConnected); err != nil {
 			cm.logger.Error("Failed to update status on pair success", "error", err)
 			cm.MarkError(instanceID)
 		}
-		if err := cm.clearInstanceSendBlock(context.Background(), instanceID); err != nil {
+		if err := cm.clearInstanceSendBlock(ctx, instanceID); err != nil {
 			cm.logger.Warn("Failed to clear send block on pair success", "error", err, "instance_id", instanceID)
 		}
 		if client := cm.GetClient(instanceID); client != nil {
@@ -121,7 +124,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.ClearCachedQRCode(instanceID)
 		phoneNumber := ""
 		var instance models.WhatsAppInstance
-		if err := cm.db.WithContext(context.Background()).
+		if err := cm.db.WithContext(ctx).
 			Select("phone_number").
 			Where("id = ?", instanceID).
 			First(&instance).Error; err == nil {
@@ -130,11 +133,11 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 			cm.logger.Debug("Failed to resolve phone number on connect event", "component", "whatsmeow", "event", "connect_phone_lookup_failed", "instance_id", instanceID, "error", err)
 		}
 
-		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusConnected); err != nil {
+		if err := cm.updateInstanceStatus(ctx, instanceID, models.InstanceStatusConnected); err != nil {
 			cm.logger.Error("Failed to update status on connect", "error", err)
 			cm.MarkError(instanceID)
 		}
-		if err := cm.clearInstanceSendBlock(context.Background(), instanceID); err != nil {
+		if err := cm.clearInstanceSendBlock(ctx, instanceID); err != nil {
 			cm.logger.Warn("Failed to clear send block on connect", "error", err, "instance_id", instanceID)
 		}
 		if client := cm.GetClient(instanceID); client != nil {
@@ -152,7 +155,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.ClearCachedQRCode(instanceID)
 		cm.clearActiveCalls(instanceID)
 		cm.stopEventDispatcherInstance(instanceID)
-		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusDisconnected); err != nil {
+		if err := cm.updateInstanceStatus(ctx, instanceID, models.InstanceStatusDisconnected); err != nil {
 			cm.logger.Error("Failed to update status on disconnect", "error", err)
 			cm.MarkError(instanceID)
 		}
@@ -180,11 +183,11 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 			reason = "WhatsApp temporary ban detected"
 		}
 		blockedUntil := time.Now().UTC().Add(24 * time.Hour)
-		if err := cm.updateInstanceSendBlock(context.Background(), instanceID, &blockedUntil, reason); err != nil {
+		if err := cm.updateInstanceSendBlock(ctx, instanceID, &blockedUntil, reason); err != nil {
 			cm.logger.Warn("Failed to persist temporary send block", "error", err, "instance_id", instanceID)
 		}
-		cm.pauseActiveCampaignsForInstance(context.Background(), orgID, instanceID, "temporary_ban")
-		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusBanned); err != nil {
+		cm.pauseActiveCampaignsForInstance(ctx, orgID, instanceID, "temporary_ban")
+		if err := cm.updateInstanceStatus(ctx, instanceID, models.InstanceStatusBanned); err != nil {
 			cm.logger.Error("Failed to update status on ban", "error", err)
 			cm.MarkError(instanceID)
 		}
@@ -195,7 +198,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.MarkDisconnected(instanceID)
 
 		notification, err := cm.createInstanceNotification(
-			context.Background(),
+			ctx,
 			orgID,
 			instanceID,
 			"banned",
@@ -223,16 +226,16 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.clearActiveCalls(instanceID)
 		logoutReason := "WhatsApp session was logged out. Reconnect and scan QR code again."
 		blockedUntil := time.Now().UTC().Add(24 * time.Hour)
-		if err := cm.updateInstanceSendBlock(context.Background(), instanceID, &blockedUntil, logoutReason); err != nil {
+		if err := cm.updateInstanceSendBlock(ctx, instanceID, &blockedUntil, logoutReason); err != nil {
 			cm.logger.Warn("Failed to persist logged-out send block", "error", err, "instance_id", instanceID)
 		}
-		cm.pauseActiveCampaignsForInstance(context.Background(), orgID, instanceID, "logged_out")
-		if err := cm.updateInstanceIdentity(context.Background(), instanceID, "", ""); err != nil {
+		cm.pauseActiveCampaignsForInstance(ctx, orgID, instanceID, "logged_out")
+		if err := cm.updateInstanceIdentity(ctx, instanceID, "", ""); err != nil {
 			cm.logger.Error("Failed to clear instance identity on logout", "error", err)
 			cm.MarkError(instanceID)
 		}
 
-		if err := cm.updateInstanceStatus(context.Background(), instanceID, models.InstanceStatusLoggedOut); err != nil {
+		if err := cm.updateInstanceStatus(ctx, instanceID, models.InstanceStatusLoggedOut); err != nil {
 			cm.logger.Error("Failed to update status on logout", "error", err)
 			cm.MarkError(instanceID)
 		}
@@ -243,7 +246,7 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 		cm.MarkDisconnected(instanceID)
 
 		notification, err := cm.createInstanceNotification(
-			context.Background(),
+			ctx,
 			orgID,
 			instanceID,
 			"logged_out",
@@ -304,38 +307,40 @@ func (cm *ConnectionManager) handleReceipt(ctx context.Context, evt *events.Rece
 		return
 	}
 
+	validIDs := make([]string, 0, len(evt.MessageIDs))
 	for _, msgID := range evt.MessageIDs {
-		trimmedMessageID := strings.TrimSpace(string(msgID))
-		if trimmedMessageID == "" {
-			continue
+		trimmed := strings.TrimSpace(string(msgID))
+		if trimmed != "" {
+			validIDs = append(validIDs, trimmed)
 		}
-		if cm.isStatusReceiptMessageID(ctx, orgID, instanceID, trimmedMessageID) {
-			continue
-		}
+	}
+	if len(validIDs) == 0 {
+		return
+	}
 
-		result := cm.db.WithContext(ctx).
-			Model(&models.Message{}).
-			Where("whats_app_message_id = ? AND instance_id = ? AND status NOT IN ?",
-				trimmedMessageID, instanceID, statusesAtOrAbove(newStatus)).
-			Update("status", newStatus)
-
-		if result.Error != nil {
-			cm.logger.Error("Failed to update message receipt status",
-				"error", result.Error,
-				"message_id", trimmedMessageID,
-				"new_status", newStatus)
-			cm.MarkError(instanceID)
-			continue
-		}
-
-		if result.RowsAffected == 0 {
+	statusReceiptIDs := cm.statusReceiptMessageIDs(ctx, orgID, instanceID, validIDs)
+	for _, trimmedMessageID := range validIDs {
+		if statusReceiptIDs[trimmedMessageID] {
 			continue
 		}
 
 		var message models.Message
 		if err := cm.db.WithContext(ctx).
-			Where("whats_app_message_id = ? AND instance_id = ?", trimmedMessageID, instanceID).
+			Where("whats_app_message_id = ? AND instance_id = ? AND status NOT IN ?",
+				trimmedMessageID, instanceID, statusesAtOrAbove(newStatus)).
 			First(&message).Error; err != nil {
+			continue
+		}
+
+		if err := cm.db.WithContext(ctx).
+			Model(&models.Message{}).
+			Where("id = ?", message.ID).
+			Update("status", newStatus).Error; err != nil {
+			cm.logger.Error("Failed to update message receipt status",
+				"error", err,
+				"message_id", trimmedMessageID,
+				"new_status", newStatus)
+			cm.MarkError(instanceID)
 			continue
 		}
 
@@ -377,6 +382,30 @@ func (cm *ConnectionManager) isStatusReceiptMessageID(ctx context.Context, orgID
 	}
 
 	return count > 0
+}
+
+// statusReceiptMessageIDs returns a set of message IDs that are status receipts,
+// batched into a single DB query instead of N individual lookups.
+func (cm *ConnectionManager) statusReceiptMessageIDs(ctx context.Context, orgID, instanceID uuid.UUID, waMessageIDs []string) map[string]bool {
+	result := make(map[string]bool, len(waMessageIDs))
+	if cm == nil || cm.db == nil || len(waMessageIDs) == 0 {
+		return result
+	}
+
+	var matchedIDs []string
+	if err := cm.db.WithContext(ctx).
+		Model(&models.WhatsAppStatus{}).
+		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id IN ?",
+			orgID, instanceID, waMessageIDs).
+		Pluck("whats_app_message_id", &matchedIDs).Error; err != nil {
+		cm.logger.Debug("Failed to batch check status receipt message IDs", "error", err)
+		return result
+	}
+
+	for _, id := range matchedIDs {
+		result[id] = true
+	}
+	return result
 }
 
 // statusesAtOrAbove returns statuses that are at or above the given status.
