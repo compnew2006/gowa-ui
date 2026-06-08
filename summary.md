@@ -519,4 +519,18 @@ All 9 Facebook package tests pass (5 pre-existing + 4 new). `go test -race -p 1 
 - Ran `npm run lint` — passed.
 - Ran `make build` — successfully compiled backend with embedded frontend.
 
+## Branch Merge & Cleanup — 2026-06-09
+Merged all branches to `main` and cleaned up stale local and remote branches.
+
+### Actions Taken
+- Merged local branch `001-per-instance-uploads-cleanup` into `main` (fast-forward, clean merge).
+- Pushed updated `main` branch to the remote repository `origin` (`https://github.com/compnew2006/whatomate.git`).
+- Deleted local branch `001-per-instance-uploads-cleanup`.
+- Deleted remote branches `001-per-instance-uploads-cleanup`, `agent/enhance-license-style`, and `agent/quoted-reply-send` on `origin`.
+- Pruned remote tracking branches for `origin` and `compnew` to remove stale local tracking references.
+
+### Verification
+- Verified that `git branch -a` lists only `main` locally, and the updated `main` on the remotes.
+- Ran `git status` to ensure working tree is clean.
+
 <!-- END -->
