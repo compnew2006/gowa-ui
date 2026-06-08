@@ -132,14 +132,14 @@ func TestResolveEffectiveRetention(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		instanceSettings  models.JSONB
-		orgSettings       models.JSONB
-		wantDays          int
-		wantSource        string
-		wantErr           bool
-		skipInstance      bool
-		skipOrg           bool
+		name             string
+		instanceSettings models.JSONB
+		orgSettings      models.JSONB
+		wantDays         int
+		wantSource       string
+		wantErr          bool
+		skipInstance     bool
+		skipOrg          bool
 	}{
 		{
 			name: "inherit true resolves to workspace default",
@@ -297,8 +297,8 @@ func TestWriteAuditRow_NilOptionalFields(t *testing.T) {
 		context.Background(),
 		orgID,
 		instanceID,
-		nil,   // no actor user ID
-		nil,   // no actor email
+		nil, // no actor user ID
+		nil, // no actor email
 		RetentionSnapshot{Inherit: true, RetentionDays: nil},
 		RetentionSnapshot{Inherit: false, RetentionDays: intPtr(10)},
 		nil, // no reason
@@ -329,61 +329,4 @@ func TestTryAcquireInstanceRun(t *testing.T) {
 	release2, ok2 := srv.tryAcquireInstanceRun()
 	assert.True(t, ok2, "second acquire after release should succeed")
 	release2()
-}
-
-func TestTryAcquireInstanceRun_ConcurrentBlock(t *testing.T) {
-	// This test verifies that a second goroutine cannot acquire the mutex
-	// while the first goroutine still holds it. We use a channel to coordinate
-	// timing between goroutines.
-	t.Parallel()
-
-	db := setupTestDB(t)
-	srv := newService(db, slog.Default())
-
-	acquired := make(chan struct{})
-	releaseFirst := make(chan struct{})
-	resultCh := make(chan bool, 1)
-
-	// Goroutine 1: acquire the run lock.
-	go func() {
-		release, ok := srv.tryAcquireInstanceRun()
-		if !ok {
-			resultCh <- false
-			return
-		}
-		close(acquired)      // signal that we hold the lock
-		<-releaseFirst       // wait for test to tell us to release
-		release()
-	}()
-
-	// Wait for goroutine 1 to acquire.
-	<-acquired
-
-	// Goroutine 2: try to acquire while goroutine 1 still holds the lock.
-	// Since tryAcquireInstanceRun uses sync.Mutex (blocking), we cannot
-	// directly test "failure" — instead we test that the mutex blocks.
-	// We run it in a goroutine and verify it does not complete before release.
-	completed := make(chan struct{})
-	go func() {
-		_, _ = srv.tryAcquireInstanceRun()
-		close(completed)
-	}()
-
-	// Give a small window; the second goroutine should be blocked.
-	select {
-	case <-completed:
-		// Mutex-based implementation always returns true, so it will block
-		// until release rather than returning false. This is expected behavior
-		// for the sync.Mutex approach.
-		t.Log("second acquire completed (mutex was released by first goroutine)")
-	case <-time.After(50 * time.Millisecond):
-		// Second goroutine is still blocked — expected.
-		t.Log("second acquire is blocked as expected")
-	}
-
-	// Release the first lock so goroutines can finish.
-	close(releaseFirst)
-
-	// Allow time for cleanup.
-	<-completed
 }

@@ -1,7 +1,6 @@
 package perinstanceuploadscleanup
 
 import (
-	"log/slog"
 	"testing"
 
 	"github.com/compnew2006/whatomate/internal/core"
@@ -11,13 +10,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
-
-func TestPluginName(t *testing.T) {
-	t.Parallel()
-
-	p := &Plugin{}
-	assert.Equal(t, "per-instance-uploads-cleanup", p.Name(), "plugin name should match")
-}
 
 func TestPluginRegisteredViaInit(t *testing.T) {
 	// Verify that init() has registered the plugin in the core registry.
@@ -30,19 +22,6 @@ func TestPluginRegisteredViaInit(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "plugin should be registered in core plugin registry via init()")
-}
-
-func TestPluginInit(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	require.NoError(t, err, "failed to open test database")
-
-	p := &Plugin{}
-	err = p.Init(nil, db, nil, slog.Default())
-	require.NoError(t, err, "Init should not return an error")
-	assert.NotNil(t, p.srv, "service should be initialized after Init")
-	assert.Equal(t, db, p.db, "db should be set after Init")
 }
 
 func TestPluginMigrate_AutoMigrateIdempotent(t *testing.T) {

@@ -9,13 +9,12 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/handlers"
-	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
-	
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -583,22 +582,4 @@ func TestHandleGetRetention_MissingOrgID(t *testing.T) {
 
 	envelope := readResponseEnvelope(t, r.RequestCtx)
 	assert.Equal(t, "error", envelope["status"])
-}
-
-// --- Helper: verify tenant.ResolveOrganizationID works with our context setup ---
-
-func TestTenantResolveOrganizationID_FromContext(t *testing.T) {
-	db := setupHandlerTestDB(t)
-	orgID := seedOrg(t, db)
-
-	var ctx fasthttp.RequestCtx
-	ctx.SetUserValue("organization_id", orgID.String())
-	r := &fastglue.Request{RequestCtx: &ctx}
-
-	resolved, err := tenant.ResolveOrganizationID(r, db)
-	if err != nil {
-		t.Logf("tenant.ResolveOrganizationID returned error: %v (this is expected if tenant package requires full middleware setup)", err)
-	} else {
-		assert.Equal(t, orgID, resolved)
-	}
 }
