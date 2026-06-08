@@ -504,3 +504,19 @@ All 9 Facebook package tests pass (5 pre-existing + 4 new). `go test -race -p 1 
 **Gotchas**: tenant key is "organization_id" not "org_id"; fasthttp.RequestCtx needs Init(); SendErrorEnvelope status is HTTP status not JSON field; SQLite no ILIKE/DESC in CREATE INDEX; GORM db.Exec() returns *gorm.DB chain .Error.
 
 **Remaining**: T045 (core mod needs approval), T037/T033/T021/T042 (frontend), T040/T041 (run handler tests), T016a (worker test), T053-T055 (infra required).
+
+## Direct Chat Header Action Buttons — 2026-06-08
+
+### Objective
+- Replaced the 3-dots actions Popover in the ChatView.vue header with direct action buttons.
+- This resolves issues where clicking the 3-dots actions dropdown did not open anything.
+
+### Files Modified
+- `frontend/src/views/chat/ChatView.vue` — removed more actions Popover and added direct Button/Tooltip elements for Toggle Public Visibility, Claim Chat, Close Chat, Transfer to Agent, Resume Chatbot, and Custom Actions.
+
+### Verification
+- Ran `npm run typecheck` — passed.
+- Ran `npm run lint` — passed.
+- Ran `make build` — successfully compiled backend with embedded frontend.
+
+<!-- END -->

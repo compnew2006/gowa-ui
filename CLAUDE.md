@@ -687,11 +687,6 @@ npx playwright test --project=chromium
 npx playwright test          # full suite if shared components changed
 npx playwright test --debug  # if failures
 ```
-```
-chrome-devtools → take_screenshot()
-zai-mcp-server  → ui_diff_check()
-zai-mcp-server  → diagnose_error_screenshot()   ← if console errors visible
-```
 
 **Backend / Go changes:**
 ```bash
@@ -892,56 +887,6 @@ codegraph semantic_search "send email; notify user; deliver message"
 | `search_for_pattern` | Searches for a regex pattern across project files, returning whole matched lines |
 | `write_memory` | Persist architectural note or pattern |
 
-***
-
-## Chrome-DevTools — 29 Tools
-
-| Tool | Purpose |
-|---|---|
-| `click` | Click element by uid |
-| `close_page` | Close page by index |
-| `drag` | Drag element onto another |
-| `emulate` | Emulate device/network/geolocation |
-| `evaluate_script` | Run JavaScript in page context |
-| `fill` | Type into input/select |
-| `fill_form` | Fill multiple form fields at once |
-| `get_console_message` | Get console message by ID |
-| `get_network_request` | Network request details |
-| `handle_dialog` | Handle alert/confirm/prompt |
-| `hover` | Hover over element |
-| `lighthouse_audit` | a11y/SEO/best-practices audit |
-| `list_console_messages` | All console messages |
-| `list_network_requests` | All network requests |
-| `list_pages` | Open browser pages |
-| `navigate_page` | Navigate to URL/back/forward/reload |
-| `new_page` | Open new tab |
-| `performance_analyze_insight` | Analyze a Performance Insight |
-| `performance_start_trace` | Start performance trace |
-| `performance_stop_trace` | Stop performance trace |
-| `press_key` | Press key or combination |
-| `resize_page` | Resize browser window |
-| `select_page` | Select page for operations |
-| `take_heapsnapshot` | Capture heap snapshot |
-| `take_screenshot` | Screenshot of page or element |
-| `take_snapshot` | Accessibility tree snapshot |
-| `type_text` | Type into focused input |
-| `upload_file` | Upload file via element |
-| `wait_for` | Wait for text to appear |
-
-***
-
-## Zai-MCP-Server — 8 Tools
-
-| Tool | Purpose |
-|---|---|
-| `analyze_data_visualization` | Analyze charts, graphs, dashboards |
-| `analyze_image` | General-purpose image analysis |
-| `analyze_video` | Analyze video content |
-| `diagnose_error_screenshot` | Diagnose error screenshots + stack traces |
-| `extract_text_from_screenshot` | OCR text extraction |
-| `ui_diff_check` | Compare expected vs actual UI screenshots |
-| `ui_to_artifact` | Convert UI screenshot to code/spec/description |
-| `understand_technical_diagram` | Analyze architecture/flowchart/UML |
 
 ***
 

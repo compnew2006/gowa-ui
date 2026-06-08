@@ -111,3 +111,4 @@ ruvector.db
 *.prof
 # CocoIndex Code (ccc)
 /.cocoindex_code/
+/node_modules

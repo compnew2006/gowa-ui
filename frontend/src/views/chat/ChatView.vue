@@ -4858,109 +4858,103 @@ async function sendMediaMessage() {
                 <kbd class="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-border/50 bg-muted px-0.5 font-mono text-[10px] text-muted-foreground">I</kbd>
               </TooltipContent>
             </Tooltip>
-            <Popover v-if="(canToggleCurrentChatPublic || canClaimCurrentChat || canCloseCurrentChat || canManageTransfers) && !isCurrentChatRestricted">
-              <Tooltip>
-                <TooltipTrigger as-child>
-                  <PopoverTrigger as-child>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
-                      aria-label="More actions (M)"
-                    >
-                      <MoreHorizontal class="h-4 w-4" />
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <span>{{ $t("chat.moreActions") }}</span>
-                  <kbd class="ml-1.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded border border-border/50 bg-muted px-0.5 font-mono text-[10px] text-muted-foreground">M</kbd>
-                </TooltipContent>
-              </Tooltip>
-              <PopoverContent
-                class="w-48 p-1"
-                side="bottom"
-                align="end"
-              >
-                <button
-                  v-if="canToggleCurrentChatPublic"
-                  type="button"
-                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
-                  :class="contactsStore.currentContact?.is_public ? 'text-primary' : ''"
+            <!-- Toggle Public Visibility -->
+            <Tooltip v-if="canToggleCurrentChatPublic && !isCurrentChatRestricted">
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  :class="contactsStore.currentContact?.is_public && 'text-primary'"
                   :disabled="isUpdatingCurrentChatPublic"
                   @click="toggleCurrentChatPublicVisibility"
                 >
-                  <Pin class="h-3.5 w-3.5" />
-                  {{
-                    contactsStore.currentContact?.is_public
-                      ? $t("chat.removePublicChat")
-                      : $t("chat.makePublicChat")
-                  }}
-                </button>
-                <button
-                  v-if="canClaimCurrentChat"
-                  type="button"
-                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
-                  :disabled="isClaimingCurrentChat"
-                  @click="claimCurrentChat"
-                >
-                  <Check class="h-3.5 w-3.5" />
-                  {{ $t("chat.claimChat") }}
-                </button>
-                <button
-                  v-if="canCloseCurrentChat"
-                  type="button"
-                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
-                  :disabled="isClosingCurrentChat"
-                  @click="closeCurrentChat"
-                >
-                  <Check class="h-3.5 w-3.5" />
-                  Close Chat
-                </button>
-                <button
-                  v-if="canManageTransfers && !activeTransferId"
-                  type="button"
-                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
-                  :disabled="isTransferring"
-                  @click="transferToAgent"
-                >
-                  <UserX class="h-3.5 w-3.5" />
-                  {{ $t("chat.transferToAgent") }}
-                </button>
-                <button
-                  v-if="canManageTransfers && activeTransferId"
-                  type="button"
-                  class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
-                  :disabled="isResuming"
-                  @click="resumeChatbot"
-                >
-                  <Play class="h-3.5 w-3.5" />
-                  {{ $t("chat.resumeChatbot") }}
-                </button>
-                <template v-if="customActions.length > 0">
-                  <div class="my-1 h-px bg-border" />
-                  <button
-                    v-for="action in customActions"
-                    :key="action.id"
-                    type="button"
-                    class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-accent"
-                    :disabled="executingActionId === action.id"
-                    @click="executeCustomAction(action)"
-                  >
-                    <Loader2
-                      v-if="executingActionId === action.id"
-                      class="h-3.5 w-3.5 animate-spin"
-                    />
-                    <component
-                      v-else
-                      :is="getActionIcon(action.icon)"
-                      class="h-3.5 w-3.5"
-                    />
-                    {{ action.name }}
-                  </button>
-                </template>
-              </PopoverContent>
-            </Popover>
+                  <Pin class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <span>{{
+                  contactsStore.currentContact?.is_public
+                    ? $t("chat.removePublicChat")
+                    : $t("chat.makePublicChat")
+                }}</span>
+              </TooltipContent>
+            </Tooltip>
+
+            <!-- Claim Chat -->
+            <Button
+              v-if="canClaimCurrentChat && !isCurrentChatRestricted"
+              variant="outline"
+              size="sm"
+              class="h-8 px-2.5 text-xs gap-1.5"
+              :disabled="isClaimingCurrentChat"
+              @click="claimCurrentChat"
+            >
+              <Check class="h-3.5 w-3.5" />
+              <span>{{ $t("chat.claimChat") }}</span>
+            </Button>
+
+            <!-- Close Chat -->
+            <Button
+              v-if="canCloseCurrentChat && !isCurrentChatRestricted"
+              variant="outline"
+              size="sm"
+              class="h-8 px-2.5 text-xs gap-1.5"
+              :disabled="isClosingCurrentChat"
+              @click="closeCurrentChat"
+            >
+              <Check class="h-3.5 w-3.5" />
+              <span>Close Chat</span>
+            </Button>
+
+            <!-- Transfer to Agent / Resume Chatbot -->
+            <Button
+              v-if="canManageTransfers && !activeTransferId && !isCurrentChatRestricted"
+              variant="outline"
+              size="sm"
+              class="h-8 px-2.5 text-xs gap-1.5"
+              :disabled="isTransferring"
+              @click="transferToAgent"
+            >
+              <UserX class="h-3.5 w-3.5" />
+              <span>{{ $t("chat.transferToAgent") }}</span>
+            </Button>
+
+            <Button
+              v-if="canManageTransfers && activeTransferId && !isCurrentChatRestricted"
+              variant="outline"
+              size="sm"
+              class="h-8 px-2.5 text-xs gap-1.5"
+              :disabled="isResuming"
+              @click="resumeChatbot"
+            >
+              <Play class="h-3.5 w-3.5" />
+              <span>{{ $t("chat.resumeChatbot") }}</span>
+            </Button>
+
+            <!-- Custom Actions -->
+            <template v-if="customActions.length > 0 && !isCurrentChatRestricted">
+              <Button
+                v-for="action in customActions"
+                :key="action.id"
+                variant="outline"
+                size="sm"
+                class="h-8 px-2.5 text-xs gap-1.5"
+                :disabled="executingActionId === action.id"
+                @click="executeCustomAction(action)"
+              >
+                <Loader2
+                  v-if="executingActionId === action.id"
+                  class="h-3.5 w-3.5 animate-spin"
+                />
+                <component
+                  v-else
+                  :is="getActionIcon(action.icon)"
+                  class="h-3.5 w-3.5"
+                />
+                <span>{{ action.name }}</span>
+              </Button>
+            </template>
           </div>
         </div>
 

@@ -1,1000 +1,745 @@
-# CLAUDE.md — v3.0 — 2026-06-06
+---
+name: agent-orchestrator
+description: >
+  Universal 5-phase agent orchestration workflow for any codebase.
+  Enforces: session startup → memory + skill selection → deep analysis →
+  decision gate → implementation → verification → architectural audit.
+  Includes SWARM protocol for large tasks, MCP-first tooling rules,
+  strict Serena-first file operations, and mandatory codegraph/codebase-memory
+  verification before any code change.
+  Activate this skill on EVERY coding session regardless of project.
+---
 
-This file provides guidance to Claude Code (claude.ai/code) and OpenCode (GLM-4.5 via Z.ai)
-when working with code in this repository. Both tools load this file automatically at session start.
+# Agent Orchestrator — Universal Workflow v2.0
 
-***
+**This skill defines the mandatory workflow for every coding session and every user request.**
+It is project-agnostic — it works with any codebase, any language, any framework.
+
+All project-specific details (build commands, architecture, critical paths) are
+discovered dynamically during onboarding and analysis phases.
+
+---
+
+## ⛔ HARD RULES — Always Active, No Exceptions
+
+These rules are non-negotiable. They apply at ALL times during the session.
+
+### Rule 1: MCP-First, Shell-Second
+
+**Forbidden for code navigation:**
+```
+cat  head  tail  less  grep  rg  ag  find  ls  ← FORBIDDEN on source files
+```
+
+Use MCP tools (`serena`, `codegraph`, `codebase-memory-mcp`) for all code navigation.
+
+**Shell allowed ONLY for:**
+- Running tests
+- Git operations
+- Package installs (npm, pip, go get, etc.)
+- Linters and formatters
+- Running/building the application
+- File creation (`touch`, `mkdir`)
+
+### Rule 2: Serena-First for All File Operations
+
+**Reading files:**
+```
+serena → get_symbols_overview(path = file)     ← structure overview
+serena → find_symbol(name = symbol)            ← locate specific symbol
+serena → find_declaration(name = symbol)       ← find where declared
+serena → search_for_pattern(pattern = text)    ← search across files
+```
+
+**Editing files:**
+```
+serena → replace_symbol_body(...)              ← modify functions/methods
+serena → replace_content(...)                  ← targeted text replacement
+serena → insert_after_symbol(...)              ← add code after symbol
+serena → insert_before_symbol(...)             ← add code before symbol
+serena → rename_symbol(...)                    ← rename across project
+serena → safe_delete_symbol(...)               ← delete with safety check
+```
+
+> **NEVER edit a file without reading it first.**
+> Always use `serena → get_symbols_overview()` or read the file before any modification.
+
+### Rule 3: Verify Before Change — codegraph
+
+**Before ANY code modification, verify with codegraph:**
+```
+codegraph → fn_impact(name = target, flags = -T)     ← who will be affected?
+codegraph → co_changes(file = target)                 ← what files usually change together?
+codegraph → where(name = target)                      ← where is this used?
+```
+
+**After ANY code modification, verify with codegraph:**
+```
+git add <edited-file>
+codegraph → diff_impact(flags = --staged -T)          ← did we break anything?
+codegraph → check(flags = --staged --no-new-cycles)   ← any new cycles?
+```
+
+If unexpected dependents appear → **STOP. Report to user. Do NOT commit.**
+
+### Rule 4: Check Patterns First — codebase-memory-mcp
+
+**Before implementing anything, check if a pattern already exists:**
+```
+codebase-memory-mcp → search_graph(query = task description)    ← existing architecture patterns
+codebase-memory-mcp → search_code(pattern = keyword)            ← existing code patterns
+codebase-memory-mcp → get_architecture()                        ← high-level project structure
+```
+
+If an existing pattern is found → **follow it**. Do not invent new patterns when
+the codebase already has an established way of doing things.
+
+### Rule 5: Files Under 500 Lines
+
+- Keep all files under 500 lines. Extract into new files when exceeding.
+- Preserve all existing comments and docstrings unrelated to your changes.
+- Follow existing code style and conventions discovered during onboarding.
+
+---
 
 ## RUNTIME DETECTION
+
+Execute at the very start of every session:
 
 ```
 If running in OpenCode  → prepend ALL tool calls with server prefix:
                           codegraph_*, serena_*, codebase_memory_*, chrome_devtools_*, zai_*, openspace_*
 If running in Claude Code → use bare tool names: semantic_search, fn_impact, replace_symbol_body ...
+If running in Antigravity → use call_mcp_tool with ServerName and ToolName
 ```
 
-***
+---
 
-## Project Overview
+## MCP SERVER AVAILABILITY CHECK
 
-Whatomate is a WhatsApp Business Platform with dual-provider support: **Meta Cloud API** and
-**Whatsmeow** (WhatsApp Web protocol). Go backend (FastHTTP + fastglue router), Vue 3 +
-TypeScript frontend, PostgreSQL, Redis. Single binary production build with embedded frontend.
-
-- **Go module**: `github.com/compnew2006/whatomate`
-- **HTTP framework**: fastglue + fasthttp — NOT net/http
-- **Config format**: TOML via koanf (`config.toml`, gitignored — copy from `config.example.toml`)
-- **Go version**: 1.25.x
-
-***
-
-## Build & Run Commands
-
-```bash
-make build && ./whatomate server -config config.toml -migrate   # backend dev
-make frontend-dev                                                # frontend dev
-make build-prod && ./whatomate server -config config.toml -migrate  # production
-make backend-watch                                               # hot-reload backend
-make dev-watch                                                   # backend + frontend
-make test                                                        # all Go tests
-go test -v -run TestFunctionName ./internal/handlers/...        # single test
-make test-db                                                     # DB integration (ephemeral Postgres)
-cd frontend && npm run test:unit                                 # frontend unit
-cd frontend && npm run test:e2e                                  # frontend E2E
-cd frontend && npm run lint && npm run typecheck                 # lint + types
-make lint                                                        # Go lint
-```
-
-### Environment Variables (required for tests)
-
-```bash
-export TEST_DATABASE_URL="postgres://test:test@127.0.0.1:5432/test?sslmode=disable"
-export TEST_REDIS_URL="redis://127.0.0.1:6379/1"
-```
-
-Tests **skip** (not fail) if these are unset.
-Always use `-p 1` when running multiple packages sharing the test DB.
-
-### First-Time Setup
-
-```bash
-cp config.example.toml config.toml      # never commit config.toml
-docker compose -f docker/docker-compose.yml up -d db redis
-make run-migrate                         # first run — applies all migrations
-```
-
-***
-
-## Architecture
-
-### Backend (`internal/`)
-
-- **`handlers/`** — HTTP handlers. `app.go` = `App` dependency container. 230+ files.
-- **`models/`** — GORM models. `models.go` is central. Soft deletes everywhere.
-- **`database/`** — PostgreSQL (GORM) + Redis. Migrations in `postgres.go`.
-- **`websocket/`** — `hub.go` broadcasts, `client.go` per connection, `messages.go` event types.
-- **`middleware/`** — Auth JWT, CSRF, rate limiting, tenant scoping.
-- **`worker/`** — Background jobs: campaigns, scheduled sends, group ops.
-- **`queue/`** — Redis Streams consumer groups (`campaigns`, `inbound_media`).
-- **`tenant/`** — Multi-tenant scope filtering per request.
-- **`storage/`** — Local FS or S3/MinIO abstraction.
-- **`crypto/`** — AES-256 encryption for secrets at rest.
-- **`license/`** — Host-bound license enforcement, RSA verification.
-- **`core/`** — Plugin registration registry and core interfaces. Contains `plugin.go` (registry for third-party feature extensions).
-
-### Dual Provider (`pkg/`)
-
-- **`pkg/whatsapp/`** — Meta Cloud API client.
-- **`pkg/whatsmeow/`** — QR-code protocol. QueueManager, event dispatcher, media retry.
-- **`pkg/provider/`** — `MessageProvider` interface. Provider set per-instance via `whatsapp.provider`.
-
-> **Multi-instance providers**: each instance can have its own provider — `meta` or `whatsmeow`
-> simultaneously. New providers must implement `pkg/provider/interface.go` fully.
-
-### Frontend (`frontend/src/`)
-
-- **`stores/`** — Pinia: auth, instances, contacts, transfers
-- **`services/`** — api.ts (axios), websocket.ts, domain services
-- **`views/`** — chat/, settings/, chatbot/, facebook/, analytics/, dashboard/, auth/
-- **`components/`** — chat/, chatbot/, layout/, shared/
-- **`composables/`** — shared Vue logic
-- **`i18n/`** — en, ar, es locale files
-- **`router/`** — Vue Router with guards
-
-### Key Flows
-
-1. **Send**: Frontend → handler → `MessageProvider.Send()` → Meta/Whatsmeow → WS status broadcast
-2. **Webhook**: Meta/Whatsmeow → handler → DB → WS push
-3. **Auth**: JWT httpOnly cookies. Access 15min + refresh 1 day. CSRF double-submit.
-4. **Tenancy**: `TenantScope` middleware filters all DB queries by org (see Multi-Tenancy below).
-
-***
-
-## 🔴 ARCHITECTURAL INVARIANT — Plugin Architecture
-
-**This is the most critical rule. Violating it causes irreversible damage to core.**
+**Execute BEFORE Session Startup. Determines which tools are available.**
 
 ```
-New feature = new plugin under plugin/
-Core modification = FORBIDDEN without explicit approval
+Step 0: Check available MCP servers
+
+  List all available MCP servers and tools.
+  Mark availability:
+    serena              ☐ available  ☐ unavailable
+    codegraph           ☐ available  ☐ unavailable
+    codebase-memory-mcp ☐ available  ☐ unavailable
+    chrome-devtools     ☐ available  ☐ unavailable
+    zai-mcp-server      ☐ available  ☐ unavailable
+    openspace           ☐ available  ☐ unavailable
+
+  FALLBACK MODES:
+  ┌─────────────────────────┬────────────────────────────────────────────────┐
+  │ If unavailable          │ Fallback behavior                             │
+  ├─────────────────────────┼────────────────────────────────────────────────┤
+  │ serena                  │ Use built-in file read/edit tools.             │
+  │                         │ Skip Steps 1-3 of Session Startup.            │
+  │                         │ Use grep_search for pattern searching.        │
+  │                         │ Use view_file / replace_file_content for edits│
+  ├─────────────────────────┼────────────────────────────────────────────────┤
+  │ codegraph               │ Use serena → find_referencing_symbols for     │
+  │                         │ impact analysis. Skip automated blast radius. │
+  │                         │ Manually verify callers before editing.       │
+  │                         │ Skip Architecture Enforcement steps.          │
+  ├─────────────────────────┼────────────────────────────────────────────────┤
+  │ codebase-memory-mcp     │ Skip Phase 1 memory search.                   │
+  │                         │ Proceed without memory — log "no memory       │
+  │                         │ available" and continue.                       │
+  │                         │ Skip post-success index_repository.           │
+  ├─────────────────────────┼────────────────────────────────────────────────┤
+  │ chrome-devtools         │ Skip visual verification in Phase 5.          │
+  │                         │ Rely on test suite only for UI changes.       │
+  ├─────────────────────────┼────────────────────────────────────────────────┤
+  │ zai-mcp-server          │ Skip ui_diff_check and diagnose_error.        │
+  │                         │ Use chrome-devtools screenshots if available. │
+  ├─────────────────────────┼────────────────────────────────────────────────┤
+  │ openspace               │ Skip skill activation via openspace.          │
+  │                         │ Load skills manually from skills-map.md.      │
+  └─────────────────────────┴────────────────────────────────────────────────┘
+
+  Store availability status for the rest of this session.
 ```
 
-### Plugin Directory Structure
-
-```
-plugin/
-  <feature-name>/
-    plugin.go       ← registers via init() + blank import
-    handler.go      ← feature handlers (optional)
-    model.go        ← feature models (optional)
-    routes.go       ← route registration (optional)
-```
-
-### Registration Pattern
-
-Every plugin self-registers using Go's blank import mechanism:
-
-```go
-// plugin/<feature>/plugin.go
-package <feature>
-
-import "github.com/compnew2006/whatomate/internal/core"
-
-func init() {
-    core.RegisterPlugin(<feature>Plugin{})
-}
-
-// cmd/whatomate/main.go — activate plugin with blank import:
-import _ "github.com/compnew2006/whatomate/plugin/<feature>"
-```
-
-### Plugin Interface Contract
-
-Every plugin struct must implement the `core.Plugin` interface defined in `internal/core/plugin.go`:
-
-```go
-package core
-
-import (
-	"github.com/zerodha/fastglue"
-	"gorm.io/gorm"
-	"github.com/redis/go-redis/v9"
-	"log/slog"
-)
-
-type Plugin interface {
-	Name() string
-	Init(db *gorm.DB, rdb *redis.Client, log *slog.Logger) error
-	Routes(g *fastglue.Glue)
-	Migrate(db *gorm.DB) error
-}
-```
-
-- `Name() string`: Returns the unique name of the plugin.
-- `Init(...) error`: Receives dependency injections (GORM, Redis, Logger) and binds them to the plugin struct. The core registry calls this on all plugins during startup.
-- `Routes(g *fastglue.Glue)`: Registers the plugin's routes on the main router.
-- `Migrate(db *gorm.DB) error`: Runs GORM auto-migrations for the plugin's models (e.g. `db.AutoMigrate(&MyPluginModel{})`).
-
-### Plugin Migration Strategy
-
-To avoid breaking the Plugin Invariant and modifying core files (like `postgres.go`):
-- All plugin database migrations MUST be defined inside the plugin's `Migrate(db *gorm.DB)` method using GORM `AutoMigrate`.
-- The core migration runner automatically iterates through all registered plugins and invokes their `Migrate` methods during startup. Do NOT add plugin models to `internal/database/postgres.go`.
-
-### Plugin Tenant Scoping
-
-Because plugins do not have access to `handlers.App` or its `requestDB` helper method, plugin handlers must resolve the organization ID and scope GORM queries manually using the exported `tenant` and `middleware` packages:
-
-```go
-package <feature>
-
-import (
-	"net/http"
-	"github.com/compnew2006/whatomate/internal/middleware"
-	"github.com/compnew2006/whatomate/internal/tenant"
-	"github.com/zerodha/fastglue"
-)
-
-func (p *MyPlugin) handleSomething(rc *fastglue.Request) error {
-	// 1. Resolve tenant organization ID from request context (set by auth middleware)
-	orgID, ok := middleware.GetOrganizationID(rc)
-	if !ok {
-		return rc.SendErrorEnvelope(http.StatusUnauthorized, "missing organization", nil, "UNAUTHORIZED")
-	}
-
-	// 2. Obtain a scoped database session
-	scopedDB := tenant.ScopedDB(p.db, orgID)
-
-	// 3. Query using the scoped database
-	var results []MyPluginModel
-	if err := scopedDB.Find(&results).Error; err != nil {
-		return rc.SendErrorEnvelope(http.StatusInternalServerError, "query failed", nil, "DB_ERROR")
-	}
-
-	return rc.SendEnvelope(results)
-}
-```
-
-### Plugin Test Pattern
-
-Plugin handlers should be tested by constructing the plugin instance directly and passing mocked or test database dependencies:
-
-```go
-package <feature>
-
-import (
-	"log/slog"
-	"testing"
-
-	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/assert"
-	"gorm.io/gorm"
-)
-
-func TestMyPluginHandler(t *testing.T) {
-	// Construct plugin directly with test/mock DB dependencies
-	p := &MyPlugin{
-		db:    testDB,
-		redis: testRedis,
-		log:   slog.Default(),
-	}
-
-	// Construct fastglue.Request and call handler directly
-	// ...
-	assert.NoError(t, err)
-}
-```
-
-### Decision Rule for the Agent
-
-```
-Before ANY implementation:
-  Does this touch internal/handlers/, internal/models/, or pkg/?
-    YES → Is this a bug fix or core interface change?
-      NO  → Create plugin/ instead. Do NOT modify core.
-      YES → Get explicit user approval first.
-    NO  → Proceed normally.
-```
-
-***
-
-## Multi-Tenancy — Full Pattern
-
-### How scoping works
-
-Every DB query in a handler **must** go through the tenant scoped database. Within core handlers (defined as methods on `App`), the standard way to retrieve a request-scoped, pre-scoped database clone is via the `app.requestDB(rc)` helper method:
-
-```go
-// internal/handlers/app.go
-// requestDB returns a tenant-scoped *gorm.DB session for the current request context.
-// It checks the request context for a pre-scoped DB (set by auth middleware) or scopes it using tenant.ScopedDB.
-func (a *App) requestDB(r *fastglue.Request) *gorm.DB { ... }
-```
-
-```go
-// ✅ CORRECT — always scope DB queries inside App handlers using requestDB
-func (app *App) handleListContacts(rc *fastglue.Request) error {
-    var contacts []models.Contact
-    app.requestDB(rc).Find(&contacts)
-    ...
-}
-
-// ❌ WRONG — never query without scope in a handler
-app.db.Find(&contacts)
-```
-
-### What needs scoping (must filter by org_id)
-
-- All records in `models/` that have an `OrgID` or `OrganizationID` field
-- Any query inside a handler that returns user-visible data
-
-### What does NOT need scoping
-
-- Internal background workers operating on a specific known org
-- System-wide tables (e.g., `plans`, `feature_flags`) with no org column
-- License checks
-
-### Redis key namespacing per tenant
-
-```go
-// Pattern: "<prefix>:<orgID>:<resource>"
-key := fmt.Sprintf("session:%s:%s", orgID, userID)
-key := fmt.Sprintf("ratelimit:%s:%s", orgID, endpoint)
-```
-
-Never use global Redis keys for tenant-specific data.
-
-***
-
-## GORM Soft Delete Pattern
-
-All database models utilize GORM soft deletes (`gorm.DeletedAt`).
-
-### Querying Soft-Deleted Records
-Use `db.Unscoped()` to include deleted records in queries:
-```go
-// Include soft-deleted rows
-var contact models.Contact
-app.db.Unscoped().First(&contact, "id = ?", id)
-```
-
-### Soft Delete vs Hard Delete
-- `db.Delete(&record)` performs a soft delete (sets `deleted_at`).
-- `db.Unscoped().Delete(&record)` performs a hard delete (removes row from DB).
-Always use soft delete unless explicitly instructed otherwise.
-
-### Cascading & Tenant Scoping
-- GORM soft delete does NOT automatically cascade to related tables.
-- When deleting a parent record (e.g., `Instance`), ensure related tenant-scoped child records (e.g., `Campaigns`, `Messages`) are explicitly soft-deleted to avoid orphaned records:
-  ```go
-  // Explicit cascade soft-delete within same transaction
-  tx.Where("instance_id = ?", instance.ID).Delete(&models.Campaign{})
-  ```
-
-***
-
-## Error Handling Convention
-
-### Error types
-
-```go
-// Sentinel errors — for expected domain errors
-var ErrNotFound   = errors.New("not found")
-var ErrForbidden  = errors.New("forbidden")
-var ErrConflict   = errors.New("conflict")
-
-// Wrapped errors — always wrap with context
-return fmt.Errorf("handleCreateCampaign: %w", ErrNotFound)
-```
-
-### HTTP error response format (JSON)
-
-All handlers return errors via fastglue's envelope:
-
-```go
-// ✅ CORRECT — use envelope helper
-return rc.SendErrorEnvelope(http.StatusBadRequest, "validation failed", nil, "VALIDATION_ERROR")
-
-// JSON output:
-// { "status": "error", "message": "validation failed", "code": "VALIDATION_ERROR", "data": null }
-```
-
-Never return raw error strings or non-envelope JSON from handlers.
-
-### Handler error propagation pattern
-
-```go
-func (app *App) handleSomething(rc *fastglue.Request) error {
-    result, err := app.service.DoWork(ctx)
-    if err != nil {
-        if errors.Is(err, ErrNotFound) {
-            return rc.SendErrorEnvelope(http.StatusNotFound, "resource not found", nil, "NOT_FOUND")
-        }
-        app.log.Error("handleSomething: unexpected error", "err", err)
-        return rc.SendErrorEnvelope(http.StatusInternalServerError, "internal error", nil, "INTERNAL_ERROR")
-    }
-    return rc.SendEnvelope(result)
-}
-```
-
-***
-
-## WebSocket Message Protocol
-
-### Message type field
-
-Every WS message has a `type` field that drives frontend routing:
-
-```go
-// internal/websocket/messages.go — message types
-type MessageType string
-
-const (
-    MsgNewMessage       MessageType = "new_message"
-    MsgDeliveryUpdate   MessageType = "delivery_update"
-    MsgTypingIndicator  MessageType = "typing"
-    MsgAgentTransfer    MessageType = "agent_transfer"
-    MsgPresenceUpdate   MessageType = "presence"
-)
-```
-
-### JSON schema for WS events
-
-```json
-{
-  "type": "new_message",
-  "org_id": "uuid",
-  "payload": { /* event-specific data */ },
-  "timestamp": "2026-01-01T00:00:00Z"
-}
-```
-
-### Frontend subscription pattern
-
-```typescript
-// frontend/src/services/websocket.ts
-ws.on('new_message', (payload) => store.addMessage(payload))
-ws.on('delivery_update', (payload) => store.updateStatus(payload))
-```
-
-New WS event types: add to `messages.go` + broadcast in `hub.go` + subscribe in `websocket.ts`.
-
-***
-
-## Background Workers — Pattern
-
-### Adding a new worker
-
-```go
-// internal/worker/<feature>_worker.go
-type FeatureWorker struct { db *gorm.DB; redis *redis.Client }
-
-func (w *FeatureWorker) Run(ctx context.Context) error {
-    // process from Redis Stream consumer group
-}
-
-// internal/worker/register.go — register worker
-func RegisterWorkers(app *App) {
-    app.workers = append(app.workers, &FeatureWorker{db: app.db, redis: app.redis})
-}
-```
-
-### Redis Streams consumer group naming
-
-```go
-// Pattern: "stream:<domain>" + group: "worker:<feature>"
-streamKey  := "stream:campaigns"
-groupName  := "worker:campaign-sender"
-```
-
-### Retry/backoff strategy
-
-Workers use exponential backoff with jitter. Max retries configurable per worker.
-Failed jobs after max retries → dead-letter stream `stream:<domain>:dead`.
-
-***
-
-## Logging Convention
-
-```go
-// Framework: slog (structured logging)
-app.log.Info("handler called", "org_id", orgID, "user_id", userID)
-app.log.Error("operation failed", "err", err, "context", ctx)
-app.log.Debug("debug info", "key", value)  // only in dev
-```
-
-Log levels: `Debug` (dev only) · `Info` (normal ops) · `Warn` (recoverable) · `Error` (needs attention).
-Always include `org_id` and `user_id` in handler logs for traceability.
-
-***
-
-## API Pagination Pattern
-
-```go
-// Standard cursor pagination for all list endpoints
-type PaginationParams struct {
-    Page    int    `query:"page" default:"1"`
-    PerPage int    `query:"per_page" default:"20" max:"100"`
-}
-
-// Response envelope
-type PaginatedResponse struct {
-    Data       interface{} `json:"data"`
-    Total      int64       `json:"total"`
-    Page       int         `json:"page"`
-    PerPage    int         `json:"per_page"`
-    TotalPages int         `json:"total_pages"`
-}
-```
-
-Use offset pagination for simple lists. Use cursor pagination (keyset) only for high-volume streams.
-
-***
-
-## Conventions
-
-- Composition API only. Pinia, Vue Query, VeeValidate + Zod.
-- Go: `testify`. Frontend: Vitest (unit) + Playwright (E2E).
-- Handler tests: construct `fasthttp.RequestCtx` + `fastglue.Request` directly — no httptest.
-- Files under 500 lines. Extract when exceeding.
-- **Always read a file before editing it.**
-- New code = plugin first (see Plugin Architecture above).
-
-***
-
-## HARD RULE — MCP-First, Shell-Second
-
-**Forbidden for code navigation:**
-```
-cat  head  tail  less  grep  rg  ag  find  ls  ← on source files
-```
-
-**Shell allowed ONLY for:** tests, git, package installs, linters, running the app, `php -l`.
-
-***
+---
 
 ## SESSION STARTUP — Execute Every Session (in order)
 
+These 6 steps run **once** at the start of every coding session, in strict order:
+
+### Step 1: Load Serena Instructions
 ```
-1. serena          → initial_instructions()
-2. serena          → onboarding()              ← skip if done in last 24h
-3. serena          → list_memories()
-4. serena          → read_memory("summary")    ← if exists — NEVER replace, only append
-5. Check if skills-map.md exists (e.g., search via `serena → search_for_pattern(substring_pattern = "skills-map\\.md", relative_path = "")` or check file)
-   → if found: read the file
-   → if not found: generate it now using the auto-generation logic below, then read
-6. Check if summary.md exists and contains "<!-- END -->" (e.g., search `summary\\.md`). If not found or missing: create/touch it with `# Summary\n\n<!-- END -->` to ensure subsequent appends succeed.
-7. codegraph       → semantic_search("recent changes; last task; last modified")
+serena → initial_instructions()
 ```
+> Skip if serena unavailable (see Fallback Modes above).
 
-***
-
-## SKILLS MAP SYSTEM
-
-`skills-map.md` is a machine-readable index of installed skills.
-Read in Phase 1 to select the right skill per task.
-
-### Auto-generate if missing (AI does this — no external script needed)
-
+### Step 2: Project Onboarding + Context Detection
 ```
-if skills-map.md not found:
-  serena → search_for_pattern(substring_pattern = "\\.md$", relative_path = ".claude/skills")
-  serena → search_for_pattern(substring_pattern = "\\.md$", relative_path = ".agents/skills")
-  for each skill file found:
-    read first 20 lines → extract description + keywords
-  bash: touch skills-map.md
-  serena → replace_content(
-    file    = "skills-map.md",
-    content = generated routing table (format below)
-  )
+serena → onboarding()          ← skip if done in last 24h
 ```
 
-### skills-map.md format
+During onboarding (especially first session), identify and memorize:
+- Project language(s) and framework(s)
+- Build system and commands (Makefile, package.json scripts, Cargo.toml, etc.)
+- Test framework and commands
+- Lint/typecheck commands
+- Directory structure and architectural layers
+- Core/critical directories that should NOT be modified without approval
+- Extension mechanism (plugins, modules, packages, middleware, decorators, etc.)
+- Scoping mechanism (multi-tenancy, user scoping, org scoping, or none)
+- Error handling convention (custom error types, HTTP envelope, exceptions, etc.)
 
+Store findings:
+```
+serena → write_memory(name = "project-context", content = findings)
+```
+
+> This combines the previous Steps 2 and 7 — no redundancy.
+
+### Step 3: Load Memory
+```
+serena → list_memories()
+serena → read_memory("summary")     ← if exists — NEVER replace, only append
+serena → read_memory("project-context")  ← if exists — load project conventions
+```
+
+### Step 4: Check and Load Skills Map
+```
+Does skills-map.md exist?
+  YES → read it
+  NO  → auto-generate it:
+    1. serena → search_for_pattern(substring_pattern = "\\.md$", relative_path = ".claude/skills")
+    2. serena → search_for_pattern(substring_pattern = "\\.md$", relative_path = ".agents/skills")
+    3. For each skill file found: read first 20 lines → extract description + keywords
+    4. bash: touch skills-map.md
+    5. serena → replace_content(file = "skills-map.md", content = generated routing table)
+```
+
+**Skills Map format:**
 ```markdown
 # Skills Map — Auto-generated <DATE>
 <!-- Regenerate: delete this file and restart session -->
 
 | Skill ID | File | Description | Best For |
 |----------|------|-------------|----------|
-| `skill-name` | `.claude/skills/skill-name.md` | ... | ... |
+| `skill-name` | `path/to/skill.md` | ... | ... |
 
 ## Routing Rules
 | Task signals | Load skill |
 |---|---|
-| style, design, CSS, component, page, view | ui-ux-pro |
-| test, spec, playwright, e2e, unit | test-intelligence |
+| style, design, CSS, component, page, view | ui-ux skill |
+| test, spec, playwright, e2e, unit | testing skill |
 | refactor, extract, rename, cleanup | code-intelligence |
 | build, add, implement, feature | code-intelligence + domain skill |
 | fix, bug, error, broken | code-intelligence |
-| model, migration, query, gorm | domain DB skill |
-| handler, endpoint, route, API | domain API skill |
+| model, migration, schema, query | database skill |
+| handler, endpoint, route, API | API skill |
 ```
 
-### Activate selected skill
+### Step 5: Ensure summary.md Exists
+```
+Does summary.md exist and contain "<!-- END -->"?
+  NO  → create it with: "# Summary\n\n<!-- END -->"
+  YES → do nothing
+```
+
+### Step 6: Scan Recent Changes
+```
+codegraph → semantic_search("recent changes; last task; last modified")
+```
+> Skip if codegraph unavailable.
+
+---
+
+## REQUEST CLASSIFICATION — Before Phase 1
+
+**Not every request needs all 5 phases. Classify first:**
 
 ```
-openspace → search_skills(query = task domain keyword)
-openspace → execute_task(task = matched skill name)
+┌──────────────────────────────────────────────────────────────────────┐
+│                      USER REQUEST RECEIVED                          │
+└──────────────────────────┬───────────────────────────────────────────┘
+                           │
+                           ▼
+              ┌─────────────────────────┐
+              │  What type of request?  │
+              └─────────────────────────┘
+                     │
+     ┌───────────────┼───────────────────┬────────────────────┐
+     │               │                   │                    │
+     ▼               ▼                   ▼                    ▼
+  TYPE A          TYPE B              TYPE C               TYPE D
+  Investigation   Trivial Change      Standard Change      Large Change
+  ─────────────   ──────────────      ───────────────      ────────────
+  "explain X"     "fix typo"          "add feature"        "> 5 files"
+  "where is Y"    "add comment"       "fix bug"            "full-stack"
+  "how does Z"    "format this"       "refactor X"         "architectural"
+  "show me"       "rename A→B"        "implement Y"        "cross-module"
+  "list all"      "update string"     "change behavior"    "new subsystem"
+     │               │                   │                    │
+     ▼               ▼                   ▼                    ▼
+  Phase 1 + 2     Phase 2 + 4 + 5     ALL 5 Phases         ALL 5 + SWARM
+  (read-only)     (skip Gate)         (full workflow)       (multi-agent)
 ```
 
-***
+---
 
 ## LOCAL ORCHESTRATOR PROTOCOL
 
-**Master workflow for EVERY request. All 5 phases mandatory. No skipping.**
-*(Tool names below are bare — prefix with server name if running in OpenCode)*
+**Master workflow for code change requests. Phase execution depends on request type (see above).**
 
-***
+---
 
 ### PHASE 1 — MEMORY + SKILL SELECTION
 
 ```
-codebase-memory-mcp → search_graph(query = task description)
-codebase-memory-mcp → search_code(pattern = keyword)
-serena              → read_memory("summary")      ← read only, never replace
+Step 1: Check existing patterns in codebase memory
+    codebase-memory-mcp → search_graph(query = task description)
+    codebase-memory-mcp → search_code(pattern = keyword)
+    codebase-memory-mcp → get_architecture()
+
+    ⚠️ If a matching pattern is found:
+       → READ it carefully
+       → FOLLOW the established pattern
+       → Do NOT invent new approaches when one already exists
+
+Step 2: Read summary from Serena memory
+    serena → read_memory("summary")      ← read only, never replace
+
+Step 3: Select and activate matching skill
+    Read skills-map.md → match task type to skill
+    Activate the selected skill
+
+Note: Empty memory = normal. Log "no prior patterns" and continue.
 ```
 
-Read `skills-map.md` → select + activate matching skill.
-Empty memory = normal. Log "no prior patterns" and continue.
-
-***
+---
 
 ### PHASE 2 — ANALYSIS
 
-> [!NOTE]
-> In Phase 2 Analysis, use `codegraph` tools on the current `HEAD` (no `--staged` flag) to analyze the baseline codebase.
+> Use `codegraph` tools on current `HEAD` (no `--staged` flag) to analyze the baseline.
+> Use `serena` to read and understand file contents. NEVER use cat/head/tail.
 
 ```
-codegraph → semantic_search(query = task)
-serena    → find_symbol(name = target)
-codegraph → where(name = target)                           ← definition + all usages
-codegraph → fn_impact(name = target, flags = -T)
-codegraph → impact_analysis(target = module/file)
-codegraph → context(name = target, flags = -T)
-codegraph → co_changes(file = target)
-serena    → get_symbols_overview(path = target file)
+Step 1: Semantic search for the task
+    codegraph → semantic_search(query = task description)
+
+Step 2: Find target symbol
+    serena → find_symbol(name = target)
+
+Step 3: Locate definition and all usages
+    codegraph → where(name = target)
+
+Step 4: Analyze function-level blast radius
+    codegraph → fn_impact(name = target, flags = -T)
+
+Step 5: Analyze file-level impact
+    codegraph → impact_analysis(target = module/file)
+
+Step 6: Get full context (source + deps + callers + tests)
+    codegraph → context(name = target, flags = -T)
+
+Step 7: Detect historically coupled files
+    codegraph → co_changes(file = target file)
+
+Step 8: Read and understand target file structure
+    serena → get_symbols_overview(path = target file)
 ```
 
-*(Full tool reference → see Appendix)*
+**Adaptive analysis — not every step needed for every task:**
+- **Investigation** → Steps 1, 2, 3, 8 may suffice
+- **Simple rename** → Steps 2, 3, 4
+- **Bug fix** → Steps 1, 2, 3, 6, 8
+- **New feature** → All steps
+- **Refactor** → Steps 2, 3, 4, 5, 7, 8
 
-***
+**If a tool returns empty results, use fallback chain:**
+
+| Primary Tool | Fallback 1 | Fallback 2 |
+|---|---|---|
+| `codegraph → semantic_search` | `codebase-memory → search_code` | `serena → search_for_pattern` |
+| `codegraph → fn_impact` | `codegraph → query` (manual callers) | `serena → find_referencing_symbols` |
+| `codegraph → where` | `serena → find_symbol` + `find_declaration` | `serena → search_for_pattern` |
+| `codegraph → co_changes` | `git log --follow` (shell allowed) | Skip — proceed with extra caution |
+| `codegraph → diff_impact` | `codegraph → fn_impact` per changed fn | `serena → find_referencing_symbols` |
+| `codegraph → impact_analysis` | `codegraph → file_deps` | `serena → find_referencing_symbols` |
+| `serena → find_symbol` | `codegraph → where` | `codegraph → semantic_search` |
+| `serena → get_symbols_overview` | `codegraph → brief` | `codegraph → list_functions` |
+
+---
 
 ### PHASE 3 — DECISION GATE
 
-Present before any edit:
+**The most important phase — determines whether to proceed or wait for approval.**
+
+#### Step 1: Build and present risk table
 
 | Symbol | File | Direct Callers | Cross-Module? | Risk |
 |--------|------|----------------|---------------|------|
+| ...    | ...  | ...            | ...           | ...  |
 
-**Hard stop — wait for explicit user approval if:**
-- Any symbol > 5 callers AND at least 1 cross-module
-- `check` returns cycle warning
-- `co_changes` returns > 3 coupled files not in scope
-- Edit targets `internal/handlers/`, `internal/models/`, or `pkg/` (Plugin Rule — see above)
+#### Step 2: Check for existing patterns before proposing new ones
 
-**Auto-proceed (no approval):**
-- All callers in same module/package
-- New files under `plugin/` with zero existing callers
-- Pure UI/CSS changes with no Go symbol impact
+```
+codebase-memory-mcp → search_graph(query = "pattern for <what you're about to do>")
 
-***
+If pattern found → follow it, note in risk table: "follows existing pattern → lower risk"
+If no pattern   → note in risk table: "new pattern → higher risk, document after success"
+```
+
+#### Step 3: Apply decision rules
+
+**🔴 HARD STOP — wait for explicit user approval if:**
+- Any symbol has > 5 callers AND at least 1 is cross-module
+- `codegraph → check()` returns a cycle warning
+- `codegraph → co_changes()` returns > 3 coupled files not in current scope
+- Edit targets core/critical paths identified during onboarding
+- Change modifies a public API or interface contract
+- Change affects shared infrastructure (auth, middleware, database layer, etc.)
+- No existing pattern found AND change touches > 3 files
+- `codegraph → fn_impact()` shows transitive callers across > 2 modules
+
+**🟢 AUTO-PROCEED — no approval needed if:**
+- All callers are in the same module/package
+- New files with zero existing callers
+- Pure styling/UI changes with no backend impact
+- Changes within the project's designated extension mechanism
+- Documentation-only changes
+- Test-only changes
+- Follows an established pattern found in codebase-memory
+
+---
 
 ### PHASE 4 — IMPLEMENTATION
 
-```bash
-git checkout -b agent/<kebab-case-task-name>
+```
+Step 1: Create a new git branch
+    git checkout -b agent/<kebab-case-task-name>
+
+Step 2: READ before EDIT — mandatory for every file
+    ⚠️ Before touching ANY file, you MUST read it first:
+
+    serena → get_symbols_overview(path = target file)   ← understand structure
+    serena → find_symbol(name = specific function)      ← locate what to change
+
+    Only after reading and understanding the file, proceed to edit.
+
+Step 3: Check impact BEFORE editing — mandatory
+    codegraph → fn_impact(name = function-to-change, flags = -T)
+    codegraph → where(name = function-to-change)
+    serena → find_referencing_symbols(name = function-to-change)
+
+    Understand WHO depends on this symbol before you touch it.
+
+Step 4: Execute edits using Serena tools
+
+    | Operation                    | Serena Tool              |
+    |------------------------------|--------------------------|
+    | Modify existing function     | replace_symbol_body      |
+    | Targeted text/regex replace  | replace_content          |
+    | Add code after a symbol      | insert_after_symbol      |
+    | Add code before a symbol     | insert_before_symbol     |
+    | Rename across project        | rename_symbol            |
+    | Delete with safety check     | safe_delete_symbol       |
+    | Find usages before editing   | find_referencing_symbols |
+    | New file                     | bash: touch <path> then replace_content |
+
+    ⚠️ New files require TWO steps:
+       1. bash: touch <path>
+       2. serena → replace_content(file = path, content = content)
+
+    ⚠️ Code Quality:
+       - Keep files under 500 lines. Extract when exceeding.
+       - Preserve all existing comments/docstrings unrelated to your changes.
+       - Follow existing code style discovered during onboarding.
+       - Follow existing patterns found via codebase-memory-mcp.
+
+Step 5: After EACH edit — verify with codegraph
+    git add <edited-file>
+    codegraph → diff_impact(flags = --staged -T)
+    codegraph → check(flags = --staged --no-new-cycles)
+
+    ┌─────────────────────────────────────────────────────────┐
+    │  If unexpected new dependents or cycles appear:         │
+    │  ← STOP immediately                                    │
+    │  ← Report to user with full impact table                │
+    │  ← Do NOT commit                                        │
+    │  ← Consider reverting: git checkout -- <file>           │
+    └─────────────────────────────────────────────────────────┘
+
+Step 6: Commit if everything is clean
+    git add -p && git commit -m "<type>(<scope>): <description>"
+
+    Commit types: feat, fix, refactor, test, docs, chore, style, perf
+    Commit scope = most specific affected area:
+      - Module/package name (e.g., auth, payments, chat)
+      - Feature name (e.g., campaign-scheduler)
+      - Layer name (e.g., api, db, ui, middleware)
+      - Plugin/extension name (e.g., plugin/analytics)
+
+    Examples:
+      feat(auth): add refresh token rotation
+      fix(chat): prevent duplicate message delivery
+      refactor(db): extract query builder into helper
+      test(api): add integration tests for contacts endpoint
 ```
 
-| Operation | Serena tool |
-|---|---|
-| Modify existing function | `replace_symbol_body` |
-| Targeted text/regex replace | `replace_content` |
-| Add code after symbol | `insert_after_symbol` |
-| Add code before symbol | `insert_before_symbol` |
-| Rename across project | `rename_symbol` |
-| Delete with safety check | `safe_delete_symbol` |
-| Find usages before edit | `find_referencing_symbols` |
-| New file | `bash: touch <path>` then `replace_content` to write content |
-
-> **New files cannot use `replace_content` alone** — the file must exist first.
-> Create via `bash: touch <path>`, then populate via `replace_content`.
-
-After each edit, stage the changes first so that the staged analysis sees them:
-```bash
-git add <edited-file>
-```
-Then run:
-```
-codegraph → diff_impact(flags = --staged -T)
-```
-
-Unexpected new dependents → pause, report to user, do not commit.
-
-```bash
-git add -p && git commit -m "feat(<scope>): <description>"
-```
-
-***
+---
 
 ### PHASE 5 — VERIFICATION
 
-**UI / frontend changes:**
-*Playwright Usage Rule: Use npx CLI for running test suites. Use plugin:ecc:playwright tools for inspecting/debugging individual test failures.*
+> Two tracks based on the type of change:
 
-```bash
-npx playwright test --project=chromium
-npx playwright test          # full suite if shared components changed
-npx playwright test --debug  # if failures
-```
-```
-chrome-devtools → take_screenshot()
-zai-mcp-server  → ui_diff_check()
-zai-mcp-server  → diagnose_error_screenshot()   ← if console errors visible
-```
+#### Track A: Frontend / UI Changes
 
-**Backend / Go changes:**
-```bash
-make test && make lint && cd frontend && npm run typecheck
 ```
-```
-codegraph → check(flags = --staged --no-new-cycles)
-codegraph → diff_impact(flags = --staged -T)
+Step 1: Run E2E tests
+    npx playwright test --project=chromium       ← or project-specific test command
+    npx playwright test                           ← full suite if shared components changed
+    npx playwright test --debug                   ← if failures
+
+Step 2: Visual verification (if chrome-devtools available)
+    chrome-devtools → take_screenshot()
+    zai-mcp-server → ui_diff_check()             ← if zai available
+    zai-mcp-server → diagnose_error_screenshot()  ← if console errors visible
 ```
 
-**After success — save pattern + append to summary.md:**
-```
-codebase-memory-mcp → index_repository()
-serena → write_memory(name = "feature/<name>-<date>", content = "approach + gotchas")
-```
+#### Track B: Backend Changes
 
-**Append to summary.md (never replace):**
 ```
-if summary.md exists:
-  serena → replace_content(
-    file    = "summary.md",
-    pattern = "<!-- END -->",
-    replace = "\n## <task-name> — <date>\n<summary>\n<!-- END -->"
-  )
-if not exists:
-  bash: touch summary.md
-  serena → replace_content(file = "summary.md", content = "# Summary\n\n<!-- END -->")
-  then append as above
+Step 1: Run tests and lint
+    <project test command>                        ← make test, npm test, cargo test, go test, etc.
+    <project lint command>                        ← make lint, npm run lint, etc.
+    <project typecheck command>                   ← if applicable (npm run typecheck, mypy, etc.)
+
+Step 2: Structural verification with codegraph
+    codegraph → check(flags = --staged --no-new-cycles)
+    codegraph → diff_impact(flags = --staged -T)
 ```
 
-summary.md must include: task name + date, files changed, approach, blast radius table, tests, gotchas.
+#### After Success (both tracks):
 
-**Verification failure protocol (after 3 loops):**
-```bash
-# Save work safely
-git add -p
-git stash push -m "agent/<task>/failed-attempt-<N>"
-
-# If stash fails due to conflicts (SWARM mode):
-git branch agent/<task>/backup-<timestamp>  # preserve on branch instead
-git reset --hard HEAD                        # clean to last good commit
 ```
-Append failure reason + stash ref to `summary.md`. Surface to user: exact error + files + what was tried.
+Step 3: Save pattern to codebase memory
+    codebase-memory-mcp → index_repository()
 
-***
+Step 4: Save approach notes to Serena memory
+    serena → write_memory(
+        name = "feature/<name>-<date>",
+        content = "approach taken + gotchas + files changed"
+    )
 
-## SWARM PROTOCOL (> 5 files or simultaneous frontend + backend)
+Step 5: Append to summary.md (NEVER replace)
+    serena → replace_content(
+        file    = "summary.md",
+        pattern = "<!-- END -->",
+        replace = "\n## <task-name> — <date>\n<summary>\n<!-- END -->"
+    )
 
-> [!IMPORTANT]
-> - LEAD: receives full CLAUDE.md (including Appendix)
-> - SCOUT/IMPLEMENT/QA: stop reading at "## Appendix"
-
-| Role | Count | Phases | Write access | Prompt scope |
-|---|---|---|---|---|
-| LEAD | 1 | All | All files, git, summary.md | Full CLAUDE.md |
-| SCOUT | 2 | 1–3 only | Read-only | Overview + Phases 1–3 |
-| IMPLEMENT | N | 4 only | Declared files only | Overview + Phase 4 + Appendix |
-| QA | 1 | 5 only | Test files only | Phase 5 only |
-| DOC | 1 | Post-5 | summary.md + memory | Phase 5 + summary rules |
-
-**Token Budget & Context Window Management:**
-- LEAD: receives full CLAUDE.md (if context usage > 80k tokens: drop the Appendix and load tool references on demand).
-
-**Ownership (IMPLEMENT agents declare before Phase 4):**
-```
-serena → write_memory(name = "agent-<N>-owns", content = ["file1.go", "file2.vue"])
-```
-LEAD checks all ownership for overlap before Phase 4. Overlap → reassign, never concurrent edits.
-
-***
-
-## Architecture Enforcement (Automatic)
-
-After every session with code changes:
-```
-codegraph → audit(target = modified files, -T)
-codegraph → triage(-T)
-codegraph → node_roles(role = dead, -T)
-codegraph → complexity(-T)
-```
-Cycle / dead exports / complexity > 20 → report as warning **before** proceeding with original task.
-
-***
-
-## Common Pitfalls
-
-- **Do NOT use `net/http` patterns** — fasthttp/fastglue everywhere
-- **`config.toml` gitignored** — never commit; use `config.example.toml`
-- **Production binary needs frontend build first** — `go build` alone excludes SPA
-- **Tests skip (not fail)** if `TEST_DATABASE_URL` or `TEST_REDIS_URL` unset
-- **`-p 1` required** for multi-package test runs sharing the test DB
-- **Frontend dev proxy**: backend on 8080, Vite on 3000
-- **New feature = plugin**, not core modification (see Plugin Architecture above)
-
-***
-
-***
-
-# Appendix: Tool Reference
-
-*Used by LEAD and IMPLEMENT agents. Agents receiving trimmed prompt stop above this line.*
-
-***
-
-## Codegraph — 34 Tools
-
-| Tool | Purpose |
-|---|---|
-| `ast_query` | Search stored AST nodes (calls, literals, await, throw) |
-| `audit` | Composite: structure + blast radius + complexity |
-| `batch_query` | Query multiple targets in one call |
-| `branch_compare` | Structural diff between two git refs |
-| `brief` | Token-efficient file summary with risk tier |
-| `cfg` | Intraprocedural control flow graph |
-| `check` | CI gate: manifesto rules + diff predicates (exit 0/1) |
-| `co_changes` | Files that historically change together |
-| `code_owners` | CODEOWNERS mapping for files and functions |
-| `communities` | Module boundary detection via Louvain clustering |
-| `complexity` | Per-function: cognitive, cyclomatic, Halstead, MI |
-| `context` | Full: source + deps + callers + tests |
-| `dataflow` | Data flow edges + data-dependent blast radius |
-| `diff_impact` | Changed functions + transitive callers from git diff |
-| `execution_flow` | Trace execution from entry point to leaves |
-| `export_graph` | Export as DOT / Mermaid / JSON / GraphML / Neo4j |
-| `file_deps` | What a file imports and what imports it |
-| `file_exports` | Exported symbols with per-symbol consumers |
-| `find_cycles` | Detect circular dependencies |
-| `fn_impact` | Function-level blast radius (transitive callers) |
-| `impact_analysis` | Files affected by changes to a given file |
-| `implementations` | Concrete types implementing an interface |
-| `interfaces` | Interfaces a struct implements |
-| `list_functions` | List functions/methods/classes with filters |
-| `module_map` | Most-connected files overview |
-| `node_roles` | Classify: entry/core/utility/adapter/dead/leaf |
-| `path` | Shortest call path between two symbols |
-| `query` | Call graph: callers + callees with transitive chain |
-| `semantic_search` | Embeddings + BM25 hybrid search by intent |
-| `sequence` | Mermaid sequence diagram from call graph |
-| `structure` | Directory tree with cohesion scores |
-| `symbol_children` | Sub-declarations of a symbol |
-| `triage` | Ranked audit queue by composite risk score |
-| `where` | Where a symbol is defined and used |
-
-**Flags:** `-T` (no tests) · `--json` · `-f <file>` · `-k <kind>`
-
-**Semantic search tips (multi-angle RRF):**
-```
-codegraph semantic_search "validate auth; check token; verify JWT"
-codegraph semantic_search "send email; notify user; deliver message"
+    summary.md entry must include:
+    ├── Task name + date
+    ├── Files changed (with links)
+    ├── Approach taken
+    ├── Blast radius table (from Phase 3)
+    ├── Patterns followed or created
+    ├── Tests run and results
+    └── Gotchas and notes for future sessions
 ```
 
-***
+#### After Failure (3 attempts exhausted):
 
-## Codebase-Memory-MCP — 14 Tools
+```
+Step 6: Save work safely
+    git add -p
+    git stash push -m "agent/<task>/failed-attempt-<N>"
 
-| Tool | Purpose |
-|---|---|
-| `delete_project` | Delete project from knowledge graph |
-| `detect_changes` | Detect code changes and impact |
-| `get_architecture` | High-level architecture overview |
-| `get_code_snippet` | Read source for a function/class/symbol |
-| `get_graph_schema` | Schema of the knowledge graph |
-| `index_repository` | Index repo into knowledge graph |
-| `index_status` | Indexing status of a project |
-| `ingest_traces` | Ingest runtime traces to enhance graph |
-| `list_projects` | List all indexed projects |
-| `manage_adr` | Create/update Architecture Decision Records |
-| `query_graph` | Execute Cypher query against graph |
-| `search_code` | Graph-augmented code search |
-| `search_graph` | Search functions, classes, routes, variables |
-| `trace_path` | Trace paths through the code graph |
+    If stash fails (SWARM mode / conflicts):
+    git branch agent/<task>/backup-<timestamp>
+    git reset --hard HEAD
 
-***
+Step 7: Document failure in summary.md
+    Append: failure reason + stash ref + what was tried
 
-## Serena — 21 Tools
+Step 8: Report to user
+    Provide: exact error + files affected + approaches attempted + stash reference
+```
 
-| Tool | Purpose |
-|---|---|
-| `delete_memory` | Delete a memory entry |
-| `edit_memory` | Regex replace within a memory |
-| `find_declaration` | Find declaration of a symbol |
-| `find_implementations` | All implementations of a symbol |
-| `find_referencing_symbols` | All references/callers |
-| `find_symbol` | Locate symbol by name path pattern |
-| `get_diagnostics_for_file` | LSP diagnostics by severity |
-| `get_symbols_overview` | Symbol outline of a file |
-| `initial_instructions` | Load Serena operating rules |
-| `insert_after_symbol` | Insert code after a symbol |
-| `insert_before_symbol` | Insert code before a symbol |
-| `list_memories` | List all memory entries |
-| `onboarding` | Run project onboarding |
-| `read_memory` | Read memory entry by name |
-| `rename_memory` | Rename/move a memory entry |
-| `rename_symbol` | Safe project-wide rename |
-| `replace_content` | Regex-based file content replacement (existing files only) |
-| `replace_symbol_body` | Replace entire function/class body |
-| `safe_delete_symbol` | Delete only if no references exist |
-| `search_for_pattern` | Searches for a regex pattern across project files, returning whole matched lines |
-| `write_memory` | Persist architectural note or pattern |
+---
 
-***
+## ARCHITECTURE ENFORCEMENT — After Every Session With Code Changes
 
-## Chrome-DevTools — 29 Tools
+```
+Step 1: Comprehensive audit
+    codegraph → audit(target = modified files, -T)
 
-| Tool | Purpose |
-|---|---|
-| `click` | Click element by uid |
-| `close_page` | Close page by index |
-| `drag` | Drag element onto another |
-| `emulate` | Emulate device/network/geolocation |
-| `evaluate_script` | Run JavaScript in page context |
-| `fill` | Type into input/select |
-| `fill_form` | Fill multiple form fields at once |
-| `get_console_message` | Get console message by ID |
-| `get_network_request` | Network request details |
-| `handle_dialog` | Handle alert/confirm/prompt |
-| `hover` | Hover over element |
-| `lighthouse_audit` | a11y/SEO/best-practices audit |
-| `list_console_messages` | All console messages |
-| `list_network_requests` | All network requests |
-| `list_pages` | Open browser pages |
-| `navigate_page` | Navigate to URL/back/forward/reload |
-| `new_page` | Open new tab |
-| `performance_analyze_insight` | Analyze a Performance Insight |
-| `performance_start_trace` | Start performance trace |
-| `performance_stop_trace` | Stop performance trace |
-| `press_key` | Press key or combination |
-| `resize_page` | Resize browser window |
-| `select_page` | Select page for operations |
-| `take_heapsnapshot` | Capture heap snapshot |
-| `take_screenshot` | Screenshot of page or element |
-| `take_snapshot` | Accessibility tree snapshot |
-| `type_text` | Type into focused input |
-| `upload_file` | Upload file via element |
-| `wait_for` | Wait for text to appear |
+Step 2: Prioritize issues
+    codegraph → triage(-T)
 
-***
+Step 3: Detect dead code
+    codegraph → node_roles(role = dead, -T)
 
-## Zai-MCP-Server — 8 Tools
+Step 4: Measure complexity
+    codegraph → complexity(-T)
 
-| Tool | Purpose |
-|---|---|
-| `analyze_data_visualization` | Analyze charts, graphs, dashboards |
-| `analyze_image` | General-purpose image analysis |
-| `analyze_video` | Analyze video content |
-| `diagnose_error_screenshot` | Diagnose error screenshots + stack traces |
-| `extract_text_from_screenshot` | OCR text extraction |
-| `ui_diff_check` | Compare expected vs actual UI screenshots |
-| `ui_to_artifact` | Convert UI screenshot to code/spec/description |
-| `understand_technical_diagram` | Analyze architecture/flowchart/UML |
+Step 5: Verify memory is up to date
+    codebase-memory-mcp → detect_changes()
 
-***
+⚠️ If found:
+   - Dependency cycles        → Report as 🔴 CRITICAL warning
+   - Dead exports             → Report as 🟡 MEDIUM warning
+   - Complexity > 20          → Report as 🟡 MEDIUM warning
+   - Stale codebase memory    → Re-index: codebase-memory-mcp → index_repository()
 
-## Openspace — 4 Tools
+Report all warnings BEFORE proceeding with any further tasks.
+```
 
-| Tool | Purpose |
-|---|---|
-| `execute_task` | Execute a named task from openspace registry |
-| `fix_skill` | Fix/repair an installed skill |
-| `search_skills` | Search available skills by keyword |
-| `upload_skill` | Upload/install a new skill |
+> Skip if codegraph or codebase-memory-mcp unavailable (see Fallback Modes).
 
-***
+---
 
-## ECC Plugins — Built-in Tools
+## EXTENSION-FIRST PRINCIPLE
 
-### plugin:ecc:playwright — 23 Tools
+> The universal rule: prefer extensions over core modifications.
 
-Allows browser automation and E2E testing.
-Use when: running Playwright E2E tests, verifying UI layouts, checking console logs, or debugging tests.
+Before ANY implementation, apply this decision rule:
 
-### plugin:ecc:github — 25 Tools
+```
+Does this change touch core/critical paths identified during onboarding?
+  YES → Is this a bug fix or a necessary core interface change?
+    NO  → Use the project's extension mechanism instead:
+          - Go: plugin/ directory or separate package
+          - Node.js: new module/package
+          - Python: new module or decorator
+          - Java/Kotlin: new package or Spring bean
+          - Rails: new concern, service object, or engine
+          - Django: new app
+          - Vue/React: new composable/hook + component
+          - PHP/Laravel: new service provider or package
+          - Rust: new module or crate
+    YES → Get explicit user approval first.
+  NO → Proceed normally.
+```
 
-Allows GitHub repository integration.
-Use when: managing GitHub issues, pull requests, commits, and workflow runs.
+When unsure whether something is "core":
+```
+codegraph → node_roles(target = file, -T)
 
-### plugin:ecc:context7 — 2 Tools
+If role = "core" or "entry" → treat as critical, require approval
+If role = "utility" or "adapter" or "leaf" → lower risk, can auto-proceed
+```
 
-| Tool | Purpose |
-|---|---|
-| `resolve-library-docs` | Fetch up-to-date docs for any library by name |
-| `get-library-docs` | Get specific section of library documentation |
+---
 
-Use when: implementing unfamiliar library APIs, checking latest SDK method signatures.
+## SWARM PROTOCOL — For Large Tasks
 
-### plugin:ecc:memory — 7 Tools
+> Activate automatically if: task affects > 5 files OR spans frontend + backend simultaneously
 
-| Tool | Purpose |
-|---|---|
-| `create_entities` | Create named entities in memory graph |
-| `create_relations` | Create relations between entities |
-| `add_observations` | Add facts to existing entities |
-| `delete_entities` | Delete entities from graph |
-| `delete_observations` | Delete specific observations |
-| `delete_relations` | Delete relations between entities |
-| `search_nodes` | Search entities by keyword |
+### Role Assignments
 
-Use for: cross-session entity tracking (users, orgs, recurring patterns).
+| Role | Count | Phases | Write Access |
+|---|---|---|---|
+| LEAD | 1 | All | All files + git + summary.md |
+| SCOUT | 2 | 1-3 only | Read-only |
+| IMPLEMENT | N | 4 only | Declared files only |
+| QA | 1 | 5 only | Test files only |
+| DOC | 1 | Post-5 | summary.md + memory |
 
-### plugin:ecc:sequential-thinking — 1 Tool
+### Coordination Protocol
 
-| Tool | Purpose |
-|---|---|
-| `sequentialthinking` | Multi-step reasoning chain with backtracking |
+```
+Step 1: LEAD creates task plan
+    Create task.md artifact with:
+    ├── File assignments per IMPLEMENT agent
+    ├── Dependency order (which files must be done first)
+    ├── Interface contracts between agents' files
+    └── Merge strategy
 
-Use when: complex architectural decisions, multi-file refactors, ambiguous task decomposition.
+Step 2: SCOUT agents research (Phases 1-3)
+    Each SCOUT runs Phase 2 analysis on assigned modules
+    Results reported to LEAD via:
+    serena → write_memory(name = "scout-<N>-findings", content = analysis)
+
+Step 3: LEAD builds Decision Gate (Phase 3)
+    Aggregates SCOUT findings
+    Builds combined risk table
+    Determines go/no-go
+
+Step 4: IMPLEMENT agents declare ownership
+    Each agent declares its files BEFORE editing:
+    serena → write_memory(name = "agent-<N>-owns", content = ["file1", "file2"])
+
+    LEAD checks all declarations for overlap:
+    ├── Overlap found → reassign files → re-declare
+    └── No overlap → authorize agents to proceed
+
+    ⚠️ NEVER allow concurrent edits to the same file.
+
+Step 5: IMPLEMENT agents execute (Phase 4)
+    Each agent works ONLY on its declared files
+    Each agent follows Phase 4 rules (read→check→edit→verify)
+    Status updates via:
+    serena → write_memory(name = "agent-<N>-status", content = "done|blocked|failed")
+
+Step 6: LEAD monitors progress
+    Reads agent status memories
+    Resolves blocked agents
+    Re-assigns failed agent's files
+
+Step 7: QA agent runs verification (Phase 5)
+    Runs full test suite
+    Reports results to LEAD
+
+Step 8: DOC agent writes documentation
+    Updates summary.md with all changes
+    Saves patterns to codebase-memory-mcp
+```
+
+### Token Budget Management
+- LEAD: receives full skill instructions
+- SCOUT/IMPLEMENT/QA: receive only their relevant phase sections
+- If context > 80k tokens: load tool reference on-demand from references/ directory
+
+---
+
+## EXECUTION ORDER — Quick Reference
+
+| # | Step | When | Required Tools |
+|---|---|---|---|
+| 0 | MCP Availability Check | Session start | None (checks what's available) |
+| 1 | serena initial_instructions | Session start | serena |
+| 2 | Project onboarding + context | Session start (every 24h) | serena |
+| 3 | Load memory | Session start | serena |
+| 4 | Skills map check/generate | Session start | serena |
+| 5 | summary.md check | Session start | serena |
+| 6 | Scan recent changes | Session start | codegraph |
+| 7 | **Classify request** | Every request | None (agent judgment) |
+| 8 | Memory search + pattern check + skill selection | Every request — Phase 1 | codebase-memory, serena |
+| 9 | Deep analysis with fallbacks | Every request — Phase 2 | codegraph, serena |
+| 10 | Risk table + pattern check + decide | Every request — Phase 3 | codegraph, codebase-memory |
+| 11 | Read → Check → Edit → Verify → Commit | Every request — Phase 4 | serena, codegraph |
+| 12 | Tests + screenshots + structural check | Every request — Phase 5 | project tools, codegraph |
+| 13 | Save pattern + index + update summary.md | After success | codebase-memory, serena |
+| 14 | Architecture audit | End of session with changes | codegraph, codebase-memory |
+| 15 | SWARM protocol | If > 5 files or frontend+backend | All tools |
+
+---
+
+## TOOL REFERENCE
+
+Tool reference tables are in a separate file to save context window space:
+```
+references/tool-reference.md
+```
+
+Load on-demand when you need to look up a specific tool's purpose or flags.
+
+**Quick summary of available tool counts:**
+- Codegraph: 34 tools (code analysis, impact, search)
+- Codebase-Memory-MCP: 14 tools (knowledge graph, patterns)
+- Serena: 21 tools (LSP operations, memory, file edits)
+- Chrome-DevTools: 29 tools (browser automation)
+- Zai-MCP-Server: 8 tools (visual analysis)
+- Openspace: 4 tools (skill management)
+- ECC Plugins: playwright (23), github (25), context7 (2), memory (7), sequential-thinking (1)
