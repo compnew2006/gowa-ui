@@ -32,6 +32,20 @@ const (
 	inboundMediaSelfHealBatchLimit = 250
 )
 
+// newStatusUpdate builds the standard status-update map used when advancing
+// a BulkMessageRecipient through its lifecycle.
+func newStatusUpdate(status models.MessageStatus, waMessageID, errorMsg string) map[string]interface{} {
+	updates := map[string]interface{}{
+		"status":               status,
+		"whats_app_message_id": waMessageID,
+		"error_message":        errorMsg,
+	}
+	if status == models.MessageStatusSent {
+		updates["sent_at"] = time.Now()
+	}
+	return updates
+}
+
 // Worker processes jobs from the queue
 type Worker struct {
 	Config          *config.Config
@@ -689,14 +703,7 @@ func (w *Worker) transitionRecipientToSending(ctx context.Context, recipientID u
 }
 
 func (w *Worker) updateRecipientStatusConditional(recipientID uuid.UUID, expectedCurrentStatus models.MessageStatus, newStatus models.MessageStatus, waMessageID, errorMsg string) {
-	updates := map[string]interface{}{
-		"status":               newStatus,
-		"whats_app_message_id": waMessageID,
-		"error_message":        errorMsg,
-	}
-	if newStatus == models.MessageStatusSent {
-		updates["sent_at"] = time.Now()
-	}
+	updates := newStatusUpdate(newStatus, waMessageID, errorMsg)
 	result := w.DB.Model(&models.BulkMessageRecipient{}).
 		Where("id = ? AND status IN ?", recipientID, []models.MessageStatus{expectedCurrentStatus, models.MessageStatusSending}).
 		Updates(updates)
@@ -769,14 +776,7 @@ func (w *Worker) reconcileStaleInboundMedia(ctx context.Context) {
 
 // updateRecipientStatus updates the recipient's status in the database
 func (w *Worker) updateRecipientStatus(recipientID uuid.UUID, status models.MessageStatus, waMessageID, errorMsg string) {
-	updates := map[string]interface{}{
-		"status":               status,
-		"whats_app_message_id": waMessageID,
-		"error_message":        errorMsg,
-	}
-	if status == models.MessageStatusSent {
-		updates["sent_at"] = time.Now()
-	}
+	updates := newStatusUpdate(status, waMessageID, errorMsg)
 	if err := w.DB.Model(&models.BulkMessageRecipient{}).Where("id = ?", recipientID).Updates(updates).Error; err != nil {
 		w.Log.Error("Failed to update recipient status", "error", err, "recipient_id", recipientID, "status", status)
 	}

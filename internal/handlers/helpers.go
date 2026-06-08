@@ -59,6 +59,28 @@ func (pg Pagination) Apply(query *gorm.DB) *gorm.DB {
 	return query.Offset(pg.Offset).Limit(pg.Limit)
 }
 
+// TotalPages returns the number of pages for the given total record count.
+func (pg Pagination) TotalPages(total int) int {
+	if pg.Limit <= 0 {
+		return 0
+	}
+	return (total + pg.Limit - 1) / pg.Limit
+}
+
+// paginatedEnvelope builds a standard paginated response envelope.
+// dataKey is the JSON key for the payload (e.g. "data", "events", "sessions").
+// Note: adds "total_pages" to all callers — endpoints that previously returned
+// only {data, total, page, limit} now include total_pages by design.
+func paginatedEnvelope(dataKey string, data any, total int64, pg Pagination) map[string]any {
+	return map[string]any{
+		dataKey:      data,
+		"total":      total,
+		"page":       pg.Page,
+		"limit":      pg.Limit,
+		"total_pages": pg.TotalPages(int(total)),
+	}
+}
+
 // parsePagination extracts page-based pagination from query params with
 // default limit=50 and max limit=100.
 func parsePagination(r *fastglue.Request) Pagination {

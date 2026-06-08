@@ -1013,7 +1013,7 @@ func (a *App) ListAgentSelectionAudit(r *fastglue.Request) error {
 	if err := pg.Apply(query.Order("created_at DESC")).Find(&events).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list audit events", nil, "")
 	}
-	return r.SendEnvelope(map[string]any{"events": events, "total": total, "page": pg.Page, "limit": pg.Limit})
+	return r.SendEnvelope(paginatedEnvelope("events", events, total, pg))
 }
 
 func (a *App) ListAgentSelectionSessions(r *fastglue.Request) error {
@@ -1036,7 +1036,7 @@ func (a *App) ListAgentSelectionSessions(r *fastglue.Request) error {
 	if err := pg.Apply(query.Order("created_at DESC")).Find(&sessions).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list sessions", nil, "")
 	}
-	return r.SendEnvelope(map[string]any{"sessions": sessions, "total": total, "page": pg.Page, "limit": pg.Limit})
+	return r.SendEnvelope(paginatedEnvelope("sessions", sessions, total, pg))
 }
 
 func (a *App) CancelAgentSelectionSession(r *fastglue.Request) error {

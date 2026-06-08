@@ -49,7 +49,7 @@ func (a *App) ListMessageExtractionCampaigns(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list campaigns", nil, "")
 	}
 
-	return r.SendEnvelope(map[string]any{"data": campaigns, "total": total, "page": pg.Page, "limit": pg.Limit})
+	return r.SendEnvelope(paginatedEnvelope("data", campaigns, total, pg))
 }
 
 func (a *App) CreateMessageExtractionCampaign(r *fastglue.Request) error {
@@ -318,7 +318,7 @@ func (a *App) GetMessageExtractionCampaignResults(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list results", nil, "")
 	}
 
-	return r.SendEnvelope(map[string]any{"data": results, "total": total, "page": pg.Page, "limit": pg.Limit})
+	return r.SendEnvelope(paginatedEnvelope("data", results, total, pg))
 }
 
 func (a *App) ExportMessageExtractionCampaignResults(r *fastglue.Request) error {

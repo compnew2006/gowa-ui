@@ -18,18 +18,26 @@ import (
 
 const directionOutgoing = "outgoing"
 
+// resolveClientAndJID resolves a whatsmeow client and target JID from instanceID and phone number.
+func (a *WhatsmeowAdapter) resolveClientAndJID(ctx context.Context, instanceID, to string) (*whatsmeow.Client, waTypes.JID, error) {
+	client, err := a.getClient(ctx, instanceID)
+	if err != nil {
+		return nil, waTypes.JID{}, err
+	}
+	jid, err := a.parseJID(to)
+	if err != nil {
+		return nil, waTypes.JID{}, fmt.Errorf("invalid JID: %w", err)
+	}
+	return client, jid, nil
+}
+
 var textURLPattern = regexp.MustCompile(`(?i)\b(?:https?://|www\.)\S+`)
 
 // SendText sends a text message.
 func (a *WhatsmeowAdapter) SendText(ctx context.Context, instanceID string, to string, text string) (string, error) {
-	client, err := a.getClient(ctx, instanceID)
+	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
 	if err != nil {
 		return "", err
-	}
-
-	jid, err := a.parseJID(to)
-	if err != nil {
-		return "", fmt.Errorf("invalid JID: %w", err)
 	}
 	a.simulateTypingIndicator(ctx, client, jid, text)
 
@@ -61,14 +69,9 @@ func shouldUseExtendedTextMessage(text string) bool {
 
 // SendTextReply sends a text message as a quoted reply to a specific message.
 func (a *WhatsmeowAdapter) SendTextReply(ctx context.Context, instanceID string, to string, text string, replyToMsgID string) (string, error) {
-	client, err := a.getClient(ctx, instanceID)
+	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
 	if err != nil {
 		return "", err
-	}
-
-	jid, err := a.parseJID(to)
-	if err != nil {
-		return "", fmt.Errorf("invalid JID: %w", err)
 	}
 	a.simulateTypingIndicator(ctx, client, jid, text)
 
@@ -168,14 +171,9 @@ func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID str
 
 // SendImage sends an image message.
 func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to string, imageURL string, caption string) (string, error) {
-	client, err := a.getClient(ctx, instanceID)
+	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
 	if err != nil {
 		return "", err
-	}
-
-	jid, err := a.parseJID(to)
-	if err != nil {
-		return "", fmt.Errorf("invalid JID: %w", err)
 	}
 
 	data, mimeType, err := a.downloadMediaFromURL(imageURL)
@@ -211,14 +209,9 @@ func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to 
 
 // SendDocument sends a document message.
 func (a *WhatsmeowAdapter) SendDocument(ctx context.Context, instanceID string, to string, docURL string, filename string, caption string) (string, error) {
-	client, err := a.getClient(ctx, instanceID)
+	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
 	if err != nil {
 		return "", err
-	}
-
-	jid, err := a.parseJID(to)
-	if err != nil {
-		return "", fmt.Errorf("invalid JID: %w", err)
 	}
 
 	data, mimeType, err := a.downloadMediaFromURL(docURL)
@@ -263,14 +256,9 @@ func (a *WhatsmeowAdapter) SendDocument(ctx context.Context, instanceID string, 
 
 // SendVideo sends a video message.
 func (a *WhatsmeowAdapter) SendVideo(ctx context.Context, instanceID string, to string, videoURL string, caption string) (string, error) {
-	client, err := a.getClient(ctx, instanceID)
+	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
 	if err != nil {
 		return "", err
-	}
-
-	jid, err := a.parseJID(to)
-	if err != nil {
-		return "", fmt.Errorf("invalid JID: %w", err)
 	}
 
 	data, mimeType, err := a.downloadMediaFromURL(videoURL)
@@ -306,14 +294,9 @@ func (a *WhatsmeowAdapter) SendVideo(ctx context.Context, instanceID string, to 
 
 // SendAudio sends an audio message.
 func (a *WhatsmeowAdapter) SendAudio(ctx context.Context, instanceID string, to string, audioURL string) (string, error) {
-	client, err := a.getClient(ctx, instanceID)
+	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
 	if err != nil {
 		return "", err
-	}
-
-	jid, err := a.parseJID(to)
-	if err != nil {
-		return "", fmt.Errorf("invalid JID: %w", err)
 	}
 
 	data, mimeType, err := a.downloadMediaFromURL(audioURL)
@@ -349,14 +332,9 @@ func (a *WhatsmeowAdapter) SendAudio(ctx context.Context, instanceID string, to 
 
 // SendPoll sends a native WhatsApp poll message.
 func (a *WhatsmeowAdapter) SendPoll(ctx context.Context, instanceID string, to string, question string, options []string, maxSelections int) (string, error) {
-	client, err := a.getClient(ctx, instanceID)
+	client, jid, err := a.resolveClientAndJID(ctx, instanceID, to)
 	if err != nil {
 		return "", err
-	}
-
-	jid, err := a.parseJID(to)
-	if err != nil {
-		return "", fmt.Errorf("invalid JID: %w", err)
 	}
 
 	msg := client.BuildPollCreation(question, options, maxSelections)

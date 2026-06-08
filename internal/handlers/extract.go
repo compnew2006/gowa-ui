@@ -109,13 +109,7 @@ func (a *App) ListExtractableContacts(r *fastglue.Request) error {
 		response = append(response, resp)
 	}
 
-	return r.SendEnvelope(map[string]interface{}{
-		"data":       response,
-		"total":      total,
-		"page":       pg.Page,
-		"limit":      pg.Limit,
-		"total_pages": (int(total) + pg.Limit - 1) / pg.Limit,
-	})
+	return r.SendEnvelope(paginatedEnvelope("data", response, total, pg))
 }
 
 // ExportExtractedContacts exports contacts with message counts as CSV
