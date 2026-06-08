@@ -367,3 +367,51 @@ func TestCustomJSONTypes_AutoMigrateOnSQLite(t *testing.T) {
 
 	require.NoError(t, db.AutoMigrate(&jsonHolder{}))
 }
+
+func TestJSONBArray_Strings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input models.JSONBArray
+		want  []string
+	}{
+		{
+			name:  "nil returns nil",
+			input: nil,
+			want:  nil,
+		},
+		{
+			name:  "empty returns empty slice",
+			input: models.JSONBArray{},
+			want:  []string{},
+		},
+		{
+			name:  "all strings",
+			input: models.JSONBArray{"Option A", "Option B", "Option C"},
+			want:  []string{"Option A", "Option B", "Option C"},
+		},
+		{
+			name:  "filters empty strings",
+			input: models.JSONBArray{"Option A", "", "Option C"},
+			want:  []string{"Option A", "Option C"},
+		},
+		{
+			name:  "filters non-string elements",
+			input: models.JSONBArray{"Option A", 42, true, "Option B"},
+			want:  []string{"Option A", "Option B"},
+		},
+		{
+			name:  "all non-string returns empty slice",
+			input: models.JSONBArray{42, true, 3.14},
+			want:  []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.input.Strings())
+		})
+	}
+}

@@ -1,6 +1,7 @@
 package campaigninteractive
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/compnew2006/whatomate/internal/models"
@@ -24,8 +25,9 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 		return nil, fmt.Errorf("failed to query recipients: %w", err)
 	}
 
+	options := campaign.PollOptions.Strings()
+
 	if len(recipientMsgIDs) == 0 {
-		options := campaign.PollOptions.Strings()
 		return &PollVotesResponse{
 			Question: campaign.PollQuestion,
 			Options:  options,
@@ -34,11 +36,8 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 		}, nil
 	}
 
-	options := campaign.PollOptions.Strings()
-
 	type voteRow struct {
-		Content   string `gorm:"column:content"`
-		CreatedAt string `gorm:"column:created_at"`
+		InteractiveData string `gorm:"column:interactive_data"`
 	}
 	var votes []voteRow
 	if err := db.Table("messages").
@@ -53,27 +52,35 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 		return nil, fmt.Errorf("failed to query votes: %w", err)
 	}
 
-	counts := make(map[string]int64, len(options))
-	for _, v := range votes {
-		counts[v.Content]++
+	optionSet := make(map[string]bool, len(options))
+	for _, opt := range options {
+		optionSet[opt] = true
 	}
 
+	counts := make(map[string]int64, len(options))
 	var total int64
+	for _, v := range votes {
+		var data struct {
+			SelectedOptions []string `json:"selected_options"`
+		}
+		if err := json.Unmarshal([]byte(v.InteractiveData), &data); err != nil {
+			continue
+		}
+		for _, sel := range data.SelectedOptions {
+			if optionSet[sel] {
+				counts[sel]++
+				total++
+			}
+		}
+	}
+
 	results := make([]PollVote, 0, len(options))
 	for _, opt := range options {
-		c := counts[opt]
-		total += c
 		results = append(results, PollVote{
-			Option: opt,
-			Count:  c,
+			Option:     opt,
+			Count:      counts[opt],
+			Percentage: percentage(counts[opt], total),
 		})
-	}
-	for i := range results {
-		if total > 0 {
-			results[i].Percentage = fmt.Sprintf("%.1f%%", float64(results[i].Count)/float64(total)*100)
-		} else {
-			results[i].Percentage = "0.0%"
-		}
 	}
 
 	return &PollVotesResponse{
@@ -82,6 +89,14 @@ func (p *Plugin) getPollVotes(db *gorm.DB, campaignID uuid.UUID) (*PollVotesResp
 		Total:    total,
 		Results:  results,
 	}, nil
+}
+
+
+func percentage(count, total int64) string {
+	if total > 0 {
+		return fmt.Sprintf("%.1f%%", float64(count)/float64(total)*100)
+	}
+	return "0.0%"
 }
 
 func zeroResults(options []string) []PollVote {
