@@ -52,51 +52,265 @@ func TestNormalizeAutoCampaignSettings_CleansValues(t *testing.T) {
 }
 
 func TestValidateAutoCampaignSettings(t *testing.T) {
-	err := ValidateAutoCampaignSettings(map[string]any{
-		"enabled": true,
-	})
-	require.Error(t, err)
+	tests := []struct {
+		name    string
+		input   map[string]any
+		wantErr bool
+	}{
+		{
+			name: "enabled_without_message",
+			input: map[string]any{
+				"enabled": true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "enabled_message_empty_interval_zero",
+			input: map[string]any{
+				"enabled":       true,
+				"message":       "hello",
+				"interval_days": 0,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid_target_status",
+			input: map[string]any{
+				"enabled":       true,
+				"message":       "hello",
+				"interval_days": 5,
+				"target_status": "queued",
+			},
+			wantErr: true,
+		},
+		{
+			name: "min_delay_greater_than_max_delay",
+			input: map[string]any{
+				"enabled":           true,
+				"message":           "hello",
+				"interval_days":     5,
+				"min_delay_minutes": 30,
+				"max_delay_minutes": 10,
+			},
+			wantErr: true,
+		},
+		{
+			name: "media_path_traversal",
+			input: map[string]any{
+				"enabled":          true,
+				"media_local_path": "../etc/passwd",
+				"interval_days":    5,
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid_full_config",
+			input: map[string]any{
+				"enabled":           true,
+				"message":           "hello",
+				"interval_days":     5,
+				"min_delay_minutes": 15,
+				"max_delay_minutes": 25,
+				"target_status":     AutoCampaignTargetStatusRun,
+			},
+			wantErr: false,
+		},
+		{
+			name: "disabled_no_message_needed",
+			input: map[string]any{
+				"enabled":       false,
+				"interval_days": 3,
+			},
+			wantErr: false,
+		},
+		{
+			name: "interval_days_zero",
+			input: map[string]any{
+				"enabled":       false,
+				"interval_days": 0,
+			},
+			wantErr: true,
+		},
+		{
+			name: "interval_days_negative",
+			input: map[string]any{
+				"enabled":       false,
+				"interval_days": -1,
+			},
+			wantErr: true,
+		},
+		{
+			name: "interval_days_365_allowed",
+			input: map[string]any{
+				"enabled":       false,
+				"interval_days": 365,
+			},
+			wantErr: false,
+		},
+		{
+			name: "interval_days_366_rejected",
+			input: map[string]any{
+				"enabled":       false,
+				"interval_days": 366,
+			},
+			wantErr: true,
+		},
+		{
+			name: "interval_days_boundary_1",
+			input: map[string]any{
+				"enabled":       false,
+				"interval_days": 1,
+			},
+			wantErr: false,
+		},
+		{
+			name: "min_delay_negative",
+			input: map[string]any{
+				"enabled":           false,
+				"interval_days":     5,
+				"min_delay_minutes": -5,
+			},
+			wantErr: true,
+		},
+		{
+			name: "max_delay_negative",
+			input: map[string]any{
+				"enabled":           false,
+				"interval_days":     5,
+				"max_delay_minutes": -1,
+			},
+			wantErr: true,
+		},
+		{
+			name: "min_max_delay_equal",
+			input: map[string]any{
+				"enabled":           true,
+				"message":           "promo",
+				"interval_days":     7,
+				"min_delay_minutes": 10,
+				"max_delay_minutes": 10,
+				"target_status":     AutoCampaignTargetStatusDraft,
+			},
+			wantErr: false,
+		},
+		{
+			name: "min_max_delay_zero",
+			input: map[string]any{
+				"enabled":           true,
+				"message":           "promo",
+				"interval_days":     7,
+				"min_delay_minutes": 0,
+				"max_delay_minutes": 0,
+				"target_status":     AutoCampaignTargetStatusDraft,
+			},
+			wantErr: false,
+		},
+		{
+			name: "target_status_draft",
+			input: map[string]any{
+				"enabled":       true,
+				"message":       "hi",
+				"interval_days": 3,
+				"target_status": AutoCampaignTargetStatusDraft,
+			},
+			wantErr: false,
+		},
+		{
+			name: "target_status_run",
+			input: map[string]any{
+				"enabled":       true,
+				"message":       "hi",
+				"interval_days": 3,
+				"target_status": AutoCampaignTargetStatusRun,
+			},
+			wantErr: false,
+		},
+		{
+			name: "target_status_case_insensitive",
+			input: map[string]any{
+				"enabled":       true,
+				"message":       "hi",
+				"interval_days": 3,
+				"target_status": "DRAFT",
+			},
+			wantErr: false,
+		},
+		{
+			name: "media_path_absolute",
+			input: map[string]any{
+				"enabled":          false,
+				"interval_days":    5,
+				"media_local_path": "/etc/passwd",
+			},
+			wantErr: true,
+		},
+		{
+			name: "media_path_dot",
+			input: map[string]any{
+				"enabled":          false,
+				"interval_days":    5,
+				"media_local_path": ".",
+			},
+			wantErr: true,
+		},
+		{
+			name: "media_path_valid_relative",
+			input: map[string]any{
+				"enabled":          false,
+				"interval_days":    5,
+				"media_local_path": "campaigns/photo.jpg",
+			},
+			wantErr: false,
+		},
+		{
+			name: "last_generated_at_invalid",
+			input: map[string]any{
+				"enabled":           false,
+				"interval_days":     5,
+				"last_generated_at": "not-a-date",
+			},
+			wantErr: true,
+		},
+		{
+			name: "last_generated_at_valid_rfc3339",
+			input: map[string]any{
+				"enabled":           false,
+				"interval_days":     5,
+				"last_generated_at": "2026-02-24T10:30:00Z",
+			},
+			wantErr: false,
+		},
+		{
+			name:    "nil_input_uses_defaults",
+			input:   nil,
+			wantErr: false,
+		},
+		{
+			name:    "empty_map_uses_defaults",
+			input:   map[string]any{},
+			wantErr: false,
+		},
+		{
+			name: "valid_minimal_enabled",
+			input: map[string]any{
+				"enabled":       true,
+				"message":       "hi",
+				"interval_days": 1,
+			},
+			wantErr: false,
+		},
+	}
 
-	err = ValidateAutoCampaignSettings(map[string]any{
-		"enabled":       true,
-		"message":       "hello",
-		"interval_days": 0,
-	})
-	require.Error(t, err)
-
-	err = ValidateAutoCampaignSettings(map[string]any{
-		"enabled":       true,
-		"message":       "hello",
-		"interval_days": 5,
-		"target_status": "queued",
-	})
-	require.Error(t, err)
-
-	err = ValidateAutoCampaignSettings(map[string]any{
-		"enabled":           true,
-		"message":           "hello",
-		"interval_days":     5,
-		"min_delay_minutes": 30,
-		"max_delay_minutes": 10,
-	})
-	require.Error(t, err)
-
-	err = ValidateAutoCampaignSettings(map[string]any{
-		"enabled":          true,
-		"media_local_path": "../etc/passwd",
-		"interval_days":    5,
-	})
-	require.Error(t, err)
-
-	err = ValidateAutoCampaignSettings(map[string]any{
-		"enabled":           true,
-		"message":           "hello",
-		"interval_days":     5,
-		"min_delay_minutes": 15,
-		"max_delay_minutes": 25,
-		"target_status":     AutoCampaignTargetStatusRun,
-	})
-	require.NoError(t, err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateAutoCampaignSettings(tc.input)
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestEnsureInstanceSettingsDefaults_InjectsAutoCampaign(t *testing.T) {

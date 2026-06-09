@@ -12,6 +12,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/pkg/chat_close_ratings"
+	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -46,6 +47,7 @@ type chatCloseRatingSettings struct {
 	WindowDays            int
 	Templates             map[string]string
 	FollowupWindowMinutes int
+	UsePoll               bool
 }
 
 // AgentRatingSummary represents rating KPIs for the selected analytics period.
@@ -119,6 +121,12 @@ func applyChatCloseRatingSettingsToResult(result *chatCloseRatingSettings, setti
 	if rawFollowupWindow, ok := settings[organizationSettingChatCloseRatingFollowupWindowMinutes]; ok {
 		if parsed := chat_close_ratings.ParseFollowupWindowMinutes(rawFollowupWindow); parsed > 0 {
 			result.FollowupWindowMinutes = parsed
+		}
+	}
+
+	if rawUsePoll, ok := settings["use_poll"]; ok {
+		if usePoll, ok := rawUsePoll.(bool); ok {
+			result.UsePoll = usePoll
 		}
 	}
 }
@@ -329,7 +337,7 @@ func (a *App) handleManualChatCloseRatingPrompt(orgID, closingUserID uuid.UUID, 
 		return
 	}
 
-	promptMessageID, sendErr := a.sendChatCloseRatingPrompt(orgID, contact, promptText)
+	promptMessageID, sendErr := a.sendChatCloseRatingPrompt(orgID, contact, promptText, settings)
 	if sendErr != nil {
 		a.Log.Error("Failed to send close rating prompt", "error", sendErr, "contact_id", contact.ID)
 		return
@@ -345,7 +353,7 @@ func (a *App) handleManualChatCloseRatingPrompt(orgID, closingUserID uuid.UUID, 
 	}
 }
 
-func (a *App) sendChatCloseRatingPrompt(orgID uuid.UUID, contact *models.Contact, promptText string) (*uuid.UUID, error) {
+func (a *App) sendChatCloseRatingPrompt(orgID uuid.UUID, contact *models.Contact, promptText string, settings chatCloseRatingSettings) (*uuid.UUID, error) {
 	account, err := a.resolveClosePromptAccount(orgID, contact)
 	if err != nil {
 		return nil, err
@@ -353,6 +361,46 @@ func (a *App) sendChatCloseRatingPrompt(orgID uuid.UUID, contact *models.Contact
 	if account == nil {
 		return nil, fmt.Errorf("chat close rating prompt account is unavailable")
 	}
+
+	// If use_poll is enabled and the provider supports polls, send a native poll.
+	if settings.UsePoll && contact.InstanceID != nil && *contact.InstanceID != uuid.Nil {
+		if a.MessageProvider != nil {
+			if pollSender, ok := a.MessageProvider.(provider.PollProvider); ok {
+				instanceID := contact.InstanceID.String()
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+
+				ratingOptions := []string{
+					"1 - Very Poor",
+					"2 - Poor",
+					"3 - Fair",
+					"4 - Good",
+					"5 - Excellent",
+				}
+				_, pollErr := pollSender.SendPoll(ctx, instanceID, contact.PhoneNumber, promptText, ratingOptions, 1)
+				if pollErr != nil {
+					a.Log.Error("Failed to send rating poll, falling back to text", "error", pollErr, "contact_id", contact.ID)
+				} else {
+					// Store a poll-type message so the prompt is tracked.
+					msg, sendErr := a.SendOutgoingMessage(context.Background(), OutgoingMessageRequest{
+						Account: account,
+						Contact: contact,
+						Type:    models.MessageTypePoll,
+						Content: promptText,
+					}, SLASendOptions())
+					if sendErr != nil {
+						a.Log.Error("Failed to persist rating poll message", "error", sendErr)
+					}
+					if msg != nil {
+						msgID := msg.ID
+						return &msgID, nil
+					}
+					return nil, nil
+				}
+			}
+		}
+	}
+
 	if a.isWhatsmeowProvider() {
 		if a.MessageProvider == nil {
 			return nil, fmt.Errorf("message provider is not configured")
@@ -467,7 +515,28 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 	if contact == nil || incomingMessage == nil {
 		return false
 	}
-	if payload.MessageType != "text" {
+
+	// Handle poll votes as rating responses in addition to text.
+	isPollVoteMsg := payload.MessageType == "poll" && incomingMessage.InteractiveData != nil
+	var pollVoteOptions []string
+	if isPollVoteMsg {
+		if raw, ok := incomingMessage.InteractiveData["type"]; !ok || raw != "poll_vote" {
+			isPollVoteMsg = false
+		}
+		if isPollVoteMsg {
+			if opts, ok := incomingMessage.InteractiveData["selected_options"]; ok {
+				if arr, ok := opts.([]interface{}); ok {
+					for _, v := range arr {
+						if s, ok := v.(string); ok {
+							pollVoteOptions = append(pollVoteOptions, s)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if payload.MessageType != "text" && !isPollVoteMsg {
 		return false
 	}
 
@@ -482,7 +551,22 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 	}
 
 	trimmedContent := strings.TrimSpace(payload.MessageText)
-	ratingValue, hasRating := chat_close_ratings.ParseInboundRatingValue(payload.MessageText)
+	var ratingValue int
+	var hasRating bool
+
+	if isPollVoteMsg && len(pollVoteOptions) > 0 {
+		for _, opt := range pollVoteOptions {
+			if parsed := chat_close_ratings.ParseRatingFromPollOption(opt); parsed > 0 {
+				ratingValue = parsed
+				hasRating = true
+				trimmedContent = opt
+				break
+			}
+		}
+	} else {
+		ratingValue, hasRating = chat_close_ratings.ParseInboundRatingValue(payload.MessageText)
+	}
+
 	contextMessages := cycle.ContextMessages
 	if hasRating {
 		contextMessages = a.buildChatCloseRatingContext(contact.ID, incomingMessage)
@@ -497,7 +581,7 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 		ratingPointer = &ratingValue
 		entryKind = "rating"
 	}
-	followup.Entries = chat_close_ratings.AppendChatCloseRatingFollowupEntry(followup.Entries, incomingMessage, payload.MessageText, entryKind, ratingPointer)
+	followup.Entries = chat_close_ratings.AppendChatCloseRatingFollowupEntry(followup.Entries, incomingMessage, trimmedContent, entryKind, ratingPointer)
 	if !hasRating && trimmedContent != "" {
 		followup.Comments = append(followup.Comments, trimmedContent)
 	}

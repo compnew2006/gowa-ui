@@ -213,7 +213,7 @@ func TestExtractMessageContentWithMedia_TextualVariants(t *testing.T) {
 		}
 	})
 
-	t.Run("poll question as text", func(t *testing.T) {
+	t.Run("poll question uses poll type", func(t *testing.T) {
 		msg := &waE2E.Message{
 			PollCreationMessage: &waE2E.PollCreationMessage{
 				Name: proto.String("Lunch option?"),
@@ -221,10 +221,10 @@ func TestExtractMessageContentWithMedia_TextualVariants(t *testing.T) {
 		}
 
 		msgType, content, _, _, _ := cm.extractMessageContentWithMedia(ctx, nil, msg)
-		if msgType != models.MessageTypeText {
-			t.Fatalf("expected text type for poll preview, got %q", msgType)
+		if msgType != models.MessageTypePoll {
+			t.Fatalf("expected poll type for poll preview, got %q", msgType)
 		}
-		if content != "[Poll] Lunch option?" {
+		if content != "Lunch option?" {
 			t.Fatalf("unexpected poll content: %q", content)
 		}
 	})

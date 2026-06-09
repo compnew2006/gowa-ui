@@ -64,6 +64,20 @@ export interface Message {
   interactive_data?: {
     type?: string
     body?: string
+    question?: string
+    name?: string
+    title?: string
+    options?: unknown[]
+    poll_options?: unknown[]
+    max_selections?: number | string
+    selectable_options_count?: number | string
+    votes?: Record<string, number>
+    vote_counts?: Record<string, number>
+    total_votes?: number | string
+    selected_options?: string[]
+    last_selected_options?: string[]
+    voters?: Record<string, string[]>
+    poll?: Record<string, unknown>
     buttons?: Array<{
       type?: string
       reply?: { id: string; title: string }

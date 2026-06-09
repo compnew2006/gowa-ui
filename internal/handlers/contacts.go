@@ -456,15 +456,15 @@ func (a *App) enqueueDirectContactRepair(contact *models.Contact, conversationID
 // ListContacts returns all contacts for the organization
 // Users without contacts:read permission see pending queue + contacts assigned to them
 func (a *App) ListContacts(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
+	auth, err := a.requireAuthenticatedRequest(r, 5*time.Second)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
-
-	ctx, cancel := context.WithTimeout(r.RequestCtx, 5*time.Second)
-	defer cancel()
-	ctxDB := requestDB.WithContext(ctx)
+	defer auth.Cancel()
+	orgID := auth.OrgID
+	userID := auth.UserID
+	ctx := auth.Ctx
+	ctxDB := auth.DB
 
 	// Pagination
 	pg := parsePaginationWithDefaults(r, 50, 500)
@@ -803,10 +803,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 				profileName = fallbackName
 			}
 		}
-		if shouldMask {
-			phoneNumber = MaskPhoneNumber(phoneNumber)
-			profileName = MaskIfPhoneNumber(profileName)
-		}
+		phoneNumber, profileName = maskContactPhoneAndName(phoneNumber, profileName, shouldMask)
 
 		closedAt := c.ClosedAt
 		closedByUserID := c.ClosedByUserID
@@ -1154,6 +1151,14 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 }
 
 // buildMessagesResponse converts messages to response format
+func isPollVoteTimelineMessage(message models.Message) bool {
+	if message.MessageType != models.MessageTypePoll || message.InteractiveData == nil {
+		return false
+	}
+	msgType, ok := message.InteractiveData["type"].(string)
+	return ok && msgType == "poll_vote"
+}
+
 func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNumbers bool) []MessageResponse {
 	hasCompanionByWAMID := make(map[string]bool)
 	for _, m := range messages {
@@ -1166,7 +1171,7 @@ func (a *App) buildMessagesResponse(messages []models.Message, shouldMaskPhoneNu
 
 	response := make([]MessageResponse, 0, len(messages))
 	for _, m := range messages {
-		if isSyntheticPlaceholderMessage(m, hasCompanionByWAMID) {
+		if isSyntheticPlaceholderMessage(m, hasCompanionByWAMID) || isPollVoteTimelineMessage(m) {
 			continue
 		}
 

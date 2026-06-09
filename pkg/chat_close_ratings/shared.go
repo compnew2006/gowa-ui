@@ -182,6 +182,26 @@ func ParseInboundRatingValue(raw string) (int, bool) {
 	return rating, true
 }
 
+func ParseRatingFromPollOption(option string) int {
+	trimmed := strings.TrimSpace(option)
+	if trimmed == "" {
+		return 0
+	}
+	runes := []rune(trimmed)
+	end := 0
+	for end < len(runes) && runes[end] >= '0' && runes[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(string(runes[:end]))
+	if err != nil || n < 1 || n > 10 {
+		return 0
+	}
+	return n
+}
+
 func NormalizeRatingComments(values []string) []string {
 	if len(values) == 0 {
 		return []string{}

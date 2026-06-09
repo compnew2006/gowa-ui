@@ -490,6 +490,12 @@ export const messagesService = {
     }),
   revoke: (contactId: string, messageId: string) =>
     api.post(`/contacts/${contactId}/messages/${messageId}/revoke`),
+
+  sendPollVote: (messageId: string, selectedOptions: string[]) =>
+    api.post('/messages/poll-vote', {
+      message_id: messageId,
+      selected_options: selectedOptions,
+    }),
 };
 
 export interface WhatsAppStatusItem {

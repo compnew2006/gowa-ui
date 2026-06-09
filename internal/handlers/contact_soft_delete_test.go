@@ -55,6 +55,17 @@ func createChatMessage(
 	return message
 }
 
+func TestApp_ListContacts_RejectsMissingAuth(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	req := testutil.NewGETRequest(t)
+
+	err := app.ListContacts(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusUnauthorized, "Unauthorized")
+}
+
 func TestApp_SoftDeleteContactForUser_ForbiddenWithoutPermission(t *testing.T) {
 	t.Parallel()
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/license"
@@ -202,6 +203,37 @@ func (a *App) requestDB(r *fastglue.Request) *gorm.DB {
 	}
 
 	return tenant.ScopedDB(a.DB, orgID)
+}
+
+type authenticatedRequest struct {
+	DB     *gorm.DB
+	OrgID  uuid.UUID
+	UserID uuid.UUID
+	Ctx    context.Context
+	Cancel context.CancelFunc
+}
+
+func (a *App) requireAuthenticatedRequest(r *fastglue.Request, timeout time.Duration) (*authenticatedRequest, error) {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return nil, err
+	}
+
+	requestDB := a.requestDB(r)
+	ctx := context.Context(r.RequestCtx)
+	cancel := context.CancelFunc(func() {})
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(r.RequestCtx, timeout)
+		requestDB = requestDB.WithContext(ctx)
+	}
+
+	return &authenticatedRequest{
+		DB:     requestDB,
+		OrgID:  orgID,
+		UserID: userID,
+		Ctx:    ctx,
+		Cancel: cancel,
+	}, nil
 }
 
 // requirePermission checks if the user has the required permission.

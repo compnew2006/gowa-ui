@@ -8,12 +8,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
+	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	whatsmeowpkg "github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
@@ -35,6 +37,10 @@ type SendMessageRequest struct {
 
 	// Interactive message fields (for type="interactive")
 	Interactive *InteractiveContent `json:"interactive,omitempty"`
+
+	// Poll message fields (for type="poll")
+	PollOptions       []string `json:"poll_options,omitempty"`
+	PollMaxSelections int      `json:"poll_max_selections,omitempty"`
 }
 
 // InteractiveContent holds interactive message data
@@ -166,6 +172,12 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 				}
 			}
 		}
+	}
+
+	// Handle poll messages
+	if req.Type == models.MessageTypePoll {
+		msgReq.PollOptions = req.PollOptions
+		msgReq.PollMaxSelections = req.PollMaxSelections
 	}
 
 	opts := DefaultSendOptions()
@@ -876,4 +888,232 @@ func (a *App) sendWhatsAppReaction(account *models.WhatsAppAccount, contact *mod
 	} else {
 		a.Log.Info("Reaction sent successfully via provider", "message_id", message.WhatsAppMessageID, "emoji", emoji)
 	}
+}
+
+// SendPollVote handles a request to vote on an existing WhatsApp poll.
+// POST /api/messages/poll-vote  { message_id, selected_options }
+func (a *App) SendPollVote(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+
+	var req struct {
+		MessageID       string   `json:"message_id"`
+		SelectedOptions []string `json:"selected_options"`
+	}
+	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	}
+	if req.MessageID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "message_id is required", nil, "")
+	}
+	if req.SelectedOptions == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "selected_options is required", nil, "")
+	}
+	req.SelectedOptions = normalizePollVoteSelectedOptions(req.SelectedOptions)
+
+	msgUUID, err := uuid.Parse(req.MessageID)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "invalid message_id format", nil, "")
+	}
+
+	requestDB := a.requestDB(r)
+	var message models.Message
+	if err := requestDB.Where("id = ? AND organization_id = ?", msgUUID, orgID).First(&message).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
+	}
+
+	if message.MessageType != models.MessageTypePoll {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Message is not a poll", nil, "")
+	}
+	if limit := pollVoteSelectionLimit(message.InteractiveData); len(req.SelectedOptions) > limit {
+		return r.SendErrorEnvelope(
+			fasthttp.StatusBadRequest,
+			fmt.Sprintf("poll allows up to %d selected option", limit),
+			nil,
+			"selected_options",
+		)
+	}
+	if message.InstanceID == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Message has no associated instance", nil, "")
+	}
+	if a.MessageProvider == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Message provider not available", nil, "")
+	}
+
+	pollVoter, ok := a.MessageProvider.(provider.PollVoter)
+	if !ok {
+		return r.SendErrorEnvelope(fasthttp.StatusNotAcceptable, "Poll voting not supported by current provider", nil, "")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	respID, err := pollVoter.SendPollVote(ctx, provider.PollVoteTarget{
+		InstanceID:             *message.InstanceID,
+		OrgID:                  orgID,
+		OriginalPollWhatsAppID: message.WhatsAppMessageID,
+	}, req.SelectedOptions)
+	if err != nil {
+		a.Log.Error("Failed to send poll vote", "error", err, "message_id", message.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send poll vote", nil, "")
+	}
+
+	updatedInteractive := applyPollVoteSelectionToInteractive(message.InteractiveData, userID.String(), req.SelectedOptions)
+	now := time.Now()
+	if err := requestDB.Model(&models.Message{}).
+		Where("id = ?", message.ID).
+		Updates(map[string]any{
+			"interactive_data": updatedInteractive,
+			"updated_at":       now,
+		}).Error; err != nil {
+		a.Log.Error("Failed to update poll vote on original message", "error", err, "message_id", message.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update poll vote", nil, "")
+	}
+
+	message.InteractiveData = updatedInteractive
+	message.UpdatedAt = now
+	a.broadcastPollMessageUpdate(orgID, &message)
+
+	return r.SendEnvelope(map[string]any{
+		"wa_message_id":   respID,
+		"poll_message_id": message.ID.String(),
+	})
+}
+
+func normalizePollVoteSelectedOptions(selectedOptions []string) []string {
+	seen := make(map[string]struct{}, len(selectedOptions))
+	normalized := make([]string, 0, len(selectedOptions))
+	for _, option := range selectedOptions {
+		option = strings.TrimSpace(option)
+		if option == "" {
+			continue
+		}
+		if _, ok := seen[option]; ok {
+			continue
+		}
+		seen[option] = struct{}{}
+		normalized = append(normalized, option)
+	}
+	return normalized
+}
+
+func pollVoteSelectionLimit(interactive models.JSONB) int {
+	limit := pollVoteIntValue(interactive["max_selections"])
+	if limit <= 0 {
+		limit = pollVoteIntValue(interactive["selectable_options_count"])
+	}
+	if limit <= 0 {
+		return 1
+	}
+	return limit
+}
+
+func pollVoteIntValue(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float32:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		parsed, _ := v.Int64()
+		return int(parsed)
+	case string:
+		parsed, _ := strconv.Atoi(strings.TrimSpace(v))
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func applyPollVoteSelectionToInteractive(existing models.JSONB, voter string, selectedOptions []string) models.JSONB {
+	updated := make(models.JSONB, len(existing)+5)
+	for key, value := range existing {
+		updated[key] = value
+	}
+	if _, ok := updated["type"].(string); !ok {
+		updated["type"] = "poll"
+	}
+
+	voters := pollVoteSelectionVoters(updated["voters"])
+	if len(selectedOptions) == 0 {
+		delete(voters, voter)
+	} else {
+		voters[voter] = append([]string(nil), selectedOptions...)
+	}
+	updated["voters"] = voters
+	updated["votes"] = pollVoteSelectionCounts(voters)
+	updated["total_votes"] = len(voters)
+	updated["last_selected_options"] = append([]string(nil), selectedOptions...)
+	updated["last_voter"] = voter
+	return updated
+}
+
+func pollVoteSelectionVoters(raw interface{}) map[string][]string {
+	voters := map[string][]string{}
+	switch values := raw.(type) {
+	case map[string][]string:
+		for voter, selected := range values {
+			voters[voter] = append([]string(nil), selected...)
+		}
+	case map[string]interface{}:
+		for voter, selected := range values {
+			voters[voter] = pollVoteSelectionStrings(selected)
+		}
+	}
+	return voters
+}
+
+func pollVoteSelectionStrings(raw interface{}) []string {
+	switch values := raw.(type) {
+	case []string:
+		return append([]string(nil), values...)
+	case []interface{}:
+		out := make([]string, 0, len(values))
+		for _, value := range values {
+			if s, ok := value.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func pollVoteSelectionCounts(voters map[string][]string) map[string]int {
+	counts := map[string]int{}
+	for _, selected := range voters {
+		for _, option := range selected {
+			option = strings.TrimSpace(option)
+			if option != "" {
+				counts[option]++
+			}
+		}
+	}
+	return counts
+}
+
+func (a *App) broadcastPollMessageUpdate(orgID uuid.UUID, message *models.Message) {
+	if a.WSHub == nil || message == nil {
+		return
+	}
+	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+		Type: websocket.TypeMessageMediaUpdated,
+		Payload: map[string]any{
+			"id":               message.ID.String(),
+			"contact_id":       message.ContactID.String(),
+			"message_type":     message.MessageType,
+			"content":          map[string]string{"body": message.Content},
+			"interactive_data": message.InteractiveData,
+			"updated_at":       message.UpdatedAt,
+		},
+	})
 }

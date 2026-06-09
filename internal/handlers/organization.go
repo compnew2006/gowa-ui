@@ -409,6 +409,13 @@ func MaskIfPhoneNumber(s string) string {
 	return s
 }
 
+func maskContactPhoneAndName(phone, name string, shouldMask bool) (string, string) {
+	if !shouldMask {
+		return phone, name
+	}
+	return MaskPhoneNumber(phone), MaskIfPhoneNumber(name)
+}
+
 // ShouldMaskPhoneNumbers checks if phone masking is enabled for the organization
 func (a *App) ShouldMaskPhoneNumbers(orgID interface{}) bool {
 	var org models.Organization

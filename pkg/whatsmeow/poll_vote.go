@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
-	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
 	waClient "go.mau.fi/whatsmeow"
+	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
@@ -42,89 +43,141 @@ func (cm *ConnectionManager) handlePollVote(
 
 	selectedNames := cm.resolveSelectedOptionNames(ctx, orgID, instanceID, originalWAMID, vote.GetSelectedOptions())
 
-	senderPhone := cm.resolveSenderPhone(ctx, client, evt.Info)
-	if senderPhone == "" {
-		senderPhone = evt.Info.Sender.User
-	}
-	contact, err := cm.findOrCreateContact(ctx, orgID, instanceID, senderPhone, evt.Info.PushName, nil)
-	if err != nil {
-		cm.logger.Warn("Failed to find/create contact for poll vote", "error", err)
+	var originalMsg models.Message
+	if err := cm.db.WithContext(ctx).
+		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?", orgID, instanceID, originalWAMID).
+		First(&originalMsg).Error; err != nil {
+		cm.logger.Warn("Poll vote original message not found", "instance_id", instanceID, "poll_wa_id", originalWAMID, "error", err)
 		return
 	}
 
-	var originalMsg models.Message
-	err = cm.db.WithContext(ctx).
-		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?", orgID, instanceID, originalWAMID).
-		First(&originalMsg).Error
-
-	isReply := err == nil
-	var replyToID *uuid.UUID
-	if isReply {
-		replyToID = &originalMsg.ID
+	voter := cm.resolveSenderPhone(ctx, client, evt.Info)
+	if voter == "" {
+		voter = evt.Info.Sender.String()
+	}
+	if voter == "" {
+		voter = evt.Info.ID
 	}
 
-	content := "Voted: " + strings.Join(selectedNames, ", ")
-	if content == "Voted: " {
-		content = "Voted"
+	updatedInteractive := applyPollVoteToInteractive(originalMsg.InteractiveData, voter, selectedNames)
+	now := time.Now()
+	if err := cm.db.WithContext(ctx).Model(&models.Message{}).
+		Where("id = ?", originalMsg.ID).
+		Updates(map[string]any{
+			"interactive_data": updatedInteractive,
+			"updated_at":       now,
+		}).Error; err != nil {
+		cm.logger.Error("Failed to update poll vote on original message", "error", err, "message_id", originalMsg.ID)
+		return
 	}
 
-	myAccount := "whatsmeow"
-	if client.Store != nil && client.Store.ID != nil && client.Store.ID.User != "" {
-		myAccount = client.Store.ID.User
-	}
+	originalMsg.InteractiveData = updatedInteractive
+	originalMsg.UpdatedAt = now
+	cm.broadcastPollVoteUpdate(orgID, &originalMsg)
 
-	chatJID := evt.Info.Chat
-	conversationID := chatJID.String()
-	if !evt.Info.IsGroup && chatJID.Server != "newsletter" {
-		conversationID = directConversationID(chatJID, senderPhone)
-	}
-
-	createdAt := evt.Info.Timestamp
-	if createdAt.IsZero() {
-		createdAt = time.Now()
-	}
-
-	metadata := models.JSONB{
-		"is_group":  evt.Info.IsGroup,
-		"push_name": evt.Info.PushName,
-		"poll_vote": true,
-	}
-	if evt.Info.IsGroup {
-		metadata["group_jid"] = chatJID.String()
-		metadata["sender_phone"] = senderPhone
-	}
-
-	message := models.Message{
-		BaseModel:         models.BaseModel{ID: uuid.New(), CreatedAt: createdAt},
-		OrganizationID:    orgID,
-		InstanceID:        &instanceID,
-		WhatsAppAccount:   myAccount,
-		ContactID:         contact.ID,
-		WhatsAppMessageID: strings.TrimSpace(evt.Info.ID),
-		ConversationID:    conversationID,
-		Direction:         models.DirectionIncoming,
-		MessageType:       models.MessageTypePoll,
-		Content:           content,
-		Status:            models.MessageStatusReceived,
-		IsReply:           isReply,
-		ReplyToMessageID:  replyToID,
-		Metadata:          metadata,
-		InteractiveData: models.JSONB{
-			"type":             "poll_vote",
-			"selected_options": selectedNames,
-			"poll_message_id":  originalWAMID,
-		},
-	}
-
-	if err := cm.db.WithContext(ctx).Create(&message).Error; err != nil {
-		cm.logger.Error("Failed to persist poll vote message", "error", err, "instance_id", instanceID)
-	}
-
-	cm.logger.Debug("Persisted poll vote",
+	cm.logger.Debug("Updated poll vote on original message",
 		"instance_id", instanceID,
 		"poll_wa_id", originalWAMID,
 		"selected", selectedNames,
 	)
+}
+
+func applyPollVoteToInteractive(existing models.JSONB, voter string, selectedNames []string) models.JSONB {
+	updated := cloneJSONB(existing)
+	if updated == nil {
+		updated = models.JSONB{}
+	}
+	if _, ok := updated["type"].(string); !ok {
+		updated["type"] = "poll"
+	}
+
+	voters := pollVoteVoters(updated["voters"])
+	if len(selectedNames) == 0 {
+		delete(voters, voter)
+	} else {
+		voters[voter] = append([]string(nil), selectedNames...)
+	}
+	updated["voters"] = voters
+	updated["votes"] = pollVoteCounts(voters)
+	updated["total_votes"] = len(voters)
+	updated["last_selected_options"] = append([]string(nil), selectedNames...)
+	updated["last_voter"] = voter
+	return updated
+}
+
+func cloneJSONB(existing models.JSONB) models.JSONB {
+	if len(existing) == 0 {
+		return models.JSONB{}
+	}
+	cloned := make(models.JSONB, len(existing))
+	for key, value := range existing {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func pollVoteVoters(raw interface{}) map[string][]string {
+	voters := map[string][]string{}
+	rawMap, ok := raw.(map[string]interface{})
+	if !ok {
+		if typed, ok := raw.(map[string][]string); ok {
+			for voter, selected := range typed {
+				voters[voter] = append([]string(nil), selected...)
+			}
+		}
+		return voters
+	}
+	for voter, selected := range rawMap {
+		voters[voter] = stringSliceValue(selected)
+	}
+	return voters
+}
+
+func stringSliceValue(raw interface{}) []string {
+	switch values := raw.(type) {
+	case []string:
+		return append([]string(nil), values...)
+	case []interface{}:
+		out := make([]string, 0, len(values))
+		for _, value := range values {
+			if s, ok := value.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func pollVoteCounts(voters map[string][]string) map[string]int {
+	counts := map[string]int{}
+	for _, selected := range voters {
+		for _, option := range selected {
+			option = strings.TrimSpace(option)
+			if option != "" {
+				counts[option]++
+			}
+		}
+	}
+	return counts
+}
+
+func (cm *ConnectionManager) broadcastPollVoteUpdate(orgID uuid.UUID, message *models.Message) {
+	if cm.hub == nil || message == nil {
+		return
+	}
+	cm.hub.BroadcastToOrg(orgID, websocket.WSMessage{
+		Type: websocket.TypeMessageMediaUpdated,
+		Payload: map[string]any{
+			"id":               message.ID.String(),
+			"contact_id":       message.ContactID.String(),
+			"message_type":     message.MessageType,
+			"content":          map[string]string{"body": message.Content},
+			"interactive_data": message.InteractiveData,
+			"updated_at":       message.UpdatedAt,
+		},
+	})
 }
 
 // resolveSelectedOptionNames matches hashed selected options back to original

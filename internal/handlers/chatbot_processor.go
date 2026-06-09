@@ -1440,6 +1440,26 @@ func (a *App) sendStepWithSkipCheck(account *models.WhatsAppAccount, session *mo
 	}
 }
 
+func apiFetchFallbackStepMessage(step *models.ChatbotFlowStep, sessionData models.JSONB) string {
+	if fallback, ok := step.ApiConfig["fallback_message"].(string); ok && fallback != "" {
+		return processTemplate(fallback, sessionData)
+	}
+	if step.Message != "" {
+		return processTemplate(step.Message, sessionData)
+	}
+	return "Sorry, there was an error processing your request."
+}
+
+func (a *App) sendStepTextMessage(account *models.WhatsAppAccount, contact *models.Contact, message, logMessage string) {
+	if err := a.sendAndSaveTextMessage(account, contact, message); err != nil {
+		a.Log.Error(logMessage, "error", err, "contact", contact.PhoneNumber)
+	}
+}
+
+func (a *App) logOutgoingStepMessage(session *models.ChatbotSession, message, stepName string) {
+	a.logSessionMessage(session.ID, models.DirectionOutgoing, message, stepName)
+}
+
 // sendStepMessage sends the appropriate message based on step message_type
 func (a *App) sendStepMessage(account *models.WhatsAppAccount, session *models.ChatbotSession, contact *models.Contact, step *models.ChatbotFlowStep) {
 	var message string
@@ -1454,16 +1474,8 @@ func (a *App) sendStepMessage(account *models.WhatsAppAccount, session *models.C
 		if err != nil {
 			a.Log.Error("Failed to fetch API response", "error", err, "step", step.StepName)
 			// Use fallback message if configured, otherwise use the step message
-			if fallback, ok := step.ApiConfig["fallback_message"].(string); ok && fallback != "" {
-				message = processTemplate(fallback, session.SessionData)
-			} else if step.Message != "" {
-				message = processTemplate(step.Message, session.SessionData)
-			} else {
-				message = "Sorry, there was an error processing your request."
-			}
-			if err := a.sendAndSaveTextMessage(account, contact, message); err != nil {
-				a.Log.Error("Failed to send API error message", "error", err, "contact", contact.PhoneNumber)
-			}
+			message = apiFetchFallbackStepMessage(step, session.SessionData)
+			a.sendStepTextMessage(account, contact, message, "Failed to send API error message")
 		} else {
 			message = apiResp.Message
 
@@ -1481,12 +1493,10 @@ func (a *App) sendStepMessage(account *models.WhatsAppAccount, session *models.C
 					a.Log.Error("Failed to send API response buttons", "error", err, "contact", contact.PhoneNumber)
 				}
 			} else {
-				if err := a.sendAndSaveTextMessage(account, contact, message); err != nil {
-					a.Log.Error("Failed to send API response message", "error", err, "contact", contact.PhoneNumber)
-				}
+				a.sendStepTextMessage(account, contact, message, "Failed to send API response message")
 			}
 		}
-		a.logSessionMessage(session.ID, models.DirectionOutgoing, message, step.StepName)
+		a.logOutgoingStepMessage(session, message, step.StepName)
 
 	case models.FlowStepTypeButtons:
 		// Send interactive buttons message
@@ -1503,20 +1513,16 @@ func (a *App) sendStepMessage(account *models.WhatsAppAccount, session *models.C
 			}
 		} else {
 			// No buttons configured, fall back to text
-			if err := a.sendAndSaveTextMessage(account, contact, message); err != nil {
-				a.Log.Error("Failed to send step message", "error", err, "contact", contact.PhoneNumber)
-			}
+			a.sendStepTextMessage(account, contact, message, "Failed to send step message")
 		}
-		a.logSessionMessage(session.ID, models.DirectionOutgoing, message, step.StepName)
+		a.logOutgoingStepMessage(session, message, step.StepName)
 
 	case models.FlowStepTypeTransfer:
 		// Transfer to team/agent queue
 		message = processTemplate(step.Message, session.SessionData)
 		if message != "" {
-			if err := a.sendAndSaveTextMessage(account, contact, message); err != nil {
-				a.Log.Error("Failed to send transfer message", "error", err, "contact", contact.PhoneNumber)
-			}
-			a.logSessionMessage(session.ID, models.DirectionOutgoing, message, step.StepName)
+			a.sendStepTextMessage(account, contact, message, "Failed to send transfer message")
+			a.logOutgoingStepMessage(session, message, step.StepName)
 		}
 
 		// Get transfer configuration
@@ -1568,9 +1574,7 @@ func (a *App) sendStepMessage(account *models.WhatsAppAccount, session *models.C
 		if flowID == "" {
 			a.Log.Error("WhatsApp Flow step missing flow ID", "step", step.StepName)
 			// Fall back to text message
-			if err := a.sendAndSaveTextMessage(account, contact, message); err != nil {
-				a.Log.Error("Failed to send fallback message", "error", err, "contact", contact.PhoneNumber)
-			}
+			a.sendStepTextMessage(account, contact, message, "Failed to send fallback message")
 		} else {
 			// Look up the WhatsApp Flow to get the first screen name
 			var waFlow models.WhatsAppFlow
@@ -1608,16 +1612,14 @@ func (a *App) sendStepMessage(account *models.WhatsAppAccount, session *models.C
 				a.Log.Error("Failed to send WhatsApp Flow message", "error", err, "contact", contact.PhoneNumber, "flow_id", flowID)
 			}
 		}
-		a.logSessionMessage(session.ID, models.DirectionOutgoing, message, step.StepName)
+		a.logOutgoingStepMessage(session, message, step.StepName)
 
 	default:
 		// Default: use the step message with template processing
 		a.Log.Debug("Unhandled message type, falling back to text", "message_type", step.MessageType, "step", step.StepName)
 		message = processTemplate(step.Message, session.SessionData)
-		if err := a.sendAndSaveTextMessage(account, contact, message); err != nil {
-			a.Log.Error("Failed to send step message", "error", err, "contact", contact.PhoneNumber)
-		}
-		a.logSessionMessage(session.ID, models.DirectionOutgoing, message, step.StepName)
+		a.sendStepTextMessage(account, contact, message, "Failed to send step message")
+		a.logOutgoingStepMessage(session, message, step.StepName)
 	}
 }
 

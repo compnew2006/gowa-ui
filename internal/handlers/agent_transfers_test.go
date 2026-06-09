@@ -73,6 +73,15 @@ func createTestTeam(t *testing.T, app *handlers.App, orgID uuid.UUID, memberIDs 
 
 // --- ListAgentTransfers Tests ---
 
+func TestApp_ListAgentTransfers_RejectsMissingAuth(t *testing.T) {
+	app := newTestApp(t)
+	req := testutil.NewGETRequest(t)
+
+	err := app.ListAgentTransfers(req)
+	require.NoError(t, err)
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusUnauthorized, "Unauthorized")
+}
+
 func TestApp_ListAgentTransfers_Success(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)

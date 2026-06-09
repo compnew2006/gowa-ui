@@ -1505,6 +1505,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/messages", sendMessageHandler) // Legacy route
 	g.POST("/api/messages/template", sendTemplateMessageHandler)
 	g.POST("/api/messages/media", sendMediaMessageHandler)
+	g.POST("/api/messages/poll-vote", app.SendPollVote)
 	g.PUT("/api/messages/{id}/read", app.MarkMessageRead)
 	g.GET("/api/statuses", app.ListStatuses)
 	g.GET("/api/statuses/{id}/media", app.ServeStatusMedia)

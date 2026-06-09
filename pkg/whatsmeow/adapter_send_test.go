@@ -182,4 +182,54 @@ func TestResolveReplyContext_EmptyContentFallback(t *testing.T) {
 	assert.Equal(t, "Media", quotedText)
 }
 
+func TestResolvePollSender_OutgoingDirectPoll_UsesOwnJID(t *testing.T) {
+	t.Parallel()
+	chatJID := waTypes.NewJID("1234567890", waTypes.DefaultUserServer)
+	ownJID := waTypes.NewJID("9999999999", waTypes.DefaultUserServer)
 
+	msg := models.Message{Direction: models.DirectionOutgoing, Metadata: map[string]interface{}{}}
+
+	got := resolvePollSender(msg, chatJID, ownJID, false)
+	assert.Equal(t, ownJID, got, "outgoing poll should use own JID as sender")
+}
+
+func TestResolvePollSender_IncomingDirectPoll_UsesChatJID(t *testing.T) {
+	t.Parallel()
+	chatJID := waTypes.NewJID("1234567890", waTypes.DefaultUserServer)
+	ownJID := waTypes.NewJID("9999999999", waTypes.DefaultUserServer)
+
+	msg := models.Message{Direction: models.DirectionIncoming, Metadata: map[string]interface{}{}}
+
+	got := resolvePollSender(msg, chatJID, ownJID, false)
+	assert.Equal(t, chatJID, got, "incoming direct poll should use chat JID as sender")
+}
+
+func TestResolvePollSender_IncomingGroupPoll_UsesParticipantSender(t *testing.T) {
+	t.Parallel()
+	groupJID := waTypes.JID{User: "12345-group", Server: "g.us"}
+	ownJID := waTypes.NewJID("9999999999", waTypes.DefaultUserServer)
+	senderPhone := "5556667777"
+
+	msg := models.Message{
+		Direction: models.DirectionIncoming,
+		Metadata:  map[string]interface{}{"sender_phone": senderPhone},
+	}
+
+	got := resolvePollSender(msg, groupJID, ownJID, true)
+	expectedSender, _ := waTypes.ParseJID(senderPhone + "@s.whatsapp.net")
+	assert.Equal(t, expectedSender, got, "incoming group poll should use participant sender")
+}
+
+func TestResolvePollSender_OutgoingGroupPoll_UsesOwnJID(t *testing.T) {
+	t.Parallel()
+	groupJID := waTypes.JID{User: "12345-group", Server: "g.us"}
+	ownJID := waTypes.NewJID("9999999999", waTypes.DefaultUserServer)
+
+	msg := models.Message{
+		Direction: models.DirectionOutgoing,
+		Metadata:  map[string]interface{}{"sender_phone": "5556667777"},
+	}
+
+	got := resolvePollSender(msg, groupJID, ownJID, true)
+	assert.Equal(t, ownJID, got, "outgoing group poll should still use own JID")
+}

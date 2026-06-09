@@ -112,3 +112,5 @@ ruvector.db
 # CocoIndex Code (ccc)
 /.cocoindex_code/
 /node_modules
+
+testsprite_tests/tmp/config.json

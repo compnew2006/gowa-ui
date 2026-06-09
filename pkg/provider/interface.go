@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
 
 // MessageProvider defines the interface for sending messages and managing interactions
 // across different WhatsApp providers (Meta Cloud API, whatsmeow, etc.)
@@ -52,6 +56,20 @@ type ReplyProvider interface {
 // Meta Cloud API does not. Callers should type-assert to check support.
 type PollProvider interface {
 	SendPoll(ctx context.Context, instanceID string, to string, question string, options []string, maxSelections int) (string, error)
+}
+
+// PollVoteTarget identifies the poll to vote on.
+type PollVoteTarget struct {
+	InstanceID             uuid.UUID
+	OrgID                  uuid.UUID
+	OriginalPollWhatsAppID string
+}
+
+// PollVoter is an optional extension for adapters that support voting on
+// existing WhatsApp polls. Only whatsmeow implements this.
+// Callers should type-assert to check support.
+type PollVoter interface {
+	SendPollVote(ctx context.Context, target PollVoteTarget, selectedOptions []string) (string, error)
 }
 
 // GroupInfo holds metadata for a WhatsApp group.

@@ -425,6 +425,10 @@ class WebSocketService {
     store: ReturnType<typeof useContactsStore>,
     payload: any,
   ) {
+    if (payload?.message_type === "poll" && payload?.interactive_data?.type === "poll_vote") {
+      return;
+    }
+
     // Check if this message is for the current contact
     const currentContact = store.currentContact;
     const currentConversationId =
@@ -642,6 +646,7 @@ class WebSocketService {
           ? payload.media_filename
           : existing?.media_filename,
       metadata: payload?.metadata ?? existing?.metadata,
+      interactive_data: payload?.interactive_data ?? existing?.interactive_data,
       error_message:
         typeof payload?.error_message === "string"
           ? payload.error_message

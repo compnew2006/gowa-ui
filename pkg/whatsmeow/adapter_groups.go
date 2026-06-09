@@ -203,7 +203,7 @@ func (a *WhatsmeowAdapter) AddGroupParticipants(ctx context.Context, instanceID 
 		return nil, fmt.Errorf("add participants to group %q: %w", groupJID, err)
 	}
 
-result := make([]provider.GroupParticipant, 0, len(participants))
+	result := make([]provider.GroupParticipant, 0, len(participants))
 	for _, p := range participants {
 		result = append(result, parseParticipantGroup(p, a.phoneResolver(ctx)))
 	}

@@ -1,4 +1,4 @@
-.PHONY: all build build-prod run test clean docker-build docker-up docker-down migrate frontend-dev frontend-build backend-watch dev-watch air-install
+.PHONY: all build build-prod build-prod-clean require-clean version run test clean docker-build docker-up docker-down migrate frontend-dev frontend-build backend-watch dev-watch air-install
 
 # Go parameters
 GOCMD=go
@@ -57,6 +57,27 @@ build-prod: frontend-build embed-frontend
 	@echo "Production binary built: $(BINARY_NAME)"
 	@echo "Version: $(VERSION)"
 	@ls -lh $(BINARY_NAME)
+
+# Build production binary only when git has no uncommitted changes.
+build-prod-clean: require-clean build-prod
+
+require-clean:
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		echo "Working tree is dirty. Commit or stash changes before a clean production build."; \
+		echo "Use 'make version' to inspect the version source, or override VERSION=<value> intentionally."; \
+		git status --short; \
+		exit 1; \
+	fi
+
+version:
+	@echo "Version: $(VERSION)"
+	@echo "Build time: $(BUILD_TIME)"
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		echo "Working tree: dirty"; \
+		git status --short; \
+	else \
+		echo "Working tree: clean"; \
+	fi
 
 # Copy frontend build to embed directory
 embed-frontend:

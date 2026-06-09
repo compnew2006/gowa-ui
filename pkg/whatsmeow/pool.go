@@ -45,7 +45,7 @@ type ConnectionSnapshot struct {
 //   - sync.Map (byKey, byInstanceID): lock-free reads in hot paths (GetClient, snapshot).
 //   - sync.Mutex (mu): serializes structural mutations (ensureEntry, reindex, removeInstance)
 //     to prevent duplicate entries during concurrent Connect/Disconnect calls.
-//   Do not hold mu while performing I/O or calling external methods.
+//     Do not hold mu while performing I/O or calling external methods.
 type ConnectionPool struct {
 	byKey        sync.Map // map[InstanceKey]*connectionEntry
 	byInstanceID sync.Map // map[uuid.UUID]*connectionEntry

@@ -58,42 +58,235 @@ func TestNormalizeAutoRejectCallSettings_CleansValues(t *testing.T) {
 }
 
 func TestValidateAutoRejectCallSettings(t *testing.T) {
-	err := ValidateAutoRejectCallSettings(map[string]any{
-		"enabled": true,
-		"mode":    AutoRejectCallModeWithMessage,
-		"message": "",
-		"schedule": map[string]any{
-			"type": AutoRejectScheduleAlways,
+	tests := []struct {
+		name    string
+		input   map[string]any
+		wantErr bool
+	}{
+		{
+			name: "with_message_empty_reject_message",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithMessage,
+				"message": "",
+				"schedule": map[string]any{
+					"type": AutoRejectScheduleAlways,
+				},
+			},
+			wantErr: true,
 		},
-	})
-	require.Error(t, err)
+		{
+			name: "without_message_valid",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type": AutoRejectScheduleAlways,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "with_message_valid",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithMessage,
+				"message": "Away",
+				"schedule": map[string]any{
+					"type":     AutoRejectScheduleCustomHours,
+					"start":    "09:00",
+					"end":      "17:00",
+					"days":     []int{1, 2, 3},
+					"timezone": "UTC",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid_mode",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    "send_voicemail",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid_schedule_type",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type": "nights_only",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "custom_hours_bad_start",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type":     AutoRejectScheduleCustomHours,
+					"start":    "bad",
+					"end":      "17:00",
+					"days":     []int{1},
+					"timezone": "UTC",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "custom_hours_bad_end",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type":     AutoRejectScheduleCustomHours,
+					"start":    "09:00",
+					"end":      "25:00",
+					"days":     []int{1},
+					"timezone": "UTC",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "custom_hours_empty_days",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type":     AutoRejectScheduleCustomHours,
+					"start":    "09:00",
+					"end":      "17:00",
+					"days":     []int{},
+					"timezone": "UTC",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "custom_hours_invalid_days_filtered_by_normalize",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type":     AutoRejectScheduleCustomHours,
+					"start":    "09:00",
+					"end":      "17:00",
+					"days":     []int{0, 7, 99},
+					"timezone": "UTC",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "custom_hours_invalid_timezone",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type":     AutoRejectScheduleCustomHours,
+					"start":    "09:00",
+					"end":      "17:00",
+					"days":     []int{1, 2},
+					"timezone": "Invalid/Zone",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "custom_hours_empty_timezone",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type":     AutoRejectScheduleCustomHours,
+					"start":    "09:00",
+					"end":      "17:00",
+					"days":     []int{1},
+					"timezone": "  ",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "custom_hours_boundary_midnight_to_end_of_day",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type":     AutoRejectScheduleCustomHours,
+					"start":    "00:00",
+					"end":      "23:59",
+					"days":     []int{0, 1, 2, 3, 4, 5, 6},
+					"timezone": "UTC",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "schedule_while_in_other_call_valid",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithoutMessage,
+				"schedule": map[string]any{
+					"type": AutoRejectScheduleWhileInOtherCall,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "with_message_whitespace_only",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithMessage,
+				"message": "   ",
+				"schedule": map[string]any{
+					"type": AutoRejectScheduleAlways,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name:    "nil_input_uses_defaults",
+			input:   nil,
+			wantErr: false,
+		},
+		{
+			name:    "empty_map_uses_defaults",
+			input:   map[string]any{},
+			wantErr: false,
+		},
+		{
+			name: "custom_hours_real_timezone",
+			input: map[string]any{
+				"enabled": true,
+				"mode":    AutoRejectCallModeWithMessage,
+				"message": "Busy",
+				"schedule": map[string]any{
+					"type":     AutoRejectScheduleCustomHours,
+					"start":    "08:30",
+					"end":      "18:00",
+					"days":     []int{1, 2, 3, 4, 5},
+					"timezone": "America/Los_Angeles",
+				},
+			},
+			wantErr: false,
+		},
+	}
 
-	err = ValidateAutoRejectCallSettings(map[string]any{
-		"enabled": true,
-		"mode":    AutoRejectCallModeWithoutMessage,
-		"schedule": map[string]any{
-			"type":     AutoRejectScheduleCustomHours,
-			"start":    "bad",
-			"end":      "17:00",
-			"days":     []int{1},
-			"timezone": "UTC",
-		},
-	})
-	require.Error(t, err)
-
-	err = ValidateAutoRejectCallSettings(map[string]any{
-		"enabled": true,
-		"mode":    AutoRejectCallModeWithMessage,
-		"message": "Away",
-		"schedule": map[string]any{
-			"type":     AutoRejectScheduleCustomHours,
-			"start":    "09:00",
-			"end":      "17:00",
-			"days":     []int{1, 2, 3},
-			"timezone": "UTC",
-		},
-	})
-	require.NoError(t, err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateAutoRejectCallSettings(tc.input)
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestEvaluateAutoRejectCall(t *testing.T) {

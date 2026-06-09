@@ -3297,38 +3297,207 @@ interface PollData {
   question: string;
   options: string[];
   max_selections: number;
+  votes: Record<string, number>;
+  total_votes: number;
+  selected_options: string[];
 }
 
-interface PollVoteData {
-  selected_options: string[];
-  poll_message_id: string;
+function normalizePollOption(raw: unknown): string {
+  if (typeof raw === "string") return raw.trim();
+  if (!raw || typeof raw !== "object") return "";
+
+  const option = raw as Record<string, unknown>;
+  for (const key of ["option_name", "name", "title", "text", "label"]) {
+    const value = option[key];
+    if (typeof value === "string" && value.trim() !== "") {
+      return value.trim();
+    }
+  }
+
+  const nestedReply = option.reply;
+  if (nestedReply && typeof nestedReply === "object") {
+    return normalizePollOption(nestedReply);
+  }
+
+  return "";
+}
+
+function normalizePollOptions(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const options: string[] = [];
+
+  for (const item of raw) {
+    const option = normalizePollOption(item);
+    if (!option || seen.has(option)) continue;
+    seen.add(option);
+    options.push(option);
+  }
+
+  return options;
+}
+
+function normalizePollMaxSelections(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string") {
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function normalizePollVotes(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const votes: Record<string, number> = {};
+  for (const [option, count] of Object.entries(raw as Record<string, unknown>)) {
+    const normalizedOption = option.trim();
+    const normalizedCount =
+      typeof count === "number" ? count : Number.parseInt(String(count), 10);
+    if (normalizedOption && Number.isFinite(normalizedCount)) {
+      votes[normalizedOption] = Math.max(0, normalizedCount);
+    }
+  }
+  return votes;
+}
+
+function normalizePollSelectedOptions(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function parsePollContentData(content: unknown): Record<string, unknown> | null {
+  if (!content || typeof content !== "object") {
+    if (typeof content !== "string") return null;
+    const trimmed = content.trim();
+    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed && typeof parsed === "object"
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  if ("body" in content) {
+    return parsePollContentData((content as Record<string, unknown>).body);
+  }
+
+  return content as Record<string, unknown>;
 }
 
 function getPollData(message: Message): PollData | null {
   if (message.message_type !== "poll") return null;
-  if (!message.interactive_data) return null;
-  const d = message.interactive_data as Record<string, unknown>;
-  if (d.type !== "poll") return null;
+
+  const interactive = (message.interactive_data || {}) as Record<string, unknown>;
+  if (interactive.type === "poll_vote") return null;
+
+  const nestedPoll = interactive.poll;
+  const d =
+    nestedPoll && typeof nestedPoll === "object"
+      ? (nestedPoll as Record<string, unknown>)
+      : interactive;
+  const contentData = parsePollContentData(message.content);
+
+  const options = normalizePollOptions(
+    d.options || d.poll_options || contentData?.options || contentData?.poll_options,
+  );
+
+  if (interactive.type && interactive.type !== "poll" && options.length === 0) {
+    return null;
+  }
+
+  const rawQuestion =
+    d.question || d.name || d.title || contentData?.question || contentData?.name;
+  const question =
+    typeof rawQuestion === "string" && rawQuestion.trim() !== ""
+      ? rawQuestion.trim()
+      : getContentBody(message.content) || "Poll";
+
+  const votes = normalizePollVotes(d.votes || d.vote_counts || contentData?.votes);
+  const selectedOptions = normalizePollSelectedOptions(
+    d.selected_options || d.last_selected_options || contentData?.selected_options,
+  );
+  const totalVotes =
+    normalizePollMaxSelections(d.total_votes || d.totalVotes || contentData?.total_votes) ||
+    Object.values(votes).reduce((sum, count) => sum + count, 0);
+
   return {
-    question: (d.question as string) || "",
-    options: (d.options as string[]) || [],
-    max_selections: (d.max_selections as number) || 0,
+    question,
+    options,
+    max_selections: normalizePollMaxSelections(
+      d.max_selections ||
+        d.maxSelections ||
+        d.selectable_options_count ||
+        contentData?.max_selections ||
+        contentData?.selectable_options_count,
+    ),
+    votes,
+    total_votes: totalVotes,
+    selected_options: selectedOptions,
   };
 }
 
-function isPollVote(message: Message): boolean {
-  if (message.message_type !== "poll") return false;
-  if (!message.interactive_data) return false;
-  return (message.interactive_data as Record<string, unknown>).type === "poll_vote";
+const pollVoteSending = ref<Map<string, boolean>>(new Map())
+const pollVoteSelected = ref<Map<string, string[]>>(new Map())
+
+function getPollSelectionLimit(message: Message): number {
+  const poll = getPollData(message);
+  const limit = poll?.max_selections || 0;
+  return limit > 0 ? limit : 1;
 }
 
-function getPollVoteData(message: Message): PollVoteData | null {
-  if (!isPollVote(message)) return null;
-  const d = message.interactive_data as Record<string, unknown>;
-  return {
-    selected_options: (d.selected_options as string[]) || [],
-    poll_message_id: (d.poll_message_id as string) || "",
-  };
+function getCurrentPollSelection(message: Message): string[] {
+  const localSelection = pollVoteSelected.value.get(message.id);
+  if (localSelection) return localSelection;
+  return getPollData(message)?.selected_options || [];
+}
+
+function buildNextPollSelection(message: Message, option: string): string[] | null {
+  const current = getCurrentPollSelection(message);
+  if (current.includes(option)) return [];
+
+  const limit = getPollSelectionLimit(message);
+  if (limit <= 1) return [option];
+  if (current.length >= limit) return null;
+  return [...current, option];
+}
+
+async function voteOnPoll(message: Message, option: string) {
+  const selectedOptions = buildNextPollSelection(message, option);
+  if (!selectedOptions) return;
+  if (pollVoteSending.value.get(message.id)) return;
+
+  pollVoteSending.value.set(message.id, true);
+  try {
+    await messagesService.sendPollVote(message.id, selectedOptions);
+    pollVoteSelected.value.set(message.id, selectedOptions);
+    toast.success("Vote sent");
+  } catch (e: unknown) {
+    toast.error(getErrorMessage(e));
+  } finally {
+    pollVoteSending.value.set(message.id, false);
+  }
+}
+
+function isPollOptionVoted(message: Message, option: string): boolean {
+  return getCurrentPollSelection(message).includes(option);
+}
+
+function getPollOptionVoteCount(message: Message, option: string): number {
+  const poll = getPollData(message);
+  if (!poll) return 0;
+  return poll.votes[option] || 0;
+}
+
+function getPollOptionVoteLabel(message: Message, option: string): string {
+  const count = getPollOptionVoteCount(message, option);
+  if (count <= 0) return "";
+  return count === 1 ? "1 vote" : `${count} votes`;
 }
 
 function getInteractiveButtons(
@@ -5647,29 +5816,37 @@ async function sendMediaMessage() {
                           <div
                             v-for="(option, idx) in getPollData(message)?.options"
                             :key="idx"
-                            :class="['px-3 py-2 text-sm', idx > 0 && 'border-t']"
+                            :class="[
+                              'px-3 py-2 text-sm',
+                              idx > 0 && 'border-t',
+                              !isPollOptionVoted(message, option) && 'cursor-pointer hover:bg-accent/10 transition-colors',
+                            ]"
+                            @click="voteOnPoll(message, option)"
                           >
                             <div class="flex items-center gap-2">
-                              <div class="h-4 w-4 rounded-full border-2 border-muted-foreground/40 shrink-0" />
-                              <span>{{ option }}</span>
+                              <div
+                                :class="[
+                                  'h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center',
+                                  isPollOptionVoted(message, option)
+                                    ? 'border-primary bg-primary'
+                                    : 'border-muted-foreground/40',
+                                ]"
+                              >
+                                <svg v-if="isPollOptionVoted(message, option)" class="h-2.5 w-2.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                              </div>
+                              <span class="flex-1">{{ option }}</span>
+                              <span
+                                v-if="getPollOptionVoteLabel(message, option)"
+                                class="text-xs text-muted-foreground"
+                              >
+                                {{ getPollOptionVoteLabel(message, option) }}
+                              </span>
                             </div>
                           </div>
                         </div>
                         <div v-if="getPollData(message)!.max_selections > 0" class="px-3 py-1.5 text-xs text-muted-foreground border-t">
                           Select up to {{ getPollData(message)!.max_selections }}
                         </div>
-                      </div>
-                    </div>
-                    <!-- Poll vote message -->
-                    <div
-                      v-else-if="isPollVote(message)"
-                      class="mb-2"
-                    >
-                      <div class="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg">
-                        <svg class="h-4 w-4 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                        <span class="text-sm text-primary font-medium">
-                          {{ getPollVoteData(message)?.selected_options.join(', ') || 'Voted' }}
-                        </span>
                       </div>
                     </div>
                     <!-- Button reply - WhatsApp style -->

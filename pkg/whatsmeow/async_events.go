@@ -34,11 +34,11 @@ type asyncEventDispatcher struct {
 	updateDepth func(uuid.UUID, int64)
 	markDropped func(uuid.UUID)
 
-	mu       sync.Mutex
-	queues   map[uuid.UUID]*asyncEventQueue
-	wg       sync.WaitGroup
-	closed   bool
-	stopped  map[uuid.UUID]struct{}
+	mu      sync.Mutex
+	queues  map[uuid.UUID]*asyncEventQueue
+	wg      sync.WaitGroup
+	closed  bool
+	stopped map[uuid.UUID]struct{}
 }
 
 func newAsyncEventDispatcher(bufferSize int, logger logf.Logger, handler asyncEventHandler, updateDepth func(uuid.UUID, int64), markDropped func(uuid.UUID)) *asyncEventDispatcher {

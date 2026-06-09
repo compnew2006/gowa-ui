@@ -62,6 +62,10 @@ type OutgoingMessageRequest struct {
 
 	// Reply context
 	ReplyToMessage *models.Message
+
+	// Poll messages
+	PollOptions       []string
+	PollMaxSelections int
 }
 
 type MessageActorType string
@@ -492,6 +496,12 @@ func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, m
 		}
 		return a.MessageProvider.SendText(ctx, instanceID, to, renderedContent)
 
+	case models.MessageTypePoll:
+		if pollSender, ok := a.MessageProvider.(provider.PollProvider); ok {
+			return pollSender.SendPoll(ctx, instanceID, to, req.Content, req.PollOptions, req.PollMaxSelections)
+		}
+		return "", fmt.Errorf("poll sending not supported by current provider")
+
 	default:
 		return "", fmt.Errorf("unsupported message type for whatsmeow: %s", req.Type)
 	}
@@ -608,6 +618,14 @@ func (a *App) createOutgoingMessage(req OutgoingMessageRequest, opts MessageSend
 				msg.InteractiveData = a.buildInteractiveData(req)
 			}
 		}
+		case models.MessageTypePoll:
+			msg.Content = req.Content
+			msg.InteractiveData = models.JSONB{
+				"type":           "poll",
+				"question":       req.Content,
+				"options":        req.PollOptions,
+				"max_selections": req.PollMaxSelections,
+			}
 	}
 
 	// Handle reply context
@@ -617,13 +635,15 @@ func (a *App) createOutgoingMessage(req OutgoingMessageRequest, opts MessageSend
 		msg.ReplyToMessageID = &replyID
 	}
 
-	if req.Contact != nil && isGroupConversationID(req.Contact.PhoneNumber) {
+	if req.Contact != nil {
 		msg.ConversationID = req.Contact.PhoneNumber
-		if msg.Metadata == nil {
-			msg.Metadata = models.JSONB{}
+		if isGroupConversationID(req.Contact.PhoneNumber) {
+			if msg.Metadata == nil {
+				msg.Metadata = models.JSONB{}
+			}
+			msg.Metadata["is_group_chat"] = true
+			msg.Metadata["group_jid"] = req.Contact.PhoneNumber
 		}
-		msg.Metadata["is_group_chat"] = true
-		msg.Metadata["group_jid"] = req.Contact.PhoneNumber
 	}
 
 	return msg

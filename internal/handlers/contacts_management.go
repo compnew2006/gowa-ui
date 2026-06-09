@@ -163,7 +163,6 @@ func (a *App) appendAssignedChatSystemMessage(contact *models.Contact, actorUser
 	)
 }
 
-
 // userBelongsToOrg checks whether a user is a member of the given organization.
 // It checks both the user's home organization (users.organization_id) and
 // the user_organizations membership table, matching the same logic used by
@@ -1177,10 +1176,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID, userID uuid.U
 		profileName = conversationContext.DisplayName
 	}
 	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
-	if shouldMask {
-		phoneNumber = MaskPhoneNumber(phoneNumber)
-		profileName = MaskIfPhoneNumber(profileName)
-	}
+	phoneNumber, profileName = maskContactPhoneAndName(phoneNumber, profileName, shouldMask)
 
 	closedAt := contact.ClosedAt
 	closedByUserID := contact.ClosedByUserID

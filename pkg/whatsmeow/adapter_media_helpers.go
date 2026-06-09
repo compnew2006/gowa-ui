@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/retry"
 	"go.mau.fi/whatsmeow"
 )
 
@@ -254,11 +255,6 @@ func (a *WhatsmeowAdapter) readLocalMedia(pathRef string) ([]byte, string, error
 
 // uploadMediaToWhatsApp uploads media with retry logic using configured backoff.
 func (a *WhatsmeowAdapter) uploadMediaToWhatsApp(ctx context.Context, client *whatsmeow.Client, data []byte, appType whatsmeow.MediaType) (whatsmeow.UploadResponse, error) {
-	resp, err := client.Upload(ctx, data, appType)
-	if err == nil {
-		return resp, nil
-	}
-
 	retryCount := 1
 	retryDelay := 2 * time.Second
 	if a.manager != nil && a.manager.cfg != nil {
@@ -266,19 +262,16 @@ func (a *WhatsmeowAdapter) uploadMediaToWhatsApp(ctx context.Context, client *wh
 		retryDelay = time.Duration(a.manager.cfg.UploadRetryDelaySec) * time.Second
 	}
 
-	for i := 0; i < retryCount; i++ {
-		a.logger.Warn("Media upload failed, retrying after backoff", "error", err, "attempt", i+1)
-
-		select {
-		case <-time.After(retryDelay):
-		case <-ctx.Done():
-			return whatsmeow.UploadResponse{}, fmt.Errorf("upload cancelled during retry backoff: %w", ctx.Err())
-		}
-
-		resp, err = client.Upload(ctx, data, appType)
-		if err == nil {
-			return resp, nil
-		}
+	resp, err := retry.WithBackoff(ctx, retryCount, retryDelay, func(ctx context.Context) (whatsmeow.UploadResponse, error) {
+		return client.Upload(ctx, data, appType)
+	}, func(attempt int, err error) {
+		a.logger.Warn("Media upload failed, retrying after backoff", "error", err, "attempt", attempt)
+	})
+	if err == nil {
+		return resp, nil
+	}
+	if ctx.Err() != nil {
+		return whatsmeow.UploadResponse{}, fmt.Errorf("upload cancelled during retry backoff: %w", ctx.Err())
 	}
 
 	return whatsmeow.UploadResponse{}, fmt.Errorf("failed to upload media after %d retries: %w", retryCount, err)

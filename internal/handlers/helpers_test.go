@@ -359,6 +359,69 @@ func TestMaskIfPhoneNumber(t *testing.T) {
 	}
 }
 
+func TestMaskContactPhoneAndName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		phone       string
+		contactName string
+		shouldMask  bool
+		wantPhone   string
+		wantName    string
+	}{
+		{
+			name:        "mask disabled",
+			phone:       "+1234567890",
+			contactName: "Customer +1234567890",
+			shouldMask:  false,
+			wantPhone:   "+1234567890",
+			wantName:    "Customer +1234567890",
+		},
+		{
+			name:        "mask enabled with valid phone",
+			phone:       "+1234567890",
+			contactName: "+1234567890",
+			shouldMask:  true,
+			wantPhone:   "*******7890",
+			wantName:    "*******7890",
+		},
+		{
+			name:        "mask enabled with empty phone",
+			phone:       "",
+			contactName: "Customer",
+			shouldMask:  true,
+			wantPhone:   "",
+			wantName:    "Customer",
+		},
+		{
+			name:        "phone-like name is masked",
+			phone:       "5551234567",
+			contactName: "5551234567",
+			shouldMask:  true,
+			wantPhone:   "******4567",
+			wantName:    "******4567",
+		},
+		{
+			name:        "non-phone name is preserved",
+			phone:       "5551234567",
+			contactName: "Alice",
+			shouldMask:  true,
+			wantPhone:   "******4567",
+			wantName:    "Alice",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotPhone, gotName := maskContactPhoneAndName(tt.phone, tt.contactName, tt.shouldMask)
+			assert.Equal(t, tt.wantPhone, gotPhone)
+			assert.Equal(t, tt.wantName, gotName)
+		})
+	}
+}
+
 // --- parseDateRange ---
 
 func TestParseDateRange_Valid(t *testing.T) {
@@ -638,7 +701,7 @@ func TestValidateExportColumns_TableDriven(t *testing.T) {
 		},
 		{
 			name:      "case sensitive validation",
-			requested: []string{"Name"}, // uppercase
+			requested: []string{"Name"},       // uppercase
 			allowed:   []string{"id", "name"}, // lowercase
 			wantErr:   true,
 			errMsg:    "column 'Name' is not allowed for export",
@@ -669,9 +732,9 @@ func TestValidateRequiredColumns_AllRequiredPresent(t *testing.T) {
 	t.Parallel()
 
 	colIndex := map[string]int{
-		"name":    0,
-		"email":   1,
-		"phone":   2,
+		"name":  0,
+		"email": 1,
+		"phone": 2,
 	}
 	required := []string{"name", "email"}
 
@@ -785,8 +848,8 @@ func TestValidateRequiredColumns_TableDriven(t *testing.T) {
 				"email": 1,
 				"phone": 2,
 			},
-			required:  []string{"name", "email"},
-			wantErr:   false,
+			required: []string{"name", "email"},
+			wantErr:  false,
 		},
 		{
 			name: "missing required column",
@@ -804,45 +867,45 @@ func TestValidateRequiredColumns_TableDriven(t *testing.T) {
 				"NAME":  0,
 				"Email": 1,
 			},
-			required:  []string{"name", "email"},
-			wantErr:   false,
+			required: []string{"name", "email"},
+			wantErr:  false,
 		},
 		{
 			name: "underscore space variation",
 			colIndex: map[string]int{
 				"phone number": 0,
 			},
-			required:  []string{"phone_number"},
-			wantErr:   false,
+			required: []string{"phone_number"},
+			wantErr:  false,
 		},
 		{
 			name: "space underscore variation",
 			colIndex: map[string]int{
 				"phone_number": 0,
 			},
-			required:  []string{"phone number"},
-			wantErr:   false,
+			required: []string{"phone number"},
+			wantErr:  false,
 		},
 		{
 			name: "empty required list",
 			colIndex: map[string]int{
 				"name": 0,
 			},
-			required:  []string{},
-			wantErr:   false,
+			required: []string{},
+			wantErr:  false,
 		},
 		{
-			name:     "empty col index with required columns",
-			colIndex: map[string]int{},
-			required: []string{"name"},
-			wantErr:  true,
+			name:      "empty col index with required columns",
+			colIndex:  map[string]int{},
+			required:  []string{"name"},
+			wantErr:   true,
 			errSubstr: "name",
 		},
 		{
 			name: "all variations present",
 			colIndex: map[string]int{
-				"Name":        0,
-				"email":       1,
+				"Name":         0,
+				"email":        1,
 				"Phone Number": 2,
 			},
 			required: []string{"name", "email", "phone_number"},
@@ -867,4 +930,3 @@ func TestValidateRequiredColumns_TableDriven(t *testing.T) {
 		})
 	}
 }
-

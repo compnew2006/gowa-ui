@@ -127,14 +127,16 @@ func (a *App) validateTransferAssigneeAccess(orgID uuid.UUID, agentID *uuid.UUID
 // ListAgentTransfers lists agent transfers for the organization
 // Agents see only their assigned transfers + their team queues; Admin see all; Managers see their teams
 func (a *App) ListAgentTransfers(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	newQuery := func() *gorm.DB {
-		return requestDB.Session(&gorm.Session{})
-	}
-	orgID, userID, err := a.getOrgAndUserID(r)
+	auth, err := a.requireAuthenticatedRequest(r, 0)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	requestDB := auth.DB
+	newQuery := func() *gorm.DB {
+		return requestDB.Session(&gorm.Session{})
+	}
+	orgID := auth.OrgID
+	userID := auth.UserID
 
 	// Check permissions - users with write permission have full access (like admin)
 	hasFullAccess := a.HasPermission(userID, models.ResourceTransfers, models.ActionWrite, orgID)
@@ -364,10 +366,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	// Build response from flat joined rows
 	response := make([]AgentTransferResponse, len(transfers))
 	for i, t := range transfers {
-		phoneNumber := t.PhoneNumber
-		if shouldMask {
-			phoneNumber = MaskPhoneNumber(phoneNumber)
-		}
+		phoneNumber, contactName := maskContactPhoneAndName(t.PhoneNumber, "", shouldMask)
 
 		resp := AgentTransferResponse{
 			ID:              t.ID.String(),
@@ -382,10 +381,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 		}
 
 		if t.ContactName != nil {
-			contactName := *t.ContactName
-			if shouldMask {
-				contactName = MaskIfPhoneNumber(contactName)
-			}
+			_, contactName = maskContactPhoneAndName("", *t.ContactName, shouldMask)
 			resp.ContactName = contactName
 		}
 

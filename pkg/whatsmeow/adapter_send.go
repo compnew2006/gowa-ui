@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
-	"github.com/google/uuid"
+	"github.com/compnew2006/whatomate/pkg/provider"
 	"go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	waTypes "go.mau.fi/whatsmeow/types"
@@ -367,15 +367,15 @@ func resolvePollSender(origMsg models.Message, chatJID, ownJID waTypes.JID, isGr
 // SendPollVote sends a vote on an existing WhatsApp poll. It looks up the
 // original poll message, reconstructs the MessageInfo needed by whatsmeow's
 // BuildPollVote, and sends the encrypted vote.
-func (a *WhatsmeowAdapter) SendPollVote(ctx context.Context, instanceID, orgID uuid.UUID, originalPollWhatsAppID string, selectedOptions []string) (string, error) {
-	client, err := a.getClient(ctx, instanceID.String())
+func (a *WhatsmeowAdapter) SendPollVote(ctx context.Context, target provider.PollVoteTarget, selectedOptions []string) (string, error) {
+	client, err := a.getClient(ctx, target.InstanceID.String())
 	if err != nil {
 		return "", fmt.Errorf("send poll vote: get client: %w", err)
 	}
 
 	var origMsg models.Message
 	if err := a.db.WithContext(ctx).
-		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?", orgID, instanceID, originalPollWhatsAppID).
+		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?", target.OrgID, target.InstanceID, target.OriginalPollWhatsAppID).
 		First(&origMsg).Error; err != nil {
 		return "", fmt.Errorf("send poll vote: original poll not found: %w", err)
 	}
@@ -392,7 +392,7 @@ func (a *WhatsmeowAdapter) SendPollVote(ctx context.Context, instanceID, orgID u
 
 	ownJID := waTypes.EmptyJID
 	if client != nil && client.Store != nil {
-		ownJID = client.Store.GetJID()
+		ownJID = client.Store.GetJID().ToNonAD()
 	}
 
 	if client != nil && client.Store != nil && client.Store.LIDs != nil {
@@ -412,6 +412,9 @@ func (a *WhatsmeowAdapter) SendPollVote(ctx context.Context, instanceID, orgID u
 		}
 	}
 
+	chatJID = chatJID.ToNonAD()
+	senderJID = senderJID.ToNonAD()
+
 	pollInfo := &waTypes.MessageInfo{
 		MessageSource: waTypes.MessageSource{
 			Chat:     chatJID,
@@ -423,7 +426,16 @@ func (a *WhatsmeowAdapter) SendPollVote(ctx context.Context, instanceID, orgID u
 		Timestamp: origMsg.CreatedAt.In(time.UTC),
 	}
 
-	voteMsg, err := client.BuildPollVote(ctx, pollInfo, selectedOptions)
+	var voteMsg *waE2E.Message
+	if chatJID.Server == waTypes.HiddenUserServer && client != nil && client.Store != nil && !client.Store.LID.IsEmpty() {
+		originalID := client.Store.ID
+		ownLID := client.Store.LID.ToNonAD()
+		client.Store.ID = &ownLID
+		voteMsg, err = client.BuildPollVote(ctx, pollInfo, selectedOptions)
+		client.Store.ID = originalID
+	} else {
+		voteMsg, err = client.BuildPollVote(ctx, pollInfo, selectedOptions)
+	}
 	if err != nil {
 		return "", fmt.Errorf("send poll vote: build vote: %w", err)
 	}

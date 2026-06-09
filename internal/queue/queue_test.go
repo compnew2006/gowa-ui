@@ -1214,6 +1214,12 @@ func TestRedisConsumer_WithMiniRedis_Consume_ProcessesJob(t *testing.T) {
 	assert.Equal(t, job.CampaignID, received[0].CampaignID)
 	assert.Equal(t, job.RecipientID, received[0].RecipientID)
 	assert.Equal(t, job.PhoneNumber, received[0].PhoneNumber)
+
+	testutil.AssertEventually(t, func() bool {
+		pending, pendingErr := client.XPending(ctx, queue.CampaignStreamName(job.OrganizationID), queue.CampaignConsumerGroup(job.OrganizationID)).Result()
+		length, lenErr := client.XLen(ctx, queue.CampaignStreamName(job.OrganizationID)).Result()
+		return pendingErr == nil && lenErr == nil && pending.Count == 0 && length == 0
+	}, 5*time.Second, "successfully processed job should be ACKed and deleted")
 }
 
 func TestRedisConsumer_WithMiniRedis_Consume_MultipleJobs(t *testing.T) {
@@ -1309,6 +1315,59 @@ func TestRedisConsumer_WithMiniRedis_PermanentFailureMovesToDLQ(t *testing.T) {
 	pending, err := client.XPending(ctx, streamName, groupName).Result()
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), pending.Count)
+}
+
+func TestRedisConsumer_WithMiniRedis_HandlerErrorDoesNotAck(t *testing.T) {
+	client := setupMiniRedis(t)
+	log := testutil.NopLogger()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	q := queue.NewRedisQueue(client, log)
+	job := makeRecipientJob()
+	require.NoError(t, q.EnqueueRecipient(ctx, job))
+
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, job.OrganizationID)
+	require.NoError(t, err)
+	defer func() { _ = consumer.Close() }()
+
+	handler := &mockHandler{err: errors.New("temporary handler failure")}
+	consumeCtx, consumeCancel := context.WithCancel(ctx)
+	defer consumeCancel()
+
+	go func() {
+		_ = consumer.Consume(consumeCtx, handler)
+	}()
+
+	testutil.AssertEventually(t, func() bool {
+		return len(handler.getJobs()) >= 1
+	}, 5*time.Second, "handler should receive the job before returning an error")
+
+	consumeCancel()
+
+	pending, err := client.XPending(ctx, queue.CampaignStreamName(job.OrganizationID), queue.CampaignConsumerGroup(job.OrganizationID)).Result()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), pending.Count)
+
+	deadLetters, err := client.XRange(ctx, queue.CampaignDeadLetterStreamName(job.OrganizationID), "-", "+").Result()
+	require.NoError(t, err)
+	assert.Empty(t, deadLetters)
+}
+
+func TestRedisConsumer_Consume_CanceledContextExits(t *testing.T) {
+	client := setupMiniRedis(t)
+	log := testutil.NopLogger()
+	orgID := uuid.New()
+
+	consumer, err := queue.NewOrganizationRedisConsumer(client, log, orgID)
+	require.NoError(t, err)
+	defer func() { _ = consumer.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err = consumer.Consume(ctx, &mockHandler{})
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestRedisInboundMediaConsumer_WithMiniRedis_Consume_ProcessesJob(t *testing.T) {
