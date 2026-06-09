@@ -96,9 +96,9 @@ func TestPollVoteSelectionLimit(t *testing.T) {
 			expected: 4,
 		},
 		{
-			name:     "both zero defaults to 1",
+			name:     "both zero defaults to 999",
 			data:     models.JSONB{"max_selections": 0, "selectable_options_count": 0},
-			expected: 1,
+			expected: 999,
 		},
 	}
 

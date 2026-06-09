@@ -578,4 +578,21 @@ Merged all branches to `main` and cleaned up stale local and remote branches.
   - `npm run typecheck` — **PASS**
   - `npm run build` — **PASS**
   - `make build-prod` — **PASS**
+## Fix WhatsApp Poll Multi-select Limit — 2026-06-10
+We resolved an issue where WhatsApp polls allowing multiple answers (multi-select) were rendered as radio buttons and restricted to a single choice both in the UI and the backend.
+
+### Changes
+* **Frontend ([ChatView.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/views/chat/ChatView.vue))**:
+  * Updated `getPollSelectionLimit` to return `999` when `max_selections` is `0` (indicating unlimited choices).
+  * Rendered appropriate info text: "Select one or more options" for multi-select, and "Select up to X" for single-select / limited selection.
+* **Backend ([contacts_messaging.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/contacts_messaging.go))**:
+  * Fixed `pollVoteSelectionLimit` to return `999` when the resolved limit is `0` instead of defaulting to `1`.
+* **Tests ([poll_vote_helpers_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/poll_vote_helpers_test.go))**:
+  * Adjusted `TestPollVoteSelectionLimit` to assert that zero values default to `999` (unlimited).
+
+### Verification
+* Verified that Go backend tests pass successfully (`go test ./internal/handlers/...`).
+* Verified that frontend TypeScript check compiles cleanly with no errors (`npm run typecheck`).
+* Successfully built the production package using `make build-prod`.
+
 <!-- END -->

@@ -3447,8 +3447,12 @@ const pollVoteSelected = ref<Map<string, string[]>>(new Map())
 
 function getPollSelectionLimit(message: Message): number {
   const poll = getPollData(message);
-  const limit = poll?.max_selections || 0;
-  return limit > 0 ? limit : 1;
+  if (!poll) return 1;
+  const limit = poll.max_selections;
+  if (limit === 0) {
+    return 999; // 0 means unlimited/multi-select
+  }
+  return limit && limit > 0 ? limit : 1;
 }
 
 function getCurrentPollSelection(message: Message): string[] {
@@ -5847,8 +5851,11 @@ async function sendMediaMessage() {
                             </div>
                           </div>
                         </div>
-                        <div v-if="getPollData(message)!.max_selections > 0" class="px-3 py-1.5 text-xs text-muted-foreground border-t">
-                          Select up to {{ getPollData(message)!.max_selections }}
+                        <div v-if="getPollData(message)?.max_selections === 0" class="px-3 py-1.5 text-xs text-muted-foreground border-t">
+                          Select one or more options
+                        </div>
+                        <div v-else-if="(getPollData(message)?.max_selections ?? 0) > 0" class="px-3 py-1.5 text-xs text-muted-foreground border-t">
+                          Select up to {{ getPollData(message)?.max_selections }}
                         </div>
                       </div>
                     </div>

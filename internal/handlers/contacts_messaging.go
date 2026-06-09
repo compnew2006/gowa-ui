@@ -1000,11 +1000,25 @@ func normalizePollVoteSelectedOptions(selectedOptions []string) []string {
 }
 
 func pollVoteSelectionLimit(interactive models.JSONB) int {
-	limit := pollVoteIntValue(interactive["max_selections"])
-	if limit <= 0 {
-		limit = pollVoteIntValue(interactive["selectable_options_count"])
+	maxSel, hasMax := interactive["max_selections"]
+	selOpt, hasSelectable := interactive["selectable_options_count"]
+
+	if !hasMax && !hasSelectable {
+		return 1
 	}
-	if limit <= 0 {
+
+	limit := -1
+	if hasMax {
+		limit = pollVoteIntValue(maxSel)
+	}
+	if (limit <= 0 || !hasMax) && hasSelectable {
+		limit = pollVoteIntValue(selOpt)
+	}
+
+	if limit == 0 {
+		return 999
+	}
+	if limit < 0 {
 		return 1
 	}
 	return limit
