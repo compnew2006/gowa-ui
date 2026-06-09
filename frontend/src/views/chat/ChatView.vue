@@ -3459,9 +3459,11 @@ function getCurrentPollSelection(message: Message): string[] {
 
 function buildNextPollSelection(message: Message, option: string): string[] | null {
   const current = getCurrentPollSelection(message);
-  if (current.includes(option)) return [];
-
   const limit = getPollSelectionLimit(message);
+  if (current.includes(option)) {
+    return limit <= 1 ? [] : current.filter((o) => o !== option);
+  }
+
   if (limit <= 1) return [option];
   if (current.length >= limit) return null;
   return [...current, option];
@@ -5826,7 +5828,8 @@ async function sendMediaMessage() {
                             <div class="flex items-center gap-2">
                               <div
                                 :class="[
-                                  'h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center',
+                                  'h-4 w-4 border-2 shrink-0 flex items-center justify-center',
+                                  getPollSelectionLimit(message) > 1 ? 'rounded' : 'rounded-full',
                                   isPollOptionVoted(message, option)
                                     ? 'border-primary bg-primary'
                                     : 'border-muted-foreground/40',
