@@ -545,4 +545,24 @@ Merged all branches to `main` and cleaned up stale local and remote branches.
 - **Solution**: In `pkg/whatsmeow/adapter_send.go`'s `SendPollVote` function, both `chatJID` and `senderJID` are now resolved to LID JIDs via `client.Store.LIDs.GetLIDForPN` if a mapping exists in `whatsmeow_lid_map` prior to building and sending the vote.
 - **Files changed**: [adapter_send.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/adapter_send.go)
 - **Tests run**: `go test ./pkg/whatsmeow/...` and `go test ./internal/handlers/...` all PASS.
+## Whatsmeow Poll Vote E2E Decryption Fix — 2026-06-10
+- **Problem**: Even after JID LID resolution, votes cast from Whatomate still failed to display on the phone.
+- **Root Cause**: 
+  1. **LID Encryption Identity Mismatch:** `whatsmeow`'s `EncryptPollVote` function internally uses `cli.getOwnID()` (the bot's `@s.whatsapp.net` JID) to encrypt the vote payload. However, on LID sessions, the customer's phone expects the sender to be the bot's LID JID (`@lid`). Because of this JID mismatch in key derivation, the customer's phone derives a different secret key, fails to decrypt the vote payload, and discards the vote.
+  2. **Device Suffixes:** The JIDs in `pollInfo` (Chat, Sender) and own identity JID had device suffixes (AD JIDs), which caused key mismatches.
+- **Approach**:
+  1. Normalized all JIDs in `SendPollVote` to non-AD JIDs using `.ToNonAD()`.
+  2. Checked if the destination chat is a LID chat (`chatJID.Server == waTypes.HiddenUserServer`). If so, temporarily set `client.Store.ID` to point to our own non-AD LID JID (`client.Store.LID.ToNonAD()`) for the duration of the `BuildPollVote` call, and restored it immediately after to ensure correct key derivation.
+- **Files Changed**:
+  - [adapter_send.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/adapter_send.go)
+- **Blast Radius**:
+  | Symbol | File | Direct Callers | Cross-Module? | Risk |
+  |--------|------|----------------|---------------|------|
+  | `WhatsmeowAdapter.SendPollVote` | `pkg/whatsmeow/adapter_send.go` | `contacts_messaging.go` (via interface) | Yes (interface) | Low (isolated bug fix to poll vote encryption context) |
+- **Tests Run & Results**:
+  - `go test -count=1 ./pkg/whatsmeow/...` — **PASS**
+  - `go test -count=1 ./internal/handlers/...` — **PASS**
+  - `go build ./cmd/whatomate/...` — **PASS**
+- **Gotchas / Future Notes**:
+  - When debugging E2E encrypted updates (like polls, reactions, and comments) in LID chats, always ensure the key derivation sender matches the sender JID seen by the recipient's device. For new features (comments, reactions), `whatsmeow` uses `cli.getOwnLID()`, but for older features (like polls), it defaults to `cli.getOwnID()`, necessitating this temporary store override.
 <!-- END -->
