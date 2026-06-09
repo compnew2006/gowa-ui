@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	"go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
 	waTypes "go.mau.fi/whatsmeow/types"
@@ -193,7 +195,7 @@ func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID str
 			a.logger.Warn("Participant is empty after resolving reply context, falling back to customer jid", "replyToMsgID", replyToMsgID, "jid", jid.String())
 			participant = jid.ToNonAD().String()
 		}
-		
+
 		if quotedText == "" {
 			quotedText = "Message" // Better fallback
 		}
@@ -205,7 +207,6 @@ func (a *WhatsmeowAdapter) resolveReplyContext(jid waTypes.JID, replyToMsgID str
 
 	return participant, quotedText
 }
-
 
 // SendImage sends an image message.
 func (a *WhatsmeowAdapter) SendImage(ctx context.Context, instanceID string, to string, imageURL string, caption string) (string, error) {
@@ -340,6 +341,96 @@ func (a *WhatsmeowAdapter) SendPoll(ctx context.Context, instanceID string, to s
 	resp, err := client.SendMessage(ctx, jid, msg)
 	if err != nil {
 		return "", fmt.Errorf("failed to send poll message: %w", err)
+	}
+
+	return resp.ID, nil
+}
+
+// resolvePollSender returns the correct sender JID for poll vote encryption.
+// For outgoing polls the secret is stored under the app's own JID.
+// For incoming group polls the sender is the group participant.
+// For incoming direct polls the sender is the chat partner.
+func resolvePollSender(origMsg models.Message, chatJID, ownJID waTypes.JID, isGroup bool) waTypes.JID {
+	if origMsg.Direction == directionOutgoing {
+		return ownJID
+	}
+	if isGroup {
+		if senderPhone, ok := origMsg.Metadata["sender_phone"].(string); ok && senderPhone != "" {
+			if jid, err := waTypes.ParseJID(senderPhone + "@s.whatsapp.net"); err == nil {
+				return jid
+			}
+		}
+	}
+	return chatJID
+}
+
+// SendPollVote sends a vote on an existing WhatsApp poll. It looks up the
+// original poll message, reconstructs the MessageInfo needed by whatsmeow's
+// BuildPollVote, and sends the encrypted vote.
+func (a *WhatsmeowAdapter) SendPollVote(ctx context.Context, instanceID, orgID uuid.UUID, originalPollWhatsAppID string, selectedOptions []string) (string, error) {
+	client, err := a.getClient(ctx, instanceID.String())
+	if err != nil {
+		return "", fmt.Errorf("send poll vote: get client: %w", err)
+	}
+
+	var origMsg models.Message
+	if err := a.db.WithContext(ctx).
+		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?", orgID, instanceID, originalPollWhatsAppID).
+		First(&origMsg).Error; err != nil {
+		return "", fmt.Errorf("send poll vote: original poll not found: %w", err)
+	}
+
+	chatJID, err := waTypes.ParseJID(origMsg.ConversationID)
+	if err != nil {
+		return "", fmt.Errorf("send poll vote: parse chat JID: %w", err)
+	}
+
+	isGroup := false
+	if meta, ok := origMsg.Metadata["is_group"].(bool); ok {
+		isGroup = meta
+	}
+
+	ownJID := waTypes.EmptyJID
+	if client != nil && client.Store != nil {
+		ownJID = client.Store.GetJID()
+	}
+
+	if client != nil && client.Store != nil && client.Store.LIDs != nil {
+		if chatJID.Server == waTypes.DefaultUserServer {
+			if lid, err := client.Store.LIDs.GetLIDForPN(ctx, chatJID); err == nil && !lid.IsEmpty() {
+				chatJID = lid
+			}
+		}
+	}
+
+	senderJID := resolvePollSender(origMsg, chatJID, ownJID, isGroup)
+	if client != nil && client.Store != nil && client.Store.LIDs != nil {
+		if senderJID.Server == waTypes.DefaultUserServer {
+			if lid, err := client.Store.LIDs.GetLIDForPN(ctx, senderJID); err == nil && !lid.IsEmpty() {
+				senderJID = lid
+			}
+		}
+	}
+
+	pollInfo := &waTypes.MessageInfo{
+		MessageSource: waTypes.MessageSource{
+			Chat:     chatJID,
+			Sender:   senderJID,
+			IsFromMe: origMsg.Direction == directionOutgoing,
+			IsGroup:  isGroup,
+		},
+		ID:        origMsg.WhatsAppMessageID,
+		Timestamp: origMsg.CreatedAt.In(time.UTC),
+	}
+
+	voteMsg, err := client.BuildPollVote(ctx, pollInfo, selectedOptions)
+	if err != nil {
+		return "", fmt.Errorf("send poll vote: build vote: %w", err)
+	}
+
+	resp, err := client.SendMessage(ctx, chatJID, voteMsg)
+	if err != nil {
+		return "", fmt.Errorf("send poll vote: send: %w", err)
 	}
 
 	return resp.ID, nil
