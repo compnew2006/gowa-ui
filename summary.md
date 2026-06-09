@@ -565,4 +565,17 @@ Merged all branches to `main` and cleaned up stale local and remote branches.
   - `go build ./cmd/whatomate/...` — **PASS**
 - **Gotchas / Future Notes**:
   - When debugging E2E encrypted updates (like polls, reactions, and comments) in LID chats, always ensure the key derivation sender matches the sender JID seen by the recipient's device. For new features (comments, reactions), `whatsmeow` uses `cli.getOwnLID()`, but for older features (like polls), it defaults to `cli.getOwnID()`, necessitating this temporary store override.
+## Frontend Poll Multi-Selection and Selector Styling Fix — 2026-06-10
+- **Problem**: 
+  1. Click selection logic cleared all selections (returned `[]`) if the user clicked an already-selected option in a multi-select poll, instead of just deselecting the clicked option.
+  2. Visually, both single-select and multi-select options used `rounded-full` border styling (circles), which made them look like radio buttons and gave no visual indication of selection limit behavior.
+- **Approach**:
+  1. Updated `buildNextPollSelection` in `ChatView.vue` to use `current.filter((o) => o !== option)` when deselecting an option in a multi-select poll, rather than returning an empty array `[]`.
+  2. Conditionally rendered the selector shape: `rounded` for multi-select (checkboxes) and `rounded-full` for single-select (radio buttons) based on `getPollSelectionLimit(message) > 1`.
+- **Files Changed**:
+  - [ChatView.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/views/chat/ChatView.vue)
+- **Tests Run & Results**:
+  - `npm run typecheck` — **PASS**
+  - `npm run build` — **PASS**
+  - `make build-prod` — **PASS**
 <!-- END -->
