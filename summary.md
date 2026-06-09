@@ -533,4 +533,16 @@ Merged all branches to `main` and cleaned up stale local and remote branches.
 - Verified that `git branch -a` lists only `main` locally, and the updated `main` on the remotes.
 - Ran `git status` to ensure working tree is clean.
 
+## PRD Creation — 2026-06-09
+- Analyzed all documentation files in the `/docs` directory.
+- Created a comprehensive Product Requirements Document ([PRD.md](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/docs/PRD.md)) covering the system's purpose, target user personas, core architecture, key product features, user scenarios/workflows, and technical requirements.
+- Included known system gaps and priorities from `docs/GAP_ANALYSIS.md`.
+
+
+## Whatsmeow Poll Vote LID Resolution — 2026-06-10
+- **Problem**: Voting or changing poll selections from Whatomate did not reflect on the customer's phone.
+- **Root Cause**: Whatomate normalized ConversationID to the customer's phone number JID (`@s.whatsapp.net`), but the customer's actual WhatsApp account is LID-addressed (`@lid`). Since `BuildPollVote` constructs encryption/signature payloads utilizing the exact JIDs, the phone number JID created a signature/encryption mismatch with the original poll creator's JID, causing the phone to reject/fail to decrypt the vote.
+- **Solution**: In `pkg/whatsmeow/adapter_send.go`'s `SendPollVote` function, both `chatJID` and `senderJID` are now resolved to LID JIDs via `client.Store.LIDs.GetLIDForPN` if a mapping exists in `whatsmeow_lid_map` prior to building and sending the vote.
+- **Files changed**: [adapter_send.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/adapter_send.go)
+- **Tests run**: `go test ./pkg/whatsmeow/...` and `go test ./internal/handlers/...` all PASS.
 <!-- END -->
