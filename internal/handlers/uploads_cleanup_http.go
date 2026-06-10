@@ -68,7 +68,7 @@ func (a *App) RunUploadsCleanupNow(r *fastglue.Request) error {
 
 	instancesBreakdown := make([]map[string]any, 0, len(instances))
 	for _, inst := range instances {
-		days, source := resolveInstanceRetention(inst.Settings, result.RetentionDays)
+		days, source := ResolveInstanceRetention(inst.Settings, result.RetentionDays)
 		instDeleted := 0
 		if days > 0 {
 			d := days
@@ -89,28 +89,4 @@ func (a *App) RunUploadsCleanupNow(r *fastglue.Request) error {
 		"retention_days": result.RetentionDays,
 		"instances":      instancesBreakdown,
 	})
-}
-
-// resolveInstanceRetention returns (days, source) for an instance based on its
-// settings JSONB, falling back to the workspace default.
-func resolveInstanceRetention(settings models.JSONB, workspaceDefault int) (int, string) {
-	uc, ok := settings["uploads_cleanup"].(map[string]interface{})
-	if !ok {
-		if workspaceDefault > 0 {
-			return workspaceDefault, "default"
-		}
-		return 0, "disabled"
-	}
-	inherit, _ := uc["inherit"].(bool)
-	if inherit {
-		if workspaceDefault > 0 {
-			return workspaceDefault, "default"
-		}
-		return 0, "disabled"
-	}
-	rd, ok := uc["retention_days"].(float64)
-	if !ok || int(rd) <= 0 {
-		return 0, "disabled"
-	}
-	return int(rd), "custom"
 }

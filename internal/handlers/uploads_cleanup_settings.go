@@ -139,3 +139,33 @@ func (a *App) resolveUploadsRootPath() (string, error) {
 func uploadsCutoffTime(now time.Time, retentionDays int) time.Time {
 	return now.Add(-time.Duration(retentionDays) * 24 * time.Hour)
 }
+
+// ParseUploadsCleanupRetentionDays extracts retention days from org-level settings.
+func ParseUploadsCleanupRetentionDays(settings models.JSONB) int {
+	return parseUploadsCleanupRetentionDays(settings)
+}
+
+// ResolveInstanceRetention returns the effective retention days for a specific instance.
+// If the instance has uploads_cleanup.inherit=true or no uploads_cleanup config, it falls
+// back to workspaceDefault. Returns (days, source) where source is "custom", "default", or "disabled".
+func ResolveInstanceRetention(instanceSettings models.JSONB, workspaceDefault int) (int, string) {
+	uc, ok := instanceSettings["uploads_cleanup"].(map[string]interface{})
+	if !ok {
+		if workspaceDefault > 0 {
+			return workspaceDefault, "default"
+		}
+		return 0, "disabled"
+	}
+	inherit, _ := uc["inherit"].(bool)
+	if inherit {
+		if workspaceDefault > 0 {
+			return workspaceDefault, "default"
+		}
+		return 0, "disabled"
+	}
+	rd, ok := uc["retention_days"].(float64)
+	if !ok || int(rd) <= 0 {
+		return 0, "disabled"
+	}
+	return int(rd), "custom"
+}
