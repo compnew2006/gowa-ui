@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	waClient "go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	waStore "go.mau.fi/whatsmeow/store"
 	waTypes "go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -38,11 +39,21 @@ func (cm *ConnectionManager) handlePollVote(
 
 	var vote *waE2E.PollVoteMessage
 	var err error
-	if evt.Info.Chat.Server == waTypes.HiddenUserServer && client != nil && client.Store != nil && !client.Store.LID.IsEmpty() {
+	if evt.Info.Chat.Server == waTypes.HiddenUserServer && client != nil && client.Store != nil && client.Store.ID != nil && !client.Store.LID.IsEmpty() {
 		originalID := client.Store.ID
 		ownLID := client.Store.LID.ToNonAD()
 		client.Store.ID = &ownLID
+
+		originalMsgSecrets := client.Store.MsgSecrets
+		client.Store.MsgSecrets = &lidMsgSecretStoreWrapper{
+			MsgSecretStore: originalMsgSecrets,
+			ownLID:         ownLID,
+			ownID:          *originalID,
+		}
+
 		vote, err = client.DecryptPollVote(ctx, evt)
+
+		client.Store.MsgSecrets = originalMsgSecrets
 		client.Store.ID = originalID
 	} else {
 		vote, err = client.DecryptPollVote(ctx, evt)
@@ -286,4 +297,24 @@ func (cm *ConnectionManager) resolveSelectedOptionNames(
 		}
 	}
 	return names
+}
+
+type lidMsgSecretStoreWrapper struct {
+	waStore.MsgSecretStore
+	ownLID waTypes.JID
+	ownID  waTypes.JID
+}
+
+func (w *lidMsgSecretStoreWrapper) GetMessageSecret(
+	ctx context.Context,
+	chat, sender waTypes.JID,
+	id waTypes.MessageID,
+) ([]byte, waTypes.JID, error) {
+	secret, realSender, err := w.MsgSecretStore.GetMessageSecret(ctx, chat, sender, id)
+	if err == nil && secret != nil {
+		if realSender.IsEmpty() || realSender.User == w.ownID.User {
+			realSender = w.ownLID
+		}
+	}
+	return secret, realSender, err
 }
