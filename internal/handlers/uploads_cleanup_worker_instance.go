@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -98,4 +99,43 @@ func (w *UploadsCleanupWorker) deleteExpiredInstanceUploadFiles(ctx context.Cont
 	}
 
 	return totalDeleted, nil
+}
+
+func (w *UploadsCleanupWorker) deleteExpiredUploadFiles(now time.Time, retentionDays int) (int, error) {
+	rootPath, err := w.app.resolveUploadsRootPath()
+	if err != nil {
+		return 0, fmt.Errorf("resolve uploads root: %w", err)
+	}
+
+	rootDeleted, err := w.deleteRootLevelExpiredFiles(rootPath, now, retentionDays)
+	if err != nil {
+		return 0, err
+	}
+
+	// Legacy: sweep all org dirs with the same retention.
+	cutoff := uploadsCutoffTime(now, retentionDays)
+	orgsRoot := filepath.Join(rootPath, "orgs")
+	entries, err := os.ReadDir(orgsRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return rootDeleted, nil
+		}
+		return 0, fmt.Errorf("read organization uploads directory %q: %w", orgsRoot, err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		for _, relativeDir := range uploadsCleanupTargetDirs {
+			dirPath := filepath.Join(orgsRoot, entry.Name(), relativeDir)
+			count, err := w.deleteExpiredFilesFromDir(rootPath, dirPath, cutoff, retentionDays)
+			if err != nil {
+				return 0, err
+			}
+			rootDeleted += count
+		}
+	}
+
+	return rootDeleted, nil
 }

@@ -91,6 +91,8 @@ func (s *service) WriteAuditRow(ctx context.Context, orgID, instanceID uuid.UUID
 }
 
 func (s *service) tryAcquireInstanceRun() (release func(), ok bool) {
-	s.instanceRunMu.Lock()
+	if !s.instanceRunMu.TryLock() {
+		return nil, false
+	}
 	return s.instanceRunMu.Unlock, true
 }
