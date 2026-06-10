@@ -595,4 +595,27 @@ We resolved an issue where WhatsApp polls allowing multiple answers (multi-selec
 * Verified that frontend TypeScript check compiles cleanly with no errors (`npm run typecheck`).
 * Successfully built the production package using `make build-prod`.
 
+## DRY Violation Cleanups and Settings Refactoring — 2026-06-10
+We consolidated duplicated parsing helpers, GORM queries, and WhatsApp message context builders across the codebase to adhere to Go-idiomatic DRY principles.
+
+### Changes
+* **Models ([models.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/models/models.go))**:
+  * Added type-asserted `Bool(key, fallback)` and `String(key, fallback)` methods to the `models.JSONB` helper map.
+  * Added `HasIncomingHistory(db)` GORM method to the `Contact` model.
+  * Added unit tests (`TestJSONB_Bool` and `TestJSONB_String`) in [models_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/models/models_test.go).
+* **Handlers (`internal/handlers/`)**:
+  * Updated [organization.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/organization.go) and [send_restriction_policy.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/send_restriction_policy.go) to utilize the new GORM settings methods.
+  * Removed local helper functions (`contactHasIncomingHistory`, `parseOrganizationBoolSetting`, `parseOrganizationStringSetting`, and `asStringSlice`).
+  * Updated [chat_close_ratings.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/chat_close_ratings.go) to use shared context builder and slice helper.
+* **Workers (`internal/worker/`)**:
+  * Cleaned up [send_policy.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/worker/send_policy.go) by removing duplicate reading functions and updating to the new `JSONB` methods.
+  * Cleaned up [worker.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/worker/worker.go) to use `contact.HasIncomingHistory`.
+* **WhatsApp Chat Close Ratings (`pkg/chat_close_ratings/`, `pkg/whatsmeow/`)**:
+  * Extracted and exposed shared functions `BuildChatCloseRatingContext`, `MapMessagesForRatingContext`, and `AsStringSlice` under [shared.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/chat_close_ratings/shared.go).
+  * Updated [chat_close_ratings.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/chat_close_ratings.go) to call the centralized shared functions.
+
+### Verification
+* Verified that all tests under `./internal/handlers/...`, `./internal/models/...`, `./internal/worker/...`, and `./pkg/...` pass successfully.
+* Verified that package compilation is clean (`go build ./internal/... ./pkg/...`).
+
 <!-- END -->
