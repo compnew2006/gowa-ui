@@ -19,6 +19,7 @@ import {
 import { Loader2, Settings2 } from "lucide-vue-next";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 
 const props = defineProps<{
   settings: InstanceChatCloseRatingSettings;
@@ -113,6 +114,16 @@ function handleSave() {
             step="1"
             class="bg-background"
           />
+        </div>
+
+        <div class="flex items-center justify-between rounded-xl border border-border/70 bg-muted/10 p-3">
+          <div class="space-y-0.5">
+            <Label>{{ $t("instances.chat_close_rating.usePoll") }}</Label>
+            <p class="text-xs text-muted-foreground">
+              {{ $t("instances.chat_close_rating.usePollDesc") }}
+            </p>
+          </div>
+          <Switch v-model:checked="localSettings.use_poll" />
         </div>
 
         <div

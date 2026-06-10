@@ -2,6 +2,7 @@ export interface InstanceChatCloseRatingSettings {
   enabled: boolean;
   followup_window_minutes: number;
   templates: Record<string, string>;
+  use_poll: boolean;
 }
 
 export const DEFAULT_INSTANCE_CHAT_CLOSE_RATING_FOLLOWUP_WINDOW_MINUTES = 15;
@@ -83,6 +84,10 @@ export function normalizeInstanceChatCloseRatingSettings(
     templates: normalizeInstanceChatCloseRatingTemplates(
       raw?.chat_close_rating_templates,
     ),
+    use_poll:
+      typeof raw?.use_poll === "boolean"
+        ? raw.use_poll
+        : false,
   };
 }
 
@@ -93,6 +98,7 @@ export function cloneInstanceChatCloseRatingSettings(
     enabled: current.enabled,
     followup_window_minutes: current.followup_window_minutes,
     templates: { ...current.templates },
+    use_poll: current.use_poll,
   };
 }
 
@@ -106,5 +112,6 @@ export function sanitizeInstanceChatCloseRatingSettings(
         current.followup_window_minutes,
       ),
     templates: normalizeInstanceChatCloseRatingTemplates(current.templates),
+    use_poll: current.use_poll === true,
   };
 }

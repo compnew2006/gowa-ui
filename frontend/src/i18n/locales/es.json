@@ -408,7 +408,9 @@
       "configureButton": "Configurar mensaje de valoración",
       "title": "Configuración de valoración al cerrar chat",
       "description": "Configura los mensajes de valoración al cerrar el chat para esta instancia específica.",
-      "summary": "Ventana de respuesta: {minutes} min"
+      "summary": "Ventana de respuesta: {minutes} min",
+      "usePoll": "Usar encuesta de WhatsApp",
+      "usePollDesc": "Enviar una encuesta nativa de WhatsApp en lugar de un mensaje de texto de calificación"
     }
   },
   "marketingRedirect": {

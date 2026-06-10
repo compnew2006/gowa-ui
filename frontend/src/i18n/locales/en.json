@@ -2697,7 +2697,9 @@
       "configureButton": "Configure rating message",
       "title": "Chat Close Rating Settings",
       "description": "Configure the chat close rating messages for this specific instance.",
-      "summary": "Reply window: {minutes} min"
+      "summary": "Reply window: {minutes} min",
+      "usePoll": "Use WhatsApp Poll",
+      "usePollDesc": "Send a native WhatsApp poll instead of a text rating prompt"
     },
     "assigned_chat_reset": {
       "configureButton": "Configure assigned chat reset",
