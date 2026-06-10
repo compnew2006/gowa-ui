@@ -310,9 +310,14 @@ func (w *lidMsgSecretStoreWrapper) GetMessageSecret(
 	chat, sender waTypes.JID,
 	id waTypes.MessageID,
 ) ([]byte, waTypes.JID, error) {
-	secret, realSender, err := w.MsgSecretStore.GetMessageSecret(ctx, chat, sender, id)
+	querySender := sender
+	if sender.User == w.ownLID.User {
+		querySender = w.ownID
+	}
+
+	secret, realSender, err := w.MsgSecretStore.GetMessageSecret(ctx, chat, querySender, id)
 	if err == nil && secret != nil {
-		if realSender.IsEmpty() || realSender.User == w.ownID.User {
+		if realSender.IsEmpty() || realSender.User == w.ownID.User || realSender.User == w.ownLID.User {
 			realSender = w.ownLID
 		}
 	}
