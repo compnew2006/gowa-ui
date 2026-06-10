@@ -496,6 +496,22 @@ TEST_DATABASE_URL="postgres://test:test@127.0.0.1:5433/test?sslmode=disable" go 
 - Frontend `npm run typecheck` passes cleanly.
 - Go backend test suite executed and verified to pass.
 
+## Whatsmeow Poll Vote LID Decryption & Compilation Fix — 2026-06-10
+
+### Files Changed
+- [poll_vote.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/poll_vote.go)
+- [chat_close_ratings_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/chat_close_ratings_test.go)
+
+### Approach Taken
+- Declared `var err error` in `handlePollVote` to resolve the compiler `undefined: err` errors.
+- Verified that in LID-addressed chats (`evt.Info.Chat.Server == waTypes.HiddenUserServer`), the client stores the correct self LID JID temporarily during the decryption phase, resolving decryption key derivation failures (`cipher: message authentication failed`).
+- Aligned `whatsmeow` unit test cases in `chat_close_ratings_test.go` with the `ParseInboundRatingValue` implementation and handlers integration test expectations.
+- Verified and compiled the full codebase and ran tests successfully.
+
+### Tests Run & Results
+- Aligned tests compile and pass cleanly: `go test -v ./pkg/whatsmeow/...` -> PASS.
+- Full ratings and handlers suite pass: `go test -p 1 -v ./pkg/chat_close_ratings/... ./internal/handlers/...` -> PASS.
+
 <!-- END -->
 
 ## Per-Instance Uploads Cleanup Implementation — 2026-06-06
