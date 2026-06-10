@@ -445,6 +445,8 @@ All 9 Facebook package tests pass (5 pre-existing + 4 new). `go test -race -p 1 
 - [chat_close_rating_cleanup_worker.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/chat_close_rating_cleanup_worker.go) & [main.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/cmd/whatomate/main.go) - Background cleanup worker for expired cycles.
 - [meta_analytics_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/meta_analytics_test.go) - Added nil check guards for Redis in cache tests.
 - [organization_query_regression_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/organization_query_regression_test.go) - Normalization of quotes in GORM SQL assertions for PostgreSQL compatibility.
+- [InstanceChatCloseRatingPanel.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/components/whatsmeow/InstanceChatCloseRatingPanel.vue), [instance-chat-close-rating.ts](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/lib/instance-chat-close-rating.ts), & [InstancesView.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/views/settings/InstancesView.vue) - Added settings UI toggle, validation, and API payload updates for poll-based ratings.
+- [en.json](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/i18n/locales/en.json), [ar.json](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/i18n/locales/ar.json), & [es.json](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/i18n/locales/es.json) - Added translations for the new poll ratings setting.
 
 ### Approach Taken
 - Checked rating validity on closed chats before skipping auto-reopen to prevent non-rating messages from being swallowed.
@@ -452,6 +454,7 @@ All 9 Facebook package tests pass (5 pre-existing + 4 new). `go test -race -p 1 
 - Processed incoming poll votes as messages of type MessageTypePoll and triggered the close rating workflow when matching a pending rating cycle.
 - Pre-filtered and stripped ignorable control runes (`unicode.Cf`) from incoming texts before parsing rating values.
 - Implemented a background ticker worker to regularly clean up (expire) unanswered close rating cycles after 24 hours.
+- Added a switch/toggle in the settings panel to allow users to toggle poll-based ratings on or off for each instance.
 
 ### Blast Radius Table
 | Symbol | File | Direct Callers | Cross-Module? | Risk |
