@@ -479,6 +479,23 @@ TEST_DATABASE_URL="postgres://test:test@127.0.0.1:5433/test?sslmode=disable" go 
 - Arabic right-to-left marks (`\u200f`) behave like empty space but are not trimmed by `strings.TrimSpace`, necessitating custom rune-based filtering.
 - PostgreSQL quotes table names with double quotes whereas GORM on SQLite/MySQL uses backticks; normalize both in regression test SQL assertions.
 
+## Custom Poll Options Configuration UI & Integration — 2026-06-10
+### Files Changed
+- [chat_close_ratings.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/chat_close_ratings.go) - Handled loading and rendering `poll_options` from JSONB settings, and fell back to default options only if empty.
+- [instance-chat-close-rating.ts](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/lib/instance-chat-close-rating.ts) - Added `poll_options` to `InstanceChatCloseRatingSettings` interface and normalization/cloning helpers.
+- [InstanceChatCloseRatingPanel.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/components/whatsmeow/InstanceChatCloseRatingPanel.vue) - Integrated a textarea input for `poll_options` (newline-separated) displaying dynamically when use_poll switch is active.
+- [InstancesView.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/views/settings/InstancesView.vue) - Appended `poll_options` in settings save action.
+- [en.json](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/i18n/locales/en.json), [ar.json](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/i18n/locales/ar.json), [es.json](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/i18n/locales/es.json) - Added translations for the new fields.
+
+### Approach Taken
+- Enabled input of custom WhatsApp poll options (one per line) via settings.
+- Automatically synchronized state using Vue refs (`pollOptionsText`) and serialized it as string arrays inside `localSettings.poll_options`.
+- Instructed users to start options with numbers (1 to 10) to support correct close rating parser extraction.
+
+### Tests Run & Results
+- Frontend `npm run typecheck` passes cleanly.
+- Go backend test suite executed and verified to pass.
+
 <!-- END -->
 
 ## Per-Instance Uploads Cleanup Implementation — 2026-06-06

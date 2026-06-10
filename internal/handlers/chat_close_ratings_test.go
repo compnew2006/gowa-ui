@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/pkg/chat_close_ratings"
+	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -675,6 +677,67 @@ func TestChatCloseRatingCleanupWorker_ExpiresUnanswered(t *testing.T) {
 	var updatedCycle models.ChatClosureRating
 	require.NoError(t, app.DB.First(&updatedCycle, cycle.ID).Error)
 	assert.Equal(t, models.ChatClosureRatingStateExpired, updatedCycle.State)
+}
+
+
+type mockPollProvider struct {
+	provider.MessageProvider
+	lastQuestion   string
+	lastOptions    []string
+	lastSelections int
+}
+
+func (m *mockPollProvider) SendPoll(ctx context.Context, instanceID string, to string, question string, options []string, maxSelections int) (string, error) {
+	m.lastQuestion = question
+	m.lastOptions = options
+	m.lastSelections = maxSelections
+	return "wamid.mock_poll_" + uuid.New().String()[:8], nil
+}
+
+func TestSendChatCloseRatingPrompt_UsesCustomPollOptions(t *testing.T) {
+	app := newProcessorTestApp(t)
+	app.Config.WhatsApp.Provider = "whatsmeow" // Ensure whatsmeow provider path is used
+	org, account := createProcessorTestOrg(t, app)
+	closingAgent := testutil.CreateTestUser(t, app.DB, org.ID)
+
+	mockProv := &mockPollProvider{}
+	app.MessageProvider = mockProv
+
+	// Create WhatsAppInstance with use_poll enabled and custom options
+	instance := &models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Instance Poll",
+		PhoneNumber:    "15559876543",
+		Settings: models.JSONB{
+			"use_poll":     true,
+			"poll_options": []any{"1. Good", "2. Normal", "3. Bad"},
+		},
+	}
+	require.NoError(t, app.DB.Create(instance).Error)
+
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	contact.AssignedUserID = &closingAgent.ID
+	contact.InstanceID = &instance.ID
+	require.NoError(t, app.DB.Save(contact).Error)
+
+	// Trigger manual prompt
+	app.handleManualChatCloseRatingPrompt(org.ID, closingAgent.ID, contact)
+
+	// Verify the poll options passed to mock provider
+	assert.Equal(t, []string{"1. Good", "2. Normal", "3. Bad"}, mockProv.lastOptions)
+	assert.Equal(t, 1, mockProv.lastSelections)
+
+	// Verify cycle is created
+	var cycle models.ChatClosureRating
+	require.NoError(t, app.DB.Where("organization_id = ? AND contact_id = ?", org.ID, contact.ID).First(&cycle).Error)
+	assert.Equal(t, models.ChatClosureRatingStatePending, cycle.State)
+	require.NotNil(t, cycle.CloseMessageID)
+
+	// Verify a poll message record is created in GORM
+	var msg models.Message
+	require.NoError(t, app.DB.Where("id = ?", *cycle.CloseMessageID).First(&msg).Error)
+	assert.Equal(t, models.MessageTypePoll, msg.MessageType)
 }
 
 

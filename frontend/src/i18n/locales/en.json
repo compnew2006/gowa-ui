@@ -2699,7 +2699,10 @@
       "description": "Configure the chat close rating messages for this specific instance.",
       "summary": "Reply window: {minutes} min",
       "usePoll": "Use WhatsApp Poll",
-      "usePollDesc": "Send a native WhatsApp poll instead of a text rating prompt"
+      "usePollDesc": "Send a native WhatsApp poll instead of a text rating prompt",
+      "pollOptionsLabel": "Poll Options",
+      "pollOptionsDesc": "Enter custom options (one per line). Each option must start with a number (e.g. '1. Good', '2. Bad'). Leave empty to use the default 5 options.",
+      "pollOptionsPlaceholder": "1. Good\n2. Normal\n3. Bad"
     },
     "assigned_chat_reset": {
       "configureButton": "Configure assigned chat reset",

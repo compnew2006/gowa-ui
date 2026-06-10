@@ -410,7 +410,10 @@
       "description": "Configura los mensajes de valoración al cerrar el chat para esta instancia específica.",
       "summary": "Ventana de respuesta: {minutes} min",
       "usePoll": "Usar encuesta de WhatsApp",
-      "usePollDesc": "Enviar una encuesta nativa de WhatsApp en lugar de un mensaje de texto de calificación"
+      "usePollDesc": "Enviar una encuesta nativa de WhatsApp en lugar de un mensaje de texto de calificación",
+      "pollOptionsLabel": "Opciones de encuesta",
+      "pollOptionsDesc": "Ingresa opciones personalizadas (una por línea). Cada opción debe comenzar con un número (por ejemplo, '1. Bueno', '2. Malo'). Déjalo vacío para usar las 5 opciones predeterminadas.",
+      "pollOptionsPlaceholder": "1. Bueno\n2. Normal\n3. Malo"
     }
   },
   "marketingRedirect": {

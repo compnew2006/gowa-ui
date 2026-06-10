@@ -48,6 +48,7 @@ type chatCloseRatingSettings struct {
 	Templates             map[string]string
 	FollowupWindowMinutes int
 	UsePoll               bool
+	PollOptions           []string
 }
 
 // AgentRatingSummary represents rating KPIs for the selected analytics period.
@@ -88,6 +89,7 @@ func readInstanceChatCloseRatingSettings(instanceSettings models.JSONB) chatClos
 		WindowDays:            defaultChatCloseRatingWindowDays,
 		Templates:             cloneDefaultChatCloseRatingTemplates(),
 		FollowupWindowMinutes: defaultChatCloseRatingFollowupWindowMinutes,
+		PollOptions:           []string{},
 	}
 
 	if instanceSettings != nil {
@@ -127,6 +129,20 @@ func applyChatCloseRatingSettingsToResult(result *chatCloseRatingSettings, setti
 	if rawUsePoll, ok := settings["use_poll"]; ok {
 		if usePoll, ok := rawUsePoll.(bool); ok {
 			result.UsePoll = usePoll
+		}
+	}
+
+	if rawPollOptions, ok := settings["poll_options"]; ok {
+		if arr, ok := rawPollOptions.([]any); ok {
+			var opts []string
+			for _, v := range arr {
+				if s, ok := v.(string); ok {
+					opts = append(opts, s)
+				}
+			}
+			result.PollOptions = opts
+		} else if arr, ok := rawPollOptions.([]string); ok {
+			result.PollOptions = arr
 		}
 	}
 }
@@ -360,37 +376,30 @@ func (a *App) sendChatCloseRatingPrompt(orgID uuid.UUID, contact *models.Contact
 	// If use_poll is enabled and the provider supports polls, send a native poll.
 	if settings.UsePoll && contact.InstanceID != nil && *contact.InstanceID != uuid.Nil {
 		if a.MessageProvider != nil {
-			if pollSender, ok := a.MessageProvider.(provider.PollProvider); ok {
-				instanceID := contact.InstanceID.String()
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-
-				ratingOptions := []string{
-					"1 - Very Poor",
-					"2 - Poor",
-					"3 - Fair",
-					"4 - Good",
-					"5 - Excellent",
+			if _, ok := a.MessageProvider.(provider.PollProvider); ok {
+				ratingOptions := settings.PollOptions
+				if len(ratingOptions) == 0 {
+					ratingOptions = []string{
+						"1 - Very Poor",
+						"2 - Poor",
+						"3 - Fair",
+						"4 - Good",
+						"5 - Excellent",
+					}
 				}
-				_, pollErr := pollSender.SendPoll(ctx, instanceID, contact.PhoneNumber, promptText, ratingOptions, 1)
-				if pollErr != nil {
-					a.Log.Error("Failed to send rating poll, falling back to text", "error", pollErr, "contact_id", contact.ID)
-				} else {
-					// Store a poll-type message so the prompt is tracked.
-					msg, sendErr := a.SendOutgoingMessage(context.Background(), OutgoingMessageRequest{
-						Account: account,
-						Contact: contact,
-						Type:    models.MessageTypePoll,
-						Content: promptText,
-					}, SLASendOptions())
-					if sendErr != nil {
-						a.Log.Error("Failed to persist rating poll message", "error", sendErr)
-					}
-					if msg != nil {
-						msgID := msg.ID
-						return &msgID, nil
-					}
-					return nil, nil
+				msg, sendErr := a.SendOutgoingMessage(context.Background(), OutgoingMessageRequest{
+					Account:           account,
+					Contact:           contact,
+					Type:              models.MessageTypePoll,
+					Content:           promptText,
+					PollOptions:       ratingOptions,
+					PollMaxSelections: 1,
+				}, SLASendOptions())
+				if sendErr != nil {
+					a.Log.Error("Failed to send rating poll, falling back to text", "error", sendErr, "contact_id", contact.ID)
+				} else if msg != nil {
+					msgID := msg.ID
+					return &msgID, nil
 				}
 			}
 		}

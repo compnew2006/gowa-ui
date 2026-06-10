@@ -774,6 +774,7 @@ async function handleUpdateChatCloseRatingSettings(
       chat_close_rating_followup_window_minutes:
         normalized.followup_window_minutes,
       use_poll: normalized.use_poll,
+      poll_options: normalized.poll_options,
     };
 
     const templates: Record<string, string> = {};

@@ -37,12 +37,14 @@ const localSettings = ref<InstanceChatCloseRatingSettings>(
 const followupWindowInput = ref(
   String(localSettings.value.followup_window_minutes),
 );
+const pollOptionsText = ref("");
 
 function syncLocalSettings(value: InstanceChatCloseRatingSettings) {
   localSettings.value = cloneInstanceChatCloseRatingSettings(value);
   followupWindowInput.value = String(
     localSettings.value.followup_window_minutes,
   );
+  pollOptionsText.value = localSettings.value.poll_options?.join("\n") || "";
 }
 
 watch(
@@ -62,10 +64,16 @@ watch(dialogOpen, (isOpen) => {
 });
 
 function handleSave() {
+  const opts = pollOptionsText.value
+    .split("\n")
+    .map((v) => v.trim())
+    .filter((v) => v !== "");
+
   emit(
     "save",
     sanitizeInstanceChatCloseRatingSettings({
       ...localSettings.value,
+      poll_options: opts,
       followup_window_minutes:
         normalizeInstanceChatCloseRatingFollowupWindowMinutes(
           followupWindowInput.value,
@@ -124,6 +132,20 @@ function handleSave() {
             </p>
           </div>
           <Switch v-model:checked="localSettings.use_poll" />
+        </div>
+
+        <div v-if="localSettings.use_poll" class="space-y-2">
+          <Label>{{ $t("instances.chat_close_rating.pollOptionsLabel") }}</Label>
+          <p class="text-xs text-muted-foreground">
+            {{ $t("instances.chat_close_rating.pollOptionsDesc") }}
+          </p>
+          <Textarea
+            v-model="pollOptionsText"
+            :placeholder="$t('instances.chat_close_rating.pollOptionsPlaceholder')"
+            :rows="5"
+            class="bg-background font-mono text-sm resize-y"
+            dir="auto"
+          />
         </div>
 
         <div
