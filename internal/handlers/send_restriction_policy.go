@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+
+	"github.com/compnew2006/whatomate/pkg/chat_close_ratings"
 	"errors"
 	"fmt"
 	"sort"
@@ -121,7 +123,7 @@ func readSendRestrictionsSettings(settings models.JSONB) sendRestrictionsSetting
 	}
 
 	if rawNumbers, ok := payload["authorized_numbers"]; ok {
-		cfg.AuthorizedNumbers = normalizeRestrictedNumbers(asStringSlice(rawNumbers))
+		cfg.AuthorizedNumbers = normalizeRestrictedNumbers(chat_close_ratings.AsStringSlice(rawNumbers))
 	}
 	cfg.AllowedInstanceIDs = normalizeRestrictedUUIDs(parseUUIDSlice(payload["allowed_instance_ids"]))
 	if len(cfg.AllowedInstanceIDs) == 0 {
@@ -328,26 +330,7 @@ func allowedInstanceIDsForRestrictions(cfg sendRestrictionsSettings) []uuid.UUID
 	return []uuid.UUID{}
 }
 
-func asStringSlice(raw interface{}) []string {
-	switch typed := raw.(type) {
-	case []string:
-		return append([]string{}, typed...)
-	case models.StringArray:
-		return append([]string{}, typed...)
-	case []interface{}:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			value, ok := item.(string)
-			if !ok {
-				continue
-			}
-			out = append(out, value)
-		}
-		return out
-	default:
-		return nil
-	}
-}
+
 
 func normalizeRestrictedNumbers(values []string) []string {
 	if len(values) == 0 {
@@ -420,28 +403,6 @@ func mergeRestrictedNumbers(existing []string, additions []string) ([]string, bo
 	return merged, false
 }
 
-func parseOrganizationBoolSetting(settings models.JSONB, key string, fallback bool) bool {
-	if settings == nil {
-		return fallback
-	}
-	switch typed := settings[key].(type) {
-	case bool:
-		return typed
-	case string:
-		normalized := strings.TrimSpace(strings.ToLower(typed))
-		switch normalized {
-		case "true", "1", "yes", "on":
-			return true
-		case "false", "0", "no", "off":
-			return false
-		default:
-			return fallback
-		}
-	default:
-		return fallback
-	}
-}
-
 func parseOrganizationTimeSetting(settings models.JSONB, key string) *time.Time {
 	if settings == nil {
 		return nil
@@ -466,32 +427,6 @@ func parseOrganizationTimeSetting(settings models.JSONB, key string) *time.Time 
 		return parseOrganizationTimeSetting(models.JSONB{key: string(typed)}, key)
 	}
 	return nil
-}
-
-func parseOrganizationStringSetting(settings models.JSONB, key, fallback string) string {
-	if settings == nil {
-		return fallback
-	}
-	raw, ok := settings[key]
-	if !ok || raw == nil {
-		return fallback
-	}
-	switch typed := raw.(type) {
-	case string:
-		trimmed := strings.TrimSpace(typed)
-		if trimmed == "" {
-			return fallback
-		}
-		return trimmed
-	case []byte:
-		trimmed := strings.TrimSpace(string(typed))
-		if trimmed == "" {
-			return fallback
-		}
-		return trimmed
-	default:
-		return fallback
-	}
 }
 
 func normalizeOutboundMode(value string) string {
@@ -536,11 +471,11 @@ func (a *App) loadOrganizationStrictPolicySettings(orgID uuid.UUID) organization
 	}
 
 	settings := defaults
-	settings.StrictEnabled = parseOrganizationBoolSetting(org.Settings, organizationSettingStrictSendingRestrictionsEnabled, false)
-	settings.OutboundMode = normalizeOutboundMode(parseOrganizationStringSetting(org.Settings, organizationSettingOutboundMode, defaults.OutboundMode))
-	settings.ApplyToSystem = parseOrganizationBoolSetting(org.Settings, organizationSettingStrictSendingApplyToSystem, true)
-	settings.CampaignDraftOnly = parseOrganizationBoolSetting(org.Settings, organizationSettingCampaignDraftOnly, false)
-	settings.StrictRolloutMode = normalizeRolloutMode(parseOrganizationStringSetting(org.Settings, organizationSettingStrictRolloutMode, defaults.StrictRolloutMode))
+	settings.StrictEnabled = org.Settings.Bool(organizationSettingStrictSendingRestrictionsEnabled, false)
+	settings.OutboundMode = normalizeOutboundMode(org.Settings.String(organizationSettingOutboundMode, defaults.OutboundMode))
+	settings.ApplyToSystem = org.Settings.Bool(organizationSettingStrictSendingApplyToSystem, true)
+	settings.CampaignDraftOnly = org.Settings.Bool(organizationSettingCampaignDraftOnly, false)
+	settings.StrictRolloutMode = normalizeRolloutMode(org.Settings.String(organizationSettingStrictRolloutMode, defaults.StrictRolloutMode))
 	settings.StrictRolloutAfter = parseOrganizationTimeSetting(org.Settings, organizationSettingStrictRolloutEnforceAt)
 
 	return settings
@@ -581,17 +516,7 @@ func (a *App) saveUserSendRestrictions(userID uuid.UUID, existingSettings models
 	return a.DB.Model(&models.User{}).Where("id = ?", userID).Update("settings", updatedSettings).Error
 }
 
-func (a *App) contactHasIncomingHistory(orgID, contactID uuid.UUID) (bool, error) {
-	var count int64
-	err := a.DB.Model(&models.Message{}).
-		Where("organization_id = ? AND contact_id = ? AND direction = ?", orgID, contactID, models.DirectionIncoming).
-		Limit(1).
-		Count(&count).Error
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
+
 
 func (a *App) collectAutoAuthorizedNumbersForUser(orgID, userID uuid.UUID) ([]string, error) {
 	type phoneRow struct {
@@ -823,7 +748,7 @@ func (a *App) enforceStrictSendRestrictions(ctx context.Context, req OutgoingMes
 		return nil
 	}
 
-	hasIncomingHistory, err := a.contactHasIncomingHistory(orgID, req.Contact.ID)
+	hasIncomingHistory, err := req.Contact.HasIncomingHistory(a.DB)
 	if err != nil {
 		return fmt.Errorf("failed to validate incoming history: %w", err)
 	}

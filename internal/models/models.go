@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql/driver"
+	"strings"
 	"encoding/json"
 	"errors"
 	"time"
@@ -51,6 +52,51 @@ func (j *JSONB) Scan(value interface{}) error {
 		return errors.New("type assertion to []byte or string failed")
 	}
 	return json.Unmarshal(bytes, j)
+}
+
+func (j JSONB) Bool(key string, fallback bool) bool {
+	if j == nil {
+		return fallback
+	}
+	value, ok := j[key]
+	if !ok || value == nil {
+		return fallback
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "true", "1", "yes", "on":
+			return true
+		case "false", "0", "no", "off":
+			return false
+		default:
+			return fallback
+		}
+	default:
+		return fallback
+	}
+}
+
+func (j JSONB) String(key string, fallback string) string {
+	if j == nil {
+		return fallback
+	}
+	value, ok := j[key]
+	if !ok || value == nil {
+		return fallback
+	}
+	switch typed := value.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return fallback
+		}
+		return trimmed
+	default:
+		return fallback
+	}
 }
 
 // JSONBArray is a custom type for JSONB arrays
@@ -473,6 +519,18 @@ type Contact struct {
 
 func (Contact) TableName() string {
 	return "contacts"
+}
+
+func (c *Contact) HasIncomingHistory(db *gorm.DB) (bool, error) {
+	var count int64
+	err := db.Model(&Message{}).
+		Where("organization_id = ? AND contact_id = ? AND direction = ?", c.OrganizationID, c.ID, DirectionIncoming).
+		Limit(1).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 // MediaAsset represents a deduplicated inbound media object stored in object storage.

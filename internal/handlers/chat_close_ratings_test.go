@@ -382,7 +382,7 @@ func TestDecodeRatingContextMessages_ParsesJSONBPayload(t *testing.T) {
 	require.True(t, ok)
 	followup, ok := rawFollowup.(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, []string{"text 1", "text 2"}, asStringSlice(followup[chatCloseRatingFollowupCommentsKey]))
+	assert.Equal(t, []string{"text 1", "text 2"}, chat_close_ratings.AsStringSlice(followup[chatCloseRatingFollowupCommentsKey]))
 }
 
 func TestReadInstanceChatCloseRatingSettings(t *testing.T) {

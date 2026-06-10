@@ -51,23 +51,11 @@ func (w *Worker) loadOrganizationSendPolicy(orgID uuid.UUID) (organizationSendPo
 		return policy, err
 	}
 
-	settings := org.Settings
-	policy.StrictEnabled = readOrganizationBool(settings, organizationSettingStrictSendingRestrictionsEnabled, false)
-	policy.OutboundMode = readOrganizationString(settings, organizationSettingOutboundMode, policy.OutboundMode)
-	policy.ApplyToSystem = readOrganizationBool(settings, organizationSettingStrictSendingApplyToSystem, true)
-	policy.CampaignDraftOnly = readOrganizationBool(settings, organizationSettingCampaignDraftOnly, false)
+	policy.StrictEnabled = org.Settings.Bool(organizationSettingStrictSendingRestrictionsEnabled, false)
+	policy.OutboundMode = org.Settings.String(organizationSettingOutboundMode, policy.OutboundMode)
+	policy.ApplyToSystem = org.Settings.Bool(organizationSettingStrictSendingApplyToSystem, true)
+	policy.CampaignDraftOnly = org.Settings.Bool(organizationSettingCampaignDraftOnly, false)
 	return policy, nil
-}
-
-func (w *Worker) contactHasIncomingHistory(orgID, contactID uuid.UUID) (bool, error) {
-	var count int64
-	if err := w.DB.Model(&models.Message{}).
-		Where("organization_id = ? AND contact_id = ? AND direction = ?", orgID, contactID, models.DirectionIncoming).
-		Limit(1).
-		Count(&count).Error; err != nil {
-		return false, err
-	}
-	return count > 0, nil
 }
 
 func (w *Worker) validateWhatsmeowCampaignInstance(orgID uuid.UUID, rawInstanceID string) (string, error) {
@@ -107,47 +95,4 @@ func (w *Worker) validateWhatsmeowCampaignInstance(orgID uuid.UUID, rawInstanceI
 	return "", nil
 }
 
-func readOrganizationBool(settings models.JSONB, key string, fallback bool) bool {
-	if settings == nil {
-		return fallback
-	}
-	value, ok := settings[key]
-	if !ok || value == nil {
-		return fallback
-	}
-	switch typed := value.(type) {
-	case bool:
-		return typed
-	case string:
-		switch strings.ToLower(strings.TrimSpace(typed)) {
-		case "true", "1", "yes", "on":
-			return true
-		case "false", "0", "no", "off":
-			return false
-		default:
-			return fallback
-		}
-	default:
-		return fallback
-	}
-}
 
-func readOrganizationString(settings models.JSONB, key, fallback string) string {
-	if settings == nil {
-		return fallback
-	}
-	value, ok := settings[key]
-	if !ok || value == nil {
-		return fallback
-	}
-	switch typed := value.(type) {
-	case string:
-		trimmed := strings.TrimSpace(typed)
-		if trimmed == "" {
-			return fallback
-		}
-		return trimmed
-	default:
-		return fallback
-	}
-}

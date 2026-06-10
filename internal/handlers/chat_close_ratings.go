@@ -569,7 +569,7 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 
 	contextMessages := cycle.ContextMessages
 	if hasRating {
-		contextMessages = a.buildChatCloseRatingContext(contact.ID, incomingMessage)
+		contextMessages = chat_close_ratings.BuildChatCloseRatingContext(a.DB, contact.ID, incomingMessage)
 	}
 	if contextMessages == nil {
 		contextMessages = models.JSONB{}
@@ -629,41 +629,7 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 	return true
 }
 
-func (a *App) buildChatCloseRatingContext(contactID uuid.UUID, ratingMessage *models.Message) models.JSONB {
-	if ratingMessage == nil {
-		return models.JSONB{}
-	}
 
-	var before []models.Message
-	a.DB.Where("contact_id = ? AND id <> ? AND created_at <= ?", contactID, ratingMessage.ID, ratingMessage.CreatedAt).
-		Order("created_at DESC").
-		Limit(2).
-		Find(&before)
-
-	var after []models.Message
-	a.DB.Where("contact_id = ? AND id <> ? AND created_at >= ?", contactID, ratingMessage.ID, ratingMessage.CreatedAt).
-		Order("created_at ASC").
-		Limit(2).
-		Find(&after)
-
-	for i, j := 0, len(before)-1; i < j; i, j = i+1, j-1 {
-		before[i], before[j] = before[j], before[i]
-	}
-
-	return models.JSONB{
-		"before": mapMessagesForRatingContext(before),
-		"rating": chat_close_ratings.MapSingleMessageForRatingContext(ratingMessage),
-		"after":  mapMessagesForRatingContext(after),
-	}
-}
-
-func mapMessagesForRatingContext(messages []models.Message) []any {
-	entries := make([]any, 0, len(messages))
-	for i := range messages {
-		entries = append(entries, chat_close_ratings.MapSingleMessageForRatingContext(&messages[i]))
-	}
-	return entries
-}
 
 func extractFollowupCommentsForRatingMessage(contextMessages models.JSONB) []string {
 	if len(contextMessages) == 0 {
@@ -699,7 +665,7 @@ func extractFollowupCommentsForRatingMessage(contextMessages models.JSONB) []str
 		comments = append(comments, trimmed)
 	}
 
-	for _, comment := range asStringSliceChatClose(followup[chatCloseRatingFollowupCommentsKey]) {
+	for _, comment := range chat_close_ratings.AsStringSlice(followup[chatCloseRatingFollowupCommentsKey]) {
 		appendUnique(comment)
 	}
 
@@ -723,24 +689,7 @@ func extractFollowupCommentsForRatingMessage(contextMessages models.JSONB) []str
 	return comments
 }
 
-func asStringSliceChatClose(val any) []string {
-	if val == nil {
-		return nil
-	}
-	switch typed := val.(type) {
-	case []string:
-		return typed
-	case []any:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			if str, ok := item.(string); ok {
-				out = append(out, str)
-			}
-		}
-		return out
-	}
-	return nil
-}
+
 
 func mergeRatingMessageWithFollowupComments(base string, contextMessages models.JSONB) string {
 	parts := make([]string, 0, 4)

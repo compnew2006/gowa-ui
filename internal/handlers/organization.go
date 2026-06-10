@@ -81,10 +81,10 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 			if v, ok := org.Settings[organizationSettingStrictSendingRestrictionsEnabled].(bool); ok {
 				settings.StrictSendingRestrictions = v
 			}
-			settings.OutboundMode = normalizeOutboundMode(parseOrganizationStringSetting(org.Settings, organizationSettingOutboundMode, settings.OutboundMode))
-			settings.StrictSendingApplyToSystem = parseOrganizationBoolSetting(org.Settings, organizationSettingStrictSendingApplyToSystem, settings.StrictSendingApplyToSystem)
-			settings.CampaignDraftOnly = parseOrganizationBoolSetting(org.Settings, organizationSettingCampaignDraftOnly, settings.CampaignDraftOnly)
-			settings.StrictRolloutMode = normalizeRolloutMode(parseOrganizationStringSetting(org.Settings, organizationSettingStrictRolloutMode, settings.StrictRolloutMode))
+			settings.OutboundMode = normalizeOutboundMode(org.Settings.String(organizationSettingOutboundMode, settings.OutboundMode))
+			settings.StrictSendingApplyToSystem = org.Settings.Bool(organizationSettingStrictSendingApplyToSystem, settings.StrictSendingApplyToSystem)
+			settings.CampaignDraftOnly = org.Settings.Bool(organizationSettingCampaignDraftOnly, settings.CampaignDraftOnly)
+			settings.StrictRolloutMode = normalizeRolloutMode(org.Settings.String(organizationSettingStrictRolloutMode, settings.StrictRolloutMode))
 			settings.StrictRolloutEnforceAt = parseOrganizationTimeSetting(org.Settings, organizationSettingStrictRolloutEnforceAt)
 			if v, ok := org.Settings["timezone"].(string); ok && v != "" {
 				settings.Timezone = v

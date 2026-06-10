@@ -280,7 +280,7 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		}
 
 		if orgPolicy.ShouldEnforceInboundOnlyForSystemSends() {
-			hasIncomingHistory, inboundErr := w.contactHasIncomingHistory(job.OrganizationID, contact.ID)
+			hasIncomingHistory, inboundErr := contact.HasIncomingHistory(w.DB)
 			if inboundErr != nil {
 				return fmt.Errorf("failed to evaluate inbound history for contact: %w", inboundErr)
 			}

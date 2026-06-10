@@ -7,6 +7,8 @@ import (
 	"unicode"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 const (
@@ -296,7 +298,7 @@ func ReadFollowupState(cycleClosedAt time.Time, contextMessages map[string]any, 
 		}
 	}
 	if rawComments, ok := payload[FollowupCommentsKey]; ok {
-		state.Comments = NormalizeRatingComments(asStringSlice(rawComments))
+		state.Comments = NormalizeRatingComments(AsStringSlice(rawComments))
 	}
 
 	if state.RemainingMessages < 0 {
@@ -319,7 +321,7 @@ func WriteFollowupState(contextMessages map[string]any, state FollowupState) map
 	return contextMessages
 }
 
-func asStringSlice(val any) []string {
+func AsStringSlice(val any) []string {
 	if val == nil {
 		return nil
 	}
@@ -336,4 +338,40 @@ func asStringSlice(val any) []string {
 		return out
 	}
 	return nil
+}
+
+func BuildChatCloseRatingContext(db *gorm.DB, contactID uuid.UUID, ratingMessage *models.Message) models.JSONB {
+	if ratingMessage == nil {
+		return models.JSONB{}
+	}
+
+	var before []models.Message
+	db.Where("contact_id = ? AND id <> ? AND created_at <= ?", contactID, ratingMessage.ID, ratingMessage.CreatedAt).
+		Order("created_at DESC").
+		Limit(2).
+		Find(&before)
+
+	var after []models.Message
+	db.Where("contact_id = ? AND id <> ? AND created_at >= ?", contactID, ratingMessage.ID, ratingMessage.CreatedAt).
+		Order("created_at ASC").
+		Limit(2).
+		Find(&after)
+
+	for i, j := 0, len(before)-1; i < j; i, j = i+1, j-1 {
+		before[i], before[j] = before[j], before[i]
+	}
+
+	return models.JSONB{
+		"before": MapMessagesForRatingContext(before),
+		"rating": MapSingleMessageForRatingContext(ratingMessage),
+		"after":  MapMessagesForRatingContext(after),
+	}
+}
+
+func MapMessagesForRatingContext(messages []models.Message) []any {
+	entries := make([]any, 0, len(messages))
+	for i := range messages {
+		entries = append(entries, MapSingleMessageForRatingContext(&messages[i]))
+	}
+	return entries
 }

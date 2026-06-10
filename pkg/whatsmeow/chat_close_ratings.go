@@ -185,7 +185,7 @@ func (cm *ConnectionManager) maybeCaptureChatCloseRating(
 	ratingValue, hasRating := chat_close_ratings.ParseInboundRatingValue(incomingMessage.Content)
 	contextMessages := cycle.ContextMessages
 	if hasRating {
-		contextMessages = cm.buildChatCloseRatingContext(ctx, contact.ID, incomingMessage)
+		contextMessages = chat_close_ratings.BuildChatCloseRatingContext(cm.db.WithContext(ctx), contact.ID, incomingMessage)
 	}
 	if contextMessages == nil {
 		contextMessages = models.JSONB{}
@@ -246,44 +246,3 @@ func (cm *ConnectionManager) maybeCaptureChatCloseRating(
 	return true
 }
 
-func (cm *ConnectionManager) buildChatCloseRatingContext(
-	ctx context.Context,
-	contactID uuid.UUID,
-	ratingMessage *models.Message,
-) models.JSONB {
-	if ratingMessage == nil {
-		return models.JSONB{}
-	}
-
-	var before []models.Message
-	cm.db.WithContext(ctx).
-		Where("contact_id = ? AND id <> ? AND created_at <= ?", contactID, ratingMessage.ID, ratingMessage.CreatedAt).
-		Order("created_at DESC").
-		Limit(2).
-		Find(&before)
-
-	var after []models.Message
-	cm.db.WithContext(ctx).
-		Where("contact_id = ? AND id <> ? AND created_at >= ?", contactID, ratingMessage.ID, ratingMessage.CreatedAt).
-		Order("created_at ASC").
-		Limit(2).
-		Find(&after)
-
-	for i, j := 0, len(before)-1; i < j; i, j = i+1, j-1 {
-		before[i], before[j] = before[j], before[i]
-	}
-
-	return models.JSONB{
-		"before": mapMessagesForRatingContext(before),
-		"rating": chat_close_ratings.MapSingleMessageForRatingContext(ratingMessage),
-		"after":  mapMessagesForRatingContext(after),
-	}
-}
-
-func mapMessagesForRatingContext(messages []models.Message) []any {
-	entries := make([]any, 0, len(messages))
-	for i := range messages {
-		entries = append(entries, chat_close_ratings.MapSingleMessageForRatingContext(&messages[i]))
-	}
-	return entries
-}
