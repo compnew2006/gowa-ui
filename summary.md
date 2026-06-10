@@ -433,6 +433,49 @@ All 9 Facebook package tests pass (5 pre-existing + 4 new). `go test -race -p 1 
 5. **1018 historical empty `from_id` rows** — still awaiting user decision (forward-only fix is in place).
 6. **401s on `/api/facebook/comments` and `/api/auth/logout`** — root-caused to production frontend JWT 15min TTL + missing silent refresh; OUT OF SCOPE per user.
 
+
+## Chat Close Ratings Gaps Resolved — 2026-06-10
+
+### Files Changed
+- [shared.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/chat_close_ratings/shared.go) - Stripped RTL markers and control characters before rating parsing.
+- [chatbot_processor.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/chatbot_processor.go) & [chat_close_ratings.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/chat_close_ratings.go) - Checked rating validity to prevent non-rating message swallowing.
+- [chat_close_ratings.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/chat_close_ratings.go) - Reordered DB creation and manual prompt sending to be atomic.
+- [poll_vote.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/poll_vote.go) - Supported poll votes as close rating inputs.
+- [chat_lifecycle.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/chat_lifecycle.go) & [chat_lifecycle.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/chat_lifecycle.go) - Expire active pending close rating cycles on contact/chat reopen.
+- [chat_close_rating_cleanup_worker.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/chat_close_rating_cleanup_worker.go) & [main.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/cmd/whatomate/main.go) - Background cleanup worker for expired cycles.
+- [meta_analytics_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/meta_analytics_test.go) - Added nil check guards for Redis in cache tests.
+- [organization_query_regression_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/organization_query_regression_test.go) - Normalization of quotes in GORM SQL assertions for PostgreSQL compatibility.
+
+### Approach Taken
+- Checked rating validity on closed chats before skipping auto-reopen to prevent non-rating messages from being swallowed.
+- Restructured prompt sending to ensure GORM close rating cycle records are not created if the outbound message fails to send.
+- Processed incoming poll votes as messages of type MessageTypePoll and triggered the close rating workflow when matching a pending rating cycle.
+- Pre-filtered and stripped ignorable control runes (`unicode.Cf`) from incoming texts before parsing rating values.
+- Implemented a background ticker worker to regularly clean up (expire) unanswered close rating cycles after 24 hours.
+
+### Blast Radius Table
+| Symbol | File | Direct Callers | Cross-Module? | Risk |
+|--------|------|----------------|---------------|------|
+| `ParseInboundRatingValue` | `shared.go` | `maybeCaptureChatCloseRating`, `chat_close_ratings.go` | Yes | Low (cleaner parsing) |
+| `shouldSkipClosedChatAutoReopen...` | `chat_close_ratings.go` | `chatbot_processor.go` | Yes | Low |
+| `handleManualChatCloseRatingPrompt` | `chat_close_ratings.go` (handlers) | HTTP handler router | No | Low |
+| `handlePollVote` | `poll_vote.go` | Whatsmeow event handler | No | Low |
+| `reopenClosedContactOnIncoming` | `chat_lifecycle.go` (whatsmeow) | `chatbot_processor.go` | Yes | Low |
+
+### Patterns Followed
+- Followed the worker registry pattern in `main.go`.
+- Reused database models and states (`models.ChatClosureRatingStateExpired`).
+
+### Tests Run & Results
+- All unit and integration tests compile and pass cleanly:
+```bash
+TEST_DATABASE_URL="postgres://test:test@127.0.0.1:5433/test?sslmode=disable" go test -p 1 -v ./pkg/chat_close_ratings/... ./internal/handlers/
+```
+
+### Gotchas and Future Notes
+- Arabic right-to-left marks (`\u200f`) behave like empty space but are not trimmed by `strings.TrimSpace`, necessitating custom rune-based filtering.
+- PostgreSQL quotes table names with double quotes whereas GORM on SQLite/MySQL uses backticks; normalize both in regression test SQL assertions.
+
 <!-- END -->
 
 ## Per-Instance Uploads Cleanup Implementation — 2026-06-06
