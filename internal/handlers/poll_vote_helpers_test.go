@@ -240,3 +240,42 @@ func TestBroadcastPollMessageUpdate_NilHub_NilMessage(t *testing.T) {
 	// Should not panic with nil hub or nil message
 	app.broadcastPollMessageUpdate(uuid.Nil, nil)
 }
+
+func TestDeepCopyJSONBValue(t *testing.T) {
+	t.Parallel()
+
+	t.Run("copies nested maps", func(t *testing.T) {
+		t.Parallel()
+		original := map[string]interface{}{
+			"voters": map[string]interface{}{
+				"user1": []interface{}{"A", "B"},
+			},
+		}
+		result := deepCopyJSONBValue(original)
+		copied := result.(map[string]interface{})
+
+		original["voters"].(map[string]interface{})["user1"] = []interface{}{"C"}
+		copiedVoters := copied["voters"].(map[string]interface{})
+		assert.Equal(t, []interface{}{"A", "B"}, copiedVoters["user1"])
+	})
+
+	t.Run("copies nested slices", func(t *testing.T) {
+		t.Parallel()
+		original := []interface{}{
+			map[string]interface{}{"key": "value"},
+			"string_val",
+		}
+		result := deepCopyJSONBValue(original)
+		copied := result.([]interface{})
+
+		original[0].(map[string]interface{})["key"] = "modified"
+		assert.Equal(t, "value", copied[0].(map[string]interface{})["key"])
+	})
+
+	t.Run("returns primitives as-is", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "hello", deepCopyJSONBValue("hello"))
+		assert.Equal(t, 42, deepCopyJSONBValue(42))
+		assert.Nil(t, deepCopyJSONBValue(nil))
+	})
+}

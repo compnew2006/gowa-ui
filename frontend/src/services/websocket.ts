@@ -169,6 +169,9 @@ const WS_TYPE_PONG = "pong";
 // Reaction types
 const WS_TYPE_REACTION_UPDATE = "reaction_update";
 
+// Poll vote types
+const WS_TYPE_POLL_VOTE_UPDATED = "poll_vote_updated";
+
 // Agent transfer types
 const WS_TYPE_AGENT_TRANSFER = "agent_transfer";
 const WS_TYPE_AGENT_TRANSFER_RESUME = "agent_transfer_resume";
@@ -393,6 +396,9 @@ class WebSocketService {
           break;
         case WS_TYPE_REACTION_UPDATE:
           this.handleReactionUpdate(store, message.payload);
+          break;
+        case WS_TYPE_POLL_VOTE_UPDATED:
+          this.handlePollVoteUpdated(store, message.payload);
           break;
         case WS_TYPE_PONG:
           // Pong received, connection is alive
@@ -706,6 +712,47 @@ class WebSocketService {
     if (currentContact && payload.contact_id === currentContact.id) {
       store.updateMessageReactions(payload.message_id, payload.reactions);
     }
+  }
+
+  private handlePollVoteUpdated(
+    store: ReturnType<typeof useContactsStore>,
+    payload: any,
+  ) {
+    const messageID = typeof payload?.id === "string" ? payload.id : "";
+    if (!messageID) return;
+
+    const existing = store.messages.find(
+      (message) => message.id === messageID,
+    );
+    const contactID =
+      typeof payload?.contact_id === "string"
+        ? payload.contact_id
+        : existing?.contact_id;
+    if (!contactID) return;
+
+    store.patchMessage({
+      id: messageID,
+      contact_id: contactID,
+      direction: existing?.direction ?? "incoming",
+      message_type: existing?.message_type ?? "document",
+      content: payload?.content ?? existing?.content ?? { body: "" },
+      status: existing?.status ?? "received",
+      created_at:
+        typeof payload?.created_at === "string"
+          ? payload.created_at
+          : (existing?.created_at ?? new Date().toISOString()),
+      updated_at:
+        typeof payload?.updated_at === "string"
+          ? payload.updated_at
+          : new Date().toISOString(),
+      media_url: existing?.media_url,
+      media_mime_type: existing?.media_mime_type,
+      media_filename: existing?.media_filename,
+      metadata: existing?.metadata,
+      interactive_data:
+        payload?.interactive_data ?? existing?.interactive_data,
+      error_message: existing?.error_message,
+    });
   }
 
   private handleAgentTransfer(payload: any) {

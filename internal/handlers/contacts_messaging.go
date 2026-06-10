@@ -935,6 +935,23 @@ func (a *App) SendPollVote(r *fastglue.Request) error {
 			"selected_options",
 		)
 	}
+	// Validate that selected options exist in the original poll
+	if pollOpts, ok := message.InteractiveData["options"]; ok {
+		if optSlice, ok := pollOpts.([]interface{}); ok {
+			validOpts := make(map[string]bool, len(optSlice))
+			for _, o := range optSlice {
+				if s, ok := o.(string); ok {
+					validOpts[s] = true
+				}
+			}
+			for _, sel := range req.SelectedOptions {
+				if !validOpts[sel] {
+					return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+						fmt.Sprintf("invalid poll option: %s", sel), nil, "selected_options")
+				}
+			}
+		}
+	}
 	if message.InstanceID == nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Message has no associated instance", nil, "")
 	}
@@ -944,7 +961,13 @@ func (a *App) SendPollVote(r *fastglue.Request) error {
 
 	pollVoter, ok := a.MessageProvider.(provider.PollVoter)
 	if !ok {
-		return r.SendErrorEnvelope(fasthttp.StatusNotAcceptable, "Poll voting not supported by current provider", nil, "")
+		providerName := "unknown"
+		if a.Config.WhatsApp.Provider != "" {
+			providerName = a.Config.WhatsApp.Provider
+		}
+		return r.SendErrorEnvelope(fasthttp.StatusNotAcceptable,
+			fmt.Sprintf("Poll voting is not supported by the '%s' provider. Only WhatsMeow supports poll voting.", providerName),
+			nil, "PROVIDER_NOT_SUPPORTED")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -1047,10 +1070,29 @@ func pollVoteIntValue(value any) int {
 	}
 }
 
+func deepCopyJSONBValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		cp := make(map[string]interface{}, len(val))
+		for k, v := range val {
+			cp[k] = deepCopyJSONBValue(v)
+		}
+		return cp
+	case []interface{}:
+		cp := make([]interface{}, len(val))
+		for i, v := range val {
+			cp[i] = deepCopyJSONBValue(v)
+		}
+		return cp
+	default:
+		return v
+	}
+}
+
 func applyPollVoteSelectionToInteractive(existing models.JSONB, voter string, selectedOptions []string) models.JSONB {
-	updated := make(models.JSONB, len(existing)+5)
+	updated := make(models.JSONB, len(existing))
 	for key, value := range existing {
-		updated[key] = value
+		updated[key] = deepCopyJSONBValue(value)
 	}
 	if _, ok := updated["type"].(string); !ok {
 		updated["type"] = "poll"
@@ -1120,7 +1162,7 @@ func (a *App) broadcastPollMessageUpdate(orgID uuid.UUID, message *models.Messag
 		return
 	}
 	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-		Type: websocket.TypeMessageMediaUpdated,
+		Type: websocket.TypePollVoteUpdated,
 		Payload: map[string]any{
 			"id":               message.ID.String(),
 			"contact_id":       message.ContactID.String(),
