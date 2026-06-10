@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	waClient "go.mau.fi/whatsmeow"
 	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	waTypes "go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
@@ -35,7 +36,17 @@ func (cm *ConnectionManager) handlePollVote(
 		return
 	}
 
-	vote, err := client.DecryptPollVote(ctx, evt)
+	var vote *waE2E.PollVoteMessage
+	var err error
+	if evt.Info.Chat.Server == waTypes.HiddenUserServer && client != nil && client.Store != nil && !client.Store.LID.IsEmpty() {
+		originalID := client.Store.ID
+		ownLID := client.Store.LID.ToNonAD()
+		client.Store.ID = &ownLID
+		vote, err = client.DecryptPollVote(ctx, evt)
+		client.Store.ID = originalID
+	} else {
+		vote, err = client.DecryptPollVote(ctx, evt)
+	}
 	if err != nil {
 		cm.logger.Warn("Failed to decrypt poll vote", "instance_id", instanceID, "wa_message_id", evt.Info.ID, "error", err)
 		return

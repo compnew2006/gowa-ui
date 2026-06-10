@@ -38,8 +38,12 @@ func TestParseInboundRatingValue_SupportsLocalizedDigitsAndComments(t *testing.T
 		{name: "arabic with comment", input: "٧ ممتاز", wantValue: 7, wantOK: true},
 		{name: "leading rtl mark", input: "\u200f٧ ممتاز", wantValue: 7, wantOK: true},
 		{name: "out of range", input: "11", wantValue: 0, wantOK: false},
-		{name: "not leading number", input: "rating 7", wantValue: 0, wantOK: false},
+		{name: "not leading number", input: "rating 7", wantValue: 7, wantOK: true},
 		{name: "non rating token", input: "7pm", wantValue: 0, wantOK: false},
+		{name: "introductory text rating", input: "I rate it a 9", wantValue: 9, wantOK: true},
+		{name: "fraction 9/10", input: "9/10", wantValue: 9, wantOK: true},
+		{name: "fraction 10/10", input: "10/10", wantValue: 10, wantOK: true},
+		{name: "fraction with comment", input: "9/10, thank you", wantValue: 9, wantOK: true},
 	}
 
 	for _, tc := range cases {
