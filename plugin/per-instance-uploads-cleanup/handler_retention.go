@@ -320,6 +320,7 @@ func (p *Plugin) handleRun(r *fastglue.Request) error {
 	instanceName, err := p.recordLastRunDate(tenant.ScopedDB(p.db, orgID), instanceID)
 	if err != nil {
 		p.log.Error("handleRun: failed to record last run date", "err", err, "instance_id", instanceID)
+		return r.SendErrorEnvelope(http.StatusInternalServerError, "Failed to record last run date", nil, "")
 	}
 
 	return r.SendEnvelope(map[string]interface{}{

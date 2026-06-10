@@ -67,12 +67,22 @@ func (a *App) RunUploadsCleanupNow(r *fastglue.Request) error {
 	scopedDB.Find(&instances)
 
 	instancesBreakdown := make([]map[string]any, 0, len(instances))
+	instanceErrors := make([]map[string]any, 0)
 	for _, inst := range instances {
 		days, source := ResolveInstanceRetention(inst.Settings, result.RetentionDays)
 		instDeleted := 0
 		if days > 0 {
 			d := days
-			instDeleted, _ = RunManualCleanupForInstance(context.Background(), a, orgID, inst.ID, &d)
+			var instErr error
+			instDeleted, instErr = RunManualCleanupForInstance(context.Background(), a, orgID, inst.ID, &d)
+			if instErr != nil {
+				a.Log.Error("Instance cleanup failed", "instance_id", inst.ID, "error", instErr)
+				instanceErrors = append(instanceErrors, map[string]any{
+					"instance_id":   inst.ID,
+					"instance_name": inst.Name,
+					"error":         instErr.Error(),
+				})
+			}
 		}
 		instancesBreakdown = append(instancesBreakdown, map[string]any{
 			"instance_id":    inst.ID,
@@ -84,9 +94,10 @@ func (a *App) RunUploadsCleanupNow(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(map[string]any{
-		"message":        fmt.Sprintf("Uploads cleanup completed. Deleted %d file(s) across %d instance(s).", result.DeletedFiles, len(instances)),
-		"deleted_files":  result.DeletedFiles,
-		"retention_days": result.RetentionDays,
-		"instances":      instancesBreakdown,
+		"message":         fmt.Sprintf("Uploads cleanup completed. Deleted %d file(s) across %d instance(s).", result.DeletedFiles, len(instances)),
+		"deleted_files":   result.DeletedFiles,
+		"retention_days":  result.RetentionDays,
+		"instances":       instancesBreakdown,
+		"instance_errors": instanceErrors,
 	})
 }
