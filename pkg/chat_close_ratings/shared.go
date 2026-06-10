@@ -148,40 +148,111 @@ func isIgnorableRatingRune(r rune) bool {
 }
 
 func ParseInboundRatingValue(raw string) (int, bool) {
-	trimmed := NormalizeInboundRatingText(raw)
+	normalized := LocalizedRatingDigitReplacer.Replace(raw)
+	trimmed := strings.TrimSpace(normalized)
 	if trimmed == "" {
 		return 0, false
 	}
 
+	// 1. Prefix scan (fast path)
 	runes := []rune(trimmed)
-	end := 0
-	for end < len(runes) && runes[end] >= '0' && runes[end] <= '9' {
-		end++
-	}
-	if end == 0 {
-		return 0, false
-	}
-
-	nextIndex := end
-	for nextIndex < len(runes) && isIgnorableRatingRune(runes[nextIndex]) {
-		nextIndex++
-	}
-
-	if nextIndex < len(runes) {
-		next := runes[nextIndex]
-		if !unicode.IsSpace(next) && !unicode.IsPunct(next) && !unicode.IsSymbol(next) {
-			return 0, false
+	if len(runes) > 0 && runes[0] >= '0' && runes[0] <= '9' {
+		end := 0
+		for end < len(runes) && runes[end] >= '0' && runes[end] <= '9' {
+			end++
+		}
+		if end > 0 {
+			rating, err := strconv.Atoi(string(runes[:end]))
+			if err == nil && rating >= 1 && rating <= 10 {
+				nextIndex := end
+				for nextIndex < len(runes) && isIgnorableRatingRune(runes[nextIndex]) {
+					nextIndex++
+				}
+				if nextIndex < len(runes) {
+					next := runes[nextIndex]
+					if unicode.IsSpace(next) || unicode.IsPunct(next) || unicode.IsSymbol(next) {
+						return rating, true
+					}
+				} else {
+					return rating, true
+				}
+			}
 		}
 	}
 
-	rating, err := strconv.Atoi(string(runes[:end]))
-	if err != nil {
-		return 0, false
+	// 2. Scan for digits in text (robust search)
+	allRunes := []rune(normalized)
+	for i := 0; i < len(allRunes); {
+		if allRunes[i] >= '0' && allRunes[i] <= '9' {
+			start := i
+			for i < len(allRunes) && allRunes[i] >= '0' && allRunes[i] <= '9' {
+				i++
+			}
+			end := i
+
+			num, err := strconv.Atoi(string(allRunes[start:end]))
+			if err != nil || num < 1 || num > 10 {
+				continue
+			}
+
+			// Check if preceded by '/' (indicating it is a denominator of a fraction)
+			isDenominator := false
+			for j := start - 1; j >= 0; j-- {
+				if unicode.IsSpace(allRunes[j]) {
+					continue
+				}
+				if allRunes[j] == '/' {
+					isDenominator = true
+				}
+				break
+			}
+			if isDenominator {
+				continue
+			}
+
+			// Validate boundaries
+			if start > 0 {
+				prevRune := allRunes[start-1]
+				if !unicode.IsSpace(prevRune) && !unicode.IsPunct(prevRune) && !unicode.IsSymbol(prevRune) {
+					continue
+				}
+			}
+
+			if end < len(allRunes) {
+				// Check if followed by /10 or /5 fraction
+				remRunes := allRunes[end:]
+				trimmedRem := strings.TrimSpace(string(remRunes))
+				if strings.HasPrefix(trimmedRem, "/") {
+					denomStr := strings.TrimSpace(trimmedRem[1:])
+					denomEnd := 0
+					for denomEnd < len(denomStr) && denomStr[denomEnd] >= '0' && denomStr[denomEnd] <= '9' {
+						denomEnd++
+					}
+					if denomEnd > 0 {
+						denom, err := strconv.Atoi(denomStr[:denomEnd])
+						if err == nil && (denom == 10 || denom == 5) {
+							return num, true
+						}
+					}
+				}
+
+				nextRune := allRunes[end]
+				if !unicode.IsSpace(nextRune) && !unicode.IsPunct(nextRune) && !unicode.IsSymbol(nextRune) {
+					continue
+				}
+			}
+
+			return num, true
+		} else {
+			i++
+		}
 	}
-	if rating < 1 || rating > 10 {
-		return 0, false
-	}
-	return rating, true
+
+	return 0, false
+}
+
+func IsValidRatingMessageText(content string) (int, bool) {
+	return ParseInboundRatingValue(content)
 }
 
 func ParseRatingFromPollOption(option string) int {

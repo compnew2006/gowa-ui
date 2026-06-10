@@ -145,17 +145,32 @@ func (cm *ConnectionManager) shouldSkipClosedChatAutoReopenForIncomingMessage(
 	if contact.EffectiveStatus() != models.ChatStatusClosed {
 		return false
 	}
-	if msgType != models.MessageTypeText {
+	if msgType != models.MessageTypeText && msgType != models.MessageTypePoll {
 		return false
 	}
-	_ = content
 
 	cycle, _, err := cm.findActiveChatCloseRatingCycle(ctx, orgID, contact.InstanceID, contact.ID, time.Now().UTC())
 	if err != nil {
 		cm.logger.Error("Failed to resolve pending close rating cycle before auto-reopen", "error", err, "organization_id", orgID, "contact_id", contact.ID)
 		return false
 	}
-	return cycle != nil
+	if cycle == nil {
+		return false
+	}
+
+	if cycle.State == models.ChatClosureRatingStateRated {
+		return true
+	}
+
+	if cycle.State == models.ChatClosureRatingStatePending {
+		if msgType == models.MessageTypePoll {
+			return chat_close_ratings.ParseRatingFromPollOption(content) > 0
+		}
+		_, hasRating := chat_close_ratings.IsValidRatingMessageText(content)
+		return hasRating
+	}
+
+	return false
 }
 
 func (cm *ConnectionManager) maybeCaptureChatCloseRating(
@@ -167,7 +182,8 @@ func (cm *ConnectionManager) maybeCaptureChatCloseRating(
 	if contact == nil || incomingMessage == nil {
 		return false
 	}
-	if incomingMessage.Direction != models.DirectionIncoming || incomingMessage.MessageType != models.MessageTypeText {
+	isPollVoteMsg := incomingMessage.MessageType == models.MessageTypePoll && incomingMessage.InteractiveData != nil
+	if incomingMessage.Direction != models.DirectionIncoming || (incomingMessage.MessageType != models.MessageTypeText && !isPollVoteMsg) {
 		return false
 	}
 
@@ -182,7 +198,31 @@ func (cm *ConnectionManager) maybeCaptureChatCloseRating(
 	}
 
 	trimmedContent := strings.TrimSpace(incomingMessage.Content)
-	ratingValue, hasRating := chat_close_ratings.ParseInboundRatingValue(incomingMessage.Content)
+	var ratingValue int
+	var hasRating bool
+
+	if isPollVoteMsg {
+		if opts, ok := incomingMessage.InteractiveData["selected_options"]; ok {
+			if arr, ok := opts.([]interface{}); ok {
+				for _, v := range arr {
+					if s, ok := v.(string); ok {
+						if parsed := chat_close_ratings.ParseRatingFromPollOption(s); parsed > 0 {
+							ratingValue = parsed
+							hasRating = true
+							trimmedContent = s
+							break
+						}
+					}
+				}
+			}
+		}
+	} else {
+		ratingValue, hasRating = chat_close_ratings.ParseInboundRatingValue(incomingMessage.Content)
+	}
+
+	if hasRating && cycle.State == models.ChatClosureRatingStateRated && len([]rune(trimmedContent)) > 15 {
+		hasRating = false
+	}
 	contextMessages := cycle.ContextMessages
 	if hasRating {
 		contextMessages = chat_close_ratings.BuildChatCloseRatingContext(cm.db.WithContext(ctx), contact.ID, incomingMessage)

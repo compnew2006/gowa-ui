@@ -15,6 +15,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/contactutil"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
+	"github.com/compnew2006/whatomate/pkg/chat_close_ratings"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/google/uuid"
 )
@@ -2397,11 +2398,11 @@ func (a *App) shouldSkipClosedChatAutoReopenForIncomingMessage(orgID uuid.UUID, 
 	if a == nil || contact == nil {
 		return false
 	}
-	_ = content
 	if normalizeContactStatus(contact) != models.ChatStatusClosed {
 		return false
 	}
-	if strings.TrimSpace(msgType) != "text" {
+	trimmedMsgType := strings.TrimSpace(msgType)
+	if trimmedMsgType != "text" && trimmedMsgType != "poll" {
 		return false
 	}
 
@@ -2410,7 +2411,23 @@ func (a *App) shouldSkipClosedChatAutoReopenForIncomingMessage(orgID uuid.UUID, 
 		a.Log.Error("Failed to resolve pending close rating cycle before auto-reopen", "error", err, "organization_id", orgID, "contact_id", contact.ID)
 		return false
 	}
-	return cycle != nil
+	if cycle == nil {
+		return false
+	}
+
+	if cycle.State == models.ChatClosureRatingStateRated {
+		return true
+	}
+
+	if cycle.State == models.ChatClosureRatingStatePending {
+		if trimmedMsgType == "poll" {
+			return chat_close_ratings.ParseRatingFromPollOption(content) > 0
+		}
+		_, hasRating := chat_close_ratings.IsValidRatingMessageText(content)
+		return hasRating
+	}
+
+	return false
 }
 
 // saveIncomingMessage saves an incoming message to the messages table

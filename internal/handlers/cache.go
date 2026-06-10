@@ -52,16 +52,18 @@ func (a *App) getChatbotSettingsCached(orgID uuid.UUID, whatsAppAccount string) 
 	cacheKey := fmt.Sprintf("%s%s:%s", settingsCachePrefix, orgID.String(), whatsAppAccount)
 
 	// Try cache first
-	cached, err := a.Redis.Get(ctx, cacheKey).Result()
-	if err == nil && cached != "" {
-		var cacheData chatbotSettingsCache
-		if err := json.Unmarshal([]byte(cached), &cacheData); err == nil {
-			// Restore the API key from the cache wrapper
-			cacheData.AI.APIKey = cacheData.AIAPIKey
-			if err := a.decryptChatbotAIKey(&cacheData.ChatbotSettings); err != nil {
-				return nil, err
+	if a.Redis != nil {
+		cached, err := a.Redis.Get(ctx, cacheKey).Result()
+		if err == nil && cached != "" {
+			var cacheData chatbotSettingsCache
+			if err := json.Unmarshal([]byte(cached), &cacheData); err == nil {
+				// Restore the API key from the cache wrapper
+				cacheData.AI.APIKey = cacheData.AIAPIKey
+				if err := a.decryptChatbotAIKey(&cacheData.ChatbotSettings); err != nil {
+					return nil, err
+				}
+				return &cacheData.ChatbotSettings, nil
 			}
-			return &cacheData.ChatbotSettings, nil
 		}
 	}
 
@@ -77,12 +79,14 @@ func (a *App) getChatbotSettingsCached(orgID uuid.UUID, whatsAppAccount string) 
 	}
 
 	// Cache the result (include AI APIKey explicitly since it has json:"-" tag)
-	cacheData := chatbotSettingsCache{
-		ChatbotSettings: settings,
-		AIAPIKey:        settings.AI.APIKey,
-	}
-	if data, err := json.Marshal(cacheData); err == nil {
-		a.Redis.Set(ctx, cacheKey, data, settingsCacheTTL)
+	if a.Redis != nil {
+		cacheData := chatbotSettingsCache{
+			ChatbotSettings: settings,
+			AIAPIKey:        settings.AI.APIKey,
+		}
+		if data, err := json.Marshal(cacheData); err == nil {
+			a.Redis.Set(ctx, cacheKey, data, settingsCacheTTL)
+		}
 	}
 
 	if err := a.decryptChatbotAIKey(&settings); err != nil {
@@ -121,11 +125,13 @@ func (a *App) getChatbotFlowsCached(orgID uuid.UUID) ([]models.ChatbotFlow, erro
 	cacheKey := fmt.Sprintf("%s%s", flowsCachePrefix, orgID.String())
 
 	// Try cache first
-	cached, err := a.Redis.Get(ctx, cacheKey).Result()
-	if err == nil && cached != "" {
-		var flows []models.ChatbotFlow
-		if err := json.Unmarshal([]byte(cached), &flows); err == nil {
-			return flows, nil
+	if a.Redis != nil {
+		cached, err := a.Redis.Get(ctx, cacheKey).Result()
+		if err == nil && cached != "" {
+			var flows []models.ChatbotFlow
+			if err := json.Unmarshal([]byte(cached), &flows); err == nil {
+				return flows, nil
+			}
 		}
 	}
 
@@ -140,8 +146,10 @@ func (a *App) getChatbotFlowsCached(orgID uuid.UUID) ([]models.ChatbotFlow, erro
 	}
 
 	// Cache the result
-	if data, err := json.Marshal(flows); err == nil {
-		a.Redis.Set(ctx, cacheKey, data, flowsCacheTTL)
+	if a.Redis != nil {
+		if data, err := json.Marshal(flows); err == nil {
+			a.Redis.Set(ctx, cacheKey, data, flowsCacheTTL)
+		}
 	}
 
 	return flows, nil
@@ -169,11 +177,13 @@ func (a *App) getKeywordRulesCached(orgID uuid.UUID, whatsAppAccount string) ([]
 	cacheKey := fmt.Sprintf("%s%s:%s", keywordRulesCachePrefix, orgID.String(), whatsAppAccount)
 
 	// Try cache first
-	cached, err := a.Redis.Get(ctx, cacheKey).Result()
-	if err == nil && cached != "" {
-		var rules []models.KeywordRule
-		if err := json.Unmarshal([]byte(cached), &rules); err == nil {
-			return rules, nil
+	if a.Redis != nil {
+		cached, err := a.Redis.Get(ctx, cacheKey).Result()
+		if err == nil && cached != "" {
+			var rules []models.KeywordRule
+			if err := json.Unmarshal([]byte(cached), &rules); err == nil {
+				return rules, nil
+			}
 		}
 	}
 
@@ -202,8 +212,10 @@ func (a *App) getKeywordRulesCached(orgID uuid.UUID, whatsAppAccount string) ([]
 	rules = append(accountRules, globalRules...)
 
 	// Cache the result
-	if data, err := json.Marshal(rules); err == nil {
-		a.Redis.Set(ctx, cacheKey, data, keywordRulesCacheTTL)
+	if a.Redis != nil {
+		if data, err := json.Marshal(rules); err == nil {
+			a.Redis.Set(ctx, cacheKey, data, keywordRulesCacheTTL)
+		}
 	}
 
 	return rules, nil
@@ -211,6 +223,9 @@ func (a *App) getKeywordRulesCached(orgID uuid.UUID, whatsAppAccount string) ([]
 
 // InvalidateChatbotSettingsCache invalidates the settings cache for an organization
 func (a *App) InvalidateChatbotSettingsCache(orgID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
 	ctx := context.Background()
 	pattern := fmt.Sprintf("%s%s:*", settingsCachePrefix, orgID.String())
 	a.deleteKeysByPattern(ctx, pattern)
@@ -218,6 +233,9 @@ func (a *App) InvalidateChatbotSettingsCache(orgID uuid.UUID) {
 
 // InvalidateChatbotFlowsCache invalidates the flows cache for an organization
 func (a *App) InvalidateChatbotFlowsCache(orgID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf("%s%s", flowsCachePrefix, orgID.String())
 	a.Redis.Del(ctx, cacheKey)
@@ -225,6 +243,9 @@ func (a *App) InvalidateChatbotFlowsCache(orgID uuid.UUID) {
 
 // InvalidateKeywordRulesCache invalidates the keyword rules cache for an organization
 func (a *App) InvalidateKeywordRulesCache(orgID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
 	ctx := context.Background()
 	pattern := fmt.Sprintf("%s%s:*", keywordRulesCachePrefix, orgID.String())
 	a.deleteKeysByPattern(ctx, pattern)
@@ -232,6 +253,9 @@ func (a *App) InvalidateKeywordRulesCache(orgID uuid.UUID) {
 
 // deleteKeysByPattern deletes all keys matching a pattern
 func (a *App) deleteKeysByPattern(ctx context.Context, pattern string) {
+	if a.Redis == nil {
+		return
+	}
 	iter := a.Redis.Scan(ctx, 0, pattern, 100).Iterator()
 	for iter.Next(ctx) {
 		a.Redis.Del(ctx, iter.Val())
@@ -341,11 +365,13 @@ func (a *App) getWebhooksCached(orgID uuid.UUID) ([]models.Webhook, error) {
 	cacheKey := fmt.Sprintf("%s%s", webhooksCachePrefix, orgID.String())
 
 	// Try cache first
-	cached, err := a.Redis.Get(ctx, cacheKey).Result()
-	if err == nil && cached != "" {
-		var webhooks []models.Webhook
-		if err := json.Unmarshal([]byte(cached), &webhooks); err == nil {
-			return webhooks, nil
+	if a.Redis != nil {
+		cached, err := a.Redis.Get(ctx, cacheKey).Result()
+		if err == nil && cached != "" {
+			var webhooks []models.Webhook
+			if err := json.Unmarshal([]byte(cached), &webhooks); err == nil {
+				return webhooks, nil
+			}
 		}
 	}
 
@@ -356,8 +382,10 @@ func (a *App) getWebhooksCached(orgID uuid.UUID) ([]models.Webhook, error) {
 	}
 
 	// Cache the result
-	if data, err := json.Marshal(webhooks); err == nil {
-		a.Redis.Set(ctx, cacheKey, data, webhooksCacheTTL)
+	if a.Redis != nil {
+		if data, err := json.Marshal(webhooks); err == nil {
+			a.Redis.Set(ctx, cacheKey, data, webhooksCacheTTL)
+		}
 	}
 
 	return webhooks, nil
@@ -365,6 +393,9 @@ func (a *App) getWebhooksCached(orgID uuid.UUID) ([]models.Webhook, error) {
 
 // InvalidateWebhooksCache invalidates the webhooks cache for an organization
 func (a *App) InvalidateWebhooksCache(orgID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf("%s%s", webhooksCachePrefix, orgID.String())
 	a.Redis.Del(ctx, cacheKey)
@@ -375,11 +406,13 @@ func (a *App) getSLAEnabledSettingsCached() ([]models.ChatbotSettings, error) {
 	ctx := context.Background()
 
 	// Try cache first
-	cached, err := a.Redis.Get(ctx, slaSettingsCacheKey).Result()
-	if err == nil && cached != "" {
-		var settings []models.ChatbotSettings
-		if err := json.Unmarshal([]byte(cached), &settings); err == nil {
-			return settings, nil
+	if a.Redis != nil {
+		cached, err := a.Redis.Get(ctx, slaSettingsCacheKey).Result()
+		if err == nil && cached != "" {
+			var settings []models.ChatbotSettings
+			if err := json.Unmarshal([]byte(cached), &settings); err == nil {
+				return settings, nil
+			}
 		}
 	}
 
@@ -390,8 +423,10 @@ func (a *App) getSLAEnabledSettingsCached() ([]models.ChatbotSettings, error) {
 	}
 
 	// Cache the result
-	if data, err := json.Marshal(settings); err == nil {
-		a.Redis.Set(ctx, slaSettingsCacheKey, data, slaSettingsCacheTTL)
+	if a.Redis != nil {
+		if data, err := json.Marshal(settings); err == nil {
+			a.Redis.Set(ctx, slaSettingsCacheKey, data, slaSettingsCacheTTL)
+		}
 	}
 
 	return settings, nil
@@ -399,6 +434,9 @@ func (a *App) getSLAEnabledSettingsCached() ([]models.ChatbotSettings, error) {
 
 // InvalidateSLASettingsCache invalidates the SLA settings cache
 func (a *App) InvalidateSLASettingsCache() {
+	if a.Redis == nil {
+		return
+	}
 	ctx := context.Background()
 	a.Redis.Del(ctx, slaSettingsCacheKey)
 }
@@ -409,11 +447,13 @@ func (a *App) getAIContextsCached(orgID uuid.UUID, whatsAppAccount string) ([]mo
 	cacheKey := fmt.Sprintf("%s%s:%s", aiContextsCachePrefix, orgID.String(), whatsAppAccount)
 
 	// Try cache first
-	cached, err := a.Redis.Get(ctx, cacheKey).Result()
-	if err == nil && cached != "" {
-		var contexts []models.AIContext
-		if err := json.Unmarshal([]byte(cached), &contexts); err == nil {
-			return contexts, nil
+	if a.Redis != nil {
+		cached, err := a.Redis.Get(ctx, cacheKey).Result()
+		if err == nil && cached != "" {
+			var contexts []models.AIContext
+			if err := json.Unmarshal([]byte(cached), &contexts); err == nil {
+				return contexts, nil
+			}
 		}
 	}
 
@@ -442,8 +482,10 @@ func (a *App) getAIContextsCached(orgID uuid.UUID, whatsAppAccount string) ([]mo
 	contexts = append(accountContexts, globalContexts...)
 
 	// Cache the result
-	if data, err := json.Marshal(contexts); err == nil {
-		a.Redis.Set(ctx, cacheKey, data, aiContextsCacheTTL)
+	if a.Redis != nil {
+		if data, err := json.Marshal(contexts); err == nil {
+			a.Redis.Set(ctx, cacheKey, data, aiContextsCacheTTL)
+		}
 	}
 
 	return contexts, nil
@@ -451,6 +493,9 @@ func (a *App) getAIContextsCached(orgID uuid.UUID, whatsAppAccount string) ([]mo
 
 // InvalidateAIContextsCache invalidates the AI contexts cache for an organization
 func (a *App) InvalidateAIContextsCache(orgID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
 	ctx := context.Background()
 	pattern := fmt.Sprintf("%s%s:*", aiContextsCachePrefix, orgID.String())
 	a.deleteKeysByPattern(ctx, pattern)
@@ -659,11 +704,13 @@ func (a *App) GetRolePermissionsCached(roleID uuid.UUID) ([]string, error) {
 	cacheKey := fmt.Sprintf("%s%s", rolePermissionsCachePrefix, roleID.String())
 
 	// Try cache first
-	cached, err := a.Redis.Get(ctx, cacheKey).Result()
-	if err == nil && cached != "" {
-		var perms []string
-		if err := json.Unmarshal([]byte(cached), &perms); err == nil {
-			return perms, nil
+	if a.Redis != nil {
+		cached, err := a.Redis.Get(ctx, cacheKey).Result()
+		if err == nil && cached != "" {
+			var perms []string
+			if err := json.Unmarshal([]byte(cached), &perms); err == nil {
+				return perms, nil
+			}
 		}
 	}
 
@@ -683,8 +730,10 @@ func (a *App) GetRolePermissionsCached(roleID uuid.UUID) ([]string, error) {
 	}
 
 	// Cache the result
-	if data, err := json.Marshal(perms); err == nil {
-		a.Redis.Set(ctx, cacheKey, data, rolePermissionsCacheTTL)
+	if a.Redis != nil {
+		if data, err := json.Marshal(perms); err == nil {
+			a.Redis.Set(ctx, cacheKey, data, rolePermissionsCacheTTL)
+		}
 	}
 
 	return perms, nil
@@ -703,6 +752,9 @@ func (a *App) GetRolePermissionsCached(roleID uuid.UUID) ([]string, error) {
 // Parameters:
 //   - userID: The user ID whose permissions cache should be invalidated
 func (a *App) InvalidateUserPermissionsCache(userID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
 	ctx := context.Background()
 	// Delete the base key (no org suffix)
 	cacheKey := fmt.Sprintf("%s%s", userPermissionsCachePrefix, userID.String())
@@ -732,6 +784,9 @@ func (a *App) InvalidateUserPermissionsCache(userID uuid.UUID) {
 // Parameters:
 //   - roleID: The role ID whose cache should be invalidated (affects all users with this role)
 func (a *App) InvalidateRolePermissionsCache(roleID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
 	ctx := context.Background()
 
 	// Delete role cache
@@ -807,11 +862,13 @@ func (a *App) getTagsCached(orgID uuid.UUID) ([]models.Tag, error) {
 	cacheKey := fmt.Sprintf("%s%s", tagsCachePrefix, orgID.String())
 
 	// Try cache first
-	cached, err := a.Redis.Get(ctx, cacheKey).Result()
-	if err == nil && cached != "" {
-		var tags []models.Tag
-		if err := json.Unmarshal([]byte(cached), &tags); err == nil {
-			return tags, nil
+	if a.Redis != nil {
+		cached, err := a.Redis.Get(ctx, cacheKey).Result()
+		if err == nil && cached != "" {
+			var tags []models.Tag
+			if err := json.Unmarshal([]byte(cached), &tags); err == nil {
+				return tags, nil
+			}
 		}
 	}
 
@@ -822,8 +879,10 @@ func (a *App) getTagsCached(orgID uuid.UUID) ([]models.Tag, error) {
 	}
 
 	// Cache the result
-	if data, err := json.Marshal(tags); err == nil {
-		a.Redis.Set(ctx, cacheKey, data, tagsCacheTTL)
+	if a.Redis != nil {
+		if data, err := json.Marshal(tags); err == nil {
+			a.Redis.Set(ctx, cacheKey, data, tagsCacheTTL)
+		}
 	}
 
 	return tags, nil
@@ -831,6 +890,9 @@ func (a *App) getTagsCached(orgID uuid.UUID) ([]models.Tag, error) {
 
 // InvalidateTagsCache invalidates the tags cache for an organization
 func (a *App) InvalidateTagsCache(orgID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf("%s%s", tagsCachePrefix, orgID.String())
 	a.Redis.Del(ctx, cacheKey)

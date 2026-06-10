@@ -469,6 +469,8 @@ func runServer(args []string) {
 		uploadsCleanupCancel       context.CancelFunc
 		agentSelectionProcessor    *handlers.AgentSelectionProcessor
 		agentSelectionCancel       context.CancelFunc
+		chatCloseRatingCleanupWorker *handlers.ChatCloseRatingCleanupWorker
+		chatCloseRatingCleanupCancel context.CancelFunc
 	)
 	if sandboxMode {
 		lo.Warn("Sandbox mode: skipping recurring background workers")
@@ -517,6 +519,13 @@ func runServer(args []string) {
 		agentSelectionCtx, agentSelectionCancel = context.WithCancel(context.Background())
 		go agentSelectionProcessor.Start(agentSelectionCtx)
 		lo.Info("Customer agent selection processor started")
+
+		// Start chat close rating cleanup worker (runs every minute).
+		chatCloseRatingCleanupWorker = handlers.NewChatCloseRatingCleanupWorker(app, time.Minute)
+		var chatCloseRatingCleanupCtx context.Context
+		chatCloseRatingCleanupCtx, chatCloseRatingCleanupCancel = context.WithCancel(context.Background())
+		go chatCloseRatingCleanupWorker.Start(chatCloseRatingCleanupCtx)
+		lo.Info("Chat close rating cleanup worker started")
 	}
 
 	// Start embedded workers
@@ -635,6 +644,13 @@ func runServer(args []string) {
 		agentSelectionCancel()
 		agentSelectionProcessor.Stop()
 		lo.Info("Customer agent selection processor stopped")
+	}
+
+	if chatCloseRatingCleanupCancel != nil && chatCloseRatingCleanupWorker != nil {
+		lo.Info("Stopping chat close rating cleanup worker...")
+		chatCloseRatingCleanupCancel()
+		chatCloseRatingCleanupWorker.Stop()
+		lo.Info("Chat close rating cleanup worker stopped")
 	}
 
 	// Stop workers first

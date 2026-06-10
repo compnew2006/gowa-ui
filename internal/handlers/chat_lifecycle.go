@@ -262,6 +262,12 @@ func (a *App) reopenClosedChatToPending(contact *models.Contact) (bool, error) {
 		return false, err
 	}
 
+	if err := a.DB.Model(&models.ChatClosureRating{}).
+		Where("contact_id = ? AND state = ?", contact.ID, models.ChatClosureRatingStatePending).
+		Update("state", models.ChatClosureRatingStateExpired).Error; err != nil {
+		a.Log.Error("Failed to expire pending close rating cycles on chat reopen", "error", err, "contact_id", contact.ID)
+	}
+
 	contact.Status = models.ChatStatusPending
 	contact.AssignedUserID = nil
 	contact.ClosedAt = nil

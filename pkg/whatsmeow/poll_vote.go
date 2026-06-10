@@ -75,6 +75,46 @@ func (cm *ConnectionManager) handlePollVote(
 	originalMsg.UpdatedAt = now
 	cm.broadcastPollVoteUpdate(orgID, &originalMsg)
 
+	// Capture poll vote as close rating if it matches an active pending rating cycle
+	var cycle models.ChatClosureRating
+	if err := cm.db.WithContext(ctx).Where(
+		"contact_id = ? AND close_message_id = ? AND state = ?",
+		originalMsg.ContactID,
+		originalMsg.ID,
+		models.ChatClosureRatingStatePending,
+	).First(&cycle).Error; err == nil {
+		if len(selectedNames) > 0 {
+			var optsSlice []interface{}
+			for _, n := range selectedNames {
+				optsSlice = append(optsSlice, n)
+			}
+			incomingMsg := models.Message{
+				BaseModel:         models.BaseModel{ID: uuid.New()},
+				OrganizationID:    orgID,
+				InstanceID:        &instanceID,
+				WhatsAppAccount:   originalMsg.WhatsAppAccount,
+				ContactID:         originalMsg.ContactID,
+				WhatsAppMessageID: evt.Info.ID,
+				Direction:         models.DirectionIncoming,
+				MessageType:       models.MessageTypePoll,
+				Content:           strings.Join(selectedNames, ", "),
+				Status:            models.MessageStatusReceived,
+				InteractiveData: models.JSONB{
+					"type":             "poll_vote",
+					"selected_options": optsSlice,
+				},
+			}
+			if err := cm.db.WithContext(ctx).Create(&incomingMsg).Error; err != nil {
+				cm.logger.Error("Failed to persist incoming poll vote message for rating", "error", err)
+			} else {
+				var contact models.Contact
+				if err := cm.db.WithContext(ctx).Where("id = ?", originalMsg.ContactID).First(&contact).Error; err == nil {
+					cm.maybeCaptureChatCloseRating(ctx, orgID, &contact, &incomingMsg)
+				}
+			}
+		}
+	}
+
 	cm.logger.Debug("Updated poll vote on original message",
 		"instance_id", instanceID,
 		"poll_wa_id", originalWAMID,

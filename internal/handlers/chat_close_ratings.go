@@ -318,6 +318,15 @@ func (a *App) handleManualChatCloseRatingPrompt(orgID, closingUserID uuid.UUID, 
 
 	promptText := renderChatCloseRatingPrompt(template, org.Name, contact, agentName)
 
+	promptMessageID, sendErr := a.sendChatCloseRatingPrompt(orgID, contact, promptText, settings)
+	if sendErr != nil {
+		a.Log.Error("Failed to send close rating prompt", "error", sendErr, "contact_id", contact.ID)
+		return
+	}
+	if promptMessageID == nil {
+		return
+	}
+
 	cycle := models.ChatClosureRating{
 		BaseModel:            models.BaseModel{ID: uuid.New()},
 		OrganizationID:       orgID,
@@ -329,27 +338,13 @@ func (a *App) handleManualChatCloseRatingPrompt(orgID, closingUserID uuid.UUID, 
 		State:                models.ChatClosureRatingStatePending,
 		CloseMessage:         promptText,
 		CloseMessageLanguage: language,
+		CloseMessageID:       promptMessageID,
 		ContextMessages:      models.JSONB{},
 	}
 
 	if err := a.DB.Create(&cycle).Error; err != nil {
 		a.Log.Error("Failed to create close rating cycle", "error", err, "contact_id", contact.ID)
 		return
-	}
-
-	promptMessageID, sendErr := a.sendChatCloseRatingPrompt(orgID, contact, promptText, settings)
-	if sendErr != nil {
-		a.Log.Error("Failed to send close rating prompt", "error", sendErr, "contact_id", contact.ID)
-		return
-	}
-	if promptMessageID == nil {
-		return
-	}
-
-	if err := a.DB.Model(&models.ChatClosureRating{}).
-		Where("id = ?", cycle.ID).
-		Update("close_message_id", *promptMessageID).Error; err != nil {
-		a.Log.Error("Failed to store close rating prompt message id", "error", err, "cycle_id", cycle.ID)
 	}
 }
 
@@ -565,6 +560,10 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 		}
 	} else {
 		ratingValue, hasRating = chat_close_ratings.ParseInboundRatingValue(payload.MessageText)
+	}
+
+	if hasRating && cycle.State == models.ChatClosureRatingStateRated && len([]rune(trimmedContent)) > 15 {
+		hasRating = false
 	}
 
 	contextMessages := cycle.ContextMessages

@@ -477,10 +477,12 @@ func (a *App) Logout(r *fastglue.Request) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	deleted, _ := a.Redis.Del(ctx, refreshTokenKey(claims.ID)).Result()
 
-	if deleted == 0 {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Token already revoked or not found", nil, "")
+	if a.Redis != nil {
+		deleted, _ := a.Redis.Del(ctx, refreshTokenKey(claims.ID)).Result()
+		if deleted == 0 {
+			return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Token already revoked or not found", nil, "")
+		}
 	}
 
 	a.clearAuthCookies(r)

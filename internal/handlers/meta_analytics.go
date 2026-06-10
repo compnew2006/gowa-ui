@@ -152,15 +152,17 @@ func (a *App) GetMetaAnalytics(r *fastglue.Request) error {
 
 	// Try cache first
 	ctx := context.Background()
-	cached, err := a.Redis.Get(ctx, cacheKey).Result()
-	if err == nil && cached != "" {
-		var cachedResponse []MetaAnalyticsResponse
-		if err := json.Unmarshal([]byte(cached), &cachedResponse); err == nil {
-			a.Log.Debug("Meta analytics cache hit", "cache_key", cacheKey)
-			return r.SendEnvelope(map[string]interface{}{
-				"accounts": cachedResponse,
-				"cached":   true,
-			})
+	if a.Redis != nil {
+		cached, err := a.Redis.Get(ctx, cacheKey).Result()
+		if err == nil && cached != "" {
+			var cachedResponse []MetaAnalyticsResponse
+			if err := json.Unmarshal([]byte(cached), &cachedResponse); err == nil {
+				a.Log.Debug("Meta analytics cache hit", "cache_key", cacheKey)
+				return r.SendEnvelope(map[string]interface{}{
+					"accounts": cachedResponse,
+					"cached":   true,
+				})
+			}
 		}
 	}
 
@@ -325,8 +327,10 @@ func (a *App) GetMetaAnalytics(r *fastglue.Request) error {
 
 	// Cache the results
 	cacheTTL := a.getMetaAnalyticsCacheTTL(granularity)
-	if cacheData, err := json.Marshal(results); err == nil {
-		a.Redis.Set(ctx, cacheKey, cacheData, cacheTTL)
+	if a.Redis != nil {
+		if cacheData, err := json.Marshal(results); err == nil {
+			a.Redis.Set(ctx, cacheKey, cacheData, cacheTTL)
+		}
 	}
 
 	response := map[string]interface{}{

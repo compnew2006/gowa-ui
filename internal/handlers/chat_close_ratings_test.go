@@ -192,8 +192,12 @@ func TestParseInboundRatingValue_SupportsLocalizedDigitsAndComments(t *testing.T
 		{name: "arabic with comment", input: "٧ ممتاز", wantValue: 7, wantOK: true},
 		{name: "leading rtl mark", input: "\u200f٧ ممتاز", wantValue: 7, wantOK: true},
 		{name: "out of range", input: "11", wantValue: 0, wantOK: false},
-		{name: "not leading number", input: "rating 7", wantValue: 0, wantOK: false},
+		{name: "not leading number", input: "rating 7", wantValue: 7, wantOK: true},
 		{name: "non rating token", input: "7pm", wantValue: 0, wantOK: false},
+		{name: "introductory text rating", input: "I rate it a 9", wantValue: 9, wantOK: true},
+		{name: "fraction 9/10", input: "9/10", wantValue: 9, wantOK: true},
+		{name: "fraction 10/10", input: "10/10", wantValue: 10, wantOK: true},
+		{name: "fraction with comment", input: "9/10, thank you", wantValue: 9, wantOK: true},
 	}
 
 	for _, tc := range cases {
@@ -543,3 +547,135 @@ func TestApplyChatCloseRatingSettingsToResult_MergesTemplates(t *testing.T) {
 	assert.Equal(t, "Custom German", result.Templates["de"], "should add German")
 	assert.NotEqual(t, defaultChatCloseRatingTemplates["en"], result.Templates["en"], "English should not be default")
 }
+
+func TestMaybeCaptureChatCloseRating_NonRatingMessageReopensChat(t *testing.T) {
+	app := newProcessorTestApp(t)
+	org, account := createProcessorTestOrg(t, app)
+	closingAgent := testutil.CreateTestUser(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	
+	// Set status to Closed
+	contact.Status = models.ChatStatusClosed
+	require.NoError(t, app.DB.Save(contact).Error)
+
+	// Create pending cycle
+	cycle := models.ChatClosureRating{
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       org.ID,
+		ContactID:            contact.ID,
+		ChatID:               contact.ID,
+		ClosingAgentID:       closingAgent.ID,
+		ClosedAt:             time.Now().UTC(),
+		State:                models.ChatClosureRatingStatePending,
+		CloseMessage:         "Please rate 1-10",
+		CloseMessageLanguage: "en",
+		ContextMessages:      models.JSONB{},
+	}
+	require.NoError(t, app.DB.Create(&cycle).Error)
+
+	// Receive a non-rating message
+	msg := models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		WhatsAppAccount: account.Name,
+		ContactID:       contact.ID,
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeText,
+		Content:         "Wait, I still have a question",
+		Status:          models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(&msg).Error)
+
+	// In chatbot processor: saveIncomingMessage should reopen the chat
+	saved := app.saveIncomingMessage(account, contact, msg.WhatsAppMessageID, string(msg.MessageType), msg.Content, nil, "")
+	require.NotNil(t, saved)
+
+	// Verify the contact is reopened to pending
+	var updatedContact models.Contact
+	require.NoError(t, app.DB.First(&updatedContact, contact.ID).Error)
+	assert.Equal(t, models.ChatStatusPending, updatedContact.Status)
+
+	// Verify the close rating cycle was expired
+	var updatedCycle models.ChatClosureRating
+	require.NoError(t, app.DB.First(&updatedCycle, cycle.ID).Error)
+	assert.Equal(t, models.ChatClosureRatingStateExpired, updatedCycle.State)
+}
+
+func TestMaybeCaptureChatCloseRating_CorrectionRuneLengthLimit(t *testing.T) {
+	app := newProcessorTestApp(t)
+	org, account := createProcessorTestOrg(t, app)
+	closingAgent := testutil.CreateTestUser(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	// Create rated cycle
+	cycle := models.ChatClosureRating{
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       org.ID,
+		ContactID:            contact.ID,
+		ChatID:               contact.ID,
+		ClosingAgentID:       closingAgent.ID,
+		ClosedAt:             time.Now().UTC(),
+		State:                models.ChatClosureRatingStateRated,
+		Rating:               intPtr(9),
+		RatingMessage:        "9",
+		CloseMessage:         "Please rate 1-10",
+		CloseMessageLanguage: "en",
+		ContextMessages:      models.JSONB{"followup": map[string]any{"remaining_messages": 2, "expires_at": time.Now().UTC().Add(15*time.Minute).Format(time.RFC3339)}},
+	}
+	require.NoError(t, app.DB.Create(&cycle).Error)
+
+	// Send a comment containing a rating digit, but exceeding 15 runes (e.g. "Actually I have 2 questions")
+	msg := models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		WhatsAppAccount: account.Name,
+		ContactID:       contact.ID,
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeText,
+		Content:         "Actually I have 2 questions about the product",
+		Status:          models.MessageStatusReceived,
+	}
+	require.NoError(t, app.DB.Create(&msg).Error)
+
+	captured := app.maybeCaptureChatCloseRating(org.ID, contact, incomingMessagePayload{MessageType: "text", MessageText: msg.Content}, &msg)
+	assert.True(t, captured)
+
+	// Verify rating remains 9 (not updated to 2)
+	var updatedCycle models.ChatClosureRating
+	require.NoError(t, app.DB.First(&updatedCycle, cycle.ID).Error)
+	require.NotNil(t, updatedCycle.Rating)
+	assert.Equal(t, 9, *updatedCycle.Rating)
+}
+
+func TestChatCloseRatingCleanupWorker_ExpiresUnanswered(t *testing.T) {
+	app := newProcessorTestApp(t)
+	org, _ := createProcessorTestOrg(t, app)
+	closingAgent := testutil.CreateTestUser(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID)
+
+	// Create an expired pending cycle (expires_at is 15 minutes ago)
+	expiredTime := time.Now().UTC().Add(-20 * time.Minute)
+	cycle := models.ChatClosureRating{
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       org.ID,
+		ContactID:            contact.ID,
+		ChatID:               contact.ID,
+		ClosingAgentID:       closingAgent.ID,
+		ClosedAt:             expiredTime,
+		State:                models.ChatClosureRatingStatePending,
+		CloseMessage:         "Please rate 1-10",
+		CloseMessageLanguage: "en",
+		ContextMessages:      models.JSONB{"followup": map[string]any{"expires_at": expiredTime.Add(15*time.Minute).Format(time.RFC3339)}},
+	}
+	require.NoError(t, app.DB.Create(&cycle).Error)
+
+	worker := NewChatCloseRatingCleanupWorker(app, 1*time.Second)
+	worker.runOnce(time.Now().UTC())
+
+	var updatedCycle models.ChatClosureRating
+	require.NoError(t, app.DB.First(&updatedCycle, cycle.ID).Error)
+	assert.Equal(t, models.ChatClosureRatingStateExpired, updatedCycle.State)
+}
+
+
+

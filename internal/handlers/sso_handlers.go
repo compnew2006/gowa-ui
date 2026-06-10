@@ -139,6 +139,10 @@ func (a *App) InitSSO(r *fastglue.Request) error {
 	stateKey := "sso:state:" + nonce
 
 	// Store state in Redis (5 min TTL)
+	if a.Redis == nil {
+		a.Log.Error("Failed to store SSO state: Redis is unavailable")
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO: state storage is unavailable", nil, "")
+	}
 	if err := a.Redis.Set(r.RequestCtx, stateKey, stateJSON, 5*time.Minute).Err(); err != nil {
 		a.Log.Error("Failed to store SSO state", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to initiate SSO", nil, "")
@@ -179,6 +183,10 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 	defer a.clearSSOStateCookie(r)
 
 	// Retrieve and validate state from Redis
+	if a.Redis == nil {
+		a.redirectWithError(r, "State storage is unavailable")
+		return nil
+	}
 	stateKey := "sso:state:" + stateNonce
 	stateJSON, err := a.Redis.Get(r.RequestCtx, stateKey).Bytes()
 	if err != nil {

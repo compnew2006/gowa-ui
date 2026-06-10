@@ -32,6 +32,12 @@ func (cm *ConnectionManager) reopenClosedContactOnIncoming(
 		return err
 	}
 
+	if err := cm.db.WithContext(ctx).Model(&models.ChatClosureRating{}).
+		Where("contact_id = ? AND state = ?", contact.ID, models.ChatClosureRatingStatePending).
+		Update("state", models.ChatClosureRatingStateExpired).Error; err != nil {
+		cm.logger.Error("Failed to expire pending close rating cycles on contact reopen", "error", err, "contact_id", contact.ID)
+	}
+
 	contact.Status = models.ChatStatusPending
 	contact.AssignedUserID = nil
 	contact.ClosedAt = nil
