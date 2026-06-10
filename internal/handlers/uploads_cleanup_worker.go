@@ -162,6 +162,22 @@ func (w *UploadsCleanupWorker) runDueOrganizations(ctx context.Context, now time
 		"retention_days", effectiveRetention,
 		"scheduled_organizations", len(dueOrganizations),
 	)
+
+	// Per-instance sweep: each instance gets its own retention.
+	rootPath, err := w.app.resolveUploadsRootPath()
+	if err != nil {
+		w.app.Log.Error("Uploads cleanup worker failed to resolve root path for instance sweep", "error", err)
+		return
+	}
+	instanceDeleted, err := w.deleteExpiredInstanceUploadFiles(ctx, rootPath, now.UTC(), dueOrganizations)
+	if err != nil {
+		w.app.Log.Error("Uploads cleanup worker instance sweep failed", "error", err)
+	} else if instanceDeleted > 0 {
+		w.app.Log.Info(
+			"Uploads cleanup worker completed instance sweep",
+			"deleted_files", instanceDeleted,
+		)
+	}
 }
 
 func (w *UploadsCleanupWorker) tryAcquireLock(ctx context.Context) (bool, error) {
