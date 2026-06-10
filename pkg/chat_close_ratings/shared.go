@@ -148,7 +148,14 @@ func isIgnorableRatingRune(r rune) bool {
 }
 
 func ParseInboundRatingValue(raw string) (int, bool) {
-	normalized := LocalizedRatingDigitReplacer.Replace(raw)
+	replaced := LocalizedRatingDigitReplacer.Replace(raw)
+	var sb strings.Builder
+	for _, r := range replaced {
+		if !isIgnorableRatingRune(r) {
+			sb.WriteRune(r)
+		}
+	}
+	normalized := sb.String()
 	trimmed := strings.TrimSpace(normalized)
 	if trimmed == "" {
 		return 0, false

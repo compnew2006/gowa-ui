@@ -38,15 +38,18 @@ func TestDeleteOrganizationQueries_UseFreshScopedSessions(t *testing.T) {
 	require.NoError(t, currentUserQuery.First(&currentUser).Error)
 
 	lookupSQL := strings.ToLower(lookupQuery.Statement.SQL.String())
+	lookupSQL = strings.ReplaceAll(strings.ReplaceAll(lookupSQL, "\"", ""), "`", "")
 	countSQL := strings.ToLower(countQuery.Statement.SQL.String())
+	countSQL = strings.ReplaceAll(strings.ReplaceAll(countSQL, "\"", ""), "`", "")
 	currentUserSQL := strings.ToLower(currentUserQuery.Statement.SQL.String())
+	currentUserSQL = strings.ReplaceAll(strings.ReplaceAll(currentUserSQL, "\"", ""), "`", "")
 
-	require.Contains(t, lookupSQL, "from `organizations`")
-	require.Contains(t, lookupSQL, "`organizations`.`id`")
-	require.Contains(t, countSQL, "from `organizations`")
-	require.NotContains(t, countSQL, "`organizations`.`id`")
-	require.Contains(t, currentUserSQL, "from `users`")
-	require.NotContains(t, currentUserSQL, "from `organizations`")
+	require.Contains(t, lookupSQL, "from organizations")
+	require.Contains(t, lookupSQL, "organizations.id")
+	require.Contains(t, countSQL, "from organizations")
+	require.NotContains(t, countSQL, "organizations.id")
+	require.Contains(t, currentUserSQL, "from users")
+	require.NotContains(t, currentUserSQL, "from organizations")
 }
 
 func TestInstanceUpdates_UseFreshScopedSessions(t *testing.T) {

@@ -93,6 +93,10 @@ func TestGetMetaAnalytics_CacheHit_ReturnsCachedWithoutAPICall(t *testing.T) {
 		})
 	}))
 
+	if app.Redis == nil {
+		t.Skip("Redis is not available, skipping cache hit test")
+	}
+
 	start := time.Now().Add(-24 * time.Hour).Format("2006-01-02")
 	end := time.Now().Format("2006-01-02")
 	params := map[string]string{
