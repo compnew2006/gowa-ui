@@ -100,6 +100,7 @@ Handler return convention: `(*handlers.Envelope, error)` — standardized JSON r
 
 Optional extension interfaces:
 - `PollProvider` — `SendPoll(ctx, instanceID, to, question, options, maxSelections)` for native WhatsApp polls (whatsmeow only)
+- `SendPollVote(ctx, target, selectedOptions)` — Votes on existing polls with proper E2E encryption and LID resolution (whatsmeow only)
 
 Routes requiring Meta use `app.ProviderGuard("meta", handler)` wrapper.
 

@@ -238,6 +238,7 @@
 | POST | `/api/contacts/{id}/typing` | `SendTypingPresence` |
 | POST | `/api/contacts/{id}/messages/{message_id}/reaction` | `SendReaction` |
 | POST | `/api/contacts/{id}/messages/{message_id}/revoke` | `RevokeMessage` |
+| POST | `/api/contacts/{id}/messages/{message_id}/poll-vote` | `SendPollVote` (whatsmeow only) |
 | POST | `/api/messages` | `SendMessage` (legacy) |
 | POST | `/api/messages/template` | `SendTemplateMessage` |
 | POST | `/api/messages/media` | `SendMediaMessage` |

@@ -86,8 +86,10 @@ Whatomate resolves these challenges by providing a robust, highly performant, an
 - **Personalized Recipient Import**: Supports CSV list uploads with parameter mapping (e.g., `{{customer_name}}`), contact-based filtering, or manual text entries.
 - **Queue Workers & Autoscaling**: Distributes recipient jobs across tenant-scoped Redis Streams. A background worker scales active runners based on queue backlogs.
 - **Anti-Spam Controls**: Enforces random inter-message delays (default 20s–45s, absolute minimum floor of 10s) and organization-wide "Strict Inbound Only" sending policies.
-- **WhatsMeow Interactive Polls**: Sends native WhatsApp polls with multi-choice vote logging (WhatsMeow only).
-- **Auto-Campaign Generator**: Runs scheduled workers to automatically generate and start campaigns targeting contacts who had inbound history in a defined window.
+- **WhatsMeow Interactive Polls**: Sends native WhatsApp polls with multi-choice vote logging (WhatsMeow only). Supports both single-select and unlimited multi-select polls. Votes are E2E-encrypted with proper LID resolution for LID-enabled sessions.
+  - **Poll Vote Resolution**: When voting on polls, the system resolves phone-number JIDs to LID JIDs for correct encryption key derivation, and temporarily overrides the bot's store identity to the LID JID during `BuildPollVote()` to ensure proper E2E decryption on the recipient's device.
+  - **Multi-Selection Support**: Polls with `max_selections=0` are treated as unlimited multi-select (rendered as checkboxes). Frontend UI distinguishes between single-select (radio buttons) and multi-select (checkboxes) with appropriate labels.
+  - **Auto-Campaign Generator**: Runs scheduled workers to automatically generate and start campaigns targeting contacts who had inbound history in a defined window.
 
 ### 4.6 Facebook Integration
 - **Account OAuth & Comment Management**: Connects Facebook pages, reads posts, and automatically replies to public comments based on rules or pushes them to WhatsApp as leads.

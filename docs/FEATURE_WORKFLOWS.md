@@ -105,8 +105,23 @@ Complete documentation of all distinct features, their execution paths, inputs, 
 97. [Typing Presence](#97-typing-presence)
 98. [Agent Role Chat Scoping](#98-agent-role-chat-scoping)
 99. [Organization Outbound Mode](#99-organization-outbound-mode)
+101. [WhatsApp Poll Messages — see docs/POLL_MESSAGES_WORKFLOW.md](#101-whatsapp-poll-messages)
 100. [Strict Rollout Mode](#100-strict-rollout-mode)
 51. [Send Restriction Policies](#51-send-restriction-policies)
+## 101. WhatsApp Poll Messages
+
+**Source Files:** `pkg/whatsmeow/adapter_send.go`, `internal/handlers/contacts_messaging.go`, `frontend/src/views/chat/ChatView.vue`
+
+See the dedicated feature doc for complete workflow details:
+
+➡️ **[docs/POLL_MESSAGES_WORKFLOW.md](POLL_MESSAGES_WORKFLOW.md)**
+
+### Quick Summary
+- **Send Native Polls**: Via WhatsMeow provider using `client.BuildPollCreation()`
+- **Vote on Polls**: Full LID resolution support for E2E-encrypted poll votes
+- **Multi-Selection**: Supports both single-select and unlimited multi-select polls
+- **LID Resolution**: Phone-number JIDs resolved to LID JIDs for correct encryption key derivation
+- **E2E Encryption Workaround**: Temporary `Store.ID` override for LID sessions during `BuildPollVote()`
 52. [Agent Chat Visibility Restrictions](#52-agent-chat-visibility-restrictions)
 53. [Contact Account Resolution](#53-contact-account-resolution)
 54. [Contact Repair](#54-contact-repair)
