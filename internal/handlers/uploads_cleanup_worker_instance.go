@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -34,51 +33,19 @@ func RunManualCleanupForInstance(ctx context.Context, app *App, orgID, instanceI
 	orgDir := filepath.Join(rootPath, "orgs", orgID.String())
 	for _, relativeDir := range uploadsCleanupTargetDirs {
 		instanceDir := filepath.Join(orgDir, relativeDir, instanceID.String())
-		if _, err := os.Stat(instanceDir); os.IsNotExist(err) {
-			continue
-		}
-		count, err := deleteExpiredFilesFromDirStatic(rootPath, instanceDir, cutoff)
+		count, err := walkAndDeleteExpiredFiles(walkOptions{
+			RootPath:   rootPath,
+			DirPath:    instanceDir,
+			Cutoff:     cutoff,
+			DB:         app.DB,
+			Log:        app.Log,
+			InstanceID: &instanceID,
+		})
 		if err != nil {
 			return deletedFiles, err
 		}
 		deletedFiles += count
 	}
 
-	return deletedFiles, nil
-}
-
-func deleteExpiredFilesFromDirStatic(rootPath, dirPath string, cutoff time.Time) (int, error) {
-	deletedFiles := 0
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("read directory %q: %w", dirPath, err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			subDir := filepath.Join(dirPath, entry.Name())
-			count, err := deleteExpiredFilesFromDirStatic(rootPath, subDir, cutoff)
-			if err != nil {
-				return deletedFiles, err
-			}
-			deletedFiles += count
-			continue
-		}
-
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		if info.ModTime().Before(cutoff) {
-			fullPath := filepath.Join(dirPath, entry.Name())
-			if err := os.Remove(fullPath); err != nil {
-				continue
-			}
-			deletedFiles++
-		}
-	}
 	return deletedFiles, nil
 }

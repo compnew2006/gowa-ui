@@ -12,6 +12,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
+	"github.com/zerodha/logf"
 	"gorm.io/gorm"
 )
 
@@ -396,20 +397,32 @@ func (w *UploadsCleanupWorker) deleteExpiredOrganizationUploadFiles(rootPath str
 	return deletedFiles, nil
 }
 
-func (w *UploadsCleanupWorker) deleteExpiredFilesFromDir(rootPath, dirPath string, cutoff time.Time, retentionDays int) (int, error) {
-	info, err := os.Stat(dirPath)
+// walkOptions configures a file-deletion sweep. When DB is non-nil, each deleted
+// file is synced to the database (marking media_deleted_at and removing media_assets).
+// When InstanceID is also set, DB queries are scoped to that specific instance.
+type walkOptions struct {
+	RootPath   string
+	DirPath    string
+	Cutoff     time.Time
+	DB         *gorm.DB       // nil = disk-only deletion
+	Log        logf.Logger    // zero-value = no logging
+	InstanceID *uuid.UUID     // nil = org-level DB sync; set = instance-scoped
+}
+
+func walkAndDeleteExpiredFiles(opts walkOptions) (int, error) {
+	info, err := os.Stat(opts.DirPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, nil
 		}
-		return 0, fmt.Errorf("stat uploads directory %q: %w", dirPath, err)
+		return 0, fmt.Errorf("stat uploads directory %q: %w", opts.DirPath, err)
 	}
 	if !info.IsDir() {
 		return 0, nil
 	}
 
 	deletedFiles := 0
-	err = filepath.WalkDir(dirPath, func(path string, entry fs.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(opts.DirPath, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return fmt.Errorf("walk uploads directory %q: %w", path, walkErr)
 		}
@@ -424,65 +437,85 @@ func (w *UploadsCleanupWorker) deleteExpiredFilesFromDir(rootPath, dirPath strin
 		if err != nil {
 			return fmt.Errorf("stat upload file %q: %w", path, err)
 		}
-		if fileInfo.ModTime().After(cutoff) {
+		if fileInfo.ModTime().After(opts.Cutoff) {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(rootPath, path)
+		relPath, err := filepath.Rel(opts.RootPath, path)
 		if err != nil {
 			return fmt.Errorf("resolve upload relative path %q: %w", path, err)
 		}
 
-		now := time.Now().UTC()
-		errDb := w.app.DB.Transaction(func(tx *gorm.DB) error {
-			// 1. Mark legacy local file messages as deleted.
-			if err := tx.Model(&models.Message{}).
-				Where("media_url = ? AND media_deleted_at IS NULL", relPath).
-				Updates(map[string]any{
-					"media_deleted_at": now,
-					"updated_at":       now,
-				}).Error; err != nil {
-				return fmt.Errorf("update legacy local media_deleted_at: %w", err)
-			}
-
-			// 2. Mark object-storage/minio assets with the matching S3Key as deleted.
-			var asset models.MediaAsset
-			if err := tx.Where("s3_key = ?", relPath).First(&asset).Error; err == nil {
-				if err := tx.Model(&models.Message{}).
-					Where("media_asset_id = ? AND media_deleted_at IS NULL", asset.ID).
-					Updates(map[string]any{
-						"media_deleted_at": now,
-						"updated_at":       now,
-					}).Error; err != nil {
-					return fmt.Errorf("update messages media_deleted_at for asset %s: %w", asset.ID, err)
-				}
-
-				if err := tx.Delete(&asset).Error; err != nil {
-					return fmt.Errorf("delete media asset %s: %w", asset.ID, err)
-				}
-			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("lookup media asset for s3_key %s: %w", relPath, err)
-			}
-
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("delete upload file %q: %w", path, err)
-			}
-
-			return nil
-		})
-		if errDb != nil {
-			w.app.Log.Error("Uploads cleanup worker failed to sync database on file deletion", "path", path, "error", errDb)
-			return errDb
+		if err := syncFileDeletion(opts, path, relPath); err != nil {
+			return err
 		}
 
 		deletedFiles++
-		w.app.Log.Info("Uploads cleanup worker deleted file", "path", path, "retention_days", retentionDays)
-
+		opts.Log.Info("Uploads cleanup deleted file", "path", path)
 		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
-
 	return deletedFiles, nil
+}
+
+// syncFileDeletion handles DB sync + disk removal for a single expired file.
+func syncFileDeletion(opts walkOptions, path, relPath string) error {
+	if opts.DB == nil {
+		return os.Remove(path)
+	}
+
+	now := time.Now().UTC()
+	return opts.DB.Transaction(func(tx *gorm.DB) error {
+		// Mark legacy local file messages as deleted, optionally scoped to instance.
+		msgQuery := tx.Model(&models.Message{}).
+			Where("media_url = ? AND media_deleted_at IS NULL", relPath)
+		if opts.InstanceID != nil {
+			msgQuery = msgQuery.Where("instance_id = ?", *opts.InstanceID)
+		}
+		if err := msgQuery.Updates(map[string]any{
+			"media_deleted_at": now,
+			"updated_at":       now,
+		}).Error; err != nil {
+			return fmt.Errorf("update legacy local media_deleted_at: %w", err)
+		}
+
+		// Mark object-storage assets with matching S3Key as deleted.
+		var asset models.MediaAsset
+		if err := tx.Where("s3_key = ?", relPath).First(&asset).Error; err == nil {
+			assetMsgQuery := tx.Model(&models.Message{}).
+				Where("media_asset_id = ? AND media_deleted_at IS NULL", asset.ID)
+			if opts.InstanceID != nil {
+				assetMsgQuery = assetMsgQuery.Where("instance_id = ?", *opts.InstanceID)
+			}
+			if err := assetMsgQuery.Updates(map[string]any{
+				"media_deleted_at": now,
+				"updated_at":       now,
+			}).Error; err != nil {
+				return fmt.Errorf("update messages media_deleted_at for asset %s: %w", asset.ID, err)
+			}
+
+			if err := tx.Delete(&asset).Error; err != nil {
+				return fmt.Errorf("delete media asset %s: %w", asset.ID, err)
+			}
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("lookup media asset for s3_key %s: %w", relPath, err)
+		}
+
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("delete upload file %q: %w", path, err)
+		}
+		return nil
+	})
+}
+
+func (w *UploadsCleanupWorker) deleteExpiredFilesFromDir(rootPath, dirPath string, cutoff time.Time, retentionDays int) (int, error) {
+	return walkAndDeleteExpiredFiles(walkOptions{
+		RootPath: rootPath,
+		DirPath:  dirPath,
+		Cutoff:   cutoff,
+		DB:       w.app.DB,
+		Log:      w.app.Log,
+	})
 }
