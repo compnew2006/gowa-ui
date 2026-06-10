@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
 )
@@ -125,4 +126,16 @@ func parseOrganizationIntSetting(settings models.JSONB, key string, fallback int
 	}
 
 	return fallback
+}
+
+func (a *App) isReady() bool {
+	return a != nil && a.DB != nil && a.Config != nil
+}
+
+func (a *App) resolveUploadsRootPath() (string, error) {
+	return filepath.Abs(a.getMediaStoragePath())
+}
+
+func uploadsCutoffTime(now time.Time, retentionDays int) time.Time {
+	return now.Add(-time.Duration(retentionDays) * 24 * time.Hour)
 }

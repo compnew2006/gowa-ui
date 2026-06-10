@@ -79,7 +79,7 @@ func (w *UploadsCleanupWorker) Stop() {
 }
 
 func (w *UploadsCleanupWorker) RunManualCleanup(ctx context.Context, orgID uuid.UUID, now time.Time) (UploadsCleanupRunResult, error) {
-	if w.app == nil || w.app.DB == nil || w.app.Config == nil {
+	if !w.app.isReady() {
 		return UploadsCleanupRunResult{}, nil
 	}
 
@@ -112,7 +112,7 @@ func (w *UploadsCleanupWorker) RunManualCleanup(ctx context.Context, orgID uuid.
 }
 
 func (w *UploadsCleanupWorker) runDueOrganizations(ctx context.Context, now time.Time) {
-	if w.app == nil || w.app.DB == nil || w.app.Config == nil {
+	if !w.app.isReady() {
 		return
 	}
 
@@ -178,7 +178,7 @@ func (w *UploadsCleanupWorker) tryAcquireLock(ctx context.Context) (bool, error)
 }
 
 func (w *UploadsCleanupWorker) releaseLock(ctx context.Context) {
-	if w == nil || w.app == nil || w.app.DB == nil {
+	if w == nil || !w.app.isReady() {
 		return
 	}
 	if w.app.DB.Dialector.Name() != "postgres" {
@@ -193,7 +193,7 @@ func (w *UploadsCleanupWorker) releaseLock(ctx context.Context) {
 }
 
 func (w *UploadsCleanupWorker) sweepExpiredUploads(ctx context.Context, now time.Time) (UploadsCleanupRunResult, error) {
-	if w == nil || w.app == nil || w.app.DB == nil {
+	if w == nil || !w.app.isReady() {
 		return UploadsCleanupRunResult{}, nil
 	}
 
@@ -342,12 +342,12 @@ func (w *UploadsCleanupWorker) retentionDaysForOrganization(ctx context.Context,
 }
 
 func (w *UploadsCleanupWorker) deleteExpiredUploadFiles(now time.Time, retentionDays int) (int, error) {
-	rootPath, err := filepath.Abs(w.app.getMediaStoragePath())
+	rootPath, err := w.app.resolveUploadsRootPath()
 	if err != nil {
 		return 0, fmt.Errorf("resolve uploads root: %w", err)
 	}
 
-	cutoff := now.Add(-time.Duration(retentionDays) * 24 * time.Hour)
+	cutoff := uploadsCutoffTime(now, retentionDays)
 	deletedFiles := 0
 	for _, relativeDir := range uploadsCleanupTargetDirs {
 		dirPath := filepath.Join(rootPath, relativeDir)

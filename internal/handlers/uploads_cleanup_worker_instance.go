@@ -11,7 +11,7 @@ import (
 )
 
 func RunManualCleanupForInstance(ctx context.Context, app *App, orgID, instanceID uuid.UUID, retentionDays *int) (int, error) {
-	if app == nil || app.DB == nil || app.Config == nil {
+	if !app.isReady() {
 		return 0, nil
 	}
 
@@ -23,12 +23,12 @@ func RunManualCleanupForInstance(ctx context.Context, app *App, orgID, instanceI
 		return 0, fmt.Errorf("uploads cleanup disabled for this instance")
 	}
 
-	rootPath, err := filepath.Abs(app.getMediaStoragePath())
+	rootPath, err := app.resolveUploadsRootPath()
 	if err != nil {
 		return 0, fmt.Errorf("resolve uploads root: %w", err)
 	}
 
-	cutoff := time.Now().UTC().Add(-time.Duration(days) * 24 * time.Hour)
+	cutoff := uploadsCutoffTime(time.Now().UTC(), days)
 	deletedFiles := 0
 
 	orgDir := filepath.Join(rootPath, "orgs", orgID.String())
