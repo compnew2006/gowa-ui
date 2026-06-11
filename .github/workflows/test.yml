@@ -152,7 +152,7 @@ jobs:
         run: mkdir -p internal/frontend/dist && cp -r frontend/dist/* internal/frontend/dist/
 
       - name: Build
-        run: go build -v $(go list ./... | grep -v /scratch/)
+        run: go build -v ./cmd/... ./internal/... ./pkg/... ./plugin/...
 
   mcp-server:
     runs-on: ubuntu-latest
@@ -220,7 +220,7 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run Go vulnerability scan
-        run: govulncheck $(go list ./... | grep -v /scratch/)
+        run: govulncheck ./cmd/... ./internal/... ./pkg/... ./plugin/...
 
       - name: Enforce frontend high-severity audit gate
         run: cd frontend && npm audit --audit-level=high
