@@ -75,7 +75,8 @@ jobs:
           TEST_REDIS_URL: redis://localhost:6379
         run: |
           # -p 1 runs packages sequentially to avoid database conflicts (all packages share the test DB)
-          go test -v -race -p 1 -coverprofile=coverage.out $(go list ./... | grep -v -e /test/ -e /scratch/)
+          PKGS=$(go list ./cmd/... ./internal/... ./pkg/... ./plugin/...)
+          go test -v -race -p 1 -coverprofile=coverage.out $PKGS
 
       - name: Display coverage
         run: go tool cover -func=coverage.out | grep "total:"

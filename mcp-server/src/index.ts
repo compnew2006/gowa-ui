@@ -1,4 +1,3 @@
-import { loadConfig } from './config.js';
 import { Logger } from './logger.js';
 // import { WhatomateClient } from './clients/whatomate-client.js';
 const WhatomateClient = class { constructor(config: any) {} } as any;

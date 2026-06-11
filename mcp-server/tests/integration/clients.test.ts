@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadConfig } from '../../src/config.js';
 // import { WhatomateClient } from '../../src/clients/whatomate-client.js';
 const WhatomateClient = class { constructor(config: any) {} } as any;
 import { OpenAIClient } from '../../src/clients/openai-client.js';
