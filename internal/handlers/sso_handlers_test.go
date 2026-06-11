@@ -100,7 +100,7 @@ func createMockOAuthServer(t *testing.T, userInfoHandler http.HandlerFunc) *http
 
 	return createMockOAuthServerWithTokenHandler(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "test-access-token",
 			"token_type":    "Bearer",
 			"expires_in":    3600,
@@ -386,7 +386,7 @@ func TestApp_InitSSO_UsesRequestedOrganizationSlug(t *testing.T) {
 func TestApp_CallbackSSO_Success(t *testing.T) {
 	// Create mock OAuth server
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "test-user-id",
 			"email": "test@example.com",
 			"name":  "Test User",
@@ -456,14 +456,14 @@ func TestApp_CallbackSSO_UsesConfiguredHTTPClientForTokenExchange(t *testing.T) 
 		assert.Equal(t, expectedVerifier, r.Form.Get("code_verifier"))
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "test-access-token",
 			"token_type":    "Bearer",
 			"expires_in":    3600,
 			"refresh_token": "test-refresh-token",
 		})
 	}, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "test-user-id",
 			"email": "test@example.com",
 			"name":  "Test User",
@@ -587,7 +587,7 @@ func TestApp_CallbackSSO_ExpiredState(t *testing.T) {
 
 func TestApp_CallbackSSO_RejectsMismatchedStateCookie(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "test-user-id",
 			"email": "test@example.com",
 			"name":  "Test User",
@@ -627,7 +627,7 @@ func TestApp_CallbackSSO_RejectsMismatchedStateCookie(t *testing.T) {
 
 func TestApp_CallbackSSO_EmailDomainRestriction(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "test-user-id",
 			"email": "user@restricted.com", // Not in allowed domains
 			"name":  "Test User",
@@ -667,7 +667,7 @@ func TestApp_CallbackSSO_EmailDomainRestriction(t *testing.T) {
 
 func TestApp_CallbackSSO_ExistingLinkedCustomUserSucceeds(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "test-user-id",
 			"email": "existing@example.com",
 			"name":  "Existing User",
@@ -716,7 +716,7 @@ func TestApp_CallbackSSO_ExistingLinkedCustomUserSucceeds(t *testing.T) {
 
 func TestApp_CallbackSSO_RejectsUnlinkedExistingCustomUser(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "test-user-id",
 			"email": "existing@example.com",
 			"name":  "Existing User",
@@ -763,7 +763,7 @@ func TestApp_CallbackSSO_RejectsUnlinkedExistingCustomUser(t *testing.T) {
 
 func TestApp_CallbackSSO_RejectsCrossTenantExistingUser(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "victim-id",
 			"email": "victim@example.com",
 			"name":  "Victim User",
@@ -811,7 +811,7 @@ func TestApp_CallbackSSO_RejectsCrossTenantExistingUser(t *testing.T) {
 
 func TestApp_CallbackSSO_InactiveUser(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "test-user-id",
 			"email": "inactive@example.com",
 			"name":  "Inactive User",
@@ -1201,7 +1201,7 @@ func TestApp_DeleteSSOProvider_Unauthorized(t *testing.T) {
 // Test CallbackSSO user auto-creation disabled
 func TestApp_CallbackSSO_AutoCreateDisabled(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "new-user-id",
 			"email": "newuser@example.com",
 			"name":  "New User",
@@ -1242,7 +1242,7 @@ func TestApp_CallbackSSO_AutoCreateDisabled(t *testing.T) {
 // Test CallbackSSO with invalid email from provider
 func TestApp_CallbackSSO_InvalidEmail(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":    "test-user-id",
 			"email": "invalid-email-format", // Invalid email
 			"name":  "Test User",
@@ -1283,7 +1283,7 @@ func TestApp_CallbackSSO_InvalidEmail(t *testing.T) {
 // Test CallbackSSO with missing email from provider
 func TestApp_CallbackSSO_MissingEmail(t *testing.T) {
 	mockServer := createMockOAuthServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":   "test-user-id",
 			"name": "Test User",
 			// No email field

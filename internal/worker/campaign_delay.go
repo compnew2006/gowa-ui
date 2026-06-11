@@ -55,52 +55,6 @@ func resolveCampaignDelayScopeKey(instanceID string, fallbackCampaignID uuid.UUI
 	return "default"
 }
 
-func (w *Worker) applyCampaignSendDelay(ctx context.Context, delayScopeKey string, minDelaySeconds, maxDelaySeconds int) error {
-	minDelaySeconds, maxDelaySeconds = normalizeCampaignDelaySeconds(minDelaySeconds, maxDelaySeconds)
-	if minDelaySeconds == 0 && maxDelaySeconds == 0 {
-		return nil
-	}
-
-	gapMs, err := randomDelayMilliseconds(minDelaySeconds, maxDelaySeconds)
-	if err != nil {
-		return err
-	}
-	if gapMs <= 0 {
-		return nil
-	}
-
-	if w.Redis == nil {
-		return sleepWithContext(ctx, time.Duration(gapMs)*time.Millisecond)
-	}
-
-	nowMs := time.Now().UnixMilli()
-	ttlMs := int64(campaignDelayReservationTTL / time.Millisecond)
-	rawSendAt, err := reserveCampaignDelaySlotScript.Run(
-		ctx,
-		w.Redis,
-		[]string{campaignDelayRedisKey(delayScopeKey)},
-		nowMs,
-		gapMs,
-		ttlMs,
-	).Result()
-	if err != nil {
-		w.Log.Warn("Failed to reserve campaign delay slot, falling back to local delay", "delay_scope", strings.TrimSpace(delayScopeKey), "error", err)
-		return sleepWithContext(ctx, time.Duration(gapMs)*time.Millisecond)
-	}
-
-	sendAtMs, err := parseScriptResultInt64(rawSendAt)
-	if err != nil {
-		w.Log.Warn("Failed to parse reserved campaign delay slot, falling back to local delay", "delay_scope", strings.TrimSpace(delayScopeKey), "error", err)
-		return sleepWithContext(ctx, time.Duration(gapMs)*time.Millisecond)
-	}
-
-	waitMs := sendAtMs - nowMs
-	if waitMs <= 0 {
-		return nil
-	}
-
-	return sleepWithContext(ctx, time.Duration(waitMs)*time.Millisecond)
-}
 
 func randomDelayMilliseconds(minDelaySeconds, maxDelaySeconds int) (int64, error) {
 	if minDelaySeconds < 0 {

@@ -19,7 +19,7 @@ func createChatbotUser(t *testing.T, app *handlers.App, orgID uuid.UUID, opts ..
 	t.Helper()
 	adminRole := testutil.CreateAdminRole(t, app.DB, orgID)
 	opts = append(opts, testutil.WithRoleID(&adminRole.ID))
-	return createChatbotUser(t, app, orgID, opts...)
+	return testutil.CreateTestUser(t, app.DB, orgID, opts...)
 }
 
 // getChatbotFlowPermissions returns flows.chatbot permissions from the full permission set.

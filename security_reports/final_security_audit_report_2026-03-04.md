@@ -1,7 +1,7 @@
 # Whatomate Comprehensive Security Vulnerability Report
 
 Date: 2026-03-04
-Scope: Full repository (`backend`, `frontend`, `mcp_server`, `docs`, configs)
+Scope: Full repository (`backend`, `frontend`, `docs`, configs)
 Method: Manual review + static analysis + dependency auditing + secret scanning
 
 ## 1) Sub-Agent Team Configuration (20 domain agents)
@@ -38,8 +38,6 @@ All sub-agent outputs were consolidated and severity-ranked using: Critical, Hig
 - `npm audit`:
   - `security_reports/frontend_npm_audit.json`
   - `security_reports/frontend_npm_audit_prod.json`
-  - `security_reports/mcp_server_npm_audit.json`
-  - `security_reports/mcp_server_npm_audit_prod.json`
   - `security_reports/docs_npm_audit.json`
   - `security_reports/docs_npm_audit_prod.json`
 - `gitleaks`: `security_reports/gitleaks.json`, `security_reports/gitleaks.log`
@@ -49,7 +47,6 @@ Scan snapshots:
 - `govulncheck`: 3 reachable stdlib vulns in current code paths
 - npm audits:
   - frontend all deps: 6 high; frontend prod: 0
-  - mcp_server all deps: 1 high, 5 moderate; mcp_server prod: 0
   - docs all/prod: 1 high (`rollup` path traversal advisory)
 - gitleaks: 46 matches, with one high-confidence repo secret in `config.toml`
 
@@ -300,7 +297,6 @@ Scan snapshots:
 ### I-01: npm Audit Findings Mostly in Dev/Test Dependency Chains
 - Evidence:
   - frontend prod: 0 vulnerabilities
-  - mcp_server prod: 0 vulnerabilities
   - all-deps scans include dev tooling vulns (`minimatch`, `vite/vitest` chains)
 - Recommendation:
   - Still patch for CI/build hygiene and future supply-chain safety.

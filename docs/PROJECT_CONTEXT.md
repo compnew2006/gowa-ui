@@ -318,9 +318,6 @@ go test -v -race -p 1 ./...  # CI mode (sequential)
 cd frontend
 npm run test:unit          # Vitest
 npm run test:e2e           # Playwright (Chromium)
-
-# MCP Server
-cd mcp-server && npm ci && npm run test
 ```
 
 ### Linting

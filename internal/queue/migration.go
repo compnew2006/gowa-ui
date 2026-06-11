@@ -415,7 +415,7 @@ func appendMigrationSample(dst *[]string, value string) {
 
 func acquireCampaignMigrationLock(ctx context.Context, client *redis.Client, ttl time.Duration) (string, error) {
 	token := uuid.NewString()
-	ok, err := client.SetNX(ctx, campaignMigrationLockKey, token, ttl).Result()
+	ok, err := client.SetNX(ctx, campaignMigrationLockKey, token, ttl).Result() //nolint:staticcheck // SA1019
 	if err != nil {
 		return "", fmt.Errorf("acquire campaign migration lock: %w", err)
 	}

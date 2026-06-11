@@ -18,8 +18,6 @@ type stubWhatsmeowContactResolver struct {
 	result         *ResolvedWhatsmeowDirectContact
 	err            error
 	receivedPhone  string
-	receivedOrgID  uuid.UUID
-	receivedUserID uuid.UUID
 	receivedInstID uuid.UUID
 }
 

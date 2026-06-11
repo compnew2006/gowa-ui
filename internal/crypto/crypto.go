@@ -172,7 +172,7 @@ func DecryptWithPolicy(ciphertext, key string, allowLegacy bool) (string, error)
 	}
 
 	keyBytes := deriveKeyV2(trimmed)
-	payload := ciphertext
+	payload := ciphertext //nolint:ineffassign // payload is always reassigned below
 	if strings.HasPrefix(ciphertext, legacyPrefix) {
 		keyBytes = deriveLegacyKey(trimmed)
 		payload = ciphertext[len(legacyPrefix):]

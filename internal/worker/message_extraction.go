@@ -86,8 +86,7 @@ func (w *Worker) HandleMessageExtractionJob(ctx context.Context, job *queue.Mess
 		chatMap[jid] = &result
 	}
 
-	var contactMap map[string]models.Contact
-	contactMap = make(map[string]models.Contact)
+		contactMap := make(map[string]models.Contact)
 	for _, c := range contacts {
 		if c.InstanceID != nil && *c.InstanceID == job.InstanceID {
 			contactMap[c.ID.String()] = c

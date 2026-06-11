@@ -12,7 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	"gorm.io/gorm"
 )
 
@@ -257,15 +256,6 @@ func TestInvalidateRolePermissionsCache(t *testing.T) {
 // Helper functions
 
 // newFastHTTPCtx creates a fasthttp.RequestCtx for testing
-func newFastHTTPCtx(method, path string, body []byte) *fasthttp.RequestCtx {
-	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.Header.SetMethod(method)
-	ctx.Request.SetRequestURI(path)
-	if body != nil {
-		ctx.Request.SetBody(body)
-	}
-	return ctx
-}
 
 // createAppWithRedis creates an App with miniredis for testing
 func createAppWithRedis(t *testing.T, mr *miniredis.Miniredis) *handlers.App {

@@ -907,4 +907,3 @@ Key config sections: `[server]`, `[database]`, `[redis]`, `[whatsapp]` (provider
 | `internal/licensestudio/` | License management HTTP server |
 | `internal/campaignstats/` | Campaign receipt aggregation |
 | `frontend/` | Vue 3 SPA (Vite + Pinia + TypeScript + shadcn-vue + Tailwind) |
-| `mcp-server/` | MCP sidecar (Node.js) |

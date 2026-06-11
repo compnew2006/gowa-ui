@@ -1214,22 +1214,7 @@ func (a *App) sendFacebookDirectMessengerMessage(oauthCfg facebookOAuthRuntimeCo
 	return a.facebookGraphJSONPost(endpoint, body)
 }
 
-func facebookPrivateReplyCommentID(commentExternalID string) string {
-	commentExternalID = strings.TrimSpace(commentExternalID)
-	if idx := strings.LastIndex(commentExternalID, "_"); idx >= 0 && idx+1 < len(commentExternalID) {
-		return commentExternalID[idx+1:]
-	}
-	return commentExternalID
-}
 
-func isFacebookUnsupportedObjectError(payload map[string]any) bool {
-	rawErr, ok := payload["error"].(map[string]any)
-	if !ok {
-		return false
-	}
-	return strings.TrimSpace(fmt.Sprint(rawErr["code"])) == "100" &&
-		strings.TrimSpace(fmt.Sprint(rawErr["error_subcode"])) == "33"
-}
 
 func isFacebookUserCantDMError(err error) bool {
 	if err == nil {

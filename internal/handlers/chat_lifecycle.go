@@ -159,9 +159,6 @@ func (a *App) shouldRestrictChatVisibilityToAgentScope(userID, orgID uuid.UUID) 
 	return strings.EqualFold(strings.TrimSpace(perms.RoleName), "agent")
 }
 
-func applyAssignedOrPublicContactAccessFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB {
-	return query.Where("(assigned_user_id = ? OR is_public = ?)", userID, true)
-}
 
 func applyAgentVisibleChatAccessFilter(query *gorm.DB, userID uuid.UUID) *gorm.DB {
 	return query.Where(

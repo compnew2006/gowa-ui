@@ -614,7 +614,7 @@ func isTransientError(err error) bool {
 	// 1. Check if the error implements net.Error and is temporary or timeout.
 	var netErr net.Error
 	if errors.As(err, &netErr) {
-		if netErr.Timeout() || netErr.Temporary() {
+		if netErr.Timeout() {
 			return true
 		}
 	}

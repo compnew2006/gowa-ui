@@ -12,7 +12,6 @@ This report identifies 100% of the occurrences of 'Whatomate' / 'whatomat' acros
 | package.json | ./docs/package.json | Unknown / Generic Ref | Surgical Replace |
 | package.json | ./frontend/package.json | Unknown / Generic Ref | Surgical Replace |
 | go.mod | ./go.mod | Module Identity | Module Rename |
-| package.json | ./mcp-server/package.json | Unknown / Generic Ref | Surgical Replace |
 
 
 ## Backend (Identity/Integrations)
@@ -257,7 +256,6 @@ This report identifies 100% of the occurrences of 'Whatomate' / 'whatomat' acros
 | ARCHITECTURE_RISK_REPORT.md | ./ARCHITECTURE_RISK_REPORT.md | Unknown / Generic Ref | Surgical Replace |
 | CONTRIBUTING.md | ./CONTRIBUTING.md | Unknown / Generic Ref | Surgical Replace |
 | README.md | ./README.md | Unknown / Generic Ref | Surgical Replace |
-| README.md | ./mcp-server/README.md | Unknown / Generic Ref | Surgical Replace |
 | requirements.md | ./specs/001-whatsmeow-integration/checklists/requirements.md | Unknown / Generic Ref | Surgical Replace |
 | data-model.md | ./specs/001-whatsmeow-integration/data-model.md | Unknown / Generic Ref | Surgical Replace |
 | plan.md | ./specs/001-whatsmeow-integration/plan.md | Unknown / Generic Ref | Surgical Replace |
@@ -634,52 +632,6 @@ This report identifies 100% of the occurrences of 'Whatomate' / 'whatomat' acros
 | send_policy.go | ./internal/worker/send_policy.go | Unknown / Generic Ref | Surgical Replace |
 | worker.go | ./internal/worker/worker.go | Unknown / Generic Ref | Surgical Replace |
 | large_files_report.md | ./large_files_report.md | Unknown / Generic Ref | Surgical Replace |
-| .env.example | ./mcp-server/.env.example | Unknown / Generic Ref | Surgical Replace |
-| whatomate-client.js | ./mcp-server/dist/src/clients/whatomate-client.js | Unknown / Generic Ref | Surgical Replace |
-| config.js | ./mcp-server/dist/src/config.js | Unknown / Generic Ref | Surgical Replace |
-| index.js | ./mcp-server/dist/src/index.js | Unknown / Generic Ref | Surgical Replace |
-| server.js | ./mcp-server/dist/src/mcp/server.js | Unknown / Generic Ref | Surgical Replace |
-| campaign-brief.js | ./mcp-server/dist/src/prompts/campaign-brief.js | Unknown / Generic Ref | Surgical Replace |
-| draft-reply.js | ./mcp-server/dist/src/prompts/draft-reply.js | Unknown / Generic Ref | Surgical Replace |
-| handoff-summary.js | ./mcp-server/dist/src/prompts/handoff-summary.js | Unknown / Generic Ref | Surgical Replace |
-| analytics.js | ./mcp-server/dist/src/resources/analytics.js | Unknown / Generic Ref | Surgical Replace |
-| campaigns.js | ./mcp-server/dist/src/resources/campaigns.js | Unknown / Generic Ref | Surgical Replace |
-| contacts.js | ./mcp-server/dist/src/resources/contacts.js | Unknown / Generic Ref | Surgical Replace |
-| organization.js | ./mcp-server/dist/src/resources/organization.js | Unknown / Generic Ref | Surgical Replace |
-| analytics.js | ./mcp-server/dist/src/tools/analytics.js | Unknown / Generic Ref | Surgical Replace |
-| campaigns.js | ./mcp-server/dist/src/tools/campaigns.js | Unknown / Generic Ref | Surgical Replace |
-| contacts.js | ./mcp-server/dist/src/tools/contacts.js | Unknown / Generic Ref | Surgical Replace |
-| messages.js | ./mcp-server/dist/src/tools/messages.js | Unknown / Generic Ref | Surgical Replace |
-| openai.js | ./mcp-server/dist/src/tools/openai.js | Unknown / Generic Ref | Surgical Replace |
-| workflow.e2e.test.js | ./mcp-server/dist/tests/e2e/workflow.e2e.test.js | Unknown / Generic Ref | Surgical Replace |
-| clients.test.js | ./mcp-server/dist/tests/integration/clients.test.js | Unknown / Generic Ref | Surgical Replace |
-| transports.test.js | ./mcp-server/dist/tests/integration/transports.test.js | Unknown / Generic Ref | Surgical Replace |
-| mock-services.js | ./mcp-server/dist/tests/support/mock-services.js | Unknown / Generic Ref | Surgical Replace |
-| config.test.js | ./mcp-server/dist/tests/unit/config.test.js | Unknown / Generic Ref | Surgical Replace |
-| .package-lock.json | ./mcp-server/node_modules/.package-lock.json | Unknown / Generic Ref | Surgical Replace |
-| package-lock.json | ./mcp-server/package-lock.json | Unknown / Generic Ref | Surgical Replace |
-| whatomate-client.ts | ./mcp-server/src/clients/whatomate-client.ts | Unknown / Generic Ref | Surgical Replace |
-| config.ts | ./mcp-server/src/config.ts | Unknown / Generic Ref | Surgical Replace |
-| index.ts | ./mcp-server/src/index.ts | Unknown / Generic Ref | Surgical Replace |
-| server.ts | ./mcp-server/src/mcp/server.ts | Unknown / Generic Ref | Surgical Replace |
-| types.ts | ./mcp-server/src/mcp/types.ts | Unknown / Generic Ref | Surgical Replace |
-| campaign-brief.ts | ./mcp-server/src/prompts/campaign-brief.ts | Unknown / Generic Ref | Surgical Replace |
-| draft-reply.ts | ./mcp-server/src/prompts/draft-reply.ts | Unknown / Generic Ref | Surgical Replace |
-| handoff-summary.ts | ./mcp-server/src/prompts/handoff-summary.ts | Unknown / Generic Ref | Surgical Replace |
-| analytics.ts | ./mcp-server/src/resources/analytics.ts | Unknown / Generic Ref | Surgical Replace |
-| campaigns.ts | ./mcp-server/src/resources/campaigns.ts | Unknown / Generic Ref | Surgical Replace |
-| contacts.ts | ./mcp-server/src/resources/contacts.ts | Unknown / Generic Ref | Surgical Replace |
-| organization.ts | ./mcp-server/src/resources/organization.ts | Unknown / Generic Ref | Surgical Replace |
-| analytics.ts | ./mcp-server/src/tools/analytics.ts | Unknown / Generic Ref | Surgical Replace |
-| campaigns.ts | ./mcp-server/src/tools/campaigns.ts | Unknown / Generic Ref | Surgical Replace |
-| contacts.ts | ./mcp-server/src/tools/contacts.ts | Unknown / Generic Ref | Surgical Replace |
-| messages.ts | ./mcp-server/src/tools/messages.ts | Unknown / Generic Ref | Surgical Replace |
-| openai.ts | ./mcp-server/src/tools/openai.ts | Unknown / Generic Ref | Surgical Replace |
-| workflow.e2e.test.ts | ./mcp-server/tests/e2e/workflow.e2e.test.ts | Unknown / Generic Ref | Surgical Replace |
-| clients.test.ts | ./mcp-server/tests/integration/clients.test.ts | Unknown / Generic Ref | Surgical Replace |
-| transports.test.ts | ./mcp-server/tests/integration/transports.test.ts | Unknown / Generic Ref | Surgical Replace |
-| mock-services.ts | ./mcp-server/tests/support/mock-services.ts | Unknown / Generic Ref | Surgical Replace |
-| config.test.ts | ./mcp-server/tests/unit/config.test.ts | Unknown / Generic Ref | Surgical Replace |
 | .package-lock.json | ./node_modules/.package-lock.json | Unknown / Generic Ref | Surgical Replace |
 | package-lock.json | ./package-lock.json | Unknown / Generic Ref | Surgical Replace |
 | migrate.go | ./pkg/migration/migrate.go | Unknown / Generic Ref | Surgical Replace |

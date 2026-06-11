@@ -679,4 +679,3 @@ type TenantWorkerRuntime struct {
 | التشفير | AES-256 | `internal/crypto/` |
 | التكوين | TOML + koanf | `internal/config/` |
 | الواجهة | Vue 3 + shadcn-vue | `frontend/` |
-| MCP Sidecar | Node.js | `mcp-server/` |

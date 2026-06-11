@@ -201,63 +201,6 @@ Recommended workflow:
 
 `make dev-watch` uses `air` for Go hot reload and reruns the backend with `-migrate`, so model/schema changes are picked up on restart. The first run auto-installs `air` if it is missing.
 
-## MCP Sidecar
-
-This repository includes a production MCP sidecar in [`mcp-server`](./mcp-server), implemented with `@modelcontextprotocol/sdk@1.27.0`.
-
-Implementation highlights:
-
-- Modular MCP server with dedicated registries for Tools, Resources, and Prompts
-- Typed Whatomate API client with envelope parsing, timeout budget, and retry-on-GET behavior
-- OpenAI connector example (`whatomate_openai_summarize_conversation`)
-- Transport support for:
-  - `stdio` (local MCP host integration)
-  - Streamable HTTP `/mcp` (primary remote transport)
-  - Legacy SSE compatibility (`/sse`, `/messages`) behind feature flag
-- Security hardening with bearer auth, Zod input/config validation, outbound host allowlisting, and sanitized errors
-
-Quick start (stdio):
-
-```bash
-cd mcp-server
-npm install
-cp .env.example .env
-npm run build
-MCP_TRANSPORT=stdio \
-WHATOMATE_BASE_URL=http://localhost:8080 \
-WHATOMATE_API_KEY=whm_replace_me \
-OPENAI_API_KEY=sk_replace_me \
-npm run start:stdio
-```
-
-Quick start (HTTP):
-
-```bash
-cd mcp-server
-MCP_TRANSPORT=http \
-MCP_HTTP_HOST=127.0.0.1 \
-MCP_HTTP_PORT=3000 \
-MCP_HTTP_BEARER_TOKEN=replace_me \
-WHATOMATE_BASE_URL=http://localhost:8080 \
-WHATOMATE_API_KEY=whm_replace_me \
-OPENAI_API_KEY=sk_replace_me \
-npm run start:http
-```
-
-HTTP endpoints:
-
-- `POST/GET/DELETE /mcp` (MCP streamable HTTP transport)
-- `GET /healthz`
-- `GET /sse` + `POST /messages` (only when `MCP_ENABLE_LEGACY_SSE=true`)
-
-Compose profile:
-
-```bash
-docker compose -f docker/docker-compose.yml --profile mcp up -d --build
-```
-
-For full implementation details, environment reference, and TypeScript client usage example, see [`mcp-server/README.md`](./mcp-server/README.md).
-
 ## License
 
 See [LICENSE](LICENSE) for details.

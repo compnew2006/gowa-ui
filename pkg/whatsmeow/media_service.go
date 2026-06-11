@@ -394,7 +394,7 @@ func streamMediaWithPathToWriter(
 		return 0, fmt.Errorf("media download path does not start with slash: %s", directPath)
 	}
 
-	mediaConn, err := client.DangerousInternals().RefreshMediaConn(ctx, false)
+	mediaConn, err := client.DangerousInternals().RefreshMediaConn(ctx, false) //nolint:staticcheck // SA1019
 	if err != nil {
 		return 0, fmt.Errorf("refresh media connections: %w", err)
 	}
@@ -445,7 +445,7 @@ func streamMediaURLToWriter(
 	fileSHA256 []byte,
 	dst io.Writer,
 ) (int64, error) {
-	resp, err := client.DangerousInternals().DoMediaDownloadRequest(ctx, url)
+	resp, err := client.DangerousInternals().DoMediaDownloadRequest(ctx, url) //nolint:staticcheck // SA1019
 	if err != nil {
 		return 0, err
 	}

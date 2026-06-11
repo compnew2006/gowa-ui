@@ -362,27 +362,6 @@ func (cm *ConnectionManager) handleReceipt(ctx context.Context, evt *events.Rece
 	}
 }
 
-func (cm *ConnectionManager) isStatusReceiptMessageID(ctx context.Context, orgID, instanceID uuid.UUID, waMessageID string) bool {
-	if cm == nil || cm.db == nil {
-		return false
-	}
-	trimmedMessageID := strings.TrimSpace(waMessageID)
-	if trimmedMessageID == "" {
-		return false
-	}
-
-	var count int64
-	if err := cm.db.WithContext(ctx).
-		Model(&models.WhatsAppStatus{}).
-		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?",
-			orgID, instanceID, trimmedMessageID).
-		Count(&count).Error; err != nil {
-		cm.logger.Debug("Failed to check status receipt message id", "message_id", trimmedMessageID, "error", err)
-		return false
-	}
-
-	return count > 0
-}
 
 // statusReceiptMessageIDs returns a set of message IDs that are status receipts,
 // batched into a single DB query instead of N individual lookups.

@@ -234,12 +234,6 @@ func agentSelectionWriteDB(db *gorm.DB) *gorm.DB {
 	return db.Session(&gorm.Session{})
 }
 
-func agentSelectionReadDB(db *gorm.DB) *gorm.DB {
-	if db == nil {
-		return db
-	}
-	return db.Session(&gorm.Session{})
-}
 
 func trimOptionalString(value *string) string {
 	if value == nil {

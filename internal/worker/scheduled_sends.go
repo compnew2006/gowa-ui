@@ -102,7 +102,7 @@ func (w *Worker) runScheduledSendsPoller(ctx context.Context) {
 
 func (w *Worker) pollScheduledSends(ctx context.Context) error {
 	now := float64(time.Now().UnixMilli())
-	results, err := w.Redis.ZRangeByScore(ctx, scheduledSendsKey, &redis.ZRangeBy{
+	results, err := w.Redis.ZRangeByScore(ctx, scheduledSendsKey, &redis.ZRangeBy{ //nolint:staticcheck // SA1019
 		Min:   "-inf",
 		Max:   fmt.Sprintf("%f", now),
 		Count: scheduledSendsBatchSize,

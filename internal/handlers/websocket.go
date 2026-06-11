@@ -128,9 +128,6 @@ func wsTokenFromProtocols(protocolHeader string) string {
 
 // validateWSTokenFn returns a function that validates a JWT token
 // and returns user ID and organization ID.
-func (a *App) validateWSTokenFn() ws.AuthenticateFn {
-	return a.validateWSToken
-}
 
 func (a *App) canSubscribeToContactUpdates(userID, orgID, contactID uuid.UUID) bool {
 	if userID == uuid.Nil || orgID == uuid.Nil || contactID == uuid.Nil {

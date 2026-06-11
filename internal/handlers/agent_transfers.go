@@ -366,7 +366,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	// Build response from flat joined rows
 	response := make([]AgentTransferResponse, len(transfers))
 	for i, t := range transfers {
-		phoneNumber, contactName := maskContactPhoneAndName(t.PhoneNumber, "", shouldMask)
+		phoneNumber, _ := maskContactPhoneAndName(t.PhoneNumber, "", shouldMask)
 
 		resp := AgentTransferResponse{
 			ID:              t.ID.String(),
@@ -380,6 +380,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 			TransferredAt:   t.TransferredAt.Format(time.RFC3339),
 		}
 
+		var contactName string
 		if t.ContactName != nil {
 			_, contactName = maskContactPhoneAndName("", *t.ContactName, shouldMask)
 			resp.ContactName = contactName
