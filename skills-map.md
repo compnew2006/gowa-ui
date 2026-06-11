@@ -3,6 +3,7 @@
 
 | Skill ID | File | Description | Best For |
 |----------|------|-------------|----------|
+| `mcp-code-operations` | `.pi/skills/mcp-code-operations/SKILL.md` | Mandatory MCP-only code operations policy for Whatomate. Routes Socraticode for live code understanding and function relationships, codebase-memory-mcp for project memory/patterns, and Serena for source read/edit/create/remove. | Every source-code search, edit, create, remove, refactor, debug, or verification task |
 | `401-403-bypass-techniques` | `.agents/skills/401-403-bypass-techniques/SKILL.md` | 401/403 bypass playbook. Use when encountering access-denied responses on admin panels, API endpoints, or restricted paths. Covers path manipulation, HTTP method tampering, header injection, protoc... | 401 403 bypass techniques |
 | `AgentDB Advanced Features` | `.claude/skills/agentdb-advanced/SKILL.md` | Master advanced AgentDB features including QUIC synchronization, multi-database management, custom distance metrics, hybrid search, and distributed systems integration. Use when building distribute... | Agentdb advanced features |
 | `AgentDB Learning Plugins` | `.claude/skills/agentdb-learning/SKILL.md` | Create and train AI learning plugins with AgentDB's 9 reinforcement learning algorithms. Includes Decision Transformer, Q-Learning, SARSA, Actor-Critic, and more. Use when building self-learning ag... | Agentdb learning plugins |

@@ -512,6 +512,14 @@ TEST_DATABASE_URL="postgres://test:test@127.0.0.1:5433/test?sslmode=disable" go 
 - Aligned tests compile and pass cleanly: `go test -v ./pkg/whatsmeow/...` -> PASS.
 - Full ratings and handlers suite pass: `go test -p 1 -v ./pkg/chat_close_ratings/... ./internal/handlers/...` -> PASS.
 
+## Whatomate AGENTS project guide and MCP skill — 2026-06-11
+
+- Rewrote `AGENTS.md` from a generic orchestrator into a Whatomate-specific project guide with tech stack, critical paths, plugin-first architecture, tenancy/security rules, verification commands, and Pi usage instructions.
+- Added `.pi/skills/mcp-code-operations/SKILL.md` to enforce MCP-only source-code operations.
+- Updated `.gitignore` so project-level Pi skills can be tracked while local Pi runtime/cache/session state remains ignored.
+- Updated `skills-map.md` to route code work to `mcp-code-operations`.
+- MCP split documented: Socraticode for code understanding/function relationships/impact; codebase-memory-mcp for persistent architecture memory and patterns; Serena for precise source read/edit/create/remove.
+
 <!-- END -->
 
 ## Per-Instance Uploads Cleanup Implementation — 2026-06-06

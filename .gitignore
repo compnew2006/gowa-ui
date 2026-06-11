@@ -88,7 +88,24 @@ test-results/
 # CocoIndex runtime/index artifacts
 .cocoindex_code/
 
-# Developer-local Claude settings
+# Agent harness configuration
+# Track project-level Pi skills; keep runtime/cache/local state out of git.
+!.pi/
+!.pi/skills/
+!.pi/skills/**/
+!.pi/skills/**/SKILL.md
+!.pi/skills/**/references/
+!.pi/skills/**/references/**
+!.pi/settings.json
+.pi/cache/
+.pi/tmp/
+.pi/runs/
+.pi/sessions/
+.pi/logs/
+.pi/state/
+.pi/*.local.json
+
+# Developer-local agent settings and third-party skill libraries
 .claude/settings.local.json
 .claude/*.local.json
 .agent/
