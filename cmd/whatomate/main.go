@@ -450,7 +450,7 @@ func runServer(args []string) {
 	go func() {
 		lo.Info("Server listening", "address", addr)
 		if err := server.ListenAndServe(addr); err != nil {
-			lo.Fatal("Server failed", "error", err)
+			lo.Error("Server error", "error", err)
 		}
 	}()
 
@@ -590,6 +590,13 @@ func runServer(args []string) {
 
 	lo.Info("Shutting down...")
 
+	// Force exit after 30s if graceful shutdown hangs.
+	go func() {
+		<-time.After(30 * time.Second)
+		lo.Warn("Graceful shutdown timed out, forcing exit")
+		os.Exit(0)
+	}()
+
 	// Stop campaign stats subscriber
 	lo.Info("Stopping campaign stats subscriber...")
 	app.StopCampaignStatsSubscriber()
@@ -683,6 +690,8 @@ func runServer(args []string) {
 		lo.Error("Server shutdown error", "error", err)
 	}
 	lo.Info("Server stopped")
+
+	os.Exit(0)
 }
 
 // ============================================================================
