@@ -103,6 +103,22 @@ jobs:
           go-version: "1.25.8"
           cache: true
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Copy frontend dist for embedding
+        run: mkdir -p internal/frontend/dist && cp -r frontend/dist/* internal/frontend/dist/
+
       - name: Build
         run: go build -v ./...
 
@@ -149,16 +165,7 @@ jobs:
           go-version: "1.25.8"
           cache: true
 
-      - name: Download Go dependencies
-        run: go mod download
-
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - name: Run Go vulnerability scan
-        run: govulncheck ./...
-
-      - name: Set up Node.js for frontend audit
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -167,6 +174,21 @@ jobs:
 
       - name: Install frontend dependencies
         run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Copy frontend dist for embedding
+        run: mkdir -p internal/frontend/dist && cp -r frontend/dist/* internal/frontend/dist/
+
+      - name: Download Go dependencies
+        run: go mod download
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run Go vulnerability scan
+        run: govulncheck ./...
 
       - name: Enforce frontend high-severity audit gate
         run: cd frontend && npm audit --audit-level=high
