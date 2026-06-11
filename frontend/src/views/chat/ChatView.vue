@@ -3478,13 +3478,18 @@ async function voteOnPoll(message: Message, option: string) {
   if (!selectedOptions) return;
   if (pollVoteSending.value.get(message.id)) return;
 
+  // Snapshot the previous selection so we can roll back on failure.
+  const previousSelection = getCurrentPollSelection(message);
+
   pollVoteSending.value.set(message.id, true);
   try {
     await messagesService.sendPollVote(message.id, selectedOptions);
     pollVoteSelected.value.set(message.id, selectedOptions);
     toast.success("Vote sent");
   } catch (e: unknown) {
-    toast.error(getErrorMessage(e));
+    // Roll back the optimistic UI selection to the previous state.
+    pollVoteSelected.value.set(message.id, previousSelection);
+    toast.error(getErrorMessage(e, "Failed to submit vote. Please try again."));
   } finally {
     pollVoteSending.value.set(message.id, false);
   }

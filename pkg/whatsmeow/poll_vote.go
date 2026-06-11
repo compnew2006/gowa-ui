@@ -15,6 +15,7 @@ import (
 	waStore "go.mau.fi/whatsmeow/store"
 	waTypes "go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
+	"gorm.io/gorm/clause"
 )
 
 // handlePollVote decrypts and persists a poll vote event as a reply message
@@ -51,10 +52,12 @@ func (cm *ConnectionManager) handlePollVote(
 			ownID:          *originalID,
 		}
 
-		vote, err = client.DecryptPollVote(ctx, evt)
+		defer func() {
+			client.Store.MsgSecrets = originalMsgSecrets
+			client.Store.ID = originalID
+		}()
 
-		client.Store.MsgSecrets = originalMsgSecrets
-		client.Store.ID = originalID
+		vote, err = client.DecryptPollVote(ctx, evt)
 	} else {
 		vote, err = client.DecryptPollVote(ctx, evt)
 	}
@@ -67,6 +70,7 @@ func (cm *ConnectionManager) handlePollVote(
 
 	var originalMsg models.Message
 	if err := cm.db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?", orgID, instanceID, originalWAMID).
 		First(&originalMsg).Error; err != nil {
 		cm.logger.Warn("Poll vote original message not found", "instance_id", instanceID, "poll_wa_id", originalWAMID, "error", err)
@@ -230,7 +234,7 @@ func (cm *ConnectionManager) broadcastPollVoteUpdate(orgID uuid.UUID, message *m
 		return
 	}
 	cm.hub.BroadcastToOrg(orgID, websocket.WSMessage{
-		Type: websocket.TypeMessageMediaUpdated,
+		Type: websocket.TypePollVoteUpdated,
 		Payload: map[string]any{
 			"id":               message.ID.String(),
 			"contact_id":       message.ContactID.String(),

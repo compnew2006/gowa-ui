@@ -30,6 +30,9 @@ const (
 	// Permission types
 	TypePermissionsUpdated = "permissions_updated"
 
+	// Poll vote types
+	TypePollVoteUpdated = "poll_vote_updated"
+
 	// Conversation note types
 	TypeConversationNoteCreated = "conversation_note_created"
 	TypeConversationNoteUpdated = "conversation_note_updated"
