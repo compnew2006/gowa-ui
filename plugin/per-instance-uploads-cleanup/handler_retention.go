@@ -72,17 +72,17 @@ var errResponseSent = errors.New("response already sent")
 func (p *Plugin) requireInstanceAccess(r *fastglue.Request, permCheck func(uuid.UUID, uuid.UUID) bool) (orgID, userID, instanceID uuid.UUID, err error) {
 	orgID, userID, err = p.getOrgAndUserID(r)
 	if err != nil {
-		r.SendErrorEnvelope(http.StatusUnauthorized, "Unauthorized", nil, "")
+		_ = r.SendErrorEnvelope(http.StatusUnauthorized, "Unauthorized", nil, "")
 		return uuid.Nil, uuid.Nil, uuid.Nil, errResponseSent
 	}
 	if !permCheck(userID, orgID) {
-		r.SendErrorEnvelope(http.StatusForbidden, "Insufficient permissions", nil, "")
+		_ = r.SendErrorEnvelope(http.StatusForbidden, "Insufficient permissions", nil, "")
 		return uuid.Nil, uuid.Nil, uuid.Nil, errResponseSent
 	}
 	instanceIDStr := r.RequestCtx.UserValue("id")
 	instanceID, err = uuid.Parse(fmt.Sprintf("%v", instanceIDStr))
 	if err != nil {
-		r.SendErrorEnvelope(http.StatusBadRequest, "Invalid instance ID", nil, "INVALID_ID")
+		_ = r.SendErrorEnvelope(http.StatusBadRequest, "Invalid instance ID", nil, "INVALID_ID")
 		return uuid.Nil, uuid.Nil, uuid.Nil, errResponseSent
 	}
 	return orgID, userID, instanceID, nil

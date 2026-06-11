@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { loadConfig } from '../../src/config.js';
 import { Logger } from '../../src/logger.js';
 // import { WhatomateClient } from '../../src/clients/whatomate-client.js';
 const WhatomateClient = class { constructor() {} } as any;

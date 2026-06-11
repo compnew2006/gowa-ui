@@ -21,11 +21,6 @@ type RetentionSnapshot struct {
 	RetentionDays *int
 }
 
-type effectiveRetention struct {
-	Days   int
-	Source string
-}
-
 type service struct {
 	db           *gorm.DB
 	log          *slog.Logger
