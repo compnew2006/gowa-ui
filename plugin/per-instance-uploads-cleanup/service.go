@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/google/uuid"
@@ -42,30 +43,16 @@ func (s *service) ResolveEffectiveRetention(ctx context.Context, orgID, instance
 		return 0, "", fmt.Errorf("resolve effective retention: %w", err)
 	}
 
-	settings := instance.Settings
-	if settings == nil {
-		settings = make(map[string]interface{})
+	workspaceDefault, _, err := s.resolveWorkspaceDefault(orgID)
+	if err != nil {
+		return 0, "", err
 	}
 
-	uc, ok := settings["uploads_cleanup"].(map[string]interface{})
-	if !ok {
-		return s.resolveWorkspaceDefault(orgID)
+	days, source := handlers.ResolveInstanceRetention(instance.Settings, workspaceDefault)
+	if days > maxRetentionDays {
+		days = maxRetentionDays
 	}
-
-	inherit, _ := uc["inherit"].(bool)
-	if !inherit {
-		rd, ok := uc["retention_days"].(float64)
-		if !ok || int(rd) == 0 {
-			return 0, "disabled", nil
-		}
-		days := int(rd)
-		if days > maxRetentionDays {
-			days = maxRetentionDays
-		}
-		return days, "custom", nil
-	}
-
-	return s.resolveWorkspaceDefault(orgID)
+	return days, source, nil
 }
 
 func (s *service) resolveWorkspaceDefault(orgID uuid.UUID) (int, string, error) {
@@ -104,6 +91,8 @@ func (s *service) WriteAuditRow(ctx context.Context, orgID, instanceID uuid.UUID
 }
 
 func (s *service) tryAcquireInstanceRun() (release func(), ok bool) {
-	s.instanceRunMu.Lock()
+	if !s.instanceRunMu.TryLock() {
+		return nil, false
+	}
 	return s.instanceRunMu.Unlock, true
 }

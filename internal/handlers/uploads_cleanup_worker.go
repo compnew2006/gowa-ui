@@ -12,6 +12,7 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
+	"github.com/zerodha/logf"
 	"gorm.io/gorm"
 )
 
@@ -79,7 +80,7 @@ func (w *UploadsCleanupWorker) Stop() {
 }
 
 func (w *UploadsCleanupWorker) RunManualCleanup(ctx context.Context, orgID uuid.UUID, now time.Time) (UploadsCleanupRunResult, error) {
-	if w.app == nil || w.app.DB == nil || w.app.Config == nil {
+	if !w.app.isReady() {
 		return UploadsCleanupRunResult{}, nil
 	}
 
@@ -112,16 +113,16 @@ func (w *UploadsCleanupWorker) RunManualCleanup(ctx context.Context, orgID uuid.
 }
 
 func (w *UploadsCleanupWorker) runDueOrganizations(ctx context.Context, now time.Time) {
-	if w.app == nil || w.app.DB == nil || w.app.Config == nil {
+	if !w.app.isReady() {
 		return
 	}
 
-	dueOrganizations, effectiveRetention, err := w.dueOrganizations(ctx, now)
+	dueOrganizations, minRetention, err := w.dueOrganizations(ctx, now)
 	if err != nil {
 		w.app.Log.Error("Uploads cleanup worker failed to evaluate schedule", "error", err)
 		return
 	}
-	if len(dueOrganizations) == 0 || effectiveRetention <= 0 {
+	if len(dueOrganizations) == 0 || minRetention <= 0 {
 		return
 	}
 
@@ -135,32 +136,63 @@ func (w *UploadsCleanupWorker) runDueOrganizations(ctx context.Context, now time
 	}
 	defer w.releaseLock(context.Background())
 
-	dueOrganizations, effectiveRetention, err = w.dueOrganizations(ctx, now)
+	dueOrganizations, minRetention, err = w.dueOrganizations(ctx, now)
 	if err != nil {
 		w.app.Log.Error("Uploads cleanup worker failed to re-evaluate schedule", "error", err)
 		return
 	}
-	if len(dueOrganizations) == 0 || effectiveRetention <= 0 {
+	if len(dueOrganizations) == 0 || minRetention <= 0 {
 		return
 	}
 
-	deletedFiles, err := w.deleteExpiredUploadFiles(now.UTC(), effectiveRetention)
+	rootPath, err := w.app.resolveUploadsRootPath()
 	if err != nil {
-		w.app.Log.Error("Uploads cleanup worker sweep failed", "error", err)
+		w.app.Log.Error("Uploads cleanup worker failed to resolve root path", "error", err)
 		return
+	}
+
+	// Phase A: Root-level (non-org-scoped) dirs — min retention for orphan files.
+	rootDeleted, err := w.deleteRootLevelExpiredFiles(rootPath, now.UTC(), minRetention)
+	if err != nil {
+		w.app.Log.Error("Uploads cleanup worker root-level sweep failed", "error", err)
+	}
+
+	// Phase B: Per-org scoped dirs — each org uses its own retention.
+	orgDeleted := 0
+	for _, schedule := range dueOrganizations {
+		if schedule.RetentionDays <= 0 {
+			continue
+		}
+		count, err := w.deleteOrgScopedExpiredFiles(rootPath, now.UTC(), schedule)
+		if err != nil {
+			w.app.Log.Error("Uploads cleanup worker org sweep failed",
+				"org_id", schedule.OrganizationID, "error", err)
+			continue
+		}
+		orgDeleted += count
 	}
 
 	if err := w.markOrganizationsAsRan(ctx, dueOrganizations); err != nil {
 		w.app.Log.Error("Uploads cleanup worker failed to persist last run date", "error", err)
-		return
 	}
 
+	totalDeleted := rootDeleted + orgDeleted
 	w.app.Log.Info(
 		"Uploads cleanup worker completed scheduled sweep",
-		"deleted_files", deletedFiles,
-		"retention_days", effectiveRetention,
+		"deleted_files", totalDeleted,
 		"scheduled_organizations", len(dueOrganizations),
 	)
+
+	// Phase C: Per-instance sweep — each instance gets its own retention.
+	instanceDeleted, err := w.deleteExpiredInstanceUploadFiles(ctx, rootPath, now.UTC(), dueOrganizations)
+	if err != nil {
+		w.app.Log.Error("Uploads cleanup worker instance sweep failed", "error", err)
+	} else if instanceDeleted > 0 {
+		w.app.Log.Info(
+			"Uploads cleanup worker completed instance sweep",
+			"deleted_files", instanceDeleted,
+		)
+	}
 }
 
 func (w *UploadsCleanupWorker) tryAcquireLock(ctx context.Context) (bool, error) {
@@ -178,7 +210,7 @@ func (w *UploadsCleanupWorker) tryAcquireLock(ctx context.Context) (bool, error)
 }
 
 func (w *UploadsCleanupWorker) releaseLock(ctx context.Context) {
-	if w == nil || w.app == nil || w.app.DB == nil {
+	if w == nil || !w.app.isReady() {
 		return
 	}
 	if w.app.DB.Dialector.Name() != "postgres" {
@@ -192,29 +224,6 @@ func (w *UploadsCleanupWorker) releaseLock(ctx context.Context) {
 	}
 }
 
-func (w *UploadsCleanupWorker) sweepExpiredUploads(ctx context.Context, now time.Time) (UploadsCleanupRunResult, error) {
-	if w == nil || w.app == nil || w.app.DB == nil {
-		return UploadsCleanupRunResult{}, nil
-	}
-
-	retentionDays, err := w.effectiveRetentionDays(ctx)
-	if err != nil {
-		return UploadsCleanupRunResult{}, err
-	}
-	if retentionDays <= 0 {
-		return UploadsCleanupRunResult{}, errUploadsCleanupDisabled
-	}
-
-	deletedFiles, err := w.deleteExpiredUploadFiles(now.UTC(), retentionDays)
-	if err != nil {
-		return UploadsCleanupRunResult{}, err
-	}
-
-	return UploadsCleanupRunResult{
-		DeletedFiles:  deletedFiles,
-		RetentionDays: retentionDays,
-	}, nil
-}
 
 func (w *UploadsCleanupWorker) dueOrganizations(ctx context.Context, now time.Time) ([]uploadsCleanupSchedule, int, error) {
 	schedules, err := w.loadOrganizationSchedules(ctx, now)
@@ -307,47 +316,9 @@ func (w *UploadsCleanupWorker) markOrganizationsAsRan(ctx context.Context, sched
 	return nil
 }
 
-func (w *UploadsCleanupWorker) effectiveRetentionDays(ctx context.Context) (int, error) {
-	var organizations []models.Organization
-	if err := w.app.DB.WithContext(ctx).
-		Select("id", "settings").
-		Find(&organizations).Error; err != nil {
-		return 0, fmt.Errorf("load organization settings: %w", err)
-	}
 
-	effective := 0
-	for _, org := range organizations {
-		days := parseUploadsCleanupRetentionDays(org.Settings)
-		if days <= 0 {
-			continue
-		}
-		if effective == 0 || days < effective {
-			effective = days
-		}
-	}
-
-	return effective, nil
-}
-
-func (w *UploadsCleanupWorker) retentionDaysForOrganization(ctx context.Context, orgID uuid.UUID) (int, error) {
-	var org models.Organization
-	if err := w.app.DB.WithContext(ctx).
-		Select("id", "settings").
-		Where("id = ?", orgID).
-		First(&org).Error; err != nil {
-		return 0, fmt.Errorf("load organization cleanup settings: %w", err)
-	}
-
-	return parseUploadsCleanupRetentionDays(org.Settings), nil
-}
-
-func (w *UploadsCleanupWorker) deleteExpiredUploadFiles(now time.Time, retentionDays int) (int, error) {
-	rootPath, err := filepath.Abs(w.app.getMediaStoragePath())
-	if err != nil {
-		return 0, fmt.Errorf("resolve uploads root: %w", err)
-	}
-
-	cutoff := now.Add(-time.Duration(retentionDays) * 24 * time.Hour)
+func (w *UploadsCleanupWorker) deleteRootLevelExpiredFiles(rootPath string, now time.Time, retentionDays int) (int, error) {
+	cutoff := uploadsCutoffTime(now, retentionDays)
 	deletedFiles := 0
 	for _, relativeDir := range uploadsCleanupTargetDirs {
 		dirPath := filepath.Join(rootPath, relativeDir)
@@ -357,59 +328,53 @@ func (w *UploadsCleanupWorker) deleteExpiredUploadFiles(now time.Time, retention
 		}
 		deletedFiles += count
 	}
-
-	orgScopedDeletedFiles, err := w.deleteExpiredOrganizationUploadFiles(rootPath, cutoff, retentionDays)
-	if err != nil {
-		return 0, err
-	}
-	deletedFiles += orgScopedDeletedFiles
-
 	return deletedFiles, nil
 }
 
-func (w *UploadsCleanupWorker) deleteExpiredOrganizationUploadFiles(rootPath string, cutoff time.Time, retentionDays int) (int, error) {
-	orgsRoot := filepath.Join(rootPath, "orgs")
-	entries, err := os.ReadDir(orgsRoot)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("read organization uploads directory %q: %w", orgsRoot, err)
-	}
-
+// deleteOrgScopedExpiredFiles sweeps org-scoped directories using the org's own retention.
+func (w *UploadsCleanupWorker) deleteOrgScopedExpiredFiles(rootPath string, now time.Time, schedule uploadsCleanupSchedule) (int, error) {
+	cutoff := uploadsCutoffTime(now, schedule.RetentionDays)
+	orgDir := filepath.Join(rootPath, "orgs", schedule.OrganizationID.String())
 	deletedFiles := 0
-	for _, entry := range entries {
-		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
-			continue
+	for _, relativeDir := range uploadsCleanupTargetDirs {
+		dirPath := filepath.Join(orgDir, relativeDir)
+		count, err := w.deleteExpiredFilesFromDir(rootPath, dirPath, cutoff, schedule.RetentionDays)
+		if err != nil {
+			return 0, err
 		}
-
-		for _, relativeDir := range uploadsCleanupTargetDirs {
-			dirPath := filepath.Join(orgsRoot, entry.Name(), relativeDir)
-			count, err := w.deleteExpiredFilesFromDir(rootPath, dirPath, cutoff, retentionDays)
-			if err != nil {
-				return 0, err
-			}
-			deletedFiles += count
-		}
+		deletedFiles += count
 	}
-
 	return deletedFiles, nil
 }
 
-func (w *UploadsCleanupWorker) deleteExpiredFilesFromDir(rootPath, dirPath string, cutoff time.Time, retentionDays int) (int, error) {
-	info, err := os.Stat(dirPath)
+// deleteExpiredUploadFiles is the legacy entry point for manual cleanup (single retention).
+
+// walkOptions configures a file-deletion sweep. When DB is non-nil, each deleted
+// file is synced to the database (marking media_deleted_at and removing media_assets).
+// When InstanceID is also set, DB queries are scoped to that specific instance.
+type walkOptions struct {
+	RootPath   string
+	DirPath    string
+	Cutoff     time.Time
+	DB         *gorm.DB       // nil = disk-only deletion
+	Log        logf.Logger    // zero-value = no logging
+	InstanceID *uuid.UUID     // nil = org-level DB sync; set = instance-scoped
+}
+
+func walkAndDeleteExpiredFiles(opts walkOptions) (int, error) {
+	info, err := os.Stat(opts.DirPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, nil
 		}
-		return 0, fmt.Errorf("stat uploads directory %q: %w", dirPath, err)
+		return 0, fmt.Errorf("stat uploads directory %q: %w", opts.DirPath, err)
 	}
 	if !info.IsDir() {
 		return 0, nil
 	}
 
 	deletedFiles := 0
-	err = filepath.WalkDir(dirPath, func(path string, entry fs.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(opts.DirPath, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return fmt.Errorf("walk uploads directory %q: %w", path, walkErr)
 		}
@@ -424,65 +389,85 @@ func (w *UploadsCleanupWorker) deleteExpiredFilesFromDir(rootPath, dirPath strin
 		if err != nil {
 			return fmt.Errorf("stat upload file %q: %w", path, err)
 		}
-		if fileInfo.ModTime().After(cutoff) {
+		if fileInfo.ModTime().After(opts.Cutoff) {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(rootPath, path)
+		relPath, err := filepath.Rel(opts.RootPath, path)
 		if err != nil {
 			return fmt.Errorf("resolve upload relative path %q: %w", path, err)
 		}
 
-		now := time.Now().UTC()
-		errDb := w.app.DB.Transaction(func(tx *gorm.DB) error {
-			// 1. Mark legacy local file messages as deleted.
-			if err := tx.Model(&models.Message{}).
-				Where("media_url = ? AND media_deleted_at IS NULL", relPath).
-				Updates(map[string]any{
-					"media_deleted_at": now,
-					"updated_at":       now,
-				}).Error; err != nil {
-				return fmt.Errorf("update legacy local media_deleted_at: %w", err)
-			}
-
-			// 2. Mark object-storage/minio assets with the matching S3Key as deleted.
-			var asset models.MediaAsset
-			if err := tx.Where("s3_key = ?", relPath).First(&asset).Error; err == nil {
-				if err := tx.Model(&models.Message{}).
-					Where("media_asset_id = ? AND media_deleted_at IS NULL", asset.ID).
-					Updates(map[string]any{
-						"media_deleted_at": now,
-						"updated_at":       now,
-					}).Error; err != nil {
-					return fmt.Errorf("update messages media_deleted_at for asset %s: %w", asset.ID, err)
-				}
-
-				if err := tx.Delete(&asset).Error; err != nil {
-					return fmt.Errorf("delete media asset %s: %w", asset.ID, err)
-				}
-			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("lookup media asset for s3_key %s: %w", relPath, err)
-			}
-
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("delete upload file %q: %w", path, err)
-			}
-
-			return nil
-		})
-		if errDb != nil {
-			w.app.Log.Error("Uploads cleanup worker failed to sync database on file deletion", "path", path, "error", errDb)
-			return errDb
+		if err := syncFileDeletion(opts, path, relPath); err != nil {
+			return err
 		}
 
 		deletedFiles++
-		w.app.Log.Info("Uploads cleanup worker deleted file", "path", path, "retention_days", retentionDays)
-
+		opts.Log.Info("Uploads cleanup deleted file", "path", path)
 		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
-
 	return deletedFiles, nil
+}
+
+// syncFileDeletion handles DB sync + disk removal for a single expired file.
+func syncFileDeletion(opts walkOptions, path, relPath string) error {
+	if opts.DB == nil {
+		return os.Remove(path)
+	}
+
+	now := time.Now().UTC()
+	return opts.DB.Transaction(func(tx *gorm.DB) error {
+		// Mark legacy local file messages as deleted, optionally scoped to instance.
+		msgQuery := tx.Model(&models.Message{}).
+			Where("media_url = ? AND media_deleted_at IS NULL", relPath)
+		if opts.InstanceID != nil {
+			msgQuery = msgQuery.Where("instance_id = ?", *opts.InstanceID)
+		}
+		if err := msgQuery.Updates(map[string]any{
+			"media_deleted_at": now,
+			"updated_at":       now,
+		}).Error; err != nil {
+			return fmt.Errorf("update legacy local media_deleted_at: %w", err)
+		}
+
+		// Mark object-storage assets with matching S3Key as deleted.
+		var asset models.MediaAsset
+		if err := tx.Where("s3_key = ?", relPath).First(&asset).Error; err == nil {
+			assetMsgQuery := tx.Model(&models.Message{}).
+				Where("media_asset_id = ? AND media_deleted_at IS NULL", asset.ID)
+			if opts.InstanceID != nil {
+				assetMsgQuery = assetMsgQuery.Where("instance_id = ?", *opts.InstanceID)
+			}
+			if err := assetMsgQuery.Updates(map[string]any{
+				"media_deleted_at": now,
+				"updated_at":       now,
+			}).Error; err != nil {
+				return fmt.Errorf("update messages media_deleted_at for asset %s: %w", asset.ID, err)
+			}
+
+			if err := tx.Delete(&asset).Error; err != nil {
+				return fmt.Errorf("delete media asset %s: %w", asset.ID, err)
+			}
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("lookup media asset for s3_key %s: %w", relPath, err)
+		}
+
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("delete upload file %q: %w", path, err)
+		}
+		return nil
+	})
+}
+
+func (w *UploadsCleanupWorker) deleteExpiredFilesFromDir(rootPath, dirPath string, cutoff time.Time, retentionDays int) (int, error) {
+	return walkAndDeleteExpiredFiles(walkOptions{
+		RootPath: rootPath,
+		DirPath:  dirPath,
+		Cutoff:   cutoff,
+		DB:       w.app.DB,
+		Log:      w.app.Log,
+	})
 }
