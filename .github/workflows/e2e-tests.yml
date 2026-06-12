@@ -62,6 +62,7 @@ jobs:
           name = "Whatomate"
           environment = "test"
           debug = true
+          encryption_key = "0123456789abcdef0123456789abcdef"
 
           [server]
           host = "0.0.0.0"
