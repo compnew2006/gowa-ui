@@ -502,6 +502,10 @@
 | GET/POST | `/api/facebook/accounts` | FB accounts |
 | GET/PUT/DELETE | `/api/facebook/accounts/{id}` | Account CRUD |
 | GET | `/api/facebook/accounts/{id}/oauth/renew` | `RenewFacebookOAuth` |
+| POST | `/api/facebook/accounts/{id}/pages/refresh` | `RefreshFacebookAccountPages` |
+| POST | `/api/facebook/accounts/{id}/pages/{page_id}/connect` | `ConnectFacebookAccountPage` |
+| POST | `/api/facebook/accounts/{id}/pages/{page_id}/disconnect` | `DisconnectFacebookAccountPage` |
+| DELETE | `/api/facebook/accounts/{id}/pages/{page_id}` | `RemoveFacebookAccountPage` |
 | POST | `/api/facebook/oauth/init` | `InitFacebookOAuth` |
 | GET | `/api/facebook/oauth/callback` | `CallbackFacebookOAuth` |
 | POST | `/api/facebook/accounts/{id}/pages/{page_id}/feed` | `PostFacebookPage` |

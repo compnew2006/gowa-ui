@@ -759,6 +759,13 @@ export const fbAccountsService = {
   initOAuth: (params?: { action?: "connect" | "renew"; account_id?: string }) =>
     api.get("/facebook/oauth/init", { params }),
   renewOAuth: (id: string) => api.get(`/facebook/accounts/${id}/oauth/renew`),
+  refreshPages: (id: string) => api.post(`/facebook/accounts/${id}/pages/refresh`),
+  connectPage: (id: string, pageId: string) =>
+    api.post(`/facebook/accounts/${id}/pages/${encodeURIComponent(pageId)}/connect`),
+  disconnectPage: (id: string, pageId: string) =>
+    api.post(`/facebook/accounts/${id}/pages/${encodeURIComponent(pageId)}/disconnect`),
+  removePage: (id: string, pageId: string) =>
+    api.delete(`/facebook/accounts/${id}/pages/${encodeURIComponent(pageId)}`),
   create: (data: {
     name: string;
     account_uid?: string;

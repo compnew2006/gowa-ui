@@ -43,6 +43,18 @@ type facebookOAuthTokenResponse struct {
 	Error       any    `json:"error"`
 }
 
+type facebookOAuthTokenDebugResponse struct {
+	Data struct {
+		AppID     string   `json:"app_id"`
+		Type      string   `json:"type"`
+		IsValid   bool     `json:"is_valid"`
+		ExpiresAt int64    `json:"expires_at"`
+		Scopes    []string `json:"scopes"`
+		Error     any      `json:"error"`
+	} `json:"data"`
+	Error any `json:"error"`
+}
+
 type facebookOAuthUserResponse struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
@@ -178,8 +190,25 @@ func (a *App) CallbackFacebookOAuth(r *fastglue.Request) error {
 	longToken, expiresIn, err := a.exchangeFacebookLongLivedToken(oauthCfg, shortToken)
 	if err != nil {
 		a.Log.Error("Failed to exchange Facebook long-lived token", "error", err)
-		longToken = shortToken
-		expiresIn = 60 * 24 * 3600
+		return a.redirectFacebookOAuthResult(r, "error", "Failed to exchange Facebook long-lived user token")
+	}
+
+	debugPayload, err := a.debugFacebookOAuthToken(oauthCfg, longToken)
+	if err != nil {
+		a.Log.Error("Failed to debug Facebook OAuth token", "error", err)
+		return a.redirectFacebookOAuthResult(r, "error", "Failed to validate Facebook user token")
+	}
+	tokenType := strings.ToUpper(strings.TrimSpace(debugPayload.Data.Type))
+	a.Log.Info(
+		"Facebook OAuth token debug",
+		"token_type", tokenType,
+		"app_id", debugPayload.Data.AppID,
+		"is_valid", debugPayload.Data.IsValid,
+		"expires_at", debugPayload.Data.ExpiresAt,
+		"scope_count", len(debugPayload.Data.Scopes),
+	)
+	if tokenType != "USER" {
+		return a.redirectFacebookOAuthResult(r, "error", fmt.Sprintf("Facebook returned a %s token; reconnect with a user account that manages the pages", tokenType))
 	}
 
 	userInfo, err := a.fetchFacebookOAuthUser(oauthCfg, longToken)
@@ -194,8 +223,7 @@ func (a *App) CallbackFacebookOAuth(r *fastglue.Request) error {
 	pages, pageTokens, err := a.fetchFacebookOAuthPages(oauthCfg, longToken)
 	if err != nil {
 		a.Log.Error("Failed to fetch Facebook pages", "error", err)
-		pages = []map[string]any{}
-		pageTokens = map[string]string{}
+		return a.redirectFacebookOAuthResult(r, "error", "Connected with a user token, but failed to fetch managed Facebook pages")
 	}
 
 	account, err := a.saveFacebookOAuthAccount(requestDB.Session(&gorm.Session{}), state, userInfo, longToken, expiresIn, pages, pageTokens)
@@ -401,6 +429,7 @@ func facebookOAuthAuthURL(cfg facebookOAuthRuntimeConfig, state string) string {
 		"state":         {state},
 		"response_type": {"code"},
 		"scope":         {strings.Join(facebookOAuthScopes, ",")},
+		"auth_type":     {"rerequest"},
 	}
 	return fmt.Sprintf("https://www.facebook.com/%s/dialog/oauth?%s", cfg.APIVersion, query.Encode())
 }
@@ -417,6 +446,7 @@ func (a *App) exchangeFacebookOAuthCode(cfg facebookOAuthRuntimeConfig, code str
 	if err != nil {
 		return "", err
 	}
+	a.Log.Info("Facebook OAuth code exchange", "token_type", payload.TokenType, "expires_in", payload.ExpiresIn)
 	return payload.AccessToken, nil
 }
 
@@ -436,6 +466,7 @@ func (a *App) exchangeFacebookLongLivedToken(cfg facebookOAuthRuntimeConfig, sho
 	if expiresIn <= 0 {
 		expiresIn = 60 * 24 * 3600
 	}
+	a.Log.Info("Facebook OAuth long-lived token exchange", "token_type", payload.TokenType, "expires_in", expiresIn)
 	return payload.AccessToken, expiresIn, nil
 }
 
@@ -444,10 +475,63 @@ func (a *App) facebookTokenGet(endpoint string) (facebookOAuthTokenResponse, err
 	if err := a.facebookJSONRequest(http.MethodGet, endpoint, nil, &payload); err != nil {
 		return payload, err
 	}
+	if payload.Error != nil {
+		return payload, fmt.Errorf("Facebook token exchange error: %s", facebookOAuthErrorString(payload.Error))
+	}
 	if payload.AccessToken == "" {
 		return payload, errors.New("Facebook token response did not include an access token")
 	}
 	return payload, nil
+}
+
+func (a *App) debugFacebookOAuthToken(cfg facebookOAuthRuntimeConfig, accessToken string) (facebookOAuthTokenDebugResponse, error) {
+	query := url.Values{
+		"input_token":  {accessToken},
+		"access_token": {cfg.AppID + "|" + cfg.AppSecret},
+	}
+	endpoint := fmt.Sprintf("%s/%s/debug_token?%s", cfg.BaseURL, cfg.APIVersion, query.Encode())
+	var payload facebookOAuthTokenDebugResponse
+	if err := a.facebookJSONRequest(http.MethodGet, endpoint, nil, &payload); err != nil {
+		return payload, err
+	}
+	if payload.Error != nil {
+		return payload, fmt.Errorf("Facebook debug_token error: %s", facebookOAuthErrorString(payload.Error))
+	}
+	if payload.Data.Error != nil {
+		return payload, fmt.Errorf("Facebook debug_token error: %s", facebookOAuthErrorString(payload.Data.Error))
+	}
+	if !payload.Data.IsValid {
+		return payload, errors.New("Facebook debug_token reported an invalid token")
+	}
+	if strings.TrimSpace(payload.Data.Type) == "" {
+		return payload, errors.New("Facebook debug_token response did not include a token type")
+	}
+	return payload, nil
+}
+
+func facebookOAuthErrorString(raw any) string {
+	if raw == nil {
+		return "unknown error"
+	}
+	if rawErr, ok := raw.(map[string]any); ok {
+		parts := []string{}
+		if message := strings.TrimSpace(fmt.Sprint(rawErr["message"])); message != "" && message != "<nil>" {
+			parts = append(parts, message)
+		}
+		if code := strings.TrimSpace(fmt.Sprint(rawErr["code"])); code != "" && code != "<nil>" {
+			parts = append(parts, "code="+code)
+		}
+		if subcode := strings.TrimSpace(fmt.Sprint(rawErr["error_subcode"])); subcode != "" && subcode != "<nil>" {
+			parts = append(parts, "subcode="+subcode)
+		}
+		if typ := strings.TrimSpace(fmt.Sprint(rawErr["type"])); typ != "" && typ != "<nil>" {
+			parts = append(parts, "type="+typ)
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, ": ")
+		}
+	}
+	return fmt.Sprint(raw)
 }
 
 func (a *App) fetchFacebookOAuthUser(cfg facebookOAuthRuntimeConfig, accessToken string) (facebookOAuthUserResponse, error) {
@@ -481,6 +565,9 @@ func (a *App) fetchFacebookOAuthPages(cfg facebookOAuthRuntimeConfig, accessToke
 		}
 		if token, _ := page["access_token"].(string); token != "" {
 			pageTokens[pageID] = token
+			page["connected"] = true
+		} else {
+			page["connected"] = false
 		}
 		delete(page, "access_token")
 		safePages = append(safePages, page)
@@ -572,6 +659,300 @@ func (a *App) saveFacebookOAuthAccount(db *gorm.DB, state models.FacebookOAuthSt
 		return nil, err
 	}
 	return &account, nil
+}
+
+func (a *App) RefreshFacebookAccountPages(r *fastglue.Request) error {
+	account, requestDB, _, err := a.facebookAccountForPageManagement(r)
+	if err != nil {
+		return err
+	}
+	if account == nil {
+		return nil
+	}
+
+	userToken, err := crypto.Decrypt(account.AccessToken, a.Config.App.EncryptionKey)
+	if err != nil {
+		a.Log.Error("Failed to decrypt Facebook OAuth user token", "error", err, "account_id", account.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook user token", nil, "")
+	}
+	oauthCfg, err := a.facebookOAuthRuntimeConfig(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
+	pages, refreshedTokens, err := a.fetchFacebookOAuthPages(oauthCfg, userToken)
+	if err != nil {
+		a.Log.Error("Failed to refresh Facebook pages", "error", err, "account_id", account.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to refresh Facebook pages", nil, "")
+	}
+	pageTokens, err := a.decryptFacebookPageTokens(*account)
+	if err != nil {
+		a.Log.Error("Failed to decrypt Facebook page tokens", "error", err, "account_id", account.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook page tokens", nil, "")
+	}
+	for pageID := range pageTokens {
+		if token := strings.TrimSpace(refreshedTokens[pageID]); token != "" {
+			pageTokens[pageID] = token
+		}
+	}
+	pages = markFacebookPagesConnected(pages, pageTokens)
+	updated, err := a.updateFacebookAccountPages(requestDB, *account, pages, pageTokens)
+	if err != nil {
+		a.Log.Error("Failed to save refreshed Facebook pages", "error", err, "account_id", account.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save Facebook pages", nil, "")
+	}
+	return r.SendEnvelope(fbAccountToResponse(*updated))
+}
+
+func (a *App) ConnectFacebookAccountPage(r *fastglue.Request) error {
+	account, requestDB, pageID, err := a.facebookAccountForPageManagement(r)
+	if err != nil {
+		return err
+	}
+	if account == nil {
+		return nil
+	}
+
+	userToken, err := crypto.Decrypt(account.AccessToken, a.Config.App.EncryptionKey)
+	if err != nil {
+		a.Log.Error("Failed to decrypt Facebook OAuth user token", "error", err, "account_id", account.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook user token", nil, "")
+	}
+	oauthCfg, err := a.facebookOAuthRuntimeConfig(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
+	fetchedPages, fetchedTokens, err := a.fetchFacebookOAuthPages(oauthCfg, userToken)
+	if err != nil {
+		a.Log.Error("Failed to fetch Facebook pages for connect", "error", err, "account_id", account.ID, "page_id", pageID)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to fetch Facebook pages", nil, "")
+	}
+	pageToken := strings.TrimSpace(fetchedTokens[pageID])
+	if pageToken == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page token not found for this account", nil, "page_id")
+	}
+	pageTokens, err := a.decryptFacebookPageTokens(*account)
+	if err != nil {
+		a.Log.Error("Failed to decrypt Facebook page tokens", "error", err, "account_id", account.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook page tokens", nil, "")
+	}
+	pageTokens[pageID] = pageToken
+	pages := mergeFacebookPages(account.Data, fetchedPages)
+	if !facebookPagesContain(pages, pageID) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page not found for this account", nil, "page_id")
+	}
+	pages = markFacebookPagesConnected(pages, pageTokens)
+	updated, err := a.updateFacebookAccountPages(requestDB, *account, pages, pageTokens)
+	if err != nil {
+		a.Log.Error("Failed to connect Facebook page", "error", err, "account_id", account.ID, "page_id", pageID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to connect Facebook page", nil, "")
+	}
+	return r.SendEnvelope(fbAccountToResponse(*updated))
+}
+
+func (a *App) DisconnectFacebookAccountPage(r *fastglue.Request) error {
+	account, requestDB, pageID, err := a.facebookAccountForPageManagement(r)
+	if err != nil {
+		return err
+	}
+	if account == nil {
+		return nil
+	}
+	pageTokens, err := a.decryptFacebookPageTokens(*account)
+	if err != nil {
+		a.Log.Error("Failed to decrypt Facebook page tokens", "error", err, "account_id", account.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook page tokens", nil, "")
+	}
+	delete(pageTokens, pageID)
+	pages := markFacebookPagesConnected(facebookPagesFromData(account.Data), pageTokens)
+	if !facebookPagesContain(pages, pageID) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page not found for this account", nil, "page_id")
+	}
+	updated, err := a.updateFacebookAccountPages(requestDB, *account, pages, pageTokens)
+	if err != nil {
+		a.Log.Error("Failed to disconnect Facebook page", "error", err, "account_id", account.ID, "page_id", pageID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to disconnect Facebook page", nil, "")
+	}
+	return r.SendEnvelope(fbAccountToResponse(*updated))
+}
+
+func (a *App) RemoveFacebookAccountPage(r *fastglue.Request) error {
+	account, requestDB, pageID, err := a.facebookAccountForPageManagement(r)
+	if err != nil {
+		return err
+	}
+	if account == nil {
+		return nil
+	}
+	pageTokens, err := a.decryptFacebookPageTokens(*account)
+	if err != nil {
+		a.Log.Error("Failed to decrypt Facebook page tokens", "error", err, "account_id", account.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook page tokens", nil, "")
+	}
+	delete(pageTokens, pageID)
+	pages, removed := removeFacebookPage(facebookPagesFromData(account.Data), pageID)
+	if !removed {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page not found for this account", nil, "page_id")
+	}
+	pages = markFacebookPagesConnected(pages, pageTokens)
+	updated, err := a.updateFacebookAccountPages(requestDB, *account, pages, pageTokens)
+	if err != nil {
+		a.Log.Error("Failed to remove Facebook page", "error", err, "account_id", account.ID, "page_id", pageID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to remove Facebook page", nil, "")
+	}
+	return r.SendEnvelope(fbAccountToResponse(*updated))
+}
+
+func (a *App) facebookAccountForPageManagement(r *fastglue.Request) (*models.FacebookAccount, *gorm.DB, string, error) {
+	requestDB := a.requestDB(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return nil, nil, "", r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
+		return nil, nil, "", err
+	}
+	accountID, err := parsePathUUID(r, "id", "Facebook account")
+	if err != nil {
+		return nil, nil, "", nil
+	}
+	pageID := strings.TrimSpace(fmt.Sprint(r.RequestCtx.UserValue("page_id")))
+	account, err := findByIDAndOrg[models.FacebookAccount](requestDB, r, accountID, orgID, "Facebook account")
+	if err != nil {
+		return nil, nil, "", nil
+	}
+	if account.Method != models.FBAccountMethodOAuth || strings.TrimSpace(account.AccessToken) == "" {
+		return nil, nil, "", r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Facebook OAuth account is required", nil, "")
+	}
+	return account, requestDB, pageID, nil
+}
+
+func (a *App) updateFacebookAccountPages(db *gorm.DB, account models.FacebookAccount, pages []map[string]any, pageTokens map[string]string) (*models.FacebookAccount, error) {
+	var updated models.FacebookAccount
+	err := db.Transaction(func(tx *gorm.DB) error {
+		pageTokensJSON, err := json.Marshal(pageTokens)
+		if err != nil {
+			return err
+		}
+		encPageTokens, err := crypto.Encrypt(string(pageTokensJSON), a.Config.App.EncryptionKey)
+		if err != nil {
+			return err
+		}
+		data := models.JSONB{}
+		for key, value := range account.Data {
+			data[key] = value
+		}
+		data["pages"] = pages
+		data["page_count"] = len(pages)
+		updates := map[string]any{
+			"page_tokens": encPageTokens,
+			"data":        data,
+		}
+		if err := tx.Model(&models.FacebookAccount{}).Where("id = ? AND organization_id = ?", account.ID, account.OrganizationID).Updates(updates).Error; err != nil {
+			return err
+		}
+		return tx.First(&updated, "id = ? AND organization_id = ?", account.ID, account.OrganizationID).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &updated, nil
+}
+
+func mergeFacebookPages(currentData models.JSONB, fetchedPages []map[string]any) []map[string]any {
+	merged := facebookPagesFromData(currentData)
+	indexByID := map[string]int{}
+	for i, page := range merged {
+		if pageID := strings.TrimSpace(fmt.Sprint(page["id"])); pageID != "" {
+			indexByID[pageID] = i
+		}
+	}
+	for _, fetched := range fetchedPages {
+		pageID := strings.TrimSpace(fmt.Sprint(fetched["id"]))
+		if pageID == "" {
+			continue
+		}
+		clean := cloneFacebookPage(fetched)
+		if index, ok := indexByID[pageID]; ok {
+			for key, value := range clean {
+				if key != "connected" {
+					merged[index][key] = value
+				}
+			}
+			continue
+		}
+		clean["connected"] = false
+		merged = append(merged, clean)
+		indexByID[pageID] = len(merged) - 1
+	}
+	return merged
+}
+
+func facebookPagesFromData(data models.JSONB) []map[string]any {
+	if data == nil {
+		return []map[string]any{}
+	}
+	rawPages, ok := data["pages"].([]any)
+	if !ok {
+		if typedPages, ok := data["pages"].([]map[string]any); ok {
+			pages := make([]map[string]any, 0, len(typedPages))
+			for _, page := range typedPages {
+				pages = append(pages, cloneFacebookPage(page))
+			}
+			return pages
+		}
+		return []map[string]any{}
+	}
+	pages := make([]map[string]any, 0, len(rawPages))
+	for _, rawPage := range rawPages {
+		if page, ok := rawPage.(map[string]any); ok {
+			pages = append(pages, cloneFacebookPage(page))
+		}
+	}
+	return pages
+}
+
+func cloneFacebookPage(page map[string]any) map[string]any {
+	clean := make(map[string]any, len(page))
+	for key, value := range page {
+		if key == "access_token" {
+			continue
+		}
+		clean[key] = value
+	}
+	return clean
+}
+
+func markFacebookPagesConnected(pages []map[string]any, pageTokens map[string]string) []map[string]any {
+	marked := make([]map[string]any, 0, len(pages))
+	for _, page := range pages {
+		clean := cloneFacebookPage(page)
+		pageID := strings.TrimSpace(fmt.Sprint(clean["id"]))
+		clean["connected"] = pageID != "" && strings.TrimSpace(pageTokens[pageID]) != ""
+		marked = append(marked, clean)
+	}
+	return marked
+}
+
+func facebookPagesContain(pages []map[string]any, pageID string) bool {
+	for _, page := range pages {
+		if strings.TrimSpace(fmt.Sprint(page["id"])) == pageID {
+			return true
+		}
+	}
+	return false
+}
+
+func removeFacebookPage(pages []map[string]any, pageID string) ([]map[string]any, bool) {
+	filtered := make([]map[string]any, 0, len(pages))
+	removed := false
+	for _, page := range pages {
+		if strings.TrimSpace(fmt.Sprint(page["id"])) == pageID {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, cloneFacebookPage(page))
+	}
+	return filtered, removed
 }
 
 func (a *App) facebookPageOperationContext(r *fastglue.Request, action string) (*models.FacebookAccount, string, string, error) {

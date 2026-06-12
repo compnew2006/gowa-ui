@@ -92,7 +92,8 @@ Whatomate resolves these challenges by providing a robust, highly performant, an
   - **Auto-Campaign Generator**: Runs scheduled workers to automatically generate and start campaigns targeting contacts who had inbound history in a defined window.
 
 ### 4.6 Facebook Integration
-- **Account OAuth & Comment Management**: Connects Facebook pages, reads posts, and automatically replies to public comments based on rules or pushes them to WhatsApp as leads.
+- **Account OAuth & Comment Management**: Connects Facebook accounts, verifies a user-scoped OAuth token, syncs the pages the user manages, and automatically replies to public comments based on rules or pushes them to WhatsApp as leads.
+- **Page Controls**: Supports refreshing managed pages, connecting or disconnecting individual pages, and removing page links while keeping the OAuth account intact.
 - **Retargeting & Page/People Search**: Searches public pages/people and logs them into custom marketing lead lists.
 
 ### 4.7 Analytics & Dashboards

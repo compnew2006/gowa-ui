@@ -123,6 +123,70 @@ export const useFBAccountsStore = defineStore("fbAccounts", () => {
     }
   }
 
+  function replaceAccount(updated: FacebookAccount) {
+    const index = accounts.value.findIndex((a) => a.id === updated.id);
+    if (index !== -1) {
+      accounts.value[index] = updated;
+    }
+    return updated;
+  }
+
+  async function refreshPages(id: string): Promise<FacebookAccount | null> {
+    try {
+      const response = await fbAccountsService.refreshPages(id);
+      const updated = replaceAccount(unwrapResponse<FacebookAccount>(response));
+      toast.success(t("fbAccounts.toast.pagesRefreshed"));
+      return updated;
+    } catch (err: any) {
+      const message =
+        err.response?.data?.message || t("fbAccounts.toast.pagesRefreshFailed");
+      toast.error(message);
+      return null;
+    }
+  }
+
+  async function connectPage(id: string, pageId: string): Promise<FacebookAccount | null> {
+    try {
+      const response = await fbAccountsService.connectPage(id, pageId);
+      const updated = replaceAccount(unwrapResponse<FacebookAccount>(response));
+      toast.success(t("fbAccounts.toast.pageConnected"));
+      return updated;
+    } catch (err: any) {
+      const message =
+        err.response?.data?.message || t("fbAccounts.toast.pageConnectFailed");
+      toast.error(message);
+      return null;
+    }
+  }
+
+  async function disconnectPage(id: string, pageId: string): Promise<FacebookAccount | null> {
+    try {
+      const response = await fbAccountsService.disconnectPage(id, pageId);
+      const updated = replaceAccount(unwrapResponse<FacebookAccount>(response));
+      toast.success(t("fbAccounts.toast.pageDisconnected"));
+      return updated;
+    } catch (err: any) {
+      const message =
+        err.response?.data?.message || t("fbAccounts.toast.pageDisconnectFailed");
+      toast.error(message);
+      return null;
+    }
+  }
+
+  async function removePage(id: string, pageId: string): Promise<FacebookAccount | null> {
+    try {
+      const response = await fbAccountsService.removePage(id, pageId);
+      const updated = replaceAccount(unwrapResponse<FacebookAccount>(response));
+      toast.success(t("fbAccounts.toast.pageRemoved"));
+      return updated;
+    } catch (err: any) {
+      const message =
+        err.response?.data?.message || t("fbAccounts.toast.pageRemoveFailed");
+      toast.error(message);
+      return null;
+    }
+  }
+
   return {
     accounts,
     loading,
@@ -134,5 +198,9 @@ export const useFBAccountsStore = defineStore("fbAccounts", () => {
     updateAccount,
     deleteAccount,
     startOAuth,
+    refreshPages,
+    connectPage,
+    disconnectPage,
+    removePage,
   };
 });

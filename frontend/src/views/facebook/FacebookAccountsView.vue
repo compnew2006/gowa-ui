@@ -46,17 +46,29 @@ import {
   ShieldCheck,
   ShieldX,
   ShieldOff,
+  RefreshCw,
+  Link2,
+  Unlink,
 } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { toast } from "vue-sonner";
-import type { FacebookAccount } from "@/types/facebook";
+import type { FacebookAccount, FacebookAccountPage } from "@/types/facebook";
 
 const fbAccountsStore = useFBAccountsStore();
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
-const { fetchAccounts, createAccount, updateAccount, deleteAccount, startOAuth } =
-  fbAccountsStore;
+const {
+  fetchAccounts,
+  createAccount,
+  updateAccount,
+  deleteAccount,
+  startOAuth,
+  refreshPages: refreshAccountPages,
+  connectPage: connectAccountPage,
+  disconnectPage: disconnectAccountPage,
+  removePage: removeAccountPage,
+} = fbAccountsStore;
 
 const createDialogOpen = ref(false);
 const newAccountName = ref("");
@@ -78,6 +90,11 @@ const isUpdating = ref(false);
 const deleteDialogOpen = ref(false);
 const deletingAccount = ref<FacebookAccount | null>(null);
 const isDeleting = ref(false);
+
+const pageActionKey = ref("");
+const removePageDialogOpen = ref(false);
+const removingPage = ref<{ account: FacebookAccount; page: FacebookAccountPage } | null>(null);
+const isRemovingPage = ref(false);
 
 onMounted(async () => {
   handleOAuthCallbackToast();
@@ -118,7 +135,7 @@ function getMethodLabel(method: string) {
   }
 }
 
-function getLinkedPages(account: FacebookAccount): Array<{ id: string; name: string }> {
+function getLinkedPages(account: FacebookAccount): FacebookAccountPage[] {
   const pages = account.data?.pages;
   if (!Array.isArray(pages)) {
     return [];
@@ -126,10 +143,103 @@ function getLinkedPages(account: FacebookAccount): Array<{ id: string; name: str
 
   return pages
     .map((page) => ({
+      ...page,
       id: String(page?.id || ""),
       name: String(page?.name || ""),
+      category: String(page?.category || ""),
+      connected: page?.connected !== false,
     }))
     .filter((page) => page.id || page.name);
+}
+
+function isPageConnected(page: FacebookAccountPage) {
+  return page.connected !== false;
+}
+
+function pageLabel(page: FacebookAccountPage) {
+  return page.name || page.id || t("fbAccounts.unknownPage");
+}
+
+function pageDetail(page: FacebookAccountPage) {
+  return page.category || page.id || t("fbAccounts.unknownPage");
+}
+
+function pageImageUrl(page: FacebookAccountPage) {
+  return page.picture?.data?.url || "";
+}
+
+function pageActionLoading(accountId: string, pageId: string, action: string) {
+  return pageActionKey.value === `${accountId}:${pageId}:${action}`;
+}
+
+async function handleRefreshPages(account: FacebookAccount) {
+  const actionKey = `${account.id}:refresh`;
+  pageActionKey.value = actionKey;
+  try {
+    await refreshAccountPages(account.id);
+  } finally {
+    if (pageActionKey.value === actionKey) {
+      pageActionKey.value = "";
+    }
+  }
+}
+
+async function handleConnectPage(account: FacebookAccount, page: FacebookAccountPage) {
+  if (!page.id) return;
+  const actionKey = `${account.id}:${page.id}:connect`;
+  pageActionKey.value = actionKey;
+  try {
+    await connectAccountPage(account.id, page.id);
+  } finally {
+    if (pageActionKey.value === actionKey) {
+      pageActionKey.value = "";
+    }
+  }
+}
+
+async function handleDisconnectPage(account: FacebookAccount, page: FacebookAccountPage) {
+  if (!page.id) return;
+  const actionKey = `${account.id}:${page.id}:disconnect`;
+  pageActionKey.value = actionKey;
+  try {
+    await disconnectAccountPage(account.id, page.id);
+  } finally {
+    if (pageActionKey.value === actionKey) {
+      pageActionKey.value = "";
+    }
+  }
+}
+
+function openRemovePageDialog(account: FacebookAccount, page: FacebookAccountPage) {
+  if (!page.id) return;
+  removingPage.value = { account, page };
+  removePageDialogOpen.value = true;
+}
+
+function closeRemovePageDialog() {
+  if (isRemovingPage.value) return;
+  removePageDialogOpen.value = false;
+  removingPage.value = null;
+}
+
+async function handleRemovePage() {
+  if (!removingPage.value || isRemovingPage.value) return;
+  const { account, page } = removingPage.value;
+  if (!page.id) return;
+
+  const actionKey = `${account.id}:${page.id}:remove`;
+  isRemovingPage.value = true;
+  pageActionKey.value = actionKey;
+  try {
+    await removeAccountPage(account.id, page.id);
+    removePageDialogOpen.value = false;
+    removingPage.value = null;
+  } finally {
+    isRemovingPage.value = false;
+    if (pageActionKey.value === actionKey) {
+      pageActionKey.value = "";
+    }
+  }
 }
 
 async function handleStartOAuth(account?: FacebookAccount) {
@@ -469,24 +579,128 @@ async function handleDelete() {
                   </span>
                 </div>
                 <div
-                  v-if="getLinkedPages(account).length > 0"
-                  class="mt-3 flex flex-wrap gap-2"
+                  v-if="account.method === 'oauth'"
+                  class="mt-4 overflow-hidden rounded-lg border border-border/70 bg-muted/20"
                 >
-                  <Badge
-                    v-for="page in getLinkedPages(account).slice(0, 4)"
-                    :key="page.id || page.name"
-                    variant="secondary"
-                    class="max-w-full justify-start truncate text-xs"
+                  <div
+                    class="flex flex-col gap-3 border-b border-border/70 p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    {{ page.name || page.id }}
-                  </Badge>
-                  <Badge
-                    v-if="getLinkedPages(account).length > 4"
-                    variant="outline"
-                    class="text-xs"
+                    <div>
+                      <p class="text-sm font-medium text-foreground">
+                        {{ $t("fbAccounts.pages") }}
+                      </p>
+                      <p class="text-xs text-muted-foreground">
+                        {{ getLinkedPages(account).length }} {{ $t("fbAccounts.linkedPages") }}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      :disabled="pageActionKey === `${account.id}:refresh`"
+                      @click="handleRefreshPages(account)"
+                    >
+                      <Loader2
+                        v-if="pageActionKey === `${account.id}:refresh`"
+                        class="mr-2 h-4 w-4 animate-spin"
+                      />
+                      <RefreshCw v-else class="mr-2 h-4 w-4" />
+                      {{ $t("fbAccounts.refreshPages") }}
+                    </Button>
+                  </div>
+
+                  <div
+                    v-if="getLinkedPages(account).length === 0"
+                    class="p-3 text-sm text-muted-foreground"
                   >
-                    +{{ getLinkedPages(account).length - 4 }}
-                  </Badge>
+                    {{ $t("fbAccounts.noPages") }}
+                  </div>
+                  <div v-else class="divide-y divide-border/70">
+                    <div
+                      v-for="page in getLinkedPages(account)"
+                      :key="page.id || page.name"
+                      class="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div class="flex min-w-0 items-center gap-3">
+                        <img
+                          v-if="pageImageUrl(page)"
+                          :src="pageImageUrl(page)"
+                          :alt="pageLabel(page)"
+                          class="h-9 w-9 rounded-md border border-border object-cover"
+                        />
+                        <div
+                          v-else
+                          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600/10 text-blue-600"
+                        >
+                          <Facebook class="h-4 w-4" />
+                        </div>
+                        <div class="min-w-0">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <p class="truncate text-sm font-medium text-foreground">
+                              {{ pageLabel(page) }}
+                            </p>
+                            <Badge
+                              :variant="isPageConnected(page) ? 'default' : 'secondary'"
+                              class="text-xs"
+                            >
+                              {{
+                                isPageConnected(page)
+                                  ? $t("fbAccounts.pageConnected")
+                                  : $t("fbAccounts.pageDisconnected")
+                              }}
+                            </Badge>
+                          </div>
+                          <p class="truncate text-xs text-muted-foreground">
+                            {{ pageDetail(page) }}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div class="flex flex-wrap gap-2">
+                        <Button
+                          v-if="!isPageConnected(page)"
+                          size="sm"
+                          variant="outline"
+                          :disabled="pageActionLoading(account.id, page.id, 'connect')"
+                          @click="handleConnectPage(account, page)"
+                        >
+                          <Loader2
+                            v-if="pageActionLoading(account.id, page.id, 'connect')"
+                            class="mr-2 h-4 w-4 animate-spin"
+                          />
+                          <Link2 v-else class="mr-2 h-4 w-4" />
+                          {{ $t("fbAccounts.connectPage") }}
+                        </Button>
+                        <Button
+                          v-else
+                          size="sm"
+                          variant="outline"
+                          :disabled="pageActionLoading(account.id, page.id, 'disconnect')"
+                          @click="handleDisconnectPage(account, page)"
+                        >
+                          <Loader2
+                            v-if="pageActionLoading(account.id, page.id, 'disconnect')"
+                            class="mr-2 h-4 w-4 animate-spin"
+                          />
+                          <Unlink v-else class="mr-2 h-4 w-4" />
+                          {{ $t("fbAccounts.disconnectPage") }}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          class="text-destructive hover:text-destructive"
+                          :disabled="pageActionLoading(account.id, page.id, 'remove')"
+                          @click="openRemovePageDialog(account, page)"
+                        >
+                          <Loader2
+                            v-if="pageActionLoading(account.id, page.id, 'remove')"
+                            class="mr-2 h-4 w-4 animate-spin"
+                          />
+                          <Trash2 v-else class="mr-2 h-4 w-4" />
+                          {{ $t("fbAccounts.removePage") }}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -675,6 +889,20 @@ async function handleDelete() {
     >
       <template #description>
         {{ $t("fbAccounts.dialog.deleteDesc") }}
+      </template>
+    </DeleteConfirmDialog>
+
+    <DeleteConfirmDialog
+      v-model:open="removePageDialogOpen"
+      :title="$t('fbAccounts.dialog.removePageTitle')"
+      :item-name="removingPage ? pageLabel(removingPage.page) : undefined"
+      :confirm-label="$t('fbAccounts.dialog.confirmRemovePage')"
+      :cancel-label="$t('common.cancel')"
+      @confirm="handleRemovePage"
+      @cancel="closeRemovePageDialog"
+    >
+      <template #description>
+        {{ $t("fbAccounts.dialog.removePageDesc") }}
       </template>
     </DeleteConfirmDialog>
   </div>

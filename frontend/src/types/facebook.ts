@@ -1,3 +1,22 @@
+export interface FacebookAccountPage {
+  id: string;
+  name?: string;
+  category?: string;
+  picture?: {
+    data?: {
+      url?: string;
+    };
+  };
+  connected?: boolean;
+  [key: string]: any;
+}
+
+export interface FacebookAccountData {
+  pages?: FacebookAccountPage[];
+  page_count?: number;
+  [key: string]: any;
+}
+
 export interface FacebookAccount {
   id: string;
   name: string;
@@ -7,7 +26,7 @@ export interface FacebookAccount {
   avatar_url?: string;
   status: "active" | "inactive" | "closed" | "expired" | "revoked";
   method: "cookies" | "credentials" | "oauth";
-  data: Record<string, any>;
+  data: FacebookAccountData;
   has_cookies: boolean;
   oauth_connected: boolean;
   token_expires_at?: string;

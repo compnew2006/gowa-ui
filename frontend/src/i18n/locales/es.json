@@ -545,6 +545,15 @@
     "renewOAuth": "Renovar OAuth",
     "oauthConnected": "OAuth conectado",
     "pages": "Páginas",
+    "linkedPages": "páginas vinculadas",
+    "refreshPages": "Actualizar páginas",
+    "noPages": "No hay páginas vinculadas a esta cuenta.",
+    "unknownPage": "Página sin nombre",
+    "pageConnected": "Conectada",
+    "pageDisconnected": "Desconectada",
+    "connectPage": "Conectar",
+    "disconnectPage": "Desconectar",
+    "removePage": "Eliminar",
     "expires": "Expira",
     "noAccounts": "No hay cuentas de Facebook",
     "noAccountsDesc": "Agregue su primera cuenta de Facebook para comenzar a usar las herramientas de Facebook con sesiones activas.",
@@ -585,7 +594,10 @@
       "deleteTitle": "Eliminar Cuenta de Facebook",
       "deleteDesc": "Esto eliminará permanentemente esta cuenta de Facebook y sus datos asociados. Esta acción no se puede deshacer.",
       "confirmDelete": "Eliminar Cuenta",
-      "cancelKeep": "Conservar Cuenta"
+      "cancelKeep": "Conservar Cuenta",
+      "removePageTitle": "Eliminar página de Facebook",
+      "removePageDesc": "Esto elimina solo esta página de la cuenta. Puede actualizar las páginas más tarde para agregarla de nuevo y luego conectarla otra vez.",
+      "confirmRemovePage": "Eliminar página"
     },
     "toast": {
       "fetchFailed": "Error al obtener cuentas de Facebook",
@@ -602,7 +614,15 @@
       "oauthInitFailed": "Error al iniciar OAuth de Facebook",
       "oauthConnected": "Cuenta de Facebook conectada exitosamente",
       "oauthRenewed": "Cuenta de Facebook renovada exitosamente",
-      "oauthCallbackFailed": "Error en OAuth de Facebook"
+      "oauthCallbackFailed": "Error en OAuth de Facebook",
+      "pagesRefreshed": "Páginas de Facebook actualizadas",
+      "pagesRefreshFailed": "Error al actualizar páginas de Facebook",
+      "pageConnected": "Página de Facebook conectada",
+      "pageConnectFailed": "Error al conectar página de Facebook",
+      "pageDisconnected": "Página de Facebook desconectada",
+      "pageDisconnectFailed": "Error al desconectar página de Facebook",
+      "pageRemoved": "Página de Facebook eliminada",
+      "pageRemoveFailed": "Error al eliminar página de Facebook"
     }
   },
   "facebookComments": {

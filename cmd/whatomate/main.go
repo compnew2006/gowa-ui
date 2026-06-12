@@ -14,8 +14,6 @@ import (
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/core"
-	_ "github.com/compnew2006/whatomate/plugin/per-instance-uploads-cleanup"
-	_ "github.com/compnew2006/whatomate/plugin/campaign-interactive"
 	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/database"
 	"github.com/compnew2006/whatomate/internal/frontend"
@@ -31,6 +29,8 @@ import (
 	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/pkg/whatsmeow"
+	_ "github.com/compnew2006/whatomate/plugin/campaign-interactive"
+	_ "github.com/compnew2006/whatomate/plugin/per-instance-uploads-cleanup"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
@@ -455,20 +455,20 @@ func runServer(args []string) {
 	}()
 
 	var (
-		slaProcessor               *handlers.SLAProcessor
-		slaCancel                  context.CancelFunc
-		chatAssignmentResetWorker  *handlers.ChatAssignmentResetWorker
-		chatAssignmentResetCancel  context.CancelFunc
-		campaignScheduler          *handlers.CampaignScheduler
-		campaignSchedulerCancel    context.CancelFunc
-		instanceAutoCampaignWorker *handlers.InstanceAutoCampaignWorker
-		instanceAutoCampaignCancel context.CancelFunc
-		mediaRetentionWorker       *handlers.MediaRetentionWorker
-		mediaRetentionCancel       context.CancelFunc
-		uploadsCleanupWorker       *handlers.UploadsCleanupWorker
-		uploadsCleanupCancel       context.CancelFunc
-		agentSelectionProcessor    *handlers.AgentSelectionProcessor
-		agentSelectionCancel       context.CancelFunc
+		slaProcessor                 *handlers.SLAProcessor
+		slaCancel                    context.CancelFunc
+		chatAssignmentResetWorker    *handlers.ChatAssignmentResetWorker
+		chatAssignmentResetCancel    context.CancelFunc
+		campaignScheduler            *handlers.CampaignScheduler
+		campaignSchedulerCancel      context.CancelFunc
+		instanceAutoCampaignWorker   *handlers.InstanceAutoCampaignWorker
+		instanceAutoCampaignCancel   context.CancelFunc
+		mediaRetentionWorker         *handlers.MediaRetentionWorker
+		mediaRetentionCancel         context.CancelFunc
+		uploadsCleanupWorker         *handlers.UploadsCleanupWorker
+		uploadsCleanupCancel         context.CancelFunc
+		agentSelectionProcessor      *handlers.AgentSelectionProcessor
+		agentSelectionCancel         context.CancelFunc
 		chatCloseRatingCleanupWorker *handlers.ChatCloseRatingCleanupWorker
 		chatCloseRatingCleanupCancel context.CancelFunc
 	)
@@ -1561,6 +1561,10 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/facebook/accounts/{id}", app.UpdateFBAccount)
 	g.DELETE("/api/facebook/accounts/{id}", app.DeleteFBAccount)
 	g.GET("/api/facebook/accounts/{id}/oauth/renew", app.RenewFacebookOAuth)
+	g.POST("/api/facebook/accounts/{id}/pages/refresh", app.RefreshFacebookAccountPages)
+	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/connect", app.ConnectFacebookAccountPage)
+	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/disconnect", app.DisconnectFacebookAccountPage)
+	g.DELETE("/api/facebook/accounts/{id}/pages/{page_id}", app.RemoveFacebookAccountPage)
 	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/feed", app.PostFacebookPage)
 	g.GET("/api/facebook/accounts/{id}/pages/{page_id}/insights", app.GetFacebookPageInsights)
 	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/messages", app.SendFacebookPageMessage)

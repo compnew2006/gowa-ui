@@ -2824,6 +2824,15 @@
     "renewOAuth": "Renew OAuth",
     "oauthConnected": "OAuth connected",
     "pages": "Pages",
+    "linkedPages": "linked pages",
+    "refreshPages": "Refresh pages",
+    "noPages": "No pages linked to this account.",
+    "unknownPage": "Unnamed page",
+    "pageConnected": "Connected",
+    "pageDisconnected": "Disconnected",
+    "connectPage": "Connect",
+    "disconnectPage": "Disconnect",
+    "removePage": "Remove",
     "expires": "Expires",
     "noAccounts": "No Facebook accounts",
     "noAccountsDesc": "Add your first Facebook account to start using Facebook tools with active sessions.",
@@ -2864,7 +2873,10 @@
       "deleteTitle": "Delete Facebook Account",
       "deleteDesc": "This will permanently delete this Facebook account and its associated data. This action cannot be undone.",
       "confirmDelete": "Delete Account",
-      "cancelKeep": "Keep Account"
+      "cancelKeep": "Keep Account",
+      "removePageTitle": "Remove Facebook Page",
+      "removePageDesc": "This removes only this page from the account. You can refresh pages later to add it back, then connect it again.",
+      "confirmRemovePage": "Remove Page"
     },
     "toast": {
       "fetchFailed": "Failed to fetch Facebook accounts",
@@ -2881,7 +2893,15 @@
       "oauthInitFailed": "Failed to start Facebook OAuth",
       "oauthConnected": "Facebook account connected successfully",
       "oauthRenewed": "Facebook account renewed successfully",
-      "oauthCallbackFailed": "Facebook OAuth failed"
+      "oauthCallbackFailed": "Facebook OAuth failed",
+      "pagesRefreshed": "Facebook pages refreshed",
+      "pagesRefreshFailed": "Failed to refresh Facebook pages",
+      "pageConnected": "Facebook page connected",
+      "pageConnectFailed": "Failed to connect Facebook page",
+      "pageDisconnected": "Facebook page disconnected",
+      "pageDisconnectFailed": "Failed to disconnect Facebook page",
+      "pageRemoved": "Facebook page removed",
+      "pageRemoveFailed": "Failed to remove Facebook page"
     }
   },
   "licenseSettings": {

@@ -53,6 +53,32 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 | GET    | `/api/me/chat-background` | Get user's custom chat background      |
 | POST   | `/api/me/chat-background` | Upload a custom chat background        |
 
+## Facebook Integration
+
+| Method | Endpoint                                             | Description                                     |
+| ------ | ---------------------------------------------------- | ----------------------------------------------- |
+| GET/POST | `/api/facebook/accounts`                            | List or create Facebook accounts                |
+| GET/PUT/DELETE | `/api/facebook/accounts/{id}`               | Facebook account CRUD                           |
+| GET    | `/api/facebook/accounts/{id}/oauth/renew`            | Renew the stored OAuth session                  |
+| POST   | `/api/facebook/accounts/{id}/pages/refresh`          | Refresh managed pages and page metadata         |
+| POST   | `/api/facebook/accounts/{id}/pages/{page_id}/connect`| Restore/connect a single page token             |
+| POST   | `/api/facebook/accounts/{id}/pages/{page_id}/disconnect` | Disconnect a single page but keep metadata   |
+| DELETE | `/api/facebook/accounts/{id}/pages/{page_id}`        | Remove a page and its token from the account    |
+| POST   | `/api/facebook/oauth/init`                           | Start Facebook OAuth                            |
+| GET    | `/api/facebook/oauth/callback`                       | Complete Facebook OAuth                         |
+| POST   | `/api/facebook/accounts/{id}/pages/{page_id}/feed`   | Publish a post to a managed page                |
+| GET    | `/api/facebook/accounts/{id}/pages/{page_id}/insights` | Fetch page insights                          |
+| POST   | `/api/facebook/accounts/{id}/pages/{page_id}/messages` | Send a page message                          |
+| GET    | `/api/facebook/comments`                             | List Facebook comments                          |
+| GET    | `/api/facebook/page-search`                          | Search public pages                              |
+| GET/POST | `/api/facebook/people-search`                      | Search people                                    |
+| POST   | `/api/facebook/people-search/add-contacts`           | Add contacts from people-search results         |
+| POST   | `/api/facebook/comments/sync`                        | Sync comments from pages                         |
+| GET/PUT | `/api/facebook/comments/settings`                   | Read or update comment settings                  |
+| POST   | `/api/facebook/comments/{id}/reply`                  | Reply to a comment                               |
+| PUT    | `/api/facebook/comments/{id}/status`                 | Update comment status                            |
+| GET/POST | `/api/facebook/comments/webhook`                   | Public webhook endpoint                          |
+
 ## Organizations & Teams
 
 | Method | Endpoint                                   | Description                              |

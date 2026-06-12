@@ -41,15 +41,41 @@ Skill path: `.pi/skills/mcp-code-operations/SKILL.md`.
 | `internal/models/` | Core GORM models | Core path; schema changes require extra review |
 | `internal/database/` | PostgreSQL/Redis setup and core migrations | Core path; do not add plugin models here |
 | `internal/middleware/` | Auth, CSRF, rate limiting, tenant scoping | Shared infrastructure; approval required for behavior changes |
-| `internal/tenant/` | Organization-scoped database helpers | Critical multi-tenant boundary |
-| `internal/websocket/` | Real-time hub/client/message plumbing | Shared infrastructure; check blast radius |
+| `internal/tenant/` | Organization-scoped database helpers (`ScopedDB`, `GetScopedDB`) | Critical multi-tenant boundary |
+| `internal/websocket/` | Real-time hub/client/message plumbing | Shared infrastructure; check blast radius; see §3 WebSocket patterns |
 | `internal/worker/`, `internal/queue/` | Background jobs and Redis Streams | Check idempotency and queue contracts |
 | `internal/storage/`, `internal/crypto/`, `internal/license/` | Storage, encryption, licensing | Security-sensitive; approval required for behavior changes |
+| `internal/config/` | TOML/koanf config loading, validation (JWT, encryption, license, admin) | Shared infrastructure; changes affect all runmodes |
+| `internal/observability/` | Metrics and observability setup | Shared infrastructure; changes affect monitoring |
+| `internal/retry/` | Exponential backoff utilities | Shared utility; keep generic, no domain logic |
+| `internal/contactutil/` | Contact JID and group JID helpers | Shared utility; used by handlers and whatsmeow |
+| `internal/templateutil/` | Template placeholder processing | Shared utility; used by campaigns and messages |
+| `internal/campaignstats/` | Campaign receipt statistics | Domain utility for campaign feature |
+| `internal/licenseissuer/`, `internal/licensestudio/` | License issuing tooling | Security-sensitive; approval required for behavior changes |
+| `internal/frontend/` | Frontend embed/serve via `go:embed` | Do not modify generated `dist/`; rebuild via `make build-prod` |
 | `pkg/whatsapp/`, `pkg/whatsmeow/`, `pkg/provider/` | Provider clients/interfaces | Public/shared contracts; inspect callers first |
+| `pkg/chat_close_ratings/` | Shared chat close rating types | Public package; used by handlers and whatsmeow |
 | `plugin/<name>/` | Extension mechanism for new features | Preferred location for new features |
 | `frontend/src/` | Vue 3 frontend source | Use domain folders, Pinia stores, services, composables |
+| `frontend/src/services/api.ts` | Base HTTP client with auth refresh/interceptors | Domain services import and wrap this; do not bypass |
+| `frontend/src/services/*.ts` | Domain service files (auth, contacts, instances, etc.) | Each service wraps `api.ts` for its domain |
+| `frontend/src/composables/` | Reusable composition functions | Shared reactive logic; prefer over duplicating in views |
+| `frontend/src/stores/` | Pinia stores by domain | State management; one store per domain |
+| `frontend/src/views/` | Page-level Vue components | Organized by domain: analytics, chat, chatbot, settings, etc. |
+| `frontend/src/router/` | Vue Router configuration | Route definitions and guards |
+| `frontend/src/i18n/` | Internationalization | Locale files and i18n setup |
+| `frontend/src/types/` | TypeScript type definitions | Shared type declarations |
+| `test/` | Test utilities and fixtures (`testutil/`, `fixtures/`) | Shared test helpers; import via `test/testutil` |
 | `docs/` | Deployment/product documentation | Keep in sync with behavior changes |
+| `deploy/`, `docker/` | Infrastructure and Docker configs | Treat independently from product runtime |
+| `scripts/` | Build and dev helper scripts | Treat as tooling; changes don't affect runtime |
+| `specs/` | Design specifications | Useful context for understanding features |
 | `mcp-server/` | Auxiliary tooling | Treat independently from product runtime |
+| `summary.md` | Running session log (root level) | Append only; never replace historical entries |
+
+> **Note:** Both `plugin/` and `plugins/` exist at root. `plugin/` is the canonical location for
+> built-in plugins (registered via blank import in `cmd/whatomate/main.go`). `plugins/` contains
+> external/plugin-template projects. New product features go in `plugin/`.
 
 ---
 
@@ -98,23 +124,45 @@ New product features must be implemented as plugins under `plugin/<name>/` whene
 
 - Register plugins using `init()` plus blank import in `cmd/whatomate/main.go`.
 - Plugin interface lives in `internal/core/plugin.go`:
-  - `Name()`
-  - `Init(db, rdb, log)`
-  - `Routes(g *fastglue.Glue)`
-  - `Migrate(db)`
+  ```go
+  type Plugin interface {
+      Name() string
+      Init(app *handlers.App, db *gorm.DB, rdb *redis.Client, log *slog.Logger) error
+      Routes(g *fastglue.Fastglue)
+      Migrate(db *gorm.DB) error
+  }
+  ```
+  Registration uses `core.RegisterPlugin(p)`; initialization uses `core.InitPlugins(...)`.
 - Plugin migrations use plugin-local `AutoMigrate` in `Migrate()`.
 - Do **not** add plugin models to `internal/database/postgres.go`.
 - Do **not** modify `internal/handlers/`, `internal/models/`, or `pkg/` for new features unless the user explicitly approves a core/interface change.
 
 ### Backend Conventions
 
+- **Binary subcommands**: `whatomate server` (HTTP server), `whatomate worker` (background job processor),
+  `whatomate crypto-migrate`, `whatomate queue-migrate-campaigns`, `whatomate admin-reset-password`,
+  `whatomate inbound-media-reconcile`, `whatomate legacy-media-reconcile`, `whatomate version`.
+  Changes to startup/worker logic must respect the subcommand architecture.
 - HTTP framework is `fasthttp` + `fastglue`; do not introduce `net/http` handlers or Gin.
 - Handlers return `error` and send JSON via `rc.SendEnvelope()` / `rc.SendErrorEnvelope()`.
-- Use `app.requestDB(rc)` inside core `App` handlers; do not use `app.db` directly for request-scoped work.
+- **Response conventions**:
+  - Success: `r.SendEnvelope(data)` — wraps data in a standard envelope.
+  - Error: `r.SendErrorEnvelope(statusCode, message, data, details)` — always include an HTTP status code.
+  - Never write raw JSON or use `fmt.Fprintf` for responses.
+- Use `app.requestDB(rc)` inside core `App` handlers; do not use `app.DB` directly for request-scoped work.
+  `requestDB` resolves the tenant-scoped database via `tenant.GetScopedDB()` or `tenant.ScopedDB()`.
 - For plugin tenant scoping, use `middleware.GetOrganizationID()` and `tenant.ScopedDB()`.
+- **Database transactions**: use `db.Transaction(func(tx *gorm.DB) error { ... })` for multi-step writes.
+  Within a transaction, always use the `tx` parameter, not the outer `db`.
+  For tenant-scoped transactions, pass the scoped DB: `requestDB.Transaction(func(tx *gorm.DB) error { ... })`.
+- **App struct** (`internal/handlers/app.go`) is the central dependency container:
+  `Config`, `DB`, `Redis`, `Log`, `WhatsApp`, `WhatsmeowManager`, `ObjectStorage`, `WSHub`, `Queue`,
+  `HTTPClient`, `MessageProvider`, `License`. Do not add fields without approval.
 - GORM models should use soft deletes where appropriate (`gorm.DeletedAt`).
 - Redis keys must be namespaced, e.g. `<prefix>:<orgID>:<resource>`.
-- Logging uses `slog` with stable keys such as `org_id`, `user_id`, `instance_id`.
+- **Logging**: use `slog` or `logf.Logger` (from App). Stable keys: `org_id`, `user_id`, `instance_id`,
+  `campaign_id`, `chat_id`. Use `slog.Error` for failures, `slog.Warn` for degraded states,
+  `slog.Info` for normal operations. Never log secrets or credentials.
 - Config is TOML via koanf; `config.toml` is secret/local and must stay ignored.
 - Wrap errors with context using `%w`.
 - Import order: standard library → third-party → internal packages.
@@ -122,12 +170,45 @@ New product features must be implemented as plugins under `plugin/<name>/` whene
 ### Frontend Conventions
 
 - Vue 3 Composition API with `<script setup>` and TypeScript.
-- Pinia stores live under `frontend/src/stores/` by domain.
+- **Directory structure**:
+  - `stores/` — Pinia stores by domain (auth, contacts, instances, etc.).
+  - `services/` — Domain API services (`api.ts` is the base HTTP client; each domain file wraps it).
+  - `composables/` — Reusable reactive logic (`useCrudState`, `useColorMode`, `useFlowHistory`, etc.).
+  - `views/` — Page-level components organized by domain (`chat/`, `chatbot/`, `settings/`, etc.).
+  - `components/` — Reusable UI components organized by domain (`chat/`, `chatbot/`, `shared/`, `ui/`).
+  - `router/` — Vue Router definitions and guards.
+  - `types/` — Shared TypeScript type definitions.
+  - `i18n/` — Internationalization locale files.
+  - `lib/` — Utility libraries.
 - API calls go through `frontend/src/services/api.ts` so auth refresh/interceptors remain centralized.
+  Domain services import and wrap `api.ts`; do not call `fetch` or `axios` directly.
 - WebSocket handling goes through `frontend/src/services/websocket.ts` and dispatches into stores.
 - Forms use `vee-validate` + `zod`.
 - Prefer domain components/views/composables; avoid large cross-domain components.
 - Keep frontend files small and focused.
+
+### WebSocket Patterns
+
+- `internal/websocket/` contains `Hub`, `Client`, and message types.
+- All messages are `WSMessage{Type, Payload}` structs (defined in `messages.go`).
+- To add a new WebSocket message type:
+  1. Add a `const TypeXxx = "xxx"` in `messages.go`.
+  2. Broadcast from the relevant handler/worker via `a.WSHub.Broadcast(orgID, WSMessage{Type: TypeXxx, Payload: data})`.
+  3. Handle in the frontend via `websocket.ts` → dispatch to the appropriate Pinia store.
+- Always scope broadcasts to `orgID` — never broadcast globally across tenants.
+
+### Testing Conventions
+
+- Test files use standard Go `_test.go` suffix; tests live alongside source files.
+- Shared test utilities live in `test/testutil/` (DB setup, Redis setup, mock logger).
+  Import as `"github.com/compnew2006/whatomate/test/testutil"`.
+- Test App construction uses `newTestApp(t, ...appOption)` pattern with functional options
+  (`withQueue`, `withWhatsApp`, `withHTTPClient`, `withWSHub`). See `internal/handlers/testhelpers_test.go`.
+- Tests requiring a database use `testutil.SetupTestDB(t)`; tests requiring Redis use
+  `testutil.SetupTestRedis(t)` (skips if `TEST_REDIS_URL` not set).
+- **Do not** introduce new `.go.disabled` or `.go.bak` test files; those are legacy.
+- Use table-driven tests for multi-case scenarios.
+- For handler tests, construct the App with appropriate stubs from `stubs.go`.
 
 ### Security and Tenancy
 
@@ -235,8 +316,16 @@ Run the narrowest useful tests first, then broader checks when shared code chang
 Backend:
 
 ```sh
+# All tests
 make test
+
+# Targeted package tests (use during development)
 go test -p 1 -v ./internal/handlers/... ./internal/models/...
+
+# Database-specific tests (requires ephemeral Postgres container)
+make test-db
+
+# Lint
 golangci-lint run
 ```
 
@@ -252,8 +341,8 @@ cd frontend && npm run test:e2e
 Build:
 
 ```sh
-make build
-make build-prod
+make build              # Backend only
+make build-prod         # Backend + frontend embed
 ```
 
 MCP verification after edits:
@@ -280,8 +369,13 @@ After successful code changes:
    - pattern followed/created
    - tests run
    - risks/gotchas
-4. Update `summary.md` only by appending; never replace historical entries.
+4. Update `summary.md` (project root) only by appending; never replace historical entries.
 5. Do not commit unless the user asks for a commit.
+6. **Git conventions** (when user asks for a commit):
+   - Write clear, descriptive commit messages (imperative mood: "Add campaign retry logic", not "Added...").
+   - Do not commit `.disabled`, `.bak`, or scratch files.
+   - Run `make test` before committing when shared code was changed.
+   - Do not push unless the user explicitly asks.
 
 After failed attempts:
 

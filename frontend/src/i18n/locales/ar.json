@@ -2763,6 +2763,15 @@
     "renewOAuth": "تجديد OAuth",
     "oauthConnected": "متصل عبر OAuth",
     "pages": "الصفحات",
+    "linkedPages": "صفحات مرتبطة",
+    "refreshPages": "تحديث الصفحات",
+    "noPages": "لا توجد صفحات مرتبطة بهذا الحساب.",
+    "unknownPage": "صفحة بلا اسم",
+    "pageConnected": "متصلة",
+    "pageDisconnected": "غير متصلة",
+    "connectPage": "ربط",
+    "disconnectPage": "فصل",
+    "removePage": "إزالة",
     "expires": "ينتهي",
     "noAccounts": "لا توجد حسابات فيسبوك",
     "noAccountsDesc": "أضف أول حساب فيسبوك للبدء في استخدام أدوات فيسبوك مع جلسات نشطة.",
@@ -2803,7 +2812,10 @@
       "deleteTitle": "حذف حساب فيسبوك",
       "deleteDesc": "سيؤدي هذا إلى حذف حساب فيسبوك بشكل دائم والبيانات المرتبطة به. لا يمكن التراجع عن هذا الإجراء.",
       "confirmDelete": "حذف الحساب",
-      "cancelKeep": "الاحتفاظ بالحساب"
+      "cancelKeep": "الاحتفاظ بالحساب",
+      "removePageTitle": "إزالة صفحة فيسبوك",
+      "removePageDesc": "سيتم إزالة هذه الصفحة فقط من الحساب. يمكنك تحديث الصفحات لاحقًا لإضافتها مرة أخرى ثم ربطها من جديد.",
+      "confirmRemovePage": "إزالة الصفحة"
     },
     "toast": {
       "fetchFailed": "فشل في جلب حسابات فيسبوك",
@@ -2820,7 +2832,15 @@
       "oauthInitFailed": "فشل في بدء ربط فيسبوك عبر OAuth",
       "oauthConnected": "تم ربط حساب فيسبوك بنجاح",
       "oauthRenewed": "تم تجديد حساب فيسبوك بنجاح",
-      "oauthCallbackFailed": "فشل ربط فيسبوك عبر OAuth"
+      "oauthCallbackFailed": "فشل ربط فيسبوك عبر OAuth",
+      "pagesRefreshed": "تم تحديث صفحات فيسبوك",
+      "pagesRefreshFailed": "فشل في تحديث صفحات فيسبوك",
+      "pageConnected": "تم ربط صفحة فيسبوك",
+      "pageConnectFailed": "فشل في ربط صفحة فيسبوك",
+      "pageDisconnected": "تم فصل صفحة فيسبوك",
+      "pageDisconnectFailed": "فشل في فصل صفحة فيسبوك",
+      "pageRemoved": "تمت إزالة صفحة فيسبوك",
+      "pageRemoveFailed": "فشل في إزالة صفحة فيسبوك"
     }
   },
   "licenseSettings": {

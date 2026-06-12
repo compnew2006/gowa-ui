@@ -708,3 +708,63 @@ The working directory still contains pre-existing uncommitted changes in `chat_c
 
 ### Gotchas and Future Notes
 - WhatsApp uses different identity JIDs for key derivation on the client side during LID sessions. However, the backend database stores secrets under the account's primary phone JID. Both must be correctly bridged during message secret lookup for decryption to succeed.
+
+## VPS sandbox green deploy - 2026-06-11
+
+- Task: deploy the current project as a replacement sandbox green build on VPS `31.97.192.53`, preserve public blue/live users, back up the installed version, verify license activation, clean temporary codebase material from the VPS, and document switch/rollback commands.
+- Relevant skills used: DevOps/deployment, Linux systemd operations, Go/Vue production build, license-key embedding, browser/API smoke verification. No unrelated skills were invoked.
+- Pre-deploy backup: `/root/whatomate_backups/whatomate-green-predeploy-20260611_195937.tar.gz`, SHA256 `1f156804b95bc7ef324a94facf37862f2fc7a1215b6e6ac8c956755671a32567`, size `630M`.
+- New sandbox green binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260611_200325-5702241f`, SHA256 `24110198b9da7caae06d5bbb6a16738ad24da5589e7f3e1bb62c3861189c31df`.
+- Symlinks: sandbox `active` and `green` now point to the new binary; sandbox `blue` points to `/opt/whatomate/bin/whatomate.sandbox.comments-scroll-fix-20260604_013200-3f31242c`.
+- Public live symlink was unchanged: `/opt/whatomate/bin/whatomate` -> `/opt/whatomate/bin/whatomate.green.20260528_111523`.
+- Verification: `whatomate-sandbox` active on `127.0.0.1:18127`; public services `whatomate` and `whatomate@holol-wenjaz` stayed active on `18123` and `18124`; inactive tenant services remained inactive.
+- License: sandbox and public `/api/license/bootstrap` returned `enabled=true`, `status=active`, `tier=production`, `key_id=deploy-20260416`.
+- Browser QA: Chrome DevTools loaded `https://sandbox.ofuqalmadenah.com/login`, saw no console warnings/errors, confirmed assets and `/api/license/bootstrap` return HTTP `200`; screenshot saved as `sandbox-green-login.png`.
+- Local verification: frontend build passed. Targeted Go tests passed except `internal/handlers`, which has pre-existing failures in upload cleanup SQLite test setup (`messages.instance_id`) and Redis connection refusal.
+- Cleanup: removed `/tmp/whatomate-green-src` and `/tmp/whatomate-green-keyring.json` from the VPS after deployment.
+
+## Facebook OAuth token validation fix - 2026-06-12
+
+### Files Changed
+- `internal/handlers/fb_oauth.go`
+- `internal/handlers/fb_oauth_test.go`
+
+### Approach Taken
+- Added `auth_type=rerequest` to the Facebook OAuth authorization URL.
+- Added explicit token endpoint error handling and safe token exchange metadata logging.
+- Added `/debug_token` validation and require `data.type == USER` before reading `/me`, fetching `/me/accounts`, or saving the OAuth account.
+- Made long-lived token exchange failure fatal instead of falling back to a short-lived token.
+- Made `/me/accounts` failure fatal so the app does not save a connected OAuth account with empty managed pages.
+- Preserved the intended storage split: verified long-lived user token in `FacebookAccount.AccessToken`, page tokens in encrypted `FacebookAccount.PageTokens`.
+
+### Tests Run & Results
+- `go test -p 1 -v ./internal/handlers -run 'TestApp_(InitFacebookOAuth_AddsRerequestAuthType|CallbackFacebookOAuth_)'` passed; the new DB-backed OAuth callback tests skipped locally because `TEST_DATABASE_URL` is not set.
+- `go test -p 1 -v ./internal/handlers/...` still fails on the pre-existing uploads cleanup SQLite/schema issue: `no such column: instance_id` in `uploads_cleanup_worker_instance_test.go`.
+- Serena diagnostics passed for `internal/handlers/fb_oauth.go` and `internal/handlers/fb_oauth_test.go`.
+
+## Facebook Accounts page controls - 2026-06-12
+
+### Files Changed
+- `internal/handlers/fb_oauth.go`
+- `cmd/whatomate/main.go`
+- `internal/handlers/fb_oauth_test.go`
+- `frontend/src/services/api.ts`
+- `frontend/src/stores/fbAccounts.ts`
+- `frontend/src/types/facebook.ts`
+- `frontend/src/views/facebook/FacebookAccountsView.vue`
+- `frontend/src/i18n/locales/en.json`
+- `frontend/src/i18n/locales/es.json`
+- `frontend/src/i18n/locales/ar.json`
+
+### Approach Taken
+- Added backend page management endpoints for refresh, connect, disconnect, and remove under `/api/facebook/accounts/{id}/pages`.
+- Added a shared transactional updater so `FacebookAccount.Data["pages"]`, `page_count`, and encrypted `PageTokens` change together.
+- Kept OAuth callback pages connected by default, while allowing page disconnect to remove only the selected page token and page remove to delete metadata plus token.
+- Updated `/facebook/accounts` to show every managed page with Connected/Disconnected status, per-page Connect/Disconnect/Remove actions, and per-account Refresh pages.
+- Added typed frontend page metadata and i18n keys for English, Spanish, and Arabic.
+
+### Tests Run & Results
+- `go test -p 1 -v ./internal/handlers -run 'TestApp_(CallbackFacebookOAuth|InitFacebookOAuth|RefreshFacebookAccountPages|ConnectFacebookAccountPage|DisconnectFacebookAccountPage|RemoveFacebookAccountPage)'` passed with DB-backed tests skipped locally because `TEST_DATABASE_URL` is not set.
+- `go test -p 1 ./internal/handlers/...` still fails on the existing uploads cleanup SQLite/schema issue in `uploads_cleanup_worker_instance_test.go` where the test fixture lacks `messages.instance_id`.
+- `cd frontend && npm run typecheck` still fails on existing settings typing issues in `CampaignsView.vue` and `SavedContentsView.vue` involving `AxiosHeaderValue | undefined` assigned to `string | undefined`; no Facebook files were reported.
+- Serena diagnostics passed for edited Go and frontend source files. Socraticode index update completed; codebase-memory change detection ran.

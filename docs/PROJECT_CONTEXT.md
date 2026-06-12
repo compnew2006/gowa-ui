@@ -9,7 +9,7 @@ Whatomate is an open-source WhatsApp Business platform for multi-tenant organiza
 - **Bulk messaging campaigns** (individual, group-join, message/group/member extraction)
 - **Contact & group management** (tags, collaboration, directory, filters)
 - **Analytics dashboard** (messages, agents, chatbot, Meta insights, custom widgets)
-- **Facebook integration** (comments, page search, people search, retargeting)
+- **Facebook integration** (OAuth account verification, managed page refresh/connect/disconnect/remove, comments, page search, people search, retargeting)
 - **Multi-provider** switching between Meta Cloud API and WhatsMeow via `MessageProvider` interface
 
 The system serves a single embedded Vue SPA from a standalone Go binary.
