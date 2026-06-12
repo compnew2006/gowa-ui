@@ -70,6 +70,7 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 | GET    | `/api/facebook/accounts/{id}/pages/{page_id}/insights` | Fetch page insights                          |
 | POST   | `/api/facebook/accounts/{id}/pages/{page_id}/messages` | Send a page message                          |
 | GET    | `/api/facebook/comments`                             | List Facebook comments                          |
+| GET    | `/api/facebook/comments/pages`                       | List distinct pages with comments                |
 | GET    | `/api/facebook/page-search`                          | Search public pages                              |
 | GET/POST | `/api/facebook/people-search`                      | Search people                                    |
 | POST   | `/api/facebook/people-search/add-contacts`           | Add contacts from people-search results         |

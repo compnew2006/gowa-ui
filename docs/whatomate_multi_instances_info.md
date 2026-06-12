@@ -62,3 +62,37 @@ Promote this green to public:
 ```bash
 ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b /opt/whatomate/bin/whatomate && systemctl restart whatomate
 ```
+
+
+## Latest Deploy - 2026-06-12 16:47 UTC
+
+- VPS: `31.97.192.53`
+- Target: `https://sandbox.ofuqalmadenah.com`
+- New sandbox green: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_164756-f40d584c`
+- Current sandbox active: same
+- Current production active: same binary (promoted)
+- Blue rollback (sandbox): previous green binary
+- Blue/green switch scripts: `/usr/local/sbin/whatomate-sandbox-switch` and `/usr/local/sbin/whatomate-switch`
+- License: Active (Paid • Lifetime)
+
+### Changes in this deploy
+- Added `GET /api/facebook/comments/pages` endpoint — page filter now shows ALL distinct pages with comments, not just from first 100
+- Fixed Assign dialog scrolling — added `overflow-hidden` to DialogContent
+- Removed instance access filtering from assign user list — all org members shown
+- Refactored assign system: extracted shared helpers (validateAgentExists, freshDB, cancelActiveChatbotSession, buildTransferWebhookPayload, buildAgentTransferResponse)
+- Fixed missing webhook events for PickNextTransfer and ReturnAgentTransfersToQueue
+- Fixed contact stuck as "assigned" when unassigning from transfer
+- Added page filter dropdown to Facebook Comments Inbox
+
+### Quick commands
+```bash
+# Switch sandbox blue/green:
+whatomate-sandbox-switch [blue|green|status]
+
+# Switch production blue/green:
+whatomate-switch [blue|green|status]
+
+# Rollback:
+whatomate-switch blue
+whatomate-sandbox-switch blue
+```
