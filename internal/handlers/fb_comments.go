@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -93,17 +94,17 @@ type facebookCommentsWebhookActor struct {
 }
 
 type facebookCommentsWebhookValue struct {
-	Item        string                        `json:"item"`
-	Verb        string                        `json:"verb"`
-	CommentID   string                        `json:"comment_id"`
-	PostID      string                        `json:"post_id"`
-	ParentID    string                        `json:"parent_id"`
-	SenderID    string                        `json:"sender_id"`
-	SenderName  string                        `json:"sender_name"`
-	From        facebookCommentsWebhookActor  `json:"from"`
-	Message     string                        `json:"message"`
-	CreatedTime int64                         `json:"created_time"`
-	Permalink   string                        `json:"permalink_url"`
+	Item        string                       `json:"item"`
+	Verb        string                       `json:"verb"`
+	CommentID   string                       `json:"comment_id"`
+	PostID      string                       `json:"post_id"`
+	ParentID    string                       `json:"parent_id"`
+	SenderID    string                       `json:"sender_id"`
+	SenderName  string                       `json:"sender_name"`
+	From        facebookCommentsWebhookActor `json:"from"`
+	Message     string                       `json:"message"`
+	CreatedTime int64                        `json:"created_time"`
+	Permalink   string                       `json:"permalink_url"`
 }
 
 func (v facebookCommentsWebhookValue) commenterID() string {
@@ -445,6 +446,7 @@ func (a *App) ReplyFacebookComment(r *fastglue.Request) error {
 }
 
 func (a *App) UpdateFacebookCommentStatus(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -463,7 +465,7 @@ func (a *App) UpdateFacebookCommentStatus(r *fastglue.Request) error {
 	if !validFacebookCommentStatus(req.Status) {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid comment status", nil, "status")
 	}
-	commentQuery := a.DB.Model(&models.FacebookComment{}).Where("organization_id = ?", orgID)
+	commentQuery := requestDB.Model(&models.FacebookComment{}).Where("organization_id = ?", orgID)
 	if commentID, err := uuid.Parse(commentRef); err == nil {
 		commentQuery = commentQuery.Where("id = ? OR external_id = ?", commentID, commentRef)
 	} else {
@@ -504,6 +506,7 @@ func (a *App) VerifyFacebookCommentsWebhook(r *fastglue.Request) error {
 func (a *App) ReceiveFacebookCommentsWebhook(r *fastglue.Request) error {
 	body := r.RequestCtx.PostBody()
 	if err := a.verifyFacebookWebhookSignature(r, body); err != nil {
+		a.Log.Warn("Facebook comments webhook signature verification failed", "error", err, "remote_addr", r.RequestCtx.RemoteAddr().String())
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Invalid Facebook webhook signature", nil, "")
 	}
 	var payload facebookCommentsWebhookPayload
@@ -541,6 +544,16 @@ func (a *App) ReceiveFacebookCommentsWebhook(r *fastglue.Request) error {
 				failures = append(failures, fmt.Sprintf("%s: failed to save webhook comment", pageID))
 				continue
 			}
+			if created {
+				a.Log.Info("Facebook webhook comment created",
+					"org_id", account.OrganizationID,
+					"account_id", account.ID,
+					"page_id", pageID,
+					"comment_id", change.Value.CommentID,
+					"from_name", comment.FromName,
+					"is_admin_reply", comment.IsAdminReply,
+				)
+			}
 			if a.WSHub != nil {
 				wsType := websocket.TypeFacebookCommentCreated
 				if !created {
@@ -555,12 +568,26 @@ func (a *App) ReceiveFacebookCommentsWebhook(r *fastglue.Request) error {
 			if created && !comment.IsAdminReply && settings.AutoReplyEnabled && shouldAutoReplyFacebookComment(a.DB, settings, *comment) {
 				if _, err := a.sendAndStoreFacebookCommentReply(a.DB, account, comment, account.UserID, settings.AutoCommentReplyText, settings.AutoPrivateMessageText, settings.AutoCommentReplyEnabled, settings.AutoPrivateReplyEnabled, true, pageToken); err == nil {
 					autoReplies++
+					a.Log.Info("Facebook webhook auto-reply sent",
+						"org_id", account.OrganizationID,
+						"comment_id", change.Value.CommentID,
+					)
 				} else {
 					failures = append(failures, fmt.Sprintf("%s: auto reply failed", change.Value.CommentID))
+					a.Log.Warn("Facebook webhook auto-reply failed",
+						"error", err,
+						"comment_id", change.Value.CommentID,
+						"page_id", pageID,
+					)
 				}
 			}
 		}
 	}
+	a.Log.Info("Facebook comments webhook processed",
+		"processed", processed,
+		"auto_replies", autoReplies,
+		"failures", len(failures),
+	)
 	return r.SendEnvelope(map[string]any{
 		"status":       "ok",
 		"processed":    processed,
@@ -575,18 +602,18 @@ func (a *App) verifyFacebookWebhookSignature(r *fastglue.Request, body []byte) e
 		appSecret = strings.TrimSpace(a.Config.FacebookOAuth.AppSecret)
 	}
 	if appSecret == "" {
-		return nil
+		return errors.New("facebook_oauth.app_secret is not configured — cannot verify webhook signatures; configure it to accept Facebook webhooks")
 	}
 	header := strings.TrimSpace(string(r.RequestCtx.Request.Header.Peek("X-Hub-Signature-256")))
 	if header == "" {
-		return errors.New("missing signature")
+		return errors.New("missing X-Hub-Signature-256 header")
 	}
 	if !strings.HasPrefix(header, "sha256=") {
-		return errors.New("unsupported signature")
+		return errors.New("unsupported signature format")
 	}
 	provided, err := hex.DecodeString(strings.TrimPrefix(header, "sha256="))
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid signature hex: %w", err)
 	}
 	mac := hmac.New(sha256.New, []byte(appSecret))
 	_, _ = mac.Write(body)
@@ -629,6 +656,24 @@ func (a *App) getOrCreateFacebookCommentSettings(db *gorm.DB, orgID uuid.UUID) (
 }
 
 func (a *App) findFacebookAccountByPageID(pageID string) (*models.FacebookAccount, string, error) {
+	// Check Redis cache first to avoid scanning all accounts and decrypting page tokens.
+	if a.Redis != nil {
+		cacheKey := fmt.Sprintf("fb:comment:page_account:%s", pageID)
+		cached, err := a.Redis.Get(context.Background(), cacheKey).Result()
+		if err == nil && cached != "" {
+			var entry struct {
+				AccountID uuid.UUID `json:"account_id"`
+				PageToken string    `json:"page_token"`
+			}
+			if json.Unmarshal([]byte(cached), &entry) == nil && entry.AccountID != uuid.Nil && entry.PageToken != "" {
+				var account models.FacebookAccount
+				if err := a.DB.Where("id = ? AND status = ?", entry.AccountID, models.FBAccountStatusActive).First(&account).Error; err == nil {
+					return &account, entry.PageToken, nil
+				}
+			}
+		}
+	}
+
 	var accounts []models.FacebookAccount
 	if err := a.DB.Where("method = ? AND status = ?", models.FBAccountMethodOAuth, models.FBAccountStatusActive).Find(&accounts).Error; err != nil {
 		return nil, "", err
@@ -639,6 +684,16 @@ func (a *App) findFacebookAccountByPageID(pageID string) (*models.FacebookAccoun
 			continue
 		}
 		if token := strings.TrimSpace(pageTokens[pageID]); token != "" {
+			// Cache the mapping for future lookups.
+			if a.Redis != nil {
+				entry := struct {
+					AccountID uuid.UUID `json:"account_id"`
+					PageToken string    `json:"page_token"`
+				}{AccountID: account.ID, PageToken: token}
+				if data, err := json.Marshal(entry); err == nil {
+					a.Redis.Set(context.Background(), fmt.Sprintf("fb:comment:page_account:%s", pageID), data, 5*time.Minute)
+				}
+			}
 			return &account, token, nil
 		}
 	}
@@ -693,7 +748,7 @@ func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.Facebook
 	if err := commentDB.Where("organization_id = ? AND external_id = ?", account.OrganizationID, value.CommentID).First(&saved).Error; err != nil {
 		return nil, false, err
 	}
-	created := saved.CreatedAt.Equal(saved.UpdatedAt) || saved.LastRepliedAt == nil
+	created := tx.RowsAffected > 0
 	return &saved, created, nil
 }
 
@@ -897,8 +952,13 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 			if tx.RowsAffected > 0 {
 				var saved models.FacebookComment
 				_ = commentDB.Where("organization_id = ? AND external_id = ?", orgID, edge.ID).First(&saved).Error
-				if saved.CreatedAt.Equal(saved.UpdatedAt) || saved.LastRepliedAt == nil {
-					result.Created++
+				result.Created++
+				// Broadcast WebSocket for newly synced comments
+				if a.WSHub != nil {
+					a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+						Type:    websocket.TypeFacebookCommentCreated,
+						Payload: facebookCommentToResponse(saved),
+					})
 				}
 				if runAutoReply && shouldAutoReplyFacebookComment(db, settings, saved) {
 					if _, err := a.sendAndStoreFacebookCommentReply(db, &account, &saved, userID, settings.AutoCommentReplyText, settings.AutoPrivateMessageText, settings.AutoCommentReplyEnabled, settings.AutoPrivateReplyEnabled, true, pageToken); err == nil {
@@ -1213,8 +1273,6 @@ func (a *App) sendFacebookDirectMessengerMessage(oauthCfg facebookOAuthRuntimeCo
 	}
 	return a.facebookGraphJSONPost(endpoint, body)
 }
-
-
 
 func isFacebookUserCantDMError(err error) bool {
 	if err == nil {

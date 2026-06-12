@@ -3,6 +3,8 @@ package handlers
 import (
 	"errors"
 
+	"gorm.io/gorm"
+
 	"github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
@@ -92,40 +94,45 @@ func fbAccountToResponse(account models.FacebookAccount) FBAccountResponse {
 	}
 }
 
-func (a *App) ListFBAccounts(r *fastglue.Request) error {
+// fbAuthContext resolves the authenticated organisation and user from the request,
+// verifying that the user holds the required permission for the Facebook accounts resource.
+// Returns (requestDB, orgID, userID, error). The returned error is already a handler error
+// (callers should propagate it directly).
+func (a *App) fbAuthContext(r *fastglue.Request, action string) (*gorm.DB, uuid.UUID, uuid.UUID, error) {
 	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil, uuid.Nil, uuid.Nil, r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil {
-		return nil
+	if err := a.requirePermission(r, userID, models.ResourceAccounts, action); err != nil {
+		return nil, uuid.Nil, uuid.Nil, err
 	}
+	return requestDB, orgID, userID, nil
+}
 
+func (a *App) ListFBAccounts(r *fastglue.Request) error {
+	requestDB, orgID, _, err := a.fbAuthContext(r, models.ActionRead)
+	if err != nil {
+		return err
+	}
 	var accounts []models.FacebookAccount
 	if err := requestDB.Where("organization_id = ?", orgID).Order("created_at DESC").Find(&accounts).Error; err != nil {
 		a.Log.Error("Failed to list Facebook accounts", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list Facebook accounts", nil, "")
 	}
-
 	response := make([]FBAccountResponse, len(accounts))
 	for i, acc := range accounts {
 		response[i] = fbAccountToResponse(acc)
 	}
-
 	return r.SendEnvelope(map[string]interface{}{
 		"accounts": response,
 	})
 }
 
 func (a *App) CreateFBAccount(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
+	requestDB, orgID, _, err := a.fbAuthContext(r, models.ActionWrite)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
-		return nil
+		return err
 	}
 
 	var req FBCreateAccountRequest
@@ -177,43 +184,30 @@ func (a *App) CreateFBAccount(r *fastglue.Request) error {
 }
 
 func (a *App) GetFBAccount(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
+	requestDB, orgID, _, err := a.fbAuthContext(r, models.ActionRead)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return err
 	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil {
-		return nil
-	}
-
 	id, err := parsePathUUID(r, "id", "Facebook account")
 	if err != nil {
 		return nil
 	}
-
 	account, err := findByIDAndOrg[models.FacebookAccount](requestDB, r, id, orgID, "Facebook account")
 	if err != nil {
 		return nil
 	}
-
 	return r.SendEnvelope(fbAccountToResponse(*account))
 }
 
 func (a *App) UpdateFBAccount(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
+	requestDB, orgID, _, err := a.fbAuthContext(r, models.ActionWrite)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return err
 	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
-		return nil
-	}
-
 	id, err := parsePathUUID(r, "id", "Facebook account")
 	if err != nil {
 		return nil
 	}
-
 	account, err := findByIDAndOrg[models.FacebookAccount](requestDB, r, id, orgID, "Facebook account")
 	if err != nil {
 		return nil
@@ -279,29 +273,21 @@ func (a *App) UpdateFBAccount(r *fastglue.Request) error {
 }
 
 func (a *App) DeleteFBAccount(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
+	requestDB, orgID, _, err := a.fbAuthContext(r, models.ActionDelete)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return err
 	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionDelete); err != nil {
-		return nil
-	}
-
 	id, err := parsePathUUID(r, "id", "Facebook account")
 	if err != nil {
 		return nil
 	}
-
 	account, err := findByIDAndOrg[models.FacebookAccount](requestDB, r, id, orgID, "Facebook account")
 	if err != nil {
 		return nil
 	}
-
 	if err := requestDB.Delete(account).Error; err != nil {
 		a.Log.Error("Failed to delete Facebook account", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete account", nil, "")
 	}
-
 	return r.SendEnvelope(map[string]string{"status": "deleted"})
 }

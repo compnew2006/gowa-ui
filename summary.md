@@ -723,6 +723,21 @@ The working directory still contains pre-existing uncommitted changes in `chat_c
 - Local verification: frontend build passed. Targeted Go tests passed except `internal/handlers`, which has pre-existing failures in upload cleanup SQLite test setup (`messages.instance_id`) and Redis connection refusal.
 - Cleanup: removed `/tmp/whatomate-green-src` and `/tmp/whatomate-green-keyring.json` from the VPS after deployment.
 
+## VPS sandbox green deploy - 2026-06-12
+
+- Task: deploy the current project to `https://sandbox.ofuqalmadenah.com` as a replacement sandbox green build on VPS `31.97.192.53`, back up first, verify license activation, clean temporary source from the VPS, update markdown notes, and provide switch commands.
+- Relevant skills used: deployment/systemd operations, Go/Vue production build, license-key embedding, API smoke verification, Chrome DevTools browser QA. No unrelated skills were invoked.
+- Source revision: `f518308b`.
+- Pre-deploy backup: `/root/whatomate_backups/whatomate-sandbox-green-predeploy-20260612_011507.tar.gz`, SHA256 `612b71551489badffe2064d9faad63fc706535bf44657c40db4b2d4637731b7f`, size `653M`.
+- New sandbox green binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b`, SHA256 `26fa2f11406e4af956ac563f444b52148909810668e9f5f06e7bfbe3228c3044`.
+- Symlinks: sandbox `active` and `green` now point to the new binary; sandbox `blue` points to `/opt/whatomate/bin/whatomate.sandbox.green.20260611_200325-5702241f`.
+- Public live symlink observed during deploy: `/opt/whatomate/bin/whatomate` -> `/opt/whatomate/bin/whatomate.sandbox.green.20260611_200325-5702241f`.
+- Verification: `whatomate-sandbox` active on `127.0.0.1:18127`; public services `whatomate` and `whatomate@holol-wenjaz` stayed active on `18123` and `18124`; inactive tenant services remained inactive.
+- License: sandbox and public `/api/license/bootstrap` returned `enabled=true`, `status=active`, `tier=production`, `key_id=deploy-20260416`.
+- Browser QA: Chrome DevTools loaded `https://sandbox.ofuqalmadenah.com/login`, saw no console warnings/errors, confirmed assets and `/api/license/bootstrap` return HTTP `200`; screenshot saved as `sandbox-green-login-20260612.png`.
+- Local verification: targeted Go packages passed and frontend build passed.
+- Cleanup: removed `/tmp/whatomate-green-src` and `/tmp/whatomate-green-keyring.json` from the VPS after deployment.
+
 ## Facebook OAuth token validation fix - 2026-06-12
 
 ### Files Changed

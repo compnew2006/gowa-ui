@@ -344,6 +344,9 @@ func applyPreMigrationFixes(db *gorm.DB) error {
 	if err := normalizeWhatsAppStatusRows(db); err != nil {
 		return fmt.Errorf("failed to normalize whatsapp statuses: %w", err)
 	}
+	if err := fixFacebookCommentsAdminReplyColumn(db); err != nil {
+		return fmt.Errorf("failed to fix facebook comments admin reply column: %w", err)
+	}
 	if err := fixSavedContentsUniqueIndex(db); err != nil {
 		return fmt.Errorf("failed to fix saved contents unique index: %w", err)
 	}
@@ -454,6 +457,31 @@ func fixAgentSelectionParticipantUniqueIndex(db *gorm.DB) error {
 	// "Agent is already in this routing list" 23505 regression.
 	if len(toDrop) > 0 {
 		fmt.Printf("[migrate] agent_selection_participants: replaced %d non-partial unique index(es) with partial unique index on (organization_id, settings_id, user_id) WHERE deleted_at IS NULL\n", len(toDrop))
+	}
+	return nil
+}
+
+func fixFacebookCommentsAdminReplyColumn(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&models.FacebookComment{}) {
+		return nil
+	}
+	hasColumn, err := hasTableColumn(db, "facebook_comments", "is_admin_reply")
+	if err != nil {
+		return err
+	}
+	if !hasColumn {
+		if err := db.Exec(`
+			ALTER TABLE facebook_comments
+			ADD COLUMN is_admin_reply boolean NOT NULL DEFAULT false
+		`).Error; err != nil {
+			return err
+		}
+	}
+	if err := db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_facebook_comments_is_admin_reply
+		ON facebook_comments (is_admin_reply)
+	`).Error; err != nil {
+		return err
 	}
 	return nil
 }

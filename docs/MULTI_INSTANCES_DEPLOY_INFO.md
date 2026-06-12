@@ -2912,3 +2912,77 @@ Rollback only sandbox to the previous sandbox blue:
 ```bash
 ln -sfn /opt/whatomate/bin/whatomate.sandbox.blue /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
 ```
+
+## Sandbox Green Deploy - 2026-06-12 01:20 UTC - current project
+
+- VPS: `31.97.192.53` (`root`, Ubuntu).
+- Target URL: `https://sandbox.ofuqalmadenah.com`.
+- Deployment mode: replaced sandbox green only and restarted `whatomate-sandbox`.
+- Pre-deploy backup: `/root/whatomate_backups/whatomate-sandbox-green-predeploy-20260612_011507.tar.gz`
+  - SHA256: `612b71551489badffe2064d9faad63fc706535bf44657c40db4b2d4637731b7f`
+  - Size: `653M`
+- Source revision deployed: `f518308b`
+- New sandbox green binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b`
+- New sandbox green SHA256: `26fa2f11406e4af956ac563f444b52148909810668e9f5f06e7bfbe3228c3044`
+- Version output: `Whatomate f518308b-sandbox-green-20260612_011906 (built 2026-06-12_01:20:10)`
+- Symlink state after deploy:
+  - `/opt/whatomate/bin/whatomate.sandbox.active` -> `/opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b`
+  - `/opt/whatomate/bin/whatomate.sandbox.green` -> `/opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b`
+  - `/opt/whatomate/bin/whatomate.sandbox.blue` -> `/opt/whatomate/bin/whatomate.sandbox.green.20260611_200325-5702241f`
+- Public live symlink observed during deploy:
+  - `/opt/whatomate/bin/whatomate` -> `/opt/whatomate/bin/whatomate.sandbox.green.20260611_200325-5702241f`
+  - Public service version: `Whatomate 5702241f-sandbox-green-20260611_200325 (built 2026-06-11_20:06:10)`
+- Active services after deploy:
+  - `whatomate`: active on `127.0.0.1:18123`
+  - `whatomate@holol-wenjaz`: active on `127.0.0.1:18124`
+  - `whatomate@alarkan-almthalia`: inactive before and after deploy
+  - `whatomate@matbaat-ruya`: inactive before and after deploy
+  - `whatomate-sandbox`: active on `127.0.0.1:18127`
+- License verification:
+  - `http://127.0.0.1:18127/api/license/bootstrap` returned `enabled=true`, `status=active`, `tier=production`, `key_id=deploy-20260416`.
+  - `https://sandbox.ofuqalmadenah.com/api/license/bootstrap` returned HTTP `200`, `enabled=true`, `status=active`.
+  - `https://ofuqalmadenah.com/api/license/bootstrap` returned HTTP `200`, `enabled=true`, `status=active`.
+- Browser verification:
+  - Chrome DevTools loaded `https://sandbox.ofuqalmadenah.com/login`.
+  - Login UI rendered successfully.
+  - Key assets, `/api/license/bootstrap`, and `/api/auth/sso/providers` returned HTTP `200`.
+  - No JavaScript console warnings/errors were found.
+  - Browser-side license fetch returned `enabled=true`, `status=active`, `tier=production`, `key_id=deploy-20260416`.
+  - Screenshot saved locally at `sandbox-green-login-20260612.png`.
+- Local verification before deploy:
+  - `go test ./internal/database ./internal/config ./internal/crypto ./internal/license ./pkg/whatsapp ./pkg/whatsmeow`: passed.
+  - `cd frontend && npm run build`: passed.
+- Server build verification:
+  - `frontend && npm ci`: completed with zero vulnerabilities.
+  - `make build-prod`: passed and embedded frontend assets.
+  - Final `go build` used embedded license keyring and static `CGO_ENABLED=0` binary output.
+- Cleanup:
+  - Removed temporary build source `/tmp/whatomate-green-src`.
+  - Removed temporary keyring `/tmp/whatomate-green-keyring.json`.
+  - No temporary Whatomate source tree was left under `/tmp`; runtime configs and `/opt/whatomate/bin` were preserved.
+
+### One-Line Switch Commands
+
+Switch sandbox to the new green:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
+```
+
+Switch sandbox back to blue:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.blue /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
+```
+
+Promote this new sandbox green to public `https://ofuqalmadenah.com`:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b /opt/whatomate/bin/whatomate && systemctl restart whatomate
+```
+
+Rollback public `https://ofuqalmadenah.com` to the currently observed public live binary:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260611_200325-5702241f /opt/whatomate/bin/whatomate && systemctl restart whatomate
+```

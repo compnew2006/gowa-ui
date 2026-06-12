@@ -31,3 +31,34 @@ Rollback sandbox:
 ```bash
 ln -sfn /opt/whatomate/bin/whatomate.sandbox.blue /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
 ```
+
+## Latest Sandbox Deploy - 2026-06-12 01:20 UTC
+
+- VPS: `31.97.192.53`
+- Target: `https://sandbox.ofuqalmadenah.com`
+- Backup: `/root/whatomate_backups/whatomate-sandbox-green-predeploy-20260612_011507.tar.gz`
+- Backup SHA256: `612b71551489badffe2064d9faad63fc706535bf44657c40db4b2d4637731b7f`
+- New sandbox green: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b`
+- New sandbox green SHA256: `26fa2f11406e4af956ac563f444b52148909810668e9f5f06e7bfbe3228c3044`
+- Current sandbox active: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b`
+- Current sandbox blue rollback: `/opt/whatomate/bin/whatomate.sandbox.green.20260611_200325-5702241f`
+- Public live observed: `/opt/whatomate/bin/whatomate.sandbox.green.20260611_200325-5702241f`
+- License bootstrap verified active on sandbox and public live.
+
+Switch sandbox to new green:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
+```
+
+Rollback sandbox to blue:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.blue /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
+```
+
+Promote this green to public:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b /opt/whatomate/bin/whatomate && systemctl restart whatomate
+```

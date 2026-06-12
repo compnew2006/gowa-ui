@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   PageHeader,
   SearchInput,
@@ -174,7 +175,11 @@ async function handleSync() {
 
 onMounted(async () => {
   await loadInstances();
-  await Promise.all([loadStats(), loadContacts()]);
+  // Auto-select the first instance if available
+  if (instances.value.length > 0) {
+    selectedInstanceId.value = instances.value[0].id;
+    await Promise.all([loadStats(), loadContacts()]);
+  }
 });
 </script>
 
@@ -187,9 +192,6 @@ onMounted(async () => {
             <SelectValue :placeholder="t('extract.selectInstance')" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">
-              {{ t("extract.allInstances") }}
-            </SelectItem>
             <SelectItem
               v-for="inst in instances"
               :key="inst.id"
@@ -273,17 +275,18 @@ onMounted(async () => {
           </Button>
         </CardHeader>
         <CardContent>
-          <DataTable
-            :items="contacts"
-            :columns="columns"
-            :is-loading="isLoading"
-            :server-pagination="true"
-            :current-page="currentPage"
-            :total-items="totalContacts"
-            :page-size="pageSize"
-            :item-name="t('extract.contacts')"
-            @page-change="onPageChange"
-          >
+          <ScrollArea class="h-[500px] rounded-md border">
+            <DataTable
+              :items="contacts"
+              :columns="columns"
+              :is-loading="isLoading"
+              :server-pagination="true"
+              :current-page="currentPage"
+              :total-items="totalContacts"
+              :page-size="pageSize"
+              :item-name="t('extract.contacts')"
+              @page-change="onPageChange"
+            >
             <template #cell-last_message_at="{ item }">
               <span class="text-muted-foreground text-sm">
                 {{ item.last_message_at ? formatDate(item.last_message_at) : "—" }}
@@ -300,7 +303,8 @@ onMounted(async () => {
                 <p class="mt-4 text-muted-foreground">{{ t("extract.noContacts") }}</p>
               </div>
             </template>
-          </DataTable>
+            </DataTable>
+          </ScrollArea>
         </CardContent>
       </Card>
     </div>

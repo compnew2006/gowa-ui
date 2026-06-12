@@ -286,7 +286,6 @@ async function sendReply() {
       send_private_message: sendPrivateMessage.value,
     });
     toast.success(t("facebookComments.toast.replySent"));
-    await fetchComments();
   } catch (error: any) {
     toast.error(error.response?.data?.message || t("facebookComments.toast.replyFailed"));
   } finally {

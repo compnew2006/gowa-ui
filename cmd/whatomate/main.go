@@ -1579,7 +1579,14 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/facebook/comments/{id}/reply", app.ReplyFacebookComment)
 	g.PUT("/api/facebook/comments/{id}/status", app.UpdateFacebookCommentStatus)
 	g.GET("/api/facebook/comments/webhook", app.VerifyFacebookCommentsWebhook)
-	g.POST("/api/facebook/comments/webhook", app.ReceiveFacebookCommentsWebhook)
+	if cfg.RateLimit.Enabled {
+		window := time.Duration(cfg.RateLimit.WindowSeconds) * time.Second
+		g.POST("/api/facebook/comments/webhook", withRateLimit(app.ReceiveFacebookCommentsWebhook, middleware.RateLimitOpts{
+			Redis: rdb, Log: lo, Max: cfg.RateLimit.WebhookMaxAttempts, Window: window, KeyPrefix: "fb_comments_webhook", TrustProxy: cfg.RateLimit.TrustProxy,
+		}))
+	} else {
+		g.POST("/api/facebook/comments/webhook", app.ReceiveFacebookCommentsWebhook)
+	}
 
 	g.GET("/api/notifications", app.ListNotifications)
 	g.PUT("/api/notifications/{id}/dismiss", app.DismissNotification)

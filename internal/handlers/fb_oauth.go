@@ -661,6 +661,41 @@ func (a *App) saveFacebookOAuthAccount(db *gorm.DB, state models.FacebookOAuthSt
 	return &account, nil
 }
 
+// withFacebookPageManagement is a consolidation helper for connect, disconnect, and remove page handlers.
+// It handles: auth context resolution, page token decryption, running the mutation action,
+// page existence validation, marking connectedness, persistence, and response.
+func (a *App) withFacebookPageManagement(
+	r *fastglue.Request,
+	pageAction func(account *models.FacebookAccount, pageTokens map[string]string, pageID string, requestDB *gorm.DB) ([]map[string]any, error),
+) error {
+	account, requestDB, pageID, err := a.facebookAccountForPageManagement(r)
+	if err != nil {
+		return err
+	}
+	if account == nil {
+		return nil
+	}
+	pageTokens, err := a.decryptFacebookPageTokens(*account)
+	if err != nil {
+		a.Log.Error("Failed to decrypt Facebook page tokens", "error", err, "account_id", account.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook page tokens", nil, "")
+	}
+	pages, err := pageAction(account, pageTokens, pageID, requestDB)
+	if err != nil {
+		return err
+	}
+	if !facebookPagesContain(pages, pageID) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page not found for this account", nil, "page_id")
+	}
+	pages = markFacebookPagesConnected(pages, pageTokens)
+	updated, err := a.updateFacebookAccountPages(requestDB, *account, pages, pageTokens)
+	if err != nil {
+		a.Log.Error("Failed to save Facebook page update", "error", err, "account_id", account.ID, "page_id", pageID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save Facebook page update", nil, "")
+	}
+	return r.SendEnvelope(fbAccountToResponse(*updated))
+}
+
 func (a *App) RefreshFacebookAccountPages(r *fastglue.Request) error {
 	account, requestDB, _, err := a.facebookAccountForPageManagement(r)
 	if err != nil {
@@ -669,7 +704,6 @@ func (a *App) RefreshFacebookAccountPages(r *fastglue.Request) error {
 	if account == nil {
 		return nil
 	}
-
 	userToken, err := crypto.Decrypt(account.AccessToken, a.Config.App.EncryptionKey)
 	if err != nil {
 		a.Log.Error("Failed to decrypt Facebook OAuth user token", "error", err, "account_id", account.ID)
@@ -704,102 +738,46 @@ func (a *App) RefreshFacebookAccountPages(r *fastglue.Request) error {
 }
 
 func (a *App) ConnectFacebookAccountPage(r *fastglue.Request) error {
-	account, requestDB, pageID, err := a.facebookAccountForPageManagement(r)
-	if err != nil {
-		return err
-	}
-	if account == nil {
-		return nil
-	}
-
-	userToken, err := crypto.Decrypt(account.AccessToken, a.Config.App.EncryptionKey)
-	if err != nil {
-		a.Log.Error("Failed to decrypt Facebook OAuth user token", "error", err, "account_id", account.ID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook user token", nil, "")
-	}
-	oauthCfg, err := a.facebookOAuthRuntimeConfig(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
-	}
-	fetchedPages, fetchedTokens, err := a.fetchFacebookOAuthPages(oauthCfg, userToken)
-	if err != nil {
-		a.Log.Error("Failed to fetch Facebook pages for connect", "error", err, "account_id", account.ID, "page_id", pageID)
-		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to fetch Facebook pages", nil, "")
-	}
-	pageToken := strings.TrimSpace(fetchedTokens[pageID])
-	if pageToken == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page token not found for this account", nil, "page_id")
-	}
-	pageTokens, err := a.decryptFacebookPageTokens(*account)
-	if err != nil {
-		a.Log.Error("Failed to decrypt Facebook page tokens", "error", err, "account_id", account.ID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook page tokens", nil, "")
-	}
-	pageTokens[pageID] = pageToken
-	pages := mergeFacebookPages(account.Data, fetchedPages)
-	if !facebookPagesContain(pages, pageID) {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page not found for this account", nil, "page_id")
-	}
-	pages = markFacebookPagesConnected(pages, pageTokens)
-	updated, err := a.updateFacebookAccountPages(requestDB, *account, pages, pageTokens)
-	if err != nil {
-		a.Log.Error("Failed to connect Facebook page", "error", err, "account_id", account.ID, "page_id", pageID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to connect Facebook page", nil, "")
-	}
-	return r.SendEnvelope(fbAccountToResponse(*updated))
+	return a.withFacebookPageManagement(r, func(account *models.FacebookAccount, pageTokens map[string]string, pageID string, requestDB *gorm.DB) ([]map[string]any, error) {
+		userToken, err := crypto.Decrypt(account.AccessToken, a.Config.App.EncryptionKey)
+		if err != nil {
+			a.Log.Error("Failed to decrypt Facebook OAuth user token", "error", err, "account_id", account.ID)
+			return nil, r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook user token", nil, "")
+		}
+		oauthCfg, err := a.facebookOAuthRuntimeConfig(r)
+		if err != nil {
+			return nil, r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+		}
+		fetchedPages, fetchedTokens, err := a.fetchFacebookOAuthPages(oauthCfg, userToken)
+		if err != nil {
+			a.Log.Error("Failed to fetch Facebook pages for connect", "error", err, "account_id", account.ID, "page_id", pageID)
+			return nil, r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to fetch Facebook pages", nil, "")
+		}
+		pageToken := strings.TrimSpace(fetchedTokens[pageID])
+		if pageToken == "" {
+			return nil, r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page token not found for this account", nil, "page_id")
+		}
+		pageTokens[pageID] = pageToken
+		return mergeFacebookPages(account.Data, fetchedPages), nil
+	})
 }
 
 func (a *App) DisconnectFacebookAccountPage(r *fastglue.Request) error {
-	account, requestDB, pageID, err := a.facebookAccountForPageManagement(r)
-	if err != nil {
-		return err
-	}
-	if account == nil {
-		return nil
-	}
-	pageTokens, err := a.decryptFacebookPageTokens(*account)
-	if err != nil {
-		a.Log.Error("Failed to decrypt Facebook page tokens", "error", err, "account_id", account.ID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook page tokens", nil, "")
-	}
-	delete(pageTokens, pageID)
-	pages := markFacebookPagesConnected(facebookPagesFromData(account.Data), pageTokens)
-	if !facebookPagesContain(pages, pageID) {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page not found for this account", nil, "page_id")
-	}
-	updated, err := a.updateFacebookAccountPages(requestDB, *account, pages, pageTokens)
-	if err != nil {
-		a.Log.Error("Failed to disconnect Facebook page", "error", err, "account_id", account.ID, "page_id", pageID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to disconnect Facebook page", nil, "")
-	}
-	return r.SendEnvelope(fbAccountToResponse(*updated))
+	return a.withFacebookPageManagement(r, func(account *models.FacebookAccount, pageTokens map[string]string, pageID string, requestDB *gorm.DB) ([]map[string]any, error) {
+		delete(pageTokens, pageID)
+		return facebookPagesFromData(account.Data), nil
+	})
 }
 
 func (a *App) RemoveFacebookAccountPage(r *fastglue.Request) error {
-	account, requestDB, pageID, err := a.facebookAccountForPageManagement(r)
-	if err != nil {
-		return err
-	}
-	if account == nil {
-		return nil
-	}
-	pageTokens, err := a.decryptFacebookPageTokens(*account)
-	if err != nil {
-		a.Log.Error("Failed to decrypt Facebook page tokens", "error", err, "account_id", account.ID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read Facebook page tokens", nil, "")
-	}
-	delete(pageTokens, pageID)
-	pages, removed := removeFacebookPage(facebookPagesFromData(account.Data), pageID)
-	if !removed {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page not found for this account", nil, "page_id")
-	}
-	pages = markFacebookPagesConnected(pages, pageTokens)
-	updated, err := a.updateFacebookAccountPages(requestDB, *account, pages, pageTokens)
-	if err != nil {
-		a.Log.Error("Failed to remove Facebook page", "error", err, "account_id", account.ID, "page_id", pageID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to remove Facebook page", nil, "")
-	}
-	return r.SendEnvelope(fbAccountToResponse(*updated))
+	return a.withFacebookPageManagement(r, func(account *models.FacebookAccount, pageTokens map[string]string, pageID string, requestDB *gorm.DB) ([]map[string]any, error) {
+		delete(pageTokens, pageID)
+		pages, removed := removeFacebookPage(facebookPagesFromData(account.Data), pageID)
+		if !removed {
+			return nil, r.SendErrorEnvelope(fasthttp.StatusNotFound, "Page not found for this account", nil, "page_id")
+		}
+		return pages, nil
+	})
 }
 
 func (a *App) facebookAccountForPageManagement(r *fastglue.Request) (*models.FacebookAccount, *gorm.DB, string, error) {

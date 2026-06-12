@@ -252,7 +252,7 @@ func (a *App) ListFBPeopleCampaigns(r *fastglue.Request) error {
 	var campaigns []string
 	if err := requestDB.Model(&models.FBPeopleSearch{}).
 		Where("organization_id = ?", orgID).
-		Distinct().
+		Distinct("campaign_id").
 		Pluck("campaign_id", &campaigns).Error; err != nil {
 		a.Log.Error("Failed to list unique people search campaigns", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list campaigns", nil, "")

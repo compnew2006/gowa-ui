@@ -27,16 +27,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Facebook,
   Plus,
   Loader2,
-  MoreVertical,
   Pencil,
   Trash2,
   Cookie,
@@ -499,37 +492,36 @@ async function handleDelete() {
                       </p>
                     </div>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger as-child>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        class="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <MoreVertical class="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" class="w-40">
-                      <DropdownMenuItem @click="openEditDialog(account)">
-                        <Pencil class="mr-2 h-4 w-4" />
-                        {{ $t("common.edit") }}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        v-if="account.method === 'oauth'"
-                        @click="handleStartOAuth(account)"
-                      >
-                        <ExternalLink class="mr-2 h-4 w-4" />
-                        {{ $t("fbAccounts.renewOAuth") }}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        class="text-destructive focus:text-destructive"
-                        @click="openDeleteDialog(account)"
-                      >
-                        <Trash2 class="mr-2 h-4 w-4" />
-                        {{ $t("common.delete") }}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div class="flex shrink-0 items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="h-8 w-8"
+                      :title="$t('common.edit')"
+                      @click="openEditDialog(account)"
+                    >
+                      <Pencil class="h-4 w-4" />
+                    </Button>
+                    <Button
+                      v-if="account.method === 'oauth'"
+                      variant="ghost"
+                      size="icon"
+                      class="h-8 w-8"
+                      :title="$t('fbAccounts.renewOAuth')"
+                      @click="handleStartOAuth(account)"
+                    >
+                      <ExternalLink class="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="h-8 w-8 text-destructive hover:text-destructive"
+                      :title="$t('common.delete')"
+                      @click="openDeleteDialog(account)"
+                    >
+                      <Trash2 class="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2 mb-3">
@@ -579,7 +571,7 @@ async function handleDelete() {
                   </span>
                 </div>
                 <div
-                  v-if="account.method === 'oauth'"
+                  v-if="account.method === 'oauth' || getLinkedPages(account).length > 0"
                   class="mt-4 overflow-hidden rounded-lg border border-border/70 bg-muted/20"
                 >
                   <div
