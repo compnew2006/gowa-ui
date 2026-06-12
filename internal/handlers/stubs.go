@@ -17,9 +17,12 @@ import (
 // Body: { "message_ids": ["uuid1", "uuid2"] }
 func (a *App) MarkMessageRead(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, _, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceChat, models.ActionRead); err != nil {
+		return nil
 	}
 
 	var req struct {

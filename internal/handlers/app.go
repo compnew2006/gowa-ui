@@ -242,10 +242,37 @@ func (a *App) requireAuthenticatedRequest(r *fastglue.Request, timeout time.Dura
 func (a *App) requirePermission(r *fastglue.Request, userID uuid.UUID, resource, action string) error {
 	orgID, _ := a.getOrgID(r)
 	if !a.HasPermission(userID, resource, action, orgID) {
-		_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
-		return errEnvelopeSent
+		return a.sendForbidden(r, resource, action)
 	}
 	return nil
+}
+
+// authorizeRequest combines authentication extraction and permission check into one call.
+// Returns the org and user IDs, and whether the request is authorized.
+// When ok is false, the error response has already been sent.
+// authorizeRequest combines authentication extraction and permission check into one call.
+// Returns the org and user IDs, and whether the request is authorized.
+// When ok is false, the error response has already been sent.
+func (a *App) authorizeRequest(r *fastglue.Request, resource, action string) (orgID, userID uuid.UUID, ok bool) {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return uuid.Nil, uuid.Nil, false
+	}
+	if !a.HasPermission(userID, resource, action, orgID) {
+		_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions: "+resource+":"+action, nil, "")
+		return uuid.Nil, uuid.Nil, false
+	}
+	return orgID, userID, true
+}
+
+// sendForbidden sends a standardized 403 Forbidden response for permission failures.
+// Use this instead of manually constructing SendErrorEnvelope(fasthttp.StatusForbidden, ...)
+// to ensure consistent error messages across all endpoints.
+func (a *App) sendForbidden(r *fastglue.Request, resource, action string) error {
+	_ = r.SendErrorEnvelope(fasthttp.StatusForbidden,
+		"Insufficient permissions: "+resource+":"+action, nil, "")
+	return errEnvelopeSent
 }
 
 // decodeRequest decodes a JSON request body into the provided struct.

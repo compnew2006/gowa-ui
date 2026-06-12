@@ -938,6 +938,9 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requirePermission(r, userID, models.ResourceTemplates, models.ActionRead); err != nil {
+		return nil
+	}
 
 	var req SendTemplateMessageRequest
 	if err := a.decodeRequest(r, &req); err != nil {

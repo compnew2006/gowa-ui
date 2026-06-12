@@ -108,7 +108,7 @@ func (a *App) authorizeChatbotRequest(r *fastglue.Request, action string) (uuid.
 		return uuid.Nil, false
 	}
 	if !a.HasPermission(userID, models.ResourceFlowsChatbot, action, orgID) {
-		_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "Permission denied", nil, "")
+		_ = a.sendForbidden(r, models.ResourceFlowsChatbot, action)
 		return uuid.Nil, false
 	}
 	return orgID, true

@@ -377,7 +377,32 @@ See the dedicated feature doc for complete workflow details:
 
 ## 4. Roles & Permissions (RBAC)
 
-**Source Files:** `internal/handlers/roles.go`
+**Source Files:** `internal/handlers/roles.go`, `internal/handlers/app.go`, `internal/handlers/cache.go`,
+`internal/models/roles.go`, `internal/middleware/middleware.go`
+
+### Permission Model
+
+**Resources (35 total):** users, teams, roles, settings.general, settings.chatbot, settings.sso,
+settings.uploads_cleanup, accounts, templates, flows.whatsapp, flows.chatbot, campaigns,
+chatbot.keywords, chatbot.ai, chat, chat.assign, chat.collaborators, chat.bypass_claim,
+contacts, tags, analytics, analytics.agents, transfers, agent_selection, webhooks, api_keys,
+canned_responses, custom_actions, organizations, wa_filter, saved_contents,
+**catalogs** (Meta Commerce Manager), **group_directory**, **group_participants**
+
+**Actions (11):** read, write, delete, soft_delete, sync, execute, import, export, pickup, assign, prefix
+
+**System Roles:**
+- **admin**: All permissions (auto-includes newly added resources)
+- **manager**: Full access to campaigns, chatbot, contacts, catalogs, groups + read-only for users, teams, organizations
+- **agent**: Chat messaging, own analytics, transfers, read-only contacts and tags
+
+### Permission Checking Infrastructure
+
+- **`requirePermission(r, userID, resource, action)`** — Handler-level check (134+ callers), returns 403 with consistent `"Insufficient permissions: resource:action"` format
+- **`authorizeRequest(r, resource, action)`** — Combined auth extraction + permission check (reduces boilerplate from 6 to 3 lines)
+- **`HasPermission(userID, resource, action, orgID...)`** — Core permission check with Redis caching (TTL: 6h), super-admin bypass
+- **`sendForbidden(r, resource, action)`** — Standardized 403 response helper
+- **Cache invalidation**: Fires on UpdateRole, DeleteRole, UpdateUser, DeleteUser, role changes, org deletions
 
 ### List Roles
 **Entry Point:** `GET /api/roles` → `App.ListRoles()`
@@ -409,10 +434,11 @@ See the dedicated feature doc for complete workflow details:
 ### Delete Role
 **Entry Point:** `DELETE /api/roles/{id}` → `App.DeleteRole()`
 **Edge Cases:** Cannot delete system roles; reassign users to default role
+**Cache:** Invalidates role permissions cache after deletion
 
 ### List Permissions
 **Entry Point:** `GET /api/permissions` → `App.ListPermissions()`
-**Outputs:** All available resource:action pairs
+**Outputs:** All available resource:action pairs (seeded from `DefaultPermissions()`)
 
 ---
 

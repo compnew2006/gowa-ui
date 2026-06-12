@@ -68,6 +68,10 @@ func (a *App) ListCatalogs(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionRead); err != nil {
+		return nil
+	}
 
 	whatsAppAccount := string(r.RequestCtx.QueryArgs().Peek("whatsapp_account"))
 
@@ -102,6 +106,10 @@ func (a *App) CreateCatalog(r *fastglue.Request) error {
 	orgID, err := a.getOrgID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	var req CatalogRequest
@@ -153,6 +161,10 @@ func (a *App) GetCatalog(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionRead); err != nil {
+		return nil
+	}
 
 	id, err := parsePathUUID(r, "id", "catalog")
 	if err != nil {
@@ -180,6 +192,10 @@ func (a *App) DeleteCatalog(r *fastglue.Request) error {
 	orgID, err := a.getOrgID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionDelete); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "catalog")
@@ -226,6 +242,10 @@ func (a *App) SyncCatalogs(r *fastglue.Request) error {
 	orgID, err := a.getOrgID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionSync); err != nil {
+		return nil
 	}
 
 	var req SyncCatalogsRequest
@@ -295,6 +315,10 @@ func (a *App) ListCatalogProducts(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionRead); err != nil {
+		return nil
+	}
 
 	catalogID, err := parsePathUUID(r, "id", "catalog")
 	if err != nil {
@@ -330,6 +354,10 @@ func (a *App) CreateCatalogProduct(r *fastglue.Request) error {
 	orgID, err := a.getOrgID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	catalogID, err := parsePathUUID(r, "id", "catalog")
@@ -413,6 +441,10 @@ func (a *App) GetCatalogProduct(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionRead); err != nil {
+		return nil
+	}
 
 	id, err := parsePathUUID(r, "id", "product")
 	if err != nil {
@@ -433,6 +465,10 @@ func (a *App) UpdateCatalogProduct(r *fastglue.Request) error {
 	orgID, err := a.getOrgID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "product")
@@ -517,6 +553,10 @@ func (a *App) DeleteCatalogProduct(r *fastglue.Request) error {
 	orgID, err := a.getOrgID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	_, userID, _ := a.getOrgAndUserID(r)
+	if err := a.requirePermission(r, userID, models.ResourceCatalogs, models.ActionDelete); err != nil {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "product")

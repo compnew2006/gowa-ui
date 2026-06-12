@@ -71,6 +71,9 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requirePermission(r, userID, models.ResourceChat, models.ActionWrite); err != nil {
+		return nil
+	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return nil
@@ -240,6 +243,9 @@ func (a *App) SendTypingPresence(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requirePermission(r, userID, models.ResourceChat, models.ActionWrite); err != nil {
+		return nil
+	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return nil
@@ -398,6 +404,9 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceChat, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	// Parse multipart form
@@ -643,6 +652,9 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
+	if err := a.requirePermission(r, userID, models.ResourceChat, models.ActionWrite); err != nil {
+		return nil
+	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return nil
@@ -774,7 +786,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 	}
 
 	if !a.HasPermission(userID, models.ResourceChat, models.ActionDelete, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to revoke messages", nil, "")
+		return a.sendForbidden(r, models.ResourceChat, models.ActionDelete)
 	}
 
 	contactID, err := parsePathUUID(r, "id", "contact")
@@ -896,6 +908,9 @@ func (a *App) SendPollVote(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceChat, models.ActionWrite); err != nil {
+		return nil
 	}
 
 	var req struct {

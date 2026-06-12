@@ -71,6 +71,13 @@ export const RESOURCE_LABELS: Record<string, string> = {
   webhooks: "Webhooks",
   api_keys: "API Keys",
   custom_actions: "Custom Actions",
+  catalogs: "Catalogs",
+  group_directory: "Group Directory",
+  group_participants: "Group Participants",
+  agent_selection: "Customer Agent Selection",
+  "chat.collaborators": "Chat Collaborators",
+  saved_contents: "Saved Contents",
+  wa_filter: "WhatsApp Filter",
   organizations: "Organizations",
 } as const;
 

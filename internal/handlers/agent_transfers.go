@@ -465,7 +465,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	if !a.HasPermission(userID, models.ResourceTransfers, models.ActionWrite, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to create transfers", nil, "")
+		return a.sendForbidden(r, models.ResourceTransfers, models.ActionWrite)
 	}
 
 	var req CreateAgentTransferRequest

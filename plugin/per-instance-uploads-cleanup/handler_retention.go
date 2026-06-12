@@ -35,21 +35,7 @@ func (p *Plugin) getOrgAndUserID(r *fastglue.Request) (orgID, userID uuid.UUID, 
 // hasPermission checks RBAC via custom_role_permissions + checks users.is_super_admin
 // as the core App.HasPermission does, but without requiring the full App cache infra.
 func (p *Plugin) hasPermission(userID uuid.UUID, resource, action string, orgID uuid.UUID) bool {
-	var isSuperAdmin bool
-	p.db.Raw(`SELECT is_super_admin FROM users WHERE id = ? AND deleted_at IS NULL`, userID).Scan(&isSuperAdmin)
-	if isSuperAdmin {
-		return true
-	}
-	var count int64
-	p.db.Raw(`
-		SELECT COUNT(*)
-		FROM custom_role_permissions crp
-		JOIN custom_roles cr ON cr.id = crp.custom_role_id AND cr.organization_id = ? AND cr.deleted_at IS NULL
-		JOIN user_organizations uo ON uo.role_id = cr.id AND uo.user_id = ? AND uo.organization_id = ? AND uo.deleted_at IS NULL
-		WHERE crp.resource = ? AND crp.action = ?`,
-		orgID, userID, orgID, resource, action,
-	).Scan(&count)
-	return count > 0
+	return p.app.HasPermission(userID, resource, action, orgID)
 }
 
 func (p *Plugin) canAccess(userID, orgID uuid.UUID) bool {

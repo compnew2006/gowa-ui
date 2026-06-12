@@ -233,7 +233,7 @@ func (a *App) ExportData(r *fastglue.Request) error {
 
 	// Check permission
 	if !a.HasPermission(userID, config.Resource, models.ActionExport, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to export "+req.Table, nil, "")
+		return a.sendForbidden(r, config.Resource, models.ActionExport)
 	}
 
 	// Validate and set columns
@@ -424,7 +424,7 @@ func (a *App) ImportData(r *fastglue.Request) error {
 
 	// Check permission
 	if !a.HasPermission(userID, config.Resource, models.ActionImport, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to import "+tableName, nil, "")
+		return a.sendForbidden(r, config.Resource, models.ActionImport)
 	}
 
 	// Get update_on_duplicate flag
@@ -719,7 +719,7 @@ func (a *App) GetImportConfig(r *fastglue.Request) error {
 
 	// Check permission
 	if !a.HasPermission(userID, config.Resource, models.ActionImport, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to import "+tableName, nil, "")
+		return a.sendForbidden(r, config.Resource, models.ActionImport)
 	}
 
 	// Get labels from export config if available

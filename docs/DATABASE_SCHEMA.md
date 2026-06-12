@@ -98,11 +98,19 @@ This document provides a 100% exhaustive extraction of the Whatomate database sc
 *   **API**: `GET /api/me/organizations`.
 
 #### `permissions`
+*   **Description**: Granular access rights following the `resource:action` pattern.
 *   **Columns**:
-    *   `resource`: `TEXT` (e.g., 'contacts', 'campaigns')
-    *   `action`: `TEXT` (e.g., 'read', 'write', 'execute')
+    *   `resource`: `TEXT` (35 resources including: users, teams, roles, settings.*, accounts,
+        templates, flows.*, campaigns, chatbot.*, chat, chat.assign, chat.collaborators,
+        chat.bypass_claim, contacts, tags, analytics, analytics.agents, transfers,
+        agent_selection, webhooks, api_keys, canned_responses, custom_actions,
+        organizations, wa_filter, saved_contents, **catalogs**, **group_directory**,
+        **group_participants**)
+    *   `action`: `TEXT` (read, write, delete, soft_delete, sync, execute, import, export,
+        pickup, assign, prefix)
     *   `description`: `TEXT`
 *   **Indexes**: `idx_permission_resource_action` (Unique).
+*   **Seeded via**: `DefaultPermissions()` in `internal/models/roles.go`
 
 #### `custom_roles`
 *   **Columns**:

@@ -331,14 +331,23 @@ Shows if a contact is within the 24-hour service window:
 | View chats | `chat:read` or `contacts:read` |
 | View all contacts (not just assigned) | `contacts:read` |
 | View unassigned chats | `allow_unclaimed_chat_view` (user restriction) |
-| Send messages | `chat:write` or `contacts:write` |
+| Send text messages | `chat:write` |
+| Send media messages | `chat:write` |
+| Send template messages | `chat:write` + `templates:read` |
+| Send typing indicator | `chat:write` |
+| Send reactions | `chat:write` |
+| Vote on polls | `chat:write` |
 | Send to unassigned chats | `allow_unclaimed_chat_send` (user restriction) |
-| Claim chats | `chat_assign:write` or `contacts:write` or `chat:write` |
-| Close chats | `chat_assign:write` or `contacts:write` or `chat:write` |
-| Reopen chats | `chat_assign:write` or `contacts:write` or `chat:write` |
-| Set public/private | `chat_assign:write` or `contacts:write` or `chat:write` |
+| Mark messages as read | `chat:read` |
+| Claim chats | `chat.assign:write` or `contacts:write` or `chat:write` |
+| Close chats | `chat.assign:write` or `contacts:write` or `chat:write` |
+| Reopen chats | `chat.assign:write` or `contacts:write` or `chat:write` |
+| Set public/private | `chat.assign:write` or `contacts:write` or `chat:write` |
 | Soft delete chats | `contacts:soft_delete` |
 | Revoke messages | `chat:delete` |
+
+> **Note:** All chat write operations (send, type, react, vote) require `chat:write`.
+> This was hardened in June 2026 — previously only claim/close/reopen were enforced.
 | Manage transfers | `transfers:write` |
 
 ### Role-Based Visibility

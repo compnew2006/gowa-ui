@@ -30,7 +30,7 @@ internal/queue/redis.go            Redis Streams queue (tenant-scoped)
 internal/queue/pubsub.go           Redis pub/sub for real-time stats
 internal/models/bulk.go            GORM models (BulkMessageCampaign, BulkMessageRecipient)
 internal/models/constants.go       CampaignStatus, MessageStatus enums
-internal/models/roles.go           RBAC: campaigns:read/write/delete/execute
+internal/models/roles.go           RBAC: campaigns:read/write/delete/execute, catalogs:read/write/delete/sync, group_directory:read/write/delete/import, group_participants:read/write
 pkg/whatsapp/message.go            Meta Cloud API send
 pkg/whatsmeow/adapter_send.go      Whatsmeow protocol send
 pkg/whatsmeow/events.go            Receipt handling

@@ -19,9 +19,9 @@ type DirectoryImportRequest struct {
 }
 
 func (a *App) SearchGroupDirectory(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, _, ok := a.authorizeRequest(r, models.ResourceGroupDirectory, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	q := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("q")))
@@ -59,9 +59,9 @@ func (a *App) SearchGroupDirectory(r *fastglue.Request) error {
 }
 
 func (a *App) GetGroupDirectoryCategories(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, _, ok := a.authorizeRequest(r, models.ResourceGroupDirectory, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	var categories []string
@@ -77,9 +77,9 @@ func (a *App) GetGroupDirectoryCategories(r *fastglue.Request) error {
 }
 
 func (a *App) GetGroupDirectoryCountries(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, _, ok := a.authorizeRequest(r, models.ResourceGroupDirectory, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	var countries []string
@@ -95,9 +95,9 @@ func (a *App) GetGroupDirectoryCountries(r *fastglue.Request) error {
 }
 
 func (a *App) CreateGroupDirectory(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, _, ok := a.authorizeRequest(r, models.ResourceGroupDirectory, models.ActionWrite)
+	if !ok {
+		return nil
 	}
 
 	var req models.GroupDirectory
@@ -127,9 +127,9 @@ func (a *App) CreateGroupDirectory(r *fastglue.Request) error {
 }
 
 func (a *App) UpdateGroupDirectory(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, _, ok := a.authorizeRequest(r, models.ResourceGroupDirectory, models.ActionWrite)
+	if !ok {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "group directory")
@@ -170,9 +170,9 @@ func (a *App) UpdateGroupDirectory(r *fastglue.Request) error {
 }
 
 func (a *App) DeleteGroupDirectory(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, _, ok := a.authorizeRequest(r, models.ResourceGroupDirectory, models.ActionDelete)
+	if !ok {
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "group directory")
@@ -194,9 +194,9 @@ type GroupLinkPreviewRequest struct {
 }
 
 func (a *App) PreviewGroupFromLink(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	orgID, _, ok := a.authorizeRequest(r, models.ResourceGroupDirectory, models.ActionRead)
+	if !ok {
+		return nil
 	}
 
 	var req GroupLinkPreviewRequest

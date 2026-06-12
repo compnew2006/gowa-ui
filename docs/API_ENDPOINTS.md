@@ -332,15 +332,43 @@ Most endpoints require authentication. You can use either a JWT token in the `Au
 | GET    | `/api/catalogs`                | List product catalogs              |
 | POST   | `/api/catalogs`                | Create a catalog                   |
 | GET    | `/api/catalogs/{id}`           | Get catalog details                |
-| DELETE | `/api/catalogs/{id}`           | Delete catalog                     |
-| POST   | `/api/catalogs/sync`           | Sync catalogs from Meta            |
-| GET    | `/api/catalogs/{id}/products`  | List products in catalog           |
-| POST   | `/api/catalogs/{id}/products`  | Add product to catalog             |
-| GET    | `/api/products/{id}`           | Get product details                |
-| PUT    | `/api/products/{id}`           | Update product details             |
-| DELETE | `/api/products/{id}`           | Remove product                     |
+| GET    | `/api/catalogs`                | List catalogs  (`catalogs:read`)       |
+| POST   | `/api/catalogs`                | Create catalog (`catalogs:write`)      |
+| GET    | `/api/catalogs/{id}`           | Get catalog    (`catalogs:read`)       |
+| DELETE | `/api/catalogs/{id}`           | Delete catalog (`catalogs:delete`)     |
+| POST   | `/api/catalogs/sync`           | Sync catalogs from Meta (`catalogs:sync`) |
+| GET    | `/api/catalogs/{id}/products`  | List products in catalog (`catalogs:read`) |
+| POST   | `/api/catalogs/{id}/products`  | Add product to catalog (`catalogs:write`) |
+| GET    | `/api/products/{id}`           | Get product details (`catalogs:read`)  |
+| PUT    | `/api/products/{id}`           | Update product details (`catalogs:write`) |
+| DELETE | `/api/products/{id}`           | Remove product (`catalogs:delete`)     |
 
 ## Data Management & Utilities
+
+### Group Directory (`group_directory:*`)
+
+| Method | Endpoint                                    | Description                          |
+| ------ | ------------------------------------------- | ------------------------------------ |
+| GET    | `/api/groups/directory`                     | Search group directory (`group_directory:read`) |
+| POST   | `/api/groups/directory`                     | Add group to directory (`group_directory:write`) |
+| PUT    | `/api/groups/directory/{id}`                | Update directory entry (`group_directory:write`) |
+| DELETE | `/api/groups/directory/{id}`                | Remove from directory (`group_directory:delete`) |
+| GET    | `/api/groups/directory/categories`          | Get categories  (`group_directory:read`) |
+| GET    | `/api/groups/directory/countries`           | Get countries   (`group_directory:read`) |
+| POST   | `/api/groups/directory/preview`             | Preview group from link (`group_directory:read`) |
+| POST   | `/api/groups/directory/import`              | Import groups to campaign (`group_directory:import`) |
+
+### Group Participants (`group_participants:*`)
+
+| Method | Endpoint                                    | Description                          |
+| ------ | ------------------------------------------- | ------------------------------------ |
+| GET    | `/api/groups/participants`                  | List group members (`group_participants:read`) |
+| POST   | `/api/groups/participants/add`              | Add members (`group_participants:write`) |
+| POST   | `/api/groups/participants/remove`           | Remove members (`group_participants:write`) |
+| POST   | `/api/groups/participants/promote`          | Promote to admin (`group_participants:write`) |
+| POST   | `/api/groups/participants/demote`           | Demote from admin (`group_participants:write`) |
+
+### Import/Export
 
 | Method | Endpoint                                    | Description                          |
 | ------ | ------------------------------------------- | ------------------------------------ |

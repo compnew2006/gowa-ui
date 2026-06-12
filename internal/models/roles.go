@@ -77,6 +77,9 @@ const (
 	ResourceOrganizations          = "organizations"
 	ResourceWhatsAppFilter         = "wa_filter"
 	ResourceSavedContents          = "saved_contents"
+	ResourceCatalogs               = "catalogs"
+	ResourceGroupDirectory         = "group_directory"
+	ResourceGroupParticipants      = "group_participants"
 )
 
 // PermissionAction constants for available actions
@@ -234,10 +237,55 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceSavedContents, Action: ActionWrite, Description: "Create and edit saved contents"},
 		{Resource: ResourceSavedContents, Action: ActionDelete, Description: "Delete saved contents"},
 		{Resource: ResourceSavedContents, Action: ActionImport, Description: "Import saved contents"},
+
+		// Catalogs (Meta Commerce Manager)
+		{Resource: ResourceCatalogs, Action: ActionRead, Description: "View product catalogs"},
+		{Resource: ResourceCatalogs, Action: ActionWrite, Description: "Create and edit catalogs"},
+		{Resource: ResourceCatalogs, Action: ActionDelete, Description: "Delete catalogs"},
+		{Resource: ResourceCatalogs, Action: ActionSync, Description: "Sync catalogs with Meta"},
+
+		// Group Directory
+		{Resource: ResourceGroupDirectory, Action: ActionRead, Description: "View group directory"},
+		{Resource: ResourceGroupDirectory, Action: ActionWrite, Description: "Create and edit group directory entries"},
+		{Resource: ResourceGroupDirectory, Action: ActionDelete, Description: "Delete group directory entries"},
+		{Resource: ResourceGroupDirectory, Action: ActionImport, Description: "Import directory groups to campaigns"},
+
+		// Group Participants
+		{Resource: ResourceGroupParticipants, Action: ActionRead, Description: "View group participants"},
+		{Resource: ResourceGroupParticipants, Action: ActionWrite, Description: "Manage group participants (add, remove, promote, demote)"},
 	}
 }
 
 // SystemRolePermissions returns the default permission mappings for system roles
+// SystemRolePermissions returns the permission keys for the three built-in system roles
+// (admin, manager, agent). These are used during organization seeding and migration backfill.
+//
+// Intentional permission gaps (by design, not bugs):
+//
+// Manager role does NOT have:
+//   - users:*        — User management is admin-only
+//   - teams:write/delete — Team creation/deletion is admin-only
+//   - roles:*        — Role management is admin-only
+//   - api_keys:*     — API key management is admin-only
+//   - settings.sso:* — SSO configuration is admin-only
+//   - organizations:write/delete/assign — Org management is admin-only
+//   - analytics:write/delete — Widget editing is admin-only
+//   - chat:delete    — Message revocation is admin-only
+//
+// Agent role does NOT have:
+//   - chat:delete           — Message revocation requires admin
+//   - contacts:write/delete/import/export — Contact management requires manager/admin
+//   - chat.assign:write     — Chat assignment requires manager/admin
+//   - chat.bypass_claim:read — Viewing unassigned chats without claiming requires manager/admin
+//   - transfers:write       — Creating transfers requires manager/admin
+//   - templates:*           — Template management requires manager/admin
+//   - campaigns:*           — Campaign management requires manager/admin
+//   - chatbot.*:*           — Chatbot configuration requires manager/admin
+//   - settings.*:*          — Settings management requires manager/admin
+//   - saved_contents:write/delete/import — Content library management requires manager/admin
+//   - analytics:read/write  — Dashboard analytics requires manager/admin (agents get analytics.agents:read)
+//   - webhooks:*            — Webhook management requires manager/admin
+//   - custom_actions:*      — Custom action management requires manager/admin
 func SystemRolePermissions() map[string][]string {
 	// Format: "resource:action"
 	allPermissions := []string{}
@@ -289,6 +337,12 @@ func SystemRolePermissions() map[string][]string {
 		"wa_filter:read", "wa_filter:write", "wa_filter:delete",
 		// Saved Contents
 		"saved_contents:read", "saved_contents:write", "saved_contents:delete", "saved_contents:import",
+		// Catalogs
+		"catalogs:read", "catalogs:write", "catalogs:delete", "catalogs:sync",
+		// Group Directory
+		"group_directory:read", "group_directory:write", "group_directory:delete", "group_directory:import",
+		// Group Participants
+		"group_participants:read", "group_participants:write",
 	}
 
 	agentPermissions := []string{
@@ -307,6 +361,8 @@ func SystemRolePermissions() map[string][]string {
 		"canned_responses:read",
 		// Saved Contents (read only)
 		"saved_contents:read",
+		// Group Directory (read only)
+		"group_directory:read",
 	}
 
 	return map[string][]string{

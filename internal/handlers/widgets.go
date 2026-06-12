@@ -252,7 +252,7 @@ func (a *App) ListWidgets(r *fastglue.Request) error {
 
 	// Check analytics read permission
 	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
+		return a.sendForbidden(r, models.ResourceAnalytics, models.ActionRead)
 	}
 
 	// Get user's own widgets + shared widgets from org
@@ -286,7 +286,7 @@ func (a *App) GetWidget(r *fastglue.Request) error {
 
 	// Check analytics read permission
 	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
+		return a.sendForbidden(r, models.ResourceAnalytics, models.ActionRead)
 	}
 
 	id, err := parsePathUUID(r, "id", "widget")
@@ -715,7 +715,7 @@ func (a *App) GetWidgetDataSources(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
+		return a.sendForbidden(r, models.ResourceAnalytics, models.ActionRead)
 	}
 
 	sources := make([]map[string]interface{}, 0)
@@ -879,7 +879,7 @@ func (a *App) GetWidgetData(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
+		return a.sendForbidden(r, models.ResourceAnalytics, models.ActionRead)
 	}
 
 	id, err := parsePathUUID(r, "id", "widget")
@@ -919,7 +919,7 @@ func (a *App) GetAllWidgetsData(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
+		return a.sendForbidden(r, models.ResourceAnalytics, models.ActionRead)
 	}
 
 	// Parse date range from query params

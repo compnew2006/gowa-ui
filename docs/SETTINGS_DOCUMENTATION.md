@@ -493,6 +493,17 @@ The `/settings` path is a major section of the Whatomate application providing o
 
 ## Permission Model
 
+**Resources (35 total):** users, teams, roles, settings.general, settings.chatbot, settings.sso,
+settings.uploads_cleanup, accounts, templates, flows.whatsapp, flows.chatbot, campaigns,
+chatbot.keywords, chatbot.ai, chat, chat.assign, chat.collaborators, chat.bypass_claim,
+contacts, tags, analytics, analytics.agents, transfers, agent_selection, webhooks, api_keys,
+canned_responses, custom_actions, organizations, wa_filter, saved_contents,
+catalogs, group_directory, group_participants
+
+**Actions (11):** read, write, delete, soft_delete, sync, execute, import, export, pickup, assign, prefix
+
+**Error format:** `"Insufficient permissions: resource:action"` (standardized June 2026)
+
 ### Permission Hierarchy
 
 ```

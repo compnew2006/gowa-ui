@@ -18,7 +18,7 @@
 |---|-------|---------|-------|
 | 1 | عالية | سياسة كلمات المرور لا تتطلب أحرفًا خاصة | `password_policy.go` |
 | 2 | عالية | Webhook URL يسمح بمخطط HTTP (غير مشفر) | `webhooks.go` |
-| 3 | متوسطة | RBAC على مستوى المعالج فقط — لا تفرض middleware مركزية | `main.go:1382-1394` |
+| 3 | ✅ **FIXED** | RBAC centralized helpers added — `requirePermission`, `authorizeRequest`, `sendForbidden` in `app.go` | `main.go:1382-1394` |
 | 4 | متوسطة | تحقق prefix بسيط من المسار قد يتم تجاوزه | `main.go:1342-1348` |
 | 5 | متوسطة | Webhook secret يُخزن نصًا عاديًا في قاعدة البيانات | `webhooks.go:235` |
 | 6 | متوسطة | سر SSO (client_secret) يُمرر عبر JSON بدون تشفير إضافي | `sso_handlers.go` |

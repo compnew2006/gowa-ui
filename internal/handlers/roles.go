@@ -399,6 +399,9 @@ func (a *App) DeleteRole(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete role", nil, "")
 	}
 
+	// Invalidate cached role permissions so any remaining references lose access
+	a.InvalidateRolePermissionsCache(role.ID)
+
 	return r.SendEnvelope(map[string]string{"message": "Role deleted successfully"})
 }
 

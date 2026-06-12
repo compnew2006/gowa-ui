@@ -44,9 +44,12 @@ func (a *App) ListGroupMembers(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID format", nil, "")
 	}
 
-	orgID, _, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceGroupParticipants, models.ActionRead); err != nil {
+		return nil
 	}
 
 	var instance models.WhatsAppInstance
@@ -107,6 +110,14 @@ func (a *App) manageGroupParticipants(r *fastglue.Request, action string) error 
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Group participants are only available for whatsmeow instances", nil, "")
 	}
 
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceGroupParticipants, models.ActionWrite); err != nil {
+		return nil
+	}
+
 	var req GroupParticipantsRequest
 	if err := a.decodeRequest(r, &req); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
@@ -123,11 +134,6 @@ func (a *App) manageGroupParticipants(r *fastglue.Request, action string) error 
 	}
 	if len(req.Participants) == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "At least one participant is required", nil, "")
-	}
-
-	orgID, _, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
 	var instance models.WhatsAppInstance

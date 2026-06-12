@@ -75,7 +75,7 @@ Applied via `g.Before()` in order:
 2. **SecurityHeaders** — CSP (with nonce for SPA), HSTS, X-Frame-Options
 3. **Auth (`AuthWithDB`)** — Extracts JWT from `Authorization: Bearer`, `X-API-Key` header, or `whm_access` cookie
 4. **TenantScope** — Resolves organization ID, sets scoped DB instance via `tenant.ScopedDB()`
-5. **PermissionChecker** — Route-level RBAC (granular `HasPermission` checks at handler level)
+5. **PermissionChecker** — Route-level RBAC (granular `HasPermission` checks at handler level, with centralized `requirePermission`, `authorizeRequest`, and `sendForbidden` helpers in `app.go`)
 
 ### Handler Layer (`internal/handlers/`)
 
