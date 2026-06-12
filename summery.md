@@ -53,3 +53,28 @@ Rollback sandbox to blue:
 ```bash
 ln -sfn /opt/whatomate/bin/whatomate.sandbox.blue /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
 ```
+
+## VPS sandbox green deploy - 2026-06-12 18:10 UTC
+
+- Deployed current working tree revision `537913f5` as the new sandbox green runtime for `https://sandbox.ofuqalmadenah.com`.
+- Created pre-deploy backup: `/root/whatomate_backups/whatomate-sandbox-green-predeploy-20260612_180519.tar.gz`.
+- Backup SHA256: `7d7a0eb7d9b8372f5dce28f609cda5b47f5b6bb146ca081d158abc2b22da3441`.
+- New green binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_180838-537913f5`.
+- New green SHA256: `359c3cb411a38b666fe82ffb1e2fe5a8d3690b28c7fa24b2905798819fb0dd9e`.
+- Sandbox blue rollback now points to `/opt/whatomate/bin/whatomate.sandbox.green.20260612_173403-537913f5`.
+- License bootstrap verified active on sandbox, public live, and `holol-wenjaz`: `enabled=true`, `status=active`, `tier=production`, `key_id=deploy-20260416`.
+- Browser QA via Chrome DevTools loaded `https://sandbox.ofuqalmadenah.com/login`, found no console errors, and confirmed `/api/license/bootstrap` returned active license data.
+- Tenant service repair: restored missing `/opt/whatomate/instances/holol-wenjaz/config.toml` from backup, replaced its `[redis]` section from current main runtime config, and verified `whatomate@holol-wenjaz` is active on `127.0.0.1:18124`.
+- Temporary VPS source and keyring were removed after build: `/tmp/whatomate-green-src`, `/tmp/whatomate-green-keyring.json`.
+
+Switch sandbox to new green:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260612_180838-537913f5 /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
+```
+
+Rollback sandbox to blue:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.blue /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
+```

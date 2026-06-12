@@ -92,8 +92,8 @@ run:
 	$(GOCMD) run $(BINARY_PATH)/main.go server -config config.toml
 
 # Run with migrations
-run-migrate:
-	$(GOCMD) run $(BINARY_PATH)/main.go server -config config.toml -migrate
+run-migrate: build
+	@trap 'exit 0' INT; ./$(BINARY_NAME) server -config config.toml -migrate
 
 air-install:
 	$(GOCMD) install $(AIR_PACKAGE)

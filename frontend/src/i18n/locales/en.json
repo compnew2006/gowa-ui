@@ -385,6 +385,7 @@
     "unassignContact": "Unassign",
     "noUsersFound": "No one matches that search",
     "usersAvailable": "{count} user available | {count} users available",
+    "perPage": "Per page",
     "assignToAgent": "Assign to agent",
     "claimChat": "Claim Chat",
     "transferToAgent": "Transfer to Agent",

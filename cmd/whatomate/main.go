@@ -583,17 +583,22 @@ func runServer(args []string) {
 		lo.Info("Embedded workers disabled, run workers separately")
 	}
 
-	// Graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	// Graceful shutdown — buffer 2 to also catch second interrupt.
+	sig := make(chan os.Signal, 2)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+	<-sig // first signal: begin graceful shutdown
 
 	lo.Info("Shutting down...")
 
-	// Force exit after 30s if graceful shutdown hangs.
+	// Force exit on second interrupt or 30 s timeout.
 	go func() {
-		<-time.After(30 * time.Second)
-		lo.Warn("Graceful shutdown timed out, forcing exit")
+		select {
+		case <-sig:
+			lo.Warn("Forced shutdown on second interrupt")
+		case <-time.After(30 * time.Second):
+			lo.Warn("Graceful shutdown timed out, forcing exit")
+		}
 		os.Exit(0)
 	}()
 

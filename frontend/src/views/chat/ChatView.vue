@@ -6469,7 +6469,7 @@ async function sendMediaMessage() {
       v-model:open="isAssignDialogOpen"
       @update:open="(open) => { if (!open) { assignSearchQuery = ''; debouncedAssignSearchQuery = ''; } }"
     >
-      <DialogContent class="w-[calc(100vw-2rem)] max-w-md sm:max-w-lg overflow-hidden" resizable>
+      <DialogContent class="w-[calc(100vw-2rem)] max-w-md sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{{ $t("chat.assignContact") }}</DialogTitle>
           <DialogDescription>
@@ -6510,58 +6510,62 @@ async function sendMediaMessage() {
           <p class="text-xs text-muted-foreground font-medium px-1 mt-2">
             {{ $t('chat.usersAvailable', { count: filteredAssignableUsers.length }) }}
           </p>
-          <div class="max-h-[300px] overflow-y-auto space-y-0.5" role="listbox" :aria-label="$t('chat.assignContact')">
-              <Button
-                v-for="user in filteredAssignableUsers"
-                :key="user.id"
-                :variant="
-                  contactsStore.currentContact?.assigned_user_id === user.id
-                    ? 'secondary'
-                    : 'ghost'
-                "
-                class="w-full justify-start h-auto py-2.5 px-3 transition-colors"
-                :class="
-                  contactsStore.currentContact?.assigned_user_id === user.id
-                    ? 'bg-primary/10 border border-primary/20'
-                    : 'hover:bg-muted'
-                "
-                role="option"
-                :aria-selected="contactsStore.currentContact?.assigned_user_id === user.id"
-                :disabled="isAssigning"
-                @click="
-                  assignContactToUser(user.id);
-                  isAssignDialogOpen = false;
-                "
-              >
-                <div class="flex items-center w-full gap-3">
-                  <div
-                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/8 text-xs font-medium text-primary"
-                    aria-hidden="true"
-                  >
-                    {{ user.full_name?.charAt(0)?.toUpperCase() || '?' }}
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium truncate">{{ user.full_name }}</div>
-                    <div class="text-xs text-muted-foreground truncate">{{ user.email }}</div>
-                  </div>
-                  <Check
-                    v-if="
-                      contactsStore.currentContact?.assigned_user_id === user.id
-                    "
-                    class="h-4 w-4 text-primary shrink-0"
-                  />
-                  <Badge v-else variant="outline" class="text-xs shrink-0">
-                    {{ user.role?.name || $t("chat.noRole") }}
-                  </Badge>
+          <div
+            class="max-h-[28rem] space-y-0.5 overflow-y-auto pr-1"
+            role="listbox"
+            :aria-label="$t('chat.assignContact')"
+          >
+            <Button
+              v-for="user in filteredAssignableUsers"
+              :key="user.id"
+              :variant="
+                contactsStore.currentContact?.assigned_user_id === user.id
+                  ? 'secondary'
+                  : 'ghost'
+              "
+              class="w-full justify-start h-auto py-2.5 px-3 transition-colors"
+              :class="
+                contactsStore.currentContact?.assigned_user_id === user.id
+                  ? 'bg-primary/10 border border-primary/20'
+                  : 'hover:bg-muted'
+              "
+              role="option"
+              :aria-selected="contactsStore.currentContact?.assigned_user_id === user.id"
+              :disabled="isAssigning"
+              @click="
+                assignContactToUser(user.id);
+                isAssignDialogOpen = false;
+              "
+            >
+              <div class="flex items-center w-full gap-3">
+                <div
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/8 text-xs font-medium text-primary"
+                  aria-hidden="true"
+                >
+                  {{ user.full_name?.charAt(0)?.toUpperCase() || '?' }}
                 </div>
-              </Button>
-              <p
-                v-if="filteredAssignableUsers.length === 0"
-                class="text-sm text-muted-foreground text-center py-8"
-              >
-                {{ $t("chat.noUsersFound") }}
-              </p>
-            </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium truncate">{{ user.full_name }}</div>
+                  <div class="text-xs text-muted-foreground truncate">{{ user.email }}</div>
+                </div>
+                <Check
+                  v-if="
+                    contactsStore.currentContact?.assigned_user_id === user.id
+                  "
+                  class="h-4 w-4 text-primary shrink-0"
+                />
+                <Badge v-else variant="outline" class="text-xs shrink-0">
+                  {{ user.role?.name || $t("chat.noRole") }}
+                </Badge>
+              </div>
+            </Button>
+            <p
+              v-if="filteredAssignableUsers.length === 0"
+              class="text-sm text-muted-foreground text-center py-8"
+            >
+              {{ $t("chat.noUsersFound") }}
+            </p>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

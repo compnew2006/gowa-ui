@@ -756,6 +756,21 @@ The working directory still contains pre-existing uncommitted changes in `chat_c
 - Local verification: targeted Go packages passed and frontend build passed.
 - Cleanup: removed `/tmp/whatomate-green-src` and `/tmp/whatomate-green-keyring.json` from the VPS after deployment.
 
+## VPS sandbox green deploy - 2026-06-12 18:10 UTC
+
+- Task: deploy the current working tree to `https://sandbox.ofuqalmadenah.com` as a replacement sandbox green build on VPS `31.97.192.53`, back up first, verify license activation, clean temporary source from the VPS, update markdown notes, and provide switch commands.
+- Relevant skills used: deployment/systemd operations, Go/Vue production build, license-key embedding, API smoke verification, Chrome DevTools browser QA. No unrelated skills were invoked.
+- Source revision stamped: `537913f5`; working tree had local changes in `Makefile`, chat/i18n files, and `summary.md`.
+- Pre-deploy backup: `/root/whatomate_backups/whatomate-sandbox-green-predeploy-20260612_180519.tar.gz`, SHA256 `7d7a0eb7d9b8372f5dce28f609cda5b47f5b6bb146ca081d158abc2b22da3441`, size `364M`.
+- New sandbox green binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_180838-537913f5`, SHA256 `359c3cb411a38b666fe82ffb1e2fe5a8d3690b28c7fa24b2905798819fb0dd9e`.
+- Symlinks: sandbox `active` and `green` now point to the new binary; sandbox `blue` points to `/opt/whatomate/bin/whatomate.sandbox.green.20260612_173403-537913f5`.
+- Verification: `whatomate-sandbox` active on `127.0.0.1:18127`; public `whatomate` active on `18123`; restored `whatomate@holol-wenjaz` active on `18124`; inactive tenant services remained inactive.
+- Tenant repair: `/opt/whatomate/instances/holol-wenjaz` was missing, causing systemd `226/NAMESPACE`. Restored `config.toml` from `/root/whatomate_backups/20260525_192630_pre_green_text_send_fix/configs/instances/holol-wenjaz/config.toml`, replaced its `[redis]` section from the current main runtime config, and restarted the service successfully.
+- License: sandbox, public, and `holol-wenjaz` `/api/license/bootstrap` returned `enabled=true`, `status=active`, `tier=production`, `key_id=deploy-20260416`.
+- Browser QA: Chrome DevTools loaded `https://sandbox.ofuqalmadenah.com/login`, found no console warnings/errors, confirmed assets and `/api/license/bootstrap` return HTTP `200`; screenshot saved as `sandbox-green-login-20260612-1815.png`.
+- Local verification: targeted Go packages passed and frontend build passed.
+- Cleanup: removed `/tmp/whatomate-green-src` and `/tmp/whatomate-green-keyring.json` from the VPS after deployment.
+
 ## Facebook OAuth token validation fix - 2026-06-12
 
 ### Files Changed
@@ -1029,3 +1044,13 @@ Facebook commenter names (especially on admin replies or when Graph API sync ret
 - ✅ Statically built production Linux binary with embedded licensing keyring.
 - ✅ Deployed active sandbox binary to VPS `31.97.192.53`.
 - ✅ Verified `whatomate-sandbox` service is active and running, successfully serving the updated frontend build.
+
+## 2026-06-12 - Chat assign dialog scrollable assignee list
+- Refactored `frontend/src/views/chat/ChatView.vue` assign contact dialog to remove local pagination/page-size controls and render all filtered assignees in a vertical scroll list capped at `max-h-[28rem]`.
+- Removed unused `ChevronLeft`/`ChevronRight` imports after pagination removal.
+- Verification: Serena diagnostics clean for `ChatView.vue`; Socraticode impact shows no dependent files; `cd frontend && npm run typecheck` still fails on unrelated existing AxiosHeaderValue errors in `CampaignsView.vue` and `SavedContentsView.vue`.
+
+## 2026-06-12 - Local test users and run-migrate graceful Ctrl+C
+- Updated `Makefile` `run-migrate` to build and run `./whatomate server -config config.toml -migrate` instead of `go run`, avoiding non-zero `go run` wrapper exit after graceful app shutdown.
+- Seeded 25 local active/available agent users in organization `6e1f02f9-a91b-42cf-8bbb-7dda4b290cd6` for assignment-list testing. Emails: `local.agent01@arkan.test` through `local.agent25@arkan.test`; password: `Testuser123!`.
+- Verification: `make -n run-migrate` shows binary execution; seed count reported 25 active seeded users; Socraticode index refreshed.

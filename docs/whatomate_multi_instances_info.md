@@ -63,6 +63,38 @@ Promote this green to public:
 ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260612_011906-f518308b /opt/whatomate/bin/whatomate && systemctl restart whatomate
 ```
 
+## Latest Sandbox Deploy - 2026-06-12 18:10 UTC
+
+- VPS: `31.97.192.53`
+- Target: `https://sandbox.ofuqalmadenah.com`
+- Backup: `/root/whatomate_backups/whatomate-sandbox-green-predeploy-20260612_180519.tar.gz`
+- Backup SHA256: `7d7a0eb7d9b8372f5dce28f609cda5b47f5b6bb146ca081d158abc2b22da3441`
+- New sandbox green: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_180838-537913f5`
+- New sandbox green SHA256: `359c3cb411a38b666fe82ffb1e2fe5a8d3690b28c7fa24b2905798819fb0dd9e`
+- Current sandbox active: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_180838-537913f5`
+- Current sandbox blue rollback: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_173403-537913f5`
+- Public live observed: `/opt/whatomate/bin/whatomate.sandbox.green.20260612_173403-537913f5`
+- License bootstrap verified active on sandbox, public live, and `holol-wenjaz`.
+- Tenant note: restored missing `/opt/whatomate/instances/holol-wenjaz/config.toml` from an older backup and updated its `[redis]` section from the current main runtime config; `whatomate@holol-wenjaz` is active on `127.0.0.1:18124`.
+
+Switch sandbox to new green:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260612_180838-537913f5 /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
+```
+
+Rollback sandbox to blue:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.blue /opt/whatomate/bin/whatomate.sandbox.active && systemctl restart whatomate-sandbox
+```
+
+Promote this green to public:
+
+```bash
+ln -sfn /opt/whatomate/bin/whatomate.sandbox.green.20260612_180838-537913f5 /opt/whatomate/bin/whatomate && systemctl restart whatomate
+```
+
 
 ## Latest Deploy - 2026-06-12 16:47 UTC
 

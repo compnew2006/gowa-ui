@@ -409,6 +409,7 @@
     "unassignContact": "إلغاء التخصيص",
     "noUsersFound": "لا يوجد شخص مطابق للبحث",
     "usersAvailable": "{count} مستخدم متاح | {count} مستخدمين متاحين",
+    "perPage": "لكل صفحة",
     "assignToAgent": "تخصيص لوكيل",
     "claimChat": "استلام المحادثة",
     "transferToAgent": "تحويل إلى وكيل",
