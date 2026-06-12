@@ -34,7 +34,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 	testDBOnce.Do(func() {
 		var err error
 		testDB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Info),
+			Logger: logger.Default.LogMode(logger.Warn),
 		})
 		if err != nil {
 			testDBInitErr = fmt.Errorf("failed to connect to test postgres: %w", err)
