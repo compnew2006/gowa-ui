@@ -64,7 +64,7 @@ jobs:
         run: cd frontend && npm run build
 
       - name: Copy frontend dist for embedding
-        run: rm -rf internal/frontend/dist && cp -r frontend/dist internal/frontend/dist
+        run: mkdir -p internal/frontend/dist && rm -rf internal/frontend/dist/* && cp -r frontend/dist/* internal/frontend/dist/
 
       - name: Download dependencies
         run: go mod download
@@ -114,7 +114,7 @@ jobs:
         run: cd frontend && npm run build
 
       - name: Copy frontend dist for embedding
-        run: rm -rf internal/frontend/dist && cp -r frontend/dist internal/frontend/dist
+        run: mkdir -p internal/frontend/dist && rm -rf internal/frontend/dist/* && cp -r frontend/dist/* internal/frontend/dist/
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
@@ -149,7 +149,7 @@ jobs:
         run: cd frontend && npm run build
 
       - name: Copy frontend dist for embedding
-        run: rm -rf internal/frontend/dist && cp -r frontend/dist internal/frontend/dist
+        run: mkdir -p internal/frontend/dist && rm -rf internal/frontend/dist/* && cp -r frontend/dist/* internal/frontend/dist/
 
       - name: Build
         run: go build -v ./cmd/... ./internal/... ./pkg/... ./plugin/...
@@ -180,7 +180,7 @@ jobs:
         run: cd frontend && npm run build
 
       - name: Copy frontend dist for embedding
-        run: rm -rf internal/frontend/dist && cp -r frontend/dist internal/frontend/dist
+        run: mkdir -p internal/frontend/dist && rm -rf internal/frontend/dist/* && cp -r frontend/dist/* internal/frontend/dist/
 
       - name: Download Go dependencies
         run: go mod download

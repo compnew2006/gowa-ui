@@ -106,7 +106,7 @@ jobs:
 
       - name: Copy frontend to embed directory
         run: |
-          rm -rf internal/frontend/dist/*
+          mkdir -p internal/frontend/dist && rm -rf internal/frontend/dist/* && cp -r frontend/dist/* internal/frontend/dist/
           cp -r frontend/dist/* internal/frontend/dist/
 
       - name: Build backend

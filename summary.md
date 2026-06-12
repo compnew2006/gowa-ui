@@ -998,3 +998,19 @@ Facebook commenter names (especially on admin replies or when Graph API sync ret
 - ✅ Embedded licensing keyring base64 (`WwogIHsKICAgICJ...`) into production binary during cross-compilation
 - ✅ Deployed new sandbox active binary `whatomate.sandbox.fb-sync-gorm-fix-20260612_145500-0569c4ca` to VPS `31.97.192.53`
 - ✅ Verified licensing status on sandbox VPS: `status=active`, `locked=false`
+
+## Session: Merge & Cleanup — 2026-06-12
+
+### Branches Merged
+- `codex/facebook-oauth-token-validation` → `main` ✅ (fast-forward)
+- Local branch deleted ✅
+- Remote branch deleted ✅
+
+### Current State
+- **main** at `6c38e3f3` — pushed to origin
+- Only `main` local branch remains
+- Remote: `origin/main`, `upstream/main` (fork remotes preserved)
+
+### Remote Branches Not Deleted
+- `upstream/feat/digitalocean-deploy-button` — upstream fork, not ours
+- `upstream/feat/turn-hmac-secret` — upstream fork, not ours
