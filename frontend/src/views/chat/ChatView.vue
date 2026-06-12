@@ -6510,8 +6510,7 @@ async function sendMediaMessage() {
           <p class="text-xs text-muted-foreground font-medium px-1 mt-2">
             {{ $t('chat.usersAvailable', { count: filteredAssignableUsers.length }) }}
           </p>
-          <ScrollArea class="max-h-[420px]">
-            <div class="space-y-0.5" role="listbox" :aria-label="$t('chat.assignContact')">
+          <div class="max-h-[300px] overflow-y-auto space-y-0.5" role="listbox" :aria-label="$t('chat.assignContact')">
               <Button
                 v-for="user in filteredAssignableUsers"
                 :key="user.id"
@@ -6563,7 +6562,6 @@ async function sendMediaMessage() {
                 {{ $t("chat.noUsersFound") }}
               </p>
             </div>
-          </ScrollArea>
         </div>
       </DialogContent>
     </Dialog>
