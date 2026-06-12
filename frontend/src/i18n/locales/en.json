@@ -3266,6 +3266,7 @@
     "syncDesc": "Pull recent posts and comments from connected Facebook pages.",
     "syncNow": "Sync now",
     "search": "Search comments...",
+  "allPages": "All pages",
     "empty": "No comments found.",
     "unknownUser": "Facebook user",
     "fromPost": "From post",

@@ -186,31 +186,33 @@ onMounted(async () => {
 <template>
   <div :dir="isRtl ? 'rtl' : 'ltr'">
     <PageHeader :title="t('extract.title')" :description="t('extract.description')">
-      <div class="flex items-center gap-2">
-        <Select :model-value="selectedInstanceId" @update:model-value="onInstanceChange">
-          <SelectTrigger class="w-[220px]">
-            <SelectValue :placeholder="t('extract.selectInstance')" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              v-for="inst in instances"
-              :key="inst.id"
-              :value="inst.id"
-            >
-              {{ inst.name }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        <Button
-          variant="outline"
-          :disabled="!selectedInstanceId || isSyncing"
-          @click="handleSync"
-        >
-          <RefreshCw v-if="!isSyncing" class="h-4 w-4 me-1" />
-          <Loader2 v-else class="h-4 w-4 me-1 animate-spin" />
-          {{ t("extract.sync") }}
-        </Button>
-      </div>
+      <template #actions>
+        <div class="flex items-center gap-2">
+          <Select :model-value="selectedInstanceId" @update:model-value="onInstanceChange">
+            <SelectTrigger class="w-[220px]">
+              <SelectValue :placeholder="t('extract.selectInstance')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="inst in instances"
+                :key="inst.id"
+                :value="inst.id"
+              >
+                {{ inst.name }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            :disabled="!selectedInstanceId || isSyncing"
+            @click="handleSync"
+          >
+            <RefreshCw v-if="!isSyncing" class="h-4 w-4 me-1" />
+            <Loader2 v-else class="h-4 w-4 me-1 animate-spin" />
+            {{ t("extract.sync") }}
+          </Button>
+        </div>
+      </template>
     </PageHeader>
 
     <div class="p-6 space-y-6">

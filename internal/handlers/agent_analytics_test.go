@@ -93,18 +93,18 @@ func createTestChatClosureRating(t *testing.T, app *handlers.App, orgID, contact
 	t.Helper()
 
 	cycle := &models.ChatClosureRating{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   orgID,
-		ContactID:        contactID,
-		ChatID:           contactID,
-		AgentUserID:      agentID,
-		ClosingAgentID:   closingAgentID,
-		ClosedAt:         ratedAt,
-		State:            models.ChatClosureRatingStateRated,
-		Rating:           &rating,
-		RatedAt:          &ratedAt,
-		RatingMessage:    "Great service",
-		CloseMessage:     "Please rate 1-10",
+		BaseModel:            models.BaseModel{ID: uuid.New()},
+		OrganizationID:       orgID,
+		ContactID:            contactID,
+		ChatID:               contactID,
+		AgentUserID:          agentID,
+		ClosingAgentID:       closingAgentID,
+		ClosedAt:             ratedAt,
+		State:                models.ChatClosureRatingStateRated,
+		Rating:               &rating,
+		RatedAt:              &ratedAt,
+		RatingMessage:        "Great service",
+		CloseMessage:         "Please rate 1-10",
 		CloseMessageLanguage: "en",
 	}
 	require.NoError(t, app.DB.Create(cycle).Error)
@@ -152,7 +152,7 @@ func TestGetAgentAnalytics_AgentWithoutPermission_SeesOnlyOwnStats(t *testing.T)
 	contact1 := testutil.CreateTestContact(t, app.DB, org.ID)
 	contact2 := testutil.CreateTestContact(t, app.DB, org.ID)
 
-	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1 * time.Hour)}[0])
 	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusActive, models.TransferSourceFlow, now.Add(-30*time.Minute), nil)
 
 	req := testutil.NewGETRequest(t)
@@ -200,8 +200,8 @@ func TestGetAgentAnalytics_AdminWithFullPermission_SeesAllAgents(t *testing.T) {
 	contact1 := testutil.CreateTestContact(t, app.DB, org.ID)
 	contact2 := testutil.CreateTestContact(t, app.DB, org.ID)
 
-	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1*time.Hour)}[0])
-	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent2.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-3*time.Hour), &[]time.Time{now.Add(-2*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1 * time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent2.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-3*time.Hour), &[]time.Time{now.Add(-2 * time.Hour)}[0])
 
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, admin.ID)
@@ -227,11 +227,11 @@ func TestGetAgentAnalytics_WithDateRange_FiltersCorrectly(t *testing.T) {
 
 	// Create a transfer within the range
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
-	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-24*time.Hour), &[]time.Time{now.Add(-23*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-24*time.Hour), &[]time.Time{now.Add(-23 * time.Hour)}[0])
 
 	// Create a transfer outside the range
 	contact2 := testutil.CreateTestContact(t, app.DB, org.ID)
-	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-10*24*time.Hour), &[]time.Time{now.Add(-9*24*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-10*24*time.Hour), &[]time.Time{now.Add(-9 * 24 * time.Hour)}[0])
 
 	req := testutil.NewGETRequest(t)
 	req.RequestCtx.QueryArgs().Add("from", startDate)
@@ -275,8 +275,8 @@ func TestGetAgentAnalytics_WithInstanceFilter_FiltersByInstance(t *testing.T) {
 	contact1 := testutil.CreateTestContactWith(t, app.DB, org.ID, withContactInstanceID(instance1.ID))
 	contact2 := testutil.CreateTestContactWith(t, app.DB, org.ID, withContactInstanceID(instance2.ID))
 
-	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1*time.Hour)}[0])
-	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-3*time.Hour), &[]time.Time{now.Add(-2*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1 * time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-3*time.Hour), &[]time.Time{now.Add(-2 * time.Hour)}[0])
 
 	req := testutil.NewGETRequest(t)
 	req.RequestCtx.QueryArgs().Add("instance_id", instance1.ID.String())
@@ -326,7 +326,7 @@ func TestGetAgentAnalytics_WithAgentFilter_AsAdmin_ShowsSpecificAgent(t *testing
 
 	now := time.Now().UTC()
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
-	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1 * time.Hour)}[0])
 
 	req := testutil.NewGETRequest(t)
 	req.RequestCtx.QueryArgs().Add("agent_id", agent.ID.String())
@@ -467,7 +467,7 @@ func TestGetAgentAnalytics_DefaultsToCurrentMonth(t *testing.T) {
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
-	createTestAgentTransfer(t, app, org.ID, contact.ID, nil, models.TransferStatusResumed, models.TransferSourceManual, monthStart.Add(24*time.Hour), &[]time.Time{monthStart.Add(25*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, nil, models.TransferStatusResumed, models.TransferSourceManual, monthStart.Add(24*time.Hour), &[]time.Time{monthStart.Add(25 * time.Hour)}[0])
 
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, admin.ID)
@@ -524,9 +524,9 @@ func TestCalculateBreakTime_MultipleBreaks_SumsCorrectly(t *testing.T) {
 
 	now := time.Now().UTC()
 	break1Start := now.Add(-3 * time.Hour)
-	break1End := now.Add(-2*time.Hour).Add(30*time.Minute)
+	break1End := now.Add(-2 * time.Hour).Add(30 * time.Minute)
 	break2Start := now.Add(-2 * time.Hour)
-	break2End := now.Add(-1*time.Hour).Add(30*time.Minute)
+	break2End := now.Add(-1 * time.Hour).Add(30 * time.Minute)
 
 	createTestUserAvailabilityLog(t, app, agent.ID, org.ID, false, break1Start, &break1End)
 	createTestUserAvailabilityLog(t, app, agent.ID, org.ID, false, break2Start, &break2End)
@@ -618,9 +618,9 @@ func TestCalculateTrendData_AggregatesByDay(t *testing.T) {
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
 
 	// Create transfers across 3 days
-	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(24*time.Hour), &[]time.Time{startDate.Add(25*time.Hour)}[0])
-	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(48*time.Hour), &[]time.Time{startDate.Add(49*time.Hour)}[0])
-	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(72*time.Hour), &[]time.Time{startDate.Add(73*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(24*time.Hour), &[]time.Time{startDate.Add(25 * time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(48*time.Hour), &[]time.Time{startDate.Add(49 * time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(72*time.Hour), &[]time.Time{startDate.Add(73 * time.Hour)}[0])
 
 	trendData := app.CalculateTrendData(org.ID, startDate, now, "day", &agent.ID, nil)
 
@@ -643,8 +643,8 @@ func TestCalculateTrendData_WithInstanceFilter_FiltersCorrectly(t *testing.T) {
 	contact1 := testutil.CreateTestContactWith(t, app.DB, org.ID, withContactInstanceID(instance1.ID))
 	contact2 := testutil.CreateTestContactWith(t, app.DB, org.ID, withContactInstanceID(instance2.ID))
 
-	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(2*time.Hour), &[]time.Time{startDate.Add(3*time.Hour)}[0])
-	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(4*time.Hour), &[]time.Time{startDate.Add(5*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(2*time.Hour), &[]time.Time{startDate.Add(3 * time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, startDate.Add(4*time.Hour), &[]time.Time{startDate.Add(5 * time.Hour)}[0])
 
 	trendData := app.CalculateTrendData(org.ID, startDate, now, "day", &agent.ID, &instance1.ID)
 
@@ -673,7 +673,7 @@ func TestGetAgentDetails_WithPermission_ReturnsAgentStats(t *testing.T) {
 
 	now := time.Now().UTC()
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
-	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1 * time.Hour)}[0])
 
 	req := testutil.NewGETRequest(t)
 	req.RequestCtx.SetUserValue("id", agent.ID.String())
@@ -816,8 +816,8 @@ func TestCalculateSummaryStats_CalculatesAllMetrics(t *testing.T) {
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
 
 	// Create resumed transfers
-	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1*time.Hour)}[0])
-	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceFlow, now.Add(-4*time.Hour), &[]time.Time{now.Add(-3*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1 * time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceFlow, now.Add(-4*time.Hour), &[]time.Time{now.Add(-3 * time.Hour)}[0])
 
 	// Create active transfer
 	contact2 := testutil.CreateTestContact(t, app.DB, org.ID)
@@ -843,8 +843,8 @@ func TestCalculateSummaryStats_WithInstanceFilter_FiltersCorrectly(t *testing.T)
 	contact1 := testutil.CreateTestContactWith(t, app.DB, org.ID, withContactInstanceID(instance1.ID))
 	contact2 := testutil.CreateTestContactWith(t, app.DB, org.ID, withContactInstanceID(instance2.ID))
 
-	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1*time.Hour)}[0])
-	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-3*time.Hour), &[]time.Time{now.Add(-2*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact1.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1 * time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact2.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-3*time.Hour), &[]time.Time{now.Add(-2 * time.Hour)}[0])
 
 	var summary handlers.AgentAnalyticsSummary
 	app.CalculateSummaryStats(org.ID, now.Add(-5*time.Hour), now, &summary, &instance1.ID)
@@ -878,7 +878,7 @@ func TestCalculateAllAgentStats_ReturnsAllAgents(t *testing.T) {
 
 	now := time.Now().UTC()
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
-	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contact.ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-2*time.Hour), &[]time.Time{now.Add(-1 * time.Hour)}[0])
 
 	stats := app.CalculateAllAgentStats(org.ID, now.Add(-5*time.Hour), now, nil)
 
@@ -925,14 +925,14 @@ func TestAgentAnalytics_EndToEnd_FullWorkflow(t *testing.T) {
 	}
 
 	// Create transfers with various statuses and sources
-	createTestAgentTransfer(t, app, org.ID, contacts[0].ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-48*time.Hour), &[]time.Time{now.Add(-47*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contacts[0].ID, &agent.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-48*time.Hour), &[]time.Time{now.Add(-47 * time.Hour)}[0])
 	createTestAgentTransfer(t, app, org.ID, contacts[1].ID, &agent.ID, models.TransferStatusActive, models.TransferSourceFlow, now.Add(-24*time.Hour), nil)
-	createTestAgentTransfer(t, app, org.ID, contacts[2].ID, &agent2.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-12*time.Hour), &[]time.Time{now.Add(-11*time.Hour)}[0])
-	createTestAgentTransfer(t, app, org.ID, contacts[3].ID, &agent2.ID, models.TransferStatusResumed, models.TransferSourceKeyword, now.Add(-6*time.Hour), &[]time.Time{now.Add(-5*time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contacts[2].ID, &agent2.ID, models.TransferStatusResumed, models.TransferSourceManual, now.Add(-12*time.Hour), &[]time.Time{now.Add(-11 * time.Hour)}[0])
+	createTestAgentTransfer(t, app, org.ID, contacts[3].ID, &agent2.ID, models.TransferStatusResumed, models.TransferSourceKeyword, now.Add(-6*time.Hour), &[]time.Time{now.Add(-5 * time.Hour)}[0])
 	createTestAgentTransfer(t, app, org.ID, contacts[4].ID, nil, models.TransferStatusActive, models.TransferSourceManual, now.Add(-1*time.Hour), nil)
 
 	// Create availability logs
-	createTestUserAvailabilityLog(t, app, agent.ID, org.ID, false, now.Add(-4*time.Hour), &[]time.Time{now.Add(-3*time.Hour)}[0])
+	createTestUserAvailabilityLog(t, app, agent.ID, org.ID, false, now.Add(-4*time.Hour), &[]time.Time{now.Add(-3 * time.Hour)}[0])
 	createTestUserAvailabilityLog(t, app, agent2.ID, org.ID, false, now.Add(-2*time.Hour), nil)
 
 	// Create ratings

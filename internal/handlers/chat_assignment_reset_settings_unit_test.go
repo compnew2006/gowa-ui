@@ -690,9 +690,9 @@ func TestReadChatAssignmentResetSettings(t *testing.T) {
 		{
 			name: "full settings",
 			input: models.JSONB{
-				"assigned_chat_reset_enabled":  true,
-				"assigned_chat_reset_mode":     "custom_hour",
-				"assigned_chat_reset_hour":     15,
+				"assigned_chat_reset_enabled":   true,
+				"assigned_chat_reset_mode":      "custom_hour",
+				"assigned_chat_reset_hour":      15,
 				"assigned_chat_reset_last_date": "2024-01-15",
 			},
 			expected: handlers.ChatAssignmentResetSettings{

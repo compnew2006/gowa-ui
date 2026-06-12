@@ -612,66 +612,66 @@ func TestContainsRestrictedNumber(t *testing.T) {
 
 func TestMergeRestrictedNumbers(t *testing.T) {
 	tests := []struct {
-		name         string
-		existing     []string
-		additions    []string
-		expectedMerged []string
+		name            string
+		existing        []string
+		additions       []string
+		expectedMerged  []string
 		expectedChanged bool
 	}{
 		{
-			name:         "both empty",
-			existing:     []string{},
-			additions:    []string{},
-			expectedMerged: []string{},
+			name:            "both empty",
+			existing:        []string{},
+			additions:       []string{},
+			expectedMerged:  []string{},
 			expectedChanged: false,
 		},
 		{
-			name:         "existing empty, adding one",
-			existing:     []string{},
-			additions:    []string{"1234567890"},
-			expectedMerged: []string{"1234567890"},
+			name:            "existing empty, adding one",
+			existing:        []string{},
+			additions:       []string{"1234567890"},
+			expectedMerged:  []string{"1234567890"},
 			expectedChanged: true,
 		},
 		{
-			name:         "adding to existing, no overlap",
-			existing:     []string{"1234567890"},
-			additions:    []string{"9876543210"},
-			expectedMerged: []string{"1234567890", "9876543210"},
+			name:            "adding to existing, no overlap",
+			existing:        []string{"1234567890"},
+			additions:       []string{"9876543210"},
+			expectedMerged:  []string{"1234567890", "9876543210"},
 			expectedChanged: true,
 		},
 		{
-			name:         "adding duplicate, no change",
-			existing:     []string{"1234567890", "9876543210"},
-			additions:    []string{"1234567890"},
-			expectedMerged: []string{"1234567890", "9876543210"},
+			name:            "adding duplicate, no change",
+			existing:        []string{"1234567890", "9876543210"},
+			additions:       []string{"1234567890"},
+			expectedMerged:  []string{"1234567890", "9876543210"},
 			expectedChanged: false,
 		},
 		{
-			name:         "adding multiple with some duplicates",
-			existing:     []string{"1111111111", "2222222222"},
-			additions:    []string{"2222222222", "3333333333"},
-			expectedMerged: []string{"1111111111", "2222222222", "3333333333"},
+			name:            "adding multiple with some duplicates",
+			existing:        []string{"1111111111", "2222222222"},
+			additions:       []string{"2222222222", "3333333333"},
+			expectedMerged:  []string{"1111111111", "2222222222", "3333333333"},
 			expectedChanged: true,
 		},
 		{
-			name:         "both have duplicates internally",
-			existing:     []string{"111", "111", "222"},
-			additions:    []string{"222", "333"},
-			expectedMerged: []string{"111", "222", "333"},
+			name:            "both have duplicates internally",
+			existing:        []string{"111", "111", "222"},
+			additions:       []string{"222", "333"},
+			expectedMerged:  []string{"111", "222", "333"},
 			expectedChanged: true,
 		},
 		{
-			name:         "all duplicates",
-			existing:     []string{"1234567890", "1234567890"},
-			additions:    []string{"1234567890", "1234567890"},
-			expectedMerged: []string{"1234567890"},
+			name:            "all duplicates",
+			existing:        []string{"1234567890", "1234567890"},
+			additions:       []string{"1234567890", "1234567890"},
+			expectedMerged:  []string{"1234567890"},
 			expectedChanged: false,
 		},
 		{
-			name:         "empty additions, no change",
-			existing:     []string{"1234567890", "9876543210"},
-			additions:    []string{},
-			expectedMerged: []string{"1234567890", "9876543210"},
+			name:            "empty additions, no change",
+			existing:        []string{"1234567890", "9876543210"},
+			additions:       []string{},
+			expectedMerged:  []string{"1234567890", "9876543210"},
 			expectedChanged: false,
 		},
 	}
@@ -684,6 +684,3 @@ func TestMergeRestrictedNumbers(t *testing.T) {
 		})
 	}
 }
-
-
-

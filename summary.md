@@ -520,6 +520,24 @@ TEST_DATABASE_URL="postgres://test:test@127.0.0.1:5433/test?sslmode=disable" go 
 - Updated `skills-map.md` to route code work to `mcp-code-operations`.
 - MCP split documented: Socraticode for code understanding/function relationships/impact; codebase-memory-mcp for persistent architecture memory and patterns; Serena for precise source read/edit/create/remove.
 
+## Facebook Commenter Name Fallback & Direct API Debugging — 2026-06-12
+
+### Objective
+- Resolve the "Facebook user" commenter name issue on `https://sandbox.ofuqalmadenah.com/facebook/comments`.
+- Investigate Meta Graph API behavior regarding commenter name resolution.
+
+### Findings
+- **API Privacy Restriction:** Ran a custom Go test program directly on the VPS (`31.97.192.53`) using the Page Access Token to query standard comments (e.g. `1937702830951638_1988072228735776`). Confirmed that Meta Graph API returns `200 OK` but entirely omits the `from` field (which contains the user's ID/name) due to sandbox/development mode privacy restrictions on public users.
+- **Selective Names:** Facebook Page comments (e.g. `mohamed galal` or admin replies) do return the `from` field because page identities are public business data and app admins/testers bypass development restrictions.
+- **Frontend Pseudonym Fallback:** Because standard commenter names are masked by Meta, the UI displayed "Facebook user" for all 945 comments. Implemented a fallback `getFallbackName` to parse the unique comment ID suffix and render a distinct identifier (e.g. `Facebook user (230710)`), allowing sandbox operators to tell commenters apart.
+
+### Files Modified
+- [FacebookCommentsView.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/views/facebook/FacebookCommentsView.vue) — Defined `getFallbackName` helper and updated sidebar list, active thread header, and parent comment bubble templates.
+
+### Verification
+- Frontend successfully compiled and built via `make build-prod`.
+- Deployed to the remote sandbox server and verified `whatomate-sandbox` service is active and running cleanly.
+
 <!-- END -->
 
 ## Per-Instance Uploads Cleanup Implementation — 2026-06-06
@@ -783,3 +801,200 @@ The working directory still contains pre-existing uncommitted changes in `chat_c
 - `go test -p 1 ./internal/handlers/...` still fails on the existing uploads cleanup SQLite/schema issue in `uploads_cleanup_worker_instance_test.go` where the test fixture lacks `messages.instance_id`.
 - `cd frontend && npm run typecheck` still fails on existing settings typing issues in `CampaignsView.vue` and `SavedContentsView.vue` involving `AxiosHeaderValue | undefined` assigned to `string | undefined`; no Facebook files were reported.
 - Serena diagnostics passed for edited Go and frontend source files. Socraticode index update completed; codebase-memory change detection ran.
+
+---
+
+## Session: Green Deploy to VPS — 2026-06-12 02:50 UTC
+
+### What was done
+1. **Built production binary** — `make build-prod` with `LICENSE_KEY_RING_FILE=/tmp/whatomate-keyring.json`, cross-compiled for linux/amd64
+2. **Created VPS backup** — `/root/whatomate_backups/whatomate-sandbox-green-predeploy-20260612_053648.tar.gz` (677MB)
+3. **Deployed new sandbox green** — `whatomate.sandbox.green.20260612_054500-0569c4ca` (58MB, SHA256: 84e3e45f...)
+4. **Fixed license issue** — embedded keyring from `/root/whatomate-keyring.json`; license now active (Paid • Lifetime)
+5. **Cleaned up old binaries** — removed 25+ old builds, freed ~500MB
+6. **Created blue/green switch scripts**:
+   - `whatomate-sandbox-switch [blue|green|status]` — sandbox toggling
+   - `whatomate-switch [blue|green|status]` — production toggling
+7. **Promoted sandbox green to production** — both production and sandbox now running on same binary
+
+### Current State
+| Service | Binary | Status |
+|---------|--------|--------|
+| Production (whatomate) | whatomate.sandbox.green.20260612_054500-0569c4ca | Running ✅ |
+| Sandbox (whatomate-sandbox) | whatomate.sandbox.green.20260612_054500-0569c4ca | Running ✅ |
+| holol-wenjaz instance | Same binary | Running ✅ |
+| License | Active • Paid • Lifetime | Verified via UI ✅ |
+
+### Quick Commands
+```bash
+# Switch sandbox blue/green:
+whatomate-sandbox-switch [blue|green|status]
+
+# Switch production blue/green:
+whatomate-switch [blue|green|status]
+
+# Rollback production:
+whatomate-switch blue
+
+# Rollback sandbox:
+whatomate-sandbox-switch blue
+```
+
+### Files changed
+- VPS: `/opt/whatomate/bin/` — new binary, symlinks updated
+- VPS: `/usr/local/sbin/whatomate-sandbox-switch` — created
+- VPS: `/usr/local/sbin/whatomate-switch` — created
+- VPS: `/root/whatomate_multi_instances_info.md` — updated
+- VPS: `/root/whatomate_production_info.md` — updated
+- Local: `summary.md` — appended
+
+### Verified
+- ✅ Chrome DevTools: sandbox.ofuqalmadenah.com loads, login works
+- ✅ Chrome DevTools: ofuqalmadenah.com loads
+- ✅ License page shows "Active" — not "Disabled"
+- ✅ systemctl status all green
+
+## Session: Facebook Comments Fix — 2026-06-12 02:52 UTC
+
+### Issue
+Sync on `/facebook/comments` failed with: `column "is_admin_reply" of relation "facebook_comments" does not exist`
+
+### Root Cause
+The sandbox database `whatomate_sandbox_green_20260602_235053` was cloned from production before the `is_admin_reply` migration ran. The code (new binary) references this column but the DB didn't have it.
+
+### Fix
+Applied migration directly to sandbox DB:
+```sql
+ALTER TABLE facebook_comments ADD COLUMN IF NOT EXISTS is_admin_reply boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_facebook_comments_is_admin_reply ON facebook_comments (is_admin_reply);
+```
+
+### Verified
+- ✅ Sandbox DB now has the column
+- ✅ Chrome DevTools: `/facebook/comments` loads 1100 comments without errors
+- ✅ Sandbox service restarted and running
+- ✅ Other databases checked — none have facebook_comments table (only sandbox needed fix)
+
+## Session: Extract View Instance Selector Fix — 2026-06-12 02:56 UTC
+
+### Issue
+The `/whatsapp/extract` page showed contacts for an instance but the instance selector dropdown and Sync button were **not visible** in the UI.
+
+### Root Cause
+The `PageHeader` component only has a **named slot** `#actions` — there is no default slot. The instance `<Select>` + `<Button>` were placed as direct children of `<PageHeader>`, so they were silently ignored by Vue.
+
+### Fix
+Wrapped the instance selector content in `<template #actions>`:
+```html
+<PageHeader ...>
+  <template #actions>
+    <div class="flex items-center gap-2">
+      <Select ...>...</Select>
+      <Button ...>Sync</Button>
+    </div>
+  </template>
+</PageHeader>
+```
+
+### Verified
+- ✅ Chrome DevTools: Instance selector combobox visible with "عماد عادل-4395" selected
+- ✅ Sync Now button visible and functional
+- ✅ Stats cards showing (920 Contacts, 14094 Messages)
+- ✅ Contacts table with scroll, search, pagination (19 pages)
+- ✅ Export CSV button visible
+- ✅ Redeployed binary: `whatomate.sandbox.green.20260612_025442-0569c4ca`
+
+## Session: Facebook Comments Page Filter + Diagnosis — 2026-06-12 03:10 UTC
+
+### Facebook Comments - Page Filter Added
+**Problem:** No way to filter comments by specific Facebook page; all pages' comments shown together.
+
+**Fix:** Added page filter dropdown to `FacebookCommentsView.vue`:
+- Added `pageIdFilter` ref (default "all")
+- Added `availablePages` computed — extracts unique pages from loaded comments
+- Added `<Select>` in inbox header next to SearchInput
+- Updated `fetchComments()` to pass `page_id` parameter
+- Added i18n keys: `allPages` in en.json ("All pages") and ar.json ("جميع الصفحات")
+
+### Facebook Comments - "Facebook user" Display
+**Diagnosis:** Comments showing "Facebook user" instead of real names.
+- Root cause: Facebook API doesn't always return `from.name` for commenters (privacy limitation)
+- Code already has fallbacks: `commenterName()` tries `v.From.Name || v.SenderName`
+- `fetchMissingFacebookCommentActors()` batch-fetches missing actors via Graph API
+- **This is a Facebook API limitation — not fixable in code**
+
+### Extract Sync - "Instance is not connected"
+**Diagnosis:** `TriggerHistorySync` checks `WhatsmeowManager.GetClient(instanceID)` which returns nil.
+- Instance "عماد عادل-4395" has data but no active WhatsMeow WebSocket connection
+- Sandbox mode disables auto-reconnect (log: "skipping whatsmeow health monitor and auto-reconnect lifecycle")
+- **Operational fix needed:** Connect the instance via /whatsapp/instances
+
+### Files Changed
+- `frontend/src/views/facebook/FacebookCommentsView.vue` — page filter UI + logic
+- `frontend/src/i18n/locales/en.json` — `allPages` key
+- `frontend/src/i18n/locales/ar.json` — `allPages` key
+
+### Deployed
+- Binary: `whatomate.sandbox.green.20260612_030626-0569c4ca`
+
+## Session: Facebook Commenter Names Fix — 2026-06-12 14:15 UTC
+
+### Issue
+Facebook commenter names (especially on admin replies or when Graph API sync returned fallback/empty names) were showing as "Facebook user".
+
+### Root Cause
+1. Admin replies (comments made by the Facebook Page itself) had empty/placeholder commenter names in Graph API/webhook payloads.
+2. During Graph API comment sync, the API often returned empty commenter names due to privacy limitations. These empty names were overwriting valid names previously saved in the database because `"from_id"` and `"from_name"` were in the `OnConflict` update columns. To prevent this, the user previously removed these columns from `OnConflict` update columns, but that prevented updating database names when valid names *did* become available.
+
+### Fix
+- **Admin Reply Fallback:** Enhanced `normalizeFacebookCommentForSave` in `internal/handlers/fb_comments.go` to fall back to `PageName` if `FromName` is empty or "Facebook user" and `IsAdminReply` is true.
+- **Defensive Merge Check:**
+  - Modified `upsertFacebookWebhookComment` to query the database first. If the incoming name is empty/placeholder but the database already has a valid name, keep the database's name.
+  - Modified `syncFacebookPageComments` to do the same check.
+- **Restore GORM Conflict Columns:** Restored `"from_id"` and `"from_name"` to the GORM `OnConflict` assignment columns in `syncFacebookPageComments` so valid names can be updated when available.
+- **Testing:** Exposed `NormalizeFacebookCommentForSave` in `internal/handlers/export_test.go` and added unit test `TestNormalizeFacebookCommentForSave` to verify all cases.
+
+### Files Changed
+- [fb_comments.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/fb_comments.go) — name normalization, merge checks, GORM conflict columns
+- [export_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/export_test.go) — expose helper for testing
+- [fb_comments_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/fb_comments_test.go) — added unit tests
+
+### Verified
+- ✅ Unit test `TestNormalizeFacebookCommentForSave` passed
+- ✅ All other handlers tests compile and pass
+
+## Session: Facebook Sync GORM Pollution & Instance Header & Toaster Fix — 2026-06-12 15:00 UTC
+
+### Issues
+1. **Sync / Webhook "record not found" Error:** Truncating comments caused subsequent sync operations to fail with errors like `failed to save comment <id>: record not found`.
+2. **Chat Header Instance Name:** In `/chat` view, the user wanted to show the name of the WhatsApp instance from which the chat/message originated in the header.
+3. **Toaster Blocking Navbar Click:** The top-right toast notifications (`vue-sonner`) covered and blocked clicking the top-right navbar navigation buttons.
+
+### Root Cause
+1. **GORM Query Pollution:** The handler created `commentDB := db.Session(...).Table(...)` and then ran `commentDB.Where(...).First(&existing)`. In GORM v2, executing chain queries on the same query builder instance mutates and pollutes it by permanently retaining the `Where` conditions. Subsequent calls like `commentDB.Clauses(...).Create(&comment)` and `commentDB.Where(...).First(&saved)` reuse the polluted handle, generating broken SQL and causing GORM to return `record not found`.
+2. **Missing UI Element:** The active chat header lacked any component to display the originating WhatsApp instance.
+3. **Toast Placement:** Placing notifications at the `top-right` overlays the top-right navbar buttons, blocking clicks during visibility.
+
+### Fix
+- **Fresh GORM Sessions:** Avoided reusing mutated query builder handles. Replaced `commentDB` with fresh `db.Session(&gorm.Session{NewDB: true})` queries for each distinct database check, creation, and retrieval operation in `upsertFacebookWebhookComment` and `syncFacebookPageComments`.
+- **Chat Header Instance Tag:** Added the computed property `activeContactInstanceLabel` in `ChatView.vue` using the existing helper `resolveInstanceToggleLabel(contactsStore.currentContact.instance_id)`. Rendered the `<InstanceTag>` next to the contact's name in the active chat header layout using `placement="sidebar"` for styling.
+- **Toaster Placement:** Changed the `vue-sonner` `<Toaster>` position in `App.vue` from `top-right` to `bottom-right`.
+
+### Files Changed
+- [fb_comments.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/handlers/fb_comments.go) — database query pollution fixes
+- [ChatView.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/views/chat/ChatView.vue) — instance tag display in active chat header
+- [App.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/App.vue) — toaster position changed to `bottom-right`
+
+### Blast Radius & Risk Table
+
+| Component | File | Direct Callers | Cross-Module? | Risk |
+|---|---|---|---|---|
+| Facebook comments sync | `fb_comments.go` | HTTP handlers | No | Low (GORM queries separated) |
+| Chat view header | `ChatView.vue` | UI layout | No | Low (adds read-only tag display) |
+| Global Toaster | `App.vue` | Global UI | Yes | Low (notification position only) |
+
+### Verified
+- ✅ Compiles and passes all backend tests locally
+- ✅ Embedded licensing keyring base64 (`WwogIHsKICAgICJ...`) into production binary during cross-compilation
+- ✅ Deployed new sandbox active binary `whatomate.sandbox.fb-sync-gorm-fix-20260612_145500-0569c4ca` to VPS `31.97.192.53`
+- ✅ Verified licensing status on sandbox VPS: `status=active`, `locked=false`

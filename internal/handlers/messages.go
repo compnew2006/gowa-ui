@@ -618,14 +618,14 @@ func (a *App) createOutgoingMessage(req OutgoingMessageRequest, opts MessageSend
 				msg.InteractiveData = a.buildInteractiveData(req)
 			}
 		}
-		case models.MessageTypePoll:
-			msg.Content = req.Content
-			msg.InteractiveData = models.JSONB{
-				"type":           "poll",
-				"question":       req.Content,
-				"options":        req.PollOptions,
-				"max_selections": req.PollMaxSelections,
-			}
+	case models.MessageTypePoll:
+		msg.Content = req.Content
+		msg.InteractiveData = models.JSONB{
+			"type":           "poll",
+			"question":       req.Content,
+			"options":        req.PollOptions,
+			"max_selections": req.PollMaxSelections,
+		}
 	}
 
 	// Handle reply context

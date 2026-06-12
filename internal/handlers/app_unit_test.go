@@ -438,8 +438,8 @@ func TestStopCampaignStatsSubscriber_NoSubscriber(t *testing.T) {
 	t.Parallel()
 
 	app := &handlers.App{
-		Config:             &config.Config{},
-		CampaignSubCancel:  nil,
+		Config:            &config.Config{},
+		CampaignSubCancel: nil,
 	}
 
 	// Should not panic when CampaignSubCancel is nil

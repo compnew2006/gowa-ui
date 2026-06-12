@@ -265,18 +265,18 @@ func TestApp_ReceiveFacebookCommentsWebhook_PopulatesFromPayload(t *testing.T) {
 		"object": "page",
 		"entry": []map[string]any{
 			{
-				"id": pageID,
+				"id":   pageID,
 				"time": 1700000000,
 				"changes": []map[string]any{
 					{
 						"field": "feed",
 						"value": map[string]any{
-							"item":        "comment",
-							"verb":        "add",
-							"comment_id":  extID,
-							"post_id":     "wh-post-1",
+							"item":         "comment",
+							"verb":         "add",
+							"comment_id":   extID,
+							"post_id":      "wh-post-1",
 							"created_time": 1700000000,
-							"message":     "Where is my order?",
+							"message":      "Where is my order?",
 							"from": map[string]any{
 								"id":   "PSID-12345",
 								"name": "Waqas Ahmad",
@@ -318,20 +318,20 @@ func TestApp_ReceiveFacebookCommentsWebhook_FallsBackToSenderFields(t *testing.T
 		"object": "page",
 		"entry": []map[string]any{
 			{
-				"id": pageID,
+				"id":   pageID,
 				"time": 1700000000,
 				"changes": []map[string]any{
 					{
 						"field": "feed",
 						"value": map[string]any{
-							"item":        "comment",
-							"verb":        "add",
-							"comment_id":  extID,
-							"post_id":     "wh-post-legacy",
+							"item":         "comment",
+							"verb":         "add",
+							"comment_id":   extID,
+							"post_id":      "wh-post-legacy",
 							"created_time": 1700000000,
-							"message":     "Hi",
-							"sender_id":   "PSID-LEGACY",
-							"sender_name": "Legacy Sender",
+							"message":      "Hi",
+							"sender_id":    "PSID-LEGACY",
+							"sender_name":  "Legacy Sender",
 						},
 					},
 				},
@@ -397,12 +397,12 @@ func TestApp_ReceiveFacebookCommentsWebhook_AdminReplyTaggedAndNotAutoReplied(t 
 					{
 						"field": "feed",
 						"value": map[string]any{
-							"item":        "comment",
-							"verb":        "add",
-							"comment_id":  extID,
-							"post_id":     "wh-post-admin",
+							"item":         "comment",
+							"verb":         "add",
+							"comment_id":   extID,
+							"post_id":      "wh-post-admin",
 							"created_time": 1700000000,
-							"message":     "Thanks for your question!",
+							"message":      "Thanks for your question!",
 							"from": map[string]any{
 								"id":   pageID,
 								"name": "Page Admin",
@@ -481,12 +481,12 @@ func TestApp_ReceiveFacebookCommentsWebhook_NonAdminStillAutoReplies(t *testing.
 					{
 						"field": "feed",
 						"value": map[string]any{
-							"item":        "comment",
-							"verb":        "add",
-							"comment_id":  extID,
-							"post_id":     "wh-post-user",
+							"item":         "comment",
+							"verb":         "add",
+							"comment_id":   extID,
+							"post_id":      "wh-post-user",
 							"created_time": 1700000000,
-							"message":     "I need help",
+							"message":      "I need help",
 							"from": map[string]any{
 								"id":   "PSID-USER-1",
 								"name": "User One",
@@ -568,18 +568,18 @@ func TestApp_ReplyFacebookComment_PrivateReplyFallsBackToDirectMessenger_FromWeb
 		"object": "page",
 		"entry": []map[string]any{
 			{
-				"id": pageID,
+				"id":   pageID,
 				"time": 1700000000,
 				"changes": []map[string]any{
 					{
 						"field": "feed",
 						"value": map[string]any{
-							"item":        "comment",
-							"verb":        "add",
-							"comment_id":  extID,
-							"post_id":     "wh-post-fb",
+							"item":         "comment",
+							"verb":         "add",
+							"comment_id":   extID,
+							"post_id":      "wh-post-fb",
 							"created_time": 1700000000,
-							"message":     "Where is my order?",
+							"message":      "Where is my order?",
 							"from": map[string]any{
 								"id":   "PSID-WEBHOOK-1",
 								"name": "Waqas Ahmad",
@@ -882,4 +882,79 @@ func reloadFacebookCommentStatus(t *testing.T, app *handlers.App, commentID uuid
 	var comment models.FacebookComment
 	require.NoError(t, app.DB.First(&comment, "id = ?", commentID).Error)
 	return comment.Status
+}
+
+func TestNormalizeFacebookCommentForSave(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		comment      models.FacebookComment
+		expectedName string
+	}{
+		{
+			name: "Admin reply with empty FromName is set to PageName",
+			comment: models.FacebookComment{
+				IsAdminReply: true,
+				PageName:     "My Business Page",
+				FromName:     "",
+			},
+			expectedName: "My Business Page",
+		},
+		{
+			name: "Admin reply with Facebook User FromName is set to PageName",
+			comment: models.FacebookComment{
+				IsAdminReply: true,
+				PageName:     "My Business Page",
+				FromName:     "Facebook user",
+			},
+			expectedName: "My Business Page",
+		},
+		{
+			name: "Admin reply with case-insensitive Facebook User FromName is set to PageName",
+			comment: models.FacebookComment{
+				IsAdminReply: true,
+				PageName:     "My Business Page",
+				FromName:     "FACEBOOK USER",
+			},
+			expectedName: "My Business Page",
+		},
+		{
+			name: "Admin reply with valid FromName is preserved",
+			comment: models.FacebookComment{
+				IsAdminReply: true,
+				PageName:     "My Business Page",
+				FromName:     "Specific Admin Name",
+			},
+			expectedName: "Specific Admin Name",
+		},
+		{
+			name: "Non-admin reply with empty FromName remains empty",
+			comment: models.FacebookComment{
+				IsAdminReply: false,
+				PageName:     "My Business Page",
+				FromName:     "",
+			},
+			expectedName: "",
+		},
+		{
+			name: "Non-admin reply with Facebook User FromName is preserved",
+			comment: models.FacebookComment{
+				IsAdminReply: false,
+				PageName:     "My Business Page",
+				FromName:     "Facebook user",
+			},
+			expectedName: "Facebook user",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			comment := tc.comment
+			handlers.NormalizeFacebookCommentForSave(&comment)
+			assert.Equal(t, tc.expectedName, comment.FromName)
+		})
+	}
 }

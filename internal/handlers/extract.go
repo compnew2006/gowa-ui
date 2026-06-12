@@ -16,24 +16,24 @@ import (
 )
 
 type ExtractContactResponse struct {
-	ID            uuid.UUID  `json:"id"`
-	PhoneNumber   string     `json:"phone_number"`
-	ProfileName   string     `json:"profile_name"`
-	LastMessageAt *time.Time `json:"last_message_at"`
-	MessageCount  int64      `json:"message_count"`
-	UnreadCount   int        `json:"unread_count"`
-	InstanceID    *uuid.UUID `json:"instance_id,omitempty"`
-	WhatsAppAccount string  `json:"whatsapp_account,omitempty"`
+	ID              uuid.UUID  `json:"id"`
+	PhoneNumber     string     `json:"phone_number"`
+	ProfileName     string     `json:"profile_name"`
+	LastMessageAt   *time.Time `json:"last_message_at"`
+	MessageCount    int64      `json:"message_count"`
+	UnreadCount     int        `json:"unread_count"`
+	InstanceID      *uuid.UUID `json:"instance_id,omitempty"`
+	WhatsAppAccount string     `json:"whatsapp_account,omitempty"`
 }
 
 type ExtractionStatsResponse struct {
-	InstanceID    uuid.UUID `json:"instance_id"`
-	InstanceName  string    `json:"instance_name"`
-	PhoneNumber   string    `json:"phone_number"`
-	TotalContacts int64     `json:"total_contacts"`
-	TotalMessages int64     `json:"total_messages"`
+	InstanceID    uuid.UUID  `json:"instance_id"`
+	InstanceName  string     `json:"instance_name"`
+	PhoneNumber   string     `json:"phone_number"`
+	TotalContacts int64      `json:"total_contacts"`
+	TotalMessages int64      `json:"total_messages"`
 	LastSyncAt    *time.Time `json:"last_sync_at"`
-	Status        string    `json:"status"`
+	Status        string     `json:"status"`
 }
 
 type ExtractSyncRequest struct {
@@ -96,11 +96,11 @@ func (a *App) ListExtractableContacts(r *fastglue.Request) error {
 	response := make([]ExtractContactResponse, 0, len(enriched))
 	for _, c := range enriched {
 		resp := ExtractContactResponse{
-			ID:            c.ID,
-			PhoneNumber:   c.PhoneNumber,
-			ProfileName:   c.ProfileName,
-			LastMessageAt: c.LastMessageAt,
-			MessageCount:  c.MessageCount,
+			ID:              c.ID,
+			PhoneNumber:     c.PhoneNumber,
+			ProfileName:     c.ProfileName,
+			LastMessageAt:   c.LastMessageAt,
+			MessageCount:    c.MessageCount,
 			WhatsAppAccount: c.WhatsAppAccount,
 		}
 		if c.InstanceID != nil {

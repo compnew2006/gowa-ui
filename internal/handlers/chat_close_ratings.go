@@ -637,8 +637,6 @@ func (a *App) maybeCaptureChatCloseRating(orgID uuid.UUID, contact *models.Conta
 	return true
 }
 
-
-
 func extractFollowupCommentsForRatingMessage(contextMessages models.JSONB) []string {
 	if len(contextMessages) == 0 {
 		return nil
@@ -696,8 +694,6 @@ func extractFollowupCommentsForRatingMessage(contextMessages models.JSONB) []str
 
 	return comments
 }
-
-
 
 func mergeRatingMessageWithFollowupComments(base string, contextMessages models.JSONB) string {
 	parts := make([]string, 0, 4)

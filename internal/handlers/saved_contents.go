@@ -22,18 +22,18 @@ type SavedContentRequest struct {
 }
 
 type SavedContentResponse struct {
-	ID             uuid.UUID       `json:"id"`
-	Name           string          `json:"name"`
-	Body           string          `json:"body"`
-	Variables      models.StringArray `json:"variables"`
-	Category       string          `json:"category"`
-	Preview        string          `json:"preview"`
-	MediaID        string          `json:"media_id,omitempty"`
-	MediaFilename  string          `json:"media_filename,omitempty"`
-	MediaMimeType  string          `json:"media_mime_type,omitempty"`
-	CreatedBy      string          `json:"created_by,omitempty"`
-	CreatedAt      string          `json:"created_at"`
-	UpdatedAt      string          `json:"updated_at"`
+	ID            uuid.UUID          `json:"id"`
+	Name          string             `json:"name"`
+	Body          string             `json:"body"`
+	Variables     models.StringArray `json:"variables"`
+	Category      string             `json:"category"`
+	Preview       string             `json:"preview"`
+	MediaID       string             `json:"media_id,omitempty"`
+	MediaFilename string             `json:"media_filename,omitempty"`
+	MediaMimeType string             `json:"media_mime_type,omitempty"`
+	CreatedBy     string             `json:"created_by,omitempty"`
+	CreatedAt     string             `json:"created_at"`
+	UpdatedAt     string             `json:"updated_at"`
 }
 
 type SavedContentImportItem struct {
@@ -532,10 +532,10 @@ func (a *App) UploadSavedContentMedia(r *fastglue.Request) error {
 	}
 
 	updates := map[string]any{
-		"media_id":          "",
-		"media_filename":    sanitizeFilename(fileHeader.Filename),
-		"media_mime_type":   mimeType,
-		"media_local_path":  localPath,
+		"media_id":         "",
+		"media_filename":   sanitizeFilename(fileHeader.Filename),
+		"media_mime_type":  mimeType,
+		"media_local_path": localPath,
 	}
 	if err := a.DB.Model(&models.SavedContent{}).Where("id = ? AND organization_id = ?", content.ID, orgID).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update saved content with media info", "error", err)

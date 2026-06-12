@@ -279,8 +279,8 @@ func (a *App) StartGroupJoinCampaign(r *fastglue.Request) error {
 			CampaignID:     id,
 			RecipientID:    recipient.ID,
 			OrganizationID: orgID,
-			InstanceID:      accountNames[accountIdx],
-			InviteLink:      recipient.InviteLink,
+			InstanceID:     accountNames[accountIdx],
+			InviteLink:     recipient.InviteLink,
 		}
 	}
 
@@ -556,11 +556,11 @@ func (a *App) ImportDirectoryGroupsToJoinCampaign(r *fastglue.Request) error {
 			continue
 		}
 		recipients = append(recipients, models.GroupJoinRecipient{
-			CampaignID:      campaignID,
-			InviteLink:      link,
-			GroupName:       g.Name,
+			CampaignID:       campaignID,
+			InviteLink:       link,
+			GroupName:        g.Name,
 			ParticipantCount: g.ParticipantCount,
-			Status:          models.GroupJoinRecipientPending,
+			Status:           models.GroupJoinRecipientPending,
 		})
 	}
 

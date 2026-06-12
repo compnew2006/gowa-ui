@@ -98,7 +98,7 @@ func (a *App) ValidateGroupJIDs(r *fastglue.Request) error {
 	}
 
 	var req struct {
-		GroupJIDs []string `json:"group_jids"`
+		GroupJIDs  []string `json:"group_jids"`
 		CampaignID string   `json:"campaign_id"`
 		InstanceID string   `json:"instance_id"`
 	}
@@ -121,11 +121,11 @@ func (a *App) ValidateGroupJIDs(r *fastglue.Request) error {
 	}
 
 	type validationItem struct {
-		JID       string `json:"jid"`
-		Valid     bool   `json:"valid"`
-		Name      string `json:"name,omitempty"`
-		ParticipantCount int `json:"participant_count,omitempty"`
-		Error     string `json:"error,omitempty"`
+		JID              string `json:"jid"`
+		Valid            bool   `json:"valid"`
+		Name             string `json:"name,omitempty"`
+		ParticipantCount int    `json:"participant_count,omitempty"`
+		Error            string `json:"error,omitempty"`
 	}
 	results := make([]validationItem, len(req.GroupJIDs))
 
@@ -198,14 +198,14 @@ func (a *App) AddCampaignGroups(r *fastglue.Request) error {
 		}
 
 		recipients = append(recipients, models.BulkMessageRecipient{
-			CampaignID:        campaign.ID,
+			CampaignID:       campaign.ID,
 			PhoneNumber:      g.JID,
 			RecipientName:    g.Name,
-			RecipientType:     models.RecipientTypeGroup,
-			GroupJID:          g.JID,
-			GroupName:         g.Name,
-			ParticipantCount:  g.ParticipantCount,
-			Status:            models.MessageStatusPending,
+			RecipientType:    models.RecipientTypeGroup,
+			GroupJID:         g.JID,
+			GroupName:        g.Name,
+			ParticipantCount: g.ParticipantCount,
+			Status:           models.MessageStatusPending,
 		})
 	}
 
@@ -220,7 +220,7 @@ func (a *App) AddCampaignGroups(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(map[string]interface{}{
-		"message":    "Group recipients added",
+		"message":     "Group recipients added",
 		"added_count": len(recipients),
 	})
 }

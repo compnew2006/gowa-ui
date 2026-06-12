@@ -196,15 +196,15 @@ func (a *App) CreateWhatsAppFilterBatch(r *fastglue.Request) error {
 
 	// Create Batch & Result records in GORM transaction
 	batch := models.WhatsAppFilterBatch{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   orgID,
-		CreatedBy:        userID,
-		WhatsAppAccount:  whatsappAccount,
-		InstanceID:       instanceID,
-		Status:           models.FilterStatusPending,
-		TotalNumbers:     len(validPhones),
-		ValidNumbers:     0,
-		InvalidNumbers:   0,
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		CreatedBy:       userID,
+		WhatsAppAccount: whatsappAccount,
+		InstanceID:      instanceID,
+		Status:          models.FilterStatusPending,
+		TotalNumbers:    len(validPhones),
+		ValidNumbers:    0,
+		InvalidNumbers:  0,
 	}
 
 	results := make([]models.WhatsAppFilterResult, len(validPhones))

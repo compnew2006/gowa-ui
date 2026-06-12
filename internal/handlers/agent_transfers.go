@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -132,9 +133,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	requestDB := auth.DB
-	newQuery := func() *gorm.DB {
-		return requestDB.Session(&gorm.Session{})
-	}
+
 	orgID := auth.OrgID
 	userID := auth.UserID
 
@@ -193,7 +192,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	}
 
 	// Build query with conditional JOINs for better performance
-	query := newQuery().Table("agent_transfers").
+	query := freshDB(requestDB).Table("agent_transfers").
 		Select(strings.Join(selectCols, ", ")).
 		Where("agent_transfers.organization_id = ?", orgID).
 		Order("agent_transfers.transferred_at ASC") // FIFO
@@ -234,7 +233,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 	var userTeamIDs []uuid.UUID
 	if !hasFullAccess {
 		var memberships []models.TeamMember
-		if err := newQuery().Model(&models.TeamMember{}).
+		if err := freshDB(requestDB).Model(&models.TeamMember{}).
 			Where("team_members.user_id = ?", userID).
 			Find(&memberships).Error; err != nil {
 			a.Log.Error("Failed to fetch team memberships", "error", err, "user_id", userID)
@@ -265,7 +264,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 
 	// Get total count before pagination (for frontend to know if more exist)
 	var totalCount int64
-	countQuery := newQuery().Model(&models.AgentTransfer{}).
+	countQuery := freshDB(requestDB).Model(&models.AgentTransfer{}).
 		Where("agent_transfers.organization_id = ?", orgID)
 	if len(restrictedInstanceIDs) > 0 {
 		countQuery = countQuery.Joins("JOIN contacts ON contacts.id = agent_transfers.contact_id")
@@ -304,7 +303,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 
 	// Get queue counts
 	var generalQueueCount int64
-	generalQueueQuery := newQuery().Model(&models.AgentTransfer{}).
+	generalQueueQuery := freshDB(requestDB).Model(&models.AgentTransfer{}).
 		Where(
 			"agent_transfers.organization_id = ? AND agent_transfers.status = ? AND agent_transfers.agent_id IS NULL AND agent_transfers.team_id IS NULL",
 			orgID,
@@ -325,7 +324,7 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 		Count  int64
 	}
 	var teamQueueCounts []TeamQueueCount
-	teamCountQuery := newQuery().Model(&models.AgentTransfer{}).
+	teamCountQuery := freshDB(requestDB).Model(&models.AgentTransfer{}).
 		Select("agent_transfers.team_id AS team_id, COUNT(*) as count").
 		Where(
 			"agent_transfers.organization_id = ? AND agent_transfers.status = ? AND agent_transfers.agent_id IS NULL AND agent_transfers.team_id IS NOT NULL",
@@ -459,9 +458,6 @@ func (a *App) ListAgentTransfers(r *fastglue.Request) error {
 // CreateAgentTransfer creates a new agent transfer
 func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	newQuery := func() *gorm.DB {
-		return requestDB.Session(&gorm.Session{})
-	}
 	writeDB := a.DB.Session(&gorm.Session{})
 
 	orgID, userID, err := a.getOrgAndUserID(r)
@@ -487,7 +483,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	}
 
 	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](newQuery(), r, contactID, orgID, "Contact")
+	contact, err := findByIDAndOrg[models.Contact](freshDB(requestDB), r, contactID, orgID, "Contact")
 	if err != nil {
 		return nil
 	}
@@ -499,7 +495,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 
 	// Check for existing active transfer
 	var existingCount int64
-	newQuery().
+	freshDB(requestDB).
 		Model(&models.AgentTransfer{}).
 		Where("organization_id = ? AND contact_id = ? AND status = ?", orgID, contactID, models.TransferStatusActive).
 		Count(&existingCount)
@@ -520,7 +516,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		}
 		// Verify team exists and is active
 		var team models.Team
-		if err := newQuery().Where("id = ? AND organization_id = ? AND is_active = ?", parsedTeamID, orgID, true).First(&team).Error; err != nil {
+		if err := freshDB(requestDB).Where("id = ? AND organization_id = ? AND is_active = ?", parsedTeamID, orgID, true).First(&team).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Team not found or inactive", nil, "")
 		}
 		teamID = &parsedTeamID
@@ -535,20 +531,11 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 		if err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent_id", nil, "")
 		}
-		// Verify agent exists and is available (checks both native and cross-org members via user_organizations)
-		var agent models.User
-		if err := a.DB.Where("id = ? AND deleted_at IS NULL", parsedAgentID).First(&agent).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
+		if _, err := a.validateAgentExists(parsedAgentID, orgID); err != nil {
+			if resolveAgentError(r, a, &parsedAgentID, err, "CreateAgentTransfer") {
+				return nil
 			}
-			a.Log.Error("CreateAgentTransfer: Failed to fetch agent", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch agent", nil, "")
-		}
-		if !a.userBelongsToOrg(a.DB, parsedAgentID, orgID) {
-			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
-		}
-		if !agent.IsAvailable {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Agent is currently away", nil, "")
 		}
 		agentID = &parsedAgentID
 	} else if teamID != nil {
@@ -557,20 +544,14 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	} else if settings != nil && settings.AgentAssignment.AssignToSameAgent && contact.AssignedUserID != nil {
 		// Auto-assign to contact's existing assigned agent (if setting enabled and agent is available)
 		var assignedAgent models.User
-		if newQuery().Where("id = ?", contact.AssignedUserID).First(&assignedAgent).Error == nil && assignedAgent.IsAvailable {
+		if freshDB(requestDB).Where("id = ?", contact.AssignedUserID).First(&assignedAgent).Error == nil && assignedAgent.IsAvailable {
 			agentID = contact.AssignedUserID
 		}
 		// If agent is not available, falls through to queue (agentID remains nil)
 	}
 	// Otherwise, agentID remains nil (goes to queue)
 
-	if err := a.validateTransferAssigneeAccess(orgID, agentID, contact); err != nil {
-		if errors.Is(err, errTransferAssigneeInstanceAccess) {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Assignee does not have access to this WhatsApp account", nil, "")
-		}
-		a.Log.Error("Failed to validate assignee instance access", "error", err, "agent_id", agentID, "contact_id", contact.ID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate assignee access", nil, "")
-	}
+
 
 	// Determine source
 	source := req.Source
@@ -616,107 +597,21 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 			Where("id = ? AND organization_id = ?", contact.ID, orgID).
 			Updates(chatAssignmentUpdates(agentID))
 	}
-	writeDB.
-
-		// End any active chatbot session
-		Model(&models.ChatbotSession{}).
-		Where("organization_id = ? AND contact_id = ? AND status = ?", orgID, contactID, models.SessionStatusActive).
-		Updates(map[string]any{
-			"status":       models.SessionStatusCancelled,
-			"completed_at": time.Now(),
-		})
+	// End any active chatbot session
+	a.cancelActiveChatbotSession(orgID, contactID)
 
 	// Broadcast WebSocket notification
 	a.broadcastTransferCreated(&transfer, contact)
 
 	// Dispatch webhook for transfer created
-	var agentIDStr *string
-	var agentName *string
-	if transfer.AgentID != nil {
-		idStr := transfer.AgentID.String()
-		agentIDStr = &idStr
-	}
-	a.DispatchWebhook(orgID, models.WebhookEventTransferCreated, TransferEventData{
-		TransferID:      transfer.ID.String(),
-		ContactID:       contact.ID.String(),
-		ContactPhone:    contact.PhoneNumber,
-		ContactName:     contact.ProfileName,
-		Source:          transfer.Source,
-		Reason:          transfer.Notes,
-		AgentID:         agentIDStr,
-		AgentName:       agentName,
-		WhatsAppAccount: transfer.WhatsAppAccount,
-	})
-	newQuery().
+	a.DispatchWebhook(orgID, models.WebhookEventTransferCreated, buildTransferWebhookPayload(&transfer, contact))
+	freshDB(requestDB).
 
 		// Load relations for response
 		Preload("Agent").Preload("Team").Preload("TransferredByUser").First(&transfer, transfer.ID)
 
-	// Apply phone masking if enabled
-	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
-	phoneNumber := transfer.PhoneNumber
-	contactName := contact.ProfileName
-	if shouldMask {
-		phoneNumber = MaskPhoneNumber(phoneNumber)
-		contactName = MaskIfPhoneNumber(contactName)
-	}
-
-	resp := AgentTransferResponse{
-		ID:              transfer.ID.String(),
-		ContactID:       transfer.ContactID.String(),
-		InstanceID:      stringifyInstanceID(contact.InstanceID),
-		ContactName:     contactName,
-		PhoneNumber:     phoneNumber,
-		WhatsAppAccount: transfer.WhatsAppAccount,
-		Status:          transfer.Status,
-		Source:          transfer.Source,
-		Notes:           transfer.Notes,
-		TransferredAt:   transfer.TransferredAt.Format(time.RFC3339),
-	}
-
-	if transfer.AgentID != nil {
-		agentIDStr := transfer.AgentID.String()
-		resp.AgentID = &agentIDStr
-		if transfer.Agent != nil {
-			resp.AgentName = &transfer.Agent.FullName
-		}
-	}
-
-	if transfer.TeamID != nil {
-		teamIDStr := transfer.TeamID.String()
-		resp.TeamID = &teamIDStr
-		if transfer.Team != nil {
-			resp.TeamName = &transfer.Team.Name
-		}
-	}
-
-	if transfer.TransferredByUserID != nil {
-		transferredBy := transfer.TransferredByUserID.String()
-		resp.TransferredBy = &transferredBy
-		if transfer.TransferredByUser != nil {
-			resp.TransferredByName = &transfer.TransferredByUser.FullName
-		}
-	}
-
-	// SLA fields
-	resp.SLABreached = transfer.SLA.Breached
-	resp.EscalationLevel = transfer.SLA.EscalationLevel
-	if transfer.SLA.ResponseDeadline != nil {
-		deadline := transfer.SLA.ResponseDeadline.Format(time.RFC3339)
-		resp.SLAResponseDeadline = &deadline
-	}
-	if transfer.SLA.ResolutionDeadline != nil {
-		deadline := transfer.SLA.ResolutionDeadline.Format(time.RFC3339)
-		resp.SLAResolutionDeadline = &deadline
-	}
-	if transfer.SLA.PickedUpAt != nil {
-		pickedUpAt := transfer.SLA.PickedUpAt.Format(time.RFC3339)
-		resp.PickedUpAt = &pickedUpAt
-	}
-	if transfer.SLA.ExpiresAt != nil {
-		expiresAt := transfer.SLA.ExpiresAt.Format(time.RFC3339)
-		resp.ExpiresAt = &expiresAt
-	}
+	// Build response
+	resp := buildAgentTransferResponse(&transfer, contact, a.ShouldMaskPhoneNumbers(orgID), orgID)
 
 	return r.SendEnvelope(map[string]any{
 		"transfer": resp,
@@ -727,9 +622,7 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 // ResumeFromTransfer resumes chatbot processing for a transferred contact
 func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	newQuery := func() *gorm.DB {
-		return requestDB.Session(&gorm.Session{})
-	}
+
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -740,7 +633,7 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 		return nil
 	}
 
-	transfer, err := findByIDAndOrg[models.AgentTransfer](newQuery(), r, transferID, orgID, "Transfer")
+	transfer, err := findByIDAndOrg[models.AgentTransfer](freshDB(requestDB), r, transferID, orgID, "Transfer")
 	if err != nil {
 		return nil
 	}
@@ -760,7 +653,7 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 	transfer.ResumedAt = &now
 	transfer.ResumedBy = &userID
 
-	if err := newQuery().Save(transfer).Error; err != nil {
+	if err := freshDB(requestDB).Save(transfer).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to resume transfer", nil, "")
 	}
 
@@ -772,7 +665,7 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 
 	// If AssignToSameAgent is disabled, unassign the contact
 	if settings != nil && !settings.AgentAssignment.AssignToSameAgent {
-		newQuery().
+		freshDB(requestDB).
 			Model(&models.Contact{}).
 			Where("id = ?", transfer.ContactID).
 			Updates(chatAssignmentUpdates(nil))
@@ -783,7 +676,7 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 
 	// Get contact for webhook data
 	var contact models.Contact
-	newQuery().
+	freshDB(requestDB).
 		Where("id = ?", transfer.ContactID).First(&contact)
 
 	// Dispatch webhook for transfer resumed
@@ -804,9 +697,6 @@ func (a *App) ResumeFromTransfer(r *fastglue.Request) error {
 // AssignAgentTransfer assigns a transfer to a specific agent
 func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	newQuery := func() *gorm.DB {
-		return requestDB.Session(&gorm.Session{})
-	}
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
@@ -826,7 +716,7 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 	}
 
 	var transfer models.AgentTransfer
-	if err := newQuery().Where("id = ? AND organization_id = ?", transferID, orgID).
+	if err := freshDB(requestDB).Where("id = ? AND organization_id = ?", transferID, orgID).
 		Preload("Contact").First(&transfer).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Transfer not found", nil, "")
 	}
@@ -849,20 +739,11 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid agent_id", nil, "")
 		}
 
-		// Verify agent exists and is available (checks both native and cross-org members via user_organizations)
-		var agent models.User
-		if err := a.DB.Where("id = ? AND deleted_at IS NULL", parsedAgentID).First(&agent).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
+		if _, err := a.validateAgentExists(parsedAgentID, orgID); err != nil {
+			if resolveAgentError(r, a, &parsedAgentID, err, "AssignAgentTransfer") {
+				return nil
 			}
-			a.Log.Error("ResolveAgentTransfer: Failed to fetch agent", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch agent", nil, "")
-		}
-		if !a.userBelongsToOrg(a.DB, parsedAgentID, orgID) {
-			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
-		}
-		if !agent.IsAvailable {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Agent is currently away", nil, "")
 		}
 		targetAgentID = &parsedAgentID
 	} else if req.AgentID == nil && !hasWriteAccess {
@@ -887,31 +768,20 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 			}
 			// Verify team exists
 			var team models.Team
-			if err := newQuery().Where("id = ? AND organization_id = ?", parsedTeamID, orgID).First(&team).Error; err != nil {
+			if err := freshDB(requestDB).Where("id = ? AND organization_id = ?", parsedTeamID, orgID).First(&team).Error; err != nil {
 				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Team not found", nil, "")
 			}
 			transfer.TeamID = &parsedTeamID
 		}
 	}
 
-	if targetAgentID != nil {
-		if transfer.Contact == nil {
-			var contact models.Contact
-			if err := newQuery().Where("id = ? AND organization_id = ?", transfer.ContactID, orgID).First(&contact).Error; err != nil {
-				a.Log.Error("Failed to load contact for transfer assignment", "error", err, "transfer_id", transfer.ID, "contact_id", transfer.ContactID)
-				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load contact", nil, "")
-			}
-			transfer.Contact = &contact
+	if transfer.Contact == nil {
+		var contact models.Contact
+		if err := freshDB(requestDB).Where("id = ? AND organization_id = ?", transfer.ContactID, orgID).First(&contact).Error; err != nil {
+			a.Log.Error("Failed to load contact for transfer assignment", "error", err, "transfer_id", transfer.ID, "contact_id", transfer.ContactID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load contact", nil, "")
 		}
-
-		allowed, err := a.canUserSeeContactInstance(orgID, *targetAgentID, transfer.Contact)
-		if err != nil {
-			a.Log.Error("Failed to validate assignee instance access", "error", err, "user_id", targetAgentID, "contact_id", transfer.ContactID)
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate assignee access", nil, "")
-		}
-		if !allowed {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Assignee does not have access to this WhatsApp account", nil, "")
-		}
+		transfer.Contact = &contact
 	}
 
 	// Update transfer
@@ -922,7 +792,7 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 		a.UpdateSLAOnPickup(&transfer)
 	}
 
-	if err := newQuery().Save(&transfer).Error; err != nil {
+	if err := freshDB(requestDB).Save(&transfer).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to assign transfer", nil, "")
 	}
 
@@ -933,15 +803,15 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 		previousContactAssigneeID = &prev
 	}
 	if targetAgentID != nil && transfer.Contact != nil {
-		newQuery().
+		freshDB(requestDB).
 			Model(transfer.Contact).Updates(chatAssignmentUpdates(targetAgentID))
 	} else if targetAgentID == nil && transfer.Contact != nil {
-		newQuery().
+		freshDB(requestDB).
 			// Clear assignment when unassigning
 			Model(transfer.Contact).Updates(chatAssignmentUpdates(nil))
 	}
 	if transfer.Contact != nil {
-		_ = newQuery().Where("id = ?", transfer.Contact.ID).First(transfer.Contact).Error
+		_ = freshDB(requestDB).Where("id = ?", transfer.Contact.ID).First(transfer.Contact).Error
 		if targetAgentID != nil {
 			assigneeChanged := previousContactAssigneeID == nil || *previousContactAssigneeID != *targetAgentID
 			if assigneeChanged {
@@ -954,33 +824,15 @@ func (a *App) AssignAgentTransfer(r *fastglue.Request) error {
 	a.broadcastTransferAssigned(&transfer)
 
 	// Dispatch webhook for transfer assigned
-	var agentIDStr *string
-	var agentName *string
+	payload := buildTransferWebhookPayload(&transfer, transfer.Contact)
 	if targetAgentID != nil {
-		idStr := targetAgentID.String()
-		agentIDStr = &idStr
-		// Get agent name
 		var agent models.User
-		if newQuery().Where("id = ?", targetAgentID).First(&agent).Error == nil {
-			agentName = &agent.FullName
+		if freshDB(requestDB).Where("id = ?", targetAgentID).First(&agent).Error == nil {
+			agentName := agent.FullName
+			payload.AgentName = &agentName
 		}
 	}
-	contactPhone := ""
-	contactName := ""
-	if transfer.Contact != nil {
-		contactPhone = transfer.Contact.PhoneNumber
-		contactName = transfer.Contact.ProfileName
-	}
-	a.DispatchWebhook(orgID, models.WebhookEventTransferAssigned, TransferEventData{
-		TransferID:      transfer.ID.String(),
-		ContactID:       transfer.ContactID.String(),
-		ContactPhone:    contactPhone,
-		ContactName:     contactName,
-		Source:          transfer.Source,
-		AgentID:         agentIDStr,
-		AgentName:       agentName,
-		WhatsAppAccount: transfer.WhatsAppAccount,
-	})
+	a.DispatchWebhook(orgID, models.WebhookEventTransferAssigned, payload)
 
 	return r.SendEnvelope(map[string]any{
 		"message":  "Transfer assigned successfully",
@@ -1137,75 +989,11 @@ func (a *App) PickNextTransfer(r *fastglue.Request) error {
 	// Broadcast WebSocket notification
 	a.broadcastTransferAssigned(&transfer)
 
-	// Apply phone masking if enabled
-	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
-	phoneNumber := transfer.PhoneNumber
-	if shouldMask {
-		phoneNumber = MaskPhoneNumber(phoneNumber)
-	}
+	// Dispatch webhook for transfer picked
+	a.DispatchWebhook(orgID, models.WebhookEventTransferAssigned, buildTransferWebhookPayload(&transfer, transfer.Contact))
 
-	resp := AgentTransferResponse{
-		ID:              transfer.ID.String(),
-		ContactID:       transfer.ContactID.String(),
-		PhoneNumber:     phoneNumber,
-		WhatsAppAccount: transfer.WhatsAppAccount,
-		Status:          transfer.Status,
-		Source:          transfer.Source,
-		Notes:           transfer.Notes,
-		TransferredAt:   transfer.TransferredAt.Format(time.RFC3339),
-	}
-
-	if transfer.Contact != nil {
-		contactName := transfer.Contact.ProfileName
-		if shouldMask {
-			contactName = MaskIfPhoneNumber(contactName)
-		}
-		resp.ContactName = contactName
-		resp.InstanceID = stringifyInstanceID(transfer.Contact.InstanceID)
-	}
-
-	agentIDStr := userID.String()
-	resp.AgentID = &agentIDStr
-	resp.AgentName = &agent.FullName
-
-	if transfer.TeamID != nil {
-		teamIDStr := transfer.TeamID.String()
-		resp.TeamID = &teamIDStr
-		if transfer.Team != nil {
-			resp.TeamName = &transfer.Team.Name
-		}
-	}
-
-	// Set TransferredBy (self-pick)
-	if transfer.TransferredByUserID != nil {
-		transferredBy := transfer.TransferredByUserID.String()
-		resp.TransferredBy = &transferredBy
-		resp.TransferredByName = &agent.FullName
-	}
-
-	// SLA fields
-	resp.SLABreached = transfer.SLA.Breached
-	resp.EscalationLevel = transfer.SLA.EscalationLevel
-	if transfer.SLA.ResponseDeadline != nil {
-		deadline := transfer.SLA.ResponseDeadline.Format(time.RFC3339)
-		resp.SLAResponseDeadline = &deadline
-	}
-	if transfer.SLA.ResolutionDeadline != nil {
-		deadline := transfer.SLA.ResolutionDeadline.Format(time.RFC3339)
-		resp.SLAResolutionDeadline = &deadline
-	}
-	if transfer.SLA.BreachedAt != nil {
-		breachedAt := transfer.SLA.BreachedAt.Format(time.RFC3339)
-		resp.SLABreachedAt = &breachedAt
-	}
-	if transfer.SLA.PickedUpAt != nil {
-		pickedUpAt := transfer.SLA.PickedUpAt.Format(time.RFC3339)
-		resp.PickedUpAt = &pickedUpAt
-	}
-	if transfer.SLA.ExpiresAt != nil {
-		expiresAt := transfer.SLA.ExpiresAt.Format(time.RFC3339)
-		resp.ExpiresAt = &expiresAt
-	}
+	// Build response
+	resp := buildAgentTransferResponse(&transfer, transfer.Contact, a.ShouldMaskPhoneNumbers(orgID), orgID)
 
 	return r.SendEnvelope(map[string]any{
 		"message":  "Transfer picked successfully",
@@ -1357,12 +1145,7 @@ func (a *App) saveAndFinalizeTransfer(transfer *models.AgentTransfer, account *m
 
 	// End any active chatbot session
 	if endChatbotSession {
-		a.DB.Model(&models.ChatbotSession{}).
-			Where("organization_id = ? AND contact_id = ? AND status = ?", account.OrganizationID, contact.ID, models.SessionStatusActive).
-			Updates(map[string]any{
-				"status":       models.SessionStatusCancelled,
-				"completed_at": time.Now(),
-			})
+		a.cancelActiveChatbotSession(account.OrganizationID, contact.ID)
 	}
 
 	// Broadcast to WebSocket
@@ -1638,6 +1421,14 @@ func (a *App) ReturnAgentTransfersToQueue(userID, orgID uuid.UUID) int {
 
 		// Broadcast the unassignment
 		a.broadcastTransferAssigned(transfer)
+
+		// Dispatch webhook for transfer unassigned
+		var contact *models.Contact
+		if transfer.ContactID != uuid.Nil {
+			contact = &models.Contact{}
+			a.DB.Where("id = ?", transfer.ContactID).First(contact)
+		}
+		a.DispatchWebhook(transfer.OrganizationID, models.WebhookEventTransferAssigned, buildTransferWebhookPayload(transfer, contact))
 	}
 
 	a.Log.Info("Returned agent transfers to queue",
@@ -1646,4 +1437,168 @@ func (a *App) ReturnAgentTransfersToQueue(userID, orgID uuid.UUID) int {
 	)
 
 	return len(transfers)
+}
+
+
+// errAgentNotFound is returned when an agent lookup fails or does not belong to the org.
+var errAgentNotFound = errors.New("agent not found")
+
+// errAgentUnavailable is returned when the agent exists but is currently away.
+var errAgentUnavailable = errors.New("agent is currently away")
+
+// validateAgentExists checks that the agent exists, belongs to the given org, and is available.
+func (a *App) validateAgentExists(agentID, orgID uuid.UUID) (*models.User, error) {
+	var agent models.User
+	if err := a.DB.Where("id = ? AND deleted_at IS NULL", agentID).First(&agent).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errAgentNotFound
+		}
+		return nil, fmt.Errorf("fetch agent: %w", err)
+	}
+	if !a.userBelongsToOrg(a.DB, agentID, orgID) {
+		return nil, errAgentNotFound
+	}
+	if !agent.IsAvailable {
+		return nil, errAgentUnavailable
+	}
+	return &agent, nil
+}
+
+// resolveAgentError maps sentinel agent errors to HTTP response envelope errors.
+// Returns true if the error was handled (envelope sent), false if the caller should return a 500.
+func resolveAgentError(r *fastglue.Request, app *App, agentID *uuid.UUID, err error, context string) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errAgentNotFound) {
+		r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
+		return true
+	}
+	if errors.Is(err, errAgentUnavailable) {
+		r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Agent is currently away", nil, "")
+		return true
+	}
+	var idStr string
+	if agentID != nil {
+		idStr = agentID.String()
+	}
+	app.Log.Error(context+": unexpected error", "error", err, "agent_id", idStr)
+	r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to look up agent", nil, "")
+	return true
+}
+
+// freshDB returns a fresh *gorm.DB session without pre-existing scopes, avoiding
+// "table name specified more than once" errors from GORM scope+Model().Updates().
+func freshDB(requestDB *gorm.DB) *gorm.DB {
+	return requestDB.Session(&gorm.Session{})
+}
+
+// cancelActiveChatbotSession ends any active chatbot sessions for the given contact.
+func (a *App) cancelActiveChatbotSession(orgID, contactID uuid.UUID) {
+	a.DB.Model(&models.ChatbotSession{}).
+		Where("organization_id = ? AND contact_id = ? AND status = ?", orgID, contactID, models.SessionStatusActive).
+		Updates(map[string]any{
+			"status":       models.SessionStatusCancelled,
+			"completed_at": time.Now(),
+		})
+}
+
+// buildTransferWebhookPayload builds the shared TransferEventData for webhook dispatch.
+func buildTransferWebhookPayload(transfer *models.AgentTransfer, contact *models.Contact) TransferEventData {
+	var agentIDStr, agentName *string
+	if transfer.AgentID != nil {
+		idStr := transfer.AgentID.String()
+		agentIDStr = &idStr
+		// agentName requires a DB query; callers can populate it after if needed
+	}
+	contactPhone := ""
+	contactName := ""
+	if contact != nil {
+		contactPhone = contact.PhoneNumber
+		contactName = contact.ProfileName
+	}
+	return TransferEventData{
+		TransferID:      transfer.ID.String(),
+		ContactID:       transfer.ContactID.String(),
+		ContactPhone:    contactPhone,
+		ContactName:     contactName,
+		Source:          transfer.Source,
+		Reason:          transfer.Notes,
+		AgentID:         agentIDStr,
+		AgentName:       agentName,
+		WhatsAppAccount: transfer.WhatsAppAccount,
+	}
+}
+
+// buildAgentTransferResponse constructs an AgentTransferResponse from a transfer + contact.
+func buildAgentTransferResponse(transfer *models.AgentTransfer, contact *models.Contact, shouldMask bool, orgID uuid.UUID) AgentTransferResponse {
+	phoneNumber := transfer.PhoneNumber
+	contactName := contact.ProfileName
+	if shouldMask && orgID != uuid.Nil {
+		phoneNumber = MaskPhoneNumber(phoneNumber)
+		contactName = MaskIfPhoneNumber(contactName)
+	}
+
+	resp := AgentTransferResponse{
+		ID:              transfer.ID.String(),
+		ContactID:       transfer.ContactID.String(),
+		InstanceID:      stringifyInstanceID(contact.InstanceID),
+		ContactName:     contactName,
+		PhoneNumber:     phoneNumber,
+		WhatsAppAccount: transfer.WhatsAppAccount,
+		Status:          transfer.Status,
+		Source:          transfer.Source,
+		Notes:           transfer.Notes,
+		TransferredAt:   transfer.TransferredAt.Format(time.RFC3339),
+	}
+
+	if transfer.AgentID != nil {
+		idStr := transfer.AgentID.String()
+		resp.AgentID = &idStr
+		if transfer.Agent != nil {
+			resp.AgentName = &transfer.Agent.FullName
+		}
+	}
+
+	if transfer.TeamID != nil {
+		teamIDStr := transfer.TeamID.String()
+		resp.TeamID = &teamIDStr
+		if transfer.Team != nil {
+			resp.TeamName = &transfer.Team.Name
+		}
+	}
+
+	if transfer.TransferredByUserID != nil {
+		tb := transfer.TransferredByUserID.String()
+		resp.TransferredBy = &tb
+		if transfer.TransferredByUser != nil {
+			resp.TransferredByName = &transfer.TransferredByUser.FullName
+		}
+	}
+
+	// SLA fields
+	resp.SLABreached = transfer.SLA.Breached
+	resp.EscalationLevel = transfer.SLA.EscalationLevel
+	if transfer.SLA.ResponseDeadline != nil {
+		d := transfer.SLA.ResponseDeadline.Format(time.RFC3339)
+		resp.SLAResponseDeadline = &d
+	}
+	if transfer.SLA.ResolutionDeadline != nil {
+		d := transfer.SLA.ResolutionDeadline.Format(time.RFC3339)
+		resp.SLAResolutionDeadline = &d
+	}
+	if transfer.SLA.BreachedAt != nil {
+		d := transfer.SLA.BreachedAt.Format(time.RFC3339)
+		resp.SLABreachedAt = &d
+	}
+	if transfer.SLA.PickedUpAt != nil {
+		d := transfer.SLA.PickedUpAt.Format(time.RFC3339)
+		resp.PickedUpAt = &d
+	}
+	if transfer.SLA.ExpiresAt != nil {
+		d := transfer.SLA.ExpiresAt.Format(time.RFC3339)
+		resp.ExpiresAt = &d
+	}
+
+	return resp
 }

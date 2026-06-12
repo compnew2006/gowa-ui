@@ -210,20 +210,6 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Admins/managers can assign chats from restricted instances to any user.
-	// The bridge rule in applyRestrictedInstanceVisibilityFilter will then grant
-	// the assignee read access to instance metadata for this specific chat.
-	if req.UserID != nil && *req.UserID != uuid.Nil && !a.canBypassPendingChatRestriction(userID, orgID) {
-		allowed, err := a.canUserSeeContactInstance(orgID, *req.UserID, contact)
-		if err != nil {
-			a.Log.Error("Failed to validate assignee instance access", "error", err, "user_id", req.UserID, "contact_id", contact.ID)
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to validate assignee access", nil, "")
-		}
-		if !allowed {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Assignee does not have access to this WhatsApp account", nil, "")
-		}
-	}
-
 	// If assigning to a user, verify they belong to the organization.
 	// Uses the same membership check as ListUsers (user_organizations JOIN)
 	// so that any user visible in the assign dialog is also valid here.

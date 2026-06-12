@@ -73,10 +73,10 @@ func (pg Pagination) TotalPages(total int) int {
 // only {data, total, page, limit} now include total_pages by design.
 func paginatedEnvelope(dataKey string, data any, total int64, pg Pagination) map[string]any {
 	return map[string]any{
-		dataKey:      data,
-		"total":      total,
-		"page":       pg.Page,
-		"limit":      pg.Limit,
+		dataKey:       data,
+		"total":       total,
+		"page":        pg.Page,
+		"limit":       pg.Limit,
 		"total_pages": pg.TotalPages(int(total)),
 	}
 }

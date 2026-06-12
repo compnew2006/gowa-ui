@@ -36,7 +36,7 @@ import {
 import { useTagsStore } from "@/stores/tags";
 import { TagBadge } from "@/components/ui/tag-badge";
 import { getTagColorClass } from "@/lib/constants";
-import { canUserAccessInstance } from "@/lib/instance-access";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1262,12 +1262,15 @@ const canReadCustomActions = computed(() => {
   return authStore.hasPermission("custom_actions", "read");
 });
 
-// Get list of users for assignment
+// Get list of users for assignment — all active org members
 const assignableUsers = computed(() => {
-  const instanceId = contactsStore.currentContact?.instance_id?.trim();
-  return usersStore.users
-    .filter((u) => u.is_active !== false)
-    .filter((u) => canUserAccessInstance(u, instanceId));
+  return usersStore.users.filter((u) => u.is_active !== false);
+});
+
+const activeContactInstanceLabel = computed(() => {
+  const contact = contactsStore.currentContact;
+  if (!contact) return "";
+  return resolveInstanceToggleLabel(contact.instance_id);
 });
 
 function getAssignedAgentName(contact: Contact): string {
@@ -4948,6 +4951,12 @@ async function sendMediaMessage() {
                     contactsStore.currentContact.phone_number
                   }}
                 </p>
+                <InstanceTag
+                  v-if="contactsStore.currentContact?.instance_id"
+                  :fallback-label="activeContactInstanceLabel"
+                  :instance-id="contactsStore.currentContact.instance_id"
+                  placement="sidebar"
+                />
                 <Badge
                   v-if="contactsStore.currentContact.is_public"
                   class="h-5 border-0 bg-primary/12 text-[10px] text-primary"

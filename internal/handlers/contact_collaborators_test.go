@@ -252,4 +252,3 @@ func TestApp_ListContactCollaborators_Success(t *testing.T) {
 	assert.Equal(t, collaboratorUser.ID.String(), c["user_id"])
 	assert.Equal(t, string(models.CollaboratorStatusAccepted), c["status"])
 }
-

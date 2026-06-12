@@ -732,20 +732,42 @@ func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.Facebook
 		},
 	}
 	normalizeFacebookCommentForSave(&comment)
-	commentDB := db.Session(&gorm.Session{NewDB: true}).Table((&models.FacebookComment{}).TableName())
-	tx := commentDB.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "organization_id"}, {Name: "external_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"page_name", "post_id", "parent_id", "from_id", "from_name", "message",
-			"permalink", "commented_at", "last_synced_at", "metadata",
-			"is_admin_reply", "updated_at",
-		}),
-	}).Create(&comment)
+
+	var existing models.FacebookComment
+	if err := db.Session(&gorm.Session{NewDB: true}).
+		Table("facebook_comments").
+		Where("organization_id = ? AND external_id = ?", account.OrganizationID, value.CommentID).
+		First(&existing).Error; err == nil {
+		trimmedIncoming := strings.TrimSpace(comment.FromName)
+		if trimmedIncoming == "" || strings.EqualFold(trimmedIncoming, "facebook user") {
+			trimmedExisting := strings.TrimSpace(existing.FromName)
+			if trimmedExisting != "" && !strings.EqualFold(trimmedExisting, "facebook user") {
+				comment.FromName = existing.FromName
+			}
+		}
+		if comment.FromID == "" {
+			comment.FromID = existing.FromID
+		}
+	}
+
+	tx := db.Session(&gorm.Session{NewDB: true}).
+		Table("facebook_comments").
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "organization_id"}, {Name: "external_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"page_name", "post_id", "parent_id", "from_id", "from_name", "message",
+				"permalink", "commented_at", "last_synced_at", "metadata",
+				"is_admin_reply", "updated_at",
+			}),
+		}).Create(&comment)
 	if tx.Error != nil {
 		return nil, false, tx.Error
 	}
 	var saved models.FacebookComment
-	if err := commentDB.Where("organization_id = ? AND external_id = ?", account.OrganizationID, value.CommentID).First(&saved).Error; err != nil {
+	if err := db.Session(&gorm.Session{NewDB: true}).
+		Table("facebook_comments").
+		Where("organization_id = ? AND external_id = ?", account.OrganizationID, value.CommentID).
+		First(&saved).Error; err != nil {
 		return nil, false, err
 	}
 	created := tx.RowsAffected > 0
@@ -808,6 +830,13 @@ func normalizeFacebookCommentForSave(comment *models.FacebookComment) {
 	comment.ParentID = truncateFacebookCommentField(comment.ParentID, 255)
 	comment.FromID = truncateFacebookCommentField(comment.FromID, 255)
 	comment.FromName = truncateFacebookCommentField(comment.FromName, 255)
+
+	if comment.IsAdminReply && comment.PageName != "" {
+		trimmedName := strings.TrimSpace(comment.FromName)
+		if trimmedName == "" || strings.EqualFold(trimmedName, "facebook user") {
+			comment.FromName = comment.PageName
+		}
+	}
 }
 
 func truncateFacebookCommentField(value string, maxRunes int) string {
@@ -934,15 +963,34 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 				},
 			}
 			normalizeFacebookCommentForSave(&comment)
-			commentDB := db.Session(&gorm.Session{NewDB: true}).Table((&models.FacebookComment{}).TableName())
-			tx := commentDB.Clauses(clause.OnConflict{
-				Columns: []clause.Column{{Name: "organization_id"}, {Name: "external_id"}},
-				DoUpdates: clause.AssignmentColumns([]string{
-					"page_name", "post_permalink", "post_message", "parent_id", "from_id", "from_name",
-					"message", "permalink", "commented_at", "last_synced_at", "metadata",
-					"is_admin_reply", "updated_at",
-				}),
-			}).Create(&comment)
+
+			var existing models.FacebookComment
+			if err := db.Session(&gorm.Session{NewDB: true}).
+				Table("facebook_comments").
+				Where("organization_id = ? AND external_id = ?", orgID, edge.ID).
+				First(&existing).Error; err == nil {
+				trimmedIncoming := strings.TrimSpace(comment.FromName)
+				if trimmedIncoming == "" || strings.EqualFold(trimmedIncoming, "facebook user") {
+					trimmedExisting := strings.TrimSpace(existing.FromName)
+					if trimmedExisting != "" && !strings.EqualFold(trimmedExisting, "facebook user") {
+						comment.FromName = existing.FromName
+					}
+				}
+				if comment.FromID == "" {
+					comment.FromID = existing.FromID
+				}
+			}
+
+			tx := db.Session(&gorm.Session{NewDB: true}).
+				Table("facebook_comments").
+				Clauses(clause.OnConflict{
+					Columns: []clause.Column{{Name: "organization_id"}, {Name: "external_id"}},
+					DoUpdates: clause.AssignmentColumns([]string{
+						"page_name", "post_permalink", "post_message", "parent_id", "from_id", "from_name",
+						"message", "permalink", "commented_at", "last_synced_at", "metadata",
+						"is_admin_reply", "updated_at",
+					}),
+				}).Create(&comment)
 			if tx.Error != nil {
 				a.Log.Error("Failed to save Facebook synced comment", "error", tx.Error, "page_id", pageID, "page_name", pageName, "comment_id", edge.ID)
 				result.Failures = append(result.Failures, fmt.Sprintf("%s: failed to save comment %s: %v", pageNameOrID(pageName, pageID), edge.ID, tx.Error))
@@ -951,7 +999,10 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 			result.Synced++
 			if tx.RowsAffected > 0 {
 				var saved models.FacebookComment
-				_ = commentDB.Where("organization_id = ? AND external_id = ?", orgID, edge.ID).First(&saved).Error
+				_ = db.Session(&gorm.Session{NewDB: true}).
+					Table("facebook_comments").
+					Where("organization_id = ? AND external_id = ?", orgID, edge.ID).
+					First(&saved).Error
 				result.Created++
 				// Broadcast WebSocket for newly synced comments
 				if a.WSHub != nil {

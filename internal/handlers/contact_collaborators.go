@@ -45,7 +45,6 @@ type InviteContactCollaboratorRequest struct {
 	Role   string `json:"role,omitempty"`
 }
 
-
 func (a *App) loadContactForCollaboration(r *fastglue.Request, orgID, userID, contactID uuid.UUID) (*models.Contact, error) {
 	requestDB := a.requestDB(r).Session(&gorm.Session{})
 	var contact models.Contact

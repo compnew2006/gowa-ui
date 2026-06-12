@@ -226,10 +226,10 @@ func (a *App) PreviewGroupFromLink(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(map[string]any{
-		"jid":              info.JID,
-		"name":             info.Name,
+		"jid":               info.JID,
+		"name":              info.Name,
 		"participant_count": info.ParticipantCount,
-		"invite_link":      req.InviteLink,
+		"invite_link":       req.InviteLink,
 	})
 }
 
@@ -274,14 +274,14 @@ func (a *App) ImportDirectoryGroupsToCampaign(r *fastglue.Request) error {
 	recipients := make([]models.BulkMessageRecipient, 0, len(groups))
 	for _, g := range groups {
 		recipients = append(recipients, models.BulkMessageRecipient{
-			CampaignID:        campaign.ID,
+			CampaignID:       campaign.ID,
 			PhoneNumber:      g.GroupJID,
 			RecipientName:    g.Name,
-			RecipientType:     models.RecipientTypeGroup,
-			GroupJID:          g.GroupJID,
-			GroupName:         g.Name,
-			ParticipantCount:  g.ParticipantCount,
-			Status:            models.MessageStatusPending,
+			RecipientType:    models.RecipientTypeGroup,
+			GroupJID:         g.GroupJID,
+			GroupName:        g.Name,
+			ParticipantCount: g.ParticipantCount,
+			Status:           models.MessageStatusPending,
 		})
 	}
 

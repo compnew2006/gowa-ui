@@ -71,8 +71,8 @@ func TestGetMetaAnalytics_CacheMiss_CallsAPIAndStoresResult(t *testing.T) {
 	req := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "analytics",
 		"account_id":     accountID.String(),
-		"start":     time.Now().Add(-24*time.Hour).Format("2006-01-02"),
-		"end":       time.Now().Format("2006-01-02"),
+		"start":          time.Now().Add(-24 * time.Hour).Format("2006-01-02"),
+		"end":            time.Now().Format("2006-01-02"),
 		"granularity":    "DAY",
 	})
 
@@ -102,8 +102,8 @@ func TestGetMetaAnalytics_CacheHit_ReturnsCachedWithoutAPICall(t *testing.T) {
 	params := map[string]string{
 		"analytics_type": "analytics",
 		"account_id":     accountID.String(),
-		"start":     start,
-		"end":       end,
+		"start":          start,
+		"end":            end,
 		"granularity":    "DAY",
 	}
 
@@ -121,8 +121,8 @@ func TestGetMetaAnalytics_InvalidAnalyticsType_Returns400(t *testing.T) {
 
 	req := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "invalid_type",
-		"start":     "2026-01-01",
-		"end":       "2026-01-02",
+		"start":          "2026-01-01",
+		"end":            "2026-01-02",
 	})
 
 	err := app.GetMetaAnalytics(req)
@@ -160,8 +160,8 @@ func TestGetMetaAnalytics_EndBeforeStart_Returns400(t *testing.T) {
 
 	req := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "analytics",
-		"start":     "2026-01-10",
-		"end":       "2026-01-01",
+		"start":          "2026-01-10",
+		"end":            "2026-01-01",
 	})
 
 	err := app.GetMetaAnalytics(req)
@@ -174,8 +174,8 @@ func TestGetMetaAnalytics_InvalidGranularity_Returns400(t *testing.T) {
 
 	req := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "analytics",
-		"start":     "2026-01-01",
-		"end":       "2026-01-02",
+		"start":          "2026-01-01",
+		"end":            "2026-01-02",
 		"granularity":    "INVALID",
 	})
 
@@ -200,8 +200,8 @@ func TestGetMetaAnalytics_GranularityAutoAdjust(t *testing.T) {
 	req := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "analytics",
 		"account_id":     accountID.String(),
-		"start":     start,
-		"end":       end,
+		"start":          start,
+		"end":            end,
 		"granularity":    "HALF_HOUR",
 	})
 
@@ -219,8 +219,8 @@ func TestGetMetaAnalytics_MetaAPIError_ReturnsGracefully(t *testing.T) {
 	req := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "analytics",
 		"account_id":     accountID.String(),
-		"start":     time.Now().Add(-24*time.Hour).Format("2006-01-02"),
-		"end":       time.Now().Format("2006-01-02"),
+		"start":          time.Now().Add(-24 * time.Hour).Format("2006-01-02"),
+		"end":            time.Now().Format("2006-01-02"),
 		"granularity":    "DAY",
 	})
 
@@ -235,8 +235,8 @@ func TestGetMetaAnalytics_NoAccounts_ReturnsEmptyResult(t *testing.T) {
 
 	req := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "analytics",
-		"start":     time.Now().Add(-24*time.Hour).Format("2006-01-02"),
-		"end":       time.Now().Format("2006-01-02"),
+		"start":          time.Now().Add(-24 * time.Hour).Format("2006-01-02"),
+		"end":            time.Now().Format("2006-01-02"),
 		"granularity":    "DAY",
 	})
 
@@ -262,8 +262,8 @@ func TestGetMetaAnalytics_SpecificAccountID(t *testing.T) {
 	req := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "analytics",
 		"account_id":     accountID.String(),
-		"start":     time.Now().Add(-24*time.Hour).Format("2006-01-02"),
-		"end":       time.Now().Format("2006-01-02"),
+		"start":          time.Now().Add(-24 * time.Hour).Format("2006-01-02"),
+		"end":            time.Now().Format("2006-01-02"),
 		"granularity":    "DAY",
 	})
 
@@ -288,8 +288,8 @@ func TestGetMetaAnalytics_CacheKeyIsolationBetweenTypes(t *testing.T) {
 	req1 := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "analytics",
 		"account_id":     accountID.String(),
-		"start":     start,
-		"end":       end,
+		"start":          start,
+		"end":            end,
 		"granularity":    "DAY",
 	})
 	require.NoError(t, app.GetMetaAnalytics(req1))
@@ -297,8 +297,8 @@ func TestGetMetaAnalytics_CacheKeyIsolationBetweenTypes(t *testing.T) {
 	req2 := metaAnalyticsRequest(t, orgID, userID, map[string]string{
 		"analytics_type": "pricing_analytics",
 		"account_id":     accountID.String(),
-		"start":     start,
-		"end":       end,
+		"start":          start,
+		"end":            end,
 		"granularity":    "DAY",
 	})
 	require.NoError(t, app.GetMetaAnalytics(req2))

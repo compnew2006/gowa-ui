@@ -3,9 +3,9 @@ package handlers
 import (
 	"context"
 
-	"github.com/compnew2006/whatomate/pkg/chat_close_ratings"
 	"errors"
 	"fmt"
+	"github.com/compnew2006/whatomate/pkg/chat_close_ratings"
 	"sort"
 	"strings"
 	"time"
@@ -330,8 +330,6 @@ func allowedInstanceIDsForRestrictions(cfg sendRestrictionsSettings) []uuid.UUID
 	return []uuid.UUID{}
 }
 
-
-
 func normalizeRestrictedNumbers(values []string) []string {
 	if len(values) == 0 {
 		return []string{}
@@ -515,8 +513,6 @@ func (a *App) saveUserSendRestrictions(userID uuid.UUID, existingSettings models
 	updatedSettings := writeSendRestrictionsSettings(existingSettings, cfg)
 	return a.DB.Model(&models.User{}).Where("id = ?", userID).Update("settings", updatedSettings).Error
 }
-
-
 
 func (a *App) collectAutoAuthorizedNumbersForUser(orgID, userID uuid.UUID) ([]string, error) {
 	type phoneRow struct {

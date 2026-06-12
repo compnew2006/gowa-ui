@@ -555,7 +555,7 @@ func TestMaybeCaptureChatCloseRating_NonRatingMessageReopensChat(t *testing.T) {
 	org, account := createProcessorTestOrg(t, app)
 	closingAgent := testutil.CreateTestUser(t, app.DB, org.ID)
 	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
-	
+
 	// Set status to Closed
 	contact.Status = models.ChatStatusClosed
 	require.NoError(t, app.DB.Save(contact).Error)
@@ -622,7 +622,7 @@ func TestMaybeCaptureChatCloseRating_CorrectionRuneLengthLimit(t *testing.T) {
 		RatingMessage:        "9",
 		CloseMessage:         "Please rate 1-10",
 		CloseMessageLanguage: "en",
-		ContextMessages:      models.JSONB{"followup": map[string]any{"remaining_messages": 2, "expires_at": time.Now().UTC().Add(15*time.Minute).Format(time.RFC3339)}},
+		ContextMessages:      models.JSONB{"followup": map[string]any{"remaining_messages": 2, "expires_at": time.Now().UTC().Add(15 * time.Minute).Format(time.RFC3339)}},
 	}
 	require.NoError(t, app.DB.Create(&cycle).Error)
 
@@ -667,7 +667,7 @@ func TestChatCloseRatingCleanupWorker_ExpiresUnanswered(t *testing.T) {
 		State:                models.ChatClosureRatingStatePending,
 		CloseMessage:         "Please rate 1-10",
 		CloseMessageLanguage: "en",
-		ContextMessages:      models.JSONB{"followup": map[string]any{"expires_at": expiredTime.Add(15*time.Minute).Format(time.RFC3339)}},
+		ContextMessages:      models.JSONB{"followup": map[string]any{"expires_at": expiredTime.Add(15 * time.Minute).Format(time.RFC3339)}},
 	}
 	require.NoError(t, app.DB.Create(&cycle).Error)
 
@@ -678,7 +678,6 @@ func TestChatCloseRatingCleanupWorker_ExpiresUnanswered(t *testing.T) {
 	require.NoError(t, app.DB.First(&updatedCycle, cycle.ID).Error)
 	assert.Equal(t, models.ChatClosureRatingStateExpired, updatedCycle.State)
 }
-
 
 type mockPollProvider struct {
 	provider.MessageProvider
@@ -739,6 +738,3 @@ func TestSendChatCloseRatingPrompt_UsesCustomPollOptions(t *testing.T) {
 	require.NoError(t, app.DB.Where("id = ?", *cycle.CloseMessageID).First(&msg).Error)
 	assert.Equal(t, models.MessageTypePoll, msg.MessageType)
 }
-
-
-

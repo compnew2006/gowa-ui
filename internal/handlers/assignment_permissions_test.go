@@ -8,10 +8,10 @@ import (
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
-	"github.com/google/uuid"
 )
 
 func TestApp_AssignContact_AllowsContactsWritePermission(t *testing.T) {

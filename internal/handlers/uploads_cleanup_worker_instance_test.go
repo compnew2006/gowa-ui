@@ -114,7 +114,7 @@ func TestRunManualCleanupForInstance_DisabledWhenRetentionZero(t *testing.T) {
 func TestResolveInstanceRetention_CustomRetention(t *testing.T) {
 	days, source := ResolveInstanceRetention(models.JSONB{
 		"uploads_cleanup": map[string]interface{}{
-			"inherit":       false,
+			"inherit":        false,
 			"retention_days": float64(14),
 		},
 	}, 30)
@@ -125,7 +125,7 @@ func TestResolveInstanceRetention_CustomRetention(t *testing.T) {
 func TestResolveInstanceRetention_InheritWorkspaceDefault(t *testing.T) {
 	days, source := ResolveInstanceRetention(models.JSONB{
 		"uploads_cleanup": map[string]interface{}{
-			"inherit":       true,
+			"inherit":        true,
 			"retention_days": float64(14),
 		},
 	}, 30)
@@ -136,7 +136,7 @@ func TestResolveInstanceRetention_InheritWorkspaceDefault(t *testing.T) {
 func TestResolveInstanceRetention_Disabled(t *testing.T) {
 	days, source := ResolveInstanceRetention(models.JSONB{
 		"uploads_cleanup": map[string]interface{}{
-			"inherit":       false,
+			"inherit":        false,
 			"retention_days": float64(0),
 		},
 	}, 30)

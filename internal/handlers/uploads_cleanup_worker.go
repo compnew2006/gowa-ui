@@ -224,7 +224,6 @@ func (w *UploadsCleanupWorker) releaseLock(ctx context.Context) {
 	}
 }
 
-
 func (w *UploadsCleanupWorker) dueOrganizations(ctx context.Context, now time.Time) ([]uploadsCleanupSchedule, int, error) {
 	schedules, err := w.loadOrganizationSchedules(ctx, now)
 	if err != nil {
@@ -316,7 +315,6 @@ func (w *UploadsCleanupWorker) markOrganizationsAsRan(ctx context.Context, sched
 	return nil
 }
 
-
 func (w *UploadsCleanupWorker) deleteRootLevelExpiredFiles(rootPath string, now time.Time, retentionDays int) (int, error) {
 	cutoff := uploadsCutoffTime(now, retentionDays)
 	deletedFiles := 0
@@ -356,9 +354,9 @@ type walkOptions struct {
 	RootPath   string
 	DirPath    string
 	Cutoff     time.Time
-	DB         *gorm.DB       // nil = disk-only deletion
-	Log        logf.Logger    // zero-value = no logging
-	InstanceID *uuid.UUID     // nil = org-level DB sync; set = instance-scoped
+	DB         *gorm.DB    // nil = disk-only deletion
+	Log        logf.Logger // zero-value = no logging
+	InstanceID *uuid.UUID  // nil = org-level DB sync; set = instance-scoped
 }
 
 func walkAndDeleteExpiredFiles(opts walkOptions) (int, error) {

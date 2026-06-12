@@ -12,10 +12,10 @@ import (
 
 // GroupParticipantResponse represents a group participant in API responses.
 type GroupParticipantResponse struct {
-	JID         string `json:"jid"`
-	PhoneNumber string `json:"phone_number"`
-	IsAdmin     bool   `json:"is_admin"`
-	IsSuperAdmin bool  `json:"is_super_admin"`
+	JID          string `json:"jid"`
+	PhoneNumber  string `json:"phone_number"`
+	IsAdmin      bool   `json:"is_admin"`
+	IsSuperAdmin bool   `json:"is_super_admin"`
 }
 
 // GroupParticipantsRequest represents a request to manage group participants.

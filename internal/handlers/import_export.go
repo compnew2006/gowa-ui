@@ -127,12 +127,12 @@ var exportConfigs = map[string]ExportConfig{
 		},
 		DefaultColumns: []string{"phone_number", "profile_name", "last_message_at", "message_count"},
 		ColumnLabels: map[string]string{
-			"phone_number":       "Phone Number",
-			"profile_name":       "Name",
-			"last_message_at":    "Last Message At",
+			"phone_number":         "Phone Number",
+			"profile_name":         "Name",
+			"last_message_at":      "Last Message At",
 			"last_message_preview": "Last Message",
-			"unread_count":       "Unread Count",
-			"message_count":      "Message Count",
+			"unread_count":         "Unread Count",
+			"message_count":        "Message Count",
 		},
 		ColumnTransform: map[string]func(interface{}) string{
 			"last_message_at": func(v interface{}) string {

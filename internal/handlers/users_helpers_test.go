@@ -202,7 +202,7 @@ func TestUserToResponse(t *testing.T) {
 	tests := []struct {
 		name     string
 		user     models.User
-	 validate func(*testing.T, UserResponse)
+		validate func(*testing.T, UserResponse)
 	}{
 		{
 			name: "basic user without role",
@@ -245,11 +245,11 @@ func TestUserToResponse(t *testing.T) {
 				OrganizationID: orgID,
 				Settings:       models.JSONB{"key": "value"},
 				Role: &models.CustomRole{
-					BaseModel:    models.BaseModel{ID: roleID},
-					Name:         "Admin",
-					Description:  "Administrator role",
-					IsSystem:     true,
-					Permissions:  []models.Permission{},
+					BaseModel:   models.BaseModel{ID: roleID},
+					Name:        "Admin",
+					Description: "Administrator role",
+					IsSystem:    true,
+					Permissions: []models.Permission{},
 				},
 			},
 			validate: func(t *testing.T, resp UserResponse) {
@@ -281,16 +281,16 @@ func TestUserToResponse(t *testing.T) {
 					IsSystem:    false,
 					Permissions: []models.Permission{
 						{
-							BaseModel:    models.BaseModel{ID: permID},
-							Resource:     "contacts",
-							Action:       "read",
-							Description:  "Read contacts",
+							BaseModel:   models.BaseModel{ID: permID},
+							Resource:    "contacts",
+							Action:      "read",
+							Description: "Read contacts",
 						},
 						{
-							BaseModel:    models.BaseModel{ID: uuid.New()},
-							Resource:     "campaigns",
-							Action:       "write",
-							Description:  "Write campaigns",
+							BaseModel:   models.BaseModel{ID: uuid.New()},
+							Resource:    "campaigns",
+							Action:      "write",
+							Description: "Write campaigns",
 						},
 					},
 				},

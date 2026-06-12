@@ -50,7 +50,6 @@ func enableRestrictedInstanceVisibility(
 	enableRestrictedInstanceVisibilityWithStrictAndEnabled(t, app, orgID, userID, allowedInstanceID, true, true)
 }
 
-
 func enableRestrictedInstanceVisibilityWithStrictAndEnabled(
 	t *testing.T,
 	app *handlers.App,

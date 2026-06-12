@@ -77,7 +77,7 @@ function reloadPage() {
       </div>
       <RouterView v-else />
       <Toaster
-        position="top-right"
+        position="bottom-right"
         richColors
         closeButton
         :theme="resolvedColorMode"

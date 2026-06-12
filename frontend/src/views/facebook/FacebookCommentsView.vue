@@ -70,6 +70,7 @@ const total = ref(0);
 const page = ref(1);
 const limit = ref(100);
 const search = ref("");
+const pageIdFilter = ref("all");
 const status = ref<FacebookCommentStatus | "all">("open");
 const loading = ref(false);
 const syncing = ref(false);
@@ -117,6 +118,16 @@ const allStatusChips = computed(() => [
   { value: "all" as const, label: t("common.all"), count: total.value },
   ...statusChips.value,
 ]);
+
+const availablePages = computed(() => {
+  const seen = new Map<string, string>();
+  for (const comment of comments.value) {
+    if (comment.page_id && !seen.has(comment.page_id)) {
+      seen.set(comment.page_id, comment.page_name || comment.page_id);
+    }
+  }
+  return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+});
 
 onMounted(async () => {
   await Promise.all([fetchSettings(), fetchComments()]);
@@ -178,6 +189,7 @@ async function fetchComments() {
         limit: limit.value,
         status: status.value,
         search: search.value || undefined,
+        page_id: pageIdFilter.value !== "all" ? pageIdFilter.value : undefined,
       },
       { signal: controller.signal },
     );
@@ -372,6 +384,21 @@ function replyStatusVariant(replyStatus: string): "default" | "secondary" | "out
   }
 }
 
+function getFallbackName(comment: FacebookComment | null): string {
+  if (!comment) return t("facebookComments.unknownUser");
+  if (comment.from_name) {
+    return comment.from_name;
+  }
+  const idParts = (comment.external_id || "").split("_");
+  const commentSuffix = idParts.pop() || "";
+  if (commentSuffix) {
+    const len = commentSuffix.length;
+    const suffix = len > 6 ? commentSuffix.substring(len - 6) : commentSuffix;
+    return `${t("facebookComments.unknownUser")} (${suffix})`;
+  }
+  return t("facebookComments.unknownUser");
+}
+
 function avatarGradient(name: string) {
   return `bg-gradient-to-br ${getAvatarGradient(name)} text-white`;
 }
@@ -460,10 +487,30 @@ watchDebounced(
             </button>
           </div>
 
-          <SearchInput
-            v-model="search"
-            :placeholder="$t('facebookComments.search')"
-          />
+          <div class="flex items-center gap-2">
+            <SearchInput
+              v-model="search"
+              :placeholder="$t('facebookComments.search')"
+              class="flex-1"
+            />
+            <Select v-model="pageIdFilter" @update:model-value="resetAndFetchComments()">
+              <SelectTrigger class="w-[180px]">
+                <SelectValue :placeholder="$t('facebookComments.allPages')" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  {{ $t("facebookComments.allPages") }}
+                </SelectItem>
+                <SelectItem
+                  v-for="page in availablePages"
+                  :key="page.id"
+                  :value="page.id"
+                >
+                  {{ page.name }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
 
         <CardContent class="flex min-h-0 flex-1 flex-col p-0">
@@ -514,15 +561,15 @@ watchDebounced(
                       :class="
                         cn(
                           'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold',
-                          avatarGradient(comment.from_name || comment.from_id || '?'),
+                          avatarGradient(getFallbackName(comment)),
                         )
                       "
                       aria-hidden="true"
                     >
-                      {{ getInitials(comment.from_name || comment.from_id || "?") }}
+                      {{ getInitials(getFallbackName(comment)) }}
                     </span>
                     <span class="truncate text-sm font-medium">
-                      {{ comment.from_name || $t("facebookComments.unknownUser") }}
+                      {{ getFallbackName(comment) }}
                     </span>
                     <Badge
                       v-if="comment.is_admin_reply"
@@ -616,17 +663,17 @@ watchDebounced(
                 :class="
                   cn(
                     'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold',
-                    avatarGradient(selectedComment.from_name || selectedComment.from_id || '?'),
+                    avatarGradient(getFallbackName(selectedComment)),
                   )
                 "
                 aria-hidden="true"
               >
-                {{ getInitials(selectedComment.from_name || selectedComment.from_id || "?") }}
+                {{ getInitials(getFallbackName(selectedComment)) }}
               </span>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
                   <h2 class="truncate text-lg font-medium">
-                    {{ selectedComment.from_name || $t("facebookComments.unknownUser") }}
+                    {{ getFallbackName(selectedComment) }}
                   </h2>
                   <Badge
                     v-if="selectedComment.is_admin_reply"
@@ -656,7 +703,7 @@ watchDebounced(
                 <div class="flex items-center gap-2 text-xs text-muted-foreground">
                   <User class="h-3 w-3" />
                   <span class="font-medium">
-                    {{ selectedComment.from_name || $t("facebookComments.unknownUser") }}
+                    {{ getFallbackName(selectedComment) }}
                   </span>
                   <span class="chat-bubble-time">
                     {{ formatDateTime(selectedComment.commented_at) }}

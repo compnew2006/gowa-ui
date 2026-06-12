@@ -81,7 +81,7 @@ func (w *ChatCloseRatingCleanupWorker) runOnce(nowUTC time.Time) {
 		}
 
 		settings := readInstanceChatCloseRatingSettings(instanceSettings)
-		
+
 		var closedAt time.Time
 		if !cycle.ClosedAt.IsZero() {
 			closedAt = cycle.ClosedAt
