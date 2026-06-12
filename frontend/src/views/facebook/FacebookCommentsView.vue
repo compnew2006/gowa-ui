@@ -145,7 +145,11 @@ const allStatusChips = computed(() => [
   ...statusChips.value,
 ]);
 
+const allPages = ref<Array<{ id: string; name: string }>>([]);
+
 const availablePages = computed(() => {
+  if (allPages.value.length > 0) return allPages.value;
+  // fallback: extract from loaded comments
   const seen = new Map<string, string>();
   for (const comment of comments.value) {
     if (comment.page_id && !seen.has(comment.page_id)) {
@@ -155,8 +159,18 @@ const availablePages = computed(() => {
   return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
 });
 
+async function fetchCommentPages() {
+  try {
+    const response = await facebookCommentsService.listPages();
+    const data = unwrapResponse<{ pages: Array<{ page_id: string; page_name: string }> }>(response);
+    allPages.value = (data.pages || []).map((p) => ({ id: p.page_id, name: p.page_name }));
+  } catch {
+    // fallback: use comment-derived pages
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([fetchSettings(), fetchComments()]);
+  await Promise.all([fetchSettings(), fetchComments(), fetchCommentPages()]);
   wsService.subscribe(WS_TYPE_FACEBOOK_COMMENT_CREATED, handleCommentCreated);
   wsService.subscribe(WS_TYPE_FACEBOOK_COMMENT_UPDATED, handleCommentUpdated);
 });

@@ -1569,6 +1569,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/facebook/accounts/{id}/pages/{page_id}/insights", app.GetFacebookPageInsights)
 	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/messages", app.SendFacebookPageMessage)
 	g.GET("/api/facebook/comments", app.ListFacebookComments)
+	g.GET("/api/facebook/comments/pages", app.ListFacebookCommentPages)
 	g.GET("/api/facebook/page-search", app.SearchFBPages)
 	g.GET("/api/facebook/people-search/campaigns", app.ListFBPeopleCampaigns)
 	g.GET("/api/facebook/people-search", app.SearchFBPeople)

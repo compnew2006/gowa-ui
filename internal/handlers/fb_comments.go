@@ -326,6 +326,36 @@ func (a *App) ListFacebookComments(r *fastglue.Request) error {
 	})
 }
 
+
+// ListFacebookCommentPages returns distinct page IDs and names for the org's comment inbox.
+func (a *App) ListFacebookCommentPages(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil {
+		return nil
+	}
+
+	type pageRow struct {
+		PageID   string `json:"page_id"`
+		PageName string `json:"page_name"`
+	}
+	var pages []pageRow
+	if err := requestDB.Model(&models.FacebookComment{}).
+		Select("page_id, page_name").
+		Where("organization_id = ? AND deleted_at IS NULL", orgID).
+		Group("page_id, page_name").
+		Order("page_name ASC").
+		Scan(&pages).Error; err != nil {
+		a.Log.Error("Failed to list Facebook comment pages", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list pages", nil, "")
+	}
+
+	return r.SendEnvelope(map[string]any{"pages": pages})
+}
+
 func (a *App) SyncFacebookComments(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)

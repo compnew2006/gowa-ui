@@ -800,6 +800,7 @@ export const facebookCommentsService = {
     },
     config?: AxiosRequestConfig,
   ) => api.get("/facebook/comments", { ...config, params }),
+  listPages: () => api.get("/facebook/comments/pages"),
   sync: (data?: {
     account_id?: string;
     page_id?: string;
