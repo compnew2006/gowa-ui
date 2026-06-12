@@ -301,6 +301,8 @@ async function syncComments() {
       toast.warning(result.failures.slice(0, 2).join(" | "));
     }
     syncOpen.value = false;
+    // Debounce fetch to let WebSocket broadcasts settle and avoid race-condition duplicates
+    await new Promise((r) => setTimeout(r, 500));
     await fetchComments();
   } catch (error: any) {
     toast.error(error.response?.data?.message || t("facebookComments.toast.syncFailed"));
