@@ -96,6 +96,32 @@ const selectedComment = computed(
     null,
 );
 
+const getCommentLink = (comment: FacebookComment | null) => {
+  if (!comment) return "";
+  const url = comment.permalink || comment.post_permalink;
+  if (!url) return "";
+  const parts = comment.external_id ? comment.external_id.split("_") : [];
+  const commentId = parts.length > 0 ? parts[parts.length - 1] : "";
+  if (commentId) {
+    try {
+      const parsedUrl = new URL(url);
+      if (!parsedUrl.searchParams.has("comment_id")) {
+        parsedUrl.searchParams.set("comment_id", commentId);
+      }
+      return parsedUrl.toString();
+    } catch (e) {
+      if (url.includes("?")) {
+        if (!url.includes("comment_id=")) {
+          return `${url}&comment_id=${commentId}`;
+        }
+      } else {
+        return `${url}?comment_id=${commentId}`;
+      }
+    }
+  }
+  return url;
+};
+
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)));
 
 const statusCounts = computed(() => {
@@ -649,7 +675,7 @@ watchDebounced(
                 variant="link"
                 size="sm"
                 as="a"
-                :href="selectedComment.permalink || selectedComment.post_permalink"
+                :href="getCommentLink(selectedComment)"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="h-auto px-1 py-0 text-xs"

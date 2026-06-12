@@ -1014,3 +1014,18 @@ Facebook commenter names (especially on admin replies or when Graph API sync ret
 ### Remote Branches Not Deleted
 - `upstream/feat/digitalocean-deploy-button` — upstream fork, not ours
 - `upstream/feat/turn-hmac-secret` — upstream fork, not ours
+
+## Session: Facebook Comment Direct Linking — 2026-06-12
+
+### Changes Made
+- **Direct Facebook Comment Linking:** Added `getCommentLink` helper in `FacebookCommentsView.vue` to construct a direct comment URL dynamically in the frontend by appending the comment's individual ID from `external_id` (usually `[post_id]_[comment_id]`) to the base URL parameter (`permalink` or `post_permalink`).
+- **Open on Facebook Button:** Rebound the `href` attribute of the "Open on Facebook" button to the dynamic `getCommentLink(selectedComment)` value. This ensures that webhooked comments (which lack the synced permalink) and comments on live video/watch posts successfully open the direct comment ID and focus/highlight it on Facebook.
+
+### Files Changed
+- [FacebookCommentsView.vue](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/views/facebook/FacebookCommentsView.vue) — helper added, `:href` rebound.
+
+### Verified
+- ✅ Frontend code linted successfully with eslint.
+- ✅ Statically built production Linux binary with embedded licensing keyring.
+- ✅ Deployed active sandbox binary to VPS `31.97.192.53`.
+- ✅ Verified `whatomate-sandbox` service is active and running, successfully serving the updated frontend build.

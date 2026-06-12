@@ -6469,7 +6469,7 @@ async function sendMediaMessage() {
       v-model:open="isAssignDialogOpen"
       @update:open="(open) => { if (!open) { assignSearchQuery = ''; debouncedAssignSearchQuery = ''; } }"
     >
-      <DialogContent class="w-[calc(100vw-2rem)] max-w-md sm:max-w-lg" resizable>
+      <DialogContent class="w-[calc(100vw-2rem)] max-w-md sm:max-w-lg overflow-hidden" resizable>
         <DialogHeader>
           <DialogTitle>{{ $t("chat.assignContact") }}</DialogTitle>
           <DialogDescription>
