@@ -1471,11 +1471,11 @@ func resolveAgentError(r *fastglue.Request, app *App, agentID *uuid.UUID, err er
 		return false
 	}
 	if errors.Is(err, errAgentNotFound) {
-		r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
+		_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Agent not found", nil, "")
 		return true
 	}
 	if errors.Is(err, errAgentUnavailable) {
-		r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Agent is currently away", nil, "")
+		_ = r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Agent is currently away", nil, "")
 		return true
 	}
 	var idStr string
@@ -1483,7 +1483,7 @@ func resolveAgentError(r *fastglue.Request, app *App, agentID *uuid.UUID, err er
 		idStr = agentID.String()
 	}
 	app.Log.Error(context+": unexpected error", "error", err, "agent_id", idStr)
-	r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to look up agent", nil, "")
+	_ = r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to look up agent", nil, "")
 	return true
 }
 
