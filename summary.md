@@ -1054,3 +1054,29 @@ Facebook commenter names (especially on admin replies or when Graph API sync ret
 - Updated `Makefile` `run-migrate` to build and run `./whatomate server -config config.toml -migrate` instead of `go run`, avoiding non-zero `go run` wrapper exit after graceful app shutdown.
 - Seeded 25 local active/available agent users in organization `6e1f02f9-a91b-42cf-8bbb-7dda4b290cd6` for assignment-list testing. Emails: `local.agent01@arkan.test` through `local.agent25@arkan.test`; password: `Testuser123!`.
 - Verification: `make -n run-migrate` shows binary execution; seed count reported 25 active seeded users; Socraticode index refreshed.
+
+## Sandbox Green Deploy - 2026-06-13 01:05 UTC - permission hardening
+- VPS: 31.97.192.53
+- Target: https://sandbox.ofuqalmadenah.com
+- Deployed commit: 1544b9cc
+- Binary: /opt/whatomate/bin/whatomate.sandbox.green.20260613_014655-1544b9cc
+- SHA256: 92b1abdd54eb26494df9de3f096dcd192ac8b6e0611250920706d694651d48b8
+- License: ✅ enabled=true, status=active, locked=false
+- Blue rollback: /opt/whatomate/bin/whatomate.sandbox.blue (20260612_173403-537913f5)
+- Backup: /root/whatomate_backups/sandbox-active-pre-20260612_222220.bak
+- Codebase removed from VPS (only bin + config + instances remain)
+
+### One-command switch
+```
+ssh root@31.97.192.53 'whatomate-sandbox-switch green'   # New version
+ssh root@31.97.192.53 'whatomate-sandbox-switch blue'    # Rollback
+ssh root@31.97.192.53 'whatomate-sandbox-switch status'  # Check
+```
+
+### Changes deployed
+- RBAC enforcement for catalogs, group_directory, group_participants (23 endpoints)
+- chat:write for SendMessage, SendMedia, SendTypingPresence, SendReaction, SendPollVote
+- authorizeRequest() + sendForbidden() helpers
+- Plugin DRY fix, DeleteRole cache invalidation fix
+- Frontend RESOURCE_LABELS + 8 docs updated
+- Verified: Sandbox responsive, license active, HTTPS 200
