@@ -1007,6 +1007,16 @@ func TestStreamNames(t *testing.T) {
 	}
 }
 
+func TestInboundMediaStreamNamesForNamespace(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, queue.InboundMediaStreamName, queue.InboundMediaStreamNameForNamespace(""))
+	assert.Equal(t, queue.InboundMediaDeadLetterStreamName, queue.InboundMediaDeadLetterStreamNameForNamespace(""))
+	assert.Equal(t, "whatomate:inbound_media:main", queue.InboundMediaStreamNameForNamespace("main"))
+	assert.Equal(t, "whatomate:inbound_media:main:dlq", queue.InboundMediaDeadLetterStreamNameForNamespace(" main "))
+	assert.Equal(t, "whatomate:inbound_media:holol-wenjaz", queue.InboundMediaStreamNameForNamespace(":holol-wenjaz:"))
+}
+
 func TestDeadLetterStreamName_Derived(t *testing.T) {
 	t.Parallel()
 
@@ -1164,6 +1174,29 @@ func TestRedisQueue_WithMiniRedis_EnqueueInboundMedia(t *testing.T) {
 	assert.Equal(t, job.OrganizationID, decoded.OrganizationID)
 	assert.Equal(t, job.InstanceID, decoded.InstanceID)
 	assert.Equal(t, job.MediaKind, decoded.MediaKind)
+}
+
+func TestRedisQueue_WithMiniRedis_EnqueueInboundMedia_Namespace(t *testing.T) {
+	t.Parallel()
+
+	client := setupMiniRedis(t)
+	log := testutil.NopLogger()
+	ctx := context.Background()
+
+	q := queue.NewRedisQueueWithInboundMediaNamespace(client, log, "main")
+	job := makeInboundMediaJob()
+
+	err := q.EnqueueInboundMedia(ctx, job)
+	require.NoError(t, err)
+
+	legacyLen, err := client.XLen(ctx, queue.InboundMediaStreamName).Result()
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, legacyLen)
+
+	msgs, err := client.XRange(ctx, queue.InboundMediaStreamNameForNamespace("main"), "-", "+").Result()
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, string(queue.JobTypeInboundMedia), msgs[0].Values["type"])
 }
 
 func TestRedisConsumer_WithMiniRedis_Consume_ProcessesJob(t *testing.T) {

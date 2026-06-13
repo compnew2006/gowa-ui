@@ -106,12 +106,16 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, me
 	var inboundConsumers []queue.Consumer
 	if opts.EnableInboundMedia {
 		concurrency := 1
-		if cfg != nil && cfg.Whatsmeow.InboundMediaWorkerConcurrency > 0 {
-			concurrency = cfg.Whatsmeow.InboundMediaWorkerConcurrency
+		inboundMediaNamespace := ""
+		if cfg != nil {
+			if cfg.Whatsmeow.InboundMediaWorkerConcurrency > 0 {
+				concurrency = cfg.Whatsmeow.InboundMediaWorkerConcurrency
+			}
+			inboundMediaNamespace = cfg.Whatsmeow.InboundMediaQueueNamespace
 		}
 		inboundConsumers = make([]queue.Consumer, 0, concurrency)
 		for i := 0; i < concurrency; i++ {
-			redisConsumer, cErr := queue.NewRedisInboundMediaConsumer(rdb, log, i)
+			redisConsumer, cErr := queue.NewRedisInboundMediaConsumerWithNamespace(rdb, log, inboundMediaNamespace, i)
 			if cErr != nil {
 				return nil, fmt.Errorf("failed to create inbound-media consumer #%d: %w", i, cErr)
 			}
@@ -756,14 +760,20 @@ func (w *Worker) runInboundMediaSelfHealLoop(ctx context.Context) {
 }
 
 func (w *Worker) reconcileStaleInboundMedia(ctx context.Context) {
+	queueNamespace := ""
+	if w.Config != nil {
+		queueNamespace = w.Config.Whatsmeow.InboundMediaQueueNamespace
+	}
+
 	summary, err := waprovider.ReconcileStaleQueuedInboundMedia(
 		ctx,
 		w.DB,
 		w.Redis,
 		waprovider.InboundMediaReconcileOptions{
-			OlderThan: inboundMediaSelfHealOlderThan,
-			Limit:     inboundMediaSelfHealBatchLimit,
-			Apply:     true,
+			OlderThan:      inboundMediaSelfHealOlderThan,
+			Limit:          inboundMediaSelfHealBatchLimit,
+			Apply:          true,
+			QueueNamespace: queueNamespace,
 		},
 		w.Log,
 	)

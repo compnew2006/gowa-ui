@@ -215,7 +215,7 @@ func TestLoadActivePendingInboundMediaMessageIDs(t *testing.T) {
 		Found:   true,
 		Pending: 2,
 		Lag:     0,
-	})
+	}, queue.InboundMediaStreamName)
 	if err != nil {
 		t.Fatalf("load active pending ids: %v", err)
 	}

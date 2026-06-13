@@ -282,8 +282,8 @@ func runServer(args []string) {
 	}
 
 	// Initialize job queue
-	jobQueue := queue.NewRedisQueue(rdb, lo)
-	lo.Info("Job queue initialized")
+	jobQueue := queue.NewRedisQueueWithInboundMediaNamespace(rdb, lo, cfg.Whatsmeow.InboundMediaQueueNamespace)
+	lo.Info("Job queue initialized", "inbound_media_queue_namespace", cfg.Whatsmeow.InboundMediaQueueNamespace)
 
 	// Initialize Fastglue
 	g := fastglue.NewGlue()
@@ -783,7 +783,7 @@ func runWorker(args []string) {
 
 		whatsmeowManager = whatsmeow.NewConnectionManager(db, storeContainer, lo, &cfg.Whatsmeow, nil, cfg.Storage.LocalPath)
 		defer whatsmeowManager.StopEventDispatcher()
-		whatsmeowQueue := queue.NewRedisQueue(rdb, lo)
+		whatsmeowQueue := queue.NewRedisQueueWithInboundMediaNamespace(rdb, lo, cfg.Whatsmeow.InboundMediaQueueNamespace)
 		whatsmeowManager.SetInboundMediaQueue(whatsmeowQueue)
 		whatsmeowManager.SetCampaignStatsPublisher(queue.NewPublisher(rdb, lo))
 		whatsmeowManager.StartHealthMonitor(context.Background())
@@ -1135,6 +1135,7 @@ func runInboundMediaReconcile(args []string) {
 			Limit:            *limit,
 			Apply:            *apply,
 			AllowActiveQueue: *allowActiveQueue,
+			QueueNamespace:   cfg.Whatsmeow.InboundMediaQueueNamespace,
 		},
 		lo,
 	)

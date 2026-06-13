@@ -96,6 +96,9 @@ defer_inbound_media = true
 # Number of parallel inbound-media consumers per worker process. Each gets a
 # unique Redis Streams consumer id. Raise to absorb media bursts.
 inbound_media_worker_concurrency = 4
+# Optional Redis Streams namespace for inbound media. Set a unique value per
+# deployment/database when multiple Whatomate services share one Redis server.
+inbound_media_queue_namespace = ""
 event_buffer_size = 4096
 event_dispatch_enabled = true
 identity = "" # Optional device label prefix shown on phone linked devices. Example: "whats" -> "whats+<instance name>"

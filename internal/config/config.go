@@ -122,6 +122,7 @@ type WhatsmeowConfig struct {
 	InboundMediaAsyncRetryMaxDelayMs int    `koanf:"inbound_media_async_retry_max_delay_ms"`
 	DeferInboundMedia                *bool  `koanf:"defer_inbound_media"`
 	InboundMediaWorkerConcurrency    int    `koanf:"inbound_media_worker_concurrency"`
+	InboundMediaQueueNamespace       string `koanf:"inbound_media_queue_namespace"`
 	EventBufferSize                  int    `koanf:"event_buffer_size"`
 	EventDispatchEnabled             *bool  `koanf:"event_dispatch_enabled"`
 	Identity                         string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")

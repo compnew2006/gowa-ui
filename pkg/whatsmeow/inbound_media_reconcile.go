@@ -36,6 +36,7 @@ type InboundMediaReconcileOptions struct {
 	Apply            bool
 	AllowActiveQueue bool
 	Now              time.Time
+	QueueNamespace   string
 }
 
 type InboundMediaReconcileSummary struct {
@@ -85,8 +86,8 @@ func (s inboundMediaQueueGroupState) validate(allowActive bool) error {
 	return nil
 }
 
-func loadInboundMediaQueueGroupState(ctx context.Context, rdb *redis.Client) (inboundMediaQueueGroupState, error) {
-	groups, err := rdb.XInfoGroups(ctx, queue.InboundMediaStreamName).Result()
+func loadInboundMediaQueueGroupState(ctx context.Context, rdb *redis.Client, streamName string) (inboundMediaQueueGroupState, error) {
+	groups, err := rdb.XInfoGroups(ctx, streamName).Result()
 	if err != nil {
 		return inboundMediaQueueGroupState{}, fmt.Errorf("load inbound-media consumer groups: %w", err)
 	}
@@ -193,8 +194,8 @@ func jsonBString(value any) string {
 	}
 }
 
-func loadPendingInboundMediaMessageID(ctx context.Context, rdb *redis.Client, streamID string) (uuid.UUID, error) {
-	streamMessages, err := rdb.XRangeN(ctx, queue.InboundMediaStreamName, streamID, streamID, 1).Result()
+func loadPendingInboundMediaMessageID(ctx context.Context, rdb *redis.Client, streamName string, streamID string) (uuid.UUID, error) {
+	streamMessages, err := rdb.XRangeN(ctx, streamName, streamID, streamID, 1).Result()
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("read stream entry: %w", err)
 	}
@@ -222,6 +223,7 @@ func loadActivePendingInboundMediaMessageIDs(
 	ctx context.Context,
 	rdb *redis.Client,
 	queueState inboundMediaQueueGroupState,
+	streamName string,
 ) (map[uuid.UUID]struct{}, error) {
 	activePendingIDs := make(map[uuid.UUID]struct{})
 	if rdb == nil || queueState.Pending <= 0 {
@@ -231,7 +233,7 @@ func loadActivePendingInboundMediaMessageIDs(
 	start := "-"
 	for {
 		pendingEntries, err := rdb.XPendingExt(ctx, &redis.XPendingExtArgs{
-			Stream: queue.InboundMediaStreamName,
+			Stream: streamName,
 			Group:  queue.InboundMediaConsumerGroup,
 			Start:  start,
 			End:    "+",
@@ -245,7 +247,7 @@ func loadActivePendingInboundMediaMessageIDs(
 		}
 
 		for _, pendingEntry := range pendingEntries {
-			messageID, err := loadPendingInboundMediaMessageID(ctx, rdb, pendingEntry.ID)
+			messageID, err := loadPendingInboundMediaMessageID(ctx, rdb, streamName, pendingEntry.ID)
 			if err != nil {
 				return nil, fmt.Errorf("resolve pending inbound-media job %q: %w", pendingEntry.ID, err)
 			}
@@ -301,7 +303,8 @@ func ReconcileStaleQueuedInboundMedia(
 		opts.Now = time.Now().UTC()
 	}
 
-	queueState, err := loadInboundMediaQueueGroupState(ctx, rdb)
+	streamName := queue.InboundMediaStreamNameForNamespace(opts.QueueNamespace)
+	queueState, err := loadInboundMediaQueueGroupState(ctx, rdb, streamName)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +319,7 @@ func ReconcileStaleQueuedInboundMedia(
 		QueueLag:     queueState.Lag,
 	}
 
-	activePendingIDs, err := loadActivePendingInboundMediaMessageIDs(ctx, rdb, queueState)
+	activePendingIDs, err := loadActivePendingInboundMediaMessageIDs(ctx, rdb, queueState, streamName)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +372,7 @@ func ReconcileStaleQueuedInboundMedia(
 		return summary, nil
 	}
 
-	queueClient := queue.NewRedisQueue(rdb, logger)
+	queueClient := queue.NewRedisQueueWithInboundMediaNamespace(rdb, logger, opts.QueueNamespace)
 	now := opts.Now
 	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, row := range rows {

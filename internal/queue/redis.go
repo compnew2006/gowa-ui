@@ -73,17 +73,45 @@ func CampaignDeadLetterStreamName(orgID uuid.UUID) string {
 	return CampaignStreamName(orgID) + ":dlq"
 }
 
+// InboundMediaStreamNameForNamespace returns the inbound-media stream for a
+// deployment-local namespace. Empty namespace preserves the legacy shared key.
+func InboundMediaStreamNameForNamespace(namespace string) string {
+	namespace = strings.Trim(strings.TrimSpace(namespace), ":")
+	if namespace == "" {
+		return InboundMediaStreamName
+	}
+	return fmt.Sprintf("%s:%s", InboundMediaStreamName, namespace)
+}
+
+// InboundMediaDeadLetterStreamNameForNamespace returns the DLQ stream paired
+// with InboundMediaStreamNameForNamespace.
+func InboundMediaDeadLetterStreamNameForNamespace(namespace string) string {
+	namespace = strings.Trim(strings.TrimSpace(namespace), ":")
+	if namespace == "" {
+		return InboundMediaDeadLetterStreamName
+	}
+	return InboundMediaStreamNameForNamespace(namespace) + ":dlq"
+}
+
 // RedisQueue implements the Queue interface using Redis Streams.
 type RedisQueue struct {
-	client *redis.Client
-	log    logf.Logger
+	client                 *redis.Client
+	log                    logf.Logger
+	inboundMediaStreamName string
 }
 
 // NewRedisQueue creates a new Redis queue.
 func NewRedisQueue(client *redis.Client, log logf.Logger) *RedisQueue {
+	return NewRedisQueueWithInboundMediaNamespace(client, log, "")
+}
+
+// NewRedisQueueWithInboundMediaNamespace creates a Redis queue whose inbound-media
+// stream is isolated to the configured deployment namespace.
+func NewRedisQueueWithInboundMediaNamespace(client *redis.Client, log logf.Logger, namespace string) *RedisQueue {
 	return &RedisQueue{
-		client: client,
-		log:    log,
+		client:                 client,
+		log:                    log,
+		inboundMediaStreamName: InboundMediaStreamNameForNamespace(namespace),
 	}
 }
 
@@ -184,8 +212,13 @@ func (q *RedisQueue) EnqueueInboundMedia(ctx context.Context, job *InboundMediaJ
 		return fmt.Errorf("failed to marshal inbound media job: %w", err)
 	}
 
+	streamName := InboundMediaStreamName
+	if q != nil && strings.TrimSpace(q.inboundMediaStreamName) != "" {
+		streamName = q.inboundMediaStreamName
+	}
+
 	_, err = q.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: InboundMediaStreamName,
+		Stream: streamName,
 		MaxLen: StreamMaxLen,
 		Approx: true,
 		Values: map[string]interface{}{
@@ -548,10 +581,16 @@ func NewOrganizationRedisConsumer(client *redis.Client, log logf.Logger, orgID u
 
 // NewRedisInboundMediaConsumer creates a consumer for inbound-media recovery jobs.
 func NewRedisInboundMediaConsumer(client *redis.Client, log logf.Logger, index int) (*RedisConsumer, error) {
+	return NewRedisInboundMediaConsumerWithNamespace(client, log, "", index)
+}
+
+// NewRedisInboundMediaConsumerWithNamespace creates a consumer for inbound-media
+// recovery jobs scoped to the configured deployment namespace.
+func NewRedisInboundMediaConsumerWithNamespace(client *redis.Client, log logf.Logger, namespace string, index int) (*RedisConsumer, error) {
 	return newRedisConsumer(client, log, consumerOptions{
-		streamName:           InboundMediaStreamName,
+		streamName:           InboundMediaStreamNameForNamespace(namespace),
 		consumerGroup:        InboundMediaConsumerGroup,
-		deadLetterStreamName: InboundMediaDeadLetterStreamName,
+		deadLetterStreamName: InboundMediaDeadLetterStreamNameForNamespace(namespace),
 		consumerIndex:        index,
 	})
 }
