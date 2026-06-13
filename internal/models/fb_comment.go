@@ -100,6 +100,36 @@ type FacebookCommentSettings struct {
 	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
 }
 
+// FacebookPageCommentSettings stores per-page auto-reply configuration.
+// Each Facebook page can have its own reply texts and settings,
+// overriding the organization-level FacebookCommentSettings defaults.
+type FacebookPageCommentSettings struct {
+	BaseModel
+	OrganizationID          uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_org_page_settings" json:"organization_id"`
+	AccountID               uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_org_page_settings" json:"account_id"`
+	PageID                  string    `gorm:"type:text;not null;uniqueIndex:idx_org_page_settings" json:"page_id"`
+	AutoReplyEnabled        bool      `gorm:"default:false" json:"auto_reply_enabled"`
+	AutoCommentReplyEnabled bool      `gorm:"default:true" json:"auto_comment_reply_enabled"`
+	AutoPrivateReplyEnabled bool      `gorm:"default:false" json:"auto_private_reply_enabled"`
+	// AutoCommentReplyTexts stores multiple reply texts as a JSON array of strings.
+	// One is picked randomly when auto-replying to a public comment.
+	AutoCommentReplyTexts JSONB `gorm:"type:jsonb;default:'[\"تم الرد خاص\"]'" json:"auto_comment_reply_texts"`
+	// AutoPrivateMessageTexts stores multiple private message texts as a JSON array of strings.
+	// One is picked randomly when auto-sending a private message.
+	AutoPrivateMessageTexts JSONB `gorm:"type:jsonb;default:'[\"اهلا كيف اقدر اساعدك\"]'" json:"auto_private_message_texts"`
+	OnlyAutoReplyUnanswered bool   `gorm:"default:true" json:"only_auto_reply_unanswered"`
+	// WhatsAppNotifyEnabled sends a WhatsApp notification to a configured number
+	// when a new Facebook comment is auto-replied to.
+	WhatsAppNotifyEnabled bool       `gorm:"default:false" json:"whatsapp_notify_enabled"`
+	WhatsAppInstanceID    *uuid.UUID `gorm:"type:uuid" json:"whatsapp_instance_id"`
+	WhatsAppNotifyPhone   string     `gorm:"type:text" json:"whatsapp_notify_phone"`
+	Metadata              JSONB      `gorm:"type:jsonb;default:'{}'" json:"metadata"`
+
+	Organization  *Organization      `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+	Account       *FacebookAccount   `gorm:"foreignKey:AccountID" json:"account,omitempty"`
+	WhatsAppInst  *WhatsAppInstance  `gorm:"foreignKey:WhatsAppInstanceID" json:"whatsapp_instance,omitempty"`
+}
+
 func (FacebookCommentSettings) TableName() string {
 	return "facebook_comment_settings"
 }

@@ -1582,6 +1582,8 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/facebook/comments/sync", app.SyncFacebookComments)
 	g.GET("/api/facebook/comments/settings", app.GetFacebookCommentSettings)
 	g.PUT("/api/facebook/comments/settings", app.UpdateFacebookCommentSettings)
+	g.GET("/api/facebook/comments/pages/{page_id}/settings", app.GetPageCommentSettings)
+	g.PUT("/api/facebook/comments/pages/{page_id}/settings", app.UpdatePageCommentSettings)
 	g.POST("/api/facebook/comments/{id}/reply", app.ReplyFacebookComment)
 	g.PUT("/api/facebook/comments/{id}/status", app.UpdateFacebookCommentStatus)
 	g.GET("/api/facebook/comments/webhook", app.VerifyFacebookCommentsWebhook)

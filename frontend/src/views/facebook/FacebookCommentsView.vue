@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 import { watchDebounced } from "@vueuse/core";
 import { PageHeader } from "@/components/shared";
 import { SearchInput } from "@/components/shared";
@@ -85,6 +85,77 @@ const sendPrivateMessage = ref(false);
 const syncPostLimit = ref(25);
 const syncCommentsPerPost = ref(50);
 const syncRunAutoReply = ref(true);
+const autoCommentTextsInput = ref("");
+const autoPrivateTextsInput = ref("");
+const whatsappNotifyEnabled = ref(false);
+const whatsappNotifyPhone = ref("");
+const whatsappNotifyInstanceId = ref("");
+const availableInstances = ref<Array<{ id: string; name?: string; phone?: string }>>([]);
+const selectedPageIdForSettings = ref("_global");
+const pageAutoCommentTextsInput = ref("");
+const pageAutoPrivateTextsInput = ref("");
+const pageCommentReplyEnabled = ref(true);
+const pagePrivateReplyEnabled = ref(false);
+const pageWhatsAppNotifyEnabled = ref(false);
+const pageWhatsAppNotifyPhone = ref("");
+const pageWhatsAppNotifyInstanceId = ref("");
+const selectedPageName = computed(() => {
+  const page = availablePages.value.find(p => p.id === selectedPageIdForSettings.value);
+  return page?.name || selectedPageIdForSettings.value || "";
+});
+
+async function savePageSettings() {
+  if (!selectedPageIdForSettings.value) return;
+  try {
+    const commentTexts = pageAutoCommentTextsInput.value.split("\n").map(s => s.trim()).filter(s => s.length > 0);
+    const privateTexts = pageAutoPrivateTextsInput.value.split("\n").map(s => s.trim()).filter(s => s.length > 0);
+    await facebookCommentsService.updatePageSettings(selectedPageIdForSettings.value, {
+      auto_reply_enabled: true,
+      auto_comment_reply_enabled: pageCommentReplyEnabled.value,
+      auto_private_reply_enabled: pagePrivateReplyEnabled.value,
+      auto_comment_reply_texts: commentTexts,
+      auto_private_message_texts: privateTexts,
+      whatsapp_notify_enabled: pageWhatsAppNotifyEnabled.value,
+      whatsapp_notify_phone: pageWhatsAppNotifyPhone.value,
+      whatsapp_instance_id: (pageWhatsAppNotifyInstanceId.value && pageWhatsAppNotifyInstanceId.value !== "_none") ? pageWhatsAppNotifyInstanceId.value : null,
+    });
+    toast.success("Page settings saved");
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message || "Failed to save page settings");
+  }
+}
+
+watch(selectedPageIdForSettings, async (pageId) => {
+  if (!pageId || pageId === "_global") { pageAutoCommentTextsInput.value = ""; pageAutoPrivateTextsInput.value = ""; return; }
+  try {
+    const resp = await facebookCommentsService.getPageSettings(pageId);
+    const data = (resp.data as any).data?.settings || (resp.data as any).settings;
+    if (data) {
+      const commentArr: string[] = [];
+      for (let i = 0; ; i++) { const v = data.auto_comment_reply_texts?.[String(i)]; if (v === undefined) break; commentArr.push(v); }
+      const privateArr: string[] = [];
+      for (let i = 0; ; i++) { const v = data.auto_private_message_texts?.[String(i)]; if (v === undefined) break; privateArr.push(v); }
+      pageAutoCommentTextsInput.value = commentArr.join("\n");
+      pageAutoPrivateTextsInput.value = privateArr.join("\n");
+      pageCommentReplyEnabled.value = data.auto_comment_reply_enabled ?? true;
+      pagePrivateReplyEnabled.value = data.auto_private_reply_enabled ?? false;
+      pageWhatsAppNotifyEnabled.value = data.whatsapp_notify_enabled ?? false;
+      pageWhatsAppNotifyPhone.value = data.whatsapp_notify_phone || "";
+      pageWhatsAppNotifyInstanceId.value = data.whatsapp_instance_id || "";
+    }
+  } catch {}
+});
+
+const autoCommentTextsCount = computed(() =>
+  autoCommentTextsInput.value
+    .split("\n")
+    .filter((s) => s.trim().length > 0).length,
+);
+const autoPrivateTextsCount = computed(() =>
+  autoPrivateTextsInput.value
+    .split("\n")
+    .filter((s) => s.trim().length > 0).length,
+);
 
 const inboxListRef = useTemplateRef<HTMLElement>("inboxListRef");
 let activeController: AbortController | null = null;
@@ -169,6 +240,21 @@ async function fetchCommentPages() {
   }
 }
 
+async function fetchWhatsAppInstances() {
+  try {
+    const { instancesService } = await import("@/services/api");
+    const response = await instancesService.list();
+    const data = (response.data as any).data || response.data;
+    availableInstances.value = (data.instances || data || []).map((inst: any) => ({
+      id: inst.id,
+      name: inst.name || inst.display_name,
+      phone: inst.phone_number || inst.jid,
+    }));
+  } catch {
+    // instances not available — use empty list
+  }
+}
+
 onMounted(async () => {
   await Promise.all([fetchSettings(), fetchComments(), fetchCommentPages()]);
   wsService.subscribe(WS_TYPE_FACEBOOK_COMMENT_CREATED, handleCommentCreated);
@@ -210,6 +296,10 @@ async function fetchSettings() {
     if (!replyText.value) replyText.value = settings.value.auto_comment_reply_text;
     if (!privateMessageText.value)
       privateMessageText.value = settings.value.auto_private_message_text;
+    autoCommentTextsInput.value = settings.value.auto_comment_reply_text;
+    autoPrivateTextsInput.value = settings.value.auto_private_message_text;
+    // Try to load per-page settings and WhatsApp instances
+    fetchWhatsAppInstances();
   } catch (error: any) {
     toast.error(error.response?.data?.message || t("facebookComments.toast.settingsFailed"));
   }
@@ -315,9 +405,26 @@ async function saveSettings() {
   if (!settings.value) return;
   savingSettings.value = true;
   try {
-    const response = await facebookCommentsService.updateSettings(
-      settings.value as unknown as Record<string, unknown>,
-    );
+    // Convert multi-line inputs to array format
+    const commentTexts = autoCommentTextsInput.value
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const privateTexts = autoPrivateTextsInput.value
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const data = {
+      ...(settings.value as unknown as Record<string, unknown>),
+      auto_comment_reply_text: autoCommentTextsInput.value,
+      auto_private_message_text: autoPrivateTextsInput.value,
+      auto_comment_reply_texts: commentTexts.length > 0 ? commentTexts : [autoCommentTextsInput.value],
+      auto_private_message_texts: privateTexts.length > 0 ? privateTexts : [autoPrivateTextsInput.value],
+      whatsapp_notify_enabled: whatsappNotifyEnabled.value,
+      whatsapp_notify_phone: whatsappNotifyPhone.value,
+      whatsapp_instance_id: whatsappNotifyInstanceId.value || null,
+    };
+    const response = await facebookCommentsService.updateSettings(data);
     settings.value = unwrapItemResponse<FacebookCommentSettings>(response, "settings");
     toast.success(t("facebookComments.toast.settingsSaved"));
     settingsOpen.value = false;
@@ -1007,17 +1114,25 @@ watchDebounced(
             <Label :for="'auto-comment'">{{ $t("facebookComments.autoCommentText") }}</Label>
             <Textarea
               id="auto-comment"
-              v-model="settings.auto_comment_reply_text"
+              v-model="autoCommentTextsInput"
               class="min-h-[88px] resize-none"
+              :placeholder="$t('facebookComments.autoCommentPlaceholder')"
             />
+            <p class="text-xs text-muted-foreground">
+              {{ $t("facebookComments.multiTextHint", { count: autoCommentTextsCount }) }}
+            </p>
           </div>
           <div class="grid gap-2">
             <Label :for="'auto-private'">{{ $t("facebookComments.autoPrivateText") }}</Label>
             <Textarea
               id="auto-private"
-              v-model="settings.auto_private_message_text"
+              v-model="autoPrivateTextsInput"
               class="min-h-[88px] resize-none"
+              :placeholder="$t('facebookComments.autoPrivatePlaceholder')"
             />
+            <p class="text-xs text-muted-foreground">
+              {{ $t("facebookComments.multiTextHint", { count: autoPrivateTextsCount }) }}
+            </p>
           </div>
           <div class="grid gap-3 md:grid-cols-2">
             <label class="flex items-center justify-between gap-3 rounded-lg border p-3">
@@ -1028,6 +1143,73 @@ watchDebounced(
               <span class="text-sm font-medium">{{ $t("facebookComments.autoPrivate") }}</span>
               <Switch v-model:checked="settings.auto_private_reply_enabled" />
             </label>
+          </div>
+          <!-- Per-Page Settings -->
+          <div class="rounded-lg border p-4 space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-semibold">{{ $t("facebookComments.perPageSettings") }}</span>
+            </div>
+            <div class="grid gap-2">
+              <Label>{{ $t("facebookComments.selectPage") }}</Label>
+              <Select v-model="selectedPageIdForSettings">
+                <SelectTrigger>
+                  <SelectValue :placeholder="$t('facebookComments.selectPage')" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_global">{{ $t('facebookComments.globalDefaults') }}</SelectItem>
+                  <SelectItem v-for="page in availablePages" :key="page.id" :value="page.id">
+                    {{ page.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <template v-if="selectedPageIdForSettings && selectedPageIdForSettings !== '_global'">
+              <div class="grid gap-2">
+                <Label>{{ $t("facebookComments.pageAutoCommentText") }}</Label>
+                <Textarea v-model="pageAutoCommentTextsInput" class="min-h-[88px] resize-none" />
+              </div>
+              <div class="grid gap-2">
+                <Label>{{ $t("facebookComments.pageAutoPrivateText") }}</Label>
+                <Textarea v-model="pageAutoPrivateTextsInput" class="min-h-[88px] resize-none" />
+              </div>
+              <div class="grid gap-3 md:grid-cols-2">
+                <label class="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <span class="text-sm font-medium">{{ $t("facebookComments.autoPublic") }}</span>
+                  <Switch v-model:checked="pageCommentReplyEnabled" />
+                </label>
+                <label class="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <span class="text-sm font-medium">{{ $t("facebookComments.autoPrivate") }}</span>
+                  <Switch v-model:checked="pagePrivateReplyEnabled" />
+                </label>
+              </div>
+              <div class="rounded-lg border p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-medium">{{ $t("facebookComments.whatsappNotify") }}</span>
+                  <Switch v-model:checked="pageWhatsAppNotifyEnabled" />
+                </div>
+                <div v-if="pageWhatsAppNotifyEnabled" class="grid gap-3">
+                  <div class="grid gap-2">
+                    <Label>{{ $t("facebookComments.whatsappNotifyPhone") }}</Label>
+                    <Input v-model="pageWhatsAppNotifyPhone" />
+                  </div>
+                  <div class="grid gap-2">
+                    <Label>{{ $t("facebookComments.whatsappNotifyInstance") }}</Label>
+                    <Select v-model="pageWhatsAppNotifyInstanceId">
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">{{ $t('common.none') }}</SelectItem>
+                        <SelectItem v-for="inst in availableInstances" :key="inst.id" :value="inst.id">
+                          {{ inst.name || inst.phone || inst.id }}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" @click="savePageSettings">
+                {{ $t("common.save") }} {{ selectedPageName }}
+              </Button>
+            </template>
           </div>
           <div class="grid gap-3 md:grid-cols-2">
             <div class="grid gap-2">

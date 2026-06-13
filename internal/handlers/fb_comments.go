@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -266,6 +267,165 @@ func (a *App) UpdateFacebookCommentSettings(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]any{"settings": settings})
 }
 
+
+// GetPageCommentSettings returns auto-reply settings for a specific Facebook page.
+func (a *App) GetPageCommentSettings(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil {
+		return nil
+	}
+	pageID := r.RequestCtx.UserValue("page_id").(string)
+	if pageID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "page_id is required", nil, "")
+	}
+	settings, err := a.getOrCreatePageCommentSettings(requestDB, orgID, pageID)
+	if err != nil {
+		a.Log.Error("Failed to load Facebook page comment settings", "error", err, "organization_id", orgID, "page_id", pageID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load page comment settings", nil, "")
+	}
+	return r.SendEnvelope(map[string]any{"settings": settings})
+}
+
+// UpdatePageCommentSettings updates auto-reply settings for a specific Facebook page.
+func (a *App) UpdatePageCommentSettings(r *fastglue.Request) error {
+	requestDB := a.requestDB(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
+		return nil
+	}
+	pageID := r.RequestCtx.UserValue("page_id").(string)
+	if pageID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "page_id is required", nil, "")
+	}
+	var req struct {
+		AutoReplyEnabled        *bool    `json:"auto_reply_enabled"`
+		AutoCommentReplyEnabled *bool    `json:"auto_comment_reply_enabled"`
+		AutoPrivateReplyEnabled *bool    `json:"auto_private_reply_enabled"`
+		AutoCommentReplyTexts   []string `json:"auto_comment_reply_texts"`
+		AutoPrivateMessageTexts []string `json:"auto_private_message_texts"`
+		OnlyAutoReplyUnanswered *bool    `json:"only_auto_reply_unanswered"`
+		WhatsAppNotifyEnabled   *bool    `json:"whatsapp_notify_enabled"`
+		WhatsAppInstanceID      *string  `json:"whatsapp_instance_id"`
+		WhatsAppNotifyPhone     *string  `json:"whatsapp_notify_phone"`
+	}
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+	settings, err := a.getOrCreatePageCommentSettings(requestDB, orgID, pageID)
+	if err != nil {
+		a.Log.Error("Failed to load page settings for update", "error", err, "org_id", orgID, "page_id", pageID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update page settings", nil, "")
+	}
+	if req.AutoReplyEnabled != nil { settings.AutoReplyEnabled = *req.AutoReplyEnabled }
+	if req.AutoCommentReplyEnabled != nil { settings.AutoCommentReplyEnabled = *req.AutoCommentReplyEnabled }
+	if req.AutoPrivateReplyEnabled != nil { settings.AutoPrivateReplyEnabled = *req.AutoPrivateReplyEnabled }
+	if req.AutoCommentReplyTexts != nil {
+		settings.AutoCommentReplyTexts = models.JSONB{}
+		for i, t := range req.AutoCommentReplyTexts { settings.AutoCommentReplyTexts[fmt.Sprintf("%d", i)] = t }
+	}
+	if req.AutoPrivateMessageTexts != nil {
+		settings.AutoPrivateMessageTexts = models.JSONB{}
+		for i, t := range req.AutoPrivateMessageTexts { settings.AutoPrivateMessageTexts[fmt.Sprintf("%d", i)] = t }
+	}
+	if req.OnlyAutoReplyUnanswered != nil { settings.OnlyAutoReplyUnanswered = *req.OnlyAutoReplyUnanswered }
+	if req.WhatsAppNotifyEnabled != nil { settings.WhatsAppNotifyEnabled = *req.WhatsAppNotifyEnabled }
+	if req.WhatsAppInstanceID != nil {
+		if *req.WhatsAppInstanceID == "" {
+			settings.WhatsAppInstanceID = nil
+		} else if id, err := uuid.Parse(*req.WhatsAppInstanceID); err == nil {
+			settings.WhatsAppInstanceID = &id
+		}
+	}
+	if req.WhatsAppNotifyPhone != nil { settings.WhatsAppNotifyPhone = *req.WhatsAppNotifyPhone }
+	if err := requestDB.Save(settings).Error; err != nil {
+		a.Log.Error("Failed to save page comment settings", "error", err, "org_id", orgID, "page_id", pageID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update page settings", nil, "")
+	}
+	return r.SendEnvelope(map[string]any{"settings": settings})
+}
+
+// getOrCreatePageCommentSettings returns page-level settings, creating defaults if not found.
+func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageID string) (*models.FacebookPageCommentSettings, error) {
+	var settings models.FacebookPageCommentSettings
+	err := db.Where("organization_id = ? AND page_id = ?", orgID, pageID).First(&settings).Error
+	if err == nil { return &settings, nil }
+	if !errors.Is(err, gorm.ErrRecordNotFound) { return nil, err }
+	settings = models.FacebookPageCommentSettings{
+		OrganizationID:          orgID,
+		PageID:                  pageID,
+		AutoReplyEnabled:        false,
+		AutoCommentReplyEnabled: true,
+		AutoPrivateReplyEnabled: false,
+		AutoCommentReplyTexts:   models.JSONB{"0": defaultFBCommentReplyText},
+		AutoPrivateMessageTexts: models.JSONB{"0": defaultFBPrivateMessageText},
+		OnlyAutoReplyUnanswered: true,
+		Metadata:                models.JSONB{},
+	}
+	if err := a.DB.Create(&settings).Error; err != nil { return nil, err }
+	return &settings, nil
+}
+
+// pickRandomReplyText picks a random text from a JSONB array of strings.
+func pickRandomReplyText(texts models.JSONB, defaultText string) string {
+	var arr []string
+	for i := 0; ; i++ {
+		v, ok := texts[fmt.Sprintf("%d", i)]
+		if !ok { break }
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" { arr = append(arr, s) }
+	}
+	if len(arr) == 0 { return defaultText }
+	return arr[rand.Intn(len(arr))]
+}
+
+// maybeSendWhatsAppCommentNotification sends a WhatsApp notification about a new Facebook
+// comment and its auto-reply to a configured phone number via a selected WhatsApp instance.
+func (a *App) maybeSendWhatsAppCommentNotification(orgID uuid.UUID, pageSettings *models.FacebookPageCommentSettings, comment *models.FacebookComment, replyText, dmText string) {
+	if pageSettings == nil || !pageSettings.WhatsAppNotifyEnabled || pageSettings.WhatsAppInstanceID == nil { return }
+	phone := strings.TrimSpace(pageSettings.WhatsAppNotifyPhone)
+	if phone == "" { return }
+	commentLink := comment.Permalink
+	if commentLink == "" { commentLink = comment.PostPermalink }
+	var msg strings.Builder
+	msg.WriteString("*New Facebook Comment*\n\n")
+	msg.WriteString(fmt.Sprintf("From: %s\n", comment.FromName))
+	if comment.PageName != "" { msg.WriteString(fmt.Sprintf("Page: %s\n", comment.PageName)) }
+	msg.WriteString(fmt.Sprintf("Comment: %s\n", comment.Message))
+	if commentLink != "" { msg.WriteString(fmt.Sprintf("Link: %s\n\n", commentLink)) }
+	if replyText != "" { msg.WriteString(fmt.Sprintf("Auto-reply sent: %s\n", replyText)) }
+	if dmText != "" { msg.WriteString(fmt.Sprintf("DM sent: %s\n", dmText)) }
+	instanceID := pageSettings.WhatsAppInstanceID.String()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if a.isWhatsmeowProvider() && a.MessageProvider != nil {
+		var contact models.Contact
+		if err := a.DB.Where("phone_number = ? AND organization_id = ?", phone, orgID).First(&contact).Error; err != nil {
+			contact = models.Contact{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: orgID, PhoneNumber: phone, ProfileName: "FB Comment Notification"}
+			_ = a.DB.Create(&contact).Error
+		}
+		var instance models.WhatsAppInstance
+		if err := a.DB.Where("id = ? AND organization_id = ?", *pageSettings.WhatsAppInstanceID, orgID).First(&instance).Error; err != nil {
+			a.Log.Warn("WhatsApp notify: instance not found", "instance_id", instanceID, "error", err)
+			return
+		}
+		account, _ := a.resolveOutboundMessageAccount(orgID, &contact, "", &instance)
+		msgReq := OutgoingMessageRequest{Contact: &contact, InstanceID: pageSettings.WhatsAppInstanceID, Type: models.MessageTypeText, Content: msg.String()}
+		if account != nil { msgReq.Account = account }
+		opts := DefaultSendOptions()
+		opts.BroadcastWebSocket = false
+		if _, err := a.SendOutgoingMessage(ctx, msgReq, opts); err != nil {
+			a.Log.Warn("WhatsApp notify failed", "instance_id", instanceID, "error", err)
+		} else {
+			a.Log.Info("WhatsApp notify sent", "instance_id", instanceID, "comment_id", comment.ExternalID)
+		}
+	}
+}
 func (a *App) ListFacebookComments(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
 	orgID, userID, err := a.getOrgAndUserID(r)
@@ -559,8 +719,8 @@ func (a *App) ReceiveFacebookCommentsWebhook(r *fastglue.Request) error {
 			failures = append(failures, fmt.Sprintf("%s: account not found", pageID))
 			continue
 		}
-		settings, err := a.getOrCreateFacebookCommentSettings(a.DB, account.OrganizationID)
-		if err != nil || !settings.Enabled {
+		orgSettings, err := a.getOrCreateFacebookCommentSettings(a.DB, account.OrganizationID)
+		if err != nil || !orgSettings.Enabled {
 			continue
 		}
 		pageNames := facebookAccountPageNames(*account)
@@ -595,20 +755,25 @@ func (a *App) ReceiveFacebookCommentsWebhook(r *fastglue.Request) error {
 				})
 			}
 			processed++
-			if created && !comment.IsAdminReply && settings.AutoReplyEnabled && shouldAutoReplyFacebookComment(a.DB, settings, *comment) {
-				if _, err := a.sendAndStoreFacebookCommentReply(a.DB, account, comment, account.UserID, settings.AutoCommentReplyText, settings.AutoPrivateMessageText, settings.AutoCommentReplyEnabled, settings.AutoPrivateReplyEnabled, true, pageToken); err == nil {
+			if created && !comment.IsAdminReply && orgSettings.AutoReplyEnabled && shouldAutoReplyFacebookComment(a.DB, orgSettings, *comment) {
+				pageSettings, _ := a.getOrCreatePageCommentSettings(a.DB, account.OrganizationID, pageID)
+				commentText := orgSettings.AutoCommentReplyText
+				privateText := orgSettings.AutoPrivateMessageText
+				commentEnabled := orgSettings.AutoCommentReplyEnabled
+				privateEnabled := orgSettings.AutoPrivateReplyEnabled
+				if pageSettings != nil && pageSettings.AutoReplyEnabled {
+					commentEnabled = pageSettings.AutoCommentReplyEnabled
+					privateEnabled = pageSettings.AutoPrivateReplyEnabled
+					commentText = pickRandomReplyText(pageSettings.AutoCommentReplyTexts, orgSettings.AutoCommentReplyText)
+					privateText = pickRandomReplyText(pageSettings.AutoPrivateMessageTexts, orgSettings.AutoPrivateMessageText)
+				}
+				if _, err := a.sendAndStoreFacebookCommentReply(a.DB, account, comment, account.UserID, commentText, privateText, commentEnabled, privateEnabled, true, pageToken); err == nil {
 					autoReplies++
-					a.Log.Info("Facebook webhook auto-reply sent",
-						"org_id", account.OrganizationID,
-						"comment_id", change.Value.CommentID,
-					)
+					a.Log.Info("Facebook webhook auto-reply sent", "org_id", account.OrganizationID, "comment_id", change.Value.CommentID)
+					a.maybeSendWhatsAppCommentNotification(account.OrganizationID, pageSettings, comment, commentText, privateText)
 				} else {
 					failures = append(failures, fmt.Sprintf("%s: auto reply failed", change.Value.CommentID))
-					a.Log.Warn("Facebook webhook auto-reply failed",
-						"error", err,
-						"comment_id", change.Value.CommentID,
-						"page_id", pageID,
-					)
+					a.Log.Warn("Facebook webhook auto-reply failed", "error", err, "comment_id", change.Value.CommentID, "page_id", pageID)
 				}
 			}
 		}

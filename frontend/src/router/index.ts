@@ -370,6 +370,14 @@ const router = createRouter({
           meta: { permission: "chat" },
         },
         {
+          path: "settings/facebook-comments",
+          redirect: "/facebook/comments",
+        },
+        {
+          path: "settings/facebook",
+          redirect: "/facebook/comments",
+        },
+        {
           path: "facebook/page-search",
           name: "facebook-page-search",
           component: () => import("@/views/facebook/PageSearchView.vue"),

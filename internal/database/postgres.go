@@ -123,6 +123,7 @@ func GetMigrationModels() []MigrationModel {
 		{"FacebookComment", &models.FacebookComment{}},
 		{"FacebookCommentReply", &models.FacebookCommentReply{}},
 		{"FacebookCommentSettings", &models.FacebookCommentSettings{}},
+		{"FacebookPageCommentSettings", &models.FacebookPageCommentSettings{}},
 		{"FBPageSearch", &models.FBPageSearch{}},
 		{"FBPeopleSearch", &models.FBPeopleSearch{}},
 		{"InstanceNotification", &models.InstanceNotification{}},

@@ -812,6 +812,10 @@ export const facebookCommentsService = {
   getSettings: () => api.get("/facebook/comments/settings"),
   updateSettings: (data: Record<string, unknown>) =>
     api.put("/facebook/comments/settings", data),
+  getPageSettings: (pageId: string) =>
+    api.get(`/facebook/comments/pages/${pageId}/settings`),
+  updatePageSettings: (pageId: string, data: Record<string, unknown>) =>
+    api.put(`/facebook/comments/pages/${pageId}/settings`, data),
   reply: (
     id: string,
     data: {
