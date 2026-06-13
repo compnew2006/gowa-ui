@@ -48,16 +48,16 @@ func newStatusUpdate(status models.MessageStatus, waMessageID, errorMsg string) 
 
 // Worker processes jobs from the queue
 type Worker struct {
-	Config          *config.Config
-	DB              *gorm.DB
-	Redis           *redis.Client
-	Log             logf.Logger
-	WhatsApp        *whatsapp.Client
-	MessageProvider provider.MessageProvider
-	Consumer        queue.Consumer
-	InboundConsumer queue.Consumer
-	Publisher       *queue.Publisher
-	License         *license.Service
+	Config           *config.Config
+	DB               *gorm.DB
+	Redis            *redis.Client
+	Log              logf.Logger
+	WhatsApp         *whatsapp.Client
+	MessageProvider  provider.MessageProvider
+	Consumer         queue.Consumer
+	InboundConsumers []queue.Consumer
+	Publisher        *queue.Publisher
+	License          *license.Service
 	whatsmeowMgr     *waprovider.ConnectionManager
 }
 
@@ -83,9 +83,8 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, me
 	}
 
 	var (
-		consumer        queue.Consumer
-		inboundConsumer queue.Consumer
-		err             error
+		consumer queue.Consumer
+		err      error
 	)
 
 	if opts.EnableCampaignConsumer {
@@ -100,28 +99,39 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, me
 		}
 		consumer = redisConsumer
 	}
+
+	// Inbound-media consumers fan out across whatsmeow.inbound_media_worker_concurrency
+	// parallel Redis Streams consumers (each with a unique consumer id) so media
+	// downloads never serialize behind a single goroutine.
+	var inboundConsumers []queue.Consumer
 	if opts.EnableInboundMedia {
-		var redisConsumer *queue.RedisConsumer
-		redisConsumer, err = queue.NewRedisInboundMediaConsumer(rdb, log)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create inbound-media consumer: %w", err)
+		concurrency := 1
+		if cfg != nil && cfg.Whatsmeow.InboundMediaWorkerConcurrency > 0 {
+			concurrency = cfg.Whatsmeow.InboundMediaWorkerConcurrency
 		}
-		inboundConsumer = redisConsumer
+		inboundConsumers = make([]queue.Consumer, 0, concurrency)
+		for i := 0; i < concurrency; i++ {
+			redisConsumer, cErr := queue.NewRedisInboundMediaConsumer(rdb, log, i)
+			if cErr != nil {
+				return nil, fmt.Errorf("failed to create inbound-media consumer #%d: %w", i, cErr)
+			}
+			inboundConsumers = append(inboundConsumers, redisConsumer)
+		}
 	}
 
 	publisher := queue.NewPublisher(rdb, log)
 
 	return &Worker{
-		Config:          cfg,
-		DB:              db,
-		Redis:           rdb,
-		Log:             log,
-		WhatsApp:        whatsapp.NewWithBaseURL(log, cfg.WhatsApp.BaseURL),
-		MessageProvider: messageProvider,
-		Consumer:        consumer,
-		InboundConsumer: inboundConsumer,
-		Publisher:       publisher,
-		License:         licenseService,
+		Config:           cfg,
+		DB:               db,
+		Redis:            rdb,
+		Log:              log,
+		WhatsApp:         whatsapp.NewWithBaseURL(log, cfg.WhatsApp.BaseURL),
+		MessageProvider:  messageProvider,
+		Consumer:         consumer,
+		InboundConsumers: inboundConsumers,
+		Publisher:        publisher,
+		License:          licenseService,
 	}, nil
 }
 
@@ -137,7 +147,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 3+len(w.InboundConsumers))
 
 	startConsumer := func(name string, consumer queue.Consumer) {
 		if consumer == nil {
@@ -154,7 +164,9 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 
 	startConsumer("campaign", w.Consumer)
-	startConsumer("inbound_media", w.InboundConsumer)
+	for i, c := range w.InboundConsumers {
+		startConsumer(fmt.Sprintf("inbound_media#%d", i), c)
+	}
 	if w.shouldRunInboundMediaSelfHeal() {
 		wg.Add(1)
 		go func() {
@@ -721,7 +733,7 @@ func (w *Worker) isWhatsmeowProvider() bool {
 
 func (w *Worker) shouldRunInboundMediaSelfHeal() bool {
 	return w != nil &&
-		w.InboundConsumer != nil &&
+		len(w.InboundConsumers) > 0 &&
 		w.DB != nil &&
 		w.Redis != nil &&
 		w.isWhatsmeowProvider()
@@ -1083,8 +1095,8 @@ func (w *Worker) Close() error {
 			return err
 		}
 	}
-	if w.InboundConsumer != nil {
-		if err := w.InboundConsumer.Close(); err != nil {
+	for _, c := range w.InboundConsumers {
+		if err := c.Close(); err != nil {
 			return err
 		}
 	}

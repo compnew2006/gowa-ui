@@ -332,13 +332,19 @@ func (cm *ConnectionManager) persistParsedMessage(
 	var mediaAssetID *uuid.UUID
 	var mediaRetryArtifact *inboundMediaRetryArtifact
 	if downloadable != nil {
-		if cm.mediaService == nil {
+		switch {
+		case direction == models.DirectionIncoming && whatsmeowDeferInboundMedia(cm.cfg) && cm.inboundMediaQueue != nil:
+			// Defer inbound media to the async recovery worker so the event
+			// goroutine never blocks on download/upload. An empty LastError
+			// signals a deferred (not failed) state to the marker helper.
+			mediaRetryArtifact = cm.buildInboundMediaRetryArtifact(msgType, downloadable, mimeType, filename, "")
+		case cm.mediaService == nil:
 			lastErr := "media service is not configured"
 			if client == nil {
 				lastErr = waClient.ErrClientIsNil.Error()
 			}
 			mediaRetryArtifact = cm.buildInboundMediaRetryArtifact(msgType, downloadable, mimeType, filename, lastErr)
-		} else {
+		default:
 			handledMedia, mediaErr := cm.mediaService.HandleIncomingMedia(WithMediaInstanceID(ctx, instanceID), evt)
 			if mediaErr != nil {
 				cm.logger.Warn(
@@ -516,16 +522,26 @@ func (cm *ConnectionManager) enqueueInboundMediaRecoveryWithMarker(ctx context.C
 	nextMetadata[inboundMediaAsyncLastErrorKey] = strings.TrimSpace(artifact.LastError)
 	nextMetadata[inboundMediaAsyncRecoveredAtKey] = nil
 
+	deferred := strings.TrimSpace(artifact.LastError) == ""
+
 	var nextErrorMessage string
 	if enqueueErr == nil {
 		nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusQueued
 		nextMetadata[inboundMediaAsyncEnqueuedAtKey] = time.Now().UTC().Format(time.RFC3339Nano)
 		delete(nextMetadata, inboundMediaAsyncEnqueueErrorKey)
-		nextErrorMessage = "Inbound media download failed inline; queued for async recovery"
+		if deferred {
+			nextErrorMessage = "Inbound media download deferred to async recovery"
+		} else {
+			nextErrorMessage = "Inbound media download failed inline; queued for async recovery"
+		}
 	} else {
 		nextMetadata[inboundMediaAsyncStatusKey] = inboundMediaAsyncStatusEnqueueFail
 		nextMetadata[inboundMediaAsyncEnqueueErrorKey] = enqueueErr.Error()
-		nextErrorMessage = fmt.Sprintf("Inbound media download failed inline and async enqueue failed: %v", enqueueErr)
+		if deferred {
+			nextErrorMessage = fmt.Sprintf("Inbound media download deferred and async enqueue failed: %v", enqueueErr)
+		} else {
+			nextErrorMessage = fmt.Sprintf("Inbound media download failed inline and async enqueue failed: %v", enqueueErr)
+		}
 	}
 
 	if err := cm.db.WithContext(ctx).

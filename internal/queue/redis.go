@@ -495,11 +495,15 @@ type consumerOptions struct {
 	streamName           string
 	consumerGroup        string
 	deadLetterStreamName string
+	consumerIndex        int
 }
 
 func newRedisConsumer(client *redis.Client, log logf.Logger, opts consumerOptions) (*RedisConsumer, error) {
 	hostname, _ := os.Hostname()
 	consumerID := fmt.Sprintf("worker-%s-%d", hostname, os.Getpid())
+	if opts.consumerIndex > 0 {
+		consumerID = fmt.Sprintf("%s-%d", consumerID, opts.consumerIndex)
+	}
 
 	consumer := &RedisConsumer{
 		client:               client,
@@ -543,11 +547,12 @@ func NewOrganizationRedisConsumer(client *redis.Client, log logf.Logger, orgID u
 }
 
 // NewRedisInboundMediaConsumer creates a consumer for inbound-media recovery jobs.
-func NewRedisInboundMediaConsumer(client *redis.Client, log logf.Logger) (*RedisConsumer, error) {
+func NewRedisInboundMediaConsumer(client *redis.Client, log logf.Logger, index int) (*RedisConsumer, error) {
 	return newRedisConsumer(client, log, consumerOptions{
 		streamName:           InboundMediaStreamName,
 		consumerGroup:        InboundMediaConsumerGroup,
 		deadLetterStreamName: InboundMediaDeadLetterStreamName,
+		consumerIndex:        index,
 	})
 }
 

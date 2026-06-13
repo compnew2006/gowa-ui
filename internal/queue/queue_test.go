@@ -174,7 +174,6 @@ func (h *mockHandler) getInboundMediaJobs() []*queue.InboundMediaJob {
 	return dst
 }
 
-
 // --- NewRedisQueue tests ---
 
 func TestNewRedisQueue(t *testing.T) {
@@ -634,7 +633,7 @@ func TestConsumeInboundMedia_ProcessesJob(t *testing.T) {
 	err := q.EnqueueInboundMedia(ctx, job)
 	require.NoError(t, err)
 
-	consumer, err := queue.NewRedisInboundMediaConsumer(client, log)
+	consumer, err := queue.NewRedisInboundMediaConsumer(client, log, 0)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 
@@ -675,7 +674,7 @@ func TestConsumeInboundMedia_PermanentFailureMovesToDLQ(t *testing.T) {
 	}).Result()
 	require.NoError(t, err)
 
-	consumer, err := queue.NewRedisInboundMediaConsumer(client, log)
+	consumer, err := queue.NewRedisInboundMediaConsumer(client, log, 0)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 
@@ -1374,7 +1373,7 @@ func TestRedisInboundMediaConsumer_WithMiniRedis_Consume_ProcessesJob(t *testing
 	err := q.EnqueueInboundMedia(ctx, job)
 	require.NoError(t, err)
 
-	consumer, err := queue.NewRedisInboundMediaConsumer(client, log)
+	consumer, err := queue.NewRedisInboundMediaConsumer(client, log, 0)
 	require.NoError(t, err)
 	defer func() { _ = consumer.Close() }()
 

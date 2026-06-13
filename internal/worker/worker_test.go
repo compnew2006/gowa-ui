@@ -36,8 +36,8 @@ func TestNewLeavesDisabledCampaignConsumerNil(t *testing.T) {
 	if w.Consumer != nil {
 		t.Fatal("Consumer should be nil when campaign consumer is disabled")
 	}
-	if w.InboundConsumer == nil {
-		t.Fatal("InboundConsumer should be initialized when inbound media is enabled")
+	if len(w.InboundConsumers) == 0 {
+		t.Fatal("InboundConsumers should be initialized when inbound media is enabled")
 	}
 }
 
@@ -61,8 +61,8 @@ func TestNewLeavesDisabledInboundConsumerNil(t *testing.T) {
 	if w.Consumer == nil {
 		t.Fatal("Consumer should be initialized when campaign consumer is enabled")
 	}
-	if w.InboundConsumer != nil {
-		t.Fatal("InboundConsumer should be nil when inbound media is disabled")
+	if len(w.InboundConsumers) != 0 {
+		t.Fatal("InboundConsumers should be empty when inbound media is disabled")
 	}
 }
 

@@ -120,6 +120,8 @@ type WhatsmeowConfig struct {
 	InboundMediaAsyncRetryCount      int    `koanf:"inbound_media_async_retry_count"`
 	InboundMediaAsyncRetryDelayMs    int    `koanf:"inbound_media_async_retry_delay_ms"`
 	InboundMediaAsyncRetryMaxDelayMs int    `koanf:"inbound_media_async_retry_max_delay_ms"`
+	DeferInboundMedia                *bool  `koanf:"defer_inbound_media"`
+	InboundMediaWorkerConcurrency    int    `koanf:"inbound_media_worker_concurrency"`
 	EventBufferSize                  int    `koanf:"event_buffer_size"`
 	EventDispatchEnabled             *bool  `koanf:"event_dispatch_enabled"`
 	Identity                         string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")
@@ -360,6 +362,13 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Whatsmeow.InboundMediaAsyncRetryMaxDelayMs == 0 {
 		cfg.Whatsmeow.InboundMediaAsyncRetryMaxDelayMs = 60000
+	}
+	if cfg.Whatsmeow.DeferInboundMedia == nil {
+		deferMedia := true
+		cfg.Whatsmeow.DeferInboundMedia = &deferMedia
+	}
+	if cfg.Whatsmeow.InboundMediaWorkerConcurrency == 0 {
+		cfg.Whatsmeow.InboundMediaWorkerConcurrency = 4
 	}
 	if cfg.Whatsmeow.EventBufferSize == 0 {
 		cfg.Whatsmeow.EventBufferSize = 4096

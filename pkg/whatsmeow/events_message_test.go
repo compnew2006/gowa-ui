@@ -444,7 +444,7 @@ func TestFindOrCreateContact_RestoresSoftDeletedLegacyContact(t *testing.T) {
 	assert.Equal(t, int64(1), count)
 }
 
-func TestPersistParsedMessage_FailedInboundMediaEnqueuesRecoveryJob(t *testing.T) {
+func TestPersistParsedMessage_DefersInboundMediaToRecoveryWorker(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	testutil.TruncateTables(db)
 
@@ -487,14 +487,14 @@ func TestPersistParsedMessage_FailedInboundMediaEnqueuesRecoveryJob(t *testing.T
 	assert.Equal(t, "application/pdf", job.MimeType)
 	assert.Equal(t, "report.pdf", job.FallbackFilename)
 	assert.NotEmpty(t, job.MediaPayloadBase64)
-	assert.Equal(t, "client is nil", job.LastError)
+	assert.Empty(t, job.LastError) // deferred media carries no inline error
 
 	var saved models.Message
 	require.NoError(t, db.First(&saved, "id = ?", message.ID).Error)
 	assert.Equal(t, inboundMediaAsyncStatusQueued, saved.Metadata[inboundMediaAsyncStatusKey])
 	assert.NotEmpty(t, saved.Metadata[inboundMediaAsyncEnqueuedAtKey])
-	assert.Equal(t, "client is nil", saved.Metadata[inboundMediaAsyncLastErrorKey])
-	assert.Contains(t, saved.ErrorMessage, "queued for async recovery")
+	assert.Empty(t, saved.Metadata[inboundMediaAsyncLastErrorKey]) // deferred, not failed
+	assert.Contains(t, saved.ErrorMessage, "deferred to async recovery")
 	storedJob, err := decodeInboundMediaAsyncJobMetadata(saved.Metadata[inboundMediaAsyncJobKey])
 	require.NoError(t, err)
 	assert.Equal(t, job.MessageID, storedJob.MessageID)
@@ -504,7 +504,7 @@ func TestPersistParsedMessage_FailedInboundMediaEnqueuesRecoveryJob(t *testing.T
 	assert.Equal(t, job.MediaPayloadBase64, storedJob.MediaPayloadBase64)
 }
 
-func TestPersistParsedMessage_EnqueueFailureMarksMessageMetadata(t *testing.T) {
+func TestPersistParsedMessage_DeferredMediaEnqueueFailureMarksMetadata(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	testutil.TruncateTables(db)
 
@@ -544,14 +544,66 @@ func TestPersistParsedMessage_EnqueueFailureMarksMessageMetadata(t *testing.T) {
 	require.NoError(t, db.First(&saved, "id = ?", message.ID).Error)
 	assert.Equal(t, inboundMediaAsyncStatusEnqueueFail, saved.Metadata[inboundMediaAsyncStatusKey])
 	assert.Contains(t, saved.Metadata[inboundMediaAsyncEnqueueErrorKey], "redis unavailable")
-	assert.Equal(t, "client is nil", saved.Metadata[inboundMediaAsyncLastErrorKey])
-	assert.Contains(t, saved.ErrorMessage, "async enqueue failed")
+	assert.Empty(t, saved.Metadata[inboundMediaAsyncLastErrorKey]) // deferred, not failed
+	assert.Contains(t, saved.ErrorMessage, "deferred and async enqueue failed")
 	storedJob, err := decodeInboundMediaAsyncJobMetadata(saved.Metadata[inboundMediaAsyncJobKey])
 	require.NoError(t, err)
 	assert.Equal(t, message.ID, storedJob.MessageID)
 	assert.Equal(t, org.ID, storedJob.OrganizationID)
 	assert.Equal(t, instance.ID, storedJob.InstanceID)
 	assert.Equal(t, "document", storedJob.MediaKind)
+}
+
+// boolPtr is a small helper for setting *bool config flags in tests.
+func boolPtr(b bool) *bool { return &b }
+
+// TestPersistParsedMessage_InlineMediaFailureWhenDeferDisabled covers the legacy
+// inline path: with defer_inbound_media=false the event goroutine still attempts
+// the synchronous download, fails (nil client), and the error is captured on the
+// enqueued recovery job.
+func TestPersistParsedMessage_InlineMediaFailureWhenDeferDisabled(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Inline Media Org",
+		Slug:      "inline-media-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	instance := models.WhatsAppInstance{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Inline Media Instance",
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&instance).Error)
+
+	cm := NewConnectionManager(db, nil, logf.New(logf.Opts{}), &config.WhatsmeowConfig{
+		InboundMediaRetryCount:      2,
+		InboundMediaRetryDelayMs:    0,
+		InboundMediaRetryMaxDelayMs: 0,
+		DeferInboundMedia:           boolPtr(false),
+	}, nil, t.TempDir())
+	mockQueue := testutil.NewMockQueue()
+	cm.SetInboundMediaQueue(mockQueue)
+
+	evt := makeInboundDocumentEventForPersistTest(t, "wamid.inbound.media.inline.1")
+	message, err := cm.persistParsedMessage(context.Background(), nil, evt, instance.ID, org.ID, persistMessageOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, message)
+
+	require.Len(t, mockQueue.InboundMediaJobs, 1)
+	job := mockQueue.InboundMediaJobs[0]
+	assert.Equal(t, "client is nil", job.LastError) // legacy inline failure captured
+
+	var saved models.Message
+	require.NoError(t, db.First(&saved, "id = ?", message.ID).Error)
+	assert.Equal(t, inboundMediaAsyncStatusQueued, saved.Metadata[inboundMediaAsyncStatusKey])
+	assert.Equal(t, "client is nil", saved.Metadata[inboundMediaAsyncLastErrorKey])
+	assert.Contains(t, saved.ErrorMessage, "failed inline; queued for async recovery")
 }
 
 func makeInboundDocumentEventForPersistTest(t *testing.T, waMessageID string) *events.Message {

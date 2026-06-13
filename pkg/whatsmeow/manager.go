@@ -814,6 +814,18 @@ func whatsmeowEventDispatchEnabled(cfg *config.WhatsmeowConfig) bool {
 	return *cfg.EventDispatchEnabled
 }
 
+// whatsmeowDeferInboundMedia reports whether inbound media downloads should be
+// deferred to the async recovery worker instead of blocking the per-instance
+// event goroutine. Defaults to true so media bursts can no longer overflow
+// the event buffer; set defer_inbound_media=false to restore legacy inline
+// download behaviour.
+func whatsmeowDeferInboundMedia(cfg *config.WhatsmeowConfig) bool {
+	if cfg == nil || cfg.DeferInboundMedia == nil {
+		return true
+	}
+	return *cfg.DeferInboundMedia
+}
+
 func (cm *ConnectionManager) stopEventDispatcherInstance(instanceID uuid.UUID) {
 	if cm == nil || cm.eventDispatcher == nil {
 		return
