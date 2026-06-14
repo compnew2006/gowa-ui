@@ -361,16 +361,27 @@ func facebookCommentPageID(r *fastglue.Request) string {
 
 // getOrCreatePageCommentSettings returns page-level settings, creating defaults if not found.
 func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageID string) (*models.FacebookPageCommentSettings, error) {
+	// Use a clean session to avoid any scoped-DB interference with INSERT.
+	cleanDB := db.Session(&gorm.Session{NewDB: true})
 	var settings models.FacebookPageCommentSettings
-	err := db.Where("organization_id = ? AND page_id = ?", orgID, pageID).First(&settings).Error
+	// Explicitly scope query to the org — this replaces the tenant scope that NewDB strips.
+	err := cleanDB.Where("organization_id = ? AND page_id = ?", orgID, pageID).First(&settings).Error
 	if err == nil {
 		return &settings, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
+
+	// Look up which Facebook account owns this page so we can set AccountID.
+	accountID := uuid.Nil
+	if acct, _, lookupErr := a.findFacebookAccountByPageID(pageID); lookupErr == nil && acct != nil {
+		accountID = acct.ID
+	}
+
 	settings = models.FacebookPageCommentSettings{
 		OrganizationID:          orgID,
+		AccountID:               accountID,
 		PageID:                  pageID,
 		AutoReplyEnabled:        false,
 		AutoCommentReplyEnabled: true,
@@ -380,11 +391,11 @@ func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageI
 		OnlyAutoReplyUnanswered: true,
 		Metadata:                models.JSONB{},
 	}
-	if err := a.DB.Create(&settings).Error; err != nil {
-		return nil, err
+	if err := cleanDB.Create(&settings).Error; err != nil {
+			return nil, err
+		}
+		return &settings, nil
 	}
-	return &settings, nil
-}
 
 // pickRandomReplyText picks a random text from a JSONB array of strings.
 func pickRandomReplyText(texts models.JSONB, defaultText string) string {
@@ -641,7 +652,7 @@ func (a *App) ReplyFacebookComment(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Select at least one reply channel", nil, "")
 	}
 
-	comment, account, pageToken, err := a.facebookCommentOperationContext(a.DB, orgID, commentRef)
+	comment, account, pageToken, err := a.facebookCommentOperationContext(requestDB, orgID, commentRef)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Facebook comment not found", nil, "")
@@ -675,19 +686,30 @@ func (a *App) UpdateFacebookCommentStatus(r *fastglue.Request) error {
 	if !validFacebookCommentStatus(req.Status) {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid comment status", nil, "status")
 	}
+	// Load current comment for transition validation
+	var current models.FacebookComment
 	commentQuery := requestDB.Model(&models.FacebookComment{}).Where("organization_id = ?", orgID)
 	if commentID, err := uuid.Parse(commentRef); err == nil {
 		commentQuery = commentQuery.Where("id = ? OR external_id = ?", commentID, commentRef)
 	} else {
 		commentQuery = commentQuery.Where("external_id = ?", commentRef)
 	}
-	if err := commentQuery.Update("status", req.Status).Error; err != nil {
+	if err := commentQuery.First(&current).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Facebook comment not found", nil, "")
+	}
+	if !isValidFacebookCommentTransition(current.Status, req.Status) {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, fmt.Sprintf("Cannot transition from %s to %s", current.Status, req.Status), nil, "")
+	}
+	commentUpdate := requestDB.Model(&models.FacebookComment{}).Where("id = ?", current.ID)
+	if err := commentUpdate.Update("status", req.Status).Error; err != nil {
 		a.Log.Error("Failed to update Facebook comment status", "error", err, "comment_id", commentRef)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update Facebook comment", nil, "")
 	}
-	if a.WSHub != nil {
+		if a.WSHub != nil {
 		updated := models.FacebookComment{}
-		_ = commentQuery.First(&updated).Error
+		if err := commentQuery.First(&updated).Error; err != nil {
+			a.Log.Error("Failed to reload comment after status update for WS broadcast", "error", err, "comment_ref", commentRef)
+		}
 		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
 			Type:    websocket.TypeFacebookCommentUpdated,
 			Payload: facebookCommentToResponse(updated),
@@ -864,11 +886,11 @@ func (a *App) getOrCreateFacebookCommentSettings(db *gorm.DB, orgID uuid.UUID) (
 		DefaultSyncCommentsPerPost: defaultFBCommentsPerPost,
 		Metadata:                   models.JSONB{},
 	}
-	if err := a.DB.Create(&settings).Error; err != nil {
-		return nil, err
+	if err := db.Create(&settings).Error; err != nil {
+			return nil, err
+		}
+		return &settings, nil
 	}
-	return &settings, nil
-}
 
 func (a *App) findFacebookAccountByPageID(pageID string) (*models.FacebookAccount, string, error) {
 	// Check Redis cache first to avoid scanning all accounts and decrypting page tokens.
@@ -1066,7 +1088,7 @@ func truncateFacebookCommentField(value string, maxRunes int) string {
 }
 
 func (a *App) facebookAccountsForCommentSync(db *gorm.DB, orgID uuid.UUID, accountID string) ([]models.FacebookAccount, error) {
-	query := a.DB.Where("organization_id = ? AND method = ? AND status = ?", orgID, models.FBAccountMethodOAuth, models.FBAccountStatusActive)
+	query := db.Where("organization_id = ? AND method = ? AND status = ?", orgID, models.FBAccountMethodOAuth, models.FBAccountStatusActive)
 	if strings.TrimSpace(accountID) != "" {
 		parsed, err := uuid.Parse(strings.TrimSpace(accountID))
 		if err != nil {
@@ -1213,11 +1235,13 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 			}
 			result.Synced++
 			if tx.RowsAffected > 0 {
-				var saved models.FacebookComment
-				_ = db.Session(&gorm.Session{NewDB: true}).
+								var saved models.FacebookComment
+				if err := db.Session(&gorm.Session{NewDB: true}).
 					Table("facebook_comments").
 					Where("organization_id = ? AND external_id = ?", orgID, edge.ID).
-					First(&saved).Error
+					First(&saved).Error; err != nil {
+					a.Log.Error("Failed to reload comment after sync insert", "error", err, "org_id", orgID, "external_id", edge.ID)
+				}
 				result.Created++
 				// Broadcast WebSocket for newly synced comments
 				if a.WSHub != nil {
@@ -1226,13 +1250,24 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 						Payload: facebookCommentToResponse(saved),
 					})
 				}
-				if runAutoReply && shouldAutoReplyFacebookComment(db, settings, saved) {
-					if _, err := a.sendAndStoreFacebookCommentReply(db, &account, &saved, userID, settings.AutoCommentReplyText, settings.AutoPrivateMessageText, settings.AutoCommentReplyEnabled, settings.AutoPrivateReplyEnabled, true, pageToken); err == nil {
-						result.AutoReplies++
-					} else {
-						result.Failures = append(result.Failures, fmt.Sprintf("%s: auto reply failed for %s", pageNameOrID(pageName, pageID), edge.ID))
+								if runAutoReply && shouldAutoReplyFacebookComment(db, settings, saved) {
+						pageSettings, _ := a.getOrCreatePageCommentSettings(db, orgID, pageID)
+						commentText := settings.AutoCommentReplyText
+						privateText := settings.AutoPrivateMessageText
+						commentEnabled := settings.AutoCommentReplyEnabled
+						privateEnabled := settings.AutoPrivateReplyEnabled
+						if pageSettings != nil && pageSettings.AutoReplyEnabled {
+							commentEnabled = pageSettings.AutoCommentReplyEnabled
+							privateEnabled = pageSettings.AutoPrivateReplyEnabled
+							commentText = pickRandomReplyText(pageSettings.AutoCommentReplyTexts, settings.AutoCommentReplyText)
+							privateText = pickRandomReplyText(pageSettings.AutoPrivateMessageTexts, settings.AutoPrivateMessageText)
+						}
+						if _, err := a.sendAndStoreFacebookCommentReply(db, &account, &saved, userID, commentText, privateText, commentEnabled, privateEnabled, true, pageToken); err == nil {
+							result.AutoReplies++
+						} else {
+							result.Failures = append(result.Failures, fmt.Sprintf("%s: auto reply failed for %s", pageNameOrID(pageName, pageID), edge.ID))
+						}
 					}
-				}
 			}
 		}
 	}
@@ -1482,11 +1517,15 @@ func (a *App) sendAndStoreFacebookCommentReply(db *gorm.DB, account *models.Face
 	if isAuto {
 		updates["auto_replied_at"] = &now
 	}
-	updateDB := db.Session(&gorm.Session{NewDB: true})
-	_ = updateDB.Model(&models.FacebookComment{}).Where("id = ?", comment.ID).Updates(updates).Error
+		updateDB := db.Session(&gorm.Session{NewDB: true})
+	if err := updateDB.Model(&models.FacebookComment{}).Where("id = ?", comment.ID).Updates(updates).Error; err != nil {
+		a.Log.Error("Failed to update comment after reply", "error", err, "comment_id", comment.ID)
+	}
 	if a.WSHub != nil {
 		updated := models.FacebookComment{}
-		_ = db.Where("id = ?", comment.ID).First(&updated).Error
+		if err := db.Where("id = ?", comment.ID).First(&updated).Error; err != nil {
+			a.Log.Error("Failed to reload comment after reply for WS broadcast", "error", err, "comment_id", comment.ID)
+		}
 		updated.Replies = []models.FacebookCommentReply{reply}
 		a.WSHub.BroadcastToOrg(updated.OrganizationID, websocket.WSMessage{
 			Type:    websocket.TypeFacebookCommentUpdated,
@@ -1675,4 +1714,25 @@ func validFacebookCommentStatus(status models.FacebookCommentStatus) bool {
 	default:
 		return false
 	}
+}
+
+// facebookCommentTransitions defines valid status transitions.
+var facebookCommentTransitions = map[models.FacebookCommentStatus][]models.FacebookCommentStatus{
+	models.FBCommentStatusOpen:     {models.FBCommentStatusReplied, models.FBCommentStatusClosed, models.FBCommentStatusArchived},
+	models.FBCommentStatusReplied:  {models.FBCommentStatusOpen, models.FBCommentStatusClosed, models.FBCommentStatusArchived},
+	models.FBCommentStatusClosed:   {models.FBCommentStatusArchived},
+	models.FBCommentStatusArchived: {},
+}
+
+func isValidFacebookCommentTransition(current, next models.FacebookCommentStatus) bool {
+	allowed, ok := facebookCommentTransitions[current]
+	if !ok {
+		return false
+	}
+	for _, s := range allowed {
+		if s == next {
+			return true
+		}
+	}
+	return false
 }
