@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -1928,6 +1929,41 @@ func configuredLogger(appName string, cfg *config.Config) logf.Logger {
 	})
 }
 
+// realClientIP extracts the real client IP from X-Forwarded-For when the
+// TCP connection comes from a private/loopback address (e.g., behind nginx).
+func realClientIP(ctx *fasthttp.RequestCtx) string {
+	rawRemote := ctx.RemoteAddr().String()
+	host, _, err := net.SplitHostPort(rawRemote)
+	if err != nil {
+		return rawRemote
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return rawRemote
+	}
+	if !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() {
+		return rawRemote
+	}
+	if xff := ctx.Request.Header.Peek("X-Forwarded-For"); len(xff) > 0 {
+		candidate := strings.TrimSpace(string(xff))
+		if idx := strings.IndexByte(candidate, ','); idx >= 0 {
+			candidate = strings.TrimSpace(candidate[:idx])
+		}
+		candidate = strings.Trim(candidate, "[]")
+		if net.ParseIP(candidate) != nil {
+			return candidate
+		}
+	}
+	if realIP := ctx.Request.Header.Peek("X-Real-IP"); len(realIP) > 0 {
+		candidate := strings.TrimSpace(string(realIP))
+		candidate = strings.Trim(candidate, "[]")
+		if net.ParseIP(candidate) != nil {
+			return candidate
+		}
+	}
+	return rawRemote
+}
+
 func observedHandler(handler fasthttp.RequestHandler, observabilityManager *observability.Manager, lo logf.Logger) fasthttp.RequestHandler {
 	observed := handler
 	if observabilityManager != nil {
@@ -1943,7 +1979,7 @@ func observedHandler(handler fasthttp.RequestHandler, observabilityManager *obse
 			"path", string(ctx.Path()),
 			"status", ctx.Response.StatusCode(),
 			"duration_ms", time.Since(start).Milliseconds(),
-			"remote_addr", ctx.RemoteAddr().String(),
+			"remote_addr", realClientIP(ctx),
 		}
 		if orgID, ok := ctx.UserValue(middleware.ContextKeyOrganizationID).(uuid.UUID); ok {
 			fields = append(fields, "org_id", orgID)
