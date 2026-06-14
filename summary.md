@@ -1080,3 +1080,128 @@ ssh root@31.97.192.53 'whatomate-sandbox-switch status'  # Check
 - Plugin DRY fix, DeleteRole cache invalidation fix
 - Frontend RESOURCE_LABELS + 8 docs updated
 - Verified: Sandbox responsive, license active, HTTPS 200
+
+## 2026-06-13 — P0a + P0b: stop inbound message loss (commit b11fe78f)
+
+**Problem:** VPS dropped ~7,459 incoming messages/day (event buffer overflow
+from blocking media downloads) + ~4/day lost entirely (30s media timeout killed
+the message save).
+
+**P0a — defer inbound media to worker** (`pkg/whatsmeow/message_persist.go`):
+incoming messages with downloadable media now save text → broadcast → enqueue
+media to the async recovery worker instead of blocking the event goroutine.
+Guarded by `whatsmeow.defer_inbound_media` (default true). Outgoing keeps
+inline. History-sync incoming also deferred (was a burst trigger).
+
+**P0b — parallelize inbound-media consumer** (`internal/queue/redis.go`,
+`internal/worker/worker.go`): fan out `whatsmeow.inbound_media_worker_concurrency`
+(default 4) Redis Streams consumers with unique ids so the recovery queue
+doesn't become the new bottleneck. Crash reclaim preserved via idle-time claiming.
+
+**Tests:** renamed/updated 2 deferred-media tests + added legacy inline-failure
+variant; updated worker/queue tests for consumer fan-out + new constructor arity.
+DB-backed tests verified against ephemeral Postgres. 2 unrelated pre-existing
+failures confirmed (fail on original tree too).
+
+**Serena note:** LSP can't index `pkg/whatsmeow/*` (package-wide); used internal
+edit fallback for those 2 files with explicit user approval. `replace_symbol_body`
+on structs occasionally emits `type type Foo` — always `go build` after.
+
+**Follow-ups (deferred):** P1 configurable event timeout; remove dead
+`downloadAndPersistIncomingMedia`; GAP3 ops (missing instance dirs); investigate
+instance flapping; rotate VPS root password.
+
+## 2026-06-13 — Production blue/green deploy of `b11fe78f` (P0a+P0b) to ofuqalmadenah.com
+
+**Outcome:** ✅ Production green deployed & verified. License stays active (paid/lifetime).
+- VPS `31.97.192.53`, domain `ofuqalmadenah.com`
+- New green: `whatomate.green.20260613_192120-b11fe78f` (sha256 08a3ddb1…), ACTIVE
+- Blue rollback repointed to previous known-good `1544b9cc` (was ancient 20260521)
+- Switch script gained `toggle` (parity w/ sandbox). 1-cmd switch:
+  `ssh root@31.97.192.53 "whatomate-switch toggle"` (or green/blue/status)
+
+**Build (DRY via Makefile):** `env -u GOOS -u GOARCH GOOS=linux GOARCH=amd64 CGO_ENABLED=0
+make build-prod VERSION=… LICENSE_KEY_RING_FILE=/tmp/whatomate-keyring.json`.
+Makefile auto-base64s the keyring into `-X internal/license.EmbeddedPublicKeyRingBase64`.
+`file` = ELF x86-64 (avoided the Mach-O leak). Frontend embedded via `embed-frontend`.
+
+**License:** embedded 3 deploy keys (deploy-20260415/16, vendor-1) from
+`/root/whatomate-keyring.json`. Prod config has no `public_key` override (production hardening),
+so it relies SOLELY on the embedded keyring — embedding was mandatory. Verified active via
+`/api/license/bootstrap` (browser 200 + curl): enabled/active/paid/tier=production/lifetime.
+The user's "License overview Disabled" was a prior broken/stale state — now resolved.
+
+**Verification:** main svc active (PID 3841386, version green-…-b11fe78f); migration +
+plugin migrations completed; "Inbound media worker started" (P0b live); frontend bundle
+index-BMFCoqIE.css/index-CmZe5DWy.js (new); holol-wenjaz active + license active;
+chrome-devtools: login page renders, 0 console errors, license/bootstrap 200 active.
+
+**Backup:** `/root/whatomate_backups/20260613_192200_pre_…-b11fe78f/` (old binary 1544b9cc
+sha256 92b1abdd…, both configs, switch script, MANIFEST). Docs .bak_* timestamped on VPS.
+
+**No source tree on VPS:** confirmed no go.mod/.git — only binaries/configs/docs/data.
+"Remove codebase, leave only bin" already satisfied.
+
+**NOT fixed (pre-existing, separate ops):** `whatomate@alarkan-almthalia` +
+`whatomate@matbaat-ruya` = status 226/NAMESPACE (missing instance dirs; ~7179 restarts,
+zero msgs for those orgs); `whatomate-sandbox.service` crash-looping. Sandbox not touched.
+
+**Serena note:** this turn was OPS (SSH/build/deploy), MCP used for license-code
+understanding (codebase-memory + Socraticode: EmbeddedPublicKeyRingBase64 = base64 of
+keyring JSON; prod hardening rejects config public_key). No source edits this turn.
+
+## 2026-06-13 — Finish removal of `whatomate@alarkan-almthalia` + `whatomate@matbaat-ruya`
+
+User deleted the unit files + instance dirs, but the instances were **still crash-looping**
+(NRestarts=13575 each, status=226/NAMESPACE) off the `whatomate@.service` template.
+
+- Stopped + reset-failed + disabled both instances; `daemon-reload`. Crash-loop gone.
+- Survivors: `whatomate.service`, `whatomate@holol-wenjaz.service` (both active), housekeeping,
+  sandbox (separate). Template `whatomate@.service` preserved (holol-wenjaz needs it).
+- Cleaned dangling refs: `whatomate-switch` TENANTS list now `whatomate whatomate@holol-wenjaz`
+  (was 4); docs (VPS prod_info + multi_instances + local) updated; .bak_<ts> taken on VPS.
+- **Orphaned DBs remain**: `whatomate_alarkan_almthalia`, `whatomate_matbaat_ruya`. Not dropped
+  (irreversible) — awaiting user confirmation. `sudo -u postgres psql -c "DROP DATABASE ..."`.
+- Production deploy (b11fe78f) untouched; license still active/paid.
+
+---
+
+## 2026-06-13 — Inbound media namespace fix deploy + sandbox repair
+
+- Fixed and committed inbound-media Redis stream namespace isolation: `9600a801` (`Namespace inbound media Redis streams`).
+- Root cause addressed: multiple Whatomate services sharing one Redis inbound-media stream could consume jobs for the wrong DB/service, producing `message not found in organization`, DLQ loops, and permanent queued media.
+- Added `whatsmeow.inbound_media_queue_namespace` config and wired it through enqueuer, consumer, self-heal, and manual reconcile.
+- Verified locally: `go test ./internal/config ./internal/queue ./internal/worker ./cmd/whatomate ./pkg/whatsmeow`; `make build`; production linux/amd64 `make build-prod` with embedded license keyring.
+- Deployed production version `green-20260613_205155-9600a801` (sha256 `a4fad65d3f57ffd988338ff9cfdbb2848b5b69521ea9231a46876dca340dd215`) to `/opt/whatomate/bin/whatomate.green.green-20260613_205155-9600a801`.
+- Backup created on VPS: `/root/whatomate_backups/20260613_205408_pre_green-20260613_205155-9600a801`.
+- Set production config namespaces:
+  - main: `inbound_media_queue_namespace = "main"`
+  - holol-wenjaz: `inbound_media_queue_namespace = "holol-wenjaz"`
+- Brief deploy hiccup: first config patch wrote unquoted TOML namespace values, causing short startup failures; immediately fixed quotes and restarted.
+- Final prod verification: `whatomate` + `whatomate@holol-wenjaz` active, site 200, license active/production/key `deploy-20260416`, Redis namespaced main group consumers=4 pending=0 lag=0, no clean-window fatal/not-found errors.
+- Repaired sandbox URL: `whatomate-sandbox.service` was 502 due broken active symlink to missing sandbox blue binary (`203/EXEC`). Ran `whatomate-sandbox-switch green`; sandbox now active and `https://sandbox.ofuqalmadenah.com/` returns 200 on version `1544b9cc`.
+- Serena memory saved: `deployments/prod-inbound-media-namespace-9600a801-2026-06-13`.
+
+Update: after restoring sandbox URL by switching to the existing working sandbox green (`1544b9cc`), deployed the fixed `9600a801` binary to sandbox too:
+- New sandbox binary: `/opt/whatomate/bin/whatomate.sandbox.green.20260613_213200-9600a801`.
+- Sandbox rollback blue now points to working `whatomate.sandbox.green.20260613_014655-1544b9cc`.
+- Sandbox config now has `inbound_media_queue_namespace = "sandbox"`.
+- Final sandbox verification: service active, `https://sandbox.ofuqalmadenah.com/` returns 200, runtime version `green-20260613_205155-9600a801`, no fatal/panic/config errors after restart.
+- Sandbox backup: `/root/whatomate_backups/20260613_213215_pre_sandbox_9600a801`.
+
+---
+
+## 2026-06-14 — DRY refactor for repeated handler auth/permission boilerplate
+
+- Refactored repeated auth/permission LOC from the last-10-commit duplication scan.
+- Added shared `App.requireRequestPermission(r, resource, action)` helper in `internal/handlers/app.go`.
+- Updated `internal/handlers/catalog.go` to use the shared helper for catalog read/write/delete/sync permissions.
+- Updated `internal/handlers/fb_comments.go` to use the shared helper for account permissions and added `facebookCommentPageID(r)` to avoid duplicated `page_id` extraction/validation setup.
+- Updated `internal/handlers/group_participants.go` to use the shared helper for group participant read/write permissions.
+- Verification passed:
+  - `go test -run '^$' ./internal/handlers`
+  - `go test -run 'Catalog|FacebookComment|GroupMembers|GroupParticipant' ./internal/handlers`
+  - Serena diagnostics clean for edited files.
+  - Duplicate scan over changed handler diff reports no repeated added blocks.
+- Full `go test ./internal/handlers` still has unrelated pre-existing upload cleanup schema failures (`no such column: instance_id`).
+- Memory saved: `fix/handler-auth-boilerplate-dry-2026-06-14`.

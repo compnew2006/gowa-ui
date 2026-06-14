@@ -44,11 +44,8 @@ func (a *App) ListGroupMembers(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid instance ID format", nil, "")
 	}
 
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceGroupParticipants, models.ActionRead); err != nil {
+	orgID, _, ok := a.requireRequestPermission(r, models.ResourceGroupParticipants, models.ActionRead)
+	if !ok {
 		return nil
 	}
 
@@ -110,11 +107,8 @@ func (a *App) manageGroupParticipants(r *fastglue.Request, action string) error 
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Group participants are only available for whatsmeow instances", nil, "")
 	}
 
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceGroupParticipants, models.ActionWrite); err != nil {
+	orgID, _, ok := a.requireRequestPermission(r, models.ResourceGroupParticipants, models.ActionWrite)
+	if !ok {
 		return nil
 	}
 
@@ -148,6 +142,7 @@ func (a *App) manageGroupParticipants(r *fastglue.Request, action string) error 
 
 	ctx := r.RequestCtx
 	var participants []provider.GroupParticipant
+	var err error
 
 	switch action {
 	case "add":

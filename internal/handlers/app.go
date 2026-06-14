@@ -247,6 +247,18 @@ func (a *App) requirePermission(r *fastglue.Request, userID uuid.UUID, resource,
 	return nil
 }
 
+func (a *App) requireRequestPermission(r *fastglue.Request, resource, action string) (uuid.UUID, uuid.UUID, bool) {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return uuid.Nil, uuid.Nil, false
+	}
+	if err := a.requirePermission(r, userID, resource, action); err != nil {
+		return uuid.Nil, uuid.Nil, false
+	}
+	return orgID, userID, true
+}
+
 // authorizeRequest combines authentication extraction and permission check into one call.
 // Returns the org and user IDs, and whether the request is authorized.
 // When ok is false, the error response has already been sent.

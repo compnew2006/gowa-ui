@@ -223,11 +223,8 @@ type facebookCommentParentRef struct {
 
 func (a *App) GetFacebookCommentSettings(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil {
+	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionRead)
+	if !ok {
 		return nil
 	}
 
@@ -241,11 +238,8 @@ func (a *App) GetFacebookCommentSettings(r *fastglue.Request) error {
 
 func (a *App) UpdateFacebookCommentSettings(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
+	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionWrite)
+	if !ok {
 		return nil
 	}
 
@@ -267,18 +261,14 @@ func (a *App) UpdateFacebookCommentSettings(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]any{"settings": settings})
 }
 
-
 // GetPageCommentSettings returns auto-reply settings for a specific Facebook page.
 func (a *App) GetPageCommentSettings(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil {
+	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionRead)
+	if !ok {
 		return nil
 	}
-	pageID := r.RequestCtx.UserValue("page_id").(string)
+	pageID := facebookCommentPageID(r)
 	if pageID == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "page_id is required", nil, "")
 	}
@@ -293,14 +283,11 @@ func (a *App) GetPageCommentSettings(r *fastglue.Request) error {
 // UpdatePageCommentSettings updates auto-reply settings for a specific Facebook page.
 func (a *App) UpdatePageCommentSettings(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
+	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionWrite)
+	if !ok {
 		return nil
 	}
-	pageID := r.RequestCtx.UserValue("page_id").(string)
+	pageID := facebookCommentPageID(r)
 	if pageID == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "page_id is required", nil, "")
 	}
@@ -323,19 +310,33 @@ func (a *App) UpdatePageCommentSettings(r *fastglue.Request) error {
 		a.Log.Error("Failed to load page settings for update", "error", err, "org_id", orgID, "page_id", pageID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update page settings", nil, "")
 	}
-	if req.AutoReplyEnabled != nil { settings.AutoReplyEnabled = *req.AutoReplyEnabled }
-	if req.AutoCommentReplyEnabled != nil { settings.AutoCommentReplyEnabled = *req.AutoCommentReplyEnabled }
-	if req.AutoPrivateReplyEnabled != nil { settings.AutoPrivateReplyEnabled = *req.AutoPrivateReplyEnabled }
+	if req.AutoReplyEnabled != nil {
+		settings.AutoReplyEnabled = *req.AutoReplyEnabled
+	}
+	if req.AutoCommentReplyEnabled != nil {
+		settings.AutoCommentReplyEnabled = *req.AutoCommentReplyEnabled
+	}
+	if req.AutoPrivateReplyEnabled != nil {
+		settings.AutoPrivateReplyEnabled = *req.AutoPrivateReplyEnabled
+	}
 	if req.AutoCommentReplyTexts != nil {
 		settings.AutoCommentReplyTexts = models.JSONB{}
-		for i, t := range req.AutoCommentReplyTexts { settings.AutoCommentReplyTexts[fmt.Sprintf("%d", i)] = t }
+		for i, t := range req.AutoCommentReplyTexts {
+			settings.AutoCommentReplyTexts[fmt.Sprintf("%d", i)] = t
+		}
 	}
 	if req.AutoPrivateMessageTexts != nil {
 		settings.AutoPrivateMessageTexts = models.JSONB{}
-		for i, t := range req.AutoPrivateMessageTexts { settings.AutoPrivateMessageTexts[fmt.Sprintf("%d", i)] = t }
+		for i, t := range req.AutoPrivateMessageTexts {
+			settings.AutoPrivateMessageTexts[fmt.Sprintf("%d", i)] = t
+		}
 	}
-	if req.OnlyAutoReplyUnanswered != nil { settings.OnlyAutoReplyUnanswered = *req.OnlyAutoReplyUnanswered }
-	if req.WhatsAppNotifyEnabled != nil { settings.WhatsAppNotifyEnabled = *req.WhatsAppNotifyEnabled }
+	if req.OnlyAutoReplyUnanswered != nil {
+		settings.OnlyAutoReplyUnanswered = *req.OnlyAutoReplyUnanswered
+	}
+	if req.WhatsAppNotifyEnabled != nil {
+		settings.WhatsAppNotifyEnabled = *req.WhatsAppNotifyEnabled
+	}
 	if req.WhatsAppInstanceID != nil {
 		if *req.WhatsAppInstanceID == "" {
 			settings.WhatsAppInstanceID = nil
@@ -343,7 +344,9 @@ func (a *App) UpdatePageCommentSettings(r *fastglue.Request) error {
 			settings.WhatsAppInstanceID = &id
 		}
 	}
-	if req.WhatsAppNotifyPhone != nil { settings.WhatsAppNotifyPhone = *req.WhatsAppNotifyPhone }
+	if req.WhatsAppNotifyPhone != nil {
+		settings.WhatsAppNotifyPhone = *req.WhatsAppNotifyPhone
+	}
 	if err := requestDB.Save(settings).Error; err != nil {
 		a.Log.Error("Failed to save page comment settings", "error", err, "org_id", orgID, "page_id", pageID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update page settings", nil, "")
@@ -351,12 +354,21 @@ func (a *App) UpdatePageCommentSettings(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]any{"settings": settings})
 }
 
+func facebookCommentPageID(r *fastglue.Request) string {
+	pageID, _ := r.RequestCtx.UserValue("page_id").(string)
+	return strings.TrimSpace(pageID)
+}
+
 // getOrCreatePageCommentSettings returns page-level settings, creating defaults if not found.
 func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageID string) (*models.FacebookPageCommentSettings, error) {
 	var settings models.FacebookPageCommentSettings
 	err := db.Where("organization_id = ? AND page_id = ?", orgID, pageID).First(&settings).Error
-	if err == nil { return &settings, nil }
-	if !errors.Is(err, gorm.ErrRecordNotFound) { return nil, err }
+	if err == nil {
+		return &settings, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	settings = models.FacebookPageCommentSettings{
 		OrganizationID:          orgID,
 		PageID:                  pageID,
@@ -368,7 +380,9 @@ func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageI
 		OnlyAutoReplyUnanswered: true,
 		Metadata:                models.JSONB{},
 	}
-	if err := a.DB.Create(&settings).Error; err != nil { return nil, err }
+	if err := a.DB.Create(&settings).Error; err != nil {
+		return nil, err
+	}
 	return &settings, nil
 }
 
@@ -377,29 +391,49 @@ func pickRandomReplyText(texts models.JSONB, defaultText string) string {
 	var arr []string
 	for i := 0; ; i++ {
 		v, ok := texts[fmt.Sprintf("%d", i)]
-		if !ok { break }
-		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" { arr = append(arr, s) }
+		if !ok {
+			break
+		}
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			arr = append(arr, s)
+		}
 	}
-	if len(arr) == 0 { return defaultText }
+	if len(arr) == 0 {
+		return defaultText
+	}
 	return arr[rand.Intn(len(arr))]
 }
 
 // maybeSendWhatsAppCommentNotification sends a WhatsApp notification about a new Facebook
 // comment and its auto-reply to a configured phone number via a selected WhatsApp instance.
 func (a *App) maybeSendWhatsAppCommentNotification(orgID uuid.UUID, pageSettings *models.FacebookPageCommentSettings, comment *models.FacebookComment, replyText, dmText string) {
-	if pageSettings == nil || !pageSettings.WhatsAppNotifyEnabled || pageSettings.WhatsAppInstanceID == nil { return }
+	if pageSettings == nil || !pageSettings.WhatsAppNotifyEnabled || pageSettings.WhatsAppInstanceID == nil {
+		return
+	}
 	phone := strings.TrimSpace(pageSettings.WhatsAppNotifyPhone)
-	if phone == "" { return }
+	if phone == "" {
+		return
+	}
 	commentLink := comment.Permalink
-	if commentLink == "" { commentLink = comment.PostPermalink }
+	if commentLink == "" {
+		commentLink = comment.PostPermalink
+	}
 	var msg strings.Builder
 	msg.WriteString("*New Facebook Comment*\n\n")
 	msg.WriteString(fmt.Sprintf("From: %s\n", comment.FromName))
-	if comment.PageName != "" { msg.WriteString(fmt.Sprintf("Page: %s\n", comment.PageName)) }
+	if comment.PageName != "" {
+		msg.WriteString(fmt.Sprintf("Page: %s\n", comment.PageName))
+	}
 	msg.WriteString(fmt.Sprintf("Comment: %s\n", comment.Message))
-	if commentLink != "" { msg.WriteString(fmt.Sprintf("Link: %s\n\n", commentLink)) }
-	if replyText != "" { msg.WriteString(fmt.Sprintf("Auto-reply sent: %s\n", replyText)) }
-	if dmText != "" { msg.WriteString(fmt.Sprintf("DM sent: %s\n", dmText)) }
+	if commentLink != "" {
+		msg.WriteString(fmt.Sprintf("Link: %s\n\n", commentLink))
+	}
+	if replyText != "" {
+		msg.WriteString(fmt.Sprintf("Auto-reply sent: %s\n", replyText))
+	}
+	if dmText != "" {
+		msg.WriteString(fmt.Sprintf("DM sent: %s\n", dmText))
+	}
 	instanceID := pageSettings.WhatsAppInstanceID.String()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -416,7 +450,9 @@ func (a *App) maybeSendWhatsAppCommentNotification(orgID uuid.UUID, pageSettings
 		}
 		account, _ := a.resolveOutboundMessageAccount(orgID, &contact, "", &instance)
 		msgReq := OutgoingMessageRequest{Contact: &contact, InstanceID: pageSettings.WhatsAppInstanceID, Type: models.MessageTypeText, Content: msg.String()}
-		if account != nil { msgReq.Account = account }
+		if account != nil {
+			msgReq.Account = account
+		}
 		opts := DefaultSendOptions()
 		opts.BroadcastWebSocket = false
 		if _, err := a.SendOutgoingMessage(ctx, msgReq, opts); err != nil {
@@ -428,11 +464,8 @@ func (a *App) maybeSendWhatsAppCommentNotification(orgID uuid.UUID, pageSettings
 }
 func (a *App) ListFacebookComments(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil {
+	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionRead)
+	if !ok {
 		return nil
 	}
 
@@ -486,15 +519,11 @@ func (a *App) ListFacebookComments(r *fastglue.Request) error {
 	})
 }
 
-
 // ListFacebookCommentPages returns distinct page IDs and names for the org's comment inbox.
 func (a *App) ListFacebookCommentPages(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil {
+	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionRead)
+	if !ok {
 		return nil
 	}
 
@@ -518,11 +547,8 @@ func (a *App) ListFacebookCommentPages(r *fastglue.Request) error {
 
 func (a *App) SyncFacebookComments(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
+	orgID, userID, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionWrite)
+	if !ok {
 		return nil
 	}
 
@@ -582,11 +608,8 @@ func (a *App) SyncFacebookComments(r *fastglue.Request) error {
 
 func (a *App) ReplyFacebookComment(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
+	orgID, userID, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionWrite)
+	if !ok {
 		return nil
 	}
 	commentRef := strings.TrimSpace(fmt.Sprint(r.RequestCtx.UserValue("id")))
@@ -637,11 +660,8 @@ func (a *App) ReplyFacebookComment(r *fastglue.Request) error {
 
 func (a *App) UpdateFacebookCommentStatus(r *fastglue.Request) error {
 	requestDB := a.requestDB(r)
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
+	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionWrite)
+	if !ok {
 		return nil
 	}
 	commentRef := strings.TrimSpace(fmt.Sprint(r.RequestCtx.UserValue("id")))
