@@ -62,7 +62,7 @@ func TestSetupRoutes_MetricsRequireTokenWhenConfigured(t *testing.T) {
 	manager := observability.NewManager(cfg.Observability, nil, nil)
 	g := fastglue.NewGlue()
 	setupRoutes(g, app, testutil.NopLogger(), "", nil, cfg, manager)
-	handler := observedHandler(g.Handler(), manager)
+	handler := observedHandler(g.Handler(), manager, testutil.NopLogger())
 
 	unauthorized := newRemoteGETRequest(t, "/metrics", "127.0.0.1")
 	handler(unauthorized.RequestCtx)

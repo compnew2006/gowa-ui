@@ -212,14 +212,7 @@ func runServer(args []string) {
 		lo.Warn("Debug mode is enabled in production! This may expose sensitive information.")
 	}
 
-	// Set log level based on environment
-	if cfg.App.Environment == "production" {
-		lo = logf.New(logf.Opts{
-			Level:           logf.InfoLevel,
-			TimestampFormat: "2006-01-02 15:04:05",
-			DefaultFields:   []any{"app", "whatomate"},
-		})
-	}
+	lo = configuredLogger("whatomate", cfg)
 
 	sandboxMode := cfg.App.SandboxMode
 	sandboxWhatsmeowReconnect := sandboxMode && cfg.App.SandboxAllowWhatsmeowReconnect
@@ -437,7 +430,7 @@ func runServer(args []string) {
 	}
 	maxRequestBodySize := maxRequestBodySizeMB * 1024 * 1024
 	server := &fasthttp.Server{
-		Handler:            observedHandler(corsWrapper(g.Handler(), allowedOrigins), observabilityManager),
+		Handler:            observedHandler(corsWrapper(g.Handler(), allowedOrigins), observabilityManager, lo),
 		ReadTimeout:        time.Duration(cfg.Server.ReadTimeout) * time.Second,
 		ReadBufferSize:     32 * 1024,
 		WriteTimeout:       time.Duration(cfg.Server.WriteTimeout) * time.Second,
@@ -738,14 +731,7 @@ func runWorker(args []string) {
 		lo.Fatal("Invalid license configuration", "error", err)
 	}
 
-	// Set log level based on environment
-	if cfg.App.Environment == "production" {
-		lo = logf.New(logf.Opts{
-			Level:           logf.InfoLevel,
-			TimestampFormat: "2006-01-02 15:04:05",
-			DefaultFields:   []any{"app", "whatomate-worker"},
-		})
-	}
+	lo = configuredLogger("whatomate-worker", cfg)
 
 	// Connect to PostgreSQL
 	db, err := database.NewPostgres(&cfg.Database, cfg.App.Debug)
@@ -1928,11 +1914,50 @@ func withRateLimit(handler fastglue.FastRequestHandler, opts middleware.RateLimi
 	}
 }
 
-func observedHandler(handler fasthttp.RequestHandler, observabilityManager *observability.Manager) fasthttp.RequestHandler {
-	if observabilityManager == nil {
-		return handler
+func configuredLogger(appName string, cfg *config.Config) logf.Logger {
+	level := logf.DebugLevel
+	if strings.EqualFold(strings.TrimSpace(cfg.App.Environment), "production") && !cfg.App.Debug {
+		level = logf.InfoLevel
 	}
-	return observabilityManager.Wrap(handler)
+
+	return logf.New(logf.Opts{
+		Level:           level,
+		EnableCaller:    cfg.App.Debug,
+		TimestampFormat: "2006-01-02 15:04:05",
+		DefaultFields:   []any{"app", appName},
+	})
+}
+
+func observedHandler(handler fasthttp.RequestHandler, observabilityManager *observability.Manager, lo logf.Logger) fasthttp.RequestHandler {
+	observed := handler
+	if observabilityManager != nil {
+		observed = observabilityManager.Wrap(handler)
+	}
+
+	return func(ctx *fasthttp.RequestCtx) {
+		start := time.Now()
+		observed(ctx)
+
+		fields := []any{
+			"method", string(ctx.Method()),
+			"path", string(ctx.Path()),
+			"status", ctx.Response.StatusCode(),
+			"duration_ms", time.Since(start).Milliseconds(),
+			"remote_addr", ctx.RemoteAddr().String(),
+		}
+		if orgID, ok := ctx.UserValue(middleware.ContextKeyOrganizationID).(uuid.UUID); ok {
+			fields = append(fields, "org_id", orgID)
+		}
+		if userID, ok := ctx.UserValue(middleware.ContextKeyUserID).(uuid.UUID); ok {
+			fields = append(fields, "user_id", userID)
+		}
+
+		if ctx.Response.StatusCode() >= fasthttp.StatusInternalServerError {
+			lo.Error("HTTP request completed", fields...)
+			return
+		}
+		lo.Debug("HTTP request completed", fields...)
+	}
 }
 
 func outboundRateLimitUserKey(r *fastglue.Request, clientIP string) string {

@@ -1205,3 +1205,10 @@ Update: after restoring sandbox URL by switching to the existing working sandbox
   - Duplicate scan over changed handler diff reports no repeated added blocks.
 - Full `go test ./internal/handlers` still has unrelated pre-existing upload cleanup schema failures (`no such column: instance_id`).
 - Memory saved: `fix/handler-auth-boilerplate-dry-2026-06-14`.
+
+## 2026-06-14 - Debug logging visibility
+- Updated `cmd/whatomate/main.go` so production honors `app.debug = true` for debug-level logging instead of always forcing info level.
+- Added HTTP request completion debug logs through `observedHandler` with method, path, status, duration, remote address, and org/user IDs when available.
+- Avoided logging request bodies or query strings to reduce secret/token exposure risk.
+- Updated `cmd/whatomate/observability_routes_test.go` for the new observed handler signature.
+- Verification: `gofmt -w cmd/whatomate/main.go cmd/whatomate/observability_routes_test.go`; `go test -run '^$' ./cmd/whatomate`; `go test ./cmd/whatomate`; Serena diagnostics clean for edited Go files.
