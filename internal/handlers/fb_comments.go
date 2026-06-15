@@ -792,6 +792,12 @@ func (a *App) ReceiveFacebookCommentsWebhook(r *fastglue.Request) error {
 					"is_admin_reply", comment.IsAdminReply,
 				)
 			}
+			// Skip admin replies — these are the system's own auto-replies
+			// coming back through the webhook, and the user doesn't want
+			// to see them cluttering the Facebook Comments inbox.
+			if created && comment.IsAdminReply {
+				continue
+			}
 			if a.WSHub != nil {
 				wsType := websocket.TypeFacebookCommentCreated
 				if !created {
