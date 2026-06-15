@@ -361,11 +361,8 @@ func facebookCommentPageID(r *fastglue.Request) string {
 
 // getOrCreatePageCommentSettings returns page-level settings, creating defaults if not found.
 func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageID string) (*models.FacebookPageCommentSettings, error) {
-	// Use a clean session to avoid any scoped-DB interference with INSERT.
-	cleanDB := db.Session(&gorm.Session{NewDB: true})
 	var settings models.FacebookPageCommentSettings
-	// Explicitly scope query to the org — this replaces the tenant scope that NewDB strips.
-	err := cleanDB.Where("organization_id = ? AND page_id = ?", orgID, pageID).First(&settings).Error
+	err := db.Where("organization_id = ? AND page_id = ?", orgID, pageID).First(&settings).Error
 	if err == nil {
 		return &settings, nil
 	}
@@ -373,10 +370,19 @@ func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageI
 		return nil, err
 	}
 
-	// Look up which Facebook account owns this page so we can set AccountID.
+	// Resolve a valid Facebook account within this org to use as AccountID.
 	accountID := uuid.Nil
 	if acct, _, lookupErr := a.findFacebookAccountByPageID(pageID); lookupErr == nil && acct != nil {
 		accountID = acct.ID
+	}
+	if accountID == uuid.Nil {
+		// Fall back to the first active Facebook account in this org.
+		var firstAcct models.FacebookAccount
+		if err := db.Where("organization_id = ? AND method = ? AND status = ?",
+			orgID, models.FBAccountMethodOAuth, models.FBAccountStatusActive).
+			Order("created_at ASC").First(&firstAcct).Error; err == nil {
+			accountID = firstAcct.ID
+		}
 	}
 
 	settings = models.FacebookPageCommentSettings{
@@ -391,7 +397,7 @@ func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageI
 		OnlyAutoReplyUnanswered: true,
 		Metadata:                models.JSONB{},
 	}
-	if err := cleanDB.Create(&settings).Error; err != nil {
+	if err := db.Create(&settings).Error; err != nil {
 			return nil, err
 		}
 		return &settings, nil
