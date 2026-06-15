@@ -172,15 +172,7 @@ func TestNormalizeContactStatus_ClosedContact(t *testing.T) {
 // canManageChatLifecycle — DB-required integration tests
 // ---------------------------------------------------------------------------
 
-func setupLifecycleTestApp(t *testing.T) *App {
-	t.Helper()
-	db := testutil.SetupTestDB(t)
-	log := testutil.NopLogger()
-	return &App{
-		DB:  db,
-		Log: log,
-	}
-}
+
 
 func TestCanManageChatLifecycle_NilApp(t *testing.T) {
 	t.Parallel()
