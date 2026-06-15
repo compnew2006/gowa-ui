@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/handlers"
+	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -125,7 +126,28 @@ func setupHandlerTestDB(t *testing.T) *gorm.DB {
 			deleted_at DATETIME,
 			email TEXT,
 			name TEXT,
+			role_id TEXT,
 			is_super_admin BOOLEAN DEFAULT FALSE
+		)
+	`).Error)
+
+	require.NoError(t, db.Exec(`
+		CREATE TABLE permissions (
+			id TEXT PRIMARY KEY,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME,
+			resource TEXT NOT NULL,
+			action TEXT NOT NULL,
+			description TEXT
+		)
+	`).Error)
+
+	require.NoError(t, db.Exec(`
+		CREATE TABLE role_permissions (
+			custom_role_id TEXT NOT NULL,
+			permission_id TEXT NOT NULL,
+			PRIMARY KEY (custom_role_id, permission_id)
 		)
 	`).Error)
 
@@ -134,7 +156,10 @@ func setupHandlerTestDB(t *testing.T) *gorm.DB {
 
 func setupPlugin(t *testing.T, db *gorm.DB) *Plugin {
 	t.Helper()
-	app := &handlers.App{}
+	app := &handlers.App{
+		DB:  db,
+		Log: testutil.NopLogger(),
+	}
 	p := &Plugin{
 		app: app,
 		db:  db,
@@ -156,13 +181,18 @@ func seedOrg(t *testing.T, db *gorm.DB) uuid.UUID {
 
 func seedSuperAdmin(t *testing.T, db *gorm.DB, orgID, userID uuid.UUID) {
 	t.Helper()
+	roleID := uuid.New()
 	require.NoError(t, db.Exec(
-		`INSERT INTO users (id, created_at, updated_at, email, name, is_super_admin) VALUES (?, ?, ?, ?, ?, ?)`,
-		userID.String(), time.Now().UTC(), time.Now().UTC(), "admin@test.com", "Admin", true,
+		`INSERT INTO custom_roles (id, created_at, updated_at, organization_id, name) VALUES (?, ?, ?, ?, ?)`,
+		roleID.String(), time.Now().UTC(), time.Now().UTC(), orgID.String(), "admin",
 	).Error)
 	require.NoError(t, db.Exec(
-		`INSERT INTO user_organizations (id, created_at, updated_at, user_id, organization_id, is_super_admin) VALUES (?, ?, ?, ?, ?, ?)`,
-		uuid.New().String(), time.Now().UTC(), time.Now().UTC(), userID.String(), orgID.String(), true,
+		`INSERT INTO users (id, created_at, updated_at, email, name, is_super_admin, role_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		userID.String(), time.Now().UTC(), time.Now().UTC(), "admin@test.com", "Admin", true, roleID.String(),
+	).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO user_organizations (id, created_at, updated_at, user_id, organization_id, is_super_admin, role_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(), time.Now().UTC(), time.Now().UTC(), userID.String(), orgID.String(), true, roleID.String(),
 	).Error)
 }
 

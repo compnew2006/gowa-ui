@@ -43,6 +43,7 @@ func newUploadsCleanupTestApp(t *testing.T) (*App, string) {
 			updated_at DATETIME,
 			deleted_at DATETIME,
 			organization_id TEXT,
+			instance_id TEXT,
 			media_url TEXT,
 			media_deleted_at DATETIME,
 			media_asset_id TEXT,

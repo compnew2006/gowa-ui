@@ -86,3 +86,20 @@ ssh root@31.97.192.53 "whatomate-switch status"
 - **Blue rollback**: previous `f7513f9d`
 - **Backup**: `/root/whatomate_backups/20260614_235635_pre_f35294f8/`
 - **License**: active, key_id=deploy-20260416
+
+## Deployment: fd09ad62 — Filter admin auto-replies from FB Comments UI
+**Date:** 2026-06-15 04:18 UTC  
+**Commit:** `fd09ad62`
+
+### Change
+- Added `if created && comment.IsAdminReply { continue }` in the webhook handler
+- This skips auto-replies from the page admin (the system's own replies) so they don't appear in the Facebook Comments inbox
+- **Prod binary**: `whatomate.green.fd09ad62` (SHA256 `ecb28ef`)
+- **Sandbox binary**: `whatomate.sandbox.fd09ad62`
+- **Rollback**: `e445d2fb`
+
+### Status
+- ✅ Translations fixed
+- ✅ Per-page settings persist after refresh
+- ✅ Admin auto-replies hidden from UI
+- ❗ WhatsApp notification requires: production per-page config OR connected sandbox instance
