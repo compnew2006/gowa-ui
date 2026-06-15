@@ -1,35 +1,30 @@
 # Whatomate Multi-Instances Info
 
-## Latest Production Deploy - 2026-06-13 19:24 UTC
+## Latest Production Deploy - 2026-06-15 02:35 UTC
 - VPS: `31.97.192.53` | Domain: `ofuqalmadenah.com`
-- Deployed commit: `b11fe78f` (defer inbound media to worker + parallelize consumers)
-- Production green (ACTIVE): `/opt/whatomate/bin/whatomate.green.20260613_192120-b11fe78f`
-- SHA256: `08a3ddb133c695f675bfc6095ec0a4be23a9e564948158135b5b8f752cf0adb8`
-- Production blue (rollback): `/opt/whatomate/bin/whatomate.green.20260613_002015-1544b9cc` (previous known-good)
+- Deployed commit: `f7513f9d` (fix: log real client IP in observedHandler instead of TCP source)
+- Production green (ACTIVE): `/opt/whatomate/bin/whatomate.green-20260614_233550-f7513f9d`
+- SHA256: `e1bd749bcc560a14e2628ed97e419c0546ce1133fd04151f0c2a6769a0c4affa`
+- Production blue (rollback): `/opt/whatomate/bin/whatomate.green-20260614_143926-f7513f9d`
 - License: ✅ enabled=true, status=active, locked=false, kind=paid, tier=production, lifetime, key_id=deploy-20260416
-- Pre-deploy backup: `/root/whatomate_backups/20260613_192200_pre_20260613_192120-b11fe78f/`
+- Pre-deploy backup: `/root/whatomate_backups/pre_green_deploy_20260615_022658/`
 
 ### One-command switch (blue/green)
 ```bash
 ssh root@31.97.192.53 "whatomate-switch green"    # run new version
-ssh root@31.97.192.53 "whatomate-switch blue"     # rollback to 1544b9cc
+ssh root@31.97.192.53 "whatomate-switch blue"     # rollback
 ssh root@31.97.192.53 "whatomate-switch toggle"   # 1-command flip green<->blue
 ssh root@31.97.192.53 "whatomate-switch status"   # show current
 ```
 
-### Changes in this deploy (`b11fe78f`, 3 commits ahead of `1544b9cc`)
-- **P0a**: incoming media now deferred to async recovery worker instead of blocking the per-instance event goroutine -> fixes ~7,500 dropped msgs/day (buffer overflow)
-- **P0b**: inbound-media consumer fanned out to 4 parallel Redis Streams consumers (was 1) -> prevents the recovery queue becoming a bottleneck
-- FB comments: per-page settings, multi-text random replies, WhatsApp notification
-- 1 additive GORM migration (fb_comment model) applied via `-migrate` on startup
-- Switch script gained `toggle` (parity with sandbox). Config defaults: `defer_inbound_media=true`, `inbound_media_worker_concurrency=4`
+### Changes in this deploy (`f7513f9d`)
+- fix: log real client IP in observedHandler instead of TCP source
 
-### Verification (2026-06-13 19:25 UTC)
-- `whatomate.service` active, PID 3841386, version `green-20260613_192120-b11fe78f`
-- Migration + plugin migrations completed; `Inbound media worker started`
+### Verification (2026-06-15 02:35 UTC)
+- `whatomate.service` active, version `green-20260614_233550-f7513f9d`
+- Migration + plugin migrations completed
 - `GET /api/license/bootstrap` -> 200 active (browser + curl)
-- Frontend bundle = `index-BMFCoqIE.css` / `index-CmZe5DWy.js` (new)
-- `holol-wenjaz` tenant active + license active
+- License: enabled=true, status=active
 
 ### Known pre-existing issues (NOT caused by this deploy)
 - `whatomate@alarkan-almthalia` + `whatomate@matbaat-ruya`: **REMOVED 2026-06-13** (unit files + instance dirs deleted; crash-loop stopped, NRestarts=13575 each). Orphaned DBs `whatomate_alarkan_almthalia` + `whatomate_matbaat_ruya` remain — drop manually if not needed.

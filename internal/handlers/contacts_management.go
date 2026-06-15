@@ -88,6 +88,18 @@ func (a *App) canAssignContacts(userID, orgID uuid.UUID) bool {
 		a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
 }
 
+// canManageChatLifecycle checks whether a user holds any of the three permissions
+// required to claim, close, reopen, or change visibility of a chat:
+// ResourceChatAssign, ResourceContacts, or ResourceChat (all ActionWrite).
+func (a *App) canManageChatLifecycle(userID, orgID uuid.UUID) bool {
+	if a == nil {
+		return false
+	}
+	return a.HasPermission(userID, models.ResourceChatAssign, models.ActionWrite, orgID) ||
+		a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) ||
+		a.HasPermission(userID, models.ResourceChat, models.ActionWrite, orgID)
+}
+
 func (a *App) canUserSeeContactInstance(orgID, userID uuid.UUID, contact *models.Contact) (bool, error) {
 	if a == nil || contact == nil || contact.InstanceID == nil || *contact.InstanceID == uuid.Nil {
 		return true, nil
@@ -268,9 +280,7 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
-	if !a.HasPermission(userID, models.ResourceChatAssign, models.ActionWrite, orgID) &&
-		!a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) &&
-		!a.HasPermission(userID, models.ResourceChat, models.ActionWrite, orgID) {
+	if !a.canManageChatLifecycle(userID, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to claim chats", nil, "")
 	}
 
@@ -327,9 +337,7 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
-	if !a.HasPermission(userID, models.ResourceChatAssign, models.ActionWrite, orgID) &&
-		!a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) &&
-		!a.HasPermission(userID, models.ResourceChat, models.ActionWrite, orgID) {
+	if !a.canManageChatLifecycle(userID, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to close chats", nil, "")
 	}
 
@@ -360,7 +368,7 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 
 	if err := requestDB.Session(&gorm.Session{}).Model(&models.Contact{}).
 		Where("id = ?", contact.ID).
-		Updates(closeChatUpdates(userID, contact.AssignedUserID)).Error; err != nil {
+		Updates(closeChatUpdates(userID, contact.AssignedUserID, false)).Error; err != nil {
 		a.Log.Error("Failed to close chat", "error", err, "chat_id", contactID, "user_id", userID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chat", nil, "")
 	}
@@ -384,9 +392,7 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
-	if !a.HasPermission(userID, models.ResourceChatAssign, models.ActionWrite, orgID) &&
-		!a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) &&
-		!a.HasPermission(userID, models.ResourceChat, models.ActionWrite, orgID) {
+	if !a.canManageChatLifecycle(userID, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to reopen chats", nil, "")
 	}
 
@@ -436,9 +442,7 @@ func (a *App) SetChatPublic(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 
-	if !a.HasPermission(userID, models.ResourceChatAssign, models.ActionWrite, orgID) &&
-		!a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID) &&
-		!a.HasPermission(userID, models.ResourceChat, models.ActionWrite, orgID) {
+	if !a.canManageChatLifecycle(userID, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have permission to change chat visibility", nil, "")
 	}
 
@@ -1001,7 +1005,7 @@ func (a *App) SoftDeleteContactForUser(r *fastglue.Request) error {
 
 	if normalizeContactStatus(contact) != models.ChatStatusClosed {
 		closedAt := time.Now().UTC()
-		if err := requestDB.Model(contact).Updates(closeChatUpdatesForSoftDelete(userID, closedAt)).Error; err != nil {
+		if err := requestDB.Model(contact).Updates(closeChatUpdates(userID, nil, true)).Error; err != nil {
 			a.Log.Error("Failed to close chat on soft delete", "error", err, "contact_id", contact.ID, "user_id", userID)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chat", nil, "")
 		}

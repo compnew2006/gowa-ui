@@ -217,10 +217,14 @@ func chatAssignmentUpdates(assignee *uuid.UUID) map[string]any {
 	}
 }
 
-func closeChatUpdates(closedByUserID uuid.UUID, currentAssignee *uuid.UUID) map[string]any {
+func closeChatUpdates(closedByUserID uuid.UUID, currentAssignee *uuid.UUID, clearAssignee bool) map[string]any {
 	closedAt := time.Now().UTC()
-	assignee := currentAssignee
-	if assignee == nil {
+	var assignee *uuid.UUID
+	if clearAssignee {
+		assignee = nil
+	} else if currentAssignee != nil {
+		assignee = currentAssignee
+	} else {
 		assignee = &closedByUserID
 	}
 
@@ -232,15 +236,10 @@ func closeChatUpdates(closedByUserID uuid.UUID, currentAssignee *uuid.UUID) map[
 	}
 }
 
-func closeChatUpdatesForSoftDelete(closedByUserID uuid.UUID, closedAt time.Time) map[string]any {
-	return map[string]any{
-		"status":            models.ChatStatusClosed,
-		"assigned_user_id":  nil,
-		"closed_at":         &closedAt,
-		"closed_by_user_id": &closedByUserID,
-	}
-}
 
+
+// reopenChatUpdates returns the pending-state assignments used both for reopening
+// closed chats and for clearing assignment (unclaim). Delegates to chatAssignmentUpdates(nil).
 func reopenChatUpdates() map[string]any {
 	return chatAssignmentUpdates(nil)
 }

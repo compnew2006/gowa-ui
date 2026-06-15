@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    @page { size: 794px 1123px; margin: 0; }
+    :root {
+      --c-bg: #f2f0ee;
+      --c-accent: #1d7794;
+      --c-accent-light: #1d779440;
+      --c-text: #1b1a18;
+      --c-muted: #79756e;
+    }
+    html, body { margin: 0; padding: 0; width: 794px; height: 1123px; background: var(--c-bg); color: var(--c-text); font-family: 'Inter', sans-serif; }
+    @media screen {
+      html { height: auto; display: flex; justify-content: center; min-height: 100vh; background: #e0ddd9; }
+      body { transform-origin: top center; scale: min(1, calc(100vw / 794), calc(100vh / 1123)); margin: 0 auto; box-shadow: 0 0 60px rgba(0,0,0,0.2); }
+    }
+    .cover { width: 794px; height: 1123px; position: relative; overflow: hidden; }
+
+    /* Layer 1 - Background */
+    .bg-grid {
+      position: absolute; inset: 0; z-index: 1; overflow: hidden;
+    }
+    .bg-grid-line {
+      position: absolute; background: var(--c-accent); opacity: 0.03;
+    }
+    .bg-grid-line.h { width: 100%; height: 0.5px; }
+    .bg-grid-line.v { width: 0.5px; height: 100%; }
+
+    /* Layer 2 - Structure */
+    .anchor-line {
+      position: absolute;
+      left: 95px; top: 112px; bottom: 112px;
+      width: 6px;
+      background: var(--c-accent);
+      z-index: 2;
+    }
+    .meta-separator {
+      position: absolute;
+      left: 125px; top: 840px;
+      width: 280px; height: 1px;
+      background: var(--c-accent); opacity: 0.4;
+      z-index: 2;
+    }
+
+    /* Layer 3 - Content */
+    .content {
+      position: absolute; inset: 0; z-index: 3;
+    }
+    .kicker {
+      position: absolute;
+      left: 125px; top: 170px;
+      font-size: 11pt; font-weight: 500; letter-spacing: 3px;
+      color: var(--c-muted); text-transform: uppercase;
+      opacity: 0.6;
+    }
+    .title {
+      position: absolute;
+      left: 125px; top: 320px;
+      font-size: 42pt; font-weight: 700; line-height: 1.15;
+      color: var(--c-text);
+      max-width: 540px;
+      font-family: 'Playfair Display', serif;
+    }
+    .title .line { display: block; }
+    .summary {
+      position: absolute;
+      left: 125px; top: 540px;
+      font-size: 12pt; font-weight: 400; line-height: 1.7;
+      color: var(--c-muted);
+      max-width: 440px;
+      opacity: 0.85;
+    }
+    .meta {
+      position: absolute;
+      left: 125px; top: 860px;
+      font-size: 11pt; font-weight: 400; line-height: 1.8;
+      color: var(--c-muted);
+    }
+    .meta .label { color: var(--c-text); font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <!-- Layer 1: Background grid -->
+    <div class="bg-grid">
+      <!-- Horizontal lines every 50pt -->
+      <div class="bg-grid-line h" style="top:50px"></div>
+      <div class="bg-grid-line h" style="top:100px"></div>
+      <div class="bg-grid-line h" style="top:150px"></div>
+      <div class="bg-grid-line h" style="top:200px"></div>
+      <div class="bg-grid-line h" style="top:250px"></div>
+      <div class="bg-grid-line h" style="top:300px"></div>
+      <div class="bg-grid-line h" style="top:350px"></div>
+      <div class="bg-grid-line h" style="top:400px"></div>
+      <div class="bg-grid-line h" style="top:450px"></div>
+      <div class="bg-grid-line h" style="top:500px"></div>
+      <div class="bg-grid-line h" style="top:550px"></div>
+      <div class="bg-grid-line h" style="top:600px"></div>
+      <div class="bg-grid-line h" style="top:650px"></div>
+      <div class="bg-grid-line h" style="top:700px"></div>
+      <div class="bg-grid-line h" style="top:750px"></div>
+      <div class="bg-grid-line h" style="top:800px"></div>
+      <div class="bg-grid-line h" style="top:850px"></div>
+      <div class="bg-grid-line h" style="top:900px"></div>
+      <div class="bg-grid-line h" style="top:950px"></div>
+      <div class="bg-grid-line h" style="top:1000px"></div>
+      <div class="bg-grid-line h" style="top:1050px"></div>
+      <!-- Vertical lines every 50pt -->
+      <div class="bg-grid-line v" style="left:50px"></div>
+      <div class="bg-grid-line v" style="left:100px"></div>
+      <div class="bg-grid-line v" style="left:150px"></div>
+      <div class="bg-grid-line v" style="left:200px"></div>
+      <div class="bg-grid-line v" style="left:250px"></div>
+      <div class="bg-grid-line v" style="left:300px"></div>
+      <div class="bg-grid-line v" style="left:350px"></div>
+      <div class="bg-grid-line v" style="left:400px"></div>
+      <div class="bg-grid-line v" style="left:450px"></div>
+      <div class="bg-grid-line v" style="left:500px"></div>
+      <div class="bg-grid-line v" style="left:550px"></div>
+      <div class="bg-grid-line v" style="left:600px"></div>
+      <div class="bg-grid-line v" style="left:650px"></div>
+      <div class="bg-grid-line v" style="left:700px"></div>
+      <div class="bg-grid-line v" style="left:750px"></div>
+    </div>
+
+    <!-- Layer 2: Structure -->
+    <div class="anchor-line"></div>
+    <div class="meta-separator"></div>
+
+    <!-- Layer 3: Content -->
+    <div class="content">
+      <div class="kicker">Technical Review &amp; Enhancement Plan</div>
+      <div class="title">
+        <span class="line">Facebook Comments</span>
+        <span class="line">Workflow</span>
+        <span class="line">Enhancement</span>
+      </div>
+      <div class="summary">
+        A comprehensive analysis of the /facebook/comments route in Whatomate,
+        identifying 15 logic gaps and proposing 8 workflow enhancements across
+        tenancy, reliability, async processing, and frontend consistency.
+      </div>
+      <div class="meta">
+        <span class="label">Project:</span> Whatomate<br>
+        <span class="label">Route:</span> /facebook/comments<br>
+        <span class="label">Date:</span> June 2026<br>
+        <span class="label">Author:</span> Z.ai Code Review Agent
+      </div>
+    </div>
+  </div>
+</body>
+</html>

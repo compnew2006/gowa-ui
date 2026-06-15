@@ -51,6 +51,7 @@ go.work
 # IDE
 .idea/
 .vscode/
+.zed/
 *.swp
 *.swo
 
