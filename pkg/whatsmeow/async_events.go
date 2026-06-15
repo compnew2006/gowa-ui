@@ -9,7 +9,7 @@ import (
 	"github.com/zerodha/logf"
 )
 
-const defaultEventBufferSize = 4096
+const defaultEventBufferSize = 32768
 
 type asyncEventHandler func(evt interface{}, instanceID, orgID uuid.UUID)
 

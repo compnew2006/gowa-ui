@@ -45,6 +45,7 @@ import { normalizeRenderableAvatarURL } from "@/components/ui/avatar/avatar-url"
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 import {
   Tooltip,
   TooltipContent,
@@ -637,9 +638,11 @@ const activeProfilePhotoURL = computed(() =>
 );
 const mediaCaption = ref("");
 const isUploadingMedia = ref(false);
-const mediaUploadProgress = ref<{ current: number; total: number } | null>(
-  null,
-);
+const mediaUploadProgress = ref<{
+  current: number;
+  total: number;
+  percent: number;
+} | null>(null);
 const isPreparingBatchPrint = ref(false);
 const isExportingChat = ref(false);
 
@@ -4203,6 +4206,10 @@ async function sendMediaMessage() {
       mediaUploadProgress.value = {
         current: index + 1,
         total: uploads.length,
+        percent:
+          uploads.length > 1
+            ? Math.round((index / uploads.length) * 100)
+            : 0,
       };
 
       try {
@@ -4213,6 +4220,22 @@ async function sendMediaMessage() {
           caption,
           instance_id: outboundInstanceID,
           whatsapp_account: accountFilter,
+          onUploadProgress: (event) => {
+            const filePercent = event.total
+              ? Math.round((event.loaded / event.total) * 100)
+              : 0;
+            const overallPercent =
+              uploads.length > 1
+                ? Math.round(
+                    ((index + filePercent / 100) / uploads.length) * 100,
+                  )
+                : filePercent;
+            mediaUploadProgress.value = {
+              current: index + 1,
+              total: uploads.length,
+              percent: Math.min(100, overallPercent),
+            };
+          },
         });
         const result = response.data.data || response.data;
         successfulUploadIDs.add(upload.id);
@@ -6784,6 +6807,21 @@ async function sendMediaMessage() {
               class="min-h-[60px] max-h-[100px] resize-none"
               :rows="2"
             />
+          </div>
+
+          <div
+            v-if="isUploadingMedia && mediaUploadProgress"
+            class="mb-3 flex items-center gap-2"
+          >
+            <Progress
+              :model-value="mediaUploadProgress.percent"
+              class="h-2 flex-1"
+            />
+            <span
+              class="w-10 text-right text-xs tabular-nums text-muted-foreground"
+            >
+              {{ mediaUploadProgress.percent }}%
+            </span>
           </div>
 
           <div class="flex justify-end gap-2">

@@ -466,6 +466,10 @@ export const messagesService = {
     caption?: string;
     instance_id?: string;
     whatsapp_account?: string;
+    onUploadProgress?: (progressEvent: {
+      loaded: number;
+      total?: number;
+    }) => void;
   }) => {
     const formData = new FormData();
     formData.append("file", data.file);
@@ -482,6 +486,8 @@ export const messagesService = {
     }
     return api.post("/messages/media", formData, {
       headers: { "Content-Type": "multipart/form-data" },
+      timeout: 300000,
+      onUploadProgress: data.onUploadProgress,
     });
   },
   sendReaction: (contactId: string, messageId: string, emoji: string) =>

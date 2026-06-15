@@ -378,7 +378,7 @@ func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageI
 	if accountID == uuid.Nil {
 		// Fall back to the first active Facebook account in this org.
 		var firstAcct models.FacebookAccount
-		if err := db.Where("organization_id = ? AND method = ? AND status = ?",
+		if err := a.DB.Where("organization_id = ? AND method = ? AND status = ?",
 			orgID, models.FBAccountMethodOAuth, models.FBAccountStatusActive).
 			Order("created_at ASC").First(&firstAcct).Error; err == nil {
 			accountID = firstAcct.ID
@@ -434,6 +434,19 @@ func (a *App) maybeSendWhatsAppCommentNotification(orgID uuid.UUID, pageSettings
 	commentLink := comment.Permalink
 	if commentLink == "" {
 		commentLink = comment.PostPermalink
+	}
+	if commentLink == "" {
+		// Construct the Facebook comment URL from available IDs.
+		// ExternalID format: {post_id}_{comment_id}
+		parts := strings.SplitN(comment.ExternalID, "_", 2)
+		if len(parts) == 2 {
+			pageID := strings.TrimSpace(comment.PageID)
+			postID := strings.TrimSpace(parts[0])
+			commentID := strings.TrimSpace(parts[1])
+			if pageID != "" && postID != "" && commentID != "" {
+				commentLink = fmt.Sprintf("https://facebook.com/%s/posts/%s?comment_id=%s", pageID, postID, commentID)
+			}
+		}
 	}
 	var msg strings.Builder
 	msg.WriteString("*New Facebook Comment*\n\n")
