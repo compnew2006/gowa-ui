@@ -394,6 +394,9 @@ func runServer(args []string) {
 	allowedOrigins := middleware.ParseAllowedOrigins(cfg.Server.AllowedOrigins)
 	observabilityManager := observability.NewManager(cfg.Observability, db, rdb)
 
+	// Wire WhatsMeow priority-queue metrics into the /metrics endpoint.
+	observabilityManager.SetWhatsmeowMetricsProvider(whatsmeowMetricsProvider(whatsmeowManager))
+
 	// Setup middleware (CORS is handled by corsWrapper at fasthttp level)
 	g.Before(middleware.SecurityHeaders())
 	g.Before(middleware.RequestLogger(lo))
@@ -691,6 +694,45 @@ func runServer(args []string) {
 	lo.Info("Server stopped")
 
 	os.Exit(0)
+}
+
+func whatsmeowMetricsProvider(wm *whatsmeow.ConnectionManager) func(buf *strings.Builder) {
+	if wm == nil {
+		return nil
+	}
+	return func(buf *strings.Builder) {
+		fmt.Fprintln(buf, "# HELP whatsmeow_queue_depth WhatsMeow async event queue depth.")
+		fmt.Fprintln(buf, "# TYPE whatsmeow_queue_depth gauge")
+		fmt.Fprintln(buf, "# HELP whatsmeow_dropped_total WhatsMeow async events dropped.")
+		fmt.Fprintln(buf, "# TYPE whatsmeow_dropped_total counter")
+		fmt.Fprintln(buf, "# HELP whatsmeow_consumer_lag_seconds WhatsMeow async event consumer lag in seconds.")
+		fmt.Fprintln(buf, "# TYPE whatsmeow_consumer_lag_seconds gauge")
+		fmt.Fprintln(buf, "# HELP whatsmeow_circuit_open WhatsMeow async event circuit breaker state.")
+		fmt.Fprintln(buf, "# TYPE whatsmeow_circuit_open gauge")
+
+		for _, instanceID := range wm.ActiveInstanceIDs() {
+			snap := wm.GetPriorityMetricsSnapshot(instanceID)
+
+			writeMetricSample(buf, "whatsmeow_queue_depth",
+				fmt.Sprintf(`{instance="%s",type="msg"} %d`, snap.InstanceID, snap.MsgQueueDepth))
+			writeMetricSample(buf, "whatsmeow_queue_depth",
+				fmt.Sprintf(`{instance="%s",type="low"} %d`, snap.InstanceID, snap.LowQueueDepth))
+			writeMetricSample(buf, "whatsmeow_dropped_total",
+				fmt.Sprintf(`{instance="%s",reason="overflow"} %d`, snap.InstanceID, snap.EventsDropped))
+			writeMetricSample(buf, "whatsmeow_consumer_lag_seconds",
+				fmt.Sprintf(`{instance="%s",type="msg"} %.6f`, snap.InstanceID, snap.MsgConsumerLag))
+			writeMetricSample(buf, "whatsmeow_consumer_lag_seconds",
+				fmt.Sprintf(`{instance="%s",type="low"} %.6f`, snap.InstanceID, snap.LowConsumerLag))
+			if snap.CircuitBreakerOpen {
+				writeMetricSample(buf, "whatsmeow_circuit_open",
+					fmt.Sprintf(`{instance="%s"} 1`, snap.InstanceID))
+			}
+		}
+	}
+}
+
+func writeMetricSample(buf *strings.Builder, name, value string) {
+	fmt.Fprintf(buf, "%s%s\n", name, value)
 }
 
 // ============================================================================

@@ -2,12 +2,15 @@ package main
 
 import (
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/observability"
+	"github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/compnew2006/whatomate/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -74,6 +77,37 @@ func TestSetupRoutes_MetricsRequireTokenWhenConfigured(t *testing.T) {
 	handler(authorized.RequestCtx)
 	require.Equal(t, fasthttp.StatusOK, authorized.RequestCtx.Response.StatusCode())
 	require.Contains(t, string(authorized.RequestCtx.Response.Body()), "# HELP whatomate_uptime_seconds")
+}
+
+func TestWhatsmeowMetricsProviderWritesMetadataOnce(t *testing.T) {
+	t.Parallel()
+
+	manager := whatsmeow.NewConnectionManager(nil, nil, testutil.NopLogger(), &config.WhatsmeowConfig{}, nil, t.TempDir())
+	defer manager.StopEventDispatcher()
+
+	firstInstanceID := uuid.New()
+	secondInstanceID := uuid.New()
+	manager.MarkEventDropped(firstInstanceID)
+	manager.MarkEventDropped(secondInstanceID)
+
+	provider := whatsmeowMetricsProvider(manager)
+	require.NotNil(t, provider)
+
+	var buf strings.Builder
+	provider(&buf)
+	body := buf.String()
+
+	require.Equal(t, 1, strings.Count(body, "# HELP whatsmeow_queue_depth "))
+	require.Equal(t, 1, strings.Count(body, "# TYPE whatsmeow_queue_depth "))
+	require.Equal(t, 1, strings.Count(body, "# HELP whatsmeow_dropped_total "))
+	require.Equal(t, 1, strings.Count(body, "# TYPE whatsmeow_dropped_total "))
+	require.Equal(t, 1, strings.Count(body, "# HELP whatsmeow_consumer_lag_seconds "))
+	require.Equal(t, 1, strings.Count(body, "# TYPE whatsmeow_consumer_lag_seconds "))
+	require.Equal(t, 1, strings.Count(body, "# HELP whatsmeow_circuit_open "))
+	require.Equal(t, 1, strings.Count(body, "# TYPE whatsmeow_circuit_open "))
+
+	require.Contains(t, body, `whatsmeow_queue_depth{instance="`+firstInstanceID.String()+`",type="msg"}`)
+	require.Contains(t, body, `whatsmeow_queue_depth{instance="`+secondInstanceID.String()+`",type="msg"}`)
 }
 
 func TestSetupRoutes_PprofAllowsLoopbackWhenEnabled(t *testing.T) {

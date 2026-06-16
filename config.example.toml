@@ -110,6 +110,24 @@ typing_max_delay_ms = 3000
 typing_char_delay_ms = 35
 typing_cooldown_ms = 4000
 
+# ── Priority Event Ingestion (P0-6) ──
+# When enabled, replaces the single per-instance event queue with chat-sharded
+# high-priority lanes (Message / Receipt / Call events) and a bounded low-priority
+# lane (HistorySync, Contact, AppState, etc.). The low-priority lane drops newest
+# when full, so floods cannot starve incoming messages.
+#
+# priority_queues_enabled = false        # Enable priority lane routing. Default false (backward-compatible).
+# event_msg_queue_size = 2048            # Per-shard high-priority channel capacity.
+# event_low_queue_size = 512             # Low-priority channel capacity.
+# event_msg_shards = 4                   # Number of high-priority shards per instance. Changing this
+#                                        #   changes chat-to-shard assignment; requires full service restart.
+# event_low_workers = 2                  # Goroutines draining the low-priority channel.
+# event_high_enqueue_timeout_ms = 10     # Max ms to retry a high-priority enqueue before critical_overflow.
+# event_shutdown_drain_timeout_seconds = 5 # Max seconds to drain queued events during graceful shutdown.
+# event_circuit_breaker_rate_per_minute = 60     # Low-priority events/min threshold per instance.
+# event_circuit_breaker_consecutive_windows = 2  # Consecutive windows above threshold to trip the breaker.
+# event_circuit_breaker_cooldown_seconds = 300   # Seconds to suppress HistorySync after breaker trips.
+
 [observability]
 enable_metrics = false  # Exposes GET /metrics. Disabled by default.
 enable_pprof = false    # Exposes guarded /debug/pprof/* endpoints. Disabled by default.

@@ -46,6 +46,9 @@ type Manager struct {
 	mu            sync.Mutex
 	requestCounts map[requestKey]uint64
 	durations     map[string]*histogramSnapshot
+
+	// whatsmeowSMProvider is called during /metrics rendering to append whatsmeow-specific metrics.
+	whatsmeowSMProvider func(buf *strings.Builder)
 }
 
 func NewManager(cfg config.ObservabilityConfig, db *gorm.DB, redis *redis.Client) *Manager {
@@ -445,7 +448,20 @@ func (m *Manager) renderPrometheus() []byte {
 		fmt.Fprintf(&builder, "whatomate_redis_pool_stale_connections_total %d\n", stats.StaleConns)
 	}
 
+	if m.whatsmeowSMProvider != nil {
+		m.whatsmeowSMProvider(&builder)
+	}
+
 	return []byte(builder.String())
+}
+
+// SetWhatsmeowMetricsProvider registers a callback that appends whatsmeow-specific
+// metrics to the /metrics output. Pass nil to clear.
+func (m *Manager) SetWhatsmeowMetricsProvider(provider func(buf *strings.Builder)) {
+	if m == nil {
+		return
+	}
+	m.whatsmeowSMProvider = provider
 }
 
 func writeHelp(builder *strings.Builder, metricName string, help string) {

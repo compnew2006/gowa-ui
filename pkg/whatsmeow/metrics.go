@@ -148,3 +148,44 @@ func (cm *ConnectionManager) GetInstanceHealth(instanceID uuid.UUID) InstanceHea
 		QueueDepth:            metrics.queueDepth.Load(),
 	}
 }
+
+// PriorityMetricsSnapshot holds per-instance priority-queue observability data.
+type PriorityMetricsSnapshot struct {
+	InstanceID         string  `json:"instance_id"`
+	MsgQueueDepth      int64   `json:"msg_queue_depth"`
+	LowQueueDepth      int64   `json:"low_queue_depth"`
+	EventsDropped      uint64  `json:"events_dropped_today"`
+	MsgConsumerLag     float64 `json:"msg_consumer_lag_seconds"`
+	LowConsumerLag     float64 `json:"low_consumer_lag_seconds"`
+	CircuitBreakerOpen bool    `json:"circuit_breaker_open"`
+}
+
+// GetPriorityMetricsSnapshot returns priority-queue metrics for an instance.
+func (cm *ConnectionManager) GetPriorityMetricsSnapshot(instanceID uuid.UUID) PriorityMetricsSnapshot {
+	s := PriorityMetricsSnapshot{InstanceID: instanceID.String()}
+	metrics := cm.getOrCreateMetrics(instanceID)
+	s.EventsDropped = metrics.eventsDropped.Load()
+
+	if cm.eventDispatcher != nil {
+		msgDepth, lowDepth := cm.eventDispatcher.PriorityQueueDepth(instanceID)
+		s.MsgQueueDepth = msgDepth
+		s.LowQueueDepth = lowDepth
+		msgLag, lowLag := cm.eventDispatcher.PriorityConsumerLag(instanceID)
+		s.MsgConsumerLag = msgLag
+		s.LowConsumerLag = lowLag
+		s.CircuitBreakerOpen = cm.eventDispatcher.IsCircuitBreakerOpen(instanceID)
+	}
+	return s
+}
+
+// ActiveInstanceIDs returns the IDs of all instances currently tracked in the metrics map.
+func (cm *ConnectionManager) ActiveInstanceIDs() []uuid.UUID {
+	var ids []uuid.UUID
+	cm.metrics.Range(func(key, _ interface{}) bool {
+		if id, ok := key.(uuid.UUID); ok {
+			ids = append(ids, id)
+		}
+		return true
+	})
+	return ids
+}

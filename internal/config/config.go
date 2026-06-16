@@ -133,6 +133,18 @@ type WhatsmeowConfig struct {
 	TypingMaxDelayMs                 int    `koanf:"typing_max_delay_ms"`
 	TypingCharDelayMs                int    `koanf:"typing_char_delay_ms"`
 	TypingCooldownMs                 int    `koanf:"typing_cooldown_ms"`
+
+	// Priority event queue fields. Only used when PriorityQueuesEnabled=true.
+	PriorityQueuesEnabled          *bool `koanf:"priority_queues_enabled"`
+	EventMsgQueueSize              int   `koanf:"event_msg_queue_size"`
+	EventLowQueueSize              int   `koanf:"event_low_queue_size"`
+	EventMsgShards                 int   `koanf:"event_msg_shards"`
+	EventLowWorkers                int   `koanf:"event_low_workers"`
+	EventHighEnqueueTimeoutMs      int   `koanf:"event_high_enqueue_timeout_ms"`
+	EventShutdownDrainTimeoutSeconds int `koanf:"event_shutdown_drain_timeout_seconds"`
+	EventCircuitBreakerRatePerMinute       int `koanf:"event_circuit_breaker_rate_per_minute"`
+	EventCircuitBreakerConsecutiveWindows int `koanf:"event_circuit_breaker_consecutive_windows"`
+	EventCircuitBreakerCooldownSeconds    int `koanf:"event_circuit_breaker_cooldown_seconds"`
 }
 
 type ObservabilityConfig struct {
@@ -399,6 +411,34 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Whatsmeow.TypingCooldownMs == 0 {
 		cfg.Whatsmeow.TypingCooldownMs = 4000
+	}
+	// Priority event queue defaults
+	if cfg.Whatsmeow.EventMsgQueueSize == 0 {
+		cfg.Whatsmeow.EventMsgQueueSize = 2048
+	}
+	if cfg.Whatsmeow.EventLowQueueSize == 0 {
+		cfg.Whatsmeow.EventLowQueueSize = 512
+	}
+	if cfg.Whatsmeow.EventMsgShards == 0 {
+		cfg.Whatsmeow.EventMsgShards = 4
+	}
+	if cfg.Whatsmeow.EventLowWorkers == 0 {
+		cfg.Whatsmeow.EventLowWorkers = 2
+	}
+	if cfg.Whatsmeow.EventHighEnqueueTimeoutMs == 0 {
+		cfg.Whatsmeow.EventHighEnqueueTimeoutMs = 10
+	}
+	if cfg.Whatsmeow.EventShutdownDrainTimeoutSeconds == 0 {
+		cfg.Whatsmeow.EventShutdownDrainTimeoutSeconds = 5
+	}
+	if cfg.Whatsmeow.EventCircuitBreakerRatePerMinute == 0 {
+		cfg.Whatsmeow.EventCircuitBreakerRatePerMinute = 60
+	}
+	if cfg.Whatsmeow.EventCircuitBreakerConsecutiveWindows == 0 {
+		cfg.Whatsmeow.EventCircuitBreakerConsecutiveWindows = 2
+	}
+	if cfg.Whatsmeow.EventCircuitBreakerCooldownSeconds == 0 {
+		cfg.Whatsmeow.EventCircuitBreakerCooldownSeconds = 300
 	}
 	if cfg.Storage.Type == "" {
 		cfg.Storage.Type = "local"

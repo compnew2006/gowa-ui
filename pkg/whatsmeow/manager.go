@@ -134,6 +134,7 @@ func NewConnectionManager(db *gorm.DB, store *sqlstore.Container, logger logf.Lo
 		typingIndicator:  newTypingIndicatorPlanner(cfg),
 	}
 	cm.eventDispatcher = newAsyncEventDispatcher(
+		buildPriorityQueueConfig(cfg),
 		whatsmeowEventBufferSize(cfg),
 		logger,
 		cm.handleEvent,
@@ -805,6 +806,28 @@ func whatsmeowEventBufferSize(cfg *config.WhatsmeowConfig) int {
 		return defaultEventBufferSize
 	}
 	return cfg.EventBufferSize
+}
+
+func buildPriorityQueueConfig(cfg *config.WhatsmeowConfig) priorityQueueConfig {
+	if cfg == nil {
+		return priorityQueueConfig{}
+	}
+	enabled := false
+	if cfg.PriorityQueuesEnabled != nil {
+		enabled = *cfg.PriorityQueuesEnabled
+	}
+	return priorityQueueConfig{
+		priorityEnabled: enabled,
+		msgQueueSize:    cfg.EventMsgQueueSize,
+		lowQueueSize:    cfg.EventLowQueueSize,
+		msgShards:       cfg.EventMsgShards,
+		lowWorkers:      cfg.EventLowWorkers,
+		highTimeoutMs:   cfg.EventHighEnqueueTimeoutMs,
+		drainTimeoutSec: cfg.EventShutdownDrainTimeoutSeconds,
+		cbRate:          cfg.EventCircuitBreakerRatePerMinute,
+		cbWindows:       cfg.EventCircuitBreakerConsecutiveWindows,
+		cbCooldownSec:   cfg.EventCircuitBreakerCooldownSeconds,
+	}
 }
 
 func whatsmeowEventDispatchEnabled(cfg *config.WhatsmeowConfig) bool {
