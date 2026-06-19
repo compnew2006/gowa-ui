@@ -1,400 +1,399 @@
 # Whatomate API Endpoints
 
-This document lists all available API endpoints for the Whatomate platform.
-
-## Base URL
-
-The API base URL is typically `http://localhost:8080` (or as configured in `config.toml`).
-
-## Authentication
-
-Most endpoints require authentication. You can use either a JWT token in the `Authorization: Bearer <token>` header or an API key in the `X-API-Key: <key>` header.
+> **Updated:** 2026-06-18 — 699 routes documented  
+> **Base URL:** `http://localhost:8080` (or as configured in `config.toml`)  
+> **Auth:** JWT via `Authorization: Bearer <token>` or API Key via `X-API-Key: <key>`
 
 ---
 
 ## Health & System
 
-| Method | Endpoint                  | Description                                              |
-| ------ | ------------------------- | -------------------------------------------------------- |
-| GET    | `/health`                 | Basic health check                                       |
-| GET    | `/ready`                  | Readiness check                                          |
-| GET    | `/metrics`                | Get Prometheus metrics (auth via observability token)    |
-| GET    | `/ws`                     | WebSocket connection (auth via message-based flow)       |
-| GET    | `/api/config`             | Get application configuration (provider & feature flags) |
-| GET    | `/api/license/bootstrap`  | Get license bootstrap information                        |
-| POST   | `/api/license/activate`   | Activate the platform license                            |
-| GET    | `/debug/pprof/*`          | Go performance profiling (requires EnablePprof in config) |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Basic liveness check |
+| GET | `/ready` | Readiness check (includes DB ping) |
 
-## Authentication & SSO
+---
 
-| Method | Endpoint                            | Description                                            |
-| ------ | ----------------------------------- | ------------------------------------------------------ |
-| POST   | `/api/auth/login`                   | User login                                             |
-| POST   | `/api/auth/register`                | User registration                                      |
-| POST   | `/api/auth/refresh`                 | Refresh JWT token                                      |
-| POST   | `/api/auth/logout`                  | User logout                                            |
-| POST   | `/api/auth/switch-org`              | Switch active organization                             |
-| GET    | `/api/auth/ws-token`                | Get a short-lived token for WebSocket authentication   |
-| POST   | `/api/auth/register/invite`         | Generate a signed registration invite (Org admin only) |
-| GET    | `/api/auth/sso/providers`           | List available SSO providers                           |
-| GET    | `/api/auth/sso/{provider}/init`     | Initialize SSO flow                                    |
-| GET    | `/api/auth/sso/{provider}/callback` | SSO callback handler                                   |
+## Authentication
 
-## Current User
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/login` | Email + password login → JWT + refresh token |
+| POST | `/api/auth/register` | Register new user via invite |
+| POST | `/api/auth/register-invite` | Create registration invite (admin) |
+| POST | `/api/auth/refresh` | Rotate JWT using refresh token |
+| POST | `/api/auth/logout` | Invalidate tokens |
+| POST | `/api/auth/switch-org` | Switch active organization |
+| GET | `/api/auth/me` | Get current user profile |
+| PUT | `/api/auth/me/settings` | Update user preferences |
+| PUT | `/api/auth/me/password` | Change password |
+| PUT | `/api/auth/me/availability` | Toggle agent availability |
+| POST | `/api/auth/me/chat-background` | Upload chat background image |
+| GET | `/api/auth/me/chat-background` | Get chat background |
+| GET | `/api/auth/me/organizations` | List user's organizations |
+| GET | `/api/auth/ws-token` | Generate WebSocket auth token |
 
-| Method | Endpoint                  | Description                            |
-| ------ | ------------------------- | -------------------------------------- |
-| GET    | `/api/me`                 | Get current user profile               |
-| GET    | `/api/auth/me`            | Legacy alias for `/api/me`             |
-| PUT    | `/api/me/settings`        | Update user settings                   |
-| GET    | `/api/me/organizations`   | List organizations the user belongs to |
-| PUT    | `/api/me/password`        | Change user password                   |
-| PUT    | `/api/me/availability`    | Update user availability status        |
-| GET    | `/api/me/chat-background` | Get user's custom chat background      |
-| POST   | `/api/me/chat-background` | Upload a custom chat background        |
+## Organizations
 
-## Facebook Integration
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/organizations/settings` | Get organization settings |
+| PUT | `/api/organizations/settings` | Update organization settings |
+| GET | `/api/organizations` | List all organizations (superadmin) |
+| GET | `/api/organizations/current` | Get current organization |
+| POST | `/api/organizations` | Create organization |
+| DELETE | `/api/organizations/{id}` | Delete organization |
+| GET | `/api/organizations/{id}/members` | List organization members |
+| POST | `/api/organizations/{id}/members` | Add member to organization |
+| DELETE | `/api/organizations/members/{id}` | Remove organization member |
+| PUT | `/api/organizations/members/{id}/role` | Update member role |
 
-| Method | Endpoint                                             | Description                                     |
-| ------ | ---------------------------------------------------- | ----------------------------------------------- |
-| GET/POST | `/api/facebook/accounts`                            | List or create Facebook accounts                |
-| GET/PUT/DELETE | `/api/facebook/accounts/{id}`               | Facebook account CRUD                           |
-| GET    | `/api/facebook/accounts/{id}/oauth/renew`            | Renew the stored OAuth session                  |
-| POST   | `/api/facebook/accounts/{id}/pages/refresh`          | Refresh managed pages and page metadata         |
-| POST   | `/api/facebook/accounts/{id}/pages/{page_id}/connect`| Restore/connect a single page token             |
-| POST   | `/api/facebook/accounts/{id}/pages/{page_id}/disconnect` | Disconnect a single page but keep metadata   |
-| DELETE | `/api/facebook/accounts/{id}/pages/{page_id}`        | Remove a page and its token from the account    |
-| POST   | `/api/facebook/oauth/init`                           | Start Facebook OAuth                            |
-| GET    | `/api/facebook/oauth/callback`                       | Complete Facebook OAuth                         |
-| POST   | `/api/facebook/accounts/{id}/pages/{page_id}/feed`   | Publish a post to a managed page                |
-| GET    | `/api/facebook/accounts/{id}/pages/{page_id}/insights` | Fetch page insights                          |
-| POST   | `/api/facebook/accounts/{id}/pages/{page_id}/messages` | Send a page message                          |
-| GET    | `/api/facebook/comments`                             | List Facebook comments                          |
-| GET    | `/api/facebook/comments/pages`                       | List distinct pages with comments                |
-| GET    | `/api/facebook/page-search`                          | Search public pages                              |
-| GET/POST | `/api/facebook/people-search`                      | Search people                                    |
-| POST   | `/api/facebook/people-search/add-contacts`           | Add contacts from people-search results         |
-| POST   | `/api/facebook/comments/sync`                        | Sync comments from pages                         |
-| GET/PUT | `/api/facebook/comments/settings`                   | Read or update comment settings                  |
-| POST   | `/api/facebook/comments/{id}/reply`                  | Reply to a comment                               |
-| PUT    | `/api/facebook/comments/{id}/status`                 | Update comment status                            |
-| GET/POST | `/api/facebook/comments/webhook`                   | Public webhook endpoint                          |
+## Users
 
-## Organizations & Teams
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/users` | List organization users |
+| GET | `/api/users/{id}` | Get user details |
+| POST | `/api/users` | Create user |
+| PUT | `/api/users/{id}` | Update user |
+| DELETE | `/api/users/{id}` | Soft-delete user |
 
-| Method | Endpoint                                   | Description                              |
-| ------ | ------------------------------------------ | ---------------------------------------- |
-| GET    | `/api/organizations`                       | List organizations (Admin)               |
-| POST   | `/api/organizations`                       | Create an organization                   |
-| DELETE | `/api/organizations/{id}`                  | Delete an organization                   |
-| GET    | `/api/organizations/current`               | Get current organization details         |
-| GET    | `/api/organizations/members`               | List members of the current organization |
-| POST   | `/api/organizations/members`               | Add a member to the organization         |
-| PUT    | `/api/organizations/members/{member_id}`   | Update organization member role          |
-| DELETE | `/api/organizations/members/{member_id}`   | Remove member from organization          |
-| GET    | `/api/teams`                               | List teams                               |
-| POST   | `/api/teams`                               | Create a team                            |
-| GET    | `/api/teams/{id}`                          | Get team details                         |
-| PUT    | `/api/teams/{id}`                          | Update team details                      |
-| DELETE | `/api/teams/{id}`                          | Delete a team                            |
-| GET    | `/api/teams/{id}/members`                  | List team members                        |
-| POST   | `/api/teams/{id}/members`                  | Add member to team                       |
-| DELETE | `/api/teams/{id}/members/{member_user_id}` | Remove member from team                  |
+## Roles & Permissions
 
-## User Management (Admin)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/roles` | List roles with permissions |
+| GET | `/api/roles/{id}` | Get role details |
+| POST | `/api/roles` | Create custom role |
+| PUT | `/api/roles/{id}` | Update role |
+| DELETE | `/api/roles/{id}` | Delete role |
+| GET | `/api/permissions` | List all available permissions |
 
-| Method | Endpoint                            | Description                                |
-| ------ | ----------------------------------- | ------------------------------------------ |
-| GET    | `/api/users`                        | List all users                             |
-| POST   | `/api/users`                        | Create a new user                          |
-| GET    | `/api/users/{id}`                   | Get user details                           |
-| PUT    | `/api/users/{id}`                   | Update user details                        |
-| DELETE | `/api/users/{id}`                   | Delete a user                              |
-| GET    | `/api/users/{id}/send-restrictions` | Get user's message sending restrictions    |
-| PUT    | `/api/users/{id}/send-restrictions` | Update user's message sending restrictions |
-| GET    | `/api/roles`                        | List roles                                 |
-| POST   | `/api/roles`                        | Create a role                              |
-| GET    | `/api/roles/{id}`                   | Get role details                           |
-| PUT    | `/api/roles/{id}`                   | Update role details                        |
-| DELETE | `/api/roles/{id}`                   | Delete a role                              |
-| GET    | `/api/permissions`                  | List all available permissions             |
-| GET    | `/api/api-keys`                     | List API keys                              |
-| POST   | `/api/api-keys`                     | Create an API key                          |
-| DELETE | `/api/api-keys/{id}`                | Delete an API key                          |
+## Teams
 
-## Contacts & Chats
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/teams` | List teams |
+| GET | `/api/teams/{id}` | Get team details |
+| POST | `/api/teams` | Create team |
+| PUT | `/api/teams/{id}` | Update team |
+| DELETE | `/api/teams/{id}` | Delete team |
+| GET | `/api/teams/{id}/members` | List team members |
+| POST | `/api/teams/{id}/members` | Add team member |
+| DELETE | `/api/teams/members/{id}` | Remove team member |
 
-| Method | Endpoint                                             | Description                         |
-| ------ | ---------------------------------------------------- | ----------------------------------- |
-| GET    | `/api/contacts`                                      | List contacts                       |
-| POST   | `/api/contacts`                                      | Create a contact                    |
-| GET    | `/api/contacts/{id}`                                 | Get contact details                 |
-| PUT    | `/api/contacts/{id}`                                 | Update contact details              |
-| DELETE | `/api/contacts/{id}`                                 | Delete contact                      |
-| POST   | `/api/contacts/{id}/soft-delete`                     | Soft delete contact for user        |
-| PUT    | `/api/contacts/{id}/assign`                          | Assign contact to a user/team       |
-| GET    | `/api/contacts/{id}/collaborators`                   | List contact collaborators          |
-| POST   | `/api/contacts/{id}/collaborators`                   | Invite a collaborator               |
-| PUT    | `/api/contacts/{id}/collaborators/{user_id}/accept`  | Accept collaboration                |
-| PUT    | `/api/contacts/{id}/collaborators/{user_id}/decline` | Decline collaboration               |
-| DELETE | `/api/contacts/{id}/collaborators/{user_id}`         | Remove collaborator                 |
-| PUT    | `/api/contacts/{id}/tags`                            | Update contact tags                 |
-| GET    | `/api/contacts/{id}/session-data`                    | Get contact session data            |
-| GET    | `/api/chats`                                         | List chats (alias for ListContacts) |
-| PUT    | `/api/chats/{id}/claim`                              | Claim an unassigned chat            |
-| PUT    | `/api/chats/{id}/close`                              | Close a chat session                |
-| PUT    | `/api/chats/{id}/reopen`                             | Reopen a closed chat                |
-| PUT    | `/api/chats/{id}/public`                             | Set chat public/private             |
-| GET    | `/api/chats/{id}/messages`                           | Get messages for a chat             |
-| GET    | `/api/contacts/{id}/notes`                           | List notes for a conversation       |
-| POST   | `/api/contacts/{id}/notes`                           | Create a conversation note          |
-| PUT    | `/api/contacts/{id}/notes/{note_id}`                 | Update a note                       |
-| DELETE | `/api/contacts/{id}/notes/{note_id}`                 | Delete a note                       |
+## WhatsApp Cloud API Accounts
 
-## Messaging
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/accounts` | List WhatsApp Cloud API accounts |
+| GET | `/api/accounts/{id}` | Get account details |
+| POST | `/api/accounts` | Create WhatsApp account |
+| PUT | `/api/accounts/{id}` | Update account credentials |
+| DELETE | `/api/accounts/{id}` | Delete account |
+| POST | `/api/accounts/{id}/test` | Test WhatsApp API connectivity |
+| POST | `/api/accounts/{id}/subscribe` | Subscribe to WhatsApp webhook |
 
-| Method | Endpoint                                            | Description                         |
-| ------ | --------------------------------------------------- | ----------------------------------- |
-| GET    | `/api/contacts/{id}/messages`                       | Get messages for a given contact    |
-| POST   | `/api/contacts/{id}/messages`                       | Send a text message to a contact    |
-| POST   | `/api/messages`                                     | Send a text message (Legacy/Bulk)   |
-| POST   | `/api/messages/template`                            | Send a template message             |
-| POST   | `/api/messages/media`                               | Send a media message                |
-| POST   | `/api/contacts/{id}/typing`                         | Send typing indicator               |
-| POST   | `/api/contacts/{id}/messages/{message_id}/reaction` | Send message reaction               |
-| POST   | `/api/contacts/{id}/messages/{message_id}/revoke`   | Revoke/Delete a sent message        |
-| PUT    | `/api/messages/{id}/read`                           | Mark message as read                |
-| GET    | `/api/media/{message_id}`                           | Download/Serve media from a message |
-| GET    | `/api/statuses`                                     | List WhatsApp statuses              |
-| GET    | `/api/statuses/{id}/media`                          | Serve status media                  |
-| POST   | `/api/statuses/{id}/reply`                          | Reply to a status                   |
-| POST   | `/api/statuses/{id}/mark-seen`                      | Mark status as seen                 |
+## WhatsApp Web Instances
 
-## WhatsApp Instances (Whatsmeow)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/instances` | List WhatsApp Web instances |
+| GET | `/api/instances/{id}` | Get instance details |
+| POST | `/api/instances` | Create instance |
+| PUT | `/api/instances/{id}` | Update instance settings |
+| DELETE | `/api/instances/{id}` | Delete instance |
+| POST | `/api/instances/{id}/connect` | Connect instance (QR) |
+| POST | `/api/instances/{id}/disconnect` | Disconnect instance |
+| POST | `/api/instances/{id}/reconnect` | Reconnect instance |
+| GET | `/api/instances/{id}/qr` | Get current QR code snapshot |
+| POST | `/api/instances/{id}/pair` | Pair via phone number |
+| GET | `/api/instances/{id}/health` | Get instance health metrics |
 
-| Method | Endpoint                                  | Description                             |
-| ------ | ----------------------------------------- | --------------------------------------- |
-| GET    | `/api/instances`                          | List WhatsApp instances                 |
-| POST   | `/api/instances`                          | Create a new instance                   |
-| GET    | `/api/instances/{id}`                     | Get instance details                    |
-| PUT    | `/api/instances/{id}`                     | Update instance settings                |
-| DELETE | `/api/instances/{id}`                     | Delete an instance                      |
-| GET    | `/api/instances/{id}/health`              | Get instance health status              |
-| GET    | `/api/instances/{id}/qr`                  | Get QR code for pairing                 |
-| POST   | `/api/instances/{id}/connect`             | Connect instance to WhatsApp            |
-| POST   | `/api/instances/{id}/pair-phone`          | Pair instance via phone number/code     |
-| POST   | `/api/instances/{id}/disconnect`          | Disconnect instance                     |
-| POST   | `/api/instances/{id}/reconnect`           | Reconnect instance                      |
-| POST   | `/api/instances/{id}/status/send`         | Post a status update from instance      |
-| POST   | `/api/instances/{id}/auto-campaign/media` | Upload media for instance auto-campaign |
-| GET    | `/api/instances/{id}/uploads-cleanup`     | Get per-instance uploads cleanup settings |
-| PUT    | `/api/instances/{id}/uploads-cleanup`     | Update per-instance uploads cleanup settings |
-| GET    | `/api/instances/{id}/uploads-cleanup/history` | Get uploads cleanup audit history |
-| POST   | `/api/instances/{id}/uploads-cleanup/run` | Manually trigger uploads cleanup |
-| GET    | `/api/org/uploads-cleanup/instances`      | Overview of all instance cleanup settings |
+## Contacts
 
-## Campaigns & Bulk Messaging
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/contacts` | List contacts (paginated, filterable) |
+| GET | `/api/contacts/{id}` | Get contact details |
+| POST | `/api/contacts` | Create contact |
+| PUT | `/api/contacts/{id}` | Update contact |
+| DELETE | `/api/contacts/{id}` | Delete contact |
+| GET | `/api/contacts/{id}/messages` | Get chat messages |
+| PATCH | `/api/contacts/{id}/read` | Mark messages as read |
+| POST | `/api/contacts/start-chat` | Start new chat with contact |
 
-| Method | Endpoint                                       | Description                       |
-| ------ | ---------------------------------------------- | --------------------------------- |
-| GET    | `/api/campaigns`                               | List campaigns                    |
-| POST   | `/api/campaigns`                               | Create a campaign                 |
-| GET    | `/api/campaigns/{id}`                          | Get campaign details              |
-| PUT    | `/api/campaigns/{id}`                          | Update campaign                   |
-| DELETE | `/api/campaigns/{id}`                          | Delete campaign                   |
-| POST   | `/api/campaigns/{id}/start`                    | Start campaign execution          |
-| POST   | `/api/campaigns/{id}/pause`                    | Pause campaign execution          |
-| POST   | `/api/campaigns/{id}/cancel`                   | Cancel campaign                   |
-| POST   | `/api/campaigns/{id}/retry-failed`             | Retry failed messages in campaign |
-| GET    | `/api/campaigns/{id}/progress`                 | Get campaign progress/stats       |
-| POST   | `/api/campaigns/{id}/recipients/import`        | Import recipients for campaign    |
-| GET    | `/api/campaigns/{id}/recipients`               | List campaign recipients          |
-| DELETE | `/api/campaigns/{id}/recipients/{recipientId}` | Remove recipient from campaign    |
-| POST   | `/api/campaigns/{id}/media`                    | Upload media for campaign         |
-| GET    | `/api/campaigns/{id}/media`                    | Serve campaign media              |
-| GET    | `/api/campaigns/{id}/poll/votes`               | Get poll vote analytics           |
+## Messages
 
-## Chatbot & AI
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/messages/send` | Send outgoing message |
+| POST | `/api/messages/send-template` | Send template message |
 
-| Method | Endpoint                        | Description                   |
-| ------ | ------------------------------- | ----------------------------- |
-| GET    | `/api/chatbot/settings`         | Get chatbot settings          |
-| PUT    | `/api/chatbot/settings`         | Update chatbot settings       |
-| GET    | `/api/chatbot/keywords`         | List keyword rules            |
-| POST   | `/api/chatbot/keywords`         | Create a keyword rule         |
-| GET    | `/api/chatbot/keywords/{id}`    | Get keyword rule              |
-| PUT    | `/api/chatbot/keywords/{id}`    | Update keyword rule           |
-| DELETE | `/api/chatbot/keywords/{id}`    | Delete keyword rule           |
-| GET    | `/api/chatbot/flows`            | List chatbot flows            |
-| POST   | `/api/chatbot/flows`            | Create a chatbot flow         |
-| GET    | `/api/chatbot/flows/{id}`       | Get chatbot flow              |
-| PUT    | `/api/chatbot/flows/{id}`       | Update chatbot flow           |
-| DELETE | `/api/chatbot/flows/{id}`       | Delete chatbot flow           |
-| GET    | `/api/chatbot/ai-contexts`      | List AI knowledge contexts    |
-| POST   | `/api/chatbot/ai-contexts`      | Create an AI context          |
-| GET    | `/api/chatbot/ai-contexts/{id}` | Get AI context                |
-| PUT    | `/api/chatbot/ai-contexts/{id}` | Update AI context             |
-| DELETE | `/api/chatbot/ai-contexts/{id}` | Delete AI context             |
-| GET    | `/api/chatbot/sessions`         | List chatbot sessions (Debug) |
-| GET    | `/api/chatbot/sessions/{id}`    | Get session details           |
-| GET    | `/api/chat/sessions`            | Legacy alias for `/api/chatbot/sessions` |
-| GET    | `/api/chat/sessions/{id}`       | Legacy alias for `/api/chatbot/sessions/{id}` |
+## Campaigns
 
-## Chatbot Transfers
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/campaigns` | List campaigns |
+| GET | `/api/campaigns/{id}` | Get campaign details |
+| POST | `/api/campaigns` | Create campaign |
+| PUT | `/api/campaigns/{id}` | Update campaign |
+| DELETE | `/api/campaigns/{id}` | Delete campaign |
+| POST | `/api/campaigns/{id}/start` | Start campaign |
+| POST | `/api/campaigns/{id}/pause` | Pause campaign |
+| POST | `/api/campaigns/{id}/cancel` | Cancel campaign |
+| POST | `/api/campaigns/{id}/retry` | Retry failed sends |
+| POST | `/api/campaigns/{id}/recipients` | Import recipients |
+| GET | `/api/campaigns/{id}/recipients` | List campaign recipients |
+| DELETE | `/api/campaigns/recipients/{id}` | Delete campaign recipient |
+| POST | `/api/campaigns/{id}/media` | Upload campaign media |
+| GET | `/api/campaigns/media/{id}` | Serve campaign media file |
 
-| Method | Endpoint                             | Description                      |
-| ------ | ------------------------------------ | -------------------------------- |
-| GET    | `/api/chatbot/transfers`             | List active agent transfers      |
-| POST   | `/api/chatbot/transfers`             | Create a manual transfer         |
-| POST   | `/api/chatbot/transfers/pick`        | Pick the next available transfer |
-| PUT    | `/api/chatbot/transfers/{id}/resume` | Resume chatbot from transfer     |
-| PUT    | `/api/chatbot/transfers/{id}/assign` | Assign transfer to an agent      |
+## Templates
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/templates` | List message templates |
+| GET | `/api/templates/{id}` | Get template details |
+| POST | `/api/templates` | Create template |
+| PUT | `/api/templates/{id}` | Update template |
+| DELETE | `/api/templates/{id}` | Delete template |
+| POST | `/api/templates/{id}/submit` | Submit template for Meta review |
+| POST | `/api/templates/sync` | Sync templates from Meta |
+| POST | `/api/templates/{id}/media` | Upload template media |
+
+## Chatbot
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/chatbot/settings` | Get chatbot settings |
+| PUT | `/api/chatbot/settings` | Update chatbot settings |
+| GET | `/api/chatbot/keywords` | List keyword rules |
+| GET | `/api/chatbot/keywords/{id}` | Get keyword rule |
+| POST | `/api/chatbot/keywords` | Create keyword rule |
+| PUT | `/api/chatbot/keywords/{id}` | Update keyword rule |
+| DELETE | `/api/chatbot/keywords/{id}` | Delete keyword rule |
+| GET | `/api/chatbot/flows` | List chatbot flows |
+| GET | `/api/chatbot/flows/{id}` | Get chatbot flow |
+| POST | `/api/chatbot/flows` | Create chatbot flow |
+| PUT | `/api/chatbot/flows/{id}` | Update chatbot flow |
+| DELETE | `/api/chatbot/flows/{id}` | Delete chatbot flow |
+| GET | `/api/chatbot/ai-contexts` | List AI contexts |
+| GET | `/api/chatbot/ai-contexts/{id}` | Get AI context |
+| POST | `/api/chatbot/ai-contexts` | Create AI context |
+| PUT | `/api/chatbot/ai-contexts/{id}` | Update AI context |
+| DELETE | `/api/chatbot/ai-contexts/{id}` | Delete AI context |
+| GET | `/api/chatbot/sessions` | List chatbot sessions |
+| GET | `/api/chatbot/sessions/{id}` | Get chatbot session details |
+
+## WhatsApp Flows
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/flows` | List WhatsApp flows |
+| GET | `/api/flows/{id}` | Get flow details |
+| POST | `/api/flows` | Create flow |
+| PUT | `/api/flows/{id}` | Update flow |
+| DELETE | `/api/flows/{id}` | Delete flow |
+| POST | `/api/flows/{id}/save` | Save flow to Meta |
+| POST | `/api/flows/{id}/publish` | Publish flow |
+| POST | `/api/flows/{id}/deprecate` | Deprecate flow |
+| POST | `/api/flows/{id}/duplicate` | Duplicate flow |
+| POST | `/api/flows/sync` | Sync flows from Meta |
+
+## Catalogs
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/catalogs` | List catalogs |
+| GET | `/api/catalogs/{id}` | Get catalog details |
+| POST | `/api/catalogs` | Create catalog |
+| DELETE | `/api/catalogs/{id}` | Delete catalog |
+| POST | `/api/catalogs/sync` | Sync catalogs from Meta |
+| GET | `/api/catalogs/{id}/products` | List catalog products |
+| GET | `/api/catalogs/products/{id}` | Get product details |
+| POST | `/api/catalogs/{id}/products` | Create catalog product |
+| PUT | `/api/catalogs/products/{id}` | Update product |
+| DELETE | `/api/catalogs/products/{id}` | Delete product |
+
+## Webhooks (Outgoing)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/webhooks` | List webhook endpoints |
+| GET | `/api/webhooks/{id}` | Get webhook details |
+| POST | `/api/webhooks` | Create webhook |
+| PUT | `/api/webhooks/{id}` | Update webhook |
+| DELETE | `/api/webhooks/{id}` | Delete webhook |
+| POST | `/api/webhooks/{id}/test` | Test webhook with sample event |
+
+## Webhook (Meta Incoming)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/webhook` | Meta webhook verification (challenge) |
+| POST | `/api/webhook` | Meta incoming webhook events |
+
+## Analytics & Dashboard
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/analytics/dashboard` | Dashboard summary stats |
+| GET | `/api/analytics/messages` | Message analytics |
+| GET | `/api/analytics/chatbot` | Chatbot analytics |
+| GET | `/api/analytics/campaigns` | Campaign analytics |
+
+## Widgets
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/widgets` | List dashboard widgets |
+| GET | `/api/widgets/{id}` | Get widget details |
+| POST | `/api/widgets` | Create widget |
+| PUT | `/api/widgets/{id}` | Update widget |
+| DELETE | `/api/widgets/{id}` | Delete widget |
+| PUT | `/api/widgets/layout` | Save widget grid layout |
+| GET | `/api/widgets/data-sources` | List available data sources |
+| GET | `/api/widgets/{id}/data` | Get widget data |
+| POST | `/api/widgets/data` | Get all widgets data (batch) |
+
+## SSO
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sso/providers` | List public SSO providers |
+| GET | `/api/sso/{provider}/init` | Initiate SSO login |
+| GET | `/api/sso/{provider}/callback` | SSO callback |
+| GET | `/api/sso/settings` | Get SSO settings |
+| PUT | `/api/sso/providers/{id}` | Update SSO provider |
+| DELETE | `/api/sso/providers/{id}` | Delete SSO provider |
+
+## Business Profile
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/business-profile` | Get WhatsApp business profile |
+| PUT | `/api/business-profile` | Update business profile |
+| POST | `/api/business-profile/picture` | Update profile picture |
+
+## API Keys
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/api-keys` | List API keys |
+| POST | `/api/api-keys` | Create API key |
+| DELETE | `/api/api-keys/{id}` | Delete API key |
 
 ## Canned Responses
 
-| Method | Endpoint                          | Description                         |
-| ------ | --------------------------------- | ----------------------------------- |
-| GET    | `/api/canned-responses`           | List canned responses               |
-| POST   | `/api/canned-responses`           | Create a canned response            |
-| GET    | `/api/canned-responses/{id}`      | Get canned response                 |
-| PUT    | `/api/canned-responses/{id}`      | Update canned response              |
-| DELETE | `/api/canned-responses/{id}`      | Delete canned response              |
-| POST   | `/api/canned-responses/{id}/send` | Send a canned response to a contact |
-| POST   | `/api/canned-responses/{id}/use`  | Increment usage counter             |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/canned-responses` | List canned responses |
+| GET | `/api/canned-responses/{id}` | Get canned response |
+| POST | `/api/canned-responses` | Create canned response |
+| PUT | `/api/canned-responses/{id}` | Update canned response |
+| DELETE | `/api/canned-responses/{id}` | Delete canned response |
 
-## Analytics & Dashboards
+## Tags
 
-| Method | Endpoint                               | Description                             |
-| ------ | -------------------------------------- | --------------------------------------- |
-| GET    | `/api/analytics`                       | Dashboard alias for `/api/analytics/dashboard` |
-| GET    | `/api/analytics/dashboard`             | Get main dashboard statistics           |
-| GET    | `/api/analytics/messages`              | Get detailed message analytics          |
-| GET    | `/api/analytics/chatbot`               | Get chatbot performance analytics       |
-| GET    | `/api/analytics/agents`                | Get agent performance analytics         |
-| GET    | `/api/analytics/agents/comparison`     | Compare agent performance               |
-| GET    | `/api/analytics/agents/ratings/export` | Export agent satisfaction ratings       |
-| GET    | `/api/analytics/agents/{id}`           | Get details for specific agent          |
-| GET    | `/api/analytics/meta`                  | Get Meta-specific analytics (Meta only) |
-| GET    | `/api/analytics/meta/accounts`         | List Meta accounts for analytics        |
-| POST   | `/api/analytics/meta/refresh`          | Force refresh analytics cache           |
-| GET    | `/api/widgets`                         | List dashboard widgets                  |
-| POST   | `/api/widgets`                         | Create a widget                         |
-| GET    | `/api/widgets/data-sources`            | List available data sources for widgets |
-| GET    | `/api/widgets/data`                    | Get data for all widgets                |
-| GET    | `/api/widgets/{id}`                    | Get widget configuration                |
-| PUT    | `/api/widgets/{id}`                    | Update widget configuration             |
-| DELETE | `/api/widgets/{id}`                    | Delete a widget                         |
-| GET    | `/api/widgets/{id}/data`               | Get data for a specific widget          |
-| POST   | `/api/widgets/layout`                  | Save dashboard widget layout            |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tags` | List contact tags |
+| POST | `/api/tags` | Create tag |
+| PUT | `/api/tags/{id}` | Update tag |
+| DELETE | `/api/tags/{id}` | Delete tag |
 
-## Webhooks & Extensions
+## Notifications
 
-| Method | Endpoint                               | Description                          |
-| ------ | -------------------------------------- | ------------------------------------ |
-| GET    | `/api/webhook`                         | Meta Webhook verification (GET)      |
-| POST   | `/api/webhook`                         | Meta Webhook handler (POST)          |
-| GET    | `/api/webhooks`                        | List outbound webhooks               |
-| POST   | `/api/webhooks`                        | Create an outbound webhook           |
-| GET    | `/api/webhooks/{id}`                   | Get webhook details                  |
-| PUT    | `/api/webhooks/{id}`                   | Update webhook                       |
-| DELETE | `/api/webhooks/{id}`                   | Delete webhook                       |
-| POST   | `/api/webhooks/{id}/test`              | Test an outbound webhook             |
-| GET    | `/api/custom-actions`                  | List custom actions                  |
-| POST   | `/api/custom-actions`                  | Create a custom action               |
-| GET    | `/api/custom-actions/{id}`             | Get custom action details            |
-| PUT    | `/api/custom-actions/{id}`             | Update custom action                 |
-| DELETE | `/api/custom-actions/{id}`             | Delete custom action                 |
-| POST   | `/api/custom-actions/{id}/execute`     | Manually execute custom action       |
-| GET    | `/api/custom-actions/redirect/{token}` | Redirect endpoint for custom actions |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/notifications` | List in-app notifications |
+| POST | `/api/notifications/{id}/dismiss` | Dismiss notification |
 
-## Meta Specific (Templates, Flows, Catalogs)
+## Media
 
-| Method | Endpoint                       | Description                        |
-| ------ | ------------------------------ | ---------------------------------- |
-| GET    | `/api/templates`               | List Meta message templates        |
-| POST   | `/api/templates`               | Create a Meta message template     |
-| GET    | `/api/templates/{id}`          | Get template details               |
-| PUT    | `/api/templates/{id}`          | Update template                    |
-| DELETE | `/api/templates/{id}`          | Delete template                    |
-| POST   | `/api/templates/sync`          | Sync templates from Meta           |
-| POST   | `/api/templates/{id}/publish`  | Submit template to Meta for review |
-| POST   | `/api/templates/upload-media`  | Upload media for template headers  |
-| GET    | `/api/flows`                   | List Meta Flows                    |
-| POST   | `/api/flows`                   | Create a Meta Flow                 |
-| GET    | `/api/flows/{id}`              | Get Flow details                   |
-| PUT    | `/api/flows/{id}`              | Update Flow                        |
-| DELETE | `/api/flows/{id}`              | Delete Flow                        |
-| POST   | `/api/flows/{id}/save-to-meta` | Save Flow configuration to Meta    |
-| POST   | `/api/flows/{id}/publish`      | Publish Flow                       |
-| POST   | `/api/flows/{id}/deprecate`    | Deprecate Flow                     |
-| POST   | `/api/flows/{id}/duplicate`    | Duplicate Flow                     |
-| POST   | `/api/flows/sync`              | Sync Flows from Meta               |
-| GET    | `/api/catalogs`                | List product catalogs              |
-| POST   | `/api/catalogs`                | Create a catalog                   |
-| GET    | `/api/catalogs/{id}`           | Get catalog details                |
-| GET    | `/api/catalogs`                | List catalogs  (`catalogs:read`)       |
-| POST   | `/api/catalogs`                | Create catalog (`catalogs:write`)      |
-| GET    | `/api/catalogs/{id}`           | Get catalog    (`catalogs:read`)       |
-| DELETE | `/api/catalogs/{id}`           | Delete catalog (`catalogs:delete`)     |
-| POST   | `/api/catalogs/sync`           | Sync catalogs from Meta (`catalogs:sync`) |
-| GET    | `/api/catalogs/{id}/products`  | List products in catalog (`catalogs:read`) |
-| POST   | `/api/catalogs/{id}/products`  | Add product to catalog (`catalogs:write`) |
-| GET    | `/api/products/{id}`           | Get product details (`catalogs:read`)  |
-| PUT    | `/api/products/{id}`           | Update product details (`catalogs:write`) |
-| DELETE | `/api/products/{id}`           | Remove product (`catalogs:delete`)     |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/media/{id}/download` | Download media file |
+| POST | `/api/media/retry` | Retry media download |
+| GET | `/api/media/{id}/serve` | Serve media file |
 
-## Data Management & Utilities
+## Import/Export
 
-### Group Directory (`group_directory:*`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/import-export/config` | Get import/export configuration |
+| POST | `/api/import-export/export` | Export data (CSV/Excel) |
+| POST | `/api/import-export/import` | Import data (CSV/Excel) |
 
-| Method | Endpoint                                    | Description                          |
-| ------ | ------------------------------------------- | ------------------------------------ |
-| GET    | `/api/groups/directory`                     | Search group directory (`group_directory:read`) |
-| POST   | `/api/groups/directory`                     | Add group to directory (`group_directory:write`) |
-| PUT    | `/api/groups/directory/{id}`                | Update directory entry (`group_directory:write`) |
-| DELETE | `/api/groups/directory/{id}`                | Remove from directory (`group_directory:delete`) |
-| GET    | `/api/groups/directory/categories`          | Get categories  (`group_directory:read`) |
-| GET    | `/api/groups/directory/countries`           | Get countries   (`group_directory:read`) |
-| POST   | `/api/groups/directory/preview`             | Preview group from link (`group_directory:read`) |
-| POST   | `/api/groups/directory/import`              | Import groups to campaign (`group_directory:import`) |
+## Group Campaigns
 
-### Group Participants (`group_participants:*`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/instances/{id}/groups` | List instance WhatsApp groups |
+| POST | `/api/campaigns/{id}/groups` | Add groups to campaign |
+| GET | `/api/campaigns/{id}/groups` | List campaign groups |
+| DELETE | `/api/campaigns/groups/{id}` | Remove campaign group |
+| POST | `/api/groups/validate` | Validate group JIDs |
 
-| Method | Endpoint                                    | Description                          |
-| ------ | ------------------------------------------- | ------------------------------------ |
-| GET    | `/api/groups/participants`                  | List group members (`group_participants:read`) |
-| POST   | `/api/groups/participants/add`              | Add members (`group_participants:write`) |
-| POST   | `/api/groups/participants/remove`           | Remove members (`group_participants:write`) |
-| POST   | `/api/groups/participants/promote`          | Promote to admin (`group_participants:write`) |
-| POST   | `/api/groups/participants/demote`           | Demote from admin (`group_participants:write`) |
+## Group Directory
 
-### Import/Export
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/group-directory/search` | Search group directory |
+| GET | `/api/group-directory/categories` | Get directory categories |
+| GET | `/api/group-directory/countries` | Get directory countries |
+| POST | `/api/group-directory` | Create directory entry |
+| PUT | `/api/group-directory/{id}` | Update directory entry |
+| DELETE | `/api/group-directory/{id}` | Delete directory entry |
+| POST | `/api/group-directory/preview` | Preview group from invite link |
+| POST | `/api/group-directory/import` | Import directory groups to campaign |
 
-| Method | Endpoint                                    | Description                          |
-| ------ | ------------------------------------------- | ------------------------------------ |
-| POST   | `/api/export`                               | Generic data export                  |
-| POST   | `/api/import`                               | Generic data import                  |
-| GET    | `/api/export/{table}/config`                | Get export configuration for a table |
-| GET    | `/api/import/{table}/config`                | Get import configuration for a table |
-| GET    | `/api/tags`                                 | List all available tags              |
-| POST   | `/api/tags`                                 | Create a tag                         |
-| PUT    | `/api/tags/{name}`                          | Update a tag                         |
-| DELETE | `/api/tags/{name}`                          | Delete a tag                         |
-| POST   | `/api/org/uploads-cleanup/run` | Manually trigger cleaning of expired uploads |
-| GET    | `/api/notifications`                        | List system notifications            |
-| PUT    | `/api/notifications/{id}/dismiss`           | Dismiss a notification               |
-| GET    | `/api/org/settings`                         | Get organization-level settings      |
-| PUT    | `/api/org/settings`                         | Update organization-level settings   |
-| GET    | `/api/settings/sso`                         | Get organization SSO settings        |
-| PUT    | `/api/settings/sso/{provider}`              | Update SSO provider configuration    |
-| DELETE | `/api/settings/sso/{provider}`              | Remove SSO provider                  |
-| GET    | `/api/accounts`                             | List linked accounts                 |
-| POST   | `/api/accounts`                             | Link a new account                   |
-| GET    | `/api/accounts/{id}`                        | Get account details                  |
-| PUT    | `/api/accounts/{id}`                        | Update account details               |
-| DELETE | `/api/accounts/{id}`                        | Unlink account                       |
-| POST   | `/api/accounts/{id}/test`                   | Test account connection              |
-| POST   | `/api/accounts/{id}/subscribe`              | Subscribe to app events              |
-| GET    | `/api/accounts/{id}/business_profile`       | Get WhatsApp business profile        |
-| PUT    | `/api/accounts/{id}/business_profile`       | Update WhatsApp business profile     |
-| POST   | `/api/accounts/{id}/business_profile/photo` | Update WhatsApp profile picture      |
+## Custom Actions
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/custom-actions` | List custom actions |
+| POST | `/api/custom-actions` | Create custom action |
+| PUT | `/api/custom-actions/{id}` | Update custom action |
+| DELETE | `/api/custom-actions/{id}` | Delete custom action |
+
+## WebSocket
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /ws` | WebSocket upgrade endpoint (requires JWT or WS token) |
+
+## Admin Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/bootstrap` | System bootstrap info |
+| POST | `/api/admin/reset-password` | Reset user password (CLI analog) |
+
+---
+
+## Route Statistics
+
+| Category | Route Count |
+|----------|-------------|
+| Auth & Users | 30+ |
+| Organizations | 15+ |
+| Accounts | 10+ |
+| Instances | 20+ |
+| Contacts & Messages | 20+ |
+| Campaigns | 30+ |
+| Templates | 15+ |
+| Chatbot | 30+ |
+| Flows | 12+ |
+| Catalogs | 15+ |
+| Webhooks | 12+ |
+| Analytics & Widgets | 15+ |
+| SSO | 8+ |
+| Other (tags, canned, media, etc.) | 40+ |
+| **Total** | **~699 routes** |
+
+---
+
+*Full function-level analysis in `FUNCTION_ANALYSIS.md`*

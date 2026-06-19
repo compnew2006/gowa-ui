@@ -366,6 +366,41 @@ func TestProductionFloodEventsAreLowPriority(t *testing.T) {
 	}
 }
 
+func TestStatusBroadcastMessagesAreLowPriority(t *testing.T) {
+	var d asyncEventDispatcher
+
+	testCases := []struct {
+		name string
+		evt  *events.Message
+	}{
+		{
+			name: "status chat jid",
+			evt: &events.Message{Info: types.MessageInfo{MessageSource: types.MessageSource{
+				Chat: types.StatusBroadcastJID,
+			}}},
+		},
+		{
+			name: "device sent status destination",
+			evt: &events.Message{Info: types.MessageInfo{
+				DeviceSentMeta: &types.DeviceSentMeta{DestinationJID: types.StatusBroadcastJID.String()},
+			}},
+		},
+		{
+			name: "status category",
+			evt:  &events.Message{Info: types.MessageInfo{Category: "status"}},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, eventClassLow, d.classifyEvent(tc.evt))
+		})
+	}
+
+	realMessage := createFakeMessageEvent(uuid.New().String(), "12345@s.whatsapp.net")
+	assert.Equal(t, eventClassMessage, d.classifyEvent(realMessage))
+}
+
 func TestUnknownEventsDefaultLowPriority(t *testing.T) {
 	// An unrecognized non-lifecycle event should be treated as low priority.
 	instanceID := uuid.New()
@@ -469,8 +504,8 @@ func TestReceiptOrderingUsesChatKey(t *testing.T) {
 
 func TestCallOrderingUsesCallID(t *testing.T) {
 	testCases := []struct {
-		ev      interface{}
-		callID  string
+		ev     interface{}
+		callID string
 	}{
 		{&events.CallOffer{BasicCallMeta: types.BasicCallMeta{CallID: "offer-1"}}, "offer-1"},
 		{&events.CallOfferNotice{BasicCallMeta: types.BasicCallMeta{CallID: "notice-1"}}, "notice-1"},

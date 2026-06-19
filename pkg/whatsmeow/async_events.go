@@ -84,18 +84,18 @@ type asyncEventDispatcher struct {
 	markDropped func(uuid.UUID)
 
 	// state
-	mu       sync.Mutex
-	queues   map[uuid.UUID]*asyncEventQueue // legacy: per-instance single queue
-	pQueues  map[uuid.UUID]*instanceQueues  // priority: per-instance priority lanes
-	wg       sync.WaitGroup
-	closed   bool
-	stopped  map[uuid.UUID]struct{}
+	mu      sync.Mutex
+	queues  map[uuid.UUID]*asyncEventQueue // legacy: per-instance single queue
+	pQueues map[uuid.UUID]*instanceQueues  // priority: per-instance priority lanes
+	wg      sync.WaitGroup
+	closed  bool
+	stopped map[uuid.UUID]struct{}
 
 	// circuit breaker state (priority path only)
 	cbMu        sync.Mutex
 	lowCounts   map[uuid.UUID][]int64 // rolling window low-priority counts
-	cbRate      int                  // rate/minute threshold
-	cbWindows   int                  // consecutive windows to trip
+	cbRate      int                   // rate/minute threshold
+	cbWindows   int                   // consecutive windows to trip
 	cbCooldown  time.Duration
 	cbOpenUntil map[uuid.UUID]time.Time
 	cbDone      chan struct{} // closed when dispatcher shuts down
@@ -126,29 +126,29 @@ func newAsyncEventDispatcher(cfg priorityQueueConfig, bufferSize int, logger log
 	cbCooldown := time.Duration(defaultIfZero(cfg.cbCooldownSec, 300)) * time.Second
 
 	d := &asyncEventDispatcher{
-		bufferSize:       bufferSize,
-		priorityEnabled:  enabled,
-		msgQueueSize:     msgSize,
-		lowQueueSize:     lowSize,
-		msgShards:        shards,
-		lowWorkers:       workers,
-		highTimeoutMs:    timeoutMs,
-		drainTimeoutSec:  drainSec,
+		bufferSize:      bufferSize,
+		priorityEnabled: enabled,
+		msgQueueSize:    msgSize,
+		lowQueueSize:    lowSize,
+		msgShards:       shards,
+		lowWorkers:      workers,
+		highTimeoutMs:   timeoutMs,
+		drainTimeoutSec: drainSec,
 
 		handler:     handler,
 		logger:      logger,
 		updateDepth: updateDepth,
 		markDropped: markDropped,
 
-		queues:   make(map[uuid.UUID]*asyncEventQueue),
-		pQueues:  make(map[uuid.UUID]*instanceQueues),
-		stopped:  make(map[uuid.UUID]struct{}),
+		queues:  make(map[uuid.UUID]*asyncEventQueue),
+		pQueues: make(map[uuid.UUID]*instanceQueues),
+		stopped: make(map[uuid.UUID]struct{}),
 
-		cbRate:         cbRate,
-		cbWindows:      cbWindows,
-		cbCooldown:     cbCooldown,
-		lowCounts:      make(map[uuid.UUID][]int64),
-		cbOpenUntil:    make(map[uuid.UUID]time.Time),
+		cbRate:          cbRate,
+		cbWindows:       cbWindows,
+		cbCooldown:      cbCooldown,
+		lowCounts:       make(map[uuid.UUID][]int64),
+		cbOpenUntil:     make(map[uuid.UUID]time.Time),
 		lastOverflowLog: make(map[uuid.UUID]time.Time),
 	}
 
@@ -250,15 +250,19 @@ type eventPriorityClass int
 
 const (
 	eventClassMessage   eventPriorityClass = iota // high — Message, Receipt, Call events
-	eventClassLow                                  // low — HistorySync, Contact, AppState, etc.
-	eventClassLifecycle                            // bypass — Connected, Disconnected, etc.
+	eventClassLow                                 // low — HistorySync, Contact, AppState, etc.
+	eventClassLifecycle                           // bypass — Connected, Disconnected, etc.
 )
 
 func (d *asyncEventDispatcher) classifyEvent(evt interface{}) eventPriorityClass {
-	switch evt.(type) {
+	switch v := evt.(type) {
 	// ── High priority ──
-	case *events.Message,
-		*events.Receipt,
+	case *events.Message:
+		if isStatusMessageInfo(v.Info) {
+			return eventClassLow
+		}
+		return eventClassMessage
+	case *events.Receipt,
 		*events.CallOffer,
 		*events.CallOfferNotice,
 		*events.CallPreAccept,

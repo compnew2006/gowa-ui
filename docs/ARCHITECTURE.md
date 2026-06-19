@@ -1,324 +1,342 @@
 # Whatomate — Architecture
 
-## Overview Diagram
+> **Updated:** 2026-06-18  
+> **Total Functions Analyzed:** 6,710 functions across 3,098 files  
+> **Exclusions:** Dashboard/ directory
+
+---
+
+## 1. High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Single Go Binary                      │
-│  (embeds Vue SPA via //go:embed all:dist)                  │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────┐  ┌─────────────┐  ┌──────────────┐     │
-│  │  fastglue     │  │  GORM       │  │  Redis       │     │
-│  │  + fasthttp   │  │  PostgreSQL │  │  Streams     │     │
-│  └──────┬───────┘  └──────┬──────┘  └──────┬───────┘     │
-│         │                 │                  │                 │
-│  ┌──────┴──────────────────┴──────────────────┴──────────┐      │
-│  │              Middleware Chain                          │      │
-│  │  CORS → SecurityHeaders → Auth → TenantScope → RBAC    │      │
-│  └──────────────────────┬──────────────────────────────┘      │
-│                         │                                     │
-│  ┌──────────────────────┴──────────────────────────────┐      │
-│  │              handlers.App                           │      │
-│  │  (all API handlers as methods)                     │      │
-│  └──┬──────────┬──────────┬──────────┬──────────┬─────┘      │
-│     │          │          │          │          │               │
-│     ▼          ▼          ▼          ▼          ▼               │
-│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌────────┐    │
-│  │ WA   │ │Chat  │ │Camp  │ │Bot   │ │FB   │ │WS Hub │    │
-│  │Meta  │ │      │ │aigns│ │      │ │      │ │      │    │
-│  └──┬───┘ └──────┘ └──────┘ └──────┘ └──────┘ └───────┘    │
-│     │         │          │          │                                │
-│     ▼         ▼          ▼          ▼                                │
-│  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────┐                       │
-│  │ pkg/ │  │Redis│  │Queue│  │WebSocket│                       │
-│  │prov.│  │Rate │  │Worker│  │Broadcast│                       │
-│  └──────┘  └──────┘  └──────┘  └──────────┘                       │
+┌─────────────────────────────────────────────────────────────────────┐
+│                       Single Go Binary (whatomate)                    │
+│                   (embeds Vue SPA via //go:embed all:dist)            │
+├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐    │
-│  │                      Frontend (Vue 3 SPA)                     │    │
-│  │  Pinia stores ←→ API client ←→ Fasthttp server              │    │
-│  │  Vue Router (permission guards) ←→ shadcn-vue + Tailwind     │    │
-│  └──────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+│  ┌──────────────┐  ┌─────────────┐  ┌──────────────┐  ┌──────────┐  │
+│  │  fastglue     │  │  GORM       │  │  Redis       │  │  otel    │  │
+│  │  + fasthttp   │  │  PostgreSQL │  │  Streams/PubSub│  │  metrics │  │
+│  └──────┬───────┘  └──────┬──────┘  └──────┬───────┘  └──────────┘  │
+│         │                 │                 │                         │
+│  ┌──────┴──────────────────┴──────────────────┴──────────────────┐   │
+│  │                  Middleware Chain                              │   │
+│  │  CORS → Recovery → RateLimit → Auth → TenantScope → RBAC      │   │
+│  └──────────────────────────┬───────────────────────────────────┘   │
+│                             │                                        │
+│  ┌──────────────────────────┴───────────────────────────────────┐   │
+│  │                      handlers.App                             │   │
+│  │  (central dependency container — Config, DB, Redis, Log,      │   │
+│  │   WhatsApp, WhatsmeowManager, WSHub, Queue, License, etc.)    │   │
+│  └──┬─────┬─────┬──────┬──────┬──────┬──────┬──────┬──────┬─────┘   │
+│     │     │     │      │      │      │      │      │      │          │
+│     ▼     ▼     ▼      ▼      ▼      ▼      ▼      ▼      ▼          │
+│  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───────┐      │
+│  │WA │ │WA │ │Chat│ │Camp│ │Bot │ │FB  │ │WS  │ │Worker│ │Plugin │  │
+│  │Meta│ │Web│ │    │ │aign│ │    │ │    │ │Hub │ │      │ │ *.go  │  │
+│  └───┘ └───┘ └───┘ └───┘ └───┘ └───┘ └───┘ └───┘ └───────┘      │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │  Embed: all:./frontend/dist  (Vue 3 SPA)                      │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## Backend Architecture
-
-### Entry Point (`cmd/whatomate/main.go`)
-
-Single binary with subcommands:
-- **`server`** — Starts HTTP server on configured port (default 8080)
-- **`worker`** — Consumes Redis Stream messages (campaign sends, inbound media processing)
-- **`crypto-migrate`** — Re-encrypts all secrets with a new AES key
-- **`admin-reset-password`** — Resets default admin password
-- **`queue-migrate-campaigns`** — Migrates campaign queue format
-- **`inbound-media-reconcile`** / **`legacy-media-reconcile`** — Media repair jobs
-
-### Config (`internal/config/`)
-
-TOML configuration via koanf. Main `Config` struct fields:
-```
-App, Server, Database, Redis, JWT, WhatsApp (provider selection),
-Whatsmeow, Observability, AI, Storage, DefaultAdmin, RateLimit,
-Campaigns, Cookie, License, FacebookOAuth, Facebook
-```
-
-Key config keys: `[whatsapp].provider` = `"meta"` | `"whatsmeow"`
-
-### Middleware Chain (`internal/middleware/`)
-
-Applied via `g.Before()` in order:
-1. **CORS** — Cross-origin with configurable allowed origins
-2. **SecurityHeaders** — CSP (with nonce for SPA), HSTS, X-Frame-Options
-3. **Auth (`AuthWithDB`)** — Extracts JWT from `Authorization: Bearer`, `X-API-Key` header, or `whm_access` cookie
-4. **TenantScope** — Resolves organization ID, sets scoped DB instance via `tenant.ScopedDB()`
-5. **PermissionChecker** — Route-level RBAC (granular `HasPermission` checks at handler level, with centralized `requirePermission`, `authorizeRequest`, and `sendForbidden` helpers in `app.go`)
-
-### Handler Layer (`internal/handlers/`)
-
-All handlers are methods on the `handlers.App` struct:
-```go
-type App struct {
-    Config    *config.Config
-    DB        *gorm.DB
-    RDB       *redis.Client
-    Provider  provider.MessageProvider  // Meta or WhatsMeow
-    // ... other services
-}
-```
-
-Handler return convention: `(*handlers.Envelope, error)` — standardized JSON response.
-
-### Provider Abstraction (`pkg/provider/`)
-
-`MessageProvider` interface abstracts WhatsApp operations:
-- Meta Cloud API adapter: `pkg/whatsapp/`
-- WhatsMeow Web protocol adapter: `pkg/whatsmeow/`
-
-Optional extension interfaces:
-- `PollProvider` — `SendPoll(ctx, instanceID, to, question, options, maxSelections)` for native WhatsApp polls (whatsmeow only)
-- `SendPollVote(ctx, target, selectedOptions)` — Votes on existing polls with proper E2E encryption and LID resolution (whatsmeow only)
-
-Routes requiring Meta use `app.ProviderGuard("meta", handler)` wrapper.
-
-### Multi-Tenancy (`internal/tenant/`)
-
-- `TenantScope` middleware extracts org ID from context
-- `tenant.ScopedDB(db, orgID)` returns a GORM instance with `WHERE organization_id = ?` added to all queries
-- All tenant-aware models include `OrganizationID uuid.UUID` field
-
-### WebSocket (`internal/websocket/`)
-
-- Hub pattern with connected clients
-- `/ws` endpoint (auth via message-based flow after upgrade)
-- Real-time message broadcast to connected agents
-- `/api/auth/ws-token` for obtaining WS auth token
-
-### Queue/Worker (`internal/queue/`, `internal/worker/`)
-
-- Redis Streams consumer groups
-- Campaign send processing
-- Inbound media download and processing
-- Legacy media reconciliation
-
-### License (`internal/license/`)
-
-- Bootstrap → activation → enforcement
-- Feature gating at startup
-- Event logging
-
----
-
-## Frontend Architecture
-
-### Tech Stack
-- **Framework:** Vue 3 (Composition API)
-- **Build:** Vite
-- **State:** Pinia (16 stores)
-- **Routing:** Vue Router 4 with permission-based guards
-- **UI:** shadcn-vue (new-york style) + Tailwind CSS v3
-- **i18n:** vue-i18n (en, es, ar)
-- **Data fetching:** @tanstack/vue-query
-- **Notifications:** vue-sonner (toast)
-- **TypeScript:** Strict mode
-
-### Router Structure (`frontend/src/router/index.ts`)
+## 2. Binary Subcommands
 
 ```
-/login, /register, /auth/sso/callback, /activate, /pricing  (public)
-/  → AppLayout
-    /dashboard
-    /chat, /chat/:contactId
-    /profile
-    /templates, /flows
-    /campaigns
-    /instances, /instances/health
-    /chatbot, /chatbot/settings, /chatbot/keywords, /chatbot/flows, /chatbot/flows/new, /chatbot/flows/:id/edit
-    /chatbot/ai, /chatbot/transfers
-    /analytics/agents, /analytics/meta-insights
-    /settings, /settings/chatbot, /settings/accounts, /settings/tags, /settings/teams
-    /settings/users, /settings/roles, /settings/agent-selection, /settings/api-keys
-    /settings/webhooks, /settings/sso, /settings/license, /settings/custom-actions
-    /contacts, /closed-chats
-    /canned-responses, /saved-contents
-    /whatsapp-filter, /group-search, /group-join-campaigns, /group-extraction
-    /member-extraction, /group-participants
-    /extract, /tags
-    /facebook/comments, /facebook/page-search, /facebook/people-search, /facebook/accounts
-    /facebook/group-search, /facebook/extract-likes, /facebook/page-messengers
-    /facebook/extract-data, /facebook/auto-share, /facebook/retargeting
+whatomate
+├── server                → HTTP server (fasthttp + fastglue)
+├── worker                → Background job processor
+├── admin-reset-password  → CLI password reset
+├── crypto-migrate        → Encrypt V2 → V3 migration
+├── queue-migrate-campaigns → Queue namespace migration
+├── inbound-media-reconcile → Stuck media reconciliation
+├── legacy-media-reconcile → Legacy media reconciliation
+└── version               → Print version
 ```
 
-### Navigation (`navigationOrder`)
+## 3. Core Packages
 
-Sidebar menu built from `navigationOrder` array. Each entry has:
-- `path` — route path
-- `permission` — required permission string
-- `childPaths` — nested children with their own permissions
+### 3.1 `internal/handlers/` — HTTP Handlers (234 files)
 
-### Pinia Stores (16)
+| Group | Files | Key Functions |
+|---|---|---|
+| **Auth** | `auth_handlers.go`, `auth_crypto.go`, `auth_utils.go`, `auth_expiry.go`, `auth_types.go` | Login, Register, Refresh, SSO |
+| **Users** | `users.go` + helpers | User CRUD, settings, chat background |
+| **Accounts** | `accounts.go` | WhatsApp Cloud API account CRUD |
+| **Instances** | `instances.go` | WhatsApp Web instance management |
+| **Contacts** | `contacts.go`, `contacts_management.go`, `contacts_messaging.go` | Contact CRUD, messaging |
+| **Messages** | `messages.go` + helpers | Send messages, templates |
+| **Campaigns** | `campaigns.go`, `campaign_policy.go`, `campaign_scheduler.go`, `campaign_start.go` | Campaign CRUD, scheduling |
+| **Chatbot** | `chatbot.go`, `chatbot_processor.go` | Chatbot settings, keyword rules, flows |
+| **Templates** | `templates.go` | Message template CRUD, submit, sync |
+| **Analytics** | `analytics.go`, `widgets.go` | Dashboard + custom widgets |
+| **Webhooks** | `webhooks.go`, `webhook.go`, `webhook_dispatch.go` | Webhook CRUD, Meta webhook handler |
+| **Organization** | `organization.go` | Org settings, members |
+| **Roles** | `roles.go` | RBAC roles & permissions |
+| **Teams** | `teams.go` | Agent teams |
+| **Chat Lifecycle** | `chat_lifecycle.go`, `chat_cleanup.go`, `chat_close_ratings.go` | Chat status, assignment, close |
+| **Flows** | `flows.go` | WhatsApp interactive flows |
+| **Catalog** | `catalog.go` | Product catalog |
+| **Media** | `media.go`, `media_visibility.go` | Media download/serve |
+| **Import/Export** | `import_export.go` | CSV/Excel import/export |
+| **SSO** | `sso_handlers.go`, `sso_types.go`, `sso_utils.go`, `sso_security.go` | SSO providers |
+| **Canned Responses** | `canned_responses.go`, `canned_response_send.go`, `canned_response_media.go` | Quick replies |
+| **Tags** | `tags.go` | Contact tagging |
+| **Notifications** | `notifications.go` | In-app notifications |
+| **API Keys** | `apikeys.go` | API authentication keys |
+| **Config** | `config_handler.go` | Runtime config |
+| **Business Profile** | `business_profile.go` | WhatsApp profile management |
+| **WebSocket** | `websocket.go` | WS connection upgrade |
+| **Upload Cleanup** | `uploads_cleanup_*.go` | Upload retention management |
 
-| Store | Key |
+### 3.2 `internal/models/` — GORM Models
+
+| Model | Purpose | Key Fields |
+|---|---|---|
+| `Organization` | Multi-tenant org | Name, Slug, Settings |
+| `User` | User account | Email, PasswordHash, RoleID, SSO fields |
+| `UserOrganization` | Org membership | UserID, OrgID, RoleID, IsDefault |
+| `WhatsAppAccount` | Cloud API account | AppID, PhoneID, AccessToken (encrypted) |
+| `Contact` | Chat contact | PhoneNumber, ProfileName, Status, AssignedUserID |
+| `Message` | Chat message | Content, Direction, Type, Status, Media |
+| `Template` | Message template | MetaTemplateID, Name, Language, Category |
+| `WhatsAppFlow` | Interactive flow | MetaFlowID, FlowJSON, Screens |
+| `Campaign` | Bulk campaign | Name, Status, TemplateID, Recipient counts |
+| `CampaignRecipient` | Campaign recipient | Phone, Status, Attempts |
+| `Webhook` | Outgoing webhook | URL, Events, Headers, Secret |
+| `APIKey` | API auth key | KeyPrefix, KeyHash, ExpiresAt |
+| `LicenseRecord` | License record | Full licensing fields |
+| `Team` | Agent team | Name, AssignmentStrategy |
+| `Role` | RBAC role | Name, Permissions (JSONB) |
+| `Widget` | Dashboard widget | DataSource, Metric, DisplayType |
+| `MediaAsset` | Media file | FileHash, S3Key, MimeType |
+| `SSOProvider` | SSO config | Provider, ClientID, AllowedDomains |
+
+### 3.3 `internal/worker/` — Background Workers (21 files)
+
+| Worker | Purpose |
 |---|---|
-| `auth` | User, JWT, login/logout, org switching |
-| `config` | App config, provider type (meta/whatsmeow), features |
-| `contacts` | Contact list, filtering, chat assignment |
-| `instances` | WhatsMeow instance management |
-| `teams` | Team CRUD and members |
-| `users` | User management |
-| `roles` | Role and permission management |
-| `notes` | Conversation notes |
-| `tags` | Contact tag management |
-| `transfers` | Agent transfer queue |
-| `agentSelection` | Customer agent selection menus |
-| `organizations` | Multi-org management |
-| `license` | License state and enforcement |
-| `fbAccounts` | Facebook account connections |
-| `canned-responses` | Quick reply templates |
-| `saved-contents` | Content library |
+| Campaign send | Processes campaign recipient jobs with rate limiting |
+| Inbound media | Downloads incoming WhatsApp media |
+| Facebook auto-reply | Auto-replies to Facebook comments |
+| Group extraction | Extracts WhatsApp group members |
+| Group join | Joins WhatsApp groups |
+| Message extraction | Extracts chat history |
+| Member extraction | Extracts member profiles |
+| Scheduled sends | Sends scheduled messages |
+| Send policy | Enforces sending restrictions |
+| Uploads cleanup | Cleans up expired uploads |
+| Inbound media self-heal | Periodic stuck media recovery |
+| WhatsApp filter | Processes filter commands |
 
----
+### 3.4 `internal/websocket/` — Real-Time
 
-## Database Schema
+| Component | Purpose |
+|---|---|
+| `Hub` | Central WebSocket manager |
+| `Client` | Per-connection client |
+| Message types | 12+ message types for real-time events |
 
-### PostgreSQL 17 + GORM
+### 3.5 `internal/queue/` — Async Queue
 
-**Migration strategy:** GORM AutoMigrate only (no versioned migration files). Order defined in `GetMigrationModels()`.
+| Component | Purpose |
+|---|---|
+| `redis.go` | Redis Streams implementation |
+| `pubsub.go` | Redis Pub/Sub for campaign stats |
+| `queue.go` | Generic queue interface |
 
-### Model Categories (50 models)
+## 4. Provider Layer
 
-#### Core (12)
-Organization, OrganizationConfig, Permission, CustomRole, RolePermission, User, UserOrganization, Team, TeamMember, APIKey, LicenseRecord, LicenseEvent, SSOProvider, Webhook, CustomAction
-
-#### WhatsApp (7)
-WhatsAppAccount, WhatsAppInstance, InstanceNotification, Contact, MediaAsset, ContactUserDeletion, Message, WhatsAppStatus, ChatClosureRating, Template, WhatsAppFlow
-
-#### Multi-Tenant Extensions (3)
-Tag (composite PK: org_id + name), ConversationNote, ContactCollaborator
-
-#### Campaigns (10)
-BulkMessageCampaign, BulkMessageRecipient, NotificationRule, GroupJoinCampaign, GroupJoinRecipient, MessageExtractionCampaign, MessageExtractionResult, GroupExtractionCampaign, GroupExtractionResult, MemberExtractionCampaign, MemberExtractionResult, WhatsAppFilterBatch, WhatsAppFilterResult
-
-#### Chatbot (8)
-ChatbotSettings, KeywordRule, ChatbotFlow, ChatbotFlowStep, ChatbotSession, ChatbotSessionMessage, AIContext, AgentTransfer, SLATracking
-
-#### Agent Selection (5)
-AgentSelectionSettings, AgentSelectionParticipant, AgentSelectionOption, AgentSelectionSession, AgentSelectionAuditEvent
-
-#### Facebook (7)
-FacebookAccount, FacebookOAuthState, FacebookComment, FacebookCommentReply, FacebookCommentSettings, FBPageSearch, FBPeopleSearch
-
-#### Other (4)
-CannedResponse, SavedContent, Catalog, CatalogProduct, Widget, UserAvailabilityLog, GroupDirectory
-
-#### Plugins (2 models)
-InstanceUploadsCleanupAudit (per-instance-uploads-cleanup plugin)
-
-### Indexing
-Custom indexes defined in `getIndexes()` function, applied after AutoMigrate in `RunMigrationWithProgress()`.
-
----
-
-## Authentication Flow
+### `pkg/provider/` — Message Provider Interface
 
 ```
-┌──────────┐     ┌───────────────┐     ┌───────────────┐
-│  Login    │────▶│ POST /auth/login │────▶│ JWT Tokens   │
-│  Form    │     │ (rate-limited)│     │ access+refresh │
-└──────────┘     └───────────────┘     └──────┬───────┘
-                                                       │
-                                                       ▼
-┌──────────────────────────────────────────────────────────┐
-│  Protected API Request                                        │
-│  Authorization: Bearer <access_token>                        │
-│  OR X-API-Key: <key>                                     │
-│  OR Cookie: whm_access=<access_token>                      │
-│                                                               │
-│  Middleware Chain:                                           │
-│  1. AuthWithDB → validate JWT, set context                  │
-│  2. TenantScope → resolve org, set scoped DB                │
-│  3. PermissionChecker → handler-level RBAC check           │
-└──────────────────────────────────────────────────────────┘
+MessageProvider (interface)
+├── SendText, SendImage, SendDocument, SendVideo, SendAudio
+├── MarkRead, SendReaction, RevokeMessage
+├── DownloadMedia, UploadMedia, GetMediaURL
+├── SendTextReply
+├── PollProvider (SendPoll, SendPollVote)
+└── GroupProvider (GetGroups, VerifyMembership, Add/Remove Participants)
 ```
 
-### Token Types
-- **Access token** — Short-lived, subject = `access`, used for API calls
-- **Refresh token** — Longer-lived, subject = `refresh`, used to get new access tokens
-- **WS token** — For WebSocket authentication
+### `pkg/whatsapp/` — WhatsApp Cloud API (Meta)
 
-### SSO Flow
-1. `GET /api/auth/sso/providers` — List configured providers
-2. `GET /api/auth/sso/{provider}/init` — Redirect to OAuth provider
-3. `GET /api/auth/sso/{provider}/callback` — Handle callback, issue JWTs
+```
+Client
+├── SendText, SendImage, SendTemplate, etc.
+├── Template management (create, submit, sync)
+├── Flow management (create, publish, deprecate)
+├── Catalog management
+├── Webhook parsing
+└── Analytics
+```
+
+### `pkg/whatsmeow/` — WhatsApp Web (WhatsMeow)
+
+```
+ConnectionManager
+├── Connect/Disconnect/Logout
+├── QR code / phone pairing
+├── Client pool (multi-instance)
+├── Health monitoring
+└── Event dispatcher
+
+Adapter (MessageProvider implementation)
+├── Send methods (text, image, document, video, audio)
+├── Group operations
+├── Media download/upload
+├── Incoming message processing
+├── Typing indicators
+└── Presence management
+```
+
+## 5. Middleware Chain
+
+| Middleware | Path | Purpose |
+|---|---|---|
+| `CORS` | Global | Cross-origin headers |
+| `Recovery` | Global | Panic recovery |
+| `RateLimit` | Per-route | Redis-based rate limiting |
+| `Auth` | /api/* | JWT token validation |
+| `AuthWithDB` | /api/* | Full auth + RBAC + tenant |
+| `TenantScope` | /api/* | Org-scoped DB queries |
+
+## 6. Frontend Architecture
+
+```
+frontend/src/
+├── services/
+│   ├── api.ts              ← Base HTTP client (auth refresh, interceptors)
+│   ├── auth.ts             ← Auth API
+│   ├── contacts.ts         ← Contacts + messages API
+│   ├── instances.ts        ← WhatsApp instances API
+│   ├── campaigns.ts        ← Campaigns API
+│   ├── templates.ts        ← Templates API
+│   ├── chatbot.ts          ← Chatbot API
+│   ├── accounts.ts         ← WhatsApp accounts API
+│   ├── webhooks.ts         ← Webhooks API
+│   ├── analytics.ts        ← Analytics API
+│   ├── organizations.ts    ← Organization API
+│   ├── users.ts, roles.ts, teams.ts ← User/RBAC API
+│   ├── tags.ts, cannedResponses.ts, flows.ts ← Feature API
+│   ├── media.ts, notifications.ts, widgets.ts ← Utility API
+│   └── license.ts          ← License API
+├── stores/                 ← Pinia stores
+│   ├── auth.ts
+│   ├── contacts.ts
+│   ├── instances.ts
+│   ├── campaigns.ts
+│   ├── templates.ts
+│   ├── chatbot.ts
+│   ├── config.ts
+│   └── license.ts
+├── composables/            ← Reusable logic
+│   ├── useCrudState.ts
+│   ├── usePagination.ts
+│   ├── useColorMode.ts
+│   ├── useConditionEvaluator.ts
+│   ├── useFlowHistory.ts
+│   ├── useFlowSimulation.ts
+│   └── useApiMocker.ts
+├── views/                  ← Page components
+│   ├── chat/
+│   ├── campaigns/
+│   ├── chatbot/
+│   ├── settings/
+│   ├── analytics/
+│   ├── contacts/
+│   ├── templates/
+│   ├── accounts/
+│   ├── instances/
+│   ├── teams/
+│   ├── users/
+│   └── roles/
+├── components/             ← Reusable UI components
+├── router/index.ts         ← Vue Router with guards
+├── i18n/                   ← Internationalization
+└── types/                  ← TypeScript types
+```
+
+## 7. Plugin Architecture
+
+```
+internal/core/plugin.go
+├── Plugin (interface)
+│   ├── Name() string
+│   ├── Init(app, db, rdb, log) error
+│   ├── Routes(g *fastglue.Fastglue)
+│   └── Migrate(db *gorm.DB) error
+├── RegisterPlugin(p)       ← init()-time registration
+├── RegisterPluginRoutes()  ← Route registration
+└── RunPluginMigrations()   ← AutoMigrate
+
+plugin/
+├── campaign-interactive/         ← Interactive campaign templates
+└── per-instance-uploads-cleanup/ ← Per-instance upload retention
+```
+
+## 8. Data Flow
+
+### Chat Message Flow (Inbound)
+
+```
+Meta Webhook → POST /api/webhook
+  → WebhookHandler()
+    → processIncomingMessageWithoutDuplicateCheck()
+      → fetchExistingIncomingMessageIDs()
+        → Create message record in DB
+          → WSHub.BroadcastToOrg(orgID, new_message)
+            → ChatbotProcessor (if enabled)
+              → Evaluate keyword rules → Execute flow → Send reply
+```
+
+### Chat Message Flow (Outbound)
+
+```
+POST /api/messages/send
+  → SendOutgoingMessage()
+    → resolveProviderInstanceID()       ← Cloud API or WhatsApp Web?
+      → toWhatsAppAccount()             ← Encrypt account secrets
+        → sendViaProvider()
+          → Provider.SendText/Image/etc.
+            → updateContactLastMessage()
+              → broadcastNewMessage()
+                → dispatchMessageSentWebhook()
+```
+
+### Campaign Flow
+
+```
+POST /api/campaigns → CreateCampaign()
+POST /api/campaigns/{id}/start → StartCampaign()
+  → Enqueue recipients to Redis Stream
+    → Worker.HandleRecipientJob()
+      → executeRecipientSend()
+        → computeCampaignDelayDuration()
+          → provider.SendTemplate()
+            → updateRecipientStatusConditional()
+              → publishCampaignStats() ← Pub/Sub
+                → checkCampaignCompletion()
+```
+
+## 9. Key Metrics
+
+| Metric | Value |
+|---|---|
+| Total functions analyzed | 6,710 |
+| Total project files (excl Dashboard) | 2,238 |
+| Go backend files (incl tests) | 497 |
+| Frontend source files | 505 (167 TS + 336 Vue + 2 CSS) |
+| Total API routes | 699 (382 base + rate-limit variants) |
+| Database models | 25+ core models |
+| Background workers | 15+ distinct worker types |
+| WebSocket message types | 12+ |
+| Plugins | 2 (campaign-interactive, per-instance-uploads-cleanup) |
+| External providers | 2 (WhatsApp Cloud API, WhatsApp Web) |
+| Middleware layers | 6 (CORS, Recovery, RateLimit, Auth, TenantScope, RBAC) |
 
 ---
 
-## Security Model
-
-### Layers
-1. **CORS** — Origin whitelist, configurable via config
-2. **CSP** — Content Security Policy with nonce for inline scripts
-3. **HSTS** — HTTP Strict Transport Security
-4. **JWT** — HS256 with algorithm enforcement (no algorithm confusion)
-5. **API Key** — Hashed storage, validated per-request
-6. **CSRF** — Double-submit cookie pattern (skipped for Bearer/API-key)
-7. **Rate Limiting** — Redis-backed per-endpoint limits (login, register, refresh, SSO, webhook, outbound messages, campaign mutations)
-8. **Tenant Isolation** — All DB queries scoped to organization
-
-### Encryption
-- AES-256 for secrets at rest (WhatsApp credentials, API keys, etc.)
-- `internal/crypto/` handles encrypt/decrypt
-- `crypto-migrate` subcommand for key rotation
-
----
-
-## Deployment
-
-### Single Binary
-`make build-prod` produces a standalone binary containing:
-1. Go backend
-2. Embedded Vue SPA (`//go:embed all:dist`)
-3. All assets (migrations, static files)
-
-### Docker
-`docker/docker-compose.yml` provides PostgreSQL 17 and Redis 7 for development.
-
-### CI
-- Go 1.25.8
-- `go test -v -race -p 1` (sequential to avoid DB conflicts)
-- Frontend E2E: Playwright Chromium
-
----
-
-## Key Design Decisions
-
-1. **fasthttp over net/http** — Performance-critical message handling; no standard `http.Handler` patterns
-2. **GORM AutoMigrate over versioned migrations** — Simpler for a single-binary app; schema evolution is additive
-3. **Provider interface** — Enables dual WhatsApp provider without conditional code in handlers
-4. **Handler methods on App struct** — Single source of truth for all handler dependencies (DB, provider, queue, etc.)
-5. **Frontend embedding** — Zero-deployment SPA; single binary serves both API and UI
-6. **Redis Streams for queues** — Reliable message delivery with consumer groups for workers
-7. **Permission-based routing** — Frontend uses permission strings to show/hide navigation items; backend validates at handler level
+*End of Architecture Document — Full function analysis in `FUNCTION_ANALYSIS.md`*
