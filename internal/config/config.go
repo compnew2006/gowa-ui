@@ -128,6 +128,12 @@ type WhatsmeowConfig struct {
 	Identity                         string `koanf:"identity"` // Optional prefix for linked device label (e.g. "whats")
 	HealthMonitorIntervalSeconds     int    `koanf:"health_monitor_interval_seconds"`
 	ReconnectTimeoutSeconds          int    `koanf:"reconnect_timeout_seconds"`
+	// ForceIPv4 pins all whatsmeow HTTP clients (websocket, media, pre-login)
+	// to IPv4-only dialing. nil/false preserves the default dual-stack behaviour.
+	// Enable on deployments where the IPv6 peering path to WhatsApp/Meta is
+	// flaky (e.g. observed TCP resets on Hostinger -> face:b00c). The resolver
+	// still returns A and AAAA records; the dialer filters to "tcp4" only.
+	ForceIPv4                        *bool  `koanf:"force_ipv4"`
 	TypingIndicatorEnabled           bool   `koanf:"typing_indicator_enabled"`
 	TypingMinDelayMs                 int    `koanf:"typing_min_delay_ms"`
 	TypingMaxDelayMs                 int    `koanf:"typing_max_delay_ms"`

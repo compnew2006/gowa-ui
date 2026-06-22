@@ -2,8 +2,11 @@ package whatsmeow
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -798,7 +801,54 @@ func (cm *ConnectionManager) newClient(instance models.WhatsAppInstance, deviceS
 		cm.eventDispatcher.Dispatch(evt, instance.ID, instance.OrganizationID)
 	})
 
+	// Force IPv4-only dialing when configured. Used on deployments where the
+	// IPv6 peering path to WhatsApp/Meta is flaky (e.g. Hostinger -> face:b00c
+	// TCP resets). The resolver still returns A and AAAA records; the dialer
+	// filters to "tcp4" only. nil/false preserves default dual-stack behavior.
+	if whatsmeowForceIPv4(cm.cfg) {
+		ipv4Client := buildIPv4HTTPClient()
+		client.SetWebsocketHTTPClient(ipv4Client)
+		client.SetMediaHTTPClient(ipv4Client)
+		client.SetPreLoginHTTPClient(ipv4Client)
+	}
+
 	return client
+}
+
+// whatsmeowForceIPv4 reports whether all whatsmeow HTTP clients should be pinned
+// to IPv4-only dialing. Mirrors the nil-safe reader pattern of
+// whatsmeowEventDispatchEnabled. Defaults to false (dual-stack) when config is
+// nil or the field is unset.
+func whatsmeowForceIPv4(cfg *config.WhatsmeowConfig) bool {
+	if cfg == nil || cfg.ForceIPv4 == nil {
+		return false
+	}
+	return *cfg.ForceIPv4
+}
+
+// buildIPv4HTTPClient returns an *http.Client whose transport forces "tcp4"
+// dialing. The resolver still queries both A and AAAA records; the custom
+// DialContext ignores AAAA results and only connects over IPv4. HTTP/2 is
+// retained (whatsmeow's websocket upgrade benefits from it). Timeout is left
+// to whatsmeow's own defaults by not setting one on the client.
+func buildIPv4HTTPClient() *http.Client {
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// Force IPv4: ignore the incoming network hint and always dial tcp4.
+			return dialer.DialContext(ctx, "tcp4", addr)
+		},
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
+	}
+	return &http.Client{Transport: transport}
 }
 
 func whatsmeowEventBufferSize(cfg *config.WhatsmeowConfig) int {
