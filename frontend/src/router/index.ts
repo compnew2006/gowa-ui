@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
 import { useLicenseStore } from "@/stores/license";
+import { moduleKeyForPath } from "@/modules/registry";
 
 // Permission-based route meta type
 declare module "vue-router" {
@@ -184,6 +185,14 @@ const router = createRouter({
         {
           path: "settings",
           name: "settings",
+          component: () => import("@/views/settings/SettingsHubView.vue"),
+          meta: {
+            permissionsAny: ["settings.general", "settings.uploads_cleanup"],
+          },
+        },
+        {
+          path: "settings/user",
+          name: "settings-user",
           component: () => import("@/views/settings/SettingsView.vue"),
           meta: {
             permissionsAny: ["settings.general", "settings.uploads_cleanup"],
@@ -344,6 +353,12 @@ const router = createRouter({
           name: "license-settings",
           component: () => import("@/views/settings/LicenseSettingsView.vue"),
           meta: { adminOnly: true },
+        },
+        {
+          path: "settings/modules",
+          name: "modules-settings",
+          component: () => import("@/views/settings/ModulesView.vue"),
+          meta: { permission: "organizations" },
         },
         {
           path: "settings/custom-actions",
@@ -661,9 +676,18 @@ router.beforeEach(async (to, _from, next) => {
     return next({ name: "license-cleanup", query: { redirect: to.fullPath } });
   }
 
+  const configStore = useConfigStore();
+  const moduleKey = moduleKeyForPath(to.path);
+  if (moduleKey && authStore.isAuthenticated) {
+    await configStore.fetchConfig();
+    if (!configStore.isModuleEnabled(moduleKey)) {
+      const fallback = getFirstAccessibleRoute(authStore);
+      return next({ path: fallback === to.path ? "/profile" : fallback });
+    }
+  }
+
   // Provider-based access: block Meta-only routes when using whatsmeow
   if (to.meta.metaOnly) {
-    const configStore = useConfigStore();
     if (configStore.isWhatsmeow) {
       return next({ path: getFirstAccessibleRoute(authStore) });
     }

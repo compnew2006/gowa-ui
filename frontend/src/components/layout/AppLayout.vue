@@ -22,6 +22,7 @@ import { authService } from "@/services/api";
 import OrganizationSwitcher from "./OrganizationSwitcher.vue";
 import UserMenu from "./UserMenu.vue";
 import { navigationItems } from "./navigation";
+import { isCompiledModulePathEnabled } from "@/modules/registry";
 
 const { locale, t } = useI18n(); // Enable localized banner strings in template
 
@@ -302,6 +303,14 @@ const navigation = computed(() => {
   const f = configStore.features;
   return navigationItems
     .filter((item) => {
+      if (
+        !isCompiledModulePathEnabled(
+          item.path,
+          configStore.isModuleEnabled,
+        )
+      ) {
+        return false;
+      }
       if (item.adminOnly && !isAdminUser.value) {
         return false;
       }
@@ -342,6 +351,14 @@ const navigation = computed(() => {
     .map((item) => {
       // Filter children that are Meta-only
       let filteredChildren = item.children?.filter((child) => {
+        if (
+          !isCompiledModulePathEnabled(
+            child.path,
+            configStore.isModuleEnabled,
+          )
+        ) {
+          return false;
+        }
         if (child.path === "/whatsapp/campaigns" && !f.campaigns) return false;
         if (metaOnlyChildPaths.has(child.path) && !f.business_profile)
           return false;
@@ -642,16 +659,21 @@ const handleLogout = async () => {
 
             <!-- Submenu items -->
             <template v-if="item.children && item.children.length > 0 && isGroupExpanded(item) && isSidebarExpanded">
-              <div
+              <component
+                :is="item.externalUrl ? 'a' : 'div'"
+                :href="item.externalUrl || undefined"
                 :class="[
-                  'px-2.5 pb-1 pt-1 text-xs font-medium text-muted-foreground/80',
-                  isRTL ? 'mr-4 text-right' : 'ml-4 text-left',
+                  'px-2.5 pb-1 pt-1 text-xs font-medium transition-colors',
+                  isRTL ? 'mr-4 text-right flex-row-reverse' : 'ml-4 text-left',
+                  item.externalUrl
+                    ? 'text-primary hover:text-primary/80 hover:underline'
+                    : 'text-muted-foreground/80',
                 ]"
                 role="presentation"
                 :aria-label="$t(item.name)"
               >
                 {{ $t(item.name) }}
-              </div>
+              </component>
               <RouterLink
                 v-for="child in item.children"
                 :key="child.path"

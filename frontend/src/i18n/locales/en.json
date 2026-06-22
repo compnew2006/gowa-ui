@@ -237,6 +237,7 @@
     "templates": "Templates",
     "campaigns": "Campaigns",
     "license": "License",
+    "modules": "Modules",
     "closedChats": "Closed Chats",
     "general": "General",
     "accounts": "Accounts",
@@ -300,7 +301,21 @@
     "extractDesc": "Extract messages, media, and chat data from WhatsApp conversations.",
     "groupExtractionDesc": "Export list of groups from active WhatsApp sessions.",
     "memberExtractionDesc": "Export group participants list from active WhatsApp groups.",
-    "customerRoutingDesc": "Configure agent assignment rules and client selection menus."
+    "customerRoutingDesc": "Configure agent assignment rules and client selection menus.",
+    "generalDesc": "Manage language, timezone, and basic application preferences.",
+    "settingsAccountsDesc": "Manage connected WhatsApp accounts and sessions.",
+    "tagsDesc": "Create and manage contact tags for organization.",
+    "teamsDesc": "Organize users into teams for structured collaboration.",
+    "usersDesc": "Manage user accounts, roles, and permissions.",
+    "rolesDesc": "Define custom roles and access permissions.",
+    "apiKeysDesc": "Manage API keys for external integrations.",
+    "webhooksDesc": "Configure webhooks for real-time event notifications.",
+    "customActionsDesc": "Create custom actions and automation rules.",
+    "ssoDesc": "Configure single sign-on authentication providers.",
+    "licenseDesc": "View license status and manage activation.",
+    "settingsAppearanceDesc": "Customize the look and feel of your workspace.",
+    "settingsChatDesc": "Configure chat display and conversation preferences.",
+    "settingsNotificationsDesc": "Manage your notification preferences."
   },
   "userMenu": {
     "myAccount": "My Account",
@@ -3332,5 +3347,20 @@
       "statusReverted": "Comment status reverted",
       "statusFailed": "Failed to update comment status"
     }
+  },
+  "modules": {
+    "title": "Modules",
+    "description": "Enable or disable compiled modules globally or for the current organization.",
+    "empty": "No compiled modules are registered.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "dependencies": "Dependencies",
+    "enableForOrganization": "Enable for organization",
+    "disableForOrganization": "Disable for organization",
+    "enableGlobally": "Enable globally",
+    "disableGlobally": "Disable globally",
+    "loadFailed": "Failed to load modules",
+    "updateFailed": "Failed to update module",
+    "updated": "Module state updated"
   }
 }

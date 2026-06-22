@@ -81,6 +81,30 @@ func TestShouldRetrySendError(t *testing.T) {
 			retryable: true,
 			expected:  sendErrorRetryable,
 		},
+		{
+			name:      "whatsapp 400 on document send is retryable",
+			err:       errors.New("failed to send document message: server returned error 400"),
+			retryable: true,
+			expected:  sendErrorRetryable,
+		},
+		{
+			name:      "whatsapp 400 on text send is retryable",
+			err:       errors.New("failed to send text message: server returned error 400"),
+			retryable: true,
+			expected:  sendErrorRetryable,
+		},
+		{
+			name:      "whatsapp 400 on poll send is retryable",
+			err:       errors.New("failed to send poll message: server returned error 400"),
+			retryable: true,
+			expected:  sendErrorRetryable,
+		},
+		{
+			name:      "generic 400 bad request is retryable",
+			err:       errors.New("400 bad request"),
+			retryable: true,
+			expected:  sendErrorRetryable,
+		},
 	}
 
 	for _, tc := range tests {

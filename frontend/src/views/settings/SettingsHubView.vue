@@ -1,0 +1,234 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
+import { PageHeader } from "@/components/shared";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Settings,
+  Palette,
+  Bell,
+  MessageSquare,
+  Users,
+  Tags,
+  Shield,
+  Key,
+  Webhook,
+  Zap,
+  ShieldCheck,
+  ShieldAlert,
+  ArrowRight,
+  ArrowLeft,
+  Flame
+} from "lucide-vue-next";
+
+const { t, locale } = useI18n();
+const router = useRouter();
+const authStore = useAuthStore();
+const isRTL = computed(() => locale.value === "ar");
+
+type ToolEntry = {
+  nameKey: string;
+  descKey: string;
+  path: string;
+  icon: any;
+  color: string;
+  hoverGlow: string;
+  adminOnly?: boolean;
+  permission?: string;
+};
+
+const tools: ToolEntry[] = [
+  {
+    nameKey: "settings.general",
+    descKey: "nav.generalDesc",
+    path: "/settings/user#general",
+    icon: Settings,
+    color: "from-slate-500/10 to-gray-500/10 dark:from-slate-500/20 dark:to-gray-500/20 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(100,116,139,0.15)]",
+  },
+  {
+    nameKey: "settings.appearance",
+    descKey: "nav.settingsAppearanceDesc",
+    path: "/settings/user#appearance",
+    icon: Palette,
+    color: "from-purple-500/10 to-pink-500/10 dark:from-purple-500/20 dark:to-pink-500/20 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(168,85,247,0.15)]",
+  },
+  {
+    nameKey: "settings.chat",
+    descKey: "nav.settingsChatDesc",
+    path: "/settings/user#chat",
+    icon: MessageSquare,
+    color: "from-cyan-500/10 to-blue-500/10 dark:from-cyan-500/20 dark:to-blue-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(6,182,212,0.15)]",
+  },
+  {
+    nameKey: "settings.notifications",
+    descKey: "nav.settingsNotificationsDesc",
+    path: "/settings/user#notifications",
+    icon: Bell,
+    color: "from-amber-500/10 to-orange-500/10 dark:from-amber-500/20 dark:to-orange-500/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(245,158,11,0.15)]",
+  },
+  {
+    nameKey: "nav.tags",
+    descKey: "nav.tagsDesc",
+    path: "/settings/tags",
+    icon: Tags,
+    color: "from-violet-500/10 to-fuchsia-500/10 dark:from-violet-500/20 dark:to-fuchsia-500/20 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(139,92,246,0.15)]",
+    permission: "tags",
+  },
+  {
+    nameKey: "nav.teams",
+    descKey: "nav.teamsDesc",
+    path: "/settings/teams",
+    icon: Users,
+    color: "from-blue-500/10 to-indigo-500/10 dark:from-blue-500/20 dark:to-indigo-500/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]",
+    permission: "teams",
+  },
+  {
+    nameKey: "nav.users",
+    descKey: "nav.usersDesc",
+    path: "/settings/users",
+    icon: Users,
+    color: "from-sky-500/10 to-indigo-500/10 dark:from-sky-500/20 dark:to-indigo-500/20 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(14,165,233,0.15)]",
+    permission: "users",
+  },
+  {
+    nameKey: "nav.roles",
+    descKey: "nav.rolesDesc",
+    path: "/settings/roles",
+    icon: Shield,
+    color: "from-red-500/10 to-rose-500/10 dark:from-red-500/20 dark:to-rose-500/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(239,68,68,0.15)]",
+    permission: "roles",
+  },
+  {
+    nameKey: "nav.apiKeys",
+    descKey: "nav.apiKeysDesc",
+    path: "/settings/api-keys",
+    icon: Key,
+    color: "from-yellow-500/10 to-amber-500/10 dark:from-yellow-500/20 dark:to-amber-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(234,179,8,0.15)]",
+    permission: "api_keys",
+  },
+  {
+    nameKey: "nav.webhooks",
+    descKey: "nav.webhooksDesc",
+    path: "/settings/webhooks",
+    icon: Webhook,
+    color: "from-teal-500/10 to-cyan-500/10 dark:from-teal-500/20 dark:to-cyan-500/20 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(20,184,166,0.15)]",
+    permission: "webhooks",
+  },
+  {
+    nameKey: "nav.customActions",
+    descKey: "nav.customActionsDesc",
+    path: "/settings/custom-actions",
+    icon: Zap,
+    color: "from-orange-500/10 to-red-500/10 dark:from-orange-500/20 dark:to-red-500/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(249,115,22,0.15)]",
+    permission: "custom_actions",
+  },
+  {
+    nameKey: "nav.sso",
+    descKey: "nav.ssoDesc",
+    path: "/settings/sso",
+    icon: ShieldCheck,
+    color: "from-lime-500/10 to-green-500/10 dark:from-lime-500/20 dark:to-green-500/20 text-lime-600 dark:text-lime-400 border-lime-200 dark:border-lime-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(132,204,22,0.15)]",
+    permission: "settings.sso",
+  },
+  {
+    nameKey: "nav.license",
+    descKey: "nav.licenseDesc",
+    path: "/settings/license",
+    icon: ShieldAlert,
+    color: "from-rose-500/10 to-pink-500/10 dark:from-rose-500/20 dark:to-pink-500/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20",
+    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(244,63,94,0.15)]",
+    adminOnly: true,
+  },
+];
+
+const visibleTools = computed(() => {
+  return tools.filter((tool) => {
+    if (tool.adminOnly) {
+      if (!authStore.user?.is_super_admin) return false;
+      const role = String(authStore.userRole || "").trim().toLowerCase().replace(/\s+/g, "_");
+      if (!["admin", "super_admin", "super-admin"].includes(role)) return false;
+    }
+    if (tool.permission) {
+      return authStore.hasPermission(tool.permission, "read");
+    }
+    return true;
+  });
+});
+
+function navigateTo(path: string) {
+  router.push(path);
+}
+</script>
+
+<template>
+  <div :dir="isRTL ? 'rtl' : 'ltr'" class="relative min-h-screen bg-background text-foreground flex flex-col justify-between overflow-hidden">
+    <div class="absolute -top-40 -right-40 w-96 h-96 bg-slate-600/10 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
+    <div class="absolute -bottom-40 -left-40 w-[24rem] h-[24rem] bg-gray-600/10 rounded-full blur-3xl pointer-events-none animate-pulse duration-5000"></div>
+
+    <div class="flex-1 flex flex-col p-4 md:p-8 relative z-10 max-w-7xl w-full mx-auto pb-24">
+      <PageHeader
+        :title="t('settings.title')"
+        :subtitle="isRTL ? 'إدارة إعدادات النظام والتحكم في خيارات التطبيق' : 'Manage system settings and application preferences'"
+        :icon="Settings"
+        icon-gradient="bg-gradient-to-br from-slate-600 to-gray-700 shadow-slate-500/20"
+        :breadcrumbs="[{ label: t('settings.title') }]"
+      />
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+        <Card
+          v-for="tool in visibleTools"
+          :key="tool.path"
+          class="group relative overflow-hidden bg-card/40 dark:bg-slate-900/40 border-border/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl transition-all duration-300 hover:border-slate-300 dark:hover:border-slate-700 hover:-translate-y-1 hover:shadow-2xl cursor-pointer rounded-2xl flex flex-col justify-between"
+          :class="tool.hoverGlow"
+          @click="navigateTo(tool.path)"
+        >
+          <div class="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-slate-500 via-gray-500 to-zinc-500 opacity-60 group-hover:opacity-100 transition-opacity"></div>
+          
+          <CardHeader class="p-6 pb-2">
+            <div class="flex items-start justify-between">
+              <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br border shadow-md transition-transform duration-300 group-hover:scale-110" :class="tool.color">
+                <component :is="tool.icon" class="h-6 w-6" />
+              </div>
+              <Badge variant="outline" class="bg-slate-500/10 dark:bg-slate-950/40 border-slate-200 dark:border-slate-500/30 text-slate-600 dark:text-slate-400">{{ isRTL ? 'مفتوح' : 'Open' }}</Badge>
+            </div>
+            <CardTitle class="text-base font-bold mt-4 tracking-tight text-foreground/90 group-hover:text-foreground transition-colors">{{ t(tool.nameKey) }}</CardTitle>
+          </CardHeader>
+          
+          <CardContent class="p-6 pt-2 flex-1 flex flex-col justify-between">
+            <p class="text-xs text-muted-foreground group-hover:text-foreground/80 transition-colors leading-relaxed">{{ t(tool.descKey) }}</p>
+            <div class="mt-6 flex items-center justify-end text-xs font-semibold text-slate-600 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors gap-1">
+              <span>{{ isRTL ? 'فتح الإعدادات' : 'Open Settings' }}</span>
+              <component :is="isRTL ? ArrowLeft : ArrowRight" class="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1" :class="isRTL && 'group-hover:-translate-x-1'" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+
+    <div class="relative z-10 flex items-center justify-between border-t border-border/60 p-4 mx-4 md:mx-8 text-xs text-muted-foreground">
+      <div class="flex items-center gap-1.5"><Flame class="h-4 w-4 text-orange-500" /><span>Whatomate Settings</span></div>
+      <span>© 2026 Whatomate Inc.</span>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.animate-pulse { animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+@keyframes pulse { 0%, 100% { opacity: 0.1; } 50% { opacity: 0.3; } }
+.duration-5000 { animation-duration: 5s; }
+</style>

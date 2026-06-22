@@ -54,6 +54,18 @@ func classifySendError(err error) sendErrorClass {
 		}
 	}
 
+	// WhatsApp "server returned error 400" typically signals a transient
+	// Signal/PN-LID session desync rather than a hard permanent failure.
+	// whatsmeow logs "No sessions or sender keys found to migrate from <PN> to <LID>"
+	// immediately before the 400 ack. The session is usually rebuilt within
+	// seconds via an incoming message or app-state sync, so classifying it as
+	// retryable gives the existing queue retry loop (1s/2s/4s backoff) a chance
+	// to succeed instead of marking the message as permanently failed.
+	if strings.Contains(normalized, "server returned error 400") ||
+		strings.Contains(normalized, "400 bad request") {
+		return sendErrorRetryable
+	}
+
 	return sendErrorRetryable
 }
 

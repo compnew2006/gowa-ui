@@ -20,6 +20,8 @@ const licenseStore = {
 
 const configStore = {
   isWhatsmeow: false,
+  fetchConfig: vi.fn(async () => undefined),
+  isModuleEnabled: vi.fn<(key: string) => boolean>(() => true),
 };
 
 vi.mock("@/stores/auth", () => ({
@@ -46,6 +48,8 @@ describe("router license route", () => {
     licenseStore.showQuotaOverage = false;
     licenseStore.fetchBootstrap.mockResolvedValue({});
     configStore.isWhatsmeow = false;
+    configStore.fetchConfig.mockResolvedValue(undefined);
+    configStore.isModuleEnabled.mockReturnValue(true);
     window.history.replaceState({}, "", "/");
   });
 
@@ -75,6 +79,43 @@ describe("router license route", () => {
     await router.isReady();
 
     expect(router.currentRoute.value.name).toBe("license-cleanup");
+  });
+
+  it("redirects away from a disabled compiled module", async () => {
+    const { default: router } = await import("./index");
+    configStore.isModuleEnabled.mockImplementation(
+      (key: string) => key !== "facebook-comments",
+    );
+
+    await router.push("/facebook/comments");
+    await router.isReady();
+
+    expect(configStore.fetchConfig).toHaveBeenCalled();
+    expect(configStore.isModuleEnabled).toHaveBeenCalledWith(
+      "facebook-comments",
+    );
+    expect(router.currentRoute.value.path).not.toBe("/facebook/comments");
+  });
+
+  it("allows an enabled compiled module route", async () => {
+    const { default: router } = await import("./index");
+
+    await router.push("/facebook/accounts");
+    await router.isReady();
+
+    expect(configStore.isModuleEnabled).toHaveBeenCalledWith(
+      "facebook-accounts",
+    );
+    expect(router.currentRoute.value.path).toBe("/facebook/accounts");
+  });
+
+  it("allows admins to open module administration", async () => {
+    const { default: router } = await import("./index");
+
+    await router.push("/settings/modules");
+    await router.isReady();
+
+    expect(router.currentRoute.value.name).toBe("modules-settings");
   });
 
   it("allows users with uploads cleanup permission to access /settings", async () => {

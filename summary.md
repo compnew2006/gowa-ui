@@ -103,3 +103,32 @@ ssh root@31.97.192.53 "whatomate-switch status"
 - ✅ Per-page settings persist after refresh
 - ✅ Admin auto-replies hidden from UI
 - ❗ WhatsApp notification requires: production per-page config OR connected sandbox instance
+
+---
+
+# GREEN Deployment Summary - 2026-06-20 08:02 UTC
+
+## Actions
+1. **Backup**: `/root/whatomate_backups/pre-deploy-20260620_075734.tar.gz` (95MB)
+2. **Build**: Cross-compiled `d5ce1326` for linux/amd64 with license keyring embedded
+3. **Deploy**: Uploaded `whatomate.green.d5ce1326-deploy20260620_075900` to VPS
+4. **Restart**: `systemctl restart whatomate.service`
+
+## Verification
+| Check | Result |
+|---|---|
+| Version | `d5ce1326-deploy20260620_080042` ✅ |
+| Service | active ✅ |
+| `/health` | 200 ✅ |
+| License | enabled=true, status=active ✅ |
+| Drops | 0 ✅ |
+| Instances | 16 connected |
+
+## One-Command Switch
+```bash
+# GREEN (active)
+ln -sfn /opt/whatomate/bin/whatomate.green.d5ce1326-deploy20260620_075900 /opt/whatomate/bin/whatomate && systemctl restart whatomate
+
+# BLUE (rollback)
+ln -sfn /opt/whatomate/bin/whatomate.green.cfbcc1ec-deploy150615 /opt/whatomate/bin/whatomate && systemctl restart whatomate
+```

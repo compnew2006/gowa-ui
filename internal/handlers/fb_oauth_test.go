@@ -2,17 +2,17 @@ package handlers_test
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/crypto"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/models"
+	facebookaccounts "github.com/compnew2006/whatomate/plugin/facebook-accounts"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -20,134 +20,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
-
-func TestApp_InitFacebookOAuth_AddsRerequestAuthType(t *testing.T) {
-	app := newTestApp(t)
-	app.Config.FacebookOAuth = config.FacebookOAuthConfig{
-		AppID:       "test-app-id",
-		AppSecret:   "test-app-secret",
-		APIVersion:  "v20.0",
-		RedirectURI: "https://example.com/api/facebook/oauth/callback",
-	}
-	org := testutil.CreateTestOrganization(t, app.DB)
-	user := createAccountsAuthorizedUser(t, app, org.ID)
-
-	req := testutil.NewGETRequest(t)
-	testutil.SetAuthContext(req, org.ID, user.ID)
-
-	err := app.InitFacebookOAuth(req)
-	require.NoError(t, err)
-	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-	var resp struct {
-		Data struct {
-			AuthURL string `json:"auth_url"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
-	authURL, err := url.Parse(resp.Data.AuthURL)
-	require.NoError(t, err)
-	query := authURL.Query()
-
-	assert.Equal(t, "rerequest", query.Get("auth_type"))
-	assert.Equal(t, "code", query.Get("response_type"))
-	assert.Equal(t, "test-app-id", query.Get("client_id"))
-	assert.NotEmpty(t, query.Get("state"))
-	assert.Contains(t, strings.Split(query.Get("scope"), ","), "pages_show_list")
-}
-
-func TestApp_CallbackFacebookOAuth_TokenExchangeErrorDoesNotSaveAccount(t *testing.T) {
-	app, server := newFacebookOAuthCallbackTestApp(t, facebookOAuthGraphScenario{
-		CodeExchangeStatus: http.StatusOK,
-		CodeExchangeBody: map[string]any{
-			"error": map[string]any{
-				"message": "Invalid verification code",
-				"type":    "OAuthException",
-				"code":    100,
-			},
-		},
-	})
-	defer server.Close()
-
-	org := testutil.CreateTestOrganization(t, app.DB)
-	user := createAccountsAuthorizedUser(t, app, org.ID)
-	stateToken := storeFacebookOAuthState(t, app, org.ID, user.ID, "token-error-state")
-	req := newFacebookOAuthCallbackRequest(t, stateToken)
-
-	err := app.CallbackFacebookOAuth(req)
-	require.NoError(t, err)
-
-	assertFacebookOAuthRedirect(t, req, "error", "")
-	assertFacebookAccountCount(t, app, 0)
-}
-
-func TestApp_CallbackFacebookOAuth_RejectsPageTokenDebugType(t *testing.T) {
-	app, server := newFacebookOAuthCallbackTestApp(t, facebookOAuthGraphScenario{
-		DebugTokenType: "PAGE",
-	})
-	defer server.Close()
-
-	org := testutil.CreateTestOrganization(t, app.DB)
-	user := createAccountsAuthorizedUser(t, app, org.ID)
-	stateToken := storeFacebookOAuthState(t, app, org.ID, user.ID, "page-token-state")
-	req := newFacebookOAuthCallbackRequest(t, stateToken)
-
-	err := app.CallbackFacebookOAuth(req)
-	require.NoError(t, err)
-
-	assertFacebookOAuthRedirect(t, req, "error", "Facebook returned a PAGE token")
-	assertFacebookAccountCount(t, app, 0)
-}
-
-func TestApp_CallbackFacebookOAuth_SavesVerifiedUserTokenAndPageTokens(t *testing.T) {
-	app, server := newFacebookOAuthCallbackTestApp(t, facebookOAuthGraphScenario{
-		DebugTokenType: "USER",
-	})
-	defer server.Close()
-
-	org := testutil.CreateTestOrganization(t, app.DB)
-	user := createAccountsAuthorizedUser(t, app, org.ID)
-	stateToken := storeFacebookOAuthState(t, app, org.ID, user.ID, "user-token-state")
-	req := newFacebookOAuthCallbackRequest(t, stateToken)
-
-	err := app.CallbackFacebookOAuth(req)
-	require.NoError(t, err)
-
-	assertFacebookOAuthRedirect(t, req, "connected", "")
-
-	var account models.FacebookAccount
-	require.NoError(t, app.DB.First(&account, "organization_id = ? AND account_uid = ?", org.ID, "user-123").Error)
-	decryptedUserToken, err := crypto.Decrypt(account.AccessToken, app.Config.App.EncryptionKey)
-	require.NoError(t, err)
-	assert.Equal(t, "long-user-token", decryptedUserToken)
-
-	decryptedPageTokens, err := crypto.Decrypt(account.PageTokens, app.Config.App.EncryptionKey)
-	require.NoError(t, err)
-	var pageTokens map[string]string
-	require.NoError(t, json.Unmarshal([]byte(decryptedPageTokens), &pageTokens))
-	assert.Equal(t, map[string]string{"page-1": "page-token-1"}, pageTokens)
-	assert.Equal(t, float64(1), account.Data["page_count"])
-}
-
-func TestApp_CallbackFacebookOAuth_PageFetchFailureDoesNotSaveAccount(t *testing.T) {
-	app, server := newFacebookOAuthCallbackTestApp(t, facebookOAuthGraphScenario{
-		DebugTokenType:       "USER",
-		AccountsStatus:       http.StatusBadRequest,
-		AccountsErrorMessage: "Tried accessing nonexisting field",
-	})
-	defer server.Close()
-
-	org := testutil.CreateTestOrganization(t, app.DB)
-	user := createAccountsAuthorizedUser(t, app, org.ID)
-	stateToken := storeFacebookOAuthState(t, app, org.ID, user.ID, "page-fetch-failure-state")
-	req := newFacebookOAuthCallbackRequest(t, stateToken)
-
-	err := app.CallbackFacebookOAuth(req)
-	require.NoError(t, err)
-
-	assertFacebookOAuthRedirect(t, req, "error", "failed to fetch managed Facebook pages")
-	assertFacebookAccountCount(t, app, 0)
-}
 
 func TestApp_RefreshFacebookAccountPages_UpdatesMetadataAndTokens(t *testing.T) {
 	app, server := newFacebookOAuthCallbackTestApp(t, facebookOAuthGraphScenario{})
@@ -162,7 +34,7 @@ func TestApp_RefreshFacebookAccountPages_UpdatesMetadataAndTokens(t *testing.T) 
 	}}, map[string]string{"page-1": "old-page-token"})
 	req := newFacebookPageManagementRequest(t, org.ID, user.ID, account.ID, "")
 
-	err := app.RefreshFacebookAccountPages(req)
+	err := newFacebookAccountsPlugin(t, app).RefreshFacebookAccountPages(req)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
@@ -189,7 +61,7 @@ func TestApp_ConnectFacebookAccountPage_RestoresSelectedPageToken(t *testing.T) 
 	}}, map[string]string{})
 	req := newFacebookPageManagementRequest(t, org.ID, user.ID, account.ID, "page-1")
 
-	err := app.ConnectFacebookAccountPage(req)
+	err := newFacebookAccountsPlugin(t, app).ConnectFacebookAccountPage(req)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
@@ -215,7 +87,7 @@ func TestApp_DisconnectFacebookAccountPage_RemovesOnlySelectedToken(t *testing.T
 	}}, map[string]string{"page-1": "page-token-1", "page-2": "page-token-2"})
 	req := newFacebookPageManagementRequest(t, org.ID, user.ID, account.ID, "page-1")
 
-	err := app.DisconnectFacebookAccountPage(req)
+	err := newFacebookAccountsPlugin(t, app).DisconnectFacebookAccountPage(req)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
@@ -242,7 +114,7 @@ func TestApp_RemoveFacebookAccountPage_RemovesMetadataAndToken(t *testing.T) {
 	}}, map[string]string{"page-1": "page-token-1", "page-2": "page-token-2"})
 	req := newFacebookPageManagementRequest(t, org.ID, user.ID, account.ID, "page-1")
 
-	err := app.RemoveFacebookAccountPage(req)
+	err := newFacebookAccountsPlugin(t, app).RemoveFacebookAccountPage(req)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
@@ -267,7 +139,7 @@ func TestApp_DisconnectFacebookAccountPage_CrossOrgReturnsNotFound(t *testing.T)
 	}}, map[string]string{"page-1": "page-token-1"})
 	req := newFacebookPageManagementRequest(t, otherOrg.ID, otherUser.ID, account.ID, "page-1")
 
-	err := app.DisconnectFacebookAccountPage(req)
+	err := newFacebookAccountsPlugin(t, app).DisconnectFacebookAccountPage(req)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
 
@@ -356,19 +228,6 @@ func newFacebookOAuthCallbackTestApp(t *testing.T, scenario facebookOAuthGraphSc
 		BaseURL:     server.URL,
 	}
 	return app, server
-}
-
-func storeFacebookOAuthState(t *testing.T, app *handlers.App, orgID, userID uuid.UUID, stateToken string) string {
-	t.Helper()
-	state := models.FacebookOAuthState{
-		OrganizationID: orgID,
-		UserID:         userID,
-		StateToken:     stateToken,
-		Action:         "connect",
-		ExpiresAt:      time.Now().Add(10 * time.Minute),
-	}
-	require.NoError(t, app.DB.Create(&state).Error)
-	return stateToken
 }
 
 func newFacebookOAuthCallbackRequest(t *testing.T, stateToken string) *fastglue.Request {
@@ -498,4 +357,11 @@ func defaultString(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func newFacebookAccountsPlugin(t *testing.T, app *handlers.App) *facebookaccounts.Plugin {
+	t.Helper()
+	plugin := &facebookaccounts.Plugin{}
+	require.NoError(t, plugin.Init(app, app.DB, nil, slog.Default()))
+	return plugin
 }

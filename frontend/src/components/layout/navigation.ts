@@ -35,6 +35,7 @@ import {
   Target,
   BookOpen,
   UserRoundCog,
+  Boxes,
 } from "lucide-vue-next";
 import type { Component } from "vue";
 
@@ -48,6 +49,8 @@ export interface NavItem {
   childPermissions?: string[];
   children?: NavItem[];
   activeMatchPaths?: string[];
+  /** When set, the subheader label renders as a clickable link to this URL. Use a relative path like "/whatsapp" so it works on any domain. */
+  externalUrl?: string;
 }
 
 export const navigationItems: NavItem[] = [
@@ -138,6 +141,7 @@ export const navigationItems: NavItem[] = [
   {
     name: "nav.whatsappTools",
     path: "/whatsapp",
+    externalUrl: "/whatsapp",
     icon: Smartphone,
     permission: "campaigns",
     activeMatchPaths: [
@@ -252,6 +256,7 @@ export const navigationItems: NavItem[] = [
   {
     name: "nav.facebookTools",
     path: "/facebook",
+    externalUrl: "/facebook",
     icon: Facebook,
     activeMatchPaths: [
       "/facebook",
@@ -312,6 +317,7 @@ export const navigationItems: NavItem[] = [
   {
     name: "nav.settings",
     path: "/settings",
+    externalUrl: "/settings",
     icon: Settings,
     permission: "settings.general",
     activeMatchPaths: [
@@ -326,6 +332,7 @@ export const navigationItems: NavItem[] = [
       "/settings/custom-actions",
       "/settings/sso",
       "/settings/license",
+      "/settings/modules",
     ],
     childPermissions: [
       "settings.general",
@@ -338,6 +345,7 @@ export const navigationItems: NavItem[] = [
       "webhooks",
       "custom_actions",
       "settings.sso",
+      "organizations",
     ],
     children: [
       {
@@ -405,6 +413,12 @@ export const navigationItems: NavItem[] = [
         path: "/settings/license",
         icon: ShieldAlert,
         adminOnly: true,
+      },
+      {
+        name: "nav.modules",
+        path: "/settings/modules",
+        icon: Boxes,
+        permission: "organizations",
       },
     ],
   },

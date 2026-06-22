@@ -3,6 +3,13 @@ bin/
 /whatomate
 /whatomate*
 /whatomate_*
+
+# Database dumps and large scratch artifacts — never commit (PII risk, repo bloat)
+*.sql.bak
+/Dashboard/kingmaster/kingmaster_100k_backup.sql
+# Unrelated scratch installers / scripts
+/Meta.ai.dmg
+/Dashboard/kingmaster/download_videos.js
 *.bin
 /server
 /main

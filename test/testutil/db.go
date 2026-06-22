@@ -137,8 +137,6 @@ func runMigrations(db *gorm.DB) error {
 		&models.FacebookComment{},
 		&models.FacebookCommentReply{},
 		&models.FacebookCommentSettings{},
-		&models.FBPageSearch{},
-		&models.FBPeopleSearch{},
 	); err != nil {
 		return err
 	}

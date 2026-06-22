@@ -31,6 +31,13 @@ import (
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/pkg/whatsmeow"
 	_ "github.com/compnew2006/whatomate/plugin/campaign-interactive"
+	_ "github.com/compnew2006/whatomate/plugin/facebook-accounts"
+	_ "github.com/compnew2006/whatomate/plugin/facebook-comments"
+	_ "github.com/compnew2006/whatomate/plugin/facebook-core"
+	_ "github.com/compnew2006/whatomate/plugin/facebook-oauth"
+	_ "github.com/compnew2006/whatomate/plugin/facebook-page-search"
+	_ "github.com/compnew2006/whatomate/plugin/facebook-people-search"
+	_ "github.com/compnew2006/whatomate/plugin/module-management"
 	_ "github.com/compnew2006/whatomate/plugin/per-instance-uploads-cleanup"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -424,6 +431,9 @@ func runServer(args []string) {
 			lo.Fatal("Plugin migration failed", "error", err)
 		}
 		lo.Info("Plugin migrations completed")
+	}
+	if err := core.SyncManagedModules(context.Background()); err != nil {
+		lo.Fatal("Failed to synchronize managed modules", "error", err)
 	}
 	core.RegisterPluginRoutes(g)
 
@@ -1586,45 +1596,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/instances/{id}/reconnect", app.ReconnectInstance)
 	g.POST("/api/instances/{id}/status/send", app.SendStatus)
 	g.POST("/api/instances/{id}/auto-campaign/media", app.UploadInstanceAutoCampaignMedia)
-
-	// Facebook Accounts
-	g.GET("/api/facebook/accounts", app.ListFBAccounts)
-	g.POST("/api/facebook/accounts", app.CreateFBAccount)
-	g.GET("/api/facebook/oauth/init", app.InitFacebookOAuth)
-	g.GET("/api/facebook/oauth/callback", app.CallbackFacebookOAuth)
-	g.GET("/api/facebook/accounts/{id}", app.GetFBAccount)
-	g.PUT("/api/facebook/accounts/{id}", app.UpdateFBAccount)
-	g.DELETE("/api/facebook/accounts/{id}", app.DeleteFBAccount)
-	g.GET("/api/facebook/accounts/{id}/oauth/renew", app.RenewFacebookOAuth)
-	g.POST("/api/facebook/accounts/{id}/pages/refresh", app.RefreshFacebookAccountPages)
-	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/connect", app.ConnectFacebookAccountPage)
-	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/disconnect", app.DisconnectFacebookAccountPage)
-	g.DELETE("/api/facebook/accounts/{id}/pages/{page_id}", app.RemoveFacebookAccountPage)
-	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/feed", app.PostFacebookPage)
-	g.GET("/api/facebook/accounts/{id}/pages/{page_id}/insights", app.GetFacebookPageInsights)
-	g.POST("/api/facebook/accounts/{id}/pages/{page_id}/messages", app.SendFacebookPageMessage)
-	g.GET("/api/facebook/comments", app.ListFacebookComments)
-	g.GET("/api/facebook/comments/pages", app.ListFacebookCommentPages)
-	g.GET("/api/facebook/page-search", app.SearchFBPages)
-	g.GET("/api/facebook/people-search/campaigns", app.ListFBPeopleCampaigns)
-	g.GET("/api/facebook/people-search", app.SearchFBPeople)
-	g.POST("/api/facebook/people-search/add-contacts", app.AddFBPeopleContacts)
-	g.POST("/api/facebook/comments/sync", app.SyncFacebookComments)
-	g.GET("/api/facebook/comments/settings", app.GetFacebookCommentSettings)
-	g.PUT("/api/facebook/comments/settings", app.UpdateFacebookCommentSettings)
-	g.GET("/api/facebook/comments/pages/{page_id}/settings", app.GetPageCommentSettings)
-	g.PUT("/api/facebook/comments/pages/{page_id}/settings", app.UpdatePageCommentSettings)
-	g.POST("/api/facebook/comments/{id}/reply", app.ReplyFacebookComment)
-	g.PUT("/api/facebook/comments/{id}/status", app.UpdateFacebookCommentStatus)
-	g.GET("/api/facebook/comments/webhook", app.VerifyFacebookCommentsWebhook)
-	if cfg.RateLimit.Enabled {
-		window := time.Duration(cfg.RateLimit.WindowSeconds) * time.Second
-		g.POST("/api/facebook/comments/webhook", withRateLimit(app.ReceiveFacebookCommentsWebhook, middleware.RateLimitOpts{
-			Redis: rdb, Log: lo, Max: cfg.RateLimit.WebhookMaxAttempts, Window: window, KeyPrefix: "fb_comments_webhook", TrustProxy: cfg.RateLimit.TrustProxy,
-		}))
-	} else {
-		g.POST("/api/facebook/comments/webhook", app.ReceiveFacebookCommentsWebhook)
-	}
 
 	g.GET("/api/notifications", app.ListNotifications)
 	g.PUT("/api/notifications/{id}/dismiss", app.DismissNotification)

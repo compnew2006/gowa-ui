@@ -34,6 +34,7 @@
     "analytics": "Analíticas",
     "settings": "Configuración",
     "license": "Licencia",
+    "modules": "Módulos",
     "customerRouting": "Enrutamiento de clientes",
     "whatsappFilter": "Filtro de WhatsApp",
     "groupSearch": "Buscar Grupos",
@@ -73,7 +74,21 @@
     "extractDesc": "Extraiga mensajes, archivos multimedia y datos de chat de las conversaciones de WhatsApp.",
     "groupExtractionDesc": "Exporte la lista de grupos de las sesiones activas de WhatsApp.",
     "memberExtractionDesc": "Exporte la lista de participantes de los grupos activos de WhatsApp.",
-    "customerRoutingDesc": "Configure reglas de asignación de agentes y menús de selección de clientes."
+    "customerRoutingDesc": "Configure reglas de asignación de agentes y menús de selección de clientes.",
+    "generalDesc": "Gestione el idioma, la zona horaria y las preferencias básicas de la aplicación.",
+    "settingsAccountsDesc": "Gestione cuentas y sesiones de WhatsApp conectadas.",
+    "tagsDesc": "Cree y gestione etiquetas de contacto para la organización.",
+    "teamsDesc": "Organice usuarios en equipos para una colaboración estructurada.",
+    "usersDesc": "Gestione cuentas de usuario, roles y permisos.",
+    "rolesDesc": "Defina roles personalizados y permisos de acceso.",
+    "apiKeysDesc": "Gestione claves API para integraciones externas.",
+    "webhooksDesc": "Configure webhooks para notificaciones de eventos en tiempo real.",
+    "customActionsDesc": "Cree acciones personalizadas y reglas de automatización.",
+    "ssoDesc": "Configure proveedores de autenticación de inicio de sesión único.",
+    "licenseDesc": "Vea el estado de la licencia y gestione la activación.",
+    "settingsAppearanceDesc": "Personalice la apariencia de su espacio de trabajo.",
+    "settingsChatDesc": "Configure la visualización del chat y las preferencias de conversación.",
+    "settingsNotificationsDesc": "Gestione sus preferencias de notificación."
   },
   "agentSelection": {
     "page": {
@@ -697,5 +712,20 @@
       "statusReverted": "Estado del comentario revertido",
       "statusFailed": "Error al actualizar estado"
     }
+  },
+  "modules": {
+    "title": "Módulos",
+    "description": "Activa o desactiva módulos compilados globalmente o para la organización actual.",
+    "empty": "No hay módulos compilados registrados.",
+    "enabled": "Activado",
+    "disabled": "Desactivado",
+    "dependencies": "Dependencias",
+    "enableForOrganization": "Activar para la organización",
+    "disableForOrganization": "Desactivar para la organización",
+    "enableGlobally": "Activar globalmente",
+    "disableGlobally": "Desactivar globalmente",
+    "loadFailed": "No se pudieron cargar los módulos",
+    "updateFailed": "No se pudo actualizar el módulo",
+    "updated": "Estado del módulo actualizado"
   }
 }

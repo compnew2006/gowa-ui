@@ -112,6 +112,10 @@ func (a *App) oauthHTTPClient() *http.Client {
 	}
 }
 
+func (a *App) OAuthHTTPClient() *http.Client {
+	return a.oauthHTTPClient()
+}
+
 func (a *App) oauthContext() context.Context {
 	return context.WithValue(context.Background(), oauth2.HTTPClient, a.oauthHTTPClient())
 }

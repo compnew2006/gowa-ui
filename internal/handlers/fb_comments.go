@@ -17,6 +17,7 @@ import (
 	"time"
 
 	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
+	"github.com/compnew2006/whatomate/plugin/facebook-comments/commentdata"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
@@ -27,8 +28,6 @@ import (
 )
 
 const (
-	defaultFBCommentPostLimit   = 25
-	defaultFBCommentsPerPost    = 50
 	maxFBCommentPostLimit       = 100
 	maxFBCommentsPerPost        = 100
 	defaultFBCommentReplyText   = "تم الرد خاص"
@@ -38,20 +37,6 @@ const (
 	fbCommentReplyStatusFailed  = "failed"
 	fbCommentReplyStatusSkipped = "skipped"
 )
-
-type facebookCommentSettingsRequest struct {
-	Enabled                    *bool   `json:"enabled"`
-	SyncEnabled                *bool   `json:"sync_enabled"`
-	AutoReplyEnabled           *bool   `json:"auto_reply_enabled"`
-	AutoCommentReplyEnabled    *bool   `json:"auto_comment_reply_enabled"`
-	AutoPrivateReplyEnabled    *bool   `json:"auto_private_reply_enabled"`
-	AutoCommentReplyText       *string `json:"auto_comment_reply_text"`
-	AutoPrivateMessageText     *string `json:"auto_private_message_text"`
-	OnlyAutoReplyUnanswered    *bool   `json:"only_auto_reply_unanswered"`
-	IgnorePageAdminComments    *bool   `json:"ignore_page_admin_comments"`
-	DefaultSyncPostLimit       *int    `json:"default_sync_post_limit"`
-	DefaultSyncCommentsPerPost *int    `json:"default_sync_comments_per_post"`
-}
 
 type facebookCommentSyncRequest struct {
 	AccountID       string   `json:"account_id"`
@@ -221,143 +206,17 @@ type facebookCommentParentRef struct {
 	ID string `json:"id"`
 }
 
-func (a *App) GetFacebookCommentSettings(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionRead)
-	if !ok {
-		return nil
-	}
 
-	settings, err := a.getOrCreateFacebookCommentSettings(requestDB, orgID)
-	if err != nil {
-		a.Log.Error("Failed to load Facebook comment settings", "error", err, "organization_id", orgID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load Facebook comment settings", nil, "")
-	}
-	return r.SendEnvelope(map[string]any{"settings": settings})
-}
 
-func (a *App) UpdateFacebookCommentSettings(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionWrite)
-	if !ok {
-		return nil
-	}
 
-	var req facebookCommentSettingsRequest
-	if err := a.decodeRequest(r, &req); err != nil {
-		return nil
-	}
-	settings, err := a.getOrCreateFacebookCommentSettings(requestDB, orgID)
-	if err != nil {
-		a.Log.Error("Failed to load Facebook comment settings for update", "error", err, "organization_id", orgID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update Facebook comment settings", nil, "")
-	}
-
-	applyFacebookCommentSettingsRequest(settings, req)
-	if err := requestDB.Save(settings).Error; err != nil {
-		a.Log.Error("Failed to save Facebook comment settings", "error", err, "organization_id", orgID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update Facebook comment settings", nil, "")
-	}
-	return r.SendEnvelope(map[string]any{"settings": settings})
-}
 
 // GetPageCommentSettings returns auto-reply settings for a specific Facebook page.
-func (a *App) GetPageCommentSettings(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionRead)
-	if !ok {
-		return nil
-	}
-	pageID := facebookCommentPageID(r)
-	if pageID == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "page_id is required", nil, "")
-	}
-	settings, err := a.getOrCreatePageCommentSettings(requestDB, orgID, pageID)
-	if err != nil {
-		a.Log.Error("Failed to load Facebook page comment settings", "error", err, "organization_id", orgID, "page_id", pageID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load page comment settings", nil, "")
-	}
-	return r.SendEnvelope(map[string]any{"settings": settings})
-}
+
 
 // UpdatePageCommentSettings updates auto-reply settings for a specific Facebook page.
-func (a *App) UpdatePageCommentSettings(r *fastglue.Request) error {
-	requestDB := a.requestDB(r)
-	orgID, _, ok := a.requireRequestPermission(r, models.ResourceAccounts, models.ActionWrite)
-	if !ok {
-		return nil
-	}
-	pageID := facebookCommentPageID(r)
-	if pageID == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "page_id is required", nil, "")
-	}
-	var req struct {
-		AutoReplyEnabled        *bool    `json:"auto_reply_enabled"`
-		AutoCommentReplyEnabled *bool    `json:"auto_comment_reply_enabled"`
-		AutoPrivateReplyEnabled *bool    `json:"auto_private_reply_enabled"`
-		AutoCommentReplyTexts   []string `json:"auto_comment_reply_texts"`
-		AutoPrivateMessageTexts []string `json:"auto_private_message_texts"`
-		OnlyAutoReplyUnanswered *bool    `json:"only_auto_reply_unanswered"`
-		WhatsAppNotifyEnabled   *bool    `json:"whatsapp_notify_enabled"`
-		WhatsAppInstanceID      *string  `json:"whatsapp_instance_id"`
-		WhatsAppNotifyPhone     *string  `json:"whatsapp_notify_phone"`
-	}
-	if err := a.decodeRequest(r, &req); err != nil {
-		return nil
-	}
-	settings, err := a.getOrCreatePageCommentSettings(requestDB, orgID, pageID)
-	if err != nil {
-		a.Log.Error("Failed to load page settings for update", "error", err, "org_id", orgID, "page_id", pageID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update page settings", nil, "")
-	}
-	if req.AutoReplyEnabled != nil {
-		settings.AutoReplyEnabled = *req.AutoReplyEnabled
-	}
-	if req.AutoCommentReplyEnabled != nil {
-		settings.AutoCommentReplyEnabled = *req.AutoCommentReplyEnabled
-	}
-	if req.AutoPrivateReplyEnabled != nil {
-		settings.AutoPrivateReplyEnabled = *req.AutoPrivateReplyEnabled
-	}
-	if req.AutoCommentReplyTexts != nil {
-		settings.AutoCommentReplyTexts = models.JSONB{}
-		for i, t := range req.AutoCommentReplyTexts {
-			settings.AutoCommentReplyTexts[fmt.Sprintf("%d", i)] = t
-		}
-	}
-	if req.AutoPrivateMessageTexts != nil {
-		settings.AutoPrivateMessageTexts = models.JSONB{}
-		for i, t := range req.AutoPrivateMessageTexts {
-			settings.AutoPrivateMessageTexts[fmt.Sprintf("%d", i)] = t
-		}
-	}
-	if req.OnlyAutoReplyUnanswered != nil {
-		settings.OnlyAutoReplyUnanswered = *req.OnlyAutoReplyUnanswered
-	}
-	if req.WhatsAppNotifyEnabled != nil {
-		settings.WhatsAppNotifyEnabled = *req.WhatsAppNotifyEnabled
-	}
-	if req.WhatsAppInstanceID != nil {
-		if *req.WhatsAppInstanceID == "" {
-			settings.WhatsAppInstanceID = nil
-		} else if id, err := uuid.Parse(*req.WhatsAppInstanceID); err == nil {
-			settings.WhatsAppInstanceID = &id
-		}
-	}
-	if req.WhatsAppNotifyPhone != nil {
-		settings.WhatsAppNotifyPhone = *req.WhatsAppNotifyPhone
-	}
-	if err := requestDB.Save(settings).Error; err != nil {
-		a.Log.Error("Failed to save page comment settings", "error", err, "org_id", orgID, "page_id", pageID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update page settings", nil, "")
-	}
-	return r.SendEnvelope(map[string]any{"settings": settings})
-}
 
-func facebookCommentPageID(r *fastglue.Request) string {
-	pageID, _ := r.RequestCtx.UserValue("page_id").(string)
-	return strings.TrimSpace(pageID)
-}
+
+
 
 // getOrCreatePageCommentSettings returns page-level settings, creating defaults if not found.
 func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageID string) (*models.FacebookPageCommentSettings, error) {
@@ -887,35 +746,8 @@ func (a *App) verifyFacebookWebhookSignature(r *fastglue.Request, body []byte) e
 }
 
 func (a *App) getOrCreateFacebookCommentSettings(db *gorm.DB, orgID uuid.UUID) (*models.FacebookCommentSettings, error) {
-	var settings models.FacebookCommentSettings
-	err := db.Where("organization_id = ?", orgID).First(&settings).Error
-	if err == nil {
-		normalizeFacebookCommentSettings(&settings)
-		return &settings, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-	settings = models.FacebookCommentSettings{
-		OrganizationID:             orgID,
-		Enabled:                    true,
-		SyncEnabled:                true,
-		AutoReplyEnabled:           false,
-		AutoCommentReplyEnabled:    true,
-		AutoPrivateReplyEnabled:    true,
-		AutoCommentReplyText:       defaultFBCommentReplyText,
-		AutoPrivateMessageText:     defaultFBPrivateMessageText,
-		OnlyAutoReplyUnanswered:    true,
-		IgnorePageAdminComments:    true,
-		DefaultSyncPostLimit:       defaultFBCommentPostLimit,
-		DefaultSyncCommentsPerPost: defaultFBCommentsPerPost,
-		Metadata:                   models.JSONB{},
-	}
-	if err := db.Create(&settings).Error; err != nil {
-			return nil, err
-		}
-		return &settings, nil
-	}
+	return commentdata.GetOrCreateSettings(db, orgID)
+}
 
 func (a *App) findFacebookAccountByPageID(pageID string) (*models.FacebookAccount, string, error) {
 	// Check Redis cache first to avoid scanning all accounts and decrypting page tokens.
@@ -960,6 +792,13 @@ func (a *App) findFacebookAccountByPageID(pageID string) (*models.FacebookAccoun
 		}
 	}
 	return nil, "", gorm.ErrRecordNotFound
+}
+
+// FindFacebookAccountByPageID is the exported accessor for the account-by-page
+// lookup used by plugins (e.g. facebook-comments page settings). It preserves
+// the historical resolution behavior and delegates to findFacebookAccountByPageID.
+func (a *App) FindFacebookAccountByPageID(pageID string) (*models.FacebookAccount, string, error) {
+	return a.findFacebookAccountByPageID(pageID)
 }
 
 func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.FacebookAccount, pageID, pageName string, value facebookCommentsWebhookValue) (*models.FacebookComment, bool, error) {
@@ -1036,53 +875,9 @@ func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.Facebook
 	return &saved, created, nil
 }
 
-func applyFacebookCommentSettingsRequest(settings *models.FacebookCommentSettings, req facebookCommentSettingsRequest) {
-	if req.Enabled != nil {
-		settings.Enabled = *req.Enabled
-	}
-	if req.SyncEnabled != nil {
-		settings.SyncEnabled = *req.SyncEnabled
-	}
-	if req.AutoReplyEnabled != nil {
-		settings.AutoReplyEnabled = *req.AutoReplyEnabled
-	}
-	if req.AutoCommentReplyEnabled != nil {
-		settings.AutoCommentReplyEnabled = *req.AutoCommentReplyEnabled
-	}
-	if req.AutoPrivateReplyEnabled != nil {
-		settings.AutoPrivateReplyEnabled = *req.AutoPrivateReplyEnabled
-	}
-	if req.AutoCommentReplyText != nil {
-		settings.AutoCommentReplyText = strings.TrimSpace(*req.AutoCommentReplyText)
-	}
-	if req.AutoPrivateMessageText != nil {
-		settings.AutoPrivateMessageText = strings.TrimSpace(*req.AutoPrivateMessageText)
-	}
-	if req.OnlyAutoReplyUnanswered != nil {
-		settings.OnlyAutoReplyUnanswered = *req.OnlyAutoReplyUnanswered
-	}
-	if req.IgnorePageAdminComments != nil {
-		settings.IgnorePageAdminComments = *req.IgnorePageAdminComments
-	}
-	if req.DefaultSyncPostLimit != nil {
-		settings.DefaultSyncPostLimit = clampPositive(*req.DefaultSyncPostLimit, defaultFBCommentPostLimit, maxFBCommentPostLimit)
-	}
-	if req.DefaultSyncCommentsPerPost != nil {
-		settings.DefaultSyncCommentsPerPost = clampPositive(*req.DefaultSyncCommentsPerPost, defaultFBCommentsPerPost, maxFBCommentsPerPost)
-	}
-	normalizeFacebookCommentSettings(settings)
-}
 
-func normalizeFacebookCommentSettings(settings *models.FacebookCommentSettings) {
-	if strings.TrimSpace(settings.AutoCommentReplyText) == "" {
-		settings.AutoCommentReplyText = defaultFBCommentReplyText
-	}
-	if strings.TrimSpace(settings.AutoPrivateMessageText) == "" {
-		settings.AutoPrivateMessageText = defaultFBPrivateMessageText
-	}
-	settings.DefaultSyncPostLimit = clampPositive(settings.DefaultSyncPostLimit, defaultFBCommentPostLimit, maxFBCommentPostLimit)
-	settings.DefaultSyncCommentsPerPost = clampPositive(settings.DefaultSyncCommentsPerPost, defaultFBCommentsPerPost, maxFBCommentsPerPost)
-}
+
+
 
 func normalizeFacebookCommentForSave(comment *models.FacebookComment) {
 	comment.PageID = truncateFacebookCommentField(comment.PageID, 255)
