@@ -22,6 +22,23 @@ var (
 	ErrModuleHasEnabledDependents = errors.New("module has enabled dependents")
 )
 
+// licenseTierGetter returns the active deployment's license tier, or "" when
+// licensing is disabled / no license is active. It is injected by the runtime
+// (cmd/whatomate) to avoid a core → license import cycle. The default value
+// returns "" which causes GateModule to skip the license-tier check and fall
+// back to the existing ModuleManager state.
+var licenseTierGetter = func() string { return "" }
+
+// SetLicenseTierGetter wires the license-tier resolver. It must be called once
+// during startup, before serving requests.
+func SetLicenseTierGetter(getter func() string) {
+	if getter == nil {
+		licenseTierGetter = func() string { return "" }
+		return
+	}
+	licenseTierGetter = getter
+}
+
 type ModuleCatalog struct {
 	Key                    string   `gorm:"column:key;primaryKey;size:128" json:"key"`
 	DisplayName            string   `gorm:"column:display_name;not null" json:"display_name"`
@@ -222,6 +239,14 @@ func GateModule(key string, handler fastglue.FastRequestHandler) fastglue.FastRe
 		manager := GetModuleManager()
 		if manager == nil {
 			return handler(r)
+		}
+
+		// License entitlement gate: when a license tier is active, the module
+		// must be present in the tier's entitlement map. Returning 404 (not
+		// 403) keeps the disabled/unlicensed surface indistinguishable from a
+		// non-existent route, matching the existing deactivation contract.
+		if tier := licenseTierGetter(); tier != "" && !LicenseAllowsModule(tier, key) {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Not found", nil, "")
 		}
 
 		organizationID, hasOrganization := middleware.GetOrganizationID(r)

@@ -1,7 +1,7 @@
 # Whatomate — Code Map
 
 > Auto-generated comprehensive index of the codebase architecture.
-> Last updated: 2026-06-04
+> Last updated: 2026-06-22
 
 ---
 
@@ -906,8 +906,112 @@ Key config sections: `[server]`, `[database]`, `[redis]`, `[whatsapp]` (provider
 | `internal/database/` | GORM + PostgreSQL setup, migrations, seeding |
 | `internal/frontend/` | Vue SPA embedding (`//go:embed all:dist`) |
 | `internal/tenant/` | Multi-tenancy (HostOrganization, TenantScope) |
-| `internal/license/` | Runtime license enforcement |
+| `internal/license/` | Runtime license enforcement (HWID-bound Ed25519 JWT, capacity caps, tier) |
 | `internal/licenseissuer/` | License issuance & key ring storage |
 | `internal/licensestudio/` | License management HTTP server |
 | `internal/campaignstats/` | Campaign receipt aggregation |
 | `frontend/` | Vue 3 SPA (Vite + Pinia + TypeScript + shadcn-vue + Tailwind) |
+
+---
+
+## 12. Plugin, Module & License System
+
+> Full guide: [`PLUGINS_AND_MODULES.md`](./PLUGINS_AND_MODULES.md)
+
+Three independent layers compose at runtime:
+
+| Layer | Package | Decides | Granularity |
+|---|---|---|---|
+| **Plugin** | `internal/core` + `plugin/<name>/` | Which code is compiled in & registers routes | Per-binary (compile time) |
+| **Module** | `internal/core/module_manager.go` + `plugin/module-management/` | Which compiled plugins are ON, globally or per-org | Global + per-org (DB tables) |
+| **License** | `internal/license/` | Host capacity caps + tier constraining module enablement | Per-host (HWID JWT) |
+
+### 12.1 Plugin interfaces (`internal/core/plugin.go`)
+
+```go
+type Plugin interface {
+    Name() string
+    Init(app *handlers.App, db *gorm.DB, rdb *redis.Client, log *slog.Logger) error
+    Routes(g *fastglue.Fastglue)
+    Migrate(db *gorm.DB) error
+}
+
+// Optional — opt into the Module system (DB-controlled enable/disable).
+type ManagedPlugin interface {
+    Plugin
+    Manifest() ModuleManifest
+}
+
+// Optional — contribute plugin-namespaced RBAC.
+type PermissionProvidingPlugin interface {
+    Plugin
+    Permissions() []PluginPermission
+}
+```
+
+**Plugin lifecycle** (`cmd/whatomate/main.go`):
+1. `core.InitPlugins(app, db, rdb, log)` — validates manifests, topological sort, builds `ModuleManager`, calls each `Init(...)`.
+2. `core.SetLicenseTierGetter(...)` — wires license-tier resolver for `GateModule`.
+3. `core.SyncManagedModules(ctx)` — reconciles `module_catalog` / `organization_modules`.
+4. `core.SyncPluginPermissions(ctx, db)` — idempotently seeds plugin-declared permissions.
+5. `core.RegisterPluginRoutes(g)`.
+
+### 12.2 Module Manager (`internal/core/module_manager.go`)
+
+- **Tables owned**: `module_catalog`, `organization_modules`, `module_schema_versions`.
+- **Effective state**: `module.global_enabled AND organization.enabled AND deps satisfied AND installed_schema_version >= schema_version`.
+- **`GateModule(key, handler)`** — route guard; checks License tier first (returns 404 if not licensed), then Module state (returns 404 if disabled). Single chokepoint.
+- **Dependency safety**: disabling a module with enabled dependents fails with `ErrModuleHasEnabledDependents`; enabling cascades to dependencies transactionally.
+
+### 12.3 License → Module Bridge (`internal/core/license_tiers.go`)
+
+```go
+var tierModules = map[string]map[string]bool{
+    "trial":      {"facebook-core": true, "facebook-accounts": true},
+    "starter":    {"facebook-core": true, "facebook-accounts": true, "facebook-comments": true},
+    "pro":        {"*": true},
+    "enterprise": {"*": true},
+}
+
+func LicenseAllowsModule(tier, moduleKey string) bool
+```
+
+- Single source of truth for tier→module entitlement.
+- `core.SetLicenseTierGetter` injects the resolver (avoids `core → license` import cycle).
+- Unknown tier / empty tier = deny by default.
+- When no license is active (`tier == ""`), `GateModule` skips the tier check — backwards compatible.
+
+### 12.4 Module Management Plugin (`plugin/module-management/`)
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/modules/effective` | auth | Modules effective for caller's org |
+| GET | `/api/admin/modules` | super-admin | Global module state |
+| PUT | `/api/admin/modules/{key}` | super-admin | Toggle global enable (403 `module_not_licensed` if tier forbids) |
+| GET | `/api/admin/modules/events` | super-admin | Global audit feed |
+| GET | `/api/organizations/{id}/modules` | `organizations:read` | Org module state |
+| PUT | `/api/organizations/{id}/modules/{key}` | `organizations:write` | Toggle per-org enable (403 `module_not_licensed` if tier forbids) |
+| GET | `/api/organizations/{id}/modules/events` | `organizations:read` | Org audit feed |
+
+Audit table `module_events` (org-scoped, plugin-owned via `Migrate`). Action values: `enable`, `disable`, `license_deny`, `conflict`.
+
+### 12.5 Plugin RBAC
+
+Plugins implementing `PermissionProvidingPlugin` declare permissions like `plugin.facebook.accounts:pages_manage`. These are seeded into the standard `permissions` table by `core.SyncPluginPermissions` and enforced via the existing `app.HasPermission(userID, resource, action, orgID)`. Super-admins bypass.
+
+Current plugin-permission catalog:
+- `plugin.facebook.accounts:pages_manage` — gates connect/disconnect/remove page lifecycle (on top of `accounts:write`).
+
+### 12.6 Quotas (License capacity caps)
+
+Enforced by `license.Service.CheckQuotaWithDelta(resource, orgID, delta)`; surfaced via `app.checkQuotaOrRespond` / `app.checkQuotaWithDeltaOrRespond` (the DRY helpers).
+
+| Resource | Limit field | Checked at |
+|---|---|---|
+| Organizations | `MaxOrganizations` (global) | Org create |
+| Users | `MaxUsersPerOrg` | User invite/create |
+| WhatsApp Endpoints | `MaxWhatsAppEndpointsPerOrg` | Endpoint create |
+| Storage | `MaxStorageBytesPerOrg` | Before upload (hard limit) |
+
+Exceeded → `402 Payment Required` with `{resource, current, limit, over_quota}`.
+

@@ -94,7 +94,7 @@ async function loadMediaPreview(id: string) {
   try {
     const response = await savedContentsService.getMedia(id);
     const blob = new Blob([response.data], {
-      type: response.headers["content-type"],
+      type: response.headers["content-type"] as string,
     });
     mediaBlobUrls.value[id] = URL.createObjectURL(blob);
   } catch {

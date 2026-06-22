@@ -167,3 +167,68 @@ func TestGateModuleBlocksDisabledTenantWithoutCallingHandler(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, request.RequestCtx.Response.StatusCode())
 	assert.True(t, called)
 }
+
+// TestGateModuleBlocksUnlicensedTier verifies the License→Module bridge: when
+// the injected tier getter returns a tier that does not include the module,
+// GateModule returns 404 without consulting the per-org module state, and
+// without calling the wrapped handler.
+func TestGateModuleBlocksUnlicensedTier(t *testing.T) {
+	db := newModuleManagerTestDB(t)
+	org := createModuleManagerTestOrganization(t, db, "TierGate")
+	manager := NewModuleManager(db, moduleManagerTestManifests())
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.NoError(t, manager.Sync(context.Background()))
+
+	previousManager := moduleManager
+	previousGetter := licenseTierGetter
+	moduleManager = manager
+	licenseTierGetter = func() string { return "trial" } // trial does NOT include facebook-comments
+	t.Cleanup(func() {
+		moduleManager = previousManager
+		licenseTierGetter = previousGetter
+	})
+
+	called := false
+	handler := GateModule("facebook-comments", func(r *fastglue.Request) error {
+		called = true
+		return r.SendEnvelope(map[string]bool{"called": true})
+	})
+
+	request := testutil.NewRequest(t)
+	request.RequestCtx.SetUserValue(middleware.ContextKeyOrganizationID, org.ID)
+	require.NoError(t, handler(request))
+	assert.Equal(t, fasthttp.StatusNotFound, request.RequestCtx.Response.StatusCode())
+	assert.False(t, called, "handler must not be called when tier does not license the module")
+}
+
+// TestGateModuleSkipsTierCheckWhenUnlicensed confirms backwards compatibility:
+// when no license is active (tier getter returns ""), GateModule falls back to
+// the pure ModuleManager state and does NOT block on the tier map.
+func TestGateModuleSkipsTierCheckWhenUnlicensed(t *testing.T) {
+	db := newModuleManagerTestDB(t)
+	org := createModuleManagerTestOrganization(t, db, "NoLicense")
+	manager := NewModuleManager(db, moduleManagerTestManifests())
+	require.NoError(t, manager.Migrate(context.Background()))
+	require.NoError(t, manager.Sync(context.Background()))
+
+	previousManager := moduleManager
+	previousGetter := licenseTierGetter
+	moduleManager = manager
+	licenseTierGetter = func() string { return "" }
+	t.Cleanup(func() {
+		moduleManager = previousManager
+		licenseTierGetter = previousGetter
+	})
+
+	called := false
+	handler := GateModule("facebook-accounts", func(r *fastglue.Request) error {
+		called = true
+		return r.SendEnvelope(map[string]bool{"called": true})
+	})
+
+	request := testutil.NewRequest(t)
+	request.RequestCtx.SetUserValue(middleware.ContextKeyOrganizationID, org.ID)
+	require.NoError(t, handler(request))
+	assert.Equal(t, fasthttp.StatusOK, request.RequestCtx.Response.StatusCode())
+	assert.True(t, called, "without an active license, GateModule must fall back to module state")
+}

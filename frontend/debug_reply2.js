@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { chromium } from 'playwright';
 
 (async () => {

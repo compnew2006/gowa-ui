@@ -33,6 +33,32 @@ func (p *Plugin) Manifest() core.ModuleManifest {
 	}
 }
 
+// Resource constants for plugin-namespaced permissions. Kept unexported and
+// local to this plugin; the catalog itself is declared in Permissions() below.
+const (
+	resourceFBAccountsPagesManage = "plugin.facebook.accounts"
+	actionPagesManage             = "pages_manage"
+)
+
+// Permissions implements core.PermissionProvidingPlugin. These permissions are
+// seeded at startup alongside models.DefaultPermissions() and are enforced via
+// the existing app.HasPermission machinery — no parallel auth system.
+//
+// plugin.facebook.accounts:pages_manage gates the destructive page lifecycle
+// (connect/disconnect/remove) on top of the existing accounts:write check. An
+// admin can therefore grant page management to a user without granting full
+// account write/delete. Existing accounts:write holders retain access because
+// the admin role auto-includes every permission (see SystemRolePermissions).
+func (p *Plugin) Permissions() []core.PluginPermission {
+	return []core.PluginPermission{
+		{
+			Resource:    resourceFBAccountsPagesManage,
+			Action:      actionPagesManage,
+			Description: "Connect, disconnect, and remove Facebook pages on an account",
+		},
+	}
+}
+
 func (p *Plugin) Init(app *handlers.App, _ *gorm.DB, _ *redis.Client, _ *slog.Logger) error {
 	p.app = app
 	return nil

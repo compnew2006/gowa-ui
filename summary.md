@@ -132,3 +132,85 @@ ln -sfn /opt/whatomate/bin/whatomate.green.d5ce1326-deploy20260620_075900 /opt/w
 # BLUE (rollback)
 ln -sfn /opt/whatomate/bin/whatomate.green.cfbcc1ec-deploy150615 /opt/whatomate/bin/whatomate && systemctl restart whatomate
 ```
+
+---
+
+# Commit Regression Testing & Code Review — 2026-06-22
+
+## Target Commit
+- **Commit**: `59580e76`
+- **Title**: `feat: extract Facebook modules to plugins and add DB-controlled module system`
+
+## Verification Summary
+- **Backend Tests**: Passed (`go test ./...` -> 33 packages pass)
+- **Frontend Unit Tests**: Passed (`npm run test:unit` -> 195 tests pass)
+- **TypeScript Typecheck**: Passed (`npm run typecheck` -> successful compilation)
+- **Linter**: Passed (`npm run lint` -> successful, 0 errors)
+- **Production Build**: Passed (`make build-prod` -> successful build of 55MB embedded binary)
+
+## Fixes Implemented
+- Resolved pre-existing test environment issues by adding `happy-dom` to `whatsapp-filter-api.test.ts`.
+- Resolved Vue Query client injection failure in `InstanceCard.test.ts` by stubbing `PerInstanceUploadsCleanup`.
+- Resolved TypeScript compilation errors in `CampaignsView.vue` and `SavedContentsView.vue` by properly casting Axios header values.
+- Resolved eslint warning for empty catch block in `FacebookCommentsView.vue`.
+
+---
+
+# License ↔ Module Bridge + Plugin RBAC — 2026-06-22
+
+## Task
+Integrate the existing License system with the existing Module system to control per-org plugin entitlements, add audit for give/ungive, and introduce plugin-namespaced RBAC (`plugin:{name}:{feature}:{action}`).
+
+## Decision gate (recorded)
+The task premise did not match the codebase: the License system is host-bound global caps (Ed25519 JWT, HWID-tied), NOT per-tenant; a DB-controlled Module system already implements most of requirement B. User chose:
+1. **Bridge License→Module** (no JWT changes) — recommended.
+2. **Plugin self-registers permissions** via optional interface.
+3. **Verify-then-fill-gaps** (DRY, no duplication).
+
+No internal-tool fallback was used. Socraticode, codebase-memory-mcp, and Serena were the primary tools throughout.
+
+## What was already implemented (verified, untouched)
+- Route gating: `core.GateModule` (tenant-scoped, 404 when off).
+- Admin give/ungive API: `plugin/module-management` (super-admin + org-admin).
+- Quotas (orgs/users/WA endpoints/storage): `license.Service.CheckQuotaWithDelta`.
+- Frontend: `ModulesView.vue`, `frontend/src/modules/registry.ts`, `services/modules.ts`.
+
+## Genuine gaps filled
+**GAP 1 — License tier → module entitlement bridge**
+- `internal/core/license_tiers.go` (new): `tierModules` map + `LicenseAllowsModule(tier, key)`. Tiers trial/starter/pro/enterprise; unknown tier = deny-by-default; `"*"` wildcard.
+- `internal/core/module_manager.go`: `SetLicenseTierGetter` injection point; `GateModule` checks tier first (404 when unlicensed), falls back to ModuleManager state when tier == "".
+- `plugin/module-management/plugin.go`: `licenseAllows` helper gates `updateGlobal`/`updateOrganization` with 403 `module_not_licensed`.
+- `cmd/whatomate/main.go`: `core.SetLicenseTierGetter(...)` wired before `SyncManagedModules`.
+
+**GAP 2 — Audit trail for give/ungive**
+- `plugin/module-management/audit.go` (new): `ModuleEvent` model (table `module_events`), plugin-owned via `Migrate()`.
+- `plugin/module-management/plugin.go`: `recordEvent` on every update attempt; `GET /api/admin/modules/events` + `GET /api/organizations/{id}/modules/events` (super-admin / org-admin gated).
+
+**GAP 3 — Plugin-namespaced RBAC**
+- `internal/core/plugin.go`: `PermissionProvidingPlugin` optional interface (mirrors `ManagedPlugin`); `ResolvePlugins` collects; `core.PluginPermissions()` accessor; `core.SyncPluginPermissions(ctx, db)` idempotent seeder (lives in core, not database, to respect the `database → core` cycle).
+- `cmd/whatomate/main.go`: `core.SyncPluginPermissions` called after `SyncManagedModules`.
+- `plugin/facebook-accounts`: implements `PermissionProvidingPlugin`, declares `plugin.facebook.accounts:pages_manage`; `pageManagementContext` enforces it for connect/disconnect/remove (layered on existing `accounts:write`).
+
+## Files
+**New (4)**: `internal/core/license_tiers.go`, `plugin/module-management/audit.go`, `plugin/facebook-accounts/permissions_test.go`, `plugin/module-management/audit_test.go`.
+**New tests (1)**: `internal/core/license_tiers_test.go`.
+**Modified (6)**: `internal/core/module_manager.go`, `internal/core/plugin.go`, `plugin/module-management/plugin.go`, `plugin/facebook-accounts/plugin.go`, `plugin/facebook-accounts/page_management.go`, `cmd/whatomate/main.go`.
+**Extended tests (3)**: `internal/core/module_manager_test.go`, `internal/core/plugin_test.go`, `plugin/module-management/plugin_test.go`.
+
+## NOT touched (deliberate — AGENTS.md core/critical-path rule)
+`internal/license/{token,service}.go`, `models.LicenseRecord`, `internal/licenseissuer/`, `internal/licensestudio/`, `internal/handlers/app.go`.
+
+## Verification
+- `go build ./...` — PASS
+- `go test -p 1 ./internal/core/... ./plugin/module-management/... ./plugin/facebook-accounts/... ./internal/models/... ./internal/license/... ./internal/middleware/...` — ALL PASS
+- `golangci-lint run` on all touched packages — CLEAN
+- Serena diagnostics on all 8 edited files — CLEAN (1 pre-existing unrelated `maps.Copy` hint in untouched code)
+- codebase-memory `detect_changes` — 16 changed files tracked
+- Serena memory written: `feature/license-module-bridge-2026-06-22`
+
+## Deferred (separate tasks)
+1. Scheduled activation/expiry (req B) — needs `valid_from`/`valid_until` columns + sweeper.
+2. Per-deployment plan overrides (req A) — `license_module_overrides` table.
+3. Full plugin RBAC rollout to remaining facebook + instagram + whatsapp plugins (mechanical; pattern proven).
+4. Extend `SystemRolePermissions()` to auto-include `core.PluginPermissions()` for admin role (needed only when multiple plugins add perms).
+

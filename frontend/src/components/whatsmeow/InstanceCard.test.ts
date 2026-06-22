@@ -100,6 +100,7 @@ function mountInstanceCard(instance: WhatsAppInstance) {
         Smartphone: passthroughStub,
         QrCode: passthroughStub,
         Pencil: passthroughStub,
+        PerInstanceUploadsCleanup: passthroughStub,
       },
     },
   });

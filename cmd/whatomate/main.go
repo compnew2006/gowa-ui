@@ -426,6 +426,21 @@ func runServer(args []string) {
 	if err := core.InitPlugins(app, db, rdb, slog.Default()); err != nil {
 		lo.Fatal("Failed to initialize plugins", "error", err)
 	}
+	// Wire the license-tier resolver so GateModule can enforce license
+	// entitlements on managed modules. When no license is active, the getter
+	// returns "" and GateModule skips the tier check, preserving the existing
+	// unlicensed behavior. Must be set before SyncManagedModules and before
+	// serving requests so the same resolver is used everywhere.
+	core.SetLicenseTierGetter(func() string {
+		if app.License == nil {
+			return ""
+		}
+		state := app.License.CurrentState()
+		if !state.Enabled {
+			return ""
+		}
+		return state.Tier
+	})
 	if *migrate {
 		if err := core.RunPluginMigrations(db); err != nil {
 			lo.Fatal("Plugin migration failed", "error", err)
@@ -434,6 +449,11 @@ func runServer(args []string) {
 	}
 	if err := core.SyncManagedModules(context.Background()); err != nil {
 		lo.Fatal("Failed to synchronize managed modules", "error", err)
+	}
+	// Seed any plugin-namespaced permissions contributed via the
+	// PermissionProvidingPlugin interface. Idempotent — existing rows untouched.
+	if err := core.SyncPluginPermissions(context.Background(), db); err != nil {
+		lo.Fatal("Failed to seed plugin permissions", "error", err)
 	}
 	core.RegisterPluginRoutes(g)
 

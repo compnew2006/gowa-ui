@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/compnew2006/whatomate/internal/crypto"
+	"github.com/compnew2006/whatomate/internal/middleware"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/plugin/facebook-accounts/accountdata"
 	facebookgraph "github.com/compnew2006/whatomate/plugin/facebook-core/graph"
@@ -134,6 +135,15 @@ func (p *Plugin) withPageManagement(
 func (p *Plugin) pageManagementContext(r *fastglue.Request) (*gorm.DB, *models.FacebookAccount, string, bool) {
 	requestDB, organizationID, ok := p.accountContext(r, models.ActionWrite)
 	if !ok {
+		return nil, nil, "", false
+	}
+	// Additional plugin-namespaced permission: destructive page lifecycle
+	// (connect/disconnect/remove) requires plugin.facebook.accounts:pages_manage
+	// on top of the base accounts:write granted by accountContext. Super-admins
+	// bypass via HasPermission's IsSuperAdmin short-circuit.
+	userID, _ := middleware.GetUserID(r)
+	if !p.app.HasPermission(userID, resourceFBAccountsPagesManage, actionPagesManage, organizationID) {
+		_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions: plugin.facebook.accounts:pages_manage", nil, "")
 		return nil, nil, "", false
 	}
 	account, ok := findAccount(r, requestDB, organizationID)

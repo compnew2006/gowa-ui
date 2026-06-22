@@ -366,6 +366,41 @@ This document provides a 100% exhaustive extraction of the Whatomate database sc
 #### `license_events`
 *   **Columns**: `event_type`, `reason`, `details`.
 
+#### `module_catalog`
+*   **Purpose**: DB-controlled registry of compiled managed modules (one row per plugin implementing `core.ManagedPlugin`).
+*   **Columns**:
+    *   `key`: `TEXT` PK — module key (e.g. `facebook-accounts`).
+    *   `display_name`, `compiled_version`: `TEXT`.
+    *   `schema_version`, `installed_schema_version`: `UINT` — migration progress.
+    *   `dependencies`: `JSON` array of module keys.
+    *   `default_enabled`, `global_enabled`, `technical`: `BOOL`.
+    *   `last_error`: `TEXT`.
+*   **API**: `/api/admin/modules` (super-admin). Synced by `core.SyncManagedModules` on startup.
+
+#### `organization_modules`
+*   **Purpose**: Per-organization module enable/disable override.
+*   **Columns**: `organization_id`, `module_key` (composite PK), `enabled` `BOOL`.
+*   **API**: `/api/organizations/{id}/modules/{key}` (org admin or super-admin).
+
+#### `module_schema_versions`
+*   **Purpose**: Latest applied schema version per module (used to detect pending migrations).
+*   **Columns**: `module_key` PK, `version` `UINT`.
+
+#### `module_events`
+*   **Purpose**: Append-only audit trail for every module give/ungive, license denial, and dependency conflict.
+*   **Columns**:
+    *   `id`: `UUID` PK.
+    *   `organization_id`: `UUID` nullable (NULL for global scope).
+    *   `scope`: `TEXT` (`global` | `organization`).
+    *   `module_key`: `TEXT`.
+    *   `action`: `TEXT` (`enable` | `disable` | `license_deny` | `conflict`).
+    *   `enabled`: `BOOL` nullable (requested new value).
+    *   `actor_user_id`: `UUID` nullable.
+    *   `actor_email`: `TEXT`.
+    *   `reason`: `TEXT`.
+    *   `details`: `JSONB`.
+*   **API**: `/api/admin/modules/events` (super-admin), `/api/organizations/{id}/modules/events` (org-scoped).
+
 #### `user_availability_logs`
 *   **Columns**: `user_id`, `started_at`, `ended_at`, `duration_seconds`.
 
@@ -388,7 +423,7 @@ This document provides a 100% exhaustive extraction of the Whatomate database sc
 ### Multi-tenancy Strategy
 *   **Mechanism**: Discriminator column `organization_id` (UUID).
 *   **Enforcement**: Middleware `TenantScope` in `main.go` automatically injects `WHERE organization_id = ?` into GORM scopes.
-*   **Exempt Tables**: `license_records`, `license_events` (Hardware bound).
+*   **Exempt Tables**: `license_records`, `license_events` (Hardware bound); `module_catalog`, `module_schema_versions`, `permissions`, `custom_roles`, `role_permissions` (global reference data). `organization_modules` and `module_events` ARE org-scoped.
 
 ### Soft-Delete Strategy
 *   **Mechanism**: `gorm.DeletedAt` indexed column.

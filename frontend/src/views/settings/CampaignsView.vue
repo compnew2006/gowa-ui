@@ -900,7 +900,7 @@ async function handleContentSelect(content: SavedContent) {
     try {
       const response = await savedContentsService.getMedia(content.id);
       const blob = new Blob([response.data], {
-        type: response.headers["content-type"],
+        type: response.headers["content-type"] as string,
       });
       const fileName = content.media_filename || `saved-content-${content.id}`;
       const file = new File([blob], fileName, { type: blob.type });
@@ -1501,7 +1501,7 @@ async function loadMediaPreview(campaignId: string) {
   try {
     const response = await campaignsService.getMedia(campaignId);
     const blob = new Blob([response.data], {
-      type: response.headers["content-type"],
+      type: response.headers["content-type"] as string,
     });
     mediaBlobUrls.value[campaignId] = URL.createObjectURL(blob);
     mediaLoadingState.value[campaignId] = "loaded";

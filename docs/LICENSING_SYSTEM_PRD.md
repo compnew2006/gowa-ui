@@ -150,3 +150,30 @@ Whatomate هو برنامج دردشة تجاري يحتاج إلى نظام ت�
 - Runbook كامل لسيناريوهات: تسريب المفتاح، إلغاء اشتراك عميل hosted، طلب HWID migration في self-hosted
 - Security review نهائي على كل السطح المُضاف
 - توثيق تعاقدي لقيود VM cloning في self-hosted
+
+---
+
+## Addendum — License → Module Bridge (2026-06-22)
+
+> **Status:** Implemented · **Docs:** [`PLUGINS_AND_MODULES.md`](./PLUGINS_AND_MODULES.md)
+
+هذا الملحق يوثّق طبقة إضافية بُنيت **فوق** نظام الترخيص هذا بدون تعديل أي من الكور (JWT، `LicenseRecord`، Issuer، Studio). الهدف: ربط `tier` القادم في الـ token بنظام الـ Modules المنفصل للتحكم في تفعيل الـ plugins لكل organization.
+
+### المشكلة التي يحلّها
+الـ License هو JWT مرتبط بـ HWID ويحمل سقوف عامة (MaxOrganizations, MaxUsersPerOrg, ...). الـ entitlements لكل organization لا تنتمي لهذا المستوى — الـ Module system هو المستوى الصحيح. الجسر يجعل `tier` يتحكم في *أي* modules يمكن تفعيلها أصلاً، ويترك الـ on/off لكل org للـ Module system.
+
+### التنفيذ
+- **`internal/core/license_tiers.go`**: مصدر واحد للحقيقة — خريطة `tierModules` (trial/starter/pro/enterprise). الدالة `LicenseAllowsModule(tier, key)` تنكر افتراضياً لأي tier غير معروف.
+- **`internal/core/module_manager.go`**: `GateModule` يفحص الـ tier أولاً (404 إن لم يكن مُرخّصاً) ثم يرجع لـ Module state. `core.SetLicenseTierGetter` يحقن الـ resolver بدون استحداث دورة استيراد `core → license`.
+- **`plugin/module-management`**: `updateGlobal` و `updateOrganization` يرفضان تفعيل module غير مُرخّص بـ 403 `module_not_licensed` ويكتبان صف `license_deny` في `module_events`.
+- **`cmd/whatomate/main.go`**: يربط `SetLicenseTierGetter` قبل `SyncManagedModules`.
+
+### التوافق معPRD
+- ✅ لا تغيير على منطق التحقق في `token.go` / `service.go` (Non-Goal محترم).
+- ✅ لا تغيير على أي endpoint موجود في `main.go`.
+- ✅ الـ self-hosted offline بدون license (`tier == ""`) يتجاوز فحص الـ tier ويرجع لسلوك الـ Module system القائم — backwards compatible повністю.
+
+### القيود المعترف بها
+- خريطة `tierModules` هي code constant. لا يوجد `license_module_overrides` table بعد (مؤجّل).
+- لا يوجد scheduled activation/expiry للـ modules (مؤجّل).
+

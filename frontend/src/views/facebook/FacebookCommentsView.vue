@@ -143,7 +143,9 @@ watch(selectedPageIdForSettings, async (pageId) => {
       pageWhatsAppNotifyPhone.value = data.whatsapp_notify_phone || "";
       pageWhatsAppNotifyInstanceId.value = data.whatsapp_instance_id || "";
     }
-  } catch {}
+  } catch {
+    // ignore
+  }
 });
 
 const autoCommentTextsCount = computed(() =>

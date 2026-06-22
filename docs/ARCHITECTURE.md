@@ -1,6 +1,6 @@
 # Whatomate — Architecture
 
-> **Updated:** 2026-06-18  
+> **Updated:** 2026-06-22  
 > **Total Functions Analyzed:** 6,710 functions across 3,098 files  
 > **Exclusions:** Dashboard/ directory
 
@@ -146,6 +146,40 @@ whatomate
 | `redis.go` | Redis Streams implementation |
 | `pubsub.go` | Redis Pub/Sub for campaign stats |
 | `queue.go` | Generic queue interface |
+
+### 3.6 Plugin, Module & License Layers
+
+Whatomate separates **extensibility** (Plugin), **per-org feature gating** (Module), and **host-bound capacity + tier entitlements** (License) into three independent layers. See [`PLUGINS_AND_MODULES.md`](./PLUGINS_AND_MODULES.md) for the full guide.
+
+```
+Request → /api/<feature>/...
+   │
+   ▼
+[fastglue route registered ONLY if the plugin is compiled in]
+   │
+   ▼
+core.GateModule("<module-key>", handler)
+   │
+   ├─ Layer 1: License tier gate  (LicenseAllowsModule(tier, key))
+   ├─ Layer 2: Module state gate  (ModuleManager.IsEnabled(orgID, key))
+   ▼
+handler body
+   │
+   ├─ Layer 3: RBAC  (app.HasPermission — core catalog + plugin namespace)
+   └─ Layer 4: Quota (License.CheckQuotaWithDelta — orgs/users/WA/storage)
+```
+
+| Layer | Package | Decides | Granularity |
+|---|---|---|---|
+| **Plugin** | `internal/core` + `plugin/<name>/` | Which code is compiled in | Per-binary |
+| **Module** | `internal/core/module_manager.go` + `plugin/module-management/` | Which compiled plugins are ON, globally or per-org | Global + per-org (DB tables) |
+| **License** | `internal/license/` | Host-level caps + tier constraining module enablement | Per-host (HWID JWT) |
+
+**Plugin optional interfaces** (both follow the "embed `Plugin` + one method" pattern):
+- `ManagedPlugin` → `Manifest()` — participates in the Module system (DB-controlled enable/disable).
+- `PermissionProvidingPlugin` → `Permissions()` — contributes plugin-namespaced RBAC (e.g. `plugin.facebook.accounts:pages_manage`), seeded by `core.SyncPluginPermissions` at startup and enforced through the existing `app.HasPermission`.
+
+**Startup wiring** (`cmd/whatomate/main.go`): `InitPlugins` → `SetLicenseTierGetter` → `SyncManagedModules` → `SyncPluginPermissions` → `RegisterPluginRoutes`.
 
 ## 4. Provider Layer
 

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/compnew2006/whatomate/internal/handlers"
+	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -35,11 +37,38 @@ type ManagedPlugin interface {
 	Manifest() ModuleManifest
 }
 
+// PluginPermission is a resource:action pair declared by a plugin. The
+// Resource follows the dotted plugin namespace convention
+// ("plugin.<plugin>.<feature>", e.g. "plugin.facebook.accounts") and the
+// Action is one of the standard models.Action* verbs (e.g. "write"). The
+// combined "resource:action" string is what handlers check via
+// app.HasPermission and what gets seeded into the permissions table.
+//
+// PluginPermission keeps core decoupled from internal/models to avoid an
+// import cycle; the conversion to models.Permission happens at seed time in
+// internal/database.
+type PluginPermission struct {
+	Resource    string
+	Action      string
+	Description string
+}
+
+// PermissionProvidingPlugin is optional. Plugins implementing it contribute
+// fine-grained, plugin-namespaced permissions to the RBAC catalog at startup.
+// These permissions are seeded alongside models.DefaultPermissions() and flow
+// through the existing role_permissions / HasPermission machinery — no
+// parallel authorization system is introduced.
+type PermissionProvidingPlugin interface {
+	Plugin
+	Permissions() []PluginPermission
+}
+
 var (
 	plugins            []Plugin
 	initializedPlugins []Plugin
 	moduleManifests    []ModuleManifest
 	moduleManager      *ModuleManager
+	pluginPermissions  []PluginPermission
 )
 
 func RegisterPlugin(p Plugin) {
@@ -117,11 +146,33 @@ func ResolvePlugins(registered []Plugin) ([]Plugin, []ModuleManifest, error) {
 		resolved = append(resolved, managedByKey[key])
 		manifests = append(manifests, manifestByKey[key])
 	}
+
+	// Collect plugin-namespaced permissions from every plugin that opts in.
+	// Both legacy and managed plugins may provide permissions. Duplicate
+	// resource:action pairs across plugins are collapsed by the database's
+	// unique index at seed time, so no de-duplication is needed here.
+	collected := make([]PluginPermission, 0)
+	for _, plugin := range resolved {
+		provider, ok := plugin.(PermissionProvidingPlugin)
+		if !ok {
+			continue
+		}
+		collected = append(collected, provider.Permissions()...)
+	}
+	pluginPermissions = collected
+
 	return resolved, manifests, nil
 }
 
 func GetModuleManifests() []ModuleManifest {
 	return append([]ModuleManifest(nil), moduleManifests...)
+}
+
+// PluginPermissions returns a copy of every plugin-namespaced permission
+// contributed via PermissionProvidingPlugin. Returns nil when no plugin
+// provides permissions or before ResolvePlugins has run.
+func PluginPermissions() []PluginPermission {
+	return append([]PluginPermission(nil), pluginPermissions...)
 }
 
 func GetModuleManager() *ModuleManager {
@@ -182,4 +233,49 @@ func SyncManagedModules(ctx context.Context) error {
 		return err
 	}
 	return moduleManager.Sync(ctx)
+}
+
+// SyncPluginPermissions idempotently seeds every plugin-namespaced permission
+// contributed via PermissionProvidingPlugin into the permissions table. It is
+// the plugin-owned counterpart to database.SeedPermissionsAndRoles (which owns
+// the core 35-resource catalog); keeping it here avoids a database→core import
+// cycle and matches the "core imports models" precedent already established by
+// module_manager.go.
+//
+// The unique index idx_permission_resource_action makes this safe to call on
+// every startup: existing rows are left untouched, missing rows are inserted.
+func SyncPluginPermissions(ctx context.Context, db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database is nil")
+	}
+	permissions := PluginPermissions()
+	if len(permissions) == 0 {
+		return nil
+	}
+	for _, perm := range permissions {
+		if perm.Resource == "" || perm.Action == "" {
+			return fmt.Errorf("plugin permission has empty resource or action: %+v", perm)
+		}
+		var existing models.Permission
+		err := db.WithContext(ctx).
+			Where("resource = ? AND action = ?", perm.Resource, perm.Action).
+			First(&existing).Error
+		if err == nil {
+			// Already seeded; leave untouched so descriptions stay stable.
+			continue
+		}
+		if err != gorm.ErrRecordNotFound {
+			return fmt.Errorf("lookup plugin permission %s:%s: %w", perm.Resource, perm.Action, err)
+		}
+		row := models.Permission{
+			BaseModel:   models.BaseModel{ID: uuid.New()},
+			Resource:    perm.Resource,
+			Action:      perm.Action,
+			Description: perm.Description,
+		}
+		if err := db.WithContext(ctx).Create(&row).Error; err != nil {
+			return fmt.Errorf("create plugin permission %s:%s: %w", perm.Resource, perm.Action, err)
+		}
+	}
+	return nil
 }
