@@ -214,3 +214,251 @@ No internal-tool fallback was used. Socraticode, codebase-memory-mcp, and Serena
 3. Full plugin RBAC rollout to remaining facebook + instagram + whatsapp plugins (mechanical; pattern proven).
 4. Extend `SystemRolePermissions()` to auto-include `core.PluginPermissions()` for admin role (needed only when multiple plugins add perms).
 
+---
+
+# Unblock manager.go in Global Serena Config — 2026-06-23
+
+## Task
+Remove the `**/pkg/**` ignore pattern from the global Serena configuration (`/Users/noiemany/.serena/serena_config.yml`) so that `manager.go` and other files under `pkg/` are no longer ignored/blocked.
+
+## Files Changed
+- [/Users/noiemany/.serena/serena_config.yml](file:///Users/noiemany/.serena/serena_config.yml)
+
+## Approach
+Removed `- "**/pkg/**"` from the `ignored_paths` list in `/Users/noiemany/.serena/serena_config.yml`. This unblocks all files under `pkg/` (such as `manager.go` in `pkg/whatsmeow/manager.go`) from being ignored by Serena.
+
+## Verification
+- Verified by checking the file content to confirm the line is successfully removed.
+
+---
+
+# Code Review & Quality Gates Skill Update — 2026-06-23
+
+## Task
+1. Replace generic "Test Quality Gate" references in `mcp-code-operations` skill config with explicit gates referencing the local `clean-code-guard` and `test-guard` skills.
+2. Review the `force_ipv4` implementation and testing code to ensure no gaps or defects exist.
+
+## Files Changed
+- [/.agent/skills/mcp-code-operations/SKILL.md](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/.agent/skills/mcp-code-operations/SKILL.md)
+- [summary.md](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/summary.md)
+
+## Approach
+- **Gate config update**: Replaced Step 5 in the verification checklist of [SKILL.md](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/.agent/skills/mcp-code-operations/SKILL.md) with two separate quality gates pointing to the absolute paths of the local [clean-code-guard](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/.agent/skills/clean-code-guard/SKILL.md) and [test-guard](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/.agent/skills/test-guard/SKILL.md) skills.
+- **Code review**: Audited the `force_ipv4` code changes in [manager.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/manager.go) and [config.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/internal/config/config.go), and the unit tests in [force_ipv4_test.go](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/pkg/whatsmeow/force_ipv4_test.go) against the standard clean code & test rules.
+
+## Verification
+- Ran the full test suite (`make test`): All Go tests (including the new force IPv4 dialing tests) passed successfully.
+- Ran the linter (`golangci-lint`): The modified packages (`whatsmeow` and `config`) are completely lint-clean.
+
+
+---
+
+# GREEN Deploy Prep + Runbook — 2026-06-23 (force_ipv4)
+
+## ⚠️ Scope correction (do NOT skip)
+
+The original deploy task contained **dangerous contradictions** with the real production topology. Before executing anything, verify against your actual VPS:
+
+- **Process manager is systemd, NOT pm2.** There are **4 systemd units**: `whatomate` + `whatomate@holol-wenjaz` + `whatomate@alarkan-almthalia` + `whatomate@matbaat-ruya`. Any `pm2 restart all` in a prior task is wrong and does nothing.
+- **Do NOT wipe the codebase.** Go single-binary; the binary is self-contained. The codebase is only needed for VPS rebuilds. Wiping `/opt/whatomate-green` while `/opt/whatomate-current` symlinks into it takes all 4 tenants down.
+- **Binary dir is `/opt/whatomate/bin/`, not `/root/bin`.** Your own docs (`docs/whatomate_multi_instances_info.md`) confirm this.
+- **License was active per docs** (`enabled=true, status=active, tier=production, lifetime, key_id=deploy-20260416`). If it now shows Disabled, **diagnose before forcing enable** — a forced enable on a wiped record locks all routes except `/activate`.
+- **Rotate the root password** — it was pasted in plaintext into the task prompt and is now in this session transcript.
+
+I did **not** SSH to the VPS or run destructive commands. This is local prep + a verified binary + an accurate runbook for YOU to execute.
+
+## What shipped (this branch)
+
+**Branch**: `deploy/green-20260623-ipv4` (local only, not pushed)
+**Commit**: `8d4f047c` — `feat(whatsmeow): add force_ipv4 config to pin clients to IPv4-only dialing`
+**Prior commits already on main** (included in this binary): `59580e76` (plugin/module system), `d5ce1326` (async events docs/tests).
+
+### Changes in this deploy
+- `internal/config/config.go` — `WhatsmeowConfig.ForceIPv4 *bool`
+- `pkg/whatsmeow/manager.go` — `whatsmeowForceIPv4()` + `buildIPv4HTTPClient()`; `newClient()` applies `Set{Websocket,Media,PreLogin}HTTPClient` when `force_ipv4=true`
+- `config.example.toml` — documented under `[whatsmeow]`
+- `pkg/whatsmeow/force_ipv4_test.go` — 4 tests (reader nil-safety, tcp4 IPv6-literal rejection, HTTP/2 retained, TLS 1.2 min)
+
+## Local verification (all green)
+
+- `make test` — **ALL PASS** (every Go package; some Facebook-API tests SKIP as expected). Includes module-management + plugin-permission tests from earlier session work.
+- `golangci-lint run ./pkg/whatsmeow/... ./internal/config/...` — CLEAN
+- `make build-prod` — built 56MB embedded-frontend binary
+
+## Binary identification
+
+| Field | Value |
+|---|---|
+| Local path | `./whatomate` |
+| Size | 56 MB |
+| SHA256 | `4a158510ff49df0ac0749c3cb1d8176f4ad3c793ff598f895f995c4642b28e0e` |
+| Version string | `Whatomate 8d4f047c-dirty (built 2026-06-22_22:32:34)` |
+| Git commit | `8d4f047c7d5ec6173721d03655803d70e61a3acc` |
+| Git branch | `deploy/green-20260623-ipv4` |
+
+(`-dirty` is because `summary.md` is uncommitted; the code itself is the clean commit `8d4f047c`.)
+
+---
+
+# 🚀 Operator Runbook — execute on the VPS yourself
+
+All commands run as `root` on `31.97.192.53`. **Read the whole runbook once before executing.**
+
+## STEP 0 — Recon (read-only, do this first)
+
+```bash
+# Confirm the topology matches this runbook before touching anything.
+systemctl list-units --type=service | grep whatomate      # expect 4 units
+readlink /opt/whatomate-current                            # expect -> /opt/whatomate-green
+ls -la /opt/whatomate-green/bin/ /opt/whatomate-blue/bin/  # both should exist
+cat /opt/whatomate/config.toml | grep -iE "license|tier"   # capture current license state
+```
+
+If any of these disagree with the comments, **stop and reconcile** — the rest of the runbook assumes the topology above.
+
+## STEP 1 — Backup the current active deployment
+
+```bash
+TS=$(date +%Y%m%d_%H%M%S)
+mkdir -p /root/backups
+# Full codebase + binary + config backup
+tar -czf /root/backups/whatomate_${TS}.tar.gz \
+  -C /opt whatomate-green whatomate-blue whatomate-current 2>/dev/null
+# Also snapshot the DB (Postgres) — adjust DB name/user if different
+sudo -u postgres pg_dump whatomate | gzip > /root/backups/whatomate_db_${TS}.sql.gz
+ls -lh /root/backups/whatomate_${TS}.tar.gz /root/backups/whatomate_db_${TS}.sql.gz
+```
+**Record these paths** — they're your rollback anchor.
+
+## STEP 2 — Upload the new binary to the VPS
+
+From your **local** machine (NOT the VPS):
+```bash
+cd /Users/noiemany/Downloads/whatomate_GOWA/whatomate
+# Tag the upload with the commit so you can tell binaries apart
+scp whatomate root@31.97.192.53:/opt/whatomate-green/bin/whatomate.green.8d4f047c
+```
+
+Then **on the VPS**, verify integrity:
+```bash
+sha256sum /opt/whatomate-green/bin/whatomate.green.8d4f047c
+# MUST equal: 4a158510ff49df0ac0749c3cb1d8176f4ad3c793ff598f895f995c4642b28e0e
+chmod +x /opt/whatomate-green/bin/whatomate.green.8d4f047c
+```
+
+## STEP 3 — Update config.toml (enable force_ipv4 on this deployment only)
+
+On the VPS, edit `/opt/whatomate/config.toml` (or wherever the active config lives — confirm in STEP 0):
+
+```toml
+[whatsmeow]
+# ... existing keys ...
+force_ipv4 = true        # ← ADD THIS. The Hostinger->face:b00c IPv6 path is flaky.
+```
+
+Leave it `false` (or absent) on any deployment that doesn't have the IPv6 problem.
+
+## STEP 4 — License system (DIAGNOSE, do not blindly enable)
+
+Your docs say the license should be `enabled=true, status=active, tier=production`. If STEP 0 showed it Disabled:
+
+```bash
+# Check the license table state — do NOT enable yet, understand first
+sudo -u postgres psql whatomate -c "SELECT id, status, tier, enabled FROM license_records ORDER BY id DESC LIMIT 5;"
+# Check the config knob
+grep -A3 "\[license\]" /opt/whatomate/config.toml
+```
+
+If `license_records` is empty → the record was wiped; restoring requires the original activation token (check `/root/backups/` from prior deploys). **Do not set `enabled=true` on an empty record** — it will lock the app to `/activate` only.
+
+If `license_records` has a row but `[license] enabled = false` in config → flip to `enabled = true` in config.toml. That's the safe case.
+
+If you're unsure, **leave license disabled and ask** — a locked production is worse than a disabled license.
+
+## STEP 5 — BLUE/GREEN switch (the actual cutover)
+
+This swaps the active symlink and restarts **all 4 systemd units** (not pm2):
+
+```bash
+# Point current at the new green binary location and atomically restart all tenants
+ln -sfn /opt/whatomate-green/bin/whatomate.green.8d4f047c /opt/whatomate-green/bin/whatomate && \
+systemctl restart whatomate whatomate@holol-wenjaz whatomate@alarkan-almthalia whatomate@matbaat-ruya && \
+sleep 3 && \
+systemctl is-active whatomate whatomate@holol-wenjaz whatomate@alarkan-almthalia whatomate@matbaat-ruya
+```
+Expected output: four lines of `active`. Anything else → go to ROLLBACK immediately.
+
+### One-command switch (for future use)
+
+**To GREEN (this deploy):**
+```bash
+ln -sfn /opt/whatomate-green/bin/whatomate.green.8d4f047c /opt/whatomate-green/bin/whatomate && systemctl restart whatomate whatomate@holol-wenjaz whatomate@alarkan-almthalia whatomate@matbaat-ruya
+```
+
+**To BLUE (rollback to previous):**
+```bash
+ln -sfn /opt/whatomate-blue/bin/whatomate /opt/whatomate-green/bin/whatomate && systemctl restart whatomate whatomate@holol-wenjaz whatomate@alarkan-almthalia whatomate@matbaat-ruya
+```
+*(Adjust the blue binary path to whatever STEP 1 backed up — check `/opt/whatomate-blue/bin/` for the prior binary name.)*
+
+## STEP 6 — Verify (browser + API)
+
+```bash
+# Local listeners (should all return 200)
+for p in 18123 18124 18125 18126; do
+  echo -n "127.0.0.1:$p -> "; curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:$p/health
+done
+
+# Version confirms the new binary is live
+curl -s http://127.0.0.1:18123/api/license/bootstrap 2>/dev/null | head -c 200; echo
+```
+
+Then in a browser, open **https://ofuqalmadenah.com/login** and confirm:
+- Login page renders (title `Whatomate`, visible `Sign in` button)
+- Check the three tenant subdomains too: `holol-wenjaz.ofuqalmadenah.com`, `alarkan-almthalia.ofuqalmadenah.com`, `matbaat-ruya.ofuqalmadenah.com`
+- As super-admin, visit `/settings` (or wherever the license banner is) and confirm license state matches what you expect from STEP 4
+
+If browser verification is unavailable, the curl checks above are the minimum gate.
+
+## ROLLBACK (if any step fails)
+
+```bash
+# 1. Revert the binary symlink to the backup
+ln -sfn /opt/whatomate-blue/bin/whatomate /opt/whatomate-green/bin/whatomate
+# 2. Restart all 4 units
+systemctl restart whatomate whatomate@holol-wenjaz whatomate@alarkan-almthalia whatomate@matbaat-ruya
+# 3. (If you changed config.toml in STEP 3) revert force_ipv4 to false
+# 4. (If STEP 4 changed license config) revert that too
+# 5. Confirm rollback via the STEP 6 checks
+```
+Worst case, restore from `/root/backups/whatomate_<TS>.tar.gz` (STEP 1).
+
+## STEP 7 — Update the info docs (after successful verify)
+
+Append to `/root/whatomate_multi_instances_info.md` and `/root/whatomate_production_info.md` on the VPS, and to the local `docs/whatomate_multi_instances_info.md`:
+- Deploy timestamp
+- Branch `deploy/green-20260623-ipv4`, commit `8d4f047c`
+- Binary SHA256 `4a158510...2b28e0e`
+- `force_ipv4 = true` set
+- Verification results (the 4 `active` lines + curl 200s)
+- Backup path from STEP 1
+
+---
+
+## Post-deploy monitoring (24h)
+
+The whole point of `force_ipv4` is to eliminate the 58 TCP resets/day on the IPv6 path. After 24h:
+```bash
+# Whatever you used to measure the 58 resets — re-run it.
+# Expect: 0 resets on the IPv6 path (because it's no longer used).
+```
+If IPv4 connectivity has any issues, flip `force_ipv4 = false` in config.toml and restart — no rebuild needed for that rollback.
+
+## Git state (local, unchanged by this prep)
+
+- Branch `deploy/green-20260623-ipv4` exists locally, **not pushed**.
+- `main` is untouched.
+- `summary.md` has this entry appended (uncommitted, intentional).
+- The force_ipv4 commit `8d4f047c` is the only new commit on the deploy branch.
+
+When you've confirmed the deploy is healthy in production for a few days, you can merge `deploy/green-20260623-ipv4` into `main` and push — or cherry-pick `8d4f047c` onto main. Either is fine; I did not push per AGENTS.md §6.
