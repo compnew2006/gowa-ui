@@ -763,8 +763,21 @@ func whatsmeowMetricsProvider(wm *whatsmeow.ConnectionManager) func(buf *strings
 				fmt.Sprintf(`{instance="%s",type="msg"} %d`, snap.InstanceID, snap.MsgQueueDepth))
 			writeMetricSample(buf, "whatsmeow_queue_depth",
 				fmt.Sprintf(`{instance="%s",type="low"} %d`, snap.InstanceID, snap.LowQueueDepth))
-			writeMetricSample(buf, "whatsmeow_dropped_total",
-				fmt.Sprintf(`{instance="%s",reason="overflow"} %d`, snap.InstanceID, snap.EventsDropped))
+			// whatsmeow_dropped_total is labeled by queue_state so operators can
+			// distinguish a poisoned/stopped instance (instance_stopped) from a
+			// saturated shard (shard_full), a flooded low queue (low_overflow),
+			// a tripped circuit breaker (circuit_open), or the legacy path
+			// (legacy_drop). When no per-state breakdown is available we fall
+			// back to a single "overflow" sample equal to the total.
+			if len(snap.DroppedByState) > 0 {
+				for state, count := range snap.DroppedByState {
+					writeMetricSample(buf, "whatsmeow_dropped_total",
+						fmt.Sprintf(`{instance="%s",queue_state="%s"} %d`, snap.InstanceID, state, count))
+				}
+			} else {
+				writeMetricSample(buf, "whatsmeow_dropped_total",
+					fmt.Sprintf(`{instance="%s",queue_state="overflow"} %d`, snap.InstanceID, snap.EventsDropped))
+			}
 			writeMetricSample(buf, "whatsmeow_consumer_lag_seconds",
 				fmt.Sprintf(`{instance="%s",type="msg"} %.6f`, snap.InstanceID, snap.MsgConsumerLag))
 			writeMetricSample(buf, "whatsmeow_consumer_lag_seconds",

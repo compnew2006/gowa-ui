@@ -87,8 +87,8 @@ func TestWhatsmeowMetricsProviderWritesMetadataOnce(t *testing.T) {
 
 	firstInstanceID := uuid.New()
 	secondInstanceID := uuid.New()
-	manager.MarkEventDropped(firstInstanceID)
-	manager.MarkEventDropped(secondInstanceID)
+	manager.MarkEventDropped(firstInstanceID, "instance_stopped")
+	manager.MarkEventDropped(secondInstanceID, "shard_full")
 
 	provider := whatsmeowMetricsProvider(manager)
 	require.NotNil(t, provider)
@@ -108,6 +108,12 @@ func TestWhatsmeowMetricsProviderWritesMetadataOnce(t *testing.T) {
 
 	require.Contains(t, body, `whatsmeow_queue_depth{instance="`+firstInstanceID.String()+`",type="msg"}`)
 	require.Contains(t, body, `whatsmeow_queue_depth{instance="`+secondInstanceID.String()+`",type="msg"}`)
+
+	// whatsmeow_dropped_total must carry a queue_state label (not the old
+	// generic reason="overflow") so operators can distinguish a poisoned
+	// instance_stopped drop from a shard_full drop.
+	require.Contains(t, body, `whatsmeow_dropped_total{instance="`+firstInstanceID.String()+`",queue_state="instance_stopped"} 1`)
+	require.Contains(t, body, `whatsmeow_dropped_total{instance="`+secondInstanceID.String()+`",queue_state="shard_full"} 1`)
 }
 
 func TestSetupRoutes_PprofAllowsLoopbackWhenEnabled(t *testing.T) {

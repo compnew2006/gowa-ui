@@ -1,6 +1,7 @@
 package whatsmeow
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -27,6 +28,13 @@ type instanceMetrics struct {
 	eventsDropped      atomic.Uint64
 	errors             atomic.Uint64
 	queueDepth         atomic.Int64
+
+	// droppedByState splits the eventsDropped total by queue_state so operators
+	// can distinguish a poisoned/stopped instance (instance_stopped) from a
+	// genuinely saturated shard (shard_full) via the whatsmeow_dropped_total
+	// Prometheus label, not only from sampled logs. Guarded by droppedMu.
+	droppedMu      sync.Mutex
+	droppedByState map[string]uint64
 }
 
 func currentDayKeyUTC() int64 {
@@ -35,7 +43,7 @@ func currentDayKeyUTC() int64 {
 }
 
 func newInstanceMetrics() *instanceMetrics {
-	m := &instanceMetrics{}
+	m := &instanceMetrics{droppedByState: make(map[string]uint64)}
 	m.dayKeyUTC.Store(currentDayKeyUTC())
 	return m
 }
@@ -52,6 +60,11 @@ func (m *instanceMetrics) resetIfDayChanged() {
 		m.messagesFailed.Store(0)
 		m.eventsDropped.Store(0)
 		m.errors.Store(0)
+		m.droppedMu.Lock()
+		for k := range m.droppedByState {
+			m.droppedByState[k] = 0
+		}
+		m.droppedMu.Unlock()
 	}
 }
 
@@ -104,10 +117,19 @@ func (cm *ConnectionManager) MarkError(instanceID uuid.UUID) {
 }
 
 // MarkEventDropped increments the async event ingestion drop counter.
-func (cm *ConnectionManager) MarkEventDropped(instanceID uuid.UUID) {
+// queueState labels the drop reason for Prometheus (e.g. "instance_stopped",
+// "shard_full"); an empty value is recorded under "unknown" so the labeled
+// total always reconciles with the eventsDropped counter.
+func (cm *ConnectionManager) MarkEventDropped(instanceID uuid.UUID, queueState string) {
+	if queueState == "" {
+		queueState = "unknown"
+	}
 	metrics := cm.getOrCreateMetrics(instanceID)
 	metrics.eventsDropped.Add(1)
 	metrics.errors.Add(1)
+	metrics.droppedMu.Lock()
+	metrics.droppedByState[queueState]++
+	metrics.droppedMu.Unlock()
 }
 
 // SetQueueDepth tracks queue depth for the instance.
@@ -151,13 +173,14 @@ func (cm *ConnectionManager) GetInstanceHealth(instanceID uuid.UUID) InstanceHea
 
 // PriorityMetricsSnapshot holds per-instance priority-queue observability data.
 type PriorityMetricsSnapshot struct {
-	InstanceID         string  `json:"instance_id"`
-	MsgQueueDepth      int64   `json:"msg_queue_depth"`
-	LowQueueDepth      int64   `json:"low_queue_depth"`
-	EventsDropped      uint64  `json:"events_dropped_today"`
-	MsgConsumerLag     float64 `json:"msg_consumer_lag_seconds"`
-	LowConsumerLag     float64 `json:"low_consumer_lag_seconds"`
-	CircuitBreakerOpen bool    `json:"circuit_breaker_open"`
+	InstanceID         string            `json:"instance_id"`
+	MsgQueueDepth      int64             `json:"msg_queue_depth"`
+	LowQueueDepth      int64             `json:"low_queue_depth"`
+	EventsDropped      uint64            `json:"events_dropped_today"`
+	DroppedByState     map[string]uint64 `json:"events_dropped_by_state,omitempty"`
+	MsgConsumerLag     float64           `json:"msg_consumer_lag_seconds"`
+	LowConsumerLag     float64           `json:"low_consumer_lag_seconds"`
+	CircuitBreakerOpen bool              `json:"circuit_breaker_open"`
 }
 
 // GetPriorityMetricsSnapshot returns priority-queue metrics for an instance.
@@ -165,6 +188,14 @@ func (cm *ConnectionManager) GetPriorityMetricsSnapshot(instanceID uuid.UUID) Pr
 	s := PriorityMetricsSnapshot{InstanceID: instanceID.String()}
 	metrics := cm.getOrCreateMetrics(instanceID)
 	s.EventsDropped = metrics.eventsDropped.Load()
+	metrics.droppedMu.Lock()
+	if len(metrics.droppedByState) > 0 {
+		s.DroppedByState = make(map[string]uint64, len(metrics.droppedByState))
+		for k, v := range metrics.droppedByState {
+			s.DroppedByState[k] = v
+		}
+	}
+	metrics.droppedMu.Unlock()
 
 	if cm.eventDispatcher != nil {
 		msgDepth, lowDepth := cm.eventDispatcher.PriorityQueueDepth(instanceID)

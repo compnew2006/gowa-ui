@@ -134,7 +134,7 @@ func TestAsyncEventDispatcherDropsWhenBufferFull(t *testing.T) {
 			close(handlerStarted)
 			<-releaseHandler
 		}
-	}, nil, func(uuid.UUID) {
+	}, nil, func(uuid.UUID, string) {
 		dropped++
 	})
 	defer d.StopAll()
@@ -186,7 +186,7 @@ func TestAsyncEventDispatcherStopInstancePreventsQueueRecreation(t *testing.T) {
 
 	var dropped atomic.Uint64
 	d := newAsyncEventDispatcher(priorityQueueConfig{}, 4, logf.New(logf.Opts{}), func(evt interface{}, instanceID, orgID uuid.UUID) {
-	}, nil, func(uuid.UUID) {
+	}, nil, func(uuid.UUID, string) {
 		dropped.Add(1)
 	})
 	defer d.StopAll()
@@ -351,7 +351,7 @@ func TestProductionFloodEventsAreLowPriority(t *testing.T) {
 			d := newAsyncEventDispatcher(cfg, 1, logf.New(logf.Opts{}), func(evt interface{}, instanceID, orgID uuid.UUID) {
 				// slow handler — events will pile up
 				time.Sleep(5 * time.Millisecond)
-			}, nil, func(instanceID uuid.UUID) {
+			}, nil, func(uuid.UUID, string) {
 				atomic.AddUint64(&droppedCount, 1)
 			})
 			defer d.StopAll()
@@ -410,7 +410,7 @@ func TestUnknownEventsDefaultLowPriority(t *testing.T) {
 	var droppedCount uint64
 	d := newAsyncEventDispatcher(cfg, 1, logf.New(logf.Opts{}), func(evt interface{}, instanceID, orgID uuid.UUID) {
 		time.Sleep(2 * time.Millisecond)
-	}, nil, func(instanceID uuid.UUID) {
+	}, nil, func(uuid.UUID, string) {
 		atomic.AddUint64(&droppedCount, 1)
 	})
 	defer d.StopAll()
@@ -574,7 +574,7 @@ func TestHighPriorityEnqueueDoesNotDeadlockProducer(t *testing.T) {
 	var dropped uint64
 	d := newAsyncEventDispatcher(cfg, 1, logf.New(logf.Opts{}), func(evt interface{}, instanceID, orgID uuid.UUID) {
 		time.Sleep(500 * time.Millisecond) // slow handler
-	}, nil, func(instanceID uuid.UUID) {
+	}, nil, func(uuid.UUID, string) {
 		atomic.AddUint64(&dropped, 1)
 	})
 	defer d.StopAll()
@@ -602,7 +602,7 @@ func TestLowPriorityDropsNewestWhenFull(t *testing.T) {
 	d := newAsyncEventDispatcher(cfg, 1, logf.New(logf.Opts{}), func(evt interface{}, instanceID, orgID uuid.UUID) {
 		time.Sleep(50 * time.Millisecond)
 		atomic.AddUint64(&processed, 1)
-	}, nil, func(instanceID uuid.UUID) {
+	}, nil, func(uuid.UUID, string) {
 		atomic.AddUint64(&dropped, 1)
 	})
 	defer d.StopAll()
@@ -625,7 +625,7 @@ func TestCriticalOverflowLogsAreSampledButMetricsCountAll(t *testing.T) {
 	var dropped uint64
 	d := newAsyncEventDispatcher(cfg, 1, logf.New(logf.Opts{}), func(evt interface{}, instanceID, orgID uuid.UUID) {
 		time.Sleep(100 * time.Millisecond)
-	}, nil, func(instanceID uuid.UUID) {
+	}, nil, func(uuid.UUID, string) {
 		atomic.AddUint64(&dropped, 1)
 	})
 	defer d.StopAll()

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zerodha/logf"
 	waClient "go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/types/events"
 	"gorm.io/gorm"
 )
 
@@ -185,6 +186,69 @@ func TestConnectionManager_ReconnectExistingClientFailure_RestoresDispatcherStop
 	require.False(t,
 		cm.eventDispatcher.Dispatch("after-failed-reconnect", instance.ID, instance.OrganizationID),
 		"after a failed reconnect, the dispatcher must remain in the stopped state for the instance",
+	)
+}
+
+// TestConnectionManager_AutoReconnectConnectedClearsDispatcherStop
+// reproduces the silent-event-loss bug caused by whatsmeow's *internal*
+// auto-reconnect (EnableAutoReconnect defaults to true and is never disabled).
+//
+// On a transient websocket drop (e.g. IPv6 reset) the library reconnects by
+// itself and emits Disconnected then Connected straight into handleEvent —
+// WITHOUT calling cm.Connect()/connectExistingClient/newClient. The
+// Disconnected handler adds the instance to the dispatcher's stopped[] map;
+// unless the Connected handler clears it (AllowInstance), every subsequent
+// event is dropped at enqueueHigh with reason critical_overflow /
+// queue_state=instance_stopped, because priorityQueueFor returns nil.
+//
+// The manual reconnect path (cm.Connect -> connectExistingClient) is covered by
+// TestConnectionManager_ReconnectExistingClient_AllowsDispatcherAfterStop; this
+// test covers the library's internal auto-reconnect path, which never calls
+// cm.Connect() and was the actual production bug.
+func TestConnectionManager_AutoReconnectConnectedClearsDispatcherStop(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	testutil.TruncateTables(db)
+
+	instance := createHealthTestInstance(t, db, models.InstanceStatusConnected, "AutoReconnect", "15550007777@s.whatsapp.net")
+	cm := newHealthTestManager(db)
+	require.NotNil(t, cm.eventDispatcher)
+
+	// Step 1: seed the dispatcher with an allowed instance and confirm it
+	// accepts events before the drop.
+	cm.eventDispatcher.AllowInstance(instance.ID, instance.OrganizationID)
+	require.True(t,
+		cm.eventDispatcher.Dispatch("before-drop", instance.ID, instance.OrganizationID),
+		"sanity: Dispatch must accept events for an allowed instance",
+	)
+
+	// Step 2: simulate the library emitting *events.Disconnected. The handler
+	// must move the instance into the stopped[] state (mirrors production).
+	cm.handleEvent(&events.Disconnected{}, instance.ID, instance.OrganizationID)
+	require.False(t,
+		cm.eventDispatcher.Dispatch("while-stopped", instance.ID, instance.OrganizationID),
+		"after Disconnected, Dispatch must return false (instance in stopped[])",
+	)
+
+	// Discriminator: prove the stop is sticky/persistent, not a one-off. If
+	// AllowInstance were a no-op or placed wrongly, a single Dispatch could
+	// accidentally succeed on retry; two consecutive false results pin the
+	// contract that only a Connected/PairSuccess event clears stopped[].
+	require.False(t,
+		cm.eventDispatcher.Dispatch("still-stopped", instance.ID, instance.OrganizationID),
+		"stopped[] must persist until a Connected/PairSuccess event clears it",
+	)
+
+	// Step 3: simulate the library's INTERNAL auto-reconnect emitting
+	// *events.Connected — this is the path that never calls cm.Connect().
+	// No client is connected in this test, so prime the status lookup the
+	// Connected handler performs by leaving the DB row as-is.
+	cm.handleEvent(&events.Connected{}, instance.ID, instance.OrganizationID)
+
+	// Step 4: the Connected handler must have cleared stopped[] so events flow
+	// again. Before the fix this assertion failed (silent event loss).
+	require.True(t,
+		cm.eventDispatcher.Dispatch("after-auto-reconnect", instance.ID, instance.OrganizationID),
+		"after an auto-reconnect Connected event, the dispatcher must accept events again",
 	)
 }
 

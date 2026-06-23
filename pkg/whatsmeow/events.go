@@ -73,6 +73,13 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 
 	case *events.PairSuccess:
 		cm.ClearCachedQRCode(instanceID)
+		// Defensive: ensure the dispatcher is re-allowed on a fresh pairing.
+		// newClient already calls AllowInstance on the connect path; this is
+		// idempotent (AllowInstance deletes from stopped[], a no-op if absent)
+		// and guards against any pairing flow that did not traverse cm.Connect().
+		if cm.eventDispatcher != nil {
+			cm.eventDispatcher.AllowInstance(instanceID, orgID)
+		}
 		jid := v.ID.String()
 		phoneNumber := v.ID.User
 
@@ -122,6 +129,18 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 
 	case *events.Connected:
 		cm.ClearCachedQRCode(instanceID)
+		// whatsmeow auto-reconnects internally (EnableAutoReconnect=true by
+		// default and never disabled here) on transient websocket drops
+		// (e.g. IPv6 resets). That path emits *events.Connected without
+		// calling cm.Connect()/connectExistingClient/newClient, so the
+		// AllowInstance those paths perform never runs. The Disconnected
+		// handler above adds the instance to stopped[] via
+		// stopEventDispatcherInstance; without clearing it here, every
+		// subsequent event is dropped at enqueueHigh (critical_overflow)
+		// because priorityQueueFor returns nil. AllowInstance is idempotent.
+		if cm.eventDispatcher != nil {
+			cm.eventDispatcher.AllowInstance(instanceID, orgID)
+		}
 		phoneNumber := ""
 		var instance models.WhatsAppInstance
 		if err := cm.db.WithContext(ctx).
@@ -361,7 +380,6 @@ func (cm *ConnectionManager) handleReceipt(ctx context.Context, evt *events.Rece
 			"contact_id", message.ContactID)
 	}
 }
-
 
 // statusReceiptMessageIDs returns a set of message IDs that are status receipts,
 // batched into a single DB query instead of N individual lookups.

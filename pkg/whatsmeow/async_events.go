@@ -17,6 +17,20 @@ const defaultEventBufferSize = 32768
 // Overflow log sampling: at most one critical_overflow log per instance per interval.
 const overflowLogSampleInterval = 30 * time.Second
 
+// Drop reason/categories reported by enqueueHigh. Both drop branches share the
+// reasonCriticalOverflow category (kept stable so existing log matchers/alerts
+// still fire and sampling applies uniformly), but carry a distinct queue_state
+// so operators can tell a poisoned (stopped) instance — the common auto-reconnect
+// bug — from a genuinely saturated shard.
+const (
+	reasonCriticalOverflow = "critical_overflow" // log event category for both enqueueHigh drop branches
+	queueStateStopped      = "instance_stopped"  // priorityQueueFor returned nil: instance in stopped[] or dispatcher closed
+	queueStateShardFull    = "shard_full"        // shard channel at capacity past the bounded retry window
+	queueStateLowOverflow  = "low_overflow"      // low-priority queue full (drop-newest) or instance stopped
+	queueStateCircuitOpen  = "circuit_open"      // low-priority event dropped because the circuit breaker is open
+	queueStateLegacy       = "legacy_drop"       // legacy single-queue path drop (PriorityQueuesEnabled=false)
+)
+
 type asyncEventHandler func(evt interface{}, instanceID, orgID uuid.UUID)
 
 // ─── Legacy single-queue types (used when PriorityQueuesEnabled=false) ───
@@ -81,7 +95,7 @@ type asyncEventDispatcher struct {
 	handler     asyncEventHandler
 	logger      logf.Logger
 	updateDepth func(uuid.UUID, int64)
-	markDropped func(uuid.UUID)
+	markDropped func(uuid.UUID, string)
 
 	// state
 	mu      sync.Mutex
@@ -108,7 +122,7 @@ type asyncEventDispatcher struct {
 // ─── Constructor ───
 
 func newAsyncEventDispatcher(cfg priorityQueueConfig, bufferSize int, logger logf.Logger, handler asyncEventHandler,
-	updateDepth func(uuid.UUID, int64), markDropped func(uuid.UUID)) *asyncEventDispatcher {
+	updateDepth func(uuid.UUID, int64), markDropped func(uuid.UUID, string)) *asyncEventDispatcher {
 
 	if bufferSize <= 0 {
 		bufferSize = defaultEventBufferSize
@@ -201,7 +215,7 @@ func (d *asyncEventDispatcher) Dispatch(evt interface{}, instanceID, orgID uuid.
 func (d *asyncEventDispatcher) legacyDispatch(evt interface{}, instanceID, orgID uuid.UUID) bool {
 	queue := d.queueFor(instanceID, orgID)
 	if queue == nil {
-		d.markEventDropped(instanceID)
+		d.markEventDropped(instanceID, queueStateLegacy)
 		d.logEventDropLegacy(instanceID, evt)
 		return false
 	}
@@ -211,7 +225,7 @@ func (d *asyncEventDispatcher) legacyDispatch(evt interface{}, instanceID, orgID
 	defer queue.mu.Unlock()
 
 	if queue.closed {
-		d.markEventDropped(instanceID)
+		d.markEventDropped(instanceID, queueStateLegacy)
 		d.logEventDropLegacy(instanceID, evt)
 		return false
 	}
@@ -221,7 +235,7 @@ func (d *asyncEventDispatcher) legacyDispatch(evt interface{}, instanceID, orgID
 		d.updateQueueDepth(instanceID, len(queue.events))
 		return true
 	default:
-		d.markEventDropped(instanceID)
+		d.markEventDropped(instanceID, queueStateLegacy)
 		d.logEventDropLegacy(instanceID, evt)
 		return false
 	}
@@ -356,8 +370,8 @@ func shardIndex(key string, shards int) int {
 func (d *asyncEventDispatcher) enqueueHigh(evt interface{}, instanceID, orgID uuid.UUID) bool {
 	queues := d.priorityQueueFor(instanceID, orgID)
 	if queues == nil {
-		d.markEventDropped(instanceID)
-		d.logPriorityDrop(instanceID, evt, "critical_overflow")
+		d.markEventDropped(instanceID, queueStateStopped)
+		d.logPriorityDrop(instanceID, evt, reasonCriticalOverflow, queueStateStopped)
 		return false
 	}
 
@@ -393,9 +407,9 @@ func (d *asyncEventDispatcher) enqueueHigh(evt interface{}, instanceID, orgID uu
 		}
 	}
 
-	// All attempts failed → critical_overflow.
-	d.markEventDropped(instanceID)
-	d.logPriorityDrop(instanceID, evt, "critical_overflow")
+	// All attempts failed → critical_overflow (shard saturated).
+	d.markEventDropped(instanceID, queueStateShardFull)
+	d.logPriorityDrop(instanceID, evt, reasonCriticalOverflow, queueStateShardFull)
 	return false
 }
 
@@ -403,8 +417,8 @@ func (d *asyncEventDispatcher) enqueueHigh(evt interface{}, instanceID, orgID uu
 func (d *asyncEventDispatcher) enqueueLow(evt interface{}, instanceID, orgID uuid.UUID) bool {
 	queues := d.priorityQueueFor(instanceID, orgID)
 	if queues == nil {
-		d.markEventDropped(instanceID)
-		d.logPriorityDrop(instanceID, evt, "low_overflow")
+		d.markEventDropped(instanceID, queueStateStopped)
+		d.logPriorityDrop(instanceID, evt, "low_overflow", queueStateStopped)
 		return false
 	}
 
@@ -415,8 +429,8 @@ func (d *asyncEventDispatcher) enqueueLow(evt interface{}, instanceID, orgID uui
 			return false // silently skip HistorySync during cooldown
 		}
 		// Other low events: count as circuit_open drop but do not enqueue.
-		d.markEventDropped(instanceID)
-		d.logPriorityDrop(instanceID, evt, "circuit_open")
+		d.markEventDropped(instanceID, queueStateCircuitOpen)
+		d.logPriorityDrop(instanceID, evt, "circuit_open", queueStateCircuitOpen)
 		return false
 	}
 	d.recordLowEvent(instanceID)
@@ -435,8 +449,8 @@ func (d *asyncEventDispatcher) enqueueLow(evt interface{}, instanceID, orgID uui
 		d.updatePriorityQueueDepth(instanceID, int64(len(queues.lowQueue)))
 		return true
 	default:
-		d.markEventDropped(instanceID)
-		d.logPriorityDrop(instanceID, evt, "low_overflow")
+		d.markEventDropped(instanceID, queueStateLowOverflow)
+		d.logPriorityDrop(instanceID, evt, "low_overflow", queueStateLowOverflow)
 		return false
 	}
 }
@@ -920,14 +934,14 @@ func (d *asyncEventDispatcher) logEventDropLegacy(instanceID uuid.UUID, evt inte
 	)
 }
 
-func (d *asyncEventDispatcher) logPriorityDrop(instanceID uuid.UUID, evt interface{}, reason string) {
+func (d *asyncEventDispatcher) logPriorityDrop(instanceID uuid.UUID, evt interface{}, reason, queueState string) {
 	if d == nil {
 		return
 	}
 	// NOTE: markEventDropped is called by the caller (enqueueHigh/enqueueLow) before
 	// entering this function. We do NOT call it here to avoid double-counting.
 
-	isCritical := reason == "critical_overflow"
+	isCritical := reason == reasonCriticalOverflow
 	if !isCritical {
 		// Low-priority drops: log at warn level with full detail.
 		d.logger.Warn(
@@ -952,12 +966,18 @@ func (d *asyncEventDispatcher) logPriorityDrop(instanceID uuid.UUID, evt interfa
 	d.overflowLogMu.Unlock()
 
 	if shouldLog {
+		// queue_state distinguishes a poisoned instance (instance_stopped —
+		// the common auto-reconnect bug where the dispatcher is in stopped[]
+		// and priorityQueueFor returns nil) from a genuinely saturated shard
+		// (shard_full). Without it the two branches are indistinguishable.
 		d.logger.Warn(
 			"WhatsMeow critical overflow; dropping high-priority event",
 			"component", "whatsmeow",
 			"event", "critical_overflow",
 			"instance_id", instanceID,
 			"event_type", eventTypeName(evt),
+			"reason", reason,
+			"queue_state", queueState,
 		)
 	}
 }
@@ -978,11 +998,11 @@ func (d *asyncEventDispatcher) updatePriorityQueueDepth(instanceID uuid.UUID, de
 	d.updateDepth(instanceID, depth)
 }
 
-func (d *asyncEventDispatcher) markEventDropped(instanceID uuid.UUID) {
+func (d *asyncEventDispatcher) markEventDropped(instanceID uuid.UUID, queueState string) {
 	if d == nil || d.markDropped == nil {
 		return
 	}
-	d.markDropped(instanceID)
+	d.markDropped(instanceID, queueState)
 }
 
 func (d *asyncEventDispatcher) priorityRemainingDepth(pq *instanceQueues) int {

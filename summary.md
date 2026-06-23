@@ -517,3 +517,311 @@ to force-prove recovery on contact 966531536800 — needs explicit approval.
 
 **Not committed** per AGENTS.md §6. Changes are on working tree (uncommitted) + deployed via blue/green.
 Rollback anytime with `whatomate-switch blue` on the VPS.
+
+---
+
+## 2026-06-23 — Fix: /settings/modules "Failed to update module" in prod (license tier mismatch)
+
+**Symptom.** Disabling a module globally on `/settings/modules` showed "Failed to update module"
+in production, but worked locally. Affecting every managed-module toggle (noticed on
+`facebook-people-search`).
+
+**Root cause = two bugs.**
+
+1. **Tier vocabulary mismatch (the real blocker).** `internal/core/license_tiers.go` `tierModules`
+   only knew `trial`/`starter`/`pro`/`enterprise`. The license issuer emits tier string `"production"`
+   for paid host-bound deployments (prod `license_records`: tier=`production`, license_kind=`paid`,
+   status=`active`). `LicenseAllowsModule("production", key)` → map miss → deny-by-default → FALSE
+   for every module → `plugin/module-management/plugin.go:104` blocked all toggles with HTTP 403
+   "Module is not licensed for this deployment tier". Local worked because `licenseAllows`
+   short-circuits to true when `state.Enabled == false` (unlicensed).
+
+2. **Frontend hid the real error (UX).** `ModulesView.vue` caught any error and showed generic
+   `modules.updateFailed`, discarding the backend's `data.message` — masking the 403 as
+   "Failed to update module".
+
+**Fix (deployed blue-20260623_license_tier-20260623_102338):**
+- `internal/core/license_tiers.go` — add `"production": {"*": true}` alias (paid deployments are
+  unrestricted, like pro/enterprise). +3 test cases in `internal/core/license_tiers_test.go`.
+- `frontend/src/views/settings/ModulesView.vue` — `updateGlobal`/`updateOrganization` now surface
+  `error?.response?.data?.message` (catch `(error: any)`), matching the pattern in
+  ClosedChatsView/GroupSearch/InstancesView/BusinessProfileDialog.
+
+**Verification:** go test ./internal/core + ./plugin/module-management green · full go build/test
+clean (one intermittent flake in TestCompiledFacebookModulesResolveWithDependencies reproduced 0/3
+on rerun, unrelated to this change) · frontend typecheck + eslint clean · entitlement proven live:
+`LicenseAllowsModule("production", "facebook-people-search")` now true.
+
+**Deploy (per user request: BLUE slot).** Built license-tier binary in green source tree, moved it
+to `/opt/whatomate-blue/whatomate.license_tier-20260623`, restored green slot to the session-reset
+build (rollback), `whatomate-switch blue`. Final state:
+- BLUE (active) = license-tier fix `blue-20260623_license_tier-20260623_102338`
+- GREEN (rollback) = session-reset build from earlier today
+- Rollback: `whatomate-switch green`
+
+Post-switch observation: HTTPS 200, 0 panics/fatals, 0 module 403s, 0 send-400s. Both
+`whatomate.service` + `whatomate@holol-wenjaz` active. The earlier session-reset fix remains
+deployed (it's in the same source tree the blue binary was built from).
+
+**Not committed** per AGENTS.md §6. All changes on working tree (uncommitted) + deployed via blue.
+Toggle verification pending an actual UI click (did not impersonate the super-admin session).
+
+## 2026-06-23 — Audit Log System (v1, scope-B)
+
+### Work Summary
+Implemented a canonical cross-cutting audit log per `docs/superpowers/specs/2026-06-23-audit-log-system-design.md`
+(see plan `docs/superpowers/plans/2026-06-23-audit-log-system.md`). Records security-relevant
+and operational events across the platform with an admin-only UI. Per-message events deferred
+to v2 (user confirmed).
+
+### Files changed
+- New backend: `internal/audit/{events,service,builder}.go` (+ tests),
+  `internal/models/audit_event.go` (+ test), `internal/handlers/audit_handlers.go` (+ test).
+- New frontend: `frontend/src/services/audit.ts`, `stores/audit.ts` (+ test),
+  `views/settings/AuditLogView.vue`.
+- Modified: `internal/handlers/app.go` (Audit field), `cmd/whatomate/main.go` (wiring + route +
+  server_started event), `internal/models/roles.go` (audit:read permission), `internal/database/postgres.go`
+  (migration), `internal/handlers/{auth_handlers,users,roles,apikeys,contacts_management,testhelpers_test}.go`
+  (call sites + test wiring), `frontend/src/{router/index.ts,components/layout/navigation.ts,i18n/locales/en.json}`.
+
+### Pattern followed
+Extended the proven `plugin/module-management/audit.go` best-effort pattern into a cross-cutting
+`internal/audit/` package with a `*audit.Service` on `*handlers.App` and a fluent `EventBuilder`.
+
+### Coverage (v1)
+auth (login success/fail, logout), admin (user/role/api-key CRUD), chat (claim/close/reopen-as-release),
+system (server_started with version/build_time/address).
+
+### Tests
+- internal/audit: 12 unit tests (category inference, builder, nil-safe no-ops, merge/clobber).
+- internal/handlers/audit_handlers_test.go: 6 tests (super-admin cross-org + global, org filter,
+  category filter, per_page cap at 200, 403 non-admin, newest-first).
+- internal/handlers/auth_handlers_test.go: login success/failure audit assertions.
+- frontend/src/stores/audit.test.ts: 5 vitest tests.
+- All green. DB-backed handler tests skip locally without TEST_DATABASE_URL (run in CI).
+
+### Verification
+`go build ./...`, `go vet` (audit/handlers/models/cmd), full `internal/handlers` suite (2.1s, pass),
+`internal/database` seed test (pass), frontend `npm run lint` (0 errors, 5 pre-existing warnings
+in untouched files), frontend typecheck clean for all audit files (only pre-existing ModulesView errors),
+production binary builds.
+
+### Architectural decisions / gotchas (verified vs. live source, differ from original spec)
+- `App.Log` is `logf.Logger`, NOT `*slog.Logger` → `audit.Service` takes `logf.Logger`.
+- Migrations register via `GetMigrationModels()` ([]MigrationModel), not a raw AutoMigrate slice.
+- Admin auto-inherits `audit:read` from `DefaultPermissions()`; no edit to `SystemRolePermissions()` needed.
+- `tenant.ScopedDB(db, orgID)` only adds a WHERE scope (no separate physical DB, no RLS); for inserts
+  the row's `OrganizationID` field carries tenancy, so `Service.Record` writes directly to `s.db`.
+  `tenant.GetScopedDB` actually takes a `*fastglue.Request`, not an orgID — the spec's routing assumption was wrong.
+- Read-API permission gating uses in-handler `requirePermission` (matching `ListPermissions`), not route middleware.
+
+### Risks/gotchas
+Best-effort writes (won't fail user actions); `audit_events` grows unbounded in v1 (created_at index
+ready for future purge worker); `module_events` table left untouched (v2 to bridge into `audit_events`).
+
+### Commits
+14 commits on `main` (one per task). Not pushed. Frontend `dist/` not rebuilt (run `make build-prod` when deploying).
+
+---
+
+## Session 2026-06-23 — Fix #1 (audit log missing logout) + Fix #2 (re-login always lands on /chat)
+
+### Workflow note
+Socraticode MCP was unavailable this session. Per AGENTS.md §8 fallback policy, user approved
+proceeding with codebase-memory-mcp (graph/impact) + Serena (references/edits) instead. No
+internal-tool fallback used for source reads/edits.
+
+### Diagnosis (both issues FRONTEND-rooted; backend already correct)
+- Backend `Logout` (internal/handlers/auth_handlers.go:495) records the `logout` audit event
+  BEFORE the Redis revocation check (already fixed in commit 03a062f3). Backend is correct.
+- Frontend had two divergent logout paths:
+  - Explicit logout button -> authStore.logout() -> POST /auth/logout -> records event. OK.
+  - Session-expiry (api.ts interceptor -> setSessionExpiredHandler in main.ts) called
+    authStore.clearAuth() DIRECTLY, never calling /auth/logout -> no `logout` event ever written.
+    This is the common root cause of BOTH reported bugs.
+- Only the router guard (index.ts:620) carried ?redirect= to /login; the session-expiry
+  handler (main.ts) and manual logout (AppLayout.vue) pushed to /login WITHOUT it, so
+  LoginView.vue fell through to `/` -> `/chat`.
+
+### Changes (3 files, frontend-only, no backend/auth/tenant/contract/DB change)
+1. frontend/src/main.ts setSessionExpiredHandler: call authStore.logout() (records logout +
+   clears state via its finally) instead of bare clearAuth(); redirect to /login with
+   ?redirect=<current fullPath>.
+2. frontend/src/components/layout/AppLayout.vue handleLogout: redirect to /login with
+   ?redirect=<current fullPath>.
+3. frontend/src/views/auth/LoginView.vue: validate redirect (same-origin, not `//`, not /login)
+   before honoring it (open-redirect + login-loop hardening).
+
+### Reused patterns / DRY
+- Reused existing authStore.logout() (already error-swallowing + clearAuth() in finally) rather
+  than duplicating the /auth/logout call.
+- ?redirect= preservation matches the pattern the router guard already uses.
+
+### Verification
+- vue-tsc --noEmit: clean
+- eslint on 3 files: clean
+- npm run test:unit: 206 passed / 42 files (incl. router/index.test.ts 7 tests)
+- Serena diagnostics: clean on main.ts + LoginView.vue (AppLayout.vue Volar cache showed a stale
+  error post-edit; confirmed correct via direct read + typecheck).
+
+### Risks / gotchas
+- Self-heal: a re-login whose /auth/logout 401s (token already revoked) still logs the user out
+  cleanly because logout() swallows the error; the backend records the event pre-revocation-check.
+- ?redirect now flows from 3 sources (guard, session-expiry, manual logout); LoginView validates it.
+- Not committed (per §6.5). Not pushed. dist/ not rebuilt.
+- Tests needed (future): no unit test covers main.ts session-expiry or LoginView safeRedirect today.
+
+## 2026-06-23 — fix(whatsmeow): clear dispatcher stopped[] on auto-reconnect Connected
+### Context
+Production: `critical_overflow instance_id=<id> event_type=Message` while instance
+showed connected. Drops ~60s apart (arrival-rate spaced), 0 persisted in window.
+### Root cause
+whatsmeow `NewClient` defaults `EnableAutoReconnect=true` (lib client.go:281) and
+whatomate never disables it. On a transient WS drop (IPv6 reset) the library
+reconnects INTERNALLY and emits Disconnected→Connected straight into handleEvent,
+WITHOUT calling cm.Connect()/connectExistingClient/newClient. The Disconnected
+handler adds the instance to the dispatcher `stopped[]` map; the Connected handler
+did NOT call AllowInstance, so `stopped[]` was never cleared → priorityQueueFor
+returned nil → every enqueueHigh dropped instantly (critical_overflow, line ~360).
+Each IPv6 blit poisoned one more instance until re-scan/restart.
+### Diagnostic tell (vs saturated shard)
+queue_depth=0 + consumer_lag=0 + ~60s-spaced drops = poisoned/stopped instance.
+Nonzero depth + rising lag = genuinely saturated shard.
+### Fix (Serena edits, minimal)
+- pkg/whatsmeow/events.go: added `cm.eventDispatcher.AllowInstance(...)` to the
+  `*events.Connected` case (primary) and `*events.PairSuccess` (defensive). Both
+  idempotent. Comment documents the library auto-reconnect bypass.
+- pkg/whatsmeow/async_events.go (diagnostic only): added constants
+  reasonCriticalOverflowStopped / queueStateStopped / queueStateShardFull;
+  enqueueHigh stopped-site and full-shard-site now pass distinct queue_state;
+  logPriorityDrop signature → (reason, queueState); critical log line now carries
+  `reason` + `queue_state` so the two branches are distinguishable. Log `event`
+  stays `critical_overflow` so existing matchers still fire.
+- pkg/whatsmeow/manager_health_test.go: new
+  TestConnectionManager_AutoReconnectConnectedClearsDispatcherStop — simulates
+  library auto-reconnect (Disconnected then Connected via handleEvent, NO
+  cm.Connect), asserts Dispatch returns true after Connected. Added events import.
+### Verification
+- go build ./pkg/whatsmeow/ → OK; go vet → exit 0
+- Serena LSP diagnostics: only pre-existing style hints, 0 errors/warnings
+- go test -race on dispatcher + connection-manager tests (incl. new test) → PASS
+  against local pg (TEST_DATABASE_URL=host=localhost port=5432 user=postgres ...)
+- New test confirmed NOT skipped (verbose: --- PASS)
+### Reused patterns / DRY
+- Mirrored existing stopEventDispatcherInstance (Disconnected) ↔ AllowInstance
+  (Connected) symmetry. Reused newHealthTestManager + createHealthTestInstance.
+### NOT done (deliberate)
+- Did NOT implement the earlier throughput plan (workers/shard, more shards,
+  high-priority circuit breaker) — solves a problem not occurring for this
+  instance. Candidate follow-up for genuine flood scenarios only.
+- Did NOT change public dispatcher interface; AllowInstance signature unchanged.
+- Did NOT disable whatsmeow auto-reconnect (larger behavior change; not needed).
+### Gotchas
+- whatsmeow EnableAutoReconnect=true by default → any reconnect-resettable state
+  MUST be reset in the *events.Connected handler, not only in cm.Connect() paths.
+- Existing TestConnectionManager_ReconnectExistingClient_* give false confidence
+  (manual path only); the new auto-reconnect test closes that gap.
+- Not committed (per §6.5). Not pushed. dist/ not rebuilt.
+
+---
+
+## Fix: UpdateUser silently dropped password_hash on admin reset — 2026-06-23
+
+### Bug
+`internal/handlers/users.go` `UpdateUser` hashed a new password onto the in-memory struct
+(`user.PasswordHash = ...`) but the DB write used GORM's `.Updates(map[string]any{...})` WITHOUT
+a `password_hash` key. GORM persists only the keys listed in the map, so admin password resets
+via `PUT /users/:id` returned 200 "User updated successfully" while leaving the DB hash
+unchanged (still the original creation-time hash). Self-service `/me/password` was unaffected
+because `ChangePassword` uses single-column `Update("password_hash", ...)`.
+
+### Root cause
+GORM map-based `Updates()` treats the map as an explicit column whitelist; struct assignments
+outside the map are ignored.
+
+### Fix (minimal, single site)
+Build the `updates` map, then conditionally add `"password_hash"` only when `req.Password != ""`
+(matches the existing `CreateUser` restore-path convention that already includes the key).
+
+### Files changed
+- `internal/handlers/users.go` — `UpdateUser`: conditional `password_hash` in updates map.
+- `internal/handlers/users_test.go` — added `TestApp_UpdateUser_PasswordPersisted`: reloads user
+  from DB, asserts new password matches bcrypt and old password returns
+  `bcrypt.ErrMismatchedHashAndPassword`.
+
+### Impact / DRY
+- `trace_path` on `UpdateUser`: no Go callers (HTTP route handler only) → blast radius contained.
+- Reused existing helpers: `scopedUserWriteDB`, `validatePasswordStrength`, `parseSuperAdminField`,
+  `testutil.CreateAdminRole`, `testutil.SetAuthContext`, `testutil.SetPathParam`.
+- No public API, model, auth, tenant, or storage changes.
+
+### Verification status
+- `go build ./internal/handlers/...` — clean.
+- `go vet ./internal/handlers/` — clean.
+- Serena diagnostics on edited regions — no issues.
+- Targeted tests compile and run; **SKIP** in this environment because Docker/`TEST_DATABASE_URL`
+  is unavailable (DB tests skip by design via `testutil.SetupTestDB`). Run
+  `make test-db` (or set `TEST_DATABASE_URL`) on a machine with Docker to execute the assertions.
+
+### Blocker note
+Socraticode MCP is not registered in this environment. Per project fallback policy, used
+codebase-memory-mcp (`trace_path`, `search_code`, `index_repository`) for impact/relationship
+analysis and Serena for all source reads/edits. No internal-tool fallback used for source code.
+
+---
+
+## Code-review fixes for UpdateUser password fix — 2026-06-23
+
+Follow-up to the earlier UpdateUser password_hash fix, addressing code-reviewer findings.
+
+### Fix A — gofmt (minor)
+Removed double blank lines Serena `insert_after_symbol` introduced before the two
+new tests. `gofmt -d` now clean on both files.
+
+### Fix B — audit records password change (observability)
+`UpdateUser` audit event now includes `Detail("password_changed", req.Password != "")`,
+matching the existing `CreateUser` pattern (`Detail("restored", true)`). Lets security
+teams distinguish credential resets from metadata-only updates in the audit log.
+
+### Fix C — regression test for self-change rejection (test gap)
+Added `TestApp_UpdateUser_SelfPasswordChangeRejected`: an admin targeting their own id
+with a `password` field must get 400 "Use /me/password to change your password", and the
+DB password must be unchanged. Guards the `currentUserID == id` branch ordering that was
+previously untested.
+
+### Files changed (this round)
+- `internal/handlers/users.go` — `UpdateUser`: added `Detail("password_changed", ...)`.
+- `internal/handlers/users_test.go` — added `TestApp_UpdateUser_SelfPasswordChangeRejected`.
+
+### Verification
+- `gofmt -d` — clean.
+- `go vet ./internal/handlers/` — clean.
+- `go build ./internal/handlers/...` — clean.
+- Serena diagnostics on edited regions — no issues.
+- Both new tests compile, register, and SKIP cleanly (no DB in this sandbox); run
+  `make test-db` on a Docker-capable host to execute assertions.
+
+No public API, model, auth, tenant, or storage changes. Not committed.
+
+## 2026-06-23 — review follow-ups M1+M2 (queue_state metric + test hardening)
+### M1 — strengthened regression test
+`TestConnectionManager_AutoReconnectConnectedClearsDispatcherStop` now has a
+"still-stopped" intermediate assertion (2nd Dispatch must also be false) proving
+the stop is sticky/persistent — better discriminates the fix from a no-op.
+### M2 — exposed queue_state as a Prometheus label (was log-only)
+- metrics.go: instanceMetrics.droppedByState map+mutex; MarkEventDropped(id)
+  → MarkEventDropped(id, queueState); PriorityMetricsSnapshot.DroppedByState;
+  resetIfDayChanged zeroes the map.
+- async_events.go: markDropped callback func(uuid.UUID)→func(uuid.UUID,string);
+  markEventDropped(instanceID)→(instanceID, queueState); added constants
+  queueStateLowOverflow/queueStateCircuitOpen/queueStateLegacy; all 8 callers
+  pass specific queue_state (instance_stopped/shard_full/low_overflow/
+  circuit_open/legacy_drop).
+- main.go: whatsmeow_dropped_total emits one sample per queue_state, falls back
+  to queue_state="overflow" when no breakdown.
+- Tests: 7 async_events_test.go markDropped lambdas updated; observability_routes_test.go
+  asserts {queue_state="instance_stopped"} and {queue_state="shard_full"} labels end-to-end.
+### Verification
+- gofmt -l clean; go vet exit 0; go build OK; Serena LSP 0 warnings.
+- go test -race ./pkg/whatsmeow/ → PASS; go test ./cmd/whatomate/ → PASS.
+### Not committed (per §6.5).
