@@ -25,7 +25,13 @@ describe("compiled module registry", () => {
     ["/facebook/comments/comment-1", "facebook-comments"],
     ["/facebook/page-search", "facebook-page-search"],
     ["/facebook/people-search", "facebook-people-search"],
-    ["/facebook/group-search", "facebook-core"],
+    ["/facebook/group-search", "facebook-group-search"],
+    ["/facebook/extract-likes", "facebook-extract-likes"],
+    ["/facebook/extract-data", "facebook-extract-data"],
+    ["/facebook/page-messengers", "facebook-page-messengers"],
+    ["/facebook/auto-share", "facebook-auto-share"],
+    ["/facebook/retargeting", "facebook-retargeting"],
+    ["/facebook/retargeting/123", "facebook-retargeting"],
     ["/chat", undefined],
   ])("maps %s to %s", (path, expected) => {
     expect(moduleKeyForPath(path)).toBe(expected);

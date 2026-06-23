@@ -5,6 +5,8 @@ import { useRouter } from "vue-router";
 import { PageHeader } from "@/components/shared";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { moduleKeyForPath } from "@/modules/registry";
+import { useConfigStore } from "@/stores/config";
 import {
   Facebook,
   MessageCircle,
@@ -23,6 +25,7 @@ import {
 
 const { t, locale } = useI18n();
 const router = useRouter();
+const configStore = useConfigStore();
 const isRTL = computed(() => locale.value === "ar");
 
 // Defined list of Facebook tools to show in the grid
@@ -119,6 +122,17 @@ const tools = [
   }
 ];
 
+// Only show tools whose managed module is effective-enabled for the current
+// organization. moduleKeyForPath is the single source of truth for the
+// path → module-key mapping (see @/modules/registry), so this stays in sync
+// with the sidebar gating in AppLayout.vue automatically.
+const visibleTools = computed(() =>
+  tools.filter((tool) => {
+    const moduleKey = moduleKeyForPath(tool.path);
+    return moduleKey === undefined || configStore.isModuleEnabled(moduleKey);
+  }),
+);
+
 function navigateTo(path: string) {
   router.push(path);
 }
@@ -144,7 +158,7 @@ function navigateTo(path: string) {
       <!-- Grid of Facebook Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
         <Card
-          v-for="tool in tools"
+          v-for="tool in visibleTools"
           :key="tool.path"
           class="group relative overflow-hidden bg-card/40 dark:bg-slate-900/40 border-border/80 dark:border-slate-800/80 backdrop-blur-xl shadow-xl transition-all duration-300 hover:border-slate-300 dark:hover:border-slate-700 hover:-translate-y-1 hover:shadow-2xl cursor-pointer rounded-2xl flex flex-col justify-between"
           :class="tool.hoverGlow"

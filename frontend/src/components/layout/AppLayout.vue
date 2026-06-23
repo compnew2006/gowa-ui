@@ -478,7 +478,10 @@ const toggleSidebarPin = () => {
 
 const handleLogout = async () => {
   await authStore.logout();
-  router.push("/login");
+  // Preserve the current route so a successful re-login returns the user
+  // where they were instead of always landing on /chat.
+  const redirectPath = router.currentRoute.value.fullPath;
+  router.push({ name: "login", query: { redirect: redirectPath } });
 };
 </script>
 

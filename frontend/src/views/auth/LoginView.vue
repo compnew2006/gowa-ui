@@ -127,8 +127,17 @@ const handleLogin = async () => {
 
     toast.success(t("auth.loginSuccess"));
 
+    // Only honor a same-origin, non-/login redirect target to avoid open
+    // redirects and login loops; otherwise go to the default landing route.
     const redirect = route.query.redirect as string;
-    router.push(redirect || "/");
+    const safeRedirect =
+      redirect &&
+      redirect.startsWith("/") &&
+      !redirect.startsWith("//") &&
+      redirect !== "/login"
+        ? redirect
+        : "/";
+    router.push(safeRedirect);
   } catch (error: any) {
     const message =
       error.response?.data?.message || t("auth.invalidCredentials");

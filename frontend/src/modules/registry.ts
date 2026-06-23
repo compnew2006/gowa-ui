@@ -21,6 +21,34 @@ export const compiledModules: readonly CompiledModuleDefinition[] = Object.freez
     pathPrefixes: ["/facebook/people-search"],
   },
   {
+    key: "facebook-auto-share",
+    pathPrefixes: ["/facebook/auto-share"],
+  },
+  {
+    key: "facebook-extract-data",
+    pathPrefixes: ["/facebook/extract-data"],
+  },
+  {
+    key: "facebook-extract-likes",
+    pathPrefixes: ["/facebook/extract-likes"],
+  },
+  {
+    key: "facebook-group-search",
+    pathPrefixes: ["/facebook/group-search"],
+  },
+  {
+    key: "facebook-page-messengers",
+    pathPrefixes: ["/facebook/page-messengers"],
+  },
+  {
+    key: "facebook-retargeting",
+    pathPrefixes: ["/facebook/retargeting"],
+  },
+  // facebook-core must stay LAST: its "/facebook" prefix is the catch-all for
+  // the Facebook hub itself and any future sub-paths without a dedicated
+  // module. Specific module prefixes above take precedence because
+  // moduleKeyForPath returns on the first match.
+  {
     key: "facebook-core",
     pathPrefixes: ["/facebook"],
   },

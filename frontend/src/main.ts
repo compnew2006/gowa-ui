@@ -46,17 +46,23 @@ setLicenseLockedHandler((error) => {
 });
 
 setSessionExpiredHandler(() => {
-  // Clear Pinia auth state so the rest of the app sees the user as logged out
-  // (handles both 401 from /api/me and from any other protected endpoint).
+  // Record the logout server-side (writes the `logout` audit event) and clear
+  // Pinia auth state. authStore.logout() already swallows errors and always
+  // clears local state via clearAuth() in its finally block, so a 401 from an
+  // already-dead refresh token still leaves the user logged out cleanly. The
+  // backend records the audit event BEFORE the Redis revocation check, so it
+  // fires even for already-revoked tokens.
   const authStore = useAuthStore(pinia);
-  authStore.clearAuth();
+  void authStore.logout();
 
   // Show localized "session expired" toast.
   toast.warning(i18n.global.t("auth.sessionExpired"));
 
-  // Soft redirect to /login (no hard reload, preserves the SPA).
+  // Soft redirect to /login preserving the route the user was on, so a
+  // successful re-login returns them where they were instead of /chat.
   if (router.currentRoute.value.name !== "login") {
-    void router.push("/login");
+    const redirectPath = router.currentRoute.value.fullPath;
+    void router.push({ name: "login", query: { redirect: redirectPath } });
   }
 });
 

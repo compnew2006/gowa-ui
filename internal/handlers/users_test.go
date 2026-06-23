@@ -1565,6 +1565,77 @@ func TestApp_UpdateUser_ChangeRole(t *testing.T) {
 	assert.Equal(t, agentRole.ID, *resp.Data.RoleID)
 }
 
+func TestApp_UpdateUser_PasswordPersisted(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	admin := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("upd-pwd-admin")),
+		testutil.WithRoleID(&adminRole.ID),
+	)
+
+	target := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("upd-pwd-target")),
+		testutil.WithPassword("originalPassword1"),
+	)
+
+	reqBody := map[string]interface{}{
+		"password": "brandNewPassword2",
+	}
+
+	req := testutil.NewJSONRequest(t, reqBody)
+	testutil.SetAuthContext(req, org.ID, admin.ID)
+	testutil.SetPathParam(req, "id", target.ID.String())
+
+	err := app.UpdateUser(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// Reload from DB and verify the new password is actually persisted while the
+	// old one no longer matches. Regression guard for the GORM map-based
+	// Updates() silently dropping password_hash from UpdateUser.
+	var dbUser models.User
+	require.NoError(t, app.DB.Where("id = ?", target.ID).First(&dbUser).Error)
+	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte("brandNewPassword2")))
+	require.ErrorIs(t, bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte("originalPassword1")), bcrypt.ErrMismatchedHashAndPassword)
+}
+
+// TestApp_UpdateUser_SelfPasswordChangeRejected ensures a user updating their
+// own record cannot set a password via PUT /users/:id and must use /me/password
+// instead. Guards the currentUserID == id branch ordering in UpdateUser.
+func TestApp_UpdateUser_SelfPasswordChangeRejected(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	admin := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("upd-pwd-self")),
+		testutil.WithRoleID(&adminRole.ID),
+		testutil.WithPassword("originalPassword1"),
+	)
+
+	reqBody := map[string]interface{}{
+		"password": "brandNewPassword2",
+	}
+
+	req := testutil.NewJSONRequest(t, reqBody)
+	// Admin targets their own id.
+	testutil.SetAuthContext(req, org.ID, admin.ID)
+	testutil.SetPathParam(req, "id", admin.ID.String())
+
+	err := app.UpdateUser(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+
+	// Password must be unchanged: the self-change branch returns before hashing.
+	var dbUser models.User
+	require.NoError(t, app.DB.Where("id = ?", admin.ID).First(&dbUser).Error)
+	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte("originalPassword1")))
+}
+
 func TestApp_UpdateUser_RoleChangeWithoutPermission(t *testing.T) {
 	t.Parallel()
 

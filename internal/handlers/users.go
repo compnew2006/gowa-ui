@@ -843,13 +843,20 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		user.IsSuperAdmin = *saField
 	}
 
-	if err := scopedUserWriteDB(a.DB, user.ID, user.OrganizationID).Updates(map[string]any{
+	updates := map[string]any{
 		"email":          user.Email,
 		"full_name":      user.FullName,
 		"role_id":        user.RoleID,
 		"is_active":      user.IsActive,
 		"is_super_admin": user.IsSuperAdmin,
-	}).Error; err != nil {
+	}
+	// Include password_hash only when a new password was provided. GORM's
+	// map-based Updates() persists only the listed keys, so the freshly hashed
+	// password set on the struct above would otherwise be silently dropped.
+	if req.Password != "" {
+		updates["password_hash"] = user.PasswordHash
+	}
+	if err := scopedUserWriteDB(a.DB, user.ID, user.OrganizationID).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update user", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update user", nil, "")
 	}
@@ -874,6 +881,7 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 			OrgValue(orgID).
 			Target("user", user.ID).
 			Detail("email", user.Email).
+			Detail("password_changed", req.Password != "").
 			Record(r.RequestCtx, a.Audit)
 	}
 
