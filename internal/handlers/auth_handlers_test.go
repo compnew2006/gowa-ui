@@ -112,6 +112,45 @@ func TestLogin_Failure_InactiveUser(t *testing.T) {
 	testutil.AssertErrorResponse(t, req, fasthttp.StatusUnauthorized, "Account is disabled")
 }
 
+// =============================================================================
+// AUDIT RECORDING TESTS
+// =============================================================================
+
+func TestLogin_RecordsAuditEvent_Success(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	email := testutil.UniqueEmail("audit-login-ok")
+	password := "validpassword123"
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword(password))
+
+	req := testutil.NewJSONRequest(t, map[string]string{"email": email, "password": password})
+	require.NoError(t, app.Login(req))
+
+	var evt models.AuditEvent
+	require.NoError(t, app.DB.Where("action = ?", "login_success").First(&evt).Error)
+	assert.Equal(t, "auth", evt.Category)
+	assert.Equal(t, "user", evt.Source)
+	assert.True(t, evt.Success)
+	require.NotNil(t, evt.TargetID)
+	assert.Equal(t, user.ID.String(), *evt.TargetID)
+}
+
+func TestLogin_RecordsAuditEvent_Failure(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	email := testutil.UniqueEmail("audit-login-bad")
+	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword("validpassword123"))
+
+	req := testutil.NewJSONRequest(t, map[string]string{"email": email, "password": "wrongpassword99"})
+	_ = app.Login(req)
+
+	var evt models.AuditEvent
+	require.NoError(t, app.DB.Where("action = ?", "login_failed").First(&evt).Error)
+	assert.False(t, evt.Success)
+	assert.Equal(t, "invalid_credentials", evt.Reason)
+}
+
+
 func TestLogin_Failure_RefreshTokenStorageUnavailable(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)

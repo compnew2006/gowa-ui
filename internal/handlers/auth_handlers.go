@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/audit"
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/middleware"
 	"github.com/compnew2006/whatomate/internal/models"
@@ -29,6 +30,14 @@ func (a *App) Login(r *fastglue.Request) error {
 	var user models.User
 	if err := requestDB.Preload("Role").Where("email = ?", req.Email).First(&user).Error; err != nil {
 		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"), []byte(req.Password))
+		if a.Audit != nil {
+			audit.NewEvent(audit.ActionLoginFailed).
+				ActorFromRequest(r).
+				Success(false).
+				Reason("invalid_credentials").
+				Detail("email", req.Email).
+				Record(r.RequestCtx, a.Audit)
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid credentials", nil, "")
 	}
 
@@ -54,11 +63,31 @@ func (a *App) Login(r *fastglue.Request) error {
 
 	// Check if user is active
 	if !user.IsActive {
+		if a.Audit != nil {
+			audit.NewEvent(audit.ActionLoginFailed).
+				ActorFromRequest(r).
+				OrgValue(user.OrganizationID).
+				Target("user", user.ID).
+				Success(false).
+				Reason("account_disabled").
+				Detail("email", req.Email).
+				Record(r.RequestCtx, a.Audit)
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Account is disabled", nil, "")
 	}
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		if a.Audit != nil {
+			audit.NewEvent(audit.ActionLoginFailed).
+				ActorFromRequest(r).
+				OrgValue(user.OrganizationID).
+				Target("user", user.ID).
+				Success(false).
+				Reason("invalid_credentials").
+				Detail("email", req.Email).
+				Record(r.RequestCtx, a.Audit)
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid credentials", nil, "")
 	}
 
@@ -78,6 +107,15 @@ func (a *App) Login(r *fastglue.Request) error {
 	if err := a.setAuthCookies(r, accessToken, accessTokenExpiresAt, refreshToken); err != nil {
 		a.Log.Error("Failed to set auth cookies", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Internal Server Error", nil, "")
+	}
+
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionLoginSuccess).
+			ActorFromRequest(r).
+			OrgValue(user.OrganizationID).
+			Target("user", user.ID).
+			Detail("email", user.Email).
+			Record(r.RequestCtx, a.Audit)
 	}
 
 	now := time.Now()
@@ -486,6 +524,17 @@ func (a *App) Logout(r *fastglue.Request) error {
 	}
 
 	a.clearAuthCookies(r)
+
+	if a.Audit != nil {
+		b := audit.NewEvent(audit.ActionLogout).
+			OrgValue(claims.OrganizationID).
+			Detail("email", claims.Email).
+			Detail("jti", claims.ID)
+		if claims.UserID != uuid.Nil {
+			b.Target("user", claims.UserID)
+		}
+		b.Record(r.RequestCtx, a.Audit)
+	}
 
 	return r.SendEnvelope(map[string]string{"status": "logged_out"})
 }

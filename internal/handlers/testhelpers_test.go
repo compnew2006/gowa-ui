@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/audit"
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/internal/queue"
@@ -75,6 +76,7 @@ func newTestApp(t *testing.T, opts ...appOption) *handlers.App {
 		DB:     db,
 		Log:    log,
 		Redis:  redisClient,
+		Audit:  audit.New(db, log),
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
