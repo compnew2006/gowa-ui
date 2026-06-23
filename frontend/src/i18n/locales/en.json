@@ -248,6 +248,7 @@
     "customerRouting": "Customer Routing",
     "users": "Users",
     "roles": "Roles",
+    "auditLog": "Audit Log",
     "apiKeys": "API Keys",
     "webhooks": "Webhooks",
     "customActions": "Custom Actions",
@@ -734,6 +735,39 @@
     "teams": "Teams",
     "webhooks": "Webhooks",
     "apiKeys": "API Keys",
+    "auditLog": {
+      "title": "Audit Log",
+      "subtitle": "Security and operational events across the platform",
+      "filters": {
+        "search": "Search actor or reason",
+        "category": "Category",
+        "action": "Action",
+        "source": "Source",
+        "success": "Outcome",
+        "any": "Any",
+        "successOnly": "Success only",
+        "failureOnly": "Failures only",
+        "dateFrom": "From",
+        "dateTo": "To",
+        "reset": "Reset filters"
+      },
+      "columns": {
+        "time": "Time",
+        "category": "Category",
+        "action": "Action",
+        "actor": "Actor",
+        "target": "Target",
+        "outcome": "Outcome",
+        "details": "Details"
+      },
+      "empty": "No events match the current filters.",
+      "source": {
+        "user": "User",
+        "system": "System",
+        "worker": "Worker",
+        "scheduled": "Scheduled"
+      }
+    },
     "templates": "Templates",
     "cannedResponses": "Canned Responses",
     "customActions": "Custom Actions",

@@ -36,6 +36,7 @@ import {
   BookOpen,
   UserRoundCog,
   Boxes,
+  ScrollText,
 } from "lucide-vue-next";
 import type { Component } from "vue";
 
@@ -327,6 +328,7 @@ export const navigationItems: NavItem[] = [
       "/settings/teams",
       "/settings/users",
       "/settings/roles",
+      "/settings/audit-log",
       "/settings/api-keys",
       "/settings/webhooks",
       "/settings/custom-actions",
@@ -341,6 +343,7 @@ export const navigationItems: NavItem[] = [
       "teams",
       "users",
       "roles",
+      "audit",
       "api_keys",
       "webhooks",
       "custom_actions",
@@ -383,6 +386,12 @@ export const navigationItems: NavItem[] = [
         path: "/settings/roles",
         icon: Shield,
         permission: "roles",
+      },
+      {
+        name: "nav.auditLog",
+        path: "/settings/audit-log",
+        icon: ScrollText,
+        permission: "audit",
       },
       {
         name: "nav.apiKeys",

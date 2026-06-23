@@ -315,6 +315,12 @@ const router = createRouter({
           meta: { permission: "roles" },
         },
         {
+          path: "settings/audit-log",
+          name: "audit-log",
+          component: () => import("@/views/settings/AuditLogView.vue"),
+          meta: { permission: "audit" },
+        },
+        {
           path: "settings/teams",
           name: "teams",
           component: () => import("@/views/settings/TeamsView.vue"),
@@ -519,6 +525,7 @@ const navigationOrder = [
       { path: "/settings/teams", permission: "teams" },
       { path: "/settings/users", permission: "users" },
       { path: "/settings/roles", permission: "roles" },
+      { path: "/settings/audit-log", permission: "audit" },
       { path: "/settings/api-keys", permission: "api_keys" },
       { path: "/settings/webhooks", permission: "webhooks" },
       { path: "/settings/custom-actions", permission: "custom_actions" },
