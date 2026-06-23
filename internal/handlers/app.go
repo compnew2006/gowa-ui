@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/audit"
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/queue"
@@ -50,6 +51,8 @@ type App struct {
 	WhatsmeowQueue *whatsmeow.QueueManager
 	// License enforces host-bound activation and runtime quotas.
 	License *license.Service
+	// Audit is the canonical cross-cutting audit recorder (best-effort).
+	Audit *audit.Service
 	// legacyMediaRestoreGroup deduplicates concurrent restore attempts per message within this process.
 	legacyMediaRestoreGroup singleflight.Group
 	// legacyMediaRestoreLimiter caps concurrent restore work across distinct messages.

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/audit"
 	"github.com/compnew2006/whatomate/internal/config"
 	"github.com/compnew2006/whatomate/internal/core"
 	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
@@ -360,6 +361,7 @@ func runServer(args []string) {
 		ObjectStorage:    storedObjects,
 		Queue:            jobQueue,
 		HTTPClient:       httpClient,
+		Audit:            audit.New(db, lo),
 	}
 
 	whatsmeowManager.SetInboundMessageHook(app.HandleWhatsmeowInboundMessage)
