@@ -476,6 +476,14 @@ func runServer(args []string) {
 
 	// Start server in goroutine
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	if app.Audit != nil {
+		audit.NewEvent(audit.ActionServerStarted).
+			ActorSystem("server").
+			Detail("version", Version).
+			Detail("build_time", BuildTime).
+			Detail("address", addr).
+			Record(context.Background(), app.Audit)
+	}
 	go func() {
 		lo.Info("Server listening", "address", addr)
 		if err := server.ListenAndServe(addr); err != nil {
