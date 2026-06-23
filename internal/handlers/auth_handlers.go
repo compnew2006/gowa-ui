@@ -110,12 +110,21 @@ func (a *App) Login(r *fastglue.Request) error {
 	}
 
 	if a.Audit != nil {
-		audit.NewEvent(audit.ActionLoginSuccess).
-			ActorFromRequest(r).
+		// At login the request has no authenticated session yet, so
+		// ActorFromRequest cannot read the user from context. Build the
+		// actor explicitly from the just-authenticated user record.
+		b := audit.NewEvent(audit.ActionLoginSuccess).
 			OrgValue(user.OrganizationID).
 			Target("user", user.ID).
-			Detail("email", user.Email).
-			Record(r.RequestCtx, a.Audit)
+			Detail("email", user.Email)
+		b.Evt().ActorUserID = &user.ID
+		b.Evt().ActorEmail = user.Email
+		if user.Role != nil {
+			b.Evt().ActorRole = user.Role.Name
+		}
+		b.Evt().IPAddress = audit.ClientIP(r)
+		b.Evt().UserAgent = string(r.RequestCtx.UserAgent())
+		b.Record(r.RequestCtx, a.Audit)
 	}
 
 	now := time.Now()
@@ -513,6 +522,25 @@ func (a *App) Logout(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token claims", nil, "")
 	}
 
+	// Record the logout intent now that we know who is logging out. This must
+	// happen BEFORE the Redis revocation check, because that check returns 401
+	// when the token was already revoked (e.g. a re-login flow) and would
+	// otherwise swallow the audit event entirely.
+	if a.Audit != nil {
+		b := audit.NewEvent(audit.ActionLogout).
+			OrgValue(claims.OrganizationID).
+			Detail("email", claims.Email).
+			Detail("jti", claims.ID)
+		if claims.UserID != uuid.Nil {
+			b.Evt().ActorUserID = &claims.UserID
+			b.Evt().ActorEmail = claims.Email
+			b.Target("user", claims.UserID)
+		}
+		b.Evt().IPAddress = audit.ClientIP(r)
+		b.Evt().UserAgent = string(r.RequestCtx.UserAgent())
+		b.Record(r.RequestCtx, a.Audit)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -524,17 +552,6 @@ func (a *App) Logout(r *fastglue.Request) error {
 	}
 
 	a.clearAuthCookies(r)
-
-	if a.Audit != nil {
-		b := audit.NewEvent(audit.ActionLogout).
-			OrgValue(claims.OrganizationID).
-			Detail("email", claims.Email).
-			Detail("jti", claims.ID)
-		if claims.UserID != uuid.Nil {
-			b.Target("user", claims.UserID)
-		}
-		b.Record(r.RequestCtx, a.Audit)
-	}
 
 	return r.SendEnvelope(map[string]string{"status": "logged_out"})
 }

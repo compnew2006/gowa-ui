@@ -99,6 +99,17 @@ func (b *EventBuilder) Detail(k string, v any) *EventBuilder {
 // Build returns the immutable event.
 func (b *EventBuilder) Build() models.AuditEvent { return b.e }
 
+// Evt returns a mutable pointer to the underlying event so callers can set
+// fields that don't have a dedicated builder method (e.g. populating the
+// actor from a model object rather than a request context, as is needed at
+// login where no session context exists yet). Use sparingly.
+func (b *EventBuilder) Evt() *models.AuditEvent { return &b.e }
+
+// ClientIP extracts the peer IP from a fastglue request, honoring the first
+// X-Forwarded-For hop. Exported so handlers can populate IPAddress without
+// duplicating the parsing logic.
+func ClientIP(r *fastglue.Request) string { return clientIP(r) }
+
 // Record builds and records the event in one call. svc may be nil (no-op).
 func (b *EventBuilder) Record(ctx context.Context, svc *Service) {
 	if svc == nil {
