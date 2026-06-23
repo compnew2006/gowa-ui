@@ -80,6 +80,9 @@ const (
 	ResourceCatalogs               = "catalogs"
 	ResourceGroupDirectory         = "group_directory"
 	ResourceGroupParticipants      = "group_participants"
+
+	// Audit log (admin-only read).
+	ResourceAudit                  = "audit"
 )
 
 // PermissionAction constants for available actions
@@ -253,6 +256,10 @@ func DefaultPermissions() []Permission {
 		// Group Participants
 		{Resource: ResourceGroupParticipants, Action: ActionRead, Description: "View group participants"},
 		{Resource: ResourceGroupParticipants, Action: ActionWrite, Description: "Manage group participants (add, remove, promote, demote)"},
+
+		// Audit Log (admin-only; admin auto-inherits all default permissions
+		// via SystemRolePermissions(), manager/agent intentionally excluded).
+		{Resource: ResourceAudit, Action: ActionRead, Description: "View audit log events"},
 	}
 }
 
