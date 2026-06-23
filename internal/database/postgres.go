@@ -194,6 +194,9 @@ func GetMigrationModels() []MigrationModel {
 
 		// Content Library
 		{"SavedContent", &models.SavedContent{}},
+
+		// Audit Log (canonical cross-cutting audit events)
+		{"AuditEvent", &models.AuditEvent{}},
 	}
 }
 
