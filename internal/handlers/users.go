@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/audit"
 	"github.com/compnew2006/whatomate/internal/license"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
@@ -641,6 +642,16 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 		softDeleted.IsActive = true
 		softDeleted.IsSuperAdmin = isSuperAdmin
 
+		if a.Audit != nil {
+			audit.NewEvent(audit.ActionUserCreated).
+				ActorFromRequest(r).
+				OrgValue(orgID).
+				Target("user", softDeleted.ID).
+				Detail("email", softDeleted.Email).
+				Detail("restored", true).
+				Record(r.RequestCtx, a.Audit)
+		}
+
 		return r.SendEnvelope(userToResponse(softDeleted))
 	}
 
@@ -673,6 +684,15 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 
 	// Load role for response
 	requestDB.Preload("Role").First(&user, user.ID)
+
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionUserCreated).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("user", user.ID).
+			Detail("email", user.Email).
+			Record(r.RequestCtx, a.Audit)
+	}
 
 	return r.SendEnvelope(userToResponse(user))
 }
@@ -848,6 +868,15 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		// Load role for response
 		Preload("Role").First(&user, user.ID)
 
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionUserUpdated).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("user", user.ID).
+			Detail("email", user.Email).
+			Record(r.RequestCtx, a.Audit)
+	}
+
 	return r.SendEnvelope(userToResponse(user))
 }
 
@@ -940,6 +969,15 @@ func (a *App) DeleteUser(r *fastglue.Request) error {
 		Delete(&models.UserOrganization{}).Error; err != nil {
 		a.Log.Error("Failed to delete user organization memberships", "error", err, "user_id", id)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete user", nil, "")
+	}
+
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionUserDeleted).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("user", user.ID).
+			Detail("email", user.Email).
+			Record(r.RequestCtx, a.Audit)
 	}
 
 	return r.SendEnvelope(map[string]string{"message": "User deleted successfully"})

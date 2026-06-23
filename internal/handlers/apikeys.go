@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/audit"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
@@ -166,6 +167,15 @@ func (a *App) CreateAPIKey(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create API key", nil, "")
 	}
 
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionAPIKeyCreated).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("api_key", apiKey.ID).
+			Detail("name", apiKey.Name).
+			Record(r.RequestCtx, a.Audit)
+	}
+
 	// Return full key only on creation
 	return r.SendEnvelope(APIKeyCreateResponse{
 		ID:        apiKey.ID,
@@ -201,6 +211,14 @@ func (a *App) DeleteAPIKey(r *fastglue.Request) error {
 	}
 	if result.RowsAffected == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "API key not found", nil, "")
+	}
+
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionAPIKeyRevoked).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("api_key", id).
+			Record(r.RequestCtx, a.Audit)
 	}
 
 	return r.SendEnvelope(map[string]string{"message": "API key deleted successfully"})

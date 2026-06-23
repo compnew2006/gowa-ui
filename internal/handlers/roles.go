@@ -3,6 +3,7 @@ package handlers
 import (
 	"strings"
 
+	"github.com/compnew2006/whatomate/internal/audit"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
@@ -199,12 +200,29 @@ func (a *App) CreateRole(r *fastglue.Request) error {
 			a.Log.Error("Failed to create role", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create role", nil, "")
 		}
+		if a.Audit != nil {
+			audit.NewEvent(audit.ActionRoleCreated).
+				ActorFromRequest(r).
+				OrgValue(orgID).
+				Target("role", role.ID).
+				Detail("name", role.Name).
+				Record(r.RequestCtx, a.Audit)
+		}
 		return r.SendEnvelope(roleToResponse(role, 0))
 	}
 
 	if err := writeDB.Create(&role).Error; err != nil {
 		a.Log.Error("Failed to create role", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create role", nil, "")
+	}
+
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionRoleCreated).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("role", role.ID).
+			Detail("name", role.Name).
+			Record(r.RequestCtx, a.Audit)
 	}
 
 	return r.SendEnvelope(roleToResponse(role, 0))
@@ -355,6 +373,16 @@ func (a *App) UpdateRole(r *fastglue.Request) error {
 	var userCount int64
 	requestDB.
 		Model(&models.User{}).Where("role_id = ?", role.ID).Count(&userCount)
+
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionRoleUpdated).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("role", role.ID).
+			Detail("name", role.Name).
+			Record(r.RequestCtx, a.Audit)
+	}
+
 	return r.SendEnvelope(roleToResponse(role, userCount))
 }
 
@@ -401,6 +429,15 @@ func (a *App) DeleteRole(r *fastglue.Request) error {
 
 	// Invalidate cached role permissions so any remaining references lose access
 	a.InvalidateRolePermissionsCache(role.ID)
+
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionRoleDeleted).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("role", role.ID).
+			Detail("name", role.Name).
+			Record(r.RequestCtx, a.Audit)
+	}
 
 	return r.SendEnvelope(map[string]string{"message": "Role deleted successfully"})
 }
