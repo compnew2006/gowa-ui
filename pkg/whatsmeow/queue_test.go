@@ -2,6 +2,7 @@ package whatsmeow
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -123,4 +124,107 @@ func TestQueueDelayRespectsIdleQueue(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("timed out waiting for second job execution")
 	}
+}
+
+// TestQueueResetHookFiresOnceBeforeFirstRetryOn400 proves the session-reset
+// hook runs exactly once, between the first failed attempt and the first
+// retry, and that the job ultimately succeeds.
+func TestQueueResetHookFiresOnceBeforeFirstRetryOn400(t *testing.T) {
+	manager := NewQueueManager(config.WhatsmeowConfig{
+		RateLimitMinDelayMs: 1,
+		RateLimitMaxDelayMs: 1,
+		QueueTimeoutSeconds: 5,
+	}, logf.New(logf.Opts{}))
+	t.Cleanup(manager.Close)
+
+	var attempts int
+	var resetCalls int
+	done := make(chan struct{})
+
+	require.NoError(t, manager.EnqueueSend("instance-400", QueuedSend{
+		Run: func(_ context.Context) error {
+			attempts++
+			if attempts == 1 {
+				// First attempt fails with the session-desync 400 class.
+				return errors.New("failed to send text message: server returned error 400")
+			}
+			// After the reset, the retry succeeds.
+			close(done)
+			return nil
+		},
+		OnRetryReset: func(_ context.Context) {
+			resetCalls++
+			// Must fire between attempt 1 (failed) and attempt 2 (succeeds).
+			assert.Equal(t, 1, attempts, "reset must fire after first attempt, got attempts=%d", attempts)
+		},
+	}))
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for retried job to succeed")
+	}
+
+	assert.Equal(t, 2, attempts, "job should run twice (initial + one retry)")
+	assert.Equal(t, 1, resetCalls, "reset hook must fire exactly once")
+}
+
+// TestQueueResetHookNotFiredForPermanentError proves the reset hook is skipped
+// when the failure is not a session-desync 400 (e.g. a permanent error that
+// aborts retries, or a non-400 retryable error).
+func TestQueueResetHookNotFiredForNon400Error(t *testing.T) {
+	manager := NewQueueManager(config.WhatsmeowConfig{
+		RateLimitMinDelayMs: 1,
+		RateLimitMaxDelayMs: 1,
+		QueueTimeoutSeconds: 5,
+	}, logf.New(logf.Opts{}))
+	t.Cleanup(manager.Close)
+
+	var resetCalls int
+	finished := make(chan struct{})
+
+	require.NoError(t, manager.EnqueueSend("instance-perm", QueuedSend{
+		// Permanent error -> no retries, no reset.
+		Run: func(_ context.Context) error {
+			defer close(finished)
+			return errors.New("instance not connected")
+		},
+		OnRetryReset: func(_ context.Context) { resetCalls++ },
+	}))
+
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for job to finish")
+	}
+	assert.Zero(t, resetCalls, "reset hook must not fire for a permanent error")
+}
+
+// TestQueueResetHookNotFiredWhenNil proves a QueuedSend without a reset hook
+// still retries normally (backward-compatible Enqueue path).
+func TestQueueEnqueueBackwardCompatNoResetHook(t *testing.T) {
+	manager := NewQueueManager(config.WhatsmeowConfig{
+		RateLimitMinDelayMs: 1,
+		RateLimitMaxDelayMs: 1,
+		QueueTimeoutSeconds: 5,
+	}, logf.New(logf.Opts{}))
+	t.Cleanup(manager.Close)
+
+	var attempts int
+	done := make(chan struct{})
+	require.NoError(t, manager.Enqueue("instance-compat", func(_ context.Context) error {
+		attempts++
+		if attempts < 2 {
+			return errors.New("failed to send text message: server returned error 400")
+		}
+		close(done)
+		return nil
+	}))
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for compat-enqueued job")
+	}
+	assert.Equal(t, 2, attempts, "Enqueue (no reset hook) must still retry")
 }

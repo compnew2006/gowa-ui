@@ -13,10 +13,21 @@ import (
 // Job represents a unit of work (sending a message)
 type Job func(ctx context.Context) error
 
+// QueuedSend is a queueable outbound send. Run executes the send; the optional
+// OnRetryReset hook is invoked once before the first retry when Run fails with
+// a session-desync class error (WhatsApp "server returned error 400"). It is
+// used to clear the recipient's Signal sessions so the retry rebuilds them
+// from a fresh prekey exchange instead of reusing the stale session that
+// caused the 400.
+type QueuedSend struct {
+	Run          Job
+	OnRetryReset func(ctx context.Context)
+}
+
 // InstanceQueue manages the message queue for a single WhatsApp instance
 type InstanceQueue struct {
 	instanceID    string
-	jobs          chan Job
+	jobs          chan QueuedSend
 	stop          chan struct{}
 	config        config.WhatsmeowConfig
 	logger        logf.Logger
@@ -63,8 +74,20 @@ func (m *QueueManager) SetDepthObserver(observer func(instanceID string, depth i
 	m.depthReport = observer
 }
 
-// Enqueue adds a job to the instance's queue
+// Enqueue adds a job to the instance's queue. It is kept for backward
+// compatibility (Job has no reset hook); new callers should prefer EnqueueSend
+// so they can supply a session-reset hook for 400 recovery.
 func (m *QueueManager) Enqueue(instanceID string, job Job) error {
+	return m.EnqueueSend(instanceID, QueuedSend{Run: job})
+}
+
+// EnqueueSend adds a QueuedSend to the instance's queue. The send's optional
+// OnRetryReset hook is invoked by the worker before the first retry when the
+// send fails with a session-desync class error.
+func (m *QueueManager) EnqueueSend(instanceID string, send QueuedSend) error {
+	if send.Run == nil {
+		return errors.New("queued send has no Run function")
+	}
 	q, _ := m.queues.LoadOrStore(instanceID, m.newInstanceQueue(instanceID))
 	queue := q.(*InstanceQueue)
 
@@ -72,7 +95,7 @@ func (m *QueueManager) Enqueue(instanceID string, job Job) error {
 	// For now using blocking write to ensure backpressure if needed.
 
 	select {
-	case queue.jobs <- job:
+	case queue.jobs <- send:
 		queue.updateActivity()
 		queue.reportDepth()
 		return nil
@@ -84,7 +107,7 @@ func (m *QueueManager) Enqueue(instanceID string, job Job) error {
 		// If full, we block or error.
 		// Let's block with context check.
 		select {
-		case queue.jobs <- job:
+		case queue.jobs <- send:
 			queue.updateActivity()
 			queue.reportDepth()
 			return nil
@@ -108,7 +131,7 @@ func (m *QueueManager) Close() {
 func (m *QueueManager) newInstanceQueue(instanceID string) *InstanceQueue {
 	q := &InstanceQueue{
 		instanceID: instanceID,
-		jobs:       make(chan Job, 100), // Buffer size 100
+		jobs:       make(chan QueuedSend, 100), // Buffer size 100
 		stop:       make(chan struct{}),
 		config:     m.config,
 		logger:     m.logger, // Passed directly, fields added in log calls
@@ -165,16 +188,16 @@ func (q *InstanceQueue) worker() {
 		select {
 		case <-q.stop:
 			return
-		case job := <-q.jobs:
+		case send := <-q.jobs:
 			q.updateActivity()
 			q.reportDepth()
-			q.process(job)
+			q.process(send)
 			q.reportDepth()
 		}
 	}
 }
 
-func (q *InstanceQueue) process(job Job) {
+func (q *InstanceQueue) process(send QueuedSend) {
 	// 1. Rate Limiting Delay
 	minDelay := q.config.RateLimitMinDelayMs
 	maxDelay := q.config.RateLimitMaxDelayMs
@@ -219,9 +242,15 @@ func (q *InstanceQueue) process(job Job) {
 		jobTimeout = 30 * time.Second
 	}
 
+	// sessionResetTriggered guards the reset hook so it runs at most once per
+	// job. It fires on the transition from attempt 0 to attempt 1 — i.e. after
+	// the first failure but before the first retry — and only when the failure
+	// is the session-desync class that a recipient reset can fix.
+	sessionResetTriggered := false
+
 	for i := 0; i <= maxRetries; i++ {
 		jobCtx, cancel := context.WithTimeout(context.Background(), jobTimeout)
-		err := job(jobCtx)
+		err := send.Run(jobCtx)
 		cancel()
 		if err == nil {
 			return // Success
@@ -234,6 +263,23 @@ func (q *InstanceQueue) process(job Job) {
 		if i == maxRetries {
 			q.logger.Error("job failed after retries", "instance_id", q.instanceID, "error", err)
 			return
+		}
+
+		// Before the first retry, clear the recipient's Signal sessions when
+		// the failure is a WhatsApp "server returned error 400" (session
+		// desync). This lets the retry rebuild a clean session via the prekey
+		// flow instead of reusing the stale one that caused the 400.
+		if !sessionResetTriggered && isSessionDesyncError(err) && send.OnRetryReset != nil {
+			resetCtx, resetCancel := context.WithTimeout(context.Background(), jobTimeout)
+			q.logger.Warn(
+				"resetting recipient session before retry",
+				"instance_id", q.instanceID,
+				"attempt", i+1,
+				"error", err,
+			)
+			send.OnRetryReset(resetCtx)
+			resetCancel()
+			sessionResetTriggered = true
 		}
 
 		q.logger.Warn("job failed, retrying", "instance_id", q.instanceID, "attempt", i+1, "error", err)

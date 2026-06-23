@@ -30,6 +30,13 @@ import (
 
 const mediaHMACLength = 10
 
+// errFileLengthMismatch is the local sentinel for downloaded-media size
+// validation. whatsmeow deprecated its upstream equivalent
+// (waClient.ErrFileLengthMismatch — "this is no longer returned anywhere") as
+// of the 2026-06 pin; we still need a stable errors.Is target for our own
+// size checks, so define an equivalent here.
+var errFileLengthMismatch = errors.New("file length does not match")
+
 type mediaContextInstanceIDKey struct{}
 
 type mediaStreamFunc func(ctx context.Context, client *waClient.Client, media waClient.DownloadableMessage, dst io.Writer) (int64, error)
@@ -226,7 +233,7 @@ func (s *MediaService) handleDownloadable(
 
 	actualSize := counter.Count()
 	if expectedSize >= 0 && actualSize != expectedSize {
-		return nil, fmt.Errorf("%w: expected %d, got %d", waClient.ErrFileLengthMismatch, expectedSize, actualSize)
+		return nil, fmt.Errorf("%w: expected %d, got %d", errFileLengthMismatch, expectedSize, actualSize)
 	}
 
 	if restorable != nil {
@@ -417,7 +424,7 @@ func streamMediaWithPathToWriter(
 		}
 		lastErr = err
 		if written > 0 ||
-			errors.Is(err, waClient.ErrFileLengthMismatch) ||
+			errors.Is(err, errFileLengthMismatch) ||
 			errors.Is(err, waClient.ErrInvalidMediaSHA256) ||
 			errors.Is(err, waClient.ErrMediaDownloadFailedWith403) ||
 			errors.Is(err, waClient.ErrMediaDownloadFailedWith404) ||
@@ -465,7 +472,7 @@ func streamPlainMediaToWriter(body io.Reader, fileLength int64, fileSHA256 []byt
 		return written, err
 	}
 	if fileLength >= 0 && written != fileLength {
-		return written, fmt.Errorf("%w: expected %d, got %d", waClient.ErrFileLengthMismatch, fileLength, written)
+		return written, fmt.Errorf("%w: expected %d, got %d", errFileLengthMismatch, fileLength, written)
 	}
 	if len(fileSHA256) == 32 && !hmac.Equal(fileSHA256, hasher.Sum(nil)) {
 		return written, waClient.ErrInvalidMediaSHA256
@@ -570,7 +577,7 @@ func streamEncryptedMediaToWriter(
 	}
 
 	if fileLength >= 0 && written != fileLength {
-		return written, fmt.Errorf("%w: expected %d, got %d", waClient.ErrFileLengthMismatch, fileLength, written)
+		return written, fmt.Errorf("%w: expected %d, got %d", errFileLengthMismatch, fileLength, written)
 	}
 	if len(fileSHA256) == 32 && !hmac.Equal(fileSHA256, plaintextHasher.Sum(nil)) {
 		return written, waClient.ErrInvalidMediaSHA256

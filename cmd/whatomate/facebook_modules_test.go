@@ -24,12 +24,25 @@ func TestCompiledFacebookModulesResolveWithDependencies(t *testing.T) {
 		keys = append(keys, manifest.Key)
 	}
 
-	assert.Equal(t, []string{
-		"facebook-core",
+	// Use ElementsMatch (set comparison) rather than an exact ordered slice:
+	// ResolvePlugins returns manifests in topologically-sorted dependency order,
+	// and the precise ordering is incidental to this test's intent — that every
+	// compiled Facebook module resolves, all dependencies are satisfied, and no
+	// dependency cycle exists. The managed Facebook module set is enumerated
+	// exhaustively here so adding a new module without registering it fails
+	// loudly.
+	assert.ElementsMatch(t, []string{
 		"facebook-accounts",
+		"facebook-auto-share",
 		"facebook-comments",
+		"facebook-core",
+		"facebook-extract-data",
+		"facebook-extract-likes",
+		"facebook-group-search",
 		"facebook-oauth",
+		"facebook-page-messengers",
 		"facebook-page-search",
 		"facebook-people-search",
+		"facebook-retargeting",
 	}, keys)
 }

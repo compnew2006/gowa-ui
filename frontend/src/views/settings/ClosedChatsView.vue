@@ -48,16 +48,50 @@ const instancesStore = useInstancesStore();
 const usersStore = useUsersStore();
 const isLoading = ref(false);
 const reopeningChatId = ref<string | null>(null);
-const searchQuery = ref("");
-const selectedAgentId = ref("all");
-const selectedInstanceId = ref("all");
-const agentComboboxOpen = ref(false);
-const closedFrom = ref("");
-const closedTo = ref("");
-const currentPage = ref(1);
-const pageSize = ref("25");
-const totalClosedChats = ref(0);
+
 const pageSizeOptions = [25, 50, 100];
+
+// Persisted filter preferences so navigating away and back (e.g. opening a
+// closed chat then returning) keeps the user's active filters. Mirrors the
+// localStorage pattern used by AgentAnalyticsView/TemplatesView.
+const FILTERS_STORAGE_KEY = "closed_chats_filters";
+
+interface SavedClosedChatFilters {
+  searchQuery?: string;
+  selectedAgentId?: string;
+  selectedInstanceId?: string;
+  closedFrom?: string;
+  closedTo?: string;
+  pageSize?: string;
+}
+
+function loadSavedFilters(): SavedClosedChatFilters {
+  try {
+    const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as SavedClosedChatFilters;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    // Malformed or unavailable storage; fall back to defaults silently.
+    return {};
+  }
+}
+
+const savedFilters = loadSavedFilters();
+const isValidPageSize = (value: string | undefined) =>
+  !!value && pageSizeOptions.includes(Number(value));
+
+const searchQuery = ref(savedFilters.searchQuery ?? "");
+const selectedAgentId = ref(savedFilters.selectedAgentId ?? "all");
+const selectedInstanceId = ref(savedFilters.selectedInstanceId ?? "all");
+const agentComboboxOpen = ref(false);
+const closedFrom = ref(savedFilters.closedFrom ?? "");
+const closedTo = ref(savedFilters.closedTo ?? "");
+const currentPage = ref(1);
+const pageSize = ref(
+  isValidPageSize(savedFilters.pageSize) ? savedFilters.pageSize! : "25",
+);
+const totalClosedChats = ref(0);
 
 interface AgentOption {
   id: string;
@@ -108,6 +142,22 @@ const hasActiveFilters = computed(
     closedTo.value !== "",
 );
 
+function saveFilters() {
+  try {
+    const payload: SavedClosedChatFilters = {
+      searchQuery: searchQuery.value,
+      selectedAgentId: selectedAgentId.value,
+      selectedInstanceId: selectedInstanceId.value,
+      closedFrom: closedFrom.value,
+      closedTo: closedTo.value,
+      pageSize: pageSize.value,
+    };
+    localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Storage unavailable or full; persistence is best-effort.
+  }
+}
+
 function formatClosedDate(value?: string): string {
   if (!value) return "—";
   const date = new Date(value);
@@ -129,6 +179,7 @@ function clearFilters() {
   selectedInstanceId.value = "all";
   closedFrom.value = "";
   closedTo.value = "";
+  // The watchers will persist the cleared state; no explicit save needed.
 }
 
 async function loadClosedChats() {
@@ -243,11 +294,13 @@ const debouncedFilterLoad = useDebounceFn(() => {
 watch(
   [searchQuery, selectedAgentId, selectedInstanceId, closedFrom, closedTo],
   () => {
+    saveFilters();
     debouncedFilterLoad();
   },
 );
 
 watch(pageSize, () => {
+  saveFilters();
   if (currentPage.value !== 1) {
     currentPage.value = 1;
   }

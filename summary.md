@@ -462,3 +462,58 @@ If IPv4 connectivity has any issues, flip `force_ipv4 = false` in config.toml an
 - The force_ipv4 commit `8d4f047c` is the only new commit on the deploy branch.
 
 When you've confirmed the deploy is healthy in production for a few days, you can merge `deploy/green-20260623-ipv4` into `main` and push — or cherry-pick `8d4f047c` onto main. Either is fine; I did not push per AGENTS.md §6.
+
+---
+
+## 2026-06-23 — Permanent fix: WhatsApp "server returned error 400" on send + whatsmeow dep bump
+
+**Investigation (read-only) first.** `failed to send text message: server returned error 400` is
+whatsmeow's native stanza-ack error (NOT a Meta Cloud API HTTP 400), returned by `client.SendMessage`
+when the recipient's Signal Protocol session is desynced — a PN→LID migration gap. Log signature:
+`[Database DEBUG] No sessions or sender keys found to migrate from <PN> to <LID>_1` immediately
+before each 400. The prior "fix" (commit c1e34cd, switching text to `Conversation` protobuf) only
+touched the payload layer and did NOT address the encryption-session desync — proven by live 400s
+still occurring at 08:00 UTC today on the current binary (instance 6129b735, org cd0fa895,
+contact 966531536800).
+
+**Root cause:** the send queue retried 3× but reused the same stale local session store each time,
+so every retry failed identically. Missing piece = a scoped session reset between retries.
+
+**Fix (deployed green-20260623_session_reset-20260623_091904):** per-recipient Signal session reset
+on the 400 class, fired once before the first retry.
+
+Files:
+- `pkg/whatsmeow/session_reset.go` (NEW) — `ResetRecipientSession` deletes all device sessions for
+  the recipient + its PN↔LID counterpart via `client.Store.Sessions.DeleteAllSessions(ctx, phone)`,
+  where `phone = jid.SignalAddressUser()` (agent-suffixed for LIDs). Panic-safe LID lookup. Group
+  JIDs no-op. Implements `provider.SessionResetter`.
+- `pkg/whatsmeow/queue.go` — `QueuedSend{Run, OnRetryReset}` + `EnqueueSend`; reset fires once before
+  first retry only on `isSessionDesyncError`. `Enqueue` kept for back-compat.
+- `pkg/whatsmeow/send_error_classification.go` — `isSessionDesyncError()` (400-class only).
+- `pkg/provider/interface.go` — `SessionResetter` optional interface.
+- `internal/handlers/messages.go` — single Enqueue site wires reset via `SessionResetter` type-assert.
+- `pkg/whatsmeow/media_service.go` — local `errFileLengthMismatch` sentinel (upstream one deprecated by bump).
+- `pkg/whatsmeow/session_reset_test.go` (NEW, 9 tests) + `queue_test.go` (+3 tests).
+
+**Dependency bump:** go.mau.fi/whatsmeow v0.0.0-20260414172242-d4ffc1df2442 → v0.0.0-20260622185415-5f04eac6dbbb.
+Session/LID/SenderKey API stable across the bump (identical line numbers). 8 transitive bumps.
+
+**Verification (full gate):** `go test ./...` green · `go vet` clean · `golangci-lint` clean on all
+changed files (SA1019 regression from bump resolved via local sentinel) · `make build-prod` 60M binary.
+
+**Deploy:** blue/green on VPS. Blue seeded with pre-fix binary (/opt/whatomate-blue/whatomate.rollback-20260623)
+for one-command rollback (`whatomate-switch blue`). rsync'd source to /opt/whatomate-green, rebuilt
+node_modules via `npm ci` (mac rollup binary had contaminated node_modules — exclude node_modules
+from rsync in future), built with GOTOOLCHAIN=auto + LICENSE_KEY_RING_FILE, `whatomate-switch green`.
+
+**Post-deploy (10 min observation):** 0 panics/fatals · 0 400 errors (down from ~8/5min) · both
+services active · HTTPS login 200 on ofuqalmadenah + holol-wenjaz · instance 6129b735 reconnected.
+Reset code path dormant (no 400 has occurred since restart to exercise it); mechanism proven by
+unit test TestQueueResetHookFiresOnceBeforeFirstRetryOn400. Did NOT trigger a real customer send
+to force-prove recovery on contact 966531536800 — needs explicit approval.
+
+**Unrelated finding:** tenants alarkan-almthalia + matbaat-ruya crash-loop with systemd status
+226/NAMESPACE — missing /opt/whatomate/instances/<tenant> dir. Deploy/setup issue, not code. Separate fixup.
+
+**Not committed** per AGENTS.md §6. Changes are on working tree (uncommitted) + deployed via blue/green.
+Rollback anytime with `whatomate-switch blue` on the VPS.

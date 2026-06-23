@@ -30,6 +30,12 @@ func TestLicenseAllowsModule(t *testing.T) {
 		{"pro wildcard allows facebook-core", "pro", "facebook-core", true},
 		{"enterprise wildcard allows any module", "enterprise", "whatever-future", true},
 
+		// production: paid host-bound deployments emit this tier string from
+		// the license issuer; it must be unrestricted like pro/enterprise.
+		{"production wildcard allows any module", "production", "instagram-direct", true},
+		{"production wildcard allows facebook-core", "production", "facebook-core", true},
+		{"production wildcard allows facebook-people-search", "production", "facebook-people-search", true},
+
 		// deny-by-default for unknown / empty tiers
 		{"unknown tier denies", "bogus-tier", "facebook-core", false},
 		{"empty tier denies", "", "facebook-core", false},

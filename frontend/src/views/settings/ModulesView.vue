@@ -58,8 +58,11 @@ async function updateOrganization(module: ManagedModule) {
     );
     await Promise.all([loadModules(), configStore.fetchModules(true)]);
     toast.success(t("modules.updated"));
-  } catch {
-    toast.error(t("modules.updateFailed"));
+  } catch (error: any) {
+    // Surface the backend's real reason (e.g. "Module is not licensed for this
+    // deployment tier", "Module has enabled dependents") instead of a generic
+    // toast. Matches the pattern used across settings views.
+    toast.error(error?.response?.data?.message || t("modules.updateFailed"));
   } finally {
     updatingKey.value = "";
   }
@@ -71,8 +74,11 @@ async function updateGlobal(module: ManagedModule) {
     await modulesService.updateGlobal(module.key, !module.global_enabled);
     await Promise.all([loadModules(), configStore.fetchModules(true)]);
     toast.success(t("modules.updated"));
-  } catch {
-    toast.error(t("modules.updateFailed"));
+  } catch (error: any) {
+    // Surface the backend's real reason (e.g. "Module is not licensed for this
+    // deployment tier", "Module has enabled dependents") instead of a generic
+    // toast. Matches the pattern used across settings views.
+    toast.error(error?.response?.data?.message || t("modules.updateFailed"));
   } finally {
     updatingKey.value = "";
   }

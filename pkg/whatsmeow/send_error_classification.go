@@ -72,3 +72,21 @@ func classifySendError(err error) sendErrorClass {
 func shouldRetrySendError(err error) bool {
 	return classifySendError(err) == sendErrorRetryable
 }
+
+// isSessionDesyncError reports whether err is the WhatsApp "server returned
+// error 400" stanza-ack class that signals a desynced recipient Signal
+// session (typically a PN<->LID migration gap). The send queue uses this to
+// decide whether to clear the recipient's sessions before the first retry.
+//
+// It deliberately matches only the 400 class, not the broader set of retryable
+// errors: a reset only helps when the root cause is a stale session, and
+// running it for unrelated transient failures (timeouts, cancellations) would
+// discard healthy sessions needlessly.
+func isSessionDesyncError(err error) bool {
+	if err == nil {
+		return false
+	}
+	normalized := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(normalized, "server returned error 400") ||
+		strings.Contains(normalized, "400 bad request")
+}

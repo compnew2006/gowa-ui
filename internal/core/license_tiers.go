@@ -30,6 +30,15 @@ var tierModules = map[string]map[string]bool{
 	"enterprise": {
 		"*": true,
 	},
+	// "production" is the tier string emitted by the license issuer for paid
+	// host-bound deployments (see internal/licenseissuer / license_records.tier).
+	// Treat it as fully unrestricted, identical to pro/enterprise: a paid
+	// production license is never meant to be module-gated. Without this alias,
+	// LicenseAllowsModule denies every managed module on a paid deployment
+	// because "production" is otherwise an unknown tier (deny-by-default).
+	"production": {
+		"*": true,
+	},
 }
 
 // LicenseAllowsModule reports whether the given license tier is entitled to

@@ -130,3 +130,21 @@ type GroupInfoProvider interface {
 	// Does NOT join the group — returns preview info only.
 	GetGroupInfoFromLink(ctx context.Context, instanceID string, inviteLink string) (*GroupInfo, error)
 }
+
+// SessionResetter is an optional extension for adapters that can clear the
+// Signal Protocol session state for a single recipient on demand. Only the
+// whatsmeow adapter implements this; the Meta Cloud API does not.
+// Callers should type-assert to check support.
+//
+// It exists so the send queue can recover from WhatsApp's "server returned
+// error 400" stanza ack, which signals a desynced recipient session (usually
+// a PN<->LID migration gap). Resetting the recipient's sessions forces a
+// clean prekey rebuild on the next send attempt.
+type SessionResetter interface {
+	// ResetRecipientSession clears the recipient's Signal sessions for the
+	// given instance and target (phone number or JID). It is scoped to that
+	// recipient only and never affects other chats. Implementations must not
+	// return fatal errors for missing clients or unresolvable mappings; a
+	// reset is always best-effort.
+	ResetRecipientSession(ctx context.Context, instanceID string, to string) error
+}

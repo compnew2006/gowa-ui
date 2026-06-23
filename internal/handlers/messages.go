@@ -11,6 +11,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
+	"github.com/compnew2006/whatomate/pkg/whatsmeow"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -258,13 +259,40 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 		// Wrap sendFn as a queue Job
 		msgID := msg.ID
 		instanceIDStr := msg.InstanceID.String()
-		err := a.WhatsmeowQueue.Enqueue(instanceIDStr, func(qCtx context.Context) error {
-			wamid, sendErr := sendFn(qCtx)
-			a.finalizeMessageSend(msg, req, opts, wamid, sendErr)
-			if sendErr != nil {
-				return sendErr
+
+		// Build an optional session-reset hook so the queue can clear the
+		// recipient's Signal sessions before retrying a 400 (session desync).
+		// The reset is best-effort and scoped to this recipient; it is a no-op
+		// for providers that don't implement provider.SessionResetter.
+		var onRetryReset func(ctx context.Context)
+		if resetter, ok := a.MessageProvider.(provider.SessionResetter); ok && req.Contact != nil {
+			to := strings.TrimSpace(req.Contact.PhoneNumber)
+			instanceID := instanceIDStr
+			if to != "" {
+				onRetryReset = func(resetCtx context.Context) {
+					if err := resetter.ResetRecipientSession(resetCtx, instanceID, to); err != nil {
+						a.Log.Warn(
+							"recipient session reset failed; retry will proceed anyway",
+							"instance_id", instanceID,
+							"to", to,
+							"message_id", msgID,
+							"error", err,
+						)
+					}
+				}
 			}
-			return nil
+		}
+
+		err := a.WhatsmeowQueue.EnqueueSend(instanceIDStr, whatsmeow.QueuedSend{
+			Run: func(qCtx context.Context) error {
+				wamid, sendErr := sendFn(qCtx)
+				a.finalizeMessageSend(msg, req, opts, wamid, sendErr)
+				if sendErr != nil {
+					return sendErr
+				}
+				return nil
+			},
+			OnRetryReset: onRetryReset,
 		})
 		if err != nil {
 			a.Log.Error("Failed to enqueue message", "error", err, "message_id", msgID)
