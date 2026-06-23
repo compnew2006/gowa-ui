@@ -13,7 +13,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
-	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // StatusTextStyle defines optional text-style metadata for text statuses.
@@ -162,26 +162,28 @@ func extractStatusTextStyle(msg *waE2E.Message) (*int64, *int64, string) {
 	return textARGB, bgARGB, font
 }
 
+// persistStatusRecord inserts a status row atomically.
+//
+// Status broadcast events can reach this code path twice for the same
+// (instance_id, whats_app_message_id) within milliseconds — e.g. once via the
+// low-priority shard (status broadcasts are demoted there) and once via the
+// legacy/normal ingestion path. A naive read-then-write check is not atomic
+// (TOCTOU): both goroutines see "not found" and both attempt Create(), and the
+// second hits the partial unique index idx_status_instance_wamid. We instead
+// rely on INSERT ... ON CONFLICT DO NOTHING so the loser becomes a silent
+// no-op at the DB level instead of a logged error + transaction rollback.
+//
+// On conflict the passed status.ID is left as the client-generated value; we do
+// not reload the existing row because callers only need to know the insert was
+// safe, not the survivor's DB-assigned identity.
 func (cm *ConnectionManager) persistStatusRecord(ctx context.Context, status *models.WhatsAppStatus) error {
 	if cm == nil || status == nil {
 		return fmt.Errorf("status is nil")
 	}
 
-	if status.WhatsAppMessageID != "" {
-		var existing models.WhatsAppStatus
-		err := cm.db.WithContext(ctx).
-			Where("organization_id = ? AND instance_id = ? AND whats_app_message_id = ?",
-				status.OrganizationID, status.InstanceID, status.WhatsAppMessageID).
-			First(&existing).Error
-		if err == nil {
-			return nil
-		}
-		if err != nil && err != gorm.ErrRecordNotFound {
-			return err
-		}
-	}
-
-	return cm.db.WithContext(ctx).Create(status).Error
+	return cm.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(status).Error
 }
 
 // SendTextStatus sends a text status update to status@broadcast for a specific instance.
