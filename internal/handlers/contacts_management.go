@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/audit"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
@@ -326,6 +327,15 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 	a.appendClaimedChatSystemMessage(&contact, userID)
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionChatClaimed).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("contact", contact.ID).
+			Detail("assignee_user_id", userID.String()).
+			Record(r.RequestCtx, a.Audit)
+	}
+
 	return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 }
 
@@ -381,6 +391,14 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 	a.handleManualChatCloseRatingPrompt(orgID, userID, &contact)
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
 
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionChatClosed).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("contact", contact.ID).
+			Record(r.RequestCtx, a.Audit)
+	}
+
 	return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 }
 
@@ -426,6 +444,15 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load updated chat", nil, "")
 	}
 	a.broadcastContactLifecycleUpdate(orgID, &contact, false)
+
+	if a.Audit != nil {
+		audit.NewEvent(audit.ActionChatReleased).
+			ActorFromRequest(r).
+			OrgValue(orgID).
+			Target("contact", contact.ID).
+			Detail("reopened", true).
+			Record(r.RequestCtx, a.Audit)
+	}
 
 	return r.SendEnvelope(a.buildContactResponse(&contact, orgID, userID))
 }
