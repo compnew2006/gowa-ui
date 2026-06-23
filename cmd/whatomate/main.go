@@ -1542,6 +1542,9 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/api-keys", app.CreateAPIKey)
 	g.DELETE("/api/api-keys/{id}", app.DeleteAPIKey)
 
+	// Audit Log (admin-only; enforced in-handler via requirePermission).
+	g.GET("/api/audit-events", app.ListAuditEvents)
+
 	// Accounts
 	g.GET("/api/accounts", app.ListAccounts)
 	g.POST("/api/accounts", app.CreateAccount)
