@@ -201,7 +201,7 @@ interface WSMessage {
 class WebSocketService {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
+  private isManualDisconnect = false;
   private reconnectDelay = 1000;
   private pingInterval: number | null = null;
   private isConnected = false;
@@ -299,6 +299,7 @@ class WebSocketService {
     if (this.ws?.readyState === WebSocket.OPEN) {
       return;
     }
+    this.isManualDisconnect = false;
 
     // Store the token function for reconnects
     if (getToken) {
@@ -354,13 +355,13 @@ class WebSocketService {
   }
 
   disconnect() {
+    this.isManualDisconnect = true;
     this.stopPing();
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
     this.isConnected = false;
-    this.reconnectAttempts = this.maxReconnectAttempts; // Prevent reconnect
   }
 
   private handleMessage(data: string) {
@@ -939,12 +940,12 @@ class WebSocketService {
   }
 
   private handleReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+    if (this.isManualDisconnect) {
       return;
     }
 
     this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30000);
 
     setTimeout(() => {
       this.connect();

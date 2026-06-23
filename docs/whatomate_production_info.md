@@ -1,13 +1,13 @@
 # Whatomate Production Info
 
-## Latest Deploy - 2026-06-20 10:40 UTC
+## Latest Deploy - 2026-06-23 20:30 UTC
 - Codebase: `/opt/whatomate-green`
 - Binary: `/opt/whatomate-green/whatomate`
-- Backup: `/root/backups/whatomate_20260620_102348.tar.gz`
+- Backup: `/root/backups/whatomate_20260623_193829.tar.gz`
 
 ## Services
-- `whatomate.service` — main production (active since 2026-06-20 10:40 UTC)
-- `whatomate@holol-wenjaz.service` — holol tenant (active)
+- `whatomate.service` — main production (active since 2026-06-23 20:30 UTC)
+- `whatomate@holol-wenjaz.service` — holol tenant (active since 2026-06-23 20:30 UTC)
 - `whatomate-sandbox.service` — sandbox (active)
 
 ## Blue/Green

@@ -9,6 +9,8 @@ bin/
 /Dashboard/kingmaster/kingmaster_100k_backup.sql
 # Unrelated scratch installers / scripts
 /Meta.ai.dmg
+# Broadly ignore downloaded macOS installer DMGs (Gemini, GitHub, GoogleStudioAI, TelegramSaudi, etc.)
+*.dmg
 /Dashboard/kingmaster/download_videos.js
 *.bin
 /server

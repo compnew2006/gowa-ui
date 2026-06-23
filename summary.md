@@ -825,3 +825,41 @@ the stop is sticky/persistent — better discriminates the fix from a no-op.
 - gofmt -l clean; go vet exit 0; go build OK; Serena LSP 0 warnings.
 - go test -race ./pkg/whatsmeow/ → PASS; go test ./cmd/whatomate/ → PASS.
 ### Not committed (per §6.5).
+
+---
+
+## GREEN Production Deployment — 2026-06-23 19:50 UTC
+- **Task**: Deploy local codebase as a GREEN update to VPS, replacing the old green instance while keeping compatibility with the existing BLUE deployment.
+- **Backup location**: `/root/backups/whatomate_20260623_193829.tar.gz`
+- **Actions Taken**:
+  - Created timestamped backup of the current VPS green codebase and active files.
+  - Cleared the old green codebase directory `/opt/whatomate-green` on the VPS.
+  - Compiled the Linux amd64 production binary locally with the public keyring `/root/whatomate-keyring.json` embedded at build time.
+  - Uploaded the pre-compiled binary directly to `/opt/whatomate-green/whatomate` on the VPS.
+  - Switched the production active slot to GREEN using the `/usr/local/sbin/whatomate-switch green` command.
+  - Verified the server starts up cleanly and licensing status is active and enabled.
+- **One-Command Switch**:
+  - Switch to GREEN: `ln -sfn /opt/whatomate-green/whatomate /opt/whatomate/bin/whatomate && systemctl restart whatomate whatomate@holol-wenjaz`
+  - Switch to BLUE: `ln -sfn /opt/whatomate-blue/whatomate.license_tier-20260623 /opt/whatomate/bin/whatomate && systemctl restart whatomate whatomate@holol-wenjaz`
+- **Verification**:
+  - `https://ofuqalmadenah.com/api/license/bootstrap` returns `"status": "active"`, `"enabled": true`.
+  - Services `whatomate` and `whatomate@holol-wenjaz` are running healthy on the new GREEN build.
+
+---
+
+## GREEN Production Deployment Hotfix (Embedded Keyring & Websocket) — 2026-06-23 20:30 UTC
+- **Task**: Fix the licensing boot crash of the GREEN production binary on VPS and update the frontend websocket connection logic.
+- **Files changed**:
+  - [websocket.ts](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/frontend/src/services/websocket.ts)
+  - [whatomate_multi_instances_info.md](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/docs/whatomate_multi_instances_info.md)
+  - [whatomate_production_info.md](file:///Users/noiemany/Downloads/whatomate_GOWA/whatomate/docs/whatomate_production_info.md)
+- **Approach taken**:
+  - Downloaded the license keyring file `/root/whatomate-keyring.json` from the VPS.
+  - Recompiled the Linux amd64 production binary locally, embedding the keyring into `EmbeddedPublicKeyRingBase64` via `make build-prod`.
+  - Copied the compiled production binary to `/opt/whatomate-green/whatomate` on the VPS.
+  - Restarted `whatomate.service` and `whatomate@holol-wenjaz.service`.
+  - Verified that the server is online, returns `status: ok` on `/health` and `status: active` on `/api/license/bootstrap`.
+- **Verification**:
+  - `curl -s http://127.0.0.1:18123/health` -> `{"status":"success","data":{"service":"whatomate","status":"ok"}}`
+  - `curl -s http://127.0.0.1:18123/api/license/bootstrap` -> `"status": "active"`, `"enabled": true`
+  - Both main and holol-wenjaz instances are running successfully.
