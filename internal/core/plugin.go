@@ -6,8 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/compnew2006/whatomate/internal/handlers"
-	"github.com/compnew2006/whatomate/internal/models"
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -68,7 +66,8 @@ var (
 	initializedPlugins []Plugin
 	moduleManifests    []ModuleManifest
 	moduleManager      *ModuleManager
-	pluginPermissions  []PluginPermission
+	// pluginPermissions lives in permission_seeder.go alongside the seeding
+	// logic that consumes it.
 )
 
 func RegisterPlugin(p Plugin) {
@@ -168,13 +167,6 @@ func GetModuleManifests() []ModuleManifest {
 	return append([]ModuleManifest(nil), moduleManifests...)
 }
 
-// PluginPermissions returns a copy of every plugin-namespaced permission
-// contributed via PermissionProvidingPlugin. Returns nil when no plugin
-// provides permissions or before ResolvePlugins has run.
-func PluginPermissions() []PluginPermission {
-	return append([]PluginPermission(nil), pluginPermissions...)
-}
-
 func GetModuleManager() *ModuleManager {
 	return moduleManager
 }
@@ -235,47 +227,4 @@ func SyncManagedModules(ctx context.Context) error {
 	return moduleManager.Sync(ctx)
 }
 
-// SyncPluginPermissions idempotently seeds every plugin-namespaced permission
-// contributed via PermissionProvidingPlugin into the permissions table. It is
-// the plugin-owned counterpart to database.SeedPermissionsAndRoles (which owns
-// the core 35-resource catalog); keeping it here avoids a database→core import
-// cycle and matches the "core imports models" precedent already established by
-// module_manager.go.
-//
-// The unique index idx_permission_resource_action makes this safe to call on
-// every startup: existing rows are left untouched, missing rows are inserted.
-func SyncPluginPermissions(ctx context.Context, db *gorm.DB) error {
-	if db == nil {
-		return fmt.Errorf("database is nil")
-	}
-	permissions := PluginPermissions()
-	if len(permissions) == 0 {
-		return nil
-	}
-	for _, perm := range permissions {
-		if perm.Resource == "" || perm.Action == "" {
-			return fmt.Errorf("plugin permission has empty resource or action: %+v", perm)
-		}
-		var existing models.Permission
-		err := db.WithContext(ctx).
-			Where("resource = ? AND action = ?", perm.Resource, perm.Action).
-			First(&existing).Error
-		if err == nil {
-			// Already seeded; leave untouched so descriptions stay stable.
-			continue
-		}
-		if err != gorm.ErrRecordNotFound {
-			return fmt.Errorf("lookup plugin permission %s:%s: %w", perm.Resource, perm.Action, err)
-		}
-		row := models.Permission{
-			BaseModel:   models.BaseModel{ID: uuid.New()},
-			Resource:    perm.Resource,
-			Action:      perm.Action,
-			Description: perm.Description,
-		}
-		if err := db.WithContext(ctx).Create(&row).Error; err != nil {
-			return fmt.Errorf("create plugin permission %s:%s: %w", perm.Resource, perm.Action, err)
-		}
-	}
-	return nil
-}
+
