@@ -18,6 +18,64 @@ type Plugin interface {
 	Migrate(db *gorm.DB) error
 }
 
+
+// PluginBase is an optional embed that satisfies the no-op parts of the Plugin
+// interface — Init (stashing the runtime deps), Migrate (no schema work), and
+// Routes (no routes). Plugins that need custom behavior simply override the
+// relevant method on the embedding type; Go's method resolution gives the
+// outer type's method precedence over the embedded one.
+//
+// Intended for plugins whose Init only stashes app/db/rdb/log for later use by
+// handlers (campaign-interactive, per-instance-uploads-cleanup, …). It removes
+// the repeated stash-and-store boilerplate without touching the Plugin contract.
+//
+// Name() is intentionally NOT provided — every plugin must declare its own name
+// so the identifier lives next to the package, not in a shared base.
+type PluginBase struct {
+	App  *handlers.App
+	DB   *gorm.DB
+	RDB  *redis.Client
+	Logg *slog.Logger
+}
+
+// Init stashes the runtime dependencies. It is the Init contract verbatim, so
+// embedding PluginBase satisfies Plugin.Init for plugins that only need the
+// stash.
+func (b *PluginBase) Init(app *handlers.App, db *gorm.DB, rdb *redis.Client, log *slog.Logger) error {
+	b.App = app
+	b.DB = db
+	b.RDB = rdb
+	b.Logg = log
+	return nil
+}
+
+// Migrate is a no-op. Plugins with their own schema override this method.
+func (b *PluginBase) Migrate(*gorm.DB) error { return nil }
+
+// Routes is a no-op. Plugins that register HTTP routes override this method.
+func (b *PluginBase) Routes(*fastglue.Fastglue) {}
+
+// GatingModule is an optional embed for managed plugins that exist only to gate
+// a feature behind the module + license system — they ship no backend routes
+// and run no schema migrations; their whole job is to declare a ModuleManifest
+// so administrators can show/hide the feature per organization and per license
+// tier via the module-management plugin.
+//
+// Embedding GatingModule satisfies the no-op Routes/Migrate parts of Plugin.
+// The embedding type still provides Name() and Manifest() (the latter making
+// it a ManagedPlugin). Together with a constructor pattern (see NewGatingModule
+// below) this collapses ~48 lines of near-identical gating-plugin boilerplate
+// per plugin down to a single struct literal.
+type GatingModule struct {
+	PluginBase
+}
+
+// NewGatingModule returns a GatingModule whose PluginBase is ready to embed.
+// It exists so gating plugins read as a one-liner: the struct value itself
+// carries no state worth constructing, but the named constructor documents
+// intent at the call site.
+func NewGatingModule() GatingModule { return GatingModule{} }
+
 // ModuleManifest describes a compiled plugin that participates in database-controlled enablement.
 type ModuleManifest struct {
 	Key            string   `json:"key"`
