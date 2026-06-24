@@ -1,42 +1,25 @@
 package campaigninteractive
 
 import (
-	"log/slog"
-
 	"github.com/compnew2006/whatomate/internal/core"
-	"github.com/compnew2006/whatomate/internal/handlers"
-	"github.com/redis/go-redis/v9"
 	"github.com/zerodha/fastglue"
-	"gorm.io/gorm"
 )
 
+// Plugin owns the campaign poll-vote analytics endpoint. It embeds
+// core.PluginBase to satisfy the Init (stash app/db/rdb/log) and no-op Migrate
+// parts of the Plugin interface; this type overrides Routes to register the
+// feature's single route. The runtime deps are reached via the promoted fields
+// p.App / p.DB / p.RDB / p.Log.
 type Plugin struct {
-	app *handlers.App
-	db  *gorm.DB
-	rdb *redis.Client
-	log *slog.Logger
+	core.PluginBase
 }
 
 func init() {
 	core.RegisterPlugin(&Plugin{})
 }
 
-func (p *Plugin) Name() string {
-	return "campaign-interactive"
-}
-
-func (p *Plugin) Init(app *handlers.App, db *gorm.DB, rdb *redis.Client, log *slog.Logger) error {
-	p.app = app
-	p.db = db
-	p.rdb = rdb
-	p.log = log
-	return nil
-}
+func (p *Plugin) Name() string { return "campaign-interactive" }
 
 func (p *Plugin) Routes(g *fastglue.Fastglue) {
 	g.GET("/api/campaigns/{id}/poll/votes", p.handleGetPollVotes)
-}
-
-func (p *Plugin) Migrate(db *gorm.DB) error {
-	return nil
 }

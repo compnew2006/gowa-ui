@@ -47,11 +47,11 @@ func (p *Plugin) handleGetPollVotes(rc *fastglue.Request) error {
 		return rc.SendErrorEnvelope(http.StatusBadRequest, "invalid campaign id", nil, "VALIDATION_ERROR")
 	}
 
-	scopedDB := tenant.ScopedDB(p.db, orgID)
+	scopedDB := tenant.ScopedDB(p.DB, orgID)
 
 	resp, err := p.getPollVotes(scopedDB, campaignID)
 	if err != nil {
-		p.log.Error("handleGetPollVotes: failed", "err", err, "campaign_id", campaignID)
+		p.Log.Error("handleGetPollVotes: failed", "err", err, "campaign_id", campaignID)
 		return rc.SendErrorEnvelope(http.StatusInternalServerError, "failed to get poll votes", nil, "INTERNAL_ERROR")
 	}
 	if resp == nil {

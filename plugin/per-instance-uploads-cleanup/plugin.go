@@ -10,11 +10,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// Plugin owns the per-instance uploads-cleanup feature. It embeds core.PluginBase
+// to satisfy the Init (stash app/db/rdb/log) and no-op Migrate/Routes parts of
+// the Plugin interface; this type overrides Init (to also build the service),
+// Routes (registers the feature's routes), and Migrate (runs the feature's
+// schema). The runtime deps are reached via the promoted fields p.App / p.DB /
+// p.RDB / p.Log.
 type Plugin struct {
-	app *handlers.App
-	db  *gorm.DB
-	rdb *redis.Client
-	log *slog.Logger
+	core.PluginBase
 	srv *service
 }
 
@@ -22,15 +25,14 @@ func init() {
 	core.RegisterPlugin(&Plugin{})
 }
 
-func (p *Plugin) Name() string {
-	return "per-instance-uploads-cleanup"
-}
+func (p *Plugin) Name() string { return "per-instance-uploads-cleanup" }
 
+// Init overrides PluginBase.Init to also construct the service from the
+// freshly-stashed DB + logger.
 func (p *Plugin) Init(app *handlers.App, db *gorm.DB, rdb *redis.Client, log *slog.Logger) error {
-	p.app = app
-	p.db = db
-	p.rdb = rdb
-	p.log = log
+	if err := p.PluginBase.Init(app, db, rdb, log); err != nil {
+		return err
+	}
 	p.srv = newService(db, log)
 	return nil
 }

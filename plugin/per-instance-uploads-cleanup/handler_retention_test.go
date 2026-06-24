@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/compnew2006/whatomate/internal/core"
 	"github.com/compnew2006/whatomate/internal/handlers"
 	"github.com/compnew2006/whatomate/test/testutil"
 	"github.com/google/uuid"
@@ -161,9 +162,11 @@ func setupPlugin(t *testing.T, db *gorm.DB) *Plugin {
 		Log: testutil.NopLogger(),
 	}
 	p := &Plugin{
-		app: app,
-		db:  db,
-		log: slog.Default(),
+		PluginBase: core.PluginBase{
+			App: app,
+			DB:  db,
+			Log: slog.Default(),
+		},
 		srv: newService(db, slog.Default()),
 	}
 	return p

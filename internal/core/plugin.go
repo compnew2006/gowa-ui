@@ -32,10 +32,10 @@ type Plugin interface {
 // Name() is intentionally NOT provided — every plugin must declare its own name
 // so the identifier lives next to the package, not in a shared base.
 type PluginBase struct {
-	App  *handlers.App
-	DB   *gorm.DB
-	RDB  *redis.Client
-	Logg *slog.Logger
+	App *handlers.App
+	DB  *gorm.DB
+	RDB *redis.Client
+	Log *slog.Logger
 }
 
 // Init stashes the runtime dependencies. It is the Init contract verbatim, so
@@ -45,7 +45,7 @@ func (b *PluginBase) Init(app *handlers.App, db *gorm.DB, rdb *redis.Client, log
 	b.App = app
 	b.DB = db
 	b.RDB = rdb
-	b.Logg = log
+	b.Log = log
 	return nil
 }
 

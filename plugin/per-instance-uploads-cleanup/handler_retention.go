@@ -17,7 +17,7 @@ import (
 )
 
 func (p *Plugin) getOrgAndUserID(r *fastglue.Request) (orgID, userID uuid.UUID, err error) {
-	orgID, err = tenant.ResolveOrganizationID(r, p.db)
+	orgID, err = tenant.ResolveOrganizationID(r, p.DB)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, err
 	}
@@ -35,7 +35,7 @@ func (p *Plugin) getOrgAndUserID(r *fastglue.Request) (orgID, userID uuid.UUID, 
 // hasPermission checks RBAC via custom_role_permissions + checks users.is_super_admin
 // as the core App.HasPermission does, but without requiring the full App cache infra.
 func (p *Plugin) hasPermission(userID uuid.UUID, resource, action string, orgID uuid.UUID) bool {
-	return p.app.HasPermission(userID, resource, action, orgID)
+	return p.App.HasPermission(userID, resource, action, orgID)
 }
 
 func (p *Plugin) canAccess(userID, orgID uuid.UUID) bool {
@@ -145,19 +145,19 @@ func (p *Plugin) handleGetRetention(r *fastglue.Request) error {
 		return err
 	}
 
-	scopedDB := tenant.ScopedDB(p.db, orgID)
+	scopedDB := tenant.ScopedDB(p.DB, orgID)
 	settings, err := getInstanceSettings(scopedDB, instanceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(http.StatusNotFound, "Instance not found", nil, "INSTANCE_NOT_FOUND")
 		}
-		p.log.Error("handleGetRetention: failed to get instance", "err", err)
+		p.Log.Error("handleGetRetention: failed to get instance", "err", err)
 		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 
 	days, source, err := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, instanceID, time.Now())
 	if err != nil {
-		p.log.Error("handleGetRetention: failed to resolve retention", "err", err)
+		p.Log.Error("handleGetRetention: failed to resolve retention", "err", err)
 		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 	return respondRetention(r, instanceID, settings, days, source)
@@ -184,25 +184,25 @@ func (p *Plugin) handlePutRetention(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(http.StatusBadRequest, err.Error(), nil, "")
 	}
 
-	scopedDB := tenant.ScopedDB(p.db, orgID)
+	scopedDB := tenant.ScopedDB(p.DB, orgID)
 	settings, err := getInstanceSettings(scopedDB, instanceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return r.SendErrorEnvelope(http.StatusNotFound, "Instance not found", nil, "INSTANCE_NOT_FOUND")
 		}
-		p.log.Error("handlePutRetention: failed to get instance", "err", err)
+		p.Log.Error("handlePutRetention: failed to get instance", "err", err)
 		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 
 	if err := p.updateInstanceRetention(scopedDB, instanceID, settings, req); err != nil {
-		p.log.Error("handlePutRetention: failed to update settings", "err", err)
+		p.Log.Error("handlePutRetention: failed to update settings", "err", err)
 		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 
 	oldInherit, oldRetentionDays, _ := parseUploadsCleanup(settings)
 	var actorEmail *string
 	var user models.User
-	if p.db.Where("id = ?", userID).First(&user).Error == nil {
+	if p.DB.Where("id = ?", userID).First(&user).Error == nil {
 		actorEmail = &user.Email
 	}
 
@@ -211,17 +211,17 @@ func (p *Plugin) handlePutRetention(r *fastglue.Request) error {
 		RetentionSnapshot{Inherit: req.Inherit, RetentionDays: req.RetentionDays},
 		req.Reason,
 	); err != nil {
-		p.log.Error("handlePutRetention: failed to write audit row", "err", err, "instance_id", instanceID)
+		p.Log.Error("handlePutRetention: failed to write audit row", "err", err, "instance_id", instanceID)
 	}
 
 	newSettings, err := getInstanceSettings(scopedDB, instanceID)
 	if err != nil {
-		p.log.Error("handlePutRetention: failed to re-read settings", "err", err)
+		p.Log.Error("handlePutRetention: failed to re-read settings", "err", err)
 		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 	days, source, err := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, instanceID, time.Now())
 	if err != nil {
-		p.log.Error("handlePutRetention: failed to resolve retention", "err", err)
+		p.Log.Error("handlePutRetention: failed to resolve retention", "err", err)
 		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 	return respondRetention(r, instanceID, newSettings, days, source)
@@ -258,7 +258,7 @@ func (p *Plugin) handleHistory(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(http.StatusBadRequest, err.Error(), nil, "invalid_limit")
 	}
 
-	scopedDB := tenant.ScopedDB(p.db, orgID)
+	scopedDB := tenant.ScopedDB(p.DB, orgID)
 	var total int64
 	scopedDB.Model(&InstanceUploadsCleanupAudit{}).Where("instance_id = ?", instanceID).Count(&total)
 
@@ -290,22 +290,22 @@ func (p *Plugin) handleRun(r *fastglue.Request) error {
 
 	days, source, err := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, instanceID, time.Now())
 	if err != nil {
-		p.log.Error("handleRun: failed to resolve retention", "err", err)
+		p.Log.Error("handleRun: failed to resolve retention", "err", err)
 		return r.SendErrorEnvelope(http.StatusInternalServerError, "Internal error", nil, "")
 	}
 	if source == "disabled" {
 		return r.SendErrorEnvelope(http.StatusBadRequest, "Uploads cleanup is disabled for this instance. Set a retention value or configure a workspace default first.", nil, "uploads_cleanup_disabled")
 	}
 
-	deletedFiles, err := handlers.RunManualCleanupForInstance(r.RequestCtx, p.app, orgID, instanceID, &days)
+	deletedFiles, err := handlers.RunManualCleanupForInstance(r.RequestCtx, p.App, orgID, instanceID, &days)
 	if err != nil {
-		p.log.Error("handleRun: cleanup failed", "err", err)
+		p.Log.Error("handleRun: cleanup failed", "err", err)
 		return r.SendErrorEnvelope(http.StatusInternalServerError, "Cleanup failed", nil, "")
 	}
 
-	instanceName, err := p.recordLastRunDate(tenant.ScopedDB(p.db, orgID), instanceID)
+	instanceName, err := p.recordLastRunDate(tenant.ScopedDB(p.DB, orgID), instanceID)
 	if err != nil {
-		p.log.Error("handleRun: failed to record last run date", "err", err, "instance_id", instanceID)
+		p.Log.Error("handleRun: failed to record last run date", "err", err, "instance_id", instanceID)
 		return r.SendErrorEnvelope(http.StatusInternalServerError, "Failed to record last run date", nil, "")
 	}
 
@@ -360,7 +360,7 @@ func (p *Plugin) handleOverview(r *fastglue.Request) error {
 	q := string(args.Peek("q"))
 	sourceFilter := string(args.Peek("source"))
 
-	scopedDB := tenant.ScopedDB(p.db, orgID)
+	scopedDB := tenant.ScopedDB(p.DB, orgID)
 	query := scopedDB.Model(&models.WhatsAppInstance{})
 	if q != "" {
 		query = query.Where("name ILIKE ?", "%"+q+"%")
@@ -384,7 +384,7 @@ func (p *Plugin) handleOverview(r *fastglue.Request) error {
 	for _, inst := range instances {
 		days, source, err := p.srv.ResolveEffectiveRetention(r.RequestCtx, orgID, inst.ID, time.Now())
 		if err != nil {
-			p.log.Error("handleOverview: failed to resolve retention", "err", err, "instance_id", inst.ID)
+			p.Log.Error("handleOverview: failed to resolve retention", "err", err, "instance_id", inst.ID)
 			continue
 		}
 
