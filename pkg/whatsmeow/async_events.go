@@ -516,13 +516,7 @@ func (d *asyncEventDispatcher) msgWorker(pq *instanceQueues, shard int) {
 	defer pq.wg.Done()
 	ch := pq.msgQueues[shard]
 	for qevt := range ch {
-		lag := time.Since(qevt.enqueuedAt)
-		if lagNs := lag.Nanoseconds(); lagNs > pq.lastMsgLagNano.Load() {
-			pq.lastMsgLagNano.Store(lagNs)
-		} else {
-			// Decay towards zero if this event had lower lag.
-			pq.lastMsgLagNano.Store(lagNs)
-		}
+		pq.lastMsgLagNano.Store(time.Since(qevt.enqueuedAt).Nanoseconds())
 		d.safeHandle(queuedEvent{evt: qevt.evt, instanceID: qevt.instanceID, orgID: qevt.orgID})
 		d.updatePriorityQueueDepth(qevt.instanceID, d.msgDepth(pq))
 	}
@@ -532,12 +526,7 @@ func (d *asyncEventDispatcher) msgWorker(pq *instanceQueues, shard int) {
 func (d *asyncEventDispatcher) lowWorker(pq *instanceQueues) {
 	defer pq.wg.Done()
 	for qevt := range pq.lowQueue {
-		lag := time.Since(qevt.enqueuedAt)
-		if lagNs := lag.Nanoseconds(); lagNs > pq.lastLowLagNano.Load() {
-			pq.lastLowLagNano.Store(lagNs)
-		} else {
-			pq.lastLowLagNano.Store(lagNs)
-		}
+		pq.lastLowLagNano.Store(time.Since(qevt.enqueuedAt).Nanoseconds())
 		d.safeHandle(queuedEvent{evt: qevt.evt, instanceID: qevt.instanceID, orgID: qevt.orgID})
 	}
 }
