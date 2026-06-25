@@ -564,8 +564,13 @@ func (d *asyncEventDispatcher) circuitBreakerOpen(instanceID uuid.UUID) bool {
 		if time.Now().Before(until) {
 			return true
 		}
+		// Cooldown elapsed: enter half-open recovery. Reset to a single
+		// fresh window rather than wiping all history, so the breaker can
+		// re-trip promptly if flooding resumes instead of needing a full
+		// cbWindows rebuild (which previously caused slow reopen oscillation).
 		delete(d.cbOpenUntil, instanceID)
-		d.lowCounts[instanceID] = nil
+		d.lowCounts[instanceID] = make([]int64, d.cbWindows)
+		return false
 	}
 
 	// Ensure window slice exists.
@@ -575,7 +580,8 @@ func (d *asyncEventDispatcher) circuitBreakerOpen(instanceID uuid.UUID) bool {
 		return false
 	}
 
-	// Increment current window (index 0 is newest).
+	// Increment current window (index 0 is newest). The ticker advances one
+	// window per minute, so cbRate is effectively a per-minute threshold.
 	windows[0]++
 
 	// Check if all windows exceed threshold.
