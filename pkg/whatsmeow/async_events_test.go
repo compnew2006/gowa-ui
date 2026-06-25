@@ -712,6 +712,103 @@ func TestCircuitBreakerTripsOnSustainedFlood(t *testing.T) {
 	assert.False(t, d.IsCircuitBreakerOpen(instanceID))
 }
 
+
+// TestCircuitBreakerDropsDroppableButNotImportant pins the post-B contract:
+// when the breaker is open, droppable low events (Presence) are dropped with
+// queue_state=circuit_open, while important low events (Contact) still enqueue
+// and reach the handler. This is the fix for flooded instances (e.g. a device
+// with ~40k contacts) where the breaker previously discarded Contact updates
+// the operator needs.
+func TestCircuitBreakerDropsDroppableButNotImportant(t *testing.T) {
+	instanceID := uuid.New()
+	orgID := uuid.New()
+
+	cfg := buildTestPriorityConfig()
+	cfg.cbRate = 1        // trip on the first sustained window
+	cfg.cbWindows = 1     // single window: trips as soon as count >= rate
+	cfg.cbCooldownSec = 5 // hold the breaker open for the test
+	cfg.lowQueueSize = 64 // big enough that important events never overflow
+
+	var (
+		mu                  sync.Mutex
+		handledByType       = map[string]int{}
+		circuitOpenDrops    uint64
+		anyDrops            uint64
+	)
+	handler := func(evt interface{}, instanceID, orgID uuid.UUID) {
+		mu.Lock()
+		handledByType[eventTypeName(evt)]++
+		mu.Unlock()
+	}
+	markDropped := func(_ uuid.UUID, state string) {
+		atomic.AddUint64(&anyDrops, 1)
+		if state == queueStateCircuitOpen {
+			atomic.AddUint64(&circuitOpenDrops, 1)
+		}
+	}
+
+	d := newAsyncEventDispatcher(cfg, 1, logf.New(logf.Opts{}), handler, nil, markDropped)
+	defer d.StopAll()
+
+	// Force the breaker open by flooding with a droppable event.
+	for i := 0; i < 10; i++ {
+		d.enqueueLow(&events.Presence{}, instanceID, orgID)
+	}
+	require.True(t, d.IsCircuitBreakerOpen(instanceID), "breaker should be open after droppable flood")
+
+	// Drain background workers so handledByType settles before assertions.
+	d.StopInstance(instanceID)
+
+	// Droppable events during the open window were dropped as circuit_open.
+	assert.Greater(t, atomic.LoadUint64(&circuitOpenDrops), uint64(0),
+		"droppable Presence events should be dropped as circuit_open while breaker is open")
+
+	// Now reopen the instance and send important events; they must still be handled.
+	d.AllowInstance(instanceID, orgID)
+	// AllowInstance clears breaker state, so re-open it before sending contacts.
+	for i := 0; i < 10; i++ {
+		d.enqueueLow(&events.Presence{}, instanceID, orgID)
+	}
+	require.True(t, d.IsCircuitBreakerOpen(instanceID), "breaker should be open again for the contact test")
+
+	handledBefore := handledByType["*events.Contact"]
+	for i := 0; i < 5; i++ {
+		d.enqueueLow(&events.Contact{}, instanceID, orgID)
+	}
+	d.StopInstance(instanceID)
+
+	handledAfter := handledByType["*events.Contact"]
+	assert.Equal(t, 5, handledAfter-handledBefore,
+		"Contact events must still be handled while the breaker is open (important, not droppable)")
+}
+
+// TestIsDroppableLowEvent pins the droppable classification so future event
+// additions are a conscious decision, not an accident.
+func TestIsDroppableLowEvent(t *testing.T) {
+	droppable := []interface{}{
+		&events.HistorySync{},
+		&events.AppState{},
+		&events.AppStateSyncComplete{},
+		&events.AppStateSyncError{},
+		&events.Presence{},
+		&events.ChatPresence{},
+	}
+	important := []interface{}{
+		&events.Contact{},
+		&events.PushName{},
+		&events.DeleteForMe{},
+		&events.DeleteChat{},
+		&events.OfflineSyncCompleted{},
+		&events.Message{}, // high priority, but must not be droppable
+	}
+	for _, evt := range droppable {
+		assert.True(t, isDroppableLowEvent(evt), "%s should be droppable", eventTypeName(evt))
+	}
+	for _, evt := range important {
+		assert.False(t, isDroppableLowEvent(evt), "%s should NOT be droppable", eventTypeName(evt))
+	}
+}
+
 // ─── Helpers ───
 
 func createFakeMessageEvent(instanceID, chatJID string) *events.Message {

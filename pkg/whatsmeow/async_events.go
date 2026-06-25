@@ -316,6 +316,29 @@ func (d *asyncEventDispatcher) classifyEvent(evt interface{}) eventPriorityClass
 	}
 }
 
+// isDroppableLowEvent reports whether a low-priority event may be safely
+// discarded when the circuit breaker is open. Such events are either
+// high-volume and self-correcting (a fresh batch always follows) or purely
+// best-effort presence hints. Discarding them does not lose user-visible
+// contact or conversation state.
+//
+// User-visible low events (Contact, PushName, DeleteForMe, DeleteChat,
+// OfflineSyncCompleted) are NOT droppable: they carry names, avatars, and
+// deletion intent that the operator expects to persist even under load.
+func isDroppableLowEvent(evt interface{}) bool {
+	switch evt.(type) {
+	case *events.HistorySync,
+		*events.AppState,
+		*events.AppStateSyncComplete,
+		*events.AppStateSyncError,
+		*events.Presence,
+		*events.ChatPresence:
+		return true
+	default:
+		return false
+	}
+}
+
 // chatKeyForEvent returns a stable string key for shard routing.
 func chatKeyForEvent(evt interface{}) string {
 	switch v := evt.(type) {
@@ -422,13 +445,12 @@ func (d *asyncEventDispatcher) enqueueLow(evt interface{}, instanceID, orgID uui
 		return false
 	}
 
-	// Circuit breaker: if instance is flooding, skip HistorySync only.
-	// All other low-priority events are counted as circuit_open drops.
-	if d.circuitBreakerOpen(instanceID) {
-		if _, isHistorySync := evt.(*events.HistorySync); isHistorySync {
-			return false // silently skip HistorySync during cooldown
-		}
-		// Other low events: count as circuit_open drop but do not enqueue.
+	// Circuit breaker: when open, drop only droppable low events (HistorySync,
+	// AppState, Presence, ChatPresence) that are high-volume and self-correcting.
+	// Important low events (Contact, PushName, DeleteForMe, DeleteChat,
+	// OfflineSyncCompleted) still flow through the normal drop-newest path so
+	// names, avatars, and deletions keep persisting under load.
+	if d.circuitBreakerOpen(instanceID) && isDroppableLowEvent(evt) {
 		d.markEventDropped(instanceID, queueStateCircuitOpen)
 		d.logPriorityDrop(instanceID, evt, "circuit_open", queueStateCircuitOpen)
 		return false
@@ -594,7 +616,7 @@ func (d *asyncEventDispatcher) circuitBreakerOpen(instanceID uuid.UUID) bool {
 	// Trip breaker.
 	now := time.Now()
 	d.cbOpenUntil[instanceID] = now.Add(d.cbCooldown)
-	d.logger.Warn("Circuit breaker opened for instance — skipping HistorySync and low-priority events",
+	d.logger.Warn("Circuit breaker opened for instance — dropping droppable low-priority events",
 		"component", "whatsmeow",
 		"event", "circuit_breaker_open",
 		"instance_id", instanceID,

@@ -1539,7 +1539,7 @@ Replaces the single per-instance event channel with **chat-sharded high-priority
 | Class | Events | Queue | Behavior |
 |-------|--------|-------|----------|
 | `eventClassMessage` | `*events.Message`, `*events.Receipt`, all `*events.Call*` variants | High (msg shards) | Sharded FIFO per chat/call. Bounded retry then `critical_overflow` |
-| `eventClassLow` | `*events.HistorySync`, `*events.Contact`, `*events.AppState`, `*events.Presence`, `*events.ChatPresence`, `*events.DeleteForMe`, `*events.DeleteChat`, `*events.OfflineSyncCompleted`, `*events.PushName`, `*events.AppStateSyncComplete`, `*events.AppStateSyncError` | Low (single channel) | Drop-newest when full. Circuit breaker suppresses HistorySync during floods |
+| `eventClassLow` | `*events.HistorySync`, `*events.Contact`, `*events.AppState`, `*events.Presence`, `*events.ChatPresence`, `*events.DeleteForMe`, `*events.DeleteChat`, `*events.OfflineSyncCompleted`, `*events.PushName`, `*events.AppStateSyncComplete`, `*events.AppStateSyncError` | Low (single channel) | Drop-newest when full. When the circuit breaker is open, **droppable** events (`HistorySync`, `AppState*`, `Presence`, `ChatPresence`) are dropped as `circuit_open`; **important** events (`Contact`, `PushName`, `DeleteForMe`, `DeleteChat`, `OfflineSyncCompleted`) still enqueue |
 | `eventClassLifecycle` | `*events.Connected`, `*events.Disconnected`, `*events.LoggedOut`, `*events.TemporaryBan`, `*events.PairSuccess`, `*events.QR` | Bypass | Handled synchronously, never queued |
 
 ### Shard Routing
@@ -1547,7 +1547,7 @@ Replaces the single per-instance event channel with **chat-sharded high-priority
 
 ### Enqueue Behavior
 - **High priority** (`enqueueHigh`): Immediate non-blocking `select`, then 10ms bounded retry loop (100µs steps). If all fail → `critical_overflow` drop. Never blocks the websocket reader.
-- **Low priority** (`enqueueLow`): Single non-blocking `select`. If full → drop-newest. Circuit breaker check first: if open, HistorySync silently skipped, other low events dropped as `circuit_open`.
+- **Low priority** (`enqueueLow`): Single non-blocking `select`. If full → drop-newest. Circuit breaker check first: if open, **droppable** low events (`HistorySync`, `AppState*`, `Presence`, `ChatPresence`) dropped as `circuit_open`; **important** low events (`Contact`, `PushName`, `DeleteForMe`, `DeleteChat`, `OfflineSyncCompleted`) still enqueue so names/avatars/deletions persist under load.
 
 ### Circuit Breaker
 | Parameter | Default | Purpose |
