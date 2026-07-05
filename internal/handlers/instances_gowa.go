@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
@@ -103,8 +105,28 @@ func (a *App) gowaFetchStatus(ctx context.Context, instance *models.WhatsAppInst
 	if a.GowaClient == nil {
 		return models.InstanceStatusDisconnected, errors.New("gowa client not initialized")
 	}
-	status, err := a.GowaClient.GetStatus(ctx, gowaDeviceID(instance))
+	deviceID := gowaDeviceID(instance)
+	status, err := a.GowaClient.GetStatus(ctx, deviceID)
 	if err != nil {
+		// GetStatus uses a path parameter which may fail for non-ASCII device IDs
+		// (e.g. Arabic-Indic numerals). Fall back to scanning ListDevices.
+		var ge *gowa.Error
+		if errors.As(err, &ge) && ge.StatusCode >= 500 {
+			if devices, listErr := a.GowaClient.ListDevices(ctx); listErr == nil {
+				for _, dev := range devices {
+					if dev.ID == deviceID {
+						switch dev.State {
+						case "logged_in":
+							return models.InstanceStatusConnected, nil
+						case "connecting":
+							return models.InstanceStatusConnecting, nil
+						default:
+							return models.InstanceStatusDisconnected, nil
+						}
+					}
+				}
+			}
+		}
 		return models.InstanceStatusDisconnected, err
 	}
 	switch {
@@ -148,10 +170,21 @@ func (a *App) GowaGetInstanceQR(r *fastglue.Request) error {
 		a.Log.Error("GOWA login QR failed", "error", err, "instance_id", instance.ID)
 		return gowaSendError(r, err, "Failed to fetch QR code from GOWA")
 	}
+
+	qrCodeVal := login.QRLink
+	if login.QRLink != "" {
+		if bytes, fetchErr := a.GowaClient.FetchBytes(ctx, login.QRLink); fetchErr == nil {
+			base64Data := base64.StdEncoding.EncodeToString(bytes)
+			qrCodeVal = fmt.Sprintf("data:image/png;base64,%s", base64Data)
+		} else {
+			a.Log.Warn("GOWA login QR download failed; passing raw link", "error", fetchErr, "url", login.QRLink)
+		}
+	}
+
 	return r.SendEnvelope(map[string]any{
 		"instance_id":     instance.ID.String(),
 		"available":       true,
-		"qr_code":         login.QRLink,
+		"qr_code":         qrCodeVal,
 		"timeout_seconds": login.QRDuration,
 		"device_id":       login.DeviceID,
 	})
@@ -191,9 +224,19 @@ func (a *App) GowaConnectInstance(r *fastglue.Request) error {
 		a.Log.Warn("Failed to mark instance as connecting", "error", err, "instance_id", instance.ID)
 	}
 
+	qrCodeVal := login.QRLink
+	if login.QRLink != "" {
+		if bytes, fetchErr := a.GowaClient.FetchBytes(ctx, login.QRLink); fetchErr == nil {
+			base64Data := base64.StdEncoding.EncodeToString(bytes)
+			qrCodeVal = fmt.Sprintf("data:image/png;base64,%s", base64Data)
+		} else {
+			a.Log.Warn("GOWA connect QR download failed; passing raw link", "error", fetchErr, "url", login.QRLink)
+		}
+	}
+
 	return r.SendEnvelope(map[string]any{
 		"status":      "connection_initiated",
-		"qr_link":     login.QRLink,
+		"qr_link":     qrCodeVal,
 		"qr_duration": login.QRDuration,
 	})
 }
@@ -229,8 +272,8 @@ func (a *App) GowaDisconnectInstance(r *fastglue.Request) error {
 	if err := a.DB.Model(&models.WhatsAppInstance{}).
 		Where("id = ?", instance.ID).
 		Updates(map[string]any{
-			"status":      models.InstanceStatusDisconnected,
-			"jid":         "",
+			"status":       models.InstanceStatusDisconnected,
+			"jid":          "",
 			"phone_number": "",
 		}).Error; err != nil {
 		a.Log.Warn("Failed to update instance status after GOWA logout", "error", err, "instance_id", instance.ID)
@@ -259,10 +302,46 @@ func (a *App) GowaReconnectInstance(r *fastglue.Request) error {
 
 	ctx, cancel := context.WithTimeout(r.RequestCtx, 30*time.Second)
 	defer cancel()
-	if err := a.GowaClient.Reconnect(ctx, gowaDeviceID(instance)); err != nil {
+
+	deviceID := gowaDeviceID(instance)
+	err = a.GowaClient.Reconnect(ctx, deviceID)
+	if err != nil {
+		var gowaErr *gowa.Error
+		if errors.As(err, &gowaErr) {
+			// If device is not logged in or session is deleted on GOWA, we self-heal
+			// by purging and re-creating the device slot, then triggering the login flow.
+			isNotLoggedIn := gowaErr.StatusCode == 404 ||
+				gowaErr.StatusCode == 500 ||
+				strings.Contains(strings.ToLower(gowaErr.Message), "not logged in") ||
+				strings.Contains(strings.ToLower(gowaErr.Message), "session deleted")
+
+			if isNotLoggedIn {
+				a.Log.Warn("GOWA reconnect failed due to missing or deleted session; self-healing device slot",
+					"error", err, "device_id", deviceID)
+
+				_ = a.GowaClient.DeleteDevice(ctx, deviceID)
+				if createErr := a.gowaCreateDevice(ctx, instance); createErr != nil {
+					a.Log.Error("GOWA reconnect self-heal: re-create device failed", "error", createErr, "device_id", deviceID)
+					return gowaSendError(r, createErr, "Failed to re-provision GOWA device")
+				}
+
+				// Give GOWA a moment to initialise the new slot
+				time.Sleep(500 * time.Millisecond)
+
+				// Call app/login to initialize the login session (so that the QR code is generated)
+				if _, loginErr := a.GowaClient.GetLoginQR(ctx, deviceID); loginErr != nil {
+					a.Log.Error("GOWA reconnect self-heal: start login flow failed", "error", loginErr, "device_id", deviceID)
+					return gowaSendError(r, loginErr, "Failed to initialize login QR code")
+				}
+
+				return r.SendEnvelope(map[string]string{"status": "reconnection_initiated"})
+			}
+		}
+
 		a.Log.Error("GOWA reconnect failed", "error", err, "instance_id", instance.ID)
 		return gowaSendError(r, err, "Failed to reconnect GOWA device")
 	}
+
 	return r.SendEnvelope(map[string]string{"status": "reconnection_initiated"})
 }
 
@@ -286,7 +365,7 @@ func (a *App) GowaGetInstanceHealth(r *fastglue.Request) error {
 
 	ctx, cancel := context.WithTimeout(r.RequestCtx, 15*time.Second)
 	defer cancel()
-	status, err := a.GowaClient.GetStatus(ctx, gowaDeviceID(instance))
+	gowaStatus, err := a.gowaFetchStatus(ctx, instance)
 	if err != nil {
 		a.Log.Error("GOWA status failed", "error", err, "instance_id", instance.ID)
 		return gowaSendError(r, err, "Failed to fetch GOWA device status")
@@ -298,7 +377,7 @@ func (a *App) GowaGetInstanceHealth(r *fastglue.Request) error {
 	// numeric fields: nonzero uptime = live; counters stay at zero (the
 	// operator can read richer metrics from the GOWA side directly).
 	health := InstanceHealthResponse{}
-	if status.IsLoggedIn {
+	if gowaStatus == models.InstanceStatusConnected {
 		health.UptimeSeconds = 1
 	}
 	return r.SendEnvelope(health)
@@ -377,20 +456,43 @@ var _ = http.StatusOK
 func (a *App) gowaGetLoginQRWithSelfHealing(ctx context.Context, instance *models.WhatsAppInstance) (*gowa.LoginResponse, error) {
 	deviceID := gowaDeviceID(instance)
 	login, err := a.GowaClient.GetLoginQR(ctx, deviceID)
-	if err != nil {
-		var gowaErr *gowa.Error
-		if errors.As(err, &gowaErr) && (gowaErr.StatusCode == 404 || gowaErr.StatusCode == 500) {
-			a.Log.Warn("GOWA login QR failed, trying self-healing (re-create device)...", "error", err, "status_code", gowaErr.StatusCode, "device_id", deviceID)
-			
-			// Best-effort delete device on GOWA
-			_ = a.GowaClient.DeleteDevice(ctx, deviceID)
-			
-			// Create device on GOWA
-			if createErr := a.gowaCreateDevice(ctx, instance); createErr == nil {
-				// Retry GetLoginQR
-				login, err = a.GowaClient.GetLoginQR(ctx, deviceID)
-			}
+	if err == nil {
+		return login, nil
+	}
+
+	var gowaErr *gowa.Error
+	if !errors.As(err, &gowaErr) {
+		return nil, err
+	}
+
+	a.Log.Warn("GOWA login QR failed, attempting self-healing",
+		"error", err, "status_code", gowaErr.StatusCode, "device_id", deviceID)
+
+	// Step 1: try reconnect first (device exists but websocket dropped)
+	if reconnErr := a.GowaClient.Reconnect(ctx, deviceID); reconnErr == nil {
+		// Brief pause for GOWA to re-establish the WS session
+		time.Sleep(1 * time.Second)
+		login, err = a.GowaClient.GetLoginQR(ctx, deviceID)
+		if err == nil {
+			a.Log.Info("GOWA self-heal via reconnect succeeded", "device_id", deviceID)
+			return login, nil
+		}
+		a.Log.Warn("GOWA reconnect succeeded but QR still failed; escalating to re-provision", "error", err, "device_id", deviceID)
+	}
+
+	// Step 2: device slot gone or corrupt — delete and re-create
+	if gowaErr.StatusCode == 404 || gowaErr.StatusCode == 500 {
+		_ = a.GowaClient.DeleteDevice(ctx, deviceID)
+		if createErr := a.gowaCreateDevice(ctx, instance); createErr != nil {
+			return nil, fmt.Errorf("GOWA self-heal: re-create device failed: %w", createErr)
+		}
+		// Give GOWA a moment to initialise the new slot
+		time.Sleep(500 * time.Millisecond)
+		login, err = a.GowaClient.GetLoginQR(ctx, deviceID)
+		if err == nil {
+			a.Log.Info("GOWA self-heal via re-provision succeeded", "device_id", deviceID)
 		}
 	}
+
 	return login, err
 }
