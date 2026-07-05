@@ -177,6 +177,9 @@ func (a *GowaAdapter) SendReaction(ctx context.Context, instanceID, messageID, e
 			}
 		}
 	}
+	if phone != "" && !strings.Contains(phone, "@") {
+		phone = phone + "@s.whatsapp.net"
+	}
 	return a.withRetryErr(ctx, func(ctx context.Context) error {
 		return a.client.ReactMessage(ctx, deviceID, messageID, phone, emoji)
 	})

@@ -503,7 +503,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		selectedInstanceID *uuid.UUID
 		selectedInstance   *models.WhatsAppInstance
 	)
-	if a.isWhatsmeowProvider() {
+	if a.isWhatsmeowProvider() || a.isGowaProvider() {
 		instance, resolveErr := a.resolveOutboundInstance(orgID, requestedInstanceID, contact.InstanceID)
 		if resolveErr != nil {
 			if _, reasonCode, ok := asInstanceSelectionError(resolveErr); ok {
@@ -689,7 +689,7 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 	// Resolve WhatsApp account only for Meta provider.
 	var account *models.WhatsAppAccount
-	if !a.isWhatsmeowProvider() {
+	if !a.isWhatsmeowProvider() && !a.isGowaProvider() {
 		reactionAccountName := message.WhatsAppAccount
 		if reactionAccountName == "" {
 			reactionAccountName = contact.WhatsAppAccount

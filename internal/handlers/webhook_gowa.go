@@ -547,10 +547,14 @@ func (a *App) handleGowaReceipt(ctx context.Context, instance *models.WhatsAppIn
 
 // gowaReactionPayload covers reactions added/removed.
 type gowaReactionPayload struct {
-	MessageID string `json:"message_id"`
-	From      string `json:"from"`
-	Emoji     string `json:"emoji"`
-	Timestamp string `json:"timestamp"`
+	ID               string `json:"id"`
+	ChatID           string `json:"chat_id"`
+	From             string `json:"from"`
+	FromName         string `json:"from_name"`
+	Timestamp        string `json:"timestamp"`
+	IsFromMe         bool   `json:"is_from_me"`
+	Reaction         string `json:"reaction"`
+	ReactedMessageID string `json:"reacted_message_id"`
 }
 
 func (a *App) handleGowaReaction(ctx context.Context, instance *models.WhatsAppInstance, raw json.RawMessage) {
@@ -558,14 +562,14 @@ func (a *App) handleGowaReaction(ctx context.Context, instance *models.WhatsAppI
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return
 	}
-	if p.MessageID == "" {
+	if p.ReactedMessageID == "" {
 		return
 	}
 
 	// Find the original message
 	var msg models.Message
-	if err := a.DB.WithContext(ctx).Where("whats_app_message_id = ? AND organization_id = ?", p.MessageID, instance.OrganizationID).First(&msg).Error; err != nil {
-		a.Log.Warn("GOWA reaction: original message not found", "whats_app_message_id", p.MessageID, "org_id", instance.OrganizationID)
+	if err := a.DB.WithContext(ctx).Where("whats_app_message_id = ? AND organization_id = ?", p.ReactedMessageID, instance.OrganizationID).First(&msg).Error; err != nil {
+		a.Log.Warn("GOWA reaction: original message not found", "whats_app_message_id", p.ReactedMessageID, "org_id", instance.OrganizationID)
 		return
 	}
 
@@ -601,9 +605,9 @@ func (a *App) handleGowaReaction(ctx context.Context, instance *models.WhatsAppI
 	}
 
 	// Add new reaction if emoji is not empty
-	if p.Emoji != "" {
+	if p.Reaction != "" {
 		newReactions = append(newReactions, map[string]any{
-			"emoji":      p.Emoji,
+			"emoji":      p.Reaction,
 			"from_phone": fromPhone,
 		})
 	}
