@@ -149,10 +149,11 @@ func (a *App) GowaGetInstanceQR(r *fastglue.Request) error {
 		return gowaSendError(r, err, "Failed to fetch QR code from GOWA")
 	}
 	return r.SendEnvelope(map[string]any{
-		"instance_id": instance.ID.String(),
-		"qr_link":     login.QRLink,
-		"qr_duration": login.QRDuration,
-		"device_id":   login.DeviceID,
+		"instance_id":     instance.ID.String(),
+		"available":       true,
+		"qr_code":         login.QRLink,
+		"timeout_seconds": login.QRDuration,
+		"device_id":       login.DeviceID,
 	})
 }
 

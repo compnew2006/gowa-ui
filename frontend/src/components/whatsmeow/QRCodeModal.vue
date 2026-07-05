@@ -87,8 +87,13 @@ function requestPairCode() {
 
       <div class="flex flex-1 flex-col space-y-8 p-6 sm:p-8">
         <div class="flex flex-1 items-center justify-center">
-          <div v-if="qrCode" class="bg-white p-6 rounded-2xl shadow-lg mx-auto">
-            <QRCode :value="qrCode" :size="320" level="M" />
+          <div v-if="qrCode" class="bg-white p-6 rounded-2xl shadow-lg mx-auto flex items-center justify-center">
+            <img
+              v-if="qrCode.startsWith('http://') || qrCode.startsWith('https://') || qrCode.startsWith('data:')"
+              :src="qrCode"
+              class="w-[320px] h-[320px]"
+            />
+            <QRCode v-else :value="qrCode" :size="320" level="M" />
           </div>
           <div
             v-else
