@@ -232,6 +232,14 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return nil
 	}
 
+	// GOWA provider: media lives on the GOWA server behind encrypted WhatsApp
+	// CDN URLs. Proxy the download through GOWA's /message/:id/download which
+	// decrypts and serves the file. Without this, the browser cannot load
+	// mmg.whatsapp.net .enc URLs directly.
+	if a.isGowaProvider() && a.GowaClient != nil {
+		return a.serveGowaMedia(r, requestDB, ctx, orgID)
+	}
+
 	// Get the message ID from URL parameter
 	messageIDValue := r.RequestCtx.UserValue("message_id")
 	messageIDStr, ok := messageIDValue.(string)
@@ -389,6 +397,33 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 		}
 		a.Log.Error("Failed to load message for media retry", "message_id", messageID, "organization_id", orgID, "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load message", nil, "")
+	}
+
+	// GOWA provider: call GOWA to re-download/decrypt the media, then return
+	// a success response so the frontend re-fetches via ServeMedia (which
+	// proxies through GOWA). The frontend updates media_url on success.
+	if a.isGowaProvider() && a.GowaClient != nil && message.InstanceID != nil {
+		var instance models.WhatsAppInstance
+		if err := requestDB.WithContext(ctx).Where("id = ?", message.InstanceID).First(&instance).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
+		}
+		dlCtx, dlCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer dlCancel()
+		deviceID := gowaDeviceID(&instance)
+		phone := message.ConversationID
+		dlResp, dlErr := a.GowaClient.DownloadMedia(dlCtx, deviceID, message.WhatsAppMessageID, phone)
+		dlCancel()
+		if dlErr != nil {
+			a.Log.Warn("GOWA media retry-download failed", "error", dlErr, "msg_id", message.WhatsAppMessageID)
+			return gowaSendError(r, dlErr, "Failed to re-download media from GOWA")
+		}
+		// Mark media as available so ServeMedia picks it up.
+		_ = requestDB.Model(&message).Update("media_deleted_at", nil)
+		return r.SendEnvelope(map[string]any{
+			"status":    "ok",
+			"media_url": dlResp.FileURL,
+			"message":   "Media re-downloaded from GOWA",
+		})
 	}
 
 	if strings.TrimSpace(message.MediaURL) != "" && message.MediaDeletedAt == nil {
@@ -594,4 +629,116 @@ func (a *App) serveLocalMediaFile(r *fastglue.Request, relativePath, mimeHint st
 	r.RequestCtx.SetBody(data)
 
 	return nil
+}
+
+// serveGowaMedia handles media requests in gowa provider mode. The message
+// ID from the URL is the whatomate UUID; we resolve it to the WhatsApp
+// message ID, call GOWA's /message/:id/download to decrypt the media, then
+// fetch the decrypted bytes from GOWA's static server and stream them to the
+// client. This is the only way to serve media in gowa mode — the media_url
+// stored on the message is an encrypted WhatsApp CDN URL that browsers
+// cannot load directly.
+func (a *App) serveGowaMedia(r *fastglue.Request, requestDB *gorm.DB, ctx context.Context, orgID uuid.UUID) error {
+	messageIDStr, ok := r.RequestCtx.UserValue("message_id").(string)
+	if !ok || messageIDStr == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid message ID", nil, "")
+	}
+	messageID, err := uuid.Parse(messageIDStr)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid message ID", nil, "")
+	}
+
+	var message models.Message
+	if err := requestDB.WithContext(ctx).
+		Where("id = ? AND organization_id = ?", messageID, orgID).
+		First(&message).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
+	}
+	if message.WhatsAppMessageID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message has no WhatsApp message ID for GOWA download", nil, "")
+	}
+	if message.InstanceID == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Message has no associated instance", nil, "")
+	}
+
+	var instance models.WhatsAppInstance
+	if err := requestDB.WithContext(ctx).Where("id = ?", message.InstanceID).First(&instance).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Instance not found", nil, "")
+	}
+	deviceID := gowaDeviceID(&instance)
+
+	// GOWA's /message/:id/download requires a phone query param to scope the
+	// action. Resolve it from the contact's phone_number (most reliable), the
+	// message's conversation_id, or the JID embedded in the media metadata.
+	phone := ""
+	if message.ConversationID != "" {
+		phone = message.ConversationID
+	}
+	if phone == "" && message.ContactID != uuid.Nil {
+		var contact models.Contact
+		if err := requestDB.WithContext(ctx).Select("phone_number").
+			Where("id = ?", message.ContactID).First(&contact).Error; err == nil {
+			phone = contact.PhoneNumber
+		}
+	}
+
+	dlCtx, dlCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer dlCancel()
+	resp, err := a.GowaClient.DownloadMedia(dlCtx, deviceID, message.WhatsAppMessageID, phone)
+	if err != nil {
+		a.Log.Warn("GOWA media download failed", "error", err, "msg_id", message.WhatsAppMessageID)
+		return gowaSendError(r, err, "Failed to download media from GOWA")
+	}
+	if resp.FileURL == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "GOWA returned no file URL", nil, "")
+	}
+
+	// Fetch the decrypted bytes from GOWA's static server.
+	bytesCtx, bytesCancel := context.WithTimeout(ctx, 60*time.Second)
+	defer bytesCancel()
+	data, err := a.GowaClient.FetchBytes(bytesCtx, resp.FileURL)
+	if err != nil {
+		a.Log.Warn("GOWA media fetch failed", "error", err, "url", resp.FileURL)
+		return gowaSendError(r, err, "Failed to fetch decrypted media from GOWA")
+	}
+
+	contentType := resp.MediaType
+	if contentType == "" {
+		contentType = message.MediaMimeType
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	filename := resp.Filename
+	if filename == "" {
+		filename = message.MediaFilename
+	}
+	if filename != "" {
+		r.RequestCtx.Response.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+	}
+	r.RequestCtx.Response.Header.Set("Content-Type", contentType)
+	r.RequestCtx.Response.Header.Set("Cache-Control", "private, max-age=3600")
+	r.RequestCtx.SetBody(data)
+	return nil
+}
+
+// ServePublicMedia serves locally saved media files without authentication.
+// This is used for GOWA to download outgoing media files from Whatomate.
+// To ensure security, it only allows paths that exist inside the local media storage,
+// and the path must start with "orgs/". Since paths contain organization UUIDs and unique
+// random UUIDs, they are secure capability URLs.
+func (a *App) ServePublicMedia(r *fastglue.Request) error {
+	filePathValue := r.RequestCtx.UserValue("filepath")
+	filePathStr, ok := filePathValue.(string)
+	if !ok || filePathStr == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid file path", nil, "")
+	}
+
+	// Security check: must start with "orgs/"
+	cleanPath := filepath.Clean(filePathStr)
+	if !strings.HasPrefix(cleanPath, "orgs/") {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
+	}
+
+	return a.serveLocalMediaFile(r, cleanPath, "")
 }

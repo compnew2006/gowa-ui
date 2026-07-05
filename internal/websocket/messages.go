@@ -18,6 +18,7 @@ const (
 	TypeSetContact          = "set_contact"
 	TypePing                = "ping"
 	TypePong                = "pong"
+	TypeReactionUpdate      = "reaction_update"
 
 	// Agent transfer types
 	TypeAgentTransfer       = "agent_transfer"

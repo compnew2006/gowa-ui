@@ -111,7 +111,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		selectedInstanceID *uuid.UUID
 		selectedInstance   *models.WhatsAppInstance
 	)
-	if a.isWhatsmeowProvider() {
+	if a.isWhatsmeowProvider() || a.isGowaProvider() {
 		instance, resolveErr := a.resolveOutboundInstance(orgID, req.InstanceID, contact.InstanceID)
 		if resolveErr != nil {
 			if _, reasonCode, ok := asInstanceSelectionError(resolveErr); ok {
@@ -885,6 +885,10 @@ func (a *App) sendWhatsAppReaction(account *models.WhatsAppAccount, contact *mod
 	// Use timeout context for external API calls
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	if contact != nil && contact.PhoneNumber != "" {
+		ctx = provider.WithRecipientPhone(ctx, contact.PhoneNumber)
+	}
 
 	// Use unified MessageProvider. For Meta, it will resolve the account and contact again.
 	// For whatsmeow, it will use the client.

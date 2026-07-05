@@ -1050,6 +1050,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	if conversationContext.IsGroupChat && conversationContext.ConversationID != "" {
 		msgQuery = buildGroupConversationMessagesQuery(ctxDB, orgID, conversationContext.ConversationID, contact.ID, contact.InstanceID)
 	}
+	msgQuery = msgQuery.Where("type != ?", models.MessageTypeIgnore)
 	if deletedAt != nil {
 		msgQuery = msgQuery.Where("created_at > ?", *deletedAt)
 	}

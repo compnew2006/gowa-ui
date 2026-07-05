@@ -177,7 +177,11 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 	// 2. Define the send function based on provider
 	var sendFn func(sendCtx context.Context) (string, error)
 
-	if a.isWhatsmeowProvider() && a.MessageProvider != nil {
+	// Route through MessageProvider for both whatsmeow and gowa backends —
+	// both implement provider.MessageProvider, and sendViaProvider +
+	// resolveProviderInstanceID work generically off the instance ID without
+	// needing a Meta WhatsAppAccount row.
+	if (a.isWhatsmeowProvider() || a.isGowaProvider()) && a.MessageProvider != nil {
 		providerInstanceID, resolveErr := a.resolveProviderInstanceID(ctx, req, msg)
 		if resolveErr != nil {
 			a.finalizeMessageSend(msg, req, opts, "", resolveErr)
@@ -478,6 +482,11 @@ func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, m
 	to := req.Contact.PhoneNumber
 	if canonicalTo := a.resolveDirectRecipientFromConversation(ctx, req.Contact); canonicalTo != "" {
 		to = canonicalTo
+	}
+
+	// For GOWA, convert relative local paths in MediaURL to public URLs
+	if a.isGowaProvider() && req.MediaURL != "" {
+		req.MediaURL = a.localMediaToPublicURL(msg.OrganizationID, req.MediaURL)
 	}
 
 	switch req.Type {
@@ -798,6 +807,10 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 		"status":       msg.Status,
 		"created_at":   msg.CreatedAt,
 		"updated_at":   msg.UpdatedAt,
+		"wamid":        msg.WhatsAppMessageID,
+		"whatsapp_account": msg.WhatsAppAccount,
+		"error_message":    msg.ErrorMessage,
+		"is_reply":         msg.IsReply,
 	}
 
 	if msg.ConversationID != "" {
@@ -1111,4 +1124,28 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		UpdatedAt:       message.UpdatedAt,
 	}
 	return r.SendEnvelope(response)
+}
+
+// localMediaToPublicURL converts a relative media path (e.g. "orgs/uuid/documents/uuid.pdf")
+// to a publicly accessible URL using the GOWA webhook callback URL configured on the server.
+func (a *App) localMediaToPublicURL(orgID uuid.UUID, relativePath string) string {
+	if relativePath == "" {
+		return ""
+	}
+	// If it's already an absolute URL, return it
+	if strings.HasPrefix(relativePath, "http://") || strings.HasPrefix(relativePath, "https://") {
+		return relativePath
+	}
+
+	baseURL := strings.TrimSuffix(a.Config.Gowa.WebhookCallbackURL, "/")
+	if baseURL == "" {
+		// Fallback to localhost if callback URL is empty
+		baseURL = "http://localhost:8080"
+	}
+
+	// Clean relativePath to avoid double slashes
+	rel := strings.ReplaceAll(relativePath, "\\", "/")
+	rel = strings.TrimPrefix(rel, "/")
+
+	return fmt.Sprintf("%s/api/media/public/%s", baseURL, rel)
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/internal/worker"
 	"github.com/compnew2006/whatomate/pkg/provider"
+	"github.com/compnew2006/whatomate/pkg/gowa"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/pkg/whatsmeow"
 	_ "github.com/compnew2006/whatomate/plugin/campaign-interactive"
@@ -394,6 +395,33 @@ func runServer(args []string) {
 			whatsmeowManager.SetQueueDepth(parsedInstanceID, depth)
 		})
 		lo.Info("MessageProvider set to whatsmeow")
+	case "gowa":
+		// Validate GOWA-specific config before touching the network. Fail
+		// fast on missing base_url or insecure webhook secret so operators
+		// see the error at boot rather than on first send.
+		if err := config.ValidateGowa(cfg); err != nil {
+			lo.Fatal("Invalid GOWA configuration", "error", err)
+		}
+		gowaClient := gowa.NewClient(
+			cfg.Gowa.BaseURL,
+			cfg.Gowa.BasicAuthUser,
+			cfg.Gowa.BasicAuthPassword,
+			cfg.Gowa.RequestTimeoutSeconds,
+			lo,
+		)
+		gowaAdapter := gowa.NewAdapter(gowaClient, db, lo).WithMaxRetries(cfg.Gowa.MaxRetries)
+		app.MessageProvider = gowaAdapter
+		// Expose the client to handlers/worker via App so Stage 4 (instance
+		// lifecycle), Stage 5 (read-side proxy), Stage 6 (inbound webhook),
+		// and Stage 7 (polling reconciler) can reach GOWA without going
+		// through the MessageProvider interface.
+		app.GowaClient = gowaAdapter.Client()
+		lo.Info("MessageProvider set to gowa",
+			"base_url", cfg.Gowa.BaseURL,
+			"webhook_callback_url", cfg.Gowa.WebhookCallbackURL,
+			"polling_enabled", cfg.Gowa.PollingEnabled,
+			"polling_interval_s", cfg.Gowa.PollingIntervalSeconds,
+		)
 	default: // "meta" or empty
 		metaAdapter := whatsapp.NewMetaAdapter(waClient, db, lo)
 		app.MessageProvider = metaAdapter
@@ -404,6 +432,13 @@ func runServer(args []string) {
 	if err := app.StartCampaignStatsSubscriber(); err != nil {
 		lo.Error("Failed to start campaign stats subscriber", "error", err)
 	}
+
+	// Start the GOWA polling reconciler (no-op outside gowa mode). Acts as
+	// the safety net behind the webhook receiver, catching events missed
+	// due to network blips, GOWA restarts, or whatomate downtime.
+	pollerCtx, pollerCancel := context.WithCancel(context.Background())
+	defer pollerCancel()
+	app.StartGowaPoller(pollerCtx)
 
 	// Parse allowed origins for CORS
 	allowedOrigins := middleware.ParseAllowedOrigins(cfg.Server.AllowedOrigins)
@@ -649,6 +684,12 @@ func runServer(args []string) {
 	lo.Info("Stopping campaign stats subscriber...")
 	app.StopCampaignStatsSubscriber()
 	lo.Info("Campaign stats subscriber stopped")
+
+	// Stop GOWA polling reconciler (no-op outside gowa mode). Drains
+	// in-flight sweeps before we close the DB.
+	lo.Info("Stopping GOWA polling reconciler...")
+	app.StopGowaPoller()
+	lo.Info("GOWA polling reconciler stopped")
 
 	licenseCancel()
 
@@ -1475,6 +1516,11 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 			path == "/api/facebook/comments/webhook" || path == "/ws" {
 			return r
 		}
+		// GOWA inbound webhook authenticates via HMAC, not JWT/API key.
+		// Path form: /api/gowa/webhook/{instanceID} or /api/gowa/webhook
+		if strings.HasPrefix(path, "/api/gowa/webhook") || strings.HasPrefix(path, "/api/media/public/") {
+			return r
+		}
 		// Skip auth for SSO routes (they handle their own auth via state tokens)
 		if len(path) >= 13 && path[:13] == "/api/auth/sso" {
 			return r
@@ -1500,7 +1546,8 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 			path == "/api/license/bootstrap" || path == "/api/license/activate" ||
 			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
 			path == "/api/auth/logout" || path == "/api/webhook" ||
-			path == "/api/facebook/comments/webhook" || path == "/ws" {
+			path == "/api/facebook/comments/webhook" || path == "/ws" ||
+			strings.HasPrefix(path, "/api/gowa/webhook") || strings.HasPrefix(path, "/api/media/public/") {
 			return r
 		}
 		if len(path) >= 13 && path[:13] == "/api/auth/sso" {
@@ -1634,20 +1681,53 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/statuses/{id}/reply", app.ReplyToStatus)
 	g.POST("/api/statuses/{id}/mark-seen", app.MarkStatusSeen)
 
-	// WhatsApp Instances (whatsmeow)
-	g.GET("/api/instances", app.ListInstances)
-	g.POST("/api/instances", app.CreateInstance)
-	g.GET("/api/instances/{id}", app.GetInstance)
-	g.PUT("/api/instances/{id}", app.UpdateInstance)
-	g.DELETE("/api/instances/{id}", app.DeleteInstance)
-	g.GET("/api/instances/{id}/health", app.GetInstanceHealth)
-	g.GET("/api/instances/{id}/qr", app.GetInstanceQRCodeSnapshot)
-	g.POST("/api/instances/{id}/connect", app.ConnectInstance)
-	g.POST("/api/instances/{id}/pair-phone", app.PairPhoneInstance)
-	g.POST("/api/instances/{id}/disconnect", app.DisconnectInstance)
-	g.POST("/api/instances/{id}/reconnect", app.ReconnectInstance)
-	g.POST("/api/instances/{id}/status/send", app.SendStatus)
-	g.POST("/api/instances/{id}/auto-campaign/media", app.UploadInstanceAutoCampaignMedia)
+	// WhatsApp Instances. In gowa mode the connect/disconnect/reconnect/
+	// health/qr handlers point at the GOWA-mode handlers; otherwise they
+	// point at the whatsmeow handlers. fastglue's router does not allow
+	// re-registering the same path, so we branch the registration rather
+	// than registering twice.
+	if cfg.WhatsApp.Provider == "gowa" {
+		g.GET("/api/instances", app.ListInstances)
+		g.POST("/api/instances", app.CreateInstance)
+		g.GET("/api/instances/{id}", app.GetInstance)
+		g.PUT("/api/instances/{id}", app.UpdateInstance)
+		g.DELETE("/api/instances/{id}", app.DeleteInstance)
+		g.GET("/api/instances/{id}/health", app.GowaGetInstanceHealth)
+		g.GET("/api/instances/{id}/qr", app.GowaGetInstanceQR)
+		g.POST("/api/instances/{id}/connect", app.GowaConnectInstance)
+		g.POST("/api/instances/{id}/pair-phone", app.PairPhoneInstance)
+		g.POST("/api/instances/{id}/disconnect", app.GowaDisconnectInstance)
+		g.POST("/api/instances/{id}/reconnect", app.GowaReconnectInstance)
+
+		// Stage 5: read-side proxies. GOWA is the source of truth for chat
+		// content in gowa mode; these endpoints fetch on demand and never
+		// touch the local Contact/Message tables.
+		g.GET("/api/gowa/instances/{id}/chats", app.GowaListChats)
+		g.GET("/api/gowa/instances/{id}/chats/{chat_jid}/messages", app.GowaGetChatMessages)
+		g.GET("/api/gowa/instances/{id}/messages/{message_id}/media", app.GowaDownloadMedia)
+		g.GET("/api/gowa/devices", app.GowaListDevicesForAdmin)
+
+		// /api/gowa/webhook/{instanceID} is the per-device inbound receiver.
+		// Also register /api/gowa/webhook (no instanceID) for GOWA's global
+		// webhook fallback — the instance is resolved from device_id in the
+		// payload body. Both are exempt from auth (verified via HMAC).
+		g.POST("/api/gowa/webhook/{instanceID}", app.GowaWebhook)
+		g.POST("/api/gowa/webhook", app.GowaWebhook)
+	} else {
+		g.GET("/api/instances", app.ListInstances)
+		g.POST("/api/instances", app.CreateInstance)
+		g.GET("/api/instances/{id}", app.GetInstance)
+		g.PUT("/api/instances/{id}", app.UpdateInstance)
+		g.DELETE("/api/instances/{id}", app.DeleteInstance)
+		g.GET("/api/instances/{id}/health", app.GetInstanceHealth)
+		g.GET("/api/instances/{id}/qr", app.GetInstanceQRCodeSnapshot)
+		g.POST("/api/instances/{id}/connect", app.ConnectInstance)
+		g.POST("/api/instances/{id}/pair-phone", app.PairPhoneInstance)
+		g.POST("/api/instances/{id}/disconnect", app.DisconnectInstance)
+		g.POST("/api/instances/{id}/reconnect", app.ReconnectInstance)
+		g.POST("/api/instances/{id}/status/send", app.SendStatus)
+		g.POST("/api/instances/{id}/auto-campaign/media", app.UploadInstanceAutoCampaignMedia)
+	}
 
 	g.GET("/api/notifications", app.ListNotifications)
 	g.PUT("/api/notifications/{id}/dismiss", app.DismissNotification)
@@ -1663,6 +1743,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Media (serves media files for messages, auth-protected)
 	g.GET("/api/media/{message_id}", app.ServeMedia)
+	g.GET("/api/media/public/{filepath:*}", app.ServePublicMedia)
 	g.POST("/api/media/{message_id}/retry-download", app.RetryMediaDownload)
 
 	// Templates (Meta only)
