@@ -109,7 +109,8 @@ func (c *Client) DeleteDevice(ctx context.Context, deviceID string) error {
 // directly, or fetched and proxied.
 func (c *Client) GetLoginQR(ctx context.Context, deviceID string) (*LoginResponse, error) {
 	var env Envelope[LoginResponse]
-	if err := c.do(ctx, http.MethodGet, "/app/login", deviceID, nil, &env); err != nil {
+	path := "/app/login?device_id=" + url.QueryEscape(deviceID)
+	if err := c.do(ctx, http.MethodGet, path, deviceID, nil, &env); err != nil {
 		return nil, err
 	}
 	return &env.Results, nil
@@ -118,7 +119,7 @@ func (c *Client) GetLoginQR(ctx context.Context, deviceID string) (*LoginRespons
 // LoginWithCode calls GET /app/login-with-code?phone=... and
 // returns a pairing code the user types into their phone.
 func (c *Client) LoginWithCode(ctx context.Context, deviceID, phone string) (*LoginWithCodeResponse, error) {
-	path := "/app/login-with-code?phone=" + url.QueryEscape(phone)
+	path := "/app/login-with-code?device_id=" + url.QueryEscape(deviceID) + "&phone=" + url.QueryEscape(phone)
 	var env Envelope[LoginWithCodeResponse]
 	if err := c.do(ctx, http.MethodGet, path, deviceID, nil, &env); err != nil {
 		return nil, err
