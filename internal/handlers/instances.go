@@ -182,6 +182,26 @@ func (a *App) CreateInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create instance", nil, "")
 	}
 
+	// GOWA provider: mirror the instance as a device on the GOWA server. On
+	// failure we roll back the local row so the operator gets a clean error
+	// and can retry — never leave an instance locally that GOWA doesn't know
+	// about, otherwise all subsequent lifecycle calls would 404 on GOWA.
+	if a.isGowaProvider() {
+		provCtx, provCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := a.gowaCreateDevice(provCtx, &instance); err != nil {
+			provCancel()
+			a.Log.Error("GOWA device provisioning failed; rolling back local instance",
+				"error", err, "instance_id", instance.ID, "name", instance.Name)
+			if delErr := requestDB.Delete(&instance).Error; delErr != nil {
+				a.Log.Error("Failed to roll back local instance after GOWA provisioning failure",
+					"error", delErr, "instance_id", instance.ID)
+			}
+			return r.SendErrorEnvelope(fasthttp.StatusBadGateway,
+				"Failed to provision device on GOWA backend", nil, "")
+		}
+		provCancel()
+	}
+
 	return r.SendEnvelope(instance)
 }
 
@@ -387,15 +407,23 @@ func (a *App) DeleteInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
 	}
 
-	if a.WhatsmeowManager == nil {
+	if a.WhatsmeowManager == nil && !a.isGowaProvider() {
 		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Whatsmeow manager not initialized", nil, "")
 	}
 
 	// Ensure WhatsApp session is explicitly logged out before deleting the instance.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	if err := a.WhatsmeowManager.Logout(ctx, instance.ID); err != nil {
-		a.Log.Warn("Failed to log out WhatsApp session cleanly during deletion, proceeding with deletion", "error", err, "instance_id", instance.ID)
+	if a.isGowaProvider() {
+		// Best-effort GOWA purge: log any failure but proceed with local
+		// cleanup. The local row is the source of truth, and a stale GOWA
+		// device is preferable to a hanging delete request that traps the
+		// user's quota. gowaDeleteDevice already logs.
+		a.gowaDeleteDevice(ctx, &instance)
+	} else {
+		if err := a.WhatsmeowManager.Logout(ctx, instance.ID); err != nil {
+			a.Log.Warn("Failed to log out WhatsApp session cleanly during deletion, proceeding with deletion", "error", err, "instance_id", instance.ID)
+		}
 	}
 
 	if err := a.deleteWhatsAppInstanceWithOptionalChatPurge(&instance, orgID, deleteChats); err != nil {
@@ -440,6 +468,10 @@ func (a *App) ConnectInstance(r *fastglue.Request) error {
 	}
 
 	if a.WhatsmeowManager == nil {
+		if a.isGowaProvider() {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+				"Use POST /api/instances/{id}/connect on the GOWA provider (provider=gowa does not use this endpoint)", nil, "")
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Whatsmeow manager not initialized", nil, "")
 	}
 
@@ -497,6 +529,10 @@ func (a *App) DisconnectInstance(r *fastglue.Request) error {
 	}
 
 	if a.WhatsmeowManager == nil {
+		if a.isGowaProvider() {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+				"Use POST /api/instances/{id}/disconnect on the GOWA provider (provider=gowa does not use this endpoint)", nil, "")
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Whatsmeow manager not initialized", nil, "")
 	}
 
@@ -544,6 +580,10 @@ func (a *App) ReconnectInstance(r *fastglue.Request) error {
 	}
 
 	if a.WhatsmeowManager == nil {
+		if a.isGowaProvider() {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+				"Use POST /api/instances/{id}/reconnect on the GOWA provider (provider=gowa does not use this endpoint)", nil, "")
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Whatsmeow manager not initialized", nil, "")
 	}
 
@@ -605,6 +645,14 @@ func (a *App) GetInstanceQRCodeSnapshot(r *fastglue.Request) error {
 	}
 
 	if a.WhatsmeowManager == nil {
+		if a.isGowaProvider() {
+			// GOWA does not cache QR codes server-side the way whatsmeow does;
+			// every QR request triggers a fresh GET /devices/:id/login. Point
+			// the caller at the live endpoint instead of returning an empty
+			// snapshot.
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+				"Use GET /api/instances/{id}/qr on the GOWA provider to fetch a live QR code", nil, "")
+		}
 		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Whatsmeow manager not initialized", nil, "")
 	}
 
@@ -660,10 +708,6 @@ func (a *App) PairPhoneInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch instance", nil, "")
 	}
 
-	if a.WhatsmeowManager == nil {
-		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Whatsmeow manager not initialized", nil, "")
-	}
-
 	var req PairPhoneInstanceRequest
 	if err := r.Decode(&req, "json"); err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
@@ -672,6 +716,36 @@ func (a *App) PairPhoneInstance(r *fastglue.Request) error {
 	phoneDigits := normalizePairingPhoneNumber(req.PhoneNumber)
 	if phoneDigits == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "phone_number is required", nil, "phone_number")
+	}
+
+	if a.isGowaProvider() {
+		if a.GowaClient == nil {
+			return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "GOWA client not initialized", nil, "")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		pairResp, err := a.GowaClient.LoginWithCode(ctx, gowaDeviceID(&instance), phoneDigits)
+		if err != nil {
+			a.Log.Error("GOWA pair failed", "error", err, "instance_id", instance.ID)
+			return gowaSendError(r, err, "Failed to request pairing code from GOWA")
+		}
+
+		if err := a.DB.Model(&models.WhatsAppInstance{}).
+			Where("id = ?", instance.ID).
+			Update("status", models.InstanceStatusConnecting).Error; err != nil {
+			a.Log.Warn("Failed to update instance status for GOWA pairing", "error", err, "instance_id", instance.ID)
+		}
+
+		return r.SendEnvelope(PairPhoneInstanceResponse{
+			Status:      "pair_code_generated",
+			PairingCode: pairResp.PairCode,
+			PhoneNumber: phoneDigits,
+			TimeoutSec:  60,
+		})
+	}
+
+	if a.WhatsmeowManager == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "Whatsmeow manager not initialized", nil, "")
 	}
 
 	opts := waManager.DefaultPairPhoneOptions()
@@ -747,7 +821,22 @@ func (a *App) GetInstanceHealth(r *fastglue.Request) error {
 	}
 
 	health := InstanceHealthResponse{}
-	if a.WhatsmeowManager != nil {
+	if a.isGowaProvider() && a.GowaClient != nil {
+		// GOWA exposes only connected/logged_in booleans, not the rich
+		// counters whatsmeow tracks. Surface the live state as the connected
+		// flag and leave counters at zero — the operator can read richer
+		// metrics directly from the GOWA server if needed.
+		statusCtx, statusCancel := context.WithTimeout(r.RequestCtx, 10*time.Second)
+		status, err := a.GowaClient.GetStatus(statusCtx, gowaDeviceID(&instance))
+		statusCancel()
+		if err != nil {
+			a.Log.Warn("GOWA status probe failed during health check", "error", err, "instance_id", instance.ID)
+		} else {
+			if status.IsLoggedIn {
+				health.UptimeSeconds = 1 // nonzero signals "live"
+			}
+		}
+	} else if a.WhatsmeowManager != nil {
 		current := a.WhatsmeowManager.GetInstanceHealth(instance.ID)
 		health = InstanceHealthResponse{
 			UptimeSeconds:         current.UptimeSeconds,
