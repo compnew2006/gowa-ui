@@ -863,3 +863,77 @@ the stop is sticky/persistent — better discriminates the fix from a no-op.
   - `curl -s http://127.0.0.1:18123/health` -> `{"status":"success","data":{"service":"whatomate","status":"ok"}}`
   - `curl -s http://127.0.0.1:18123/api/license/bootstrap` -> `"status": "active"`, `"enabled": true`
   - Both main and holol-wenjaz instances are running successfully.
+
+## 2026-06-25 — Plugin system refactor (Tier 3, code-refactorer skill)
+
+Refactored the plugin framework and migrated qualifying plugins onto two new
+opt-in embeddable bases. Behavior-preserving; `Plugin` interface byte-identical.
+Batched into 4 commits per request.
+
+**Commits:**
+- `87bf437f` extract `SyncPluginPermissions`/`PluginPermissions()`/`pluginPermissions` → new `internal/core/permission_seeder.go` (isolates the only core→models data-access path).
+- `edbabd9f` add `core.PluginBase{App,DB,RDB,Log}` and `core.GatingModule{PluginBase}` embeddable bases to `internal/core/plugin.go`.
+- `c79dc596` migrate 6 pure gating plugins onto `GatingModule` (facebook-core/retargeting/auto-share/extract-data/extract-likes/group-search/page-messengers) — each is now Name+Manifest only.
+- `344b6c34` migrate 2 full-stash plugins onto `PluginBase` (campaign-interactive, per-instance-uploads-cleanup) — handler refs renamed p.app/p.db/p.log → p.App/p.DB/p.Log; `PluginBase.Logg`→`Log`.
+
+**Deliberately not migrated** (would change behavior / overshoot):
+- facebook-page-search, facebook-people-search (register routes + AutoMigrate — not pure gating).
+- facebook-accounts, module-management (stash only `app`, not the full 4-dep set).
+
+**Verification:** `make build` ✓ · `go vet ./internal/core/... ./plugin/... ./cmd/whatomate/...` clean · `go test` all green · Socraticode post-edit impact = 0 (framework public API unchanged, refactor fully isolated).
+
+Memory note: `feature/plugin-system-refactor-2026-06-25`.
+
+---
+
+## 2026-06-25 — Circuit breaker drop-policy fix (pkg/whatsmeow)
+
+**Symptom (production):** instance 966554840026 (~40k contacts, 2-core box)
+saw `circuit_open` drops of `*events.Contact` (233) and `*events.AppState`
+(230) over 3h. Connection + send/receive were fine; only contact/app-state
+updates were being discarded.
+
+**Root cause (code, not config):** the breaker was designed to shed
+HistorySync floods but actually dropped *every* low event as `circuit_open`
+once tripped, and its post-cooldown reset wiped all windows, causing a slow
+~5-min reopen oscillation.
+
+**Changes (3 commits, each its own verified move):**
+1. `refactor(whatsmeow): remove dead-branch lag tracking in event workers`
+   — `lowWorker`/`msgWorker` had an `if/else` where both branches did the
+   identical `Store(lagNs)`. Behavior-preserving.
+2. `fix(whatsmeow): reset circuit breaker to fresh windows on cooldown expiry`
+   — half-open recovery: reset to a zeroed window slice instead of `nil`,
+   so the breaker re-arms within the current window if flooding resumes.
+3. `fix(whatsmeow): keep important low events flowing when circuit breaker is open`
+   — new `isDroppableLowEvent()` splits low events into droppable
+   (HistorySync, AppState*, Presence, ChatPresence) vs important
+   (Contact, PushName, DeleteForMe, DeleteChat, OfflineSyncCompleted).
+   Only droppable events are shed when the breaker is open; important
+   events still enqueue through the normal drop-newest path. Both groups
+   still drive the rolling count, so sustained floods still trip.
+
+**Files:** `pkg/whatsmeow/async_events.go`, `pkg/whatsmeow/async_events_test.go`
+(+2 tests: `TestCircuitBreakerDropsDroppableButNotImportant`,
+`TestIsDroppableLowEvent`), `docs/FEATURE_WORKFLOWS.md`.
+
+**Verified:** `go test ./pkg/whatsmeow/...` green (full suite),
+`go vet` clean, `go build ./...` clean, Socraticode impact = 0 external
+callers (leaf consumed only via the dispatcher interface).
+
+**Operator note:** no config change needed; the existing
+`event_circuit_breaker_*` knobs still control trip threshold/cooldown,
+but now they only shed the noisy events, not contact updates.
+
+## Eliminate Outgoing Media Duplication for GOWA — 2026-07-05
+**Task:** Prevent duplicate storage of outgoing media files by deleting Whatomate's temporary copy immediately after it is sent to and cached by the GOWA server.
+
+**Changes:**
+1. Modified `whatomate/internal/handlers/messages.go` to import `"os"` and `"path/filepath"`.
+2. Updated `sendViaProvider` function: added a `defer` block that deletes the local file in the `uploads/` directory right after GOWA completes the synchronous send (and GOWA caches the file in its own `storages/` directory).
+
+**Files:** `whatomate/internal/handlers/messages.go`
+
+**Verified:**
+- `make test` completes successfully.
+- Code changes lint cleanly with `golangci-lint`.

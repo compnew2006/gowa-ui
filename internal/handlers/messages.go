@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -486,7 +488,19 @@ func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, m
 
 	// For GOWA, convert relative local paths in MediaURL to public URLs
 	if a.isGowaProvider() && req.MediaURL != "" {
+		originalPath := req.MediaURL
 		req.MediaURL = a.localMediaToPublicURL(msg.OrganizationID, req.MediaURL)
+		a.Log.Info("GOWA media URL resolved", "original", originalPath, "public_url", req.MediaURL, "msg_type", req.Type)
+
+		// Clean up the local file after this function completes since GOWA is the single source of truth
+		defer func() {
+			absolutePath := filepath.Join(a.getMediaStoragePath(), originalPath)
+			if err := os.Remove(absolutePath); err != nil {
+				a.Log.Warn("Failed to clean up temporary GOWA outgoing media file", "path", absolutePath, "error", err)
+			} else {
+				a.Log.Info("Temporary GOWA outgoing media file cleaned up", "path", absolutePath)
+			}
+		}()
 	}
 
 	switch req.Type {
@@ -799,15 +813,15 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 	}
 
 	payload := map[string]any{
-		"id":           msg.ID,
-		"contact_id":   contact.ID.String(),
-		"direction":    msg.Direction,
-		"message_type": msg.MessageType,
-		"content":      map[string]string{"body": contentBody},
-		"status":       msg.Status,
-		"created_at":   msg.CreatedAt,
-		"updated_at":   msg.UpdatedAt,
-		"wamid":        msg.WhatsAppMessageID,
+		"id":               msg.ID,
+		"contact_id":       contact.ID.String(),
+		"direction":        msg.Direction,
+		"message_type":     msg.MessageType,
+		"content":          map[string]string{"body": contentBody},
+		"status":           msg.Status,
+		"created_at":       msg.CreatedAt,
+		"updated_at":       msg.UpdatedAt,
+		"wamid":            msg.WhatsAppMessageID,
 		"whatsapp_account": msg.WhatsAppAccount,
 		"error_message":    msg.ErrorMessage,
 		"is_reply":         msg.IsReply,
