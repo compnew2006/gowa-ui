@@ -11,6 +11,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/compnew2006/whatomate/internal/websocket"
 	waManager "github.com/compnew2006/whatomate/pkg/whatsmeow"
+	"github.com/compnew2006/whatomate/pkg/gowa"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -725,6 +726,16 @@ func (a *App) PairPhoneInstance(r *fastglue.Request) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		pairResp, err := a.GowaClient.LoginWithCode(ctx, gowaDeviceID(&instance), phoneDigits)
+		if err != nil {
+			var gowaErr *gowa.Error
+			if errors.As(err, &gowaErr) && (gowaErr.StatusCode == 404 || gowaErr.StatusCode == 500) {
+				a.Log.Warn("GOWA pairing code failed, trying self-healing (re-create device)...", "error", err, "status_code", gowaErr.StatusCode)
+				_ = a.GowaClient.DeleteDevice(ctx, gowaDeviceID(&instance))
+				if createErr := a.gowaCreateDevice(ctx, &instance); createErr == nil {
+					pairResp, err = a.GowaClient.LoginWithCode(ctx, gowaDeviceID(&instance), phoneDigits)
+				}
+			}
+		}
 		if err != nil {
 			a.Log.Error("GOWA pair failed", "error", err, "instance_id", instance.ID)
 			return gowaSendError(r, err, "Failed to request pairing code from GOWA")
